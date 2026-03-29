@@ -83,6 +83,8 @@ actions:
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_execution_time` | integer | Timeout in seconds (default: 300) |
 | `enable_caching` | boolean | Enable response caching (default: true) |
+| `record_limit` | integer | Max records to process per file at start nodes (default: unlimited) |
+| `file_limit` | integer | Max files to walk per action (default: unlimited) |
 
 ## LLM Action Example
 
@@ -267,6 +269,29 @@ guard:
 | Mistral | `mistral` | mistral-large, mistral-medium |
 | Cohere | `cohere` | command-r-plus |
 | Ollama | `ollama` | llama3, mistral |
+
+## Limiting Records and Files (Test Runs)
+
+Cap processing for fast validation before full runs:
+
+```yaml
+defaults:
+  file_limit: 3           # Walk at most 3 files per action
+
+actions:
+  - name: extract
+    record_limit: 10      # Process 10 records per file (start nodes only)
+```
+
+- `record_limit` applies only at **start nodes** (initial data ingestion). Intermediate actions process whatever upstream produced.
+- `file_limit` applies at **all stages** — directory walks, merged files, and storage backend reads.
+- Both must be positive integers (`>= 1`). Omit or set to `null` for unlimited.
+- Limits are stored in the status file. If you change limits between runs, the action automatically re-executes instead of being skipped.
+
+**Typical testing workflow:**
+1. Set `record_limit: 10` in your action config
+2. Run and validate output
+3. Remove `record_limit` and re-run for full processing
 
 ## Run Modes
 

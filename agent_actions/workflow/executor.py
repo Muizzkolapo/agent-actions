@@ -128,6 +128,30 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
+    @staticmethod
+    def _limit_metadata(action_config: ActionConfigDict) -> dict[str, int | None]:
+        """Extract limit fields for status metadata storage."""
+        cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+        return {
+            "record_limit": cfg.get("record_limit"),
+            "file_limit": cfg.get("file_limit"),
+        }
+
+    def _maybe_invalidate_completed_status(
+        self, action_name: str, action_config: ActionConfigDict, current_status: str
+    ) -> str:
+        """Reset to pending if limit config changed since last completion."""
+        if current_status != "completed":
+            return current_status
+        details = self.deps.state_manager.get_status_details(action_name)
+        if details.get("record_limit") != action_config.get("record_limit") or details.get(
+            "file_limit"
+        ) != action_config.get("file_limit"):
+            logger.info("Limit config changed for %s, resetting to pending", action_name)
+            self.deps.state_manager.update_status(action_name, "pending")
+            return "pending"
+        return current_status
+
     def verify_completion_status(self, action_name: str) -> bool:
         """Return True if the action has valid output and should be skipped.
 
@@ -189,7 +213,9 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle action skip due to WHERE clause condition."""
         self.deps.output_manager.create_passthrough_output(action_idx, action_name)
-        self.deps.state_manager.update_status(action_name, "completed")
+        self.deps.state_manager.update_status(
+            action_name, "completed", **self._limit_metadata(action_config)
+        )
 
         duration = (datetime.now() - start_time).total_seconds()
         total_actions = (
@@ -258,7 +284,9 @@ class ActionExecutor:
             )
 
         if batch_status == "passthrough":
-            self.deps.state_manager.update_status(params.action_name, "completed")
+            self.deps.state_manager.update_status(
+                params.action_name, "completed", **self._limit_metadata(params.action_config)
+            )
             logger.info(
                 "Action completed (passthrough)",
                 extra={
@@ -278,7 +306,9 @@ class ActionExecutor:
             )
 
         # Normal completion
-        self.deps.state_manager.update_status(params.action_name, "completed")
+        self.deps.state_manager.update_status(
+            params.action_name, "completed", **self._limit_metadata(params.action_config)
+        )
         tokens = get_last_usage()
 
         if self.run_tracker is not None and self.run_id is not None:
@@ -366,6 +396,10 @@ class ActionExecutor:
             },
         )
 
+        current_status = self._maybe_invalidate_completed_status(
+            action_name, action_config, current_status
+        )
+
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
@@ -414,6 +448,10 @@ class ActionExecutor:
                 "current_status": current_status,
                 "is_last_action": is_last_action,
             },
+        )
+
+        current_status = self._maybe_invalidate_completed_status(
+            action_name, action_config, current_status
         )
 
         if current_status == "completed":
@@ -465,7 +503,9 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
-            self.deps.state_manager.update_status(action_name, "completed")
+            self.deps.state_manager.update_status(
+                action_name, "completed", **self._limit_metadata(action_config)
+            )
             fire_event(
                 BatchCompleteEvent(
                     batch_id=action_config.get("batch_id", ""),
@@ -536,7 +576,9 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
-            self.deps.state_manager.update_status(action_name, "completed")
+            self.deps.state_manager.update_status(
+                action_name, "completed", **self._limit_metadata(action_config)
+            )
             fire_event(
                 BatchCompleteEvent(
                     batch_id=action_config.get("batch_id", ""),

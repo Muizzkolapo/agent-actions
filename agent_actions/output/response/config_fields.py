@@ -53,6 +53,9 @@ SIMPLE_CONFIG_FIELDS = {
     "chunk_overlap": 10,
     "tokenizer_model": "cl100k_base",
     "split_method": "tiktoken",
+    # Limit controls (None = unlimited)
+    "record_limit": None,
+    "file_limit": None,
 }
 
 
