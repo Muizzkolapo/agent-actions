@@ -15,59 +15,34 @@ LLM outputs pass through three validation layers. Let's walk through what each l
 
 ```mermaid
 flowchart TD
-    A[LLM Response] --> B{Layer 1: JSON Valid?}
-    B -->|No| C[JSON Repair]
-    C --> D{Repaired?}
-    D -->|No| E[Reprompt]
-    D -->|Yes| F
-    B -->|Yes| F{Layer 2: Schema Valid?}
-    F -->|No| G{Reprompt Enabled?}
-    G -->|Yes| E
+    A[LLM Response] --> B{Layer 1+2: JSON & Schema Valid?}
+    B -->|No| G{Reprompt Enabled?}
+    G -->|Yes| E[Reprompt with Error Feedback]
     G -->|No| H[Action Fails]
     E --> A
-    F -->|Yes| I{Layer 3: Guard Passes?}
+    B -->|Yes| I{Layer 3: Guard Passes?}
     I -->|No - filter| J[Record Removed]
     I -->|No - skip| K[Action Skipped]
     I -->|Yes| L[Output Accepted]
 ```
 
-Notice how problems caught early (JSON repair) avoid expensive retries. Guards run last because they evaluate semantic conditions that require valid, schema-conforming data.
+Guards run last because they evaluate semantic conditions that require valid, schema-conforming data.
 
 | Layer | Purpose | Mechanism |
 |-------|---------|-----------|
-| **1. JSON** | Structural integrity | JSON repair + reprompt |
+| **1. JSON** | Structural integrity | Reprompt with error feedback |
 | **2. Schema** | Type/field validation | Schema constraints + reprompt |
 | **3. Guard** | Semantic validation | Condition expressions |
 
 ## Layer 1: JSON Validation
 
-Ensures the LLM returns valid JSON.
-
-### Automatic JSON Repair
-
-Before reprompting, Agent Actions attempts to fix common JSON issues:
-
-- Missing closing brackets/braces
-- Trailing commas
-- Unquoted strings
-- Invalid escape sequences
-
-```yaml
-reprompt:
-  json_repair: true  # Default: enabled
-```
-
-### Reprompt on JSON Failure
-
-If repair fails, the LLM is reprompted with the error:
+Ensures the LLM returns valid JSON. If parsing fails, the LLM is reprompted with the error:
 
 ```yaml
 - name: extract_data
   schema: my_schema
   reprompt:
     max_attempts: 3
-    json_repair: true
-    use_llm_critique: false
     on_exhausted: return_last
 ```
 
@@ -170,9 +145,6 @@ When schema validation fails, reprompting retries with error context:
   schema: analysis_schema
   reprompt:
     max_attempts: 4
-    json_repair: true
-    use_llm_critique: true
-    critique_after_attempt: 2
     on_exhausted: return_last
 ```
 
@@ -252,9 +224,6 @@ actions:
     schema: candidate_facts_list  # Layer 2: type/structure
     reprompt:
       max_attempts: 4
-      json_repair: true
-      use_llm_critique: true
-      critique_after_attempt: 2
       on_exhausted: return_last
 
   # Step 2: Filter empty results (Layer 3)
@@ -270,8 +239,6 @@ actions:
     schema: quality_score  # Ensures score is 0-100
     reprompt:
       max_attempts: 3
-      json_repair: true
-      use_llm_critique: false
       on_exhausted: return_last
 
   # Step 4: Filter low quality (Layer 3)
@@ -294,9 +261,6 @@ actions:
     schema: content_schema
     reprompt:
       max_attempts: 4
-      json_repair: true
-      use_llm_critique: true
-      critique_after_attempt: 2
       on_exhausted: return_last
 
   # LLM validates the content
@@ -339,8 +303,6 @@ properties:
   schema: classification
   reprompt:
     max_attempts: 3
-    json_repair: true
-    use_llm_critique: false
     on_exhausted: return_last
 
 - name: process_valid
@@ -374,10 +336,6 @@ properties:
   schema: score_schema
   reprompt:
     max_attempts: 5
-    json_repair: true
-    use_llm_critique: true
-    use_self_reflection: true
-    critique_after_attempt: 1
     on_exhausted: return_last
 
 # Guard for business threshold
@@ -400,8 +358,6 @@ actions:
     schema: content_schema
     reprompt:
       max_attempts: 3
-      json_repair: true
-      use_llm_critique: false
       on_exhausted: return_last
 
   - name: custom_validate
@@ -444,7 +400,7 @@ def validate_content(content: dict) -> dict:
 
 | Want to Reject | Use | Example |
 |----------------|-----|---------|
-| Invalid JSON | `reprompt: { json_repair: true }` | Malformed response |
+| Invalid JSON | `reprompt: { max_attempts: 3 }` | Malformed response |
 | Wrong type | Schema `type` | String instead of number |
 | Missing field | Schema `required` | No "title" field |
 | Wrong value | Schema `enum` | "maybe" not in ["yes", "no"] |
@@ -489,9 +445,6 @@ The limitation here: reprompting costs API tokens. Guards are free. If you're fi
   schema: extraction_schema
   reprompt:
     max_attempts: 4
-    json_repair: true
-    use_llm_critique: true
-    critique_after_attempt: 2
     on_exhausted: return_last
 
 # Layer 3: Guard for quality
@@ -527,20 +480,14 @@ properties:
 ### 4. Set Reasonable Reprompt Limits
 
 ```yaml
-# Simple schema: fewer attempts, no LLM critique
+# Simple schema: fewer attempts
 reprompt:
   max_attempts: 3
-  json_repair: true
-  use_llm_critique: false
   on_exhausted: return_last
 
-# Complex schema: more attempts, full critique
+# Complex schema: more attempts, fail on exhaustion
 reprompt:
   max_attempts: 5
-  json_repair: true
-  use_llm_critique: true
-  use_self_reflection: true
-  critique_after_attempt: 1
   on_exhausted: raise
 ```
 

@@ -18,6 +18,7 @@ from flask import Flask, jsonify, render_template, request
 from werkzeug.serving import make_server
 
 from agent_actions.errors import NetworkError
+from agent_actions.tooling.rendering.data_card import METADATA_KEYS
 
 # Keys whose values should be redacted from /api/context responses
 _SENSITIVE_KEY_PATTERN = re.compile(
@@ -231,6 +232,7 @@ class HitlServer:
             require_comment_on_reject=self.require_comment_on_reject,
             hitl_token=self._session_token,
             csp_nonce=nonce,
+            metadata_keys=json.dumps(sorted(METADATA_KEYS)),
         )
 
     def _handle_get_context(self):
