@@ -1225,10 +1225,8 @@
         }
 
         /* ── Fields Rendering ── */
-        var METADATA_KEYS = [
-            'source_guid', 'lineage', 'node_id', 'metadata', 'target_id',
-            'parent_target_id', 'root_target_id', 'chunk_info', '_recovery', '_unprocessed'
-        ];
+        /* METADATA_KEYS injected from Python (single source of truth) */
+        var METADATA_KEYS = {{ metadata_keys | tojson }};
 
         function getDisplayRecord(record) {
             if (!record || typeof record !== 'object' || Array.isArray(record)) return record;

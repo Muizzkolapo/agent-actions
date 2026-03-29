@@ -1,5 +1,6 @@
 """LSP request/notification handler helpers — hover, semantic tokens, symbols."""
 
+import json
 import logging
 import re
 
@@ -7,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 from lsprotocol import types as lsp
 
+from ..rendering.data_card import render_card_markdown
 from .models import ProjectIndex, ReferenceType
 
 SEMANTIC_TOKEN_TYPES = [
@@ -58,7 +60,49 @@ def build_hover_content(reference, index: ProjectIndex) -> str | None:
         if location:
             return f"**Action**: `{reference.value}`\n\nDefined at line {location.line + 1}"
 
+    elif reference.type == ReferenceType.SEED_FILE:
+        return _build_seed_file_hover(reference, index)
+
     return None
+
+
+def _build_seed_file_hover(reference, index: ProjectIndex) -> str | None:
+    """Build a data-card style hover for a seed file reference.
+
+    Attempts to read the first record from the referenced JSON file and
+    render it as a card-formatted markdown preview.
+    """
+    file_path = reference.value
+    # Resolve relative to project root
+    if index.root:
+        resolved = index.root / file_path
+    else:
+        return f"**Seed file**: `{file_path}`"
+
+    if not resolved.is_file():
+        return f"**Seed file**: `{file_path}`\n\n_File not found_"
+
+    try:
+        with open(resolved, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        return f"**Seed file**: `{file_path}`\n\n_Could not read: {exc}_"
+
+    # Extract first record for preview
+    if isinstance(data, list) and len(data) > 0:
+        record = data[0]
+        total = len(data)
+        header = f"**Seed file**: `{file_path}` ({total} records)\n\n"
+    elif isinstance(data, dict):
+        record = data
+        header = f"**Seed file**: `{file_path}`\n\n"
+    else:
+        return f"**Seed file**: `{file_path}`\n\n_Empty or unsupported format_"
+
+    if not isinstance(record, dict):
+        return header + f"```json\n{json.dumps(record, indent=2)[:500]}\n```"
+
+    return header + render_card_markdown(record)
 
 
 def get_prompt_symbols(content: str, file_path) -> list[lsp.DocumentSymbol]:

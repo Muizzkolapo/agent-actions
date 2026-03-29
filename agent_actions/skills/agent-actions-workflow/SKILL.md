@@ -622,11 +622,9 @@ Higher specificity wins.
 defaults:
   retry:
     max_attempts: 3
-    on_exhausted: continue
+    on_exhausted: return_last  # return_last | raise
 
   reprompt:
     max_attempts: 4
-    json_repair: true
-    use_llm_critique: true
-    on_exhausted: continue
+    on_exhausted: return_last  # return_last | raise
 ```

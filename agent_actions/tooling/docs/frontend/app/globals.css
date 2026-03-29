@@ -131,7 +131,113 @@
   .dark .card-elevated {
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
   }
+}
 
+/* ─── Data card (specimen card) — indigo accent system ─── */
+@layer components {
+  .data-card {
+    @apply relative rounded-lg border bg-card text-card-foreground overflow-hidden;
+    border-left: 4px solid #534AB7;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    transition: transform 150ms ease, box-shadow 150ms ease;
+    background-image: none;
+  }
+  .dark .data-card {
+    border-left-color: #7F77DD;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
+  }
+  .data-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+  }
+  .dark .data-card:hover {
+    box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.35), 0 2px 4px -1px rgb(0 0 0 / 0.25);
+  }
+
+  /* State-driven accent (HITL uses via inline style, docs uses default) */
+  .data-card[data-state="approved"] { border-left-color: hsl(var(--success)); }
+  .data-card[data-state="rejected"] { border-left-color: hsl(var(--destructive)); }
+  .data-card[data-state="pending"]  { border-left-color: hsl(var(--warning)); }
+
+  /* Field label — indigo 600, matching accent */
+  .data-card-label {
+    @apply uppercase font-semibold;
+    font-size: 0.75em;
+    letter-spacing: 0.5px;
+    color: #534AB7;
+  }
+  .dark .data-card-label {
+    color: #AFA9EC;
+  }
+
+  /* Inline pill — indigo tinted */
+  .data-card-pill {
+    @apply inline-flex items-center rounded-md px-1.5 py-0.5 font-mono;
+    font-size: 0.75em;
+    background: #EEEDFE;
+    color: #3C3489;
+    border: 1px solid #EEEDFE;
+  }
+  .dark .data-card-pill {
+    background: #3C3489;
+    color: #CECBF6;
+    border-color: #3C3489;
+  }
+
+  /* Metadata drawer */
+  .data-card-drawer {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 150ms ease;
+  }
+  .data-card-drawer[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+  .data-card-drawer > div {
+    overflow: hidden;
+  }
+
+  /* Long-form text — recedes behind values */
+  .data-card-prose {
+    @apply leading-relaxed;
+    font-size: 1em;
+    color: rgb(from currentColor r g b / 0.72);
+    font-family: var(--font-sora), sans-serif;
+  }
+  .data-card-prose.clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Typography control pill (font/width stepper) */
+  .typo-pill {
+    @apply flex items-center gap-0 rounded-lg border border-border bg-card;
+    height: 28px;
+  }
+  .typo-btn {
+    @apply flex items-center justify-center border-0 bg-transparent
+           text-muted-foreground cursor-pointer transition-colors;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+  }
+  .typo-btn:hover { @apply bg-accent text-foreground; }
+  .typo-btn:active { transform: scale(0.93); }
+  .typo-btn:disabled { @apply opacity-20 pointer-events-none; }
+  .typo-val {
+    @apply text-[10px] font-semibold text-muted-foreground tabular-nums;
+    min-width: 22px;
+    text-align: center;
+  }
+  .typo-sep {
+    @apply bg-border;
+    width: 1px;
+    height: 14px;
+    flex-shrink: 0;
+    margin: 0 1px;
+  }
 }
 
 /* ─── Custom scrollbar ─── */
