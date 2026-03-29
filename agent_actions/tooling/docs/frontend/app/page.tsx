@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { CommandSearch, useCommandSearch } from "@/components/command-search"
 import { HomeScreen } from "@/components/screens/home-screen"
 import { WorkflowsScreen } from "@/components/screens/workflows-screen"
 import { ActionsScreen } from "@/components/screens/actions-screen"
@@ -28,6 +29,7 @@ function Dashboard() {
   const [activeSection, setActiveSection] = useState("home")
   const [navKeys, setNavKeys] = useState<Record<string, number>>({})
   const { workflows } = useCatalogData()
+  const { open: searchOpen, setOpen: setSearchOpen } = useCommandSearch()
 
   // Reset drill-down state when re-clicking the same sidebar item
   const handleNavigate = useCallback((section: string) => {
@@ -62,7 +64,8 @@ function Dashboard() {
 
   return (
     <SidebarProvider>
-      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} />
+      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} onSearchClick={() => setSearchOpen(true)} />
+      <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} onNavigate={handleNavigate} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/80 backdrop-blur-md px-4 sticky top-0 z-10">
           <SidebarTrigger className="-ml-1 h-7 w-7 text-muted-foreground hover:text-foreground transition-colors" />
