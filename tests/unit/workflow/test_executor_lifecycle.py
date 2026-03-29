@@ -31,6 +31,8 @@ def mock_deps():
     deps.action_runner.workflow_name = "test_workflow"
     deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
     deps.action_runner.execution_order = ["agent_a", "agent_b"]
+    # Default status details for limit-change detection (no limits stored)
+    deps.state_manager.get_status_details.return_value = {"status": "completed"}
     return deps
 
 
@@ -259,7 +261,9 @@ class TestHandleRunSuccess:
 
         assert result.status == "completed"
         assert result.output_folder == "/out"
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", "completed")
+        mock_deps.state_manager.update_status.assert_called_with(
+            "agent_a", "completed", record_limit=None, file_limit=None
+        )
 
     def test_normal_completion_with_tokens(self, executor, mock_deps):
         """Normal completion should capture tokens and model info."""
@@ -467,7 +471,9 @@ class TestHandleAgentSkip:
         assert result.success is True
         assert result.status == "skipped"
         mock_deps.output_manager.create_passthrough_output.assert_called_once_with(0, "agent_a")
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", "completed")
+        mock_deps.state_manager.update_status.assert_called_with(
+            "agent_a", "completed", record_limit=None, file_limit=None
+        )
         mock_fire.assert_called_once()
 
     def test_total_agents_from_execution_order(self, executor, mock_deps):

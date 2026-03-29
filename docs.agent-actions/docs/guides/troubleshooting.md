@@ -255,9 +255,6 @@ Or enable reprompting for LLM actions:
 ```yaml
 reprompt:
   max_attempts: 4
-  json_repair: true
-  use_llm_critique: true
-  critique_after_attempt: 2
   on_exhausted: return_last
 ```
 
@@ -411,9 +408,6 @@ Reprompt requires explicit configuration:
 ```yaml
 reprompt:
   max_attempts: 3          # Number of retry attempts
-  json_repair: true        # Try to fix malformed JSON first
-  use_llm_critique: false  # Use LLM to analyze failures
-  critique_after_attempt: 2  # Start critique after N attempts
   on_exhausted: return_last   # return_last | raise
 ```
 
@@ -424,18 +418,15 @@ To disable: `reprompt: false`
 | Option | Description |
 |--------|-------------|
 | `max_attempts` | Maximum retry attempts (default: 2) |
-| `json_repair` | Attempt JSON repair before retry (default: true) |
-| `use_llm_critique` | Use LLM to analyze failures (default: false) |
-| `critique_after_attempt` | Start LLM critique after N attempts (default: 2) |
 | `on_exhausted` | Behavior when exhausted: `return_last`, `raise` |
 
 ### When to Use
 
 Consider what your agentic workflow needs:
 
-- **Simple schemas** — Low `max_attempts` (2-3), `json_repair: true`, no LLM critique
-- **Complex schemas** — Higher `max_attempts` (4-5), enable LLM critique after initial failures
-- **Critical outputs** — Maximum attempts, LLM critique from early attempts, `on_exhausted: raise`
+- **Simple schemas** — Low `max_attempts` (2-3)
+- **Complex schemas** — Higher `max_attempts` (4-5)
+- **Critical outputs** — Maximum attempts, `on_exhausted: raise`
 
 :::warning
 Reprompting adds latency and token cost. For high-volume agentic workflows, consider fixing schema issues at the source rather than relying on retries.
@@ -505,7 +496,7 @@ When debugging agentic workflow errors, work through this checklist:
 4. [ ] Check TypedDict matches actual data shape
 5. [ ] Enable `prompt_debug: true` for LLM actions
 6. [ ] Run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG` for tracebacks
-7. [ ] Consider enabling reprompt with `use_llm_critique: true` for LLM schema failures
+7. [ ] Consider enabling reprompt with `max_attempts: 3` for LLM schema failures
 
 Most errors fall into one of two categories: schema mismatches (the data structure doesn't match expectations) or missing fields (required data wasn't provided). The checklist above helps you identify which category you're dealing with.
 

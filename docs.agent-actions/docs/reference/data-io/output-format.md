@@ -96,10 +96,10 @@ Records may carry underscore-prefixed system fields that control internal proces
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `_recovery` | `boolean` | Record was produced during batch recovery |
+| `_recovery` | `object` | Recovery metadata — present when a record went through [batch recovery](../execution/batch-recovery.md) (retry for missing records and/or reprompt for validation failures). Contains `retry` and/or `reprompt` sub-objects with attempt counts, success status, and timestamps. |
 | `_unprocessed` | `true` | Upstream action failed (API error, missing batch result) — automatically skipped by downstream actions |
 
-These fields are excluded from content extraction and should not be set by users.
+These fields are excluded from content extraction and should not be set by users. See [Batch Recovery](../execution/batch-recovery.md) for the full `_recovery` structure.
 
 ### Content Field
 

@@ -19,16 +19,13 @@ defaults:
   # Retry: transient errors (rate limits, network)
   retry:
     max_attempts: 3
-    on_exhausted: continue  # continue | fail
+    on_exhausted: return_last  # return_last | raise
 
-  # Reprompt: validation errors (bad JSON, schema violations)
+  # Reprompt: validation errors (schema violations)
   # reprompt: false  # Uncomment to enable
   # reprompt:
   #   max_attempts: 3
-  #   json_repair: true
-  #   use_llm_critique: false
-  #   critique_after_attempt: 2
-  #   on_exhausted: continue
+  #   on_exhausted: return_last  # return_last | raise
 
 actions:
   # ============================================================================
