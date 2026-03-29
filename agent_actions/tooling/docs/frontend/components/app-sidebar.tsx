@@ -34,9 +34,10 @@ import { ThemeToggleSidebar } from "@/components/theme-toggle"
 interface AppSidebarProps {
   activeSection: string
   onNavigate: (section: string) => void
+  onSearchClick?: () => void
 }
 
-export function AppSidebar({ activeSection, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ activeSection, onNavigate, onSearchClick }: AppSidebarProps) {
   const { stats, runs, generatedAt } = useCatalogData()
 
   const mainNav = useMemo(() => [
@@ -83,7 +84,10 @@ export function AppSidebar({ activeSection, onNavigate }: AppSidebarProps) {
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="Search..."
-              className="h-8 bg-secondary border-0 pl-8 text-xs placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
+              className="h-8 bg-secondary border-0 pl-8 text-xs placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))] cursor-pointer"
+              readOnly
+              onClick={onSearchClick}
+              onFocus={(e) => { e.target.blur(); onSearchClick?.() }}
             />
             <kbd className="absolute right-2 top-1.5 pointer-events-none hidden h-5 select-none items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
               /

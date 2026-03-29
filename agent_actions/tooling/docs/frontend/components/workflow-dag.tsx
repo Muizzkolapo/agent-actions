@@ -138,8 +138,8 @@ function DAGContent({
   workflowId: string
   onNodeClick?: (name: string) => void
 }) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const { fitView } = useReactFlow()
 
   const nodeTypes = useMemo(
@@ -153,7 +153,7 @@ function DAGContent({
   useEffect(() => {
     const transformed = transformWorkflowToReactFlow(actions, workflowId)
 
-    setNodes(transformed.nodes as Node[])
+    setNodes(transformed.nodes)
     setEdges(transformed.edges)
 
     setTimeout(() => {

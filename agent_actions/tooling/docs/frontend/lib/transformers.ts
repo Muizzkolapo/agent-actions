@@ -57,6 +57,7 @@ export function transformWorkflows(catalog: RawCatalogJson): Workflow[] {
       name: wf.name,
       version: wf.version,
       description: wf.description,
+      path: wf.path ?? "",
       defaults: {
         model_vendor: (wf.defaults.model_vendor as string) ?? null,
         model_name: (wf.defaults.model_name as string) ?? null,

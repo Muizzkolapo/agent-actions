@@ -30,6 +30,7 @@ export interface Workflow {
   name: string
   version: string
   description: string
+  path: string
   defaults: WorkflowDefaults
   actionCount: number
   llmCount: number
