@@ -44,3 +44,8 @@ node_modules/
 MagicMock/
 /batch/
 .docusaurus/
+
+# Agent Actions runtime artifacts
+.agent_status.json
+**/agent_io/target/
+*.db
