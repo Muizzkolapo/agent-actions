@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathManager, PathType
@@ -17,6 +20,41 @@ from agent_actions.utils.file_handler import FileHandler
 from agent_actions.utils.path_utils import resolve_absolute_path
 
 logger = logging.getLogger(__name__)
+
+
+def _peek_requires_json_mode(agent_config_dir: Path, agent_name: str) -> bool:
+    """Quick YAML peek to determine if an agent requires JSON mode.
+
+    Returns True (schema directory required) when:
+    - The config cannot be read (safe default)
+    - defaults.json_mode is not explicitly False, OR
+    - Any action explicitly sets json_mode to True
+
+    Returns False (schema directory not required) only when
+    defaults.json_mode is explicitly False and no action overrides it to True.
+    """
+    config_path = agent_config_dir / f"{agent_name}.yml"
+    if not config_path.exists():
+        return True  # safe default: require schema
+    try:
+        with open(config_path) as f:
+            data: dict[str, Any] = yaml.safe_load(f) or {}
+    except Exception:
+        logger.debug("Could not peek at agent config %s; assuming JSON mode", config_path)
+        return True
+
+    defaults = data.get("defaults") or {}
+    default_json_mode = defaults.get("json_mode")
+
+    # If the default is explicitly False, check whether any action overrides to True
+    if default_json_mode is False:
+        for action in data.get("actions", []):
+            if action.get("json_mode") is True:
+                return True
+        return False
+
+    # Default is True or unset (json_mode defaults to True at runtime)
+    return True
 
 
 def find_config_file(
@@ -109,7 +147,7 @@ class ProjectPaths:
 class ProjectPathsFactory:
     """Factory for creating project paths."""
 
-    REQUIRED_DIRECTORIES = ["agent_config_dir", "schema_dir"]
+    REQUIRED_DIRECTORIES = ["agent_config_dir"]
     AUTO_CREATE_DIRECTORIES = ["prompt_dir", "rendered_workflows_dir", "io_dir", "template_dir"]
 
     def __init__(self, path_manager: PathManager | None = None):
@@ -198,11 +236,22 @@ class ProjectPathsFactory:
             path_validator = PathValidator()
             for dir_name in cls.REQUIRED_DIRECTORIES:
                 path = getattr(paths, dir_name)
-                if dir_name == "schema_dir":
-                    factory.path_manager.validate_standard_path(PathType.SCHEMA, path)
                 path_validator.validate(
                     {"operation": "validate_directory", "path": path, "path_name": dir_name}
                 )
+            # Schema dir is required only when the agent uses JSON mode.
+            # Non-JSON-mode agents (json_mode: false) don't need schemas.
+            if _peek_requires_json_mode(agent_config_dir, agent_name):
+                factory.path_manager.validate_standard_path(PathType.SCHEMA, paths.schema_dir)
+                path_validator.validate(
+                    {
+                        "operation": "validate_directory",
+                        "path": paths.schema_dir,
+                        "path_name": "schema_dir",
+                    }
+                )
+            elif paths.schema_dir.exists():
+                factory.path_manager.validate_standard_path(PathType.SCHEMA, paths.schema_dir)
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
                 path = getattr(paths, dir_name)
                 if auto_create:

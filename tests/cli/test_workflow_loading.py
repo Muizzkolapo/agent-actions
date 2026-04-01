@@ -82,7 +82,9 @@ class TestProjectPathsFactoryConstants:
         required = ProjectPathsFactory.REQUIRED_DIRECTORIES
         assert isinstance(required, list)
         assert "agent_config_dir" in required
-        assert "schema_dir" in required
+        # schema_dir is validated conditionally based on json_mode,
+        # not unconditionally in REQUIRED_DIRECTORIES
+        assert "schema_dir" not in required
 
     def test_auto_create_directories_constant(self):
         """Test AUTO_CREATE_DIRECTORIES constant exists."""
