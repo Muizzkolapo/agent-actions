@@ -1,41 +1,40 @@
 """Core event infrastructure for centralized logging."""
 
-from agent_actions.logging.core.events import (
-    BaseEvent,
-    EventCategory,
-    EventLevel,
-    EventMeta,
-)
-from agent_actions.logging.core.handlers import (
-    ConsoleEventHandler,
-    ContextDebugHandler,
-    JSONFileHandler,
-)
-from agent_actions.logging.core.manager import EventManager, fire_event, get_manager
-from agent_actions.logging.core.protocols import (
-    CategoryFilter,
-    EventFilter,
-    EventHandler,
-    LevelFilter,
-)
+# Lazy-load handlers (which pull in Rich) until actually needed.
+# Events, manager, and protocols are lightweight and load on demand too.
 
-__all__ = [
-    # Events
-    "BaseEvent",
-    "EventLevel",
-    "EventCategory",
-    "EventMeta",
-    # Manager
-    "EventManager",
-    "fire_event",
-    "get_manager",
-    # Protocols
-    "EventHandler",
-    "EventFilter",
-    "LevelFilter",
-    "CategoryFilter",
-    # Handlers
-    "ConsoleEventHandler",
-    "JSONFileHandler",
-    "ContextDebugHandler",
-]
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    # events
+    "BaseEvent": (".events", "BaseEvent"),
+    "EventCategory": (".events", "EventCategory"),
+    "EventLevel": (".events", "EventLevel"),
+    "EventMeta": (".events", "EventMeta"),
+    # handlers
+    "ConsoleEventHandler": (".handlers", "ConsoleEventHandler"),
+    "ContextDebugHandler": (".handlers", "ContextDebugHandler"),
+    "JSONFileHandler": (".handlers", "JSONFileHandler"),
+    # manager
+    "EventManager": (".manager", "EventManager"),
+    "fire_event": (".manager", "fire_event"),
+    "get_manager": (".manager", "get_manager"),
+    # protocols
+    "CategoryFilter": (".protocols", "CategoryFilter"),
+    "EventFilter": (".protocols", "EventFilter"),
+    "EventHandler": (".protocols", "EventHandler"),
+    "LevelFilter": (".protocols", "LevelFilter"),
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_IMPORTS:
+        import importlib
+
+        rel_module, attr = _LAZY_IMPORTS[name]
+        mod = importlib.import_module(rel_module, __name__)
+        val = getattr(mod, attr)
+        globals()[name] = val
+        return val
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = list(_LAZY_IMPORTS.keys())
