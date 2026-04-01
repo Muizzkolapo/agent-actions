@@ -439,7 +439,11 @@ class ActionExecutor:
         start_time: datetime,
         failed_dependency: str,
     ) -> ActionExecutionResult:
-        """Handle action skip due to upstream dependency failure."""
+        """Handle action skip due to upstream dependency failure.
+
+        State is set to ``"failed"`` so transitive dependents also skip via
+        ``is_failed``.  ``success=True`` keeps independent branches alive.
+        """
         reason = f"Upstream dependency '{failed_dependency}' failed"
         self.deps.state_manager.update_status(action_name, "failed")
         self._write_failed_disposition(action_name, reason)
@@ -463,14 +467,14 @@ class ActionExecutor:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=action_name,
-                status="skipped",
+                status="failed",
                 duration_seconds=duration,
                 skip_reason=reason,
             )
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=True, status="skipped", metrics=ExecutionMetrics(duration=duration)
+            success=True, status="failed", metrics=ExecutionMetrics(duration=duration)
         )
 
     def execute_action_sync(

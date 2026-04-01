@@ -147,12 +147,12 @@ class TestHandleDependencySkip:
 
         executor.run_tracker.record_action_complete.assert_called_once()
         config = executor.run_tracker.record_action_complete.call_args[1]["config"]
-        assert config.status == "skipped"
+        assert config.status == "failed"
         assert config.run_id == "run-123"
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_returns_skipped_result(self, mock_fire, executor, mock_deps):
-        """Returns ActionExecutionResult(success=True, status='skipped')."""
+    def test_returns_failed_result_with_success_true(self, mock_fire, executor, mock_deps):
+        """Returns ActionExecutionResult(success=True, status='failed') — failed state, but independent branches continue."""
         mock_deps.action_runner.storage_backend = None
         start_time = datetime.now()
 
@@ -160,7 +160,7 @@ class TestHandleDependencySkip:
 
         assert isinstance(result, ActionExecutionResult)
         assert result.success is True
-        assert result.status == "skipped"
+        assert result.status == "failed"
 
 
 class TestWriteFailedDisposition:
