@@ -892,6 +892,35 @@ class TestContextScopeValidation:
         )
 
 
+    def test_output_field_observable_by_downstream(self):
+        """Downstream action can observe an output_field-produced field."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "classify",
+                    "json_mode": False,
+                    "output_field": "issue_type",
+                    "prompt": "Classify",
+                },
+                {
+                    "name": "route",
+                    "depends_on": ["classify"],
+                    "context_scope": {"observe": ["classify.issue_type"]},
+                    "prompt": "Route based on {{ action.classify.issue_type }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"team": {"type": "string"}},
+                    },
+                },
+            ],
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        errors = [e for e in result.errors if "issue_type" in e.message]
+        assert not errors, f"False positive on output_field: {errors}"
+
+
 class TestPrimaryDependencyValidation:
     """Tests for primary_dependency validation."""
 
