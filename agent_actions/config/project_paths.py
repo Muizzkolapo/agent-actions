@@ -109,7 +109,7 @@ class ProjectPaths:
 class ProjectPathsFactory:
     """Factory for creating project paths."""
 
-    REQUIRED_DIRECTORIES = ["agent_config_dir", "schema_dir"]
+    REQUIRED_DIRECTORIES = ["agent_config_dir"]
     AUTO_CREATE_DIRECTORIES = ["prompt_dir", "rendered_workflows_dir", "io_dir", "template_dir"]
 
     def __init__(self, path_manager: PathManager | None = None):
@@ -198,8 +198,6 @@ class ProjectPathsFactory:
             path_validator = PathValidator()
             for dir_name in cls.REQUIRED_DIRECTORIES:
                 path = getattr(paths, dir_name)
-                if dir_name == "schema_dir":
-                    factory.path_manager.validate_standard_path(PathType.SCHEMA, path)
                 path_validator.validate(
                     {"operation": "validate_directory", "path": path, "path_name": dir_name}
                 )
