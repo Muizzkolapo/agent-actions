@@ -490,6 +490,22 @@ class ProcessingPipeline:
             storage_backend=self.config.storage_backend,
         )
 
+        # If input had records but output is empty, all items failed during
+        # processing (e.g. 401 auth error on every LLM call).  Raise so the
+        # executor marks the action as failed and the circuit breaker skips
+        # downstream dependents.
+        if data and not output:
+            from agent_actions.processing.types import ProcessingStatus
+
+            failed_msgs = [
+                r.error for r in results if r.status == ProcessingStatus.FAILED and r.error
+            ]
+            summary = "; ".join(failed_msgs[:3])  # first 3 errors
+            raise RuntimeError(
+                f"Action '{self.config.action_name}' produced 0 records — "
+                f"all {len(data)} input item(s) failed: {summary}"
+            )
+
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     @staticmethod
