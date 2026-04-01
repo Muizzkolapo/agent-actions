@@ -207,6 +207,14 @@ class ConfigRenderingService:
             )
         return cast(ActionConfigMap, data)
 
+    @staticmethod
+    def _workflow_needs_schema(config: dict[str, Any]) -> bool:
+        """Return True if any action in the workflow uses JSON mode (needs schemas)."""
+        defaults: dict[str, Any] = config.get("defaults") or {}
+        if defaults.get("json_mode") is not False:
+            return True
+        return any(a.get("json_mode") is True for a in (config.get("actions") or []))
+
     def _build_agent_entry_from_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Build agent entry dictionary from action configuration."""
         agent_entry = {
@@ -381,27 +389,28 @@ class ConfigRenderingService:
             config_path_str, template_dir_str, output_dir_str, project_root=project_root
         )
         config = self._safe_load_yaml(rendered_template, cfg_path)
-        try:
-            schema_validate_instance = SchemaValidator()
-            schema_path = get_schema_path(
-                Path(project_root) if project_root else Path(template_dir).parent
-            )
-            schema_validate_instance.validate(
-                {
-                    "agent_name": agent_name,
-                    "schema_dir": resolve_relative_to(schema_path, Path(template_dir).parent),
-                }
-            )
-        except Exception as e:
-            raise ConfigurationError(
-                "Schema validation failed",
-                context={
-                    "agent_name": agent_name,
-                    "template_dir": str(template_dir),
-                    "operation": "validate_schema",
-                },
-                cause=e,
-            ) from e
+        if self._workflow_needs_schema(config):
+            try:
+                schema_validate_instance = SchemaValidator()
+                schema_path = get_schema_path(
+                    Path(project_root) if project_root else Path(template_dir).parent
+                )
+                schema_validate_instance.validate(
+                    {
+                        "agent_name": agent_name,
+                        "schema_dir": resolve_relative_to(schema_path, Path(template_dir).parent),
+                    }
+                )
+            except Exception as e:
+                raise ConfigurationError(
+                    "Schema validation failed",
+                    context={
+                        "agent_name": agent_name,
+                        "template_dir": str(template_dir),
+                        "operation": "validate_schema",
+                    },
+                    cause=e,
+                ) from e
         self._validate_agent_config_block(config, agent_name, project_root=project_root)
         logger.debug(
             "Successfully completed render and load config",
