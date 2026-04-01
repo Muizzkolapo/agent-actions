@@ -58,6 +58,42 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
     return {}
 
 
+_PROJECT_MARKERS = ("agent_actions.yml", "agent_actions.yaml", ".agent_actions.yml")
+_FALLBACK_DIRS = ("agent_actions", "agent_config")
+
+
+def find_project_root_dir(
+    start: Path | None = None,
+    *,
+    marker_file: str | None = None,
+    use_fallback_heuristics: bool = True,
+) -> Path | None:
+    """Walk up from *start* (default CWD) looking for the project root.
+
+    The project root is the directory that contains a marker file
+    (``agent_actions.yml`` by default).  When *use_fallback_heuristics* is
+    ``True`` (the default) the ``agent_actions/`` and ``agent_config/``
+    directories are also accepted as indicators — matching the behaviour of
+    :pymethod:`PathManager.get_project_root`.
+
+    Returns the directory containing the marker, or ``None`` if no marker is
+    found before the filesystem root.
+
+    This function is intentionally dependency-free (only ``pathlib``) so it
+    can be called very early — e.g. to locate ``.env`` before the config
+    system boots.
+    """
+    markers = (marker_file,) if marker_file else _PROJECT_MARKERS
+    current = (start or Path.cwd()).resolve()
+    while current != current.parent:
+        if any((current / m).exists() for m in markers):
+            return current
+        if use_fallback_heuristics and any((current / d).is_dir() for d in _FALLBACK_DIRS):
+            return current
+        current = current.parent
+    return None
+
+
 def resolve_project_root(explicit_root: Path | None = None) -> Path:
     """Resolve project root, defaulting to cwd when not provided.
 
