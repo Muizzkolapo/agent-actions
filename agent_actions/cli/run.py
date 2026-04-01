@@ -121,9 +121,17 @@ class RunCommand:
             use_parallel = self._determine_execution_mode(workflow)
             self._run_workflow_execution(workflow, use_parallel)
 
-            if workflow.services.core.state_manager.is_workflow_complete():
+            state_mgr = workflow.services.core.state_manager
+            if state_mgr.is_workflow_complete():
                 status = "SUCCESS"
                 click.echo(f"Successfully completed agent run for: {self.args.agent}")
+            elif state_mgr.is_workflow_done():
+                # All actions reached terminal state but some failed
+                status = "FAILED"
+                failed = state_mgr.get_failed_actions(workflow.execution_order)
+                click.echo(
+                    f"Workflow completed with {len(failed)} failed action(s): {', '.join(failed)}"
+                )
             else:
                 status = "PAUSED"
                 click.echo(
