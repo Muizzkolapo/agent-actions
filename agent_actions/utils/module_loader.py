@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import (
     CacheHitEvent,
     CacheInvalidationEvent,

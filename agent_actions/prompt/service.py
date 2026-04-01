@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 from agent_actions.config.types import RunMode
 from agent_actions.errors import TemplateVariableError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
 from agent_actions.prompt.context.scope_application import apply_context_scope

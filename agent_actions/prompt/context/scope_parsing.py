@@ -2,7 +2,7 @@
 
 import re
 
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 

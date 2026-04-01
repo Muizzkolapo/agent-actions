@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from agent_actions.utils.dict import get_nested_value, nested_field_exists, set_nested_value

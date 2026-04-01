@@ -12,7 +12,7 @@ import yaml
 
 from agent_actions.errors import ProcessingError, get_error_detail
 from agent_actions.errors.base import AgentActionsError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import (
     DataLoadingErrorEvent,
     DataParsingErrorEvent,

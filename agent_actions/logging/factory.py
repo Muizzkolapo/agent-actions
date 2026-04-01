@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 from agent_actions.logging.config import LoggingConfig
 
 if TYPE_CHECKING:
-    from agent_actions.logging.core import EventManager
     from agent_actions.logging.core.handlers import ContextDebugHandler
+    from agent_actions.logging.core.manager import EventManager
     from agent_actions.logging.events.handlers import RunResultsCollector
 
 
@@ -51,9 +51,7 @@ class LoggerFactory:
         else:
             console_level_str = cls._config.default_level
 
-        from agent_actions.logging.core import (
-            EventManager,
-        )
+        from agent_actions.logging.core.manager import EventManager
 
         manager = EventManager.get()
         cls._event_manager = manager
@@ -103,11 +101,8 @@ class LoggerFactory:
         console_level_str,
     ) -> None:
         """Build and register all event handlers on the manager."""
-        from agent_actions.logging.core import (
-            ConsoleEventHandler,
-            EventLevel,
-            JSONFileHandler,
-        )
+        from agent_actions.logging.core.events import EventLevel
+        from agent_actions.logging.core.handlers import ConsoleEventHandler, JSONFileHandler
         from agent_actions.logging.events import AgentActionsFormatter
         from agent_actions.logging.events.handlers import RunResultsCollector
 
@@ -277,7 +272,7 @@ class LoggerFactory:
         for f in root_logger.filters[:]:
             root_logger.removeFilter(f)
 
-        from agent_actions.logging.core import EventManager
+        from agent_actions.logging.core.manager import EventManager
 
         EventManager.reset()
 

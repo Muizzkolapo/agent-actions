@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMErrorEvent, RateLimitEvent
 
 logger = logging.getLogger(__name__)

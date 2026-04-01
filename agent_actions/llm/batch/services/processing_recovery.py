@@ -22,7 +22,7 @@ from agent_actions.llm.batch.infrastructure.registry import (
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.storage.backend import (

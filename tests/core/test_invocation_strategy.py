@@ -4,16 +4,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.processing import (
+from agent_actions.processing.invocation import (
     BatchStrategy,
     BatchSubmissionResult,
     InvocationResult,
     InvocationStrategyFactory,
     OnlineStrategy,
-    ProcessingMode,
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
-from agent_actions.processing.types import ProcessingContext
+from agent_actions.processing.types import ProcessingContext, ProcessingMode
 
 
 @pytest.fixture

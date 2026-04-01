@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import AgentActionsError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     FileWriteCompleteEvent,
     FileWriteStartedEvent,

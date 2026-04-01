@@ -8,7 +8,6 @@ from .registry import (
     list_udfs,
     udf_tool,
 )
-from .tooling import execute_user_defined_function, load_user_defined_function
 
 __all__ = [
     "udf_tool",
@@ -16,7 +15,5 @@ __all__ = [
     "get_udf_metadata",
     "list_udfs",
     "clear_registry",
-    "load_user_defined_function",
-    "execute_user_defined_function",
     "FileUDFResult",
 ]

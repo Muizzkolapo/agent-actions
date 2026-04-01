@@ -14,7 +14,7 @@ from agent_actions.config.path_config import load_project_config, resolve_projec
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import WorkflowConfig
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 from agent_actions.output.response.config_fields import get_default
 

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     EnricherExecutedEvent,
     EnrichmentPipelineCompleteEvent,

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 
 from agent_actions.errors import get_error_detail
-from agent_actions.logging import fire_event, get_manager
+from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import (
     ActionCompleteEvent,
     ActionFailedEvent,

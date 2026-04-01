@@ -13,7 +13,7 @@ from rich.console import Console
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import get_error_detail
 from agent_actions.llm.providers.usage_tracker import get_last_usage
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ActionSkipEvent,
     BatchCompleteEvent,

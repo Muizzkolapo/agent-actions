@@ -21,7 +21,7 @@ from agent_actions.llm.batch.processing.batch_passthrough_builder import (
     BatchPassthroughBuilder,
 )
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-from agent_actions.logging import fire_event, get_manager
+from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
 from agent_actions.logging.events.batch_events import (
     BatchStatusCheckFailedEvent,

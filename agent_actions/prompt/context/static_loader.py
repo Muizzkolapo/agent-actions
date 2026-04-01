@@ -14,7 +14,7 @@ import yaml
 
 from agent_actions.config.defaults import SeedDataDefaults
 from agent_actions.errors import FileSystemError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import (
     CacheHitEvent,
     CacheInvalidationEvent,

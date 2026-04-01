@@ -24,7 +24,7 @@ from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
     JSONResponseMixin,
 )
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,

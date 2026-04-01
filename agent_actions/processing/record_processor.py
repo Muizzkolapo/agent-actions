@@ -8,7 +8,7 @@ from typing import Any, Optional, cast
 from agent_actions.errors import ConfigurationError, SchemaValidationError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import (
     BatchDataProcessingCompleteEvent,
     BatchProcessingProgressEvent,

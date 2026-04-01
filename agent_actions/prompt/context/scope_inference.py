@@ -3,7 +3,7 @@
 import logging
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import (
     ContextDependencyInferredEvent,
     ContextFieldSkippedEvent,

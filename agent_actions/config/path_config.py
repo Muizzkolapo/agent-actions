@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 from agent_actions.errors import ConfigValidationError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 
 logger = logging.getLogger(__name__)

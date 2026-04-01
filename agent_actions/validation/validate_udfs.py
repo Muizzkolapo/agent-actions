@@ -17,7 +17,7 @@ from agent_actions.input.loaders.udf import (
     discover_udfs,
     validate_udf_references,
 )
-from agent_actions.logging.core import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
 from agent_actions.utils.udf_management.registry import (

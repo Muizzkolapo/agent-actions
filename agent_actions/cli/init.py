@@ -20,7 +20,7 @@ from agent_actions.errors import (
     FileSystemError,
     ValidationError,
 )
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ProjectDirectoryCreatedEvent,
     ProjectInitializationStartEvent,

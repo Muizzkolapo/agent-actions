@@ -25,7 +25,7 @@ from agent_actions.llm.providers.generation_params import extract_generation_par
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
 )
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
 )

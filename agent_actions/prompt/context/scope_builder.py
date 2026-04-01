@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextNamespaceLoadedEvent
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_namespace import (

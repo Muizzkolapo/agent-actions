@@ -11,7 +11,7 @@ from rich.console import Console
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-from agent_actions.logging import get_manager
+from agent_actions.logging.core.manager import get_manager
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
