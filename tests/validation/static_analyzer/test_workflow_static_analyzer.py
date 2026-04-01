@@ -891,7 +891,6 @@ class TestContextScopeValidation:
             "not found" in e.message or "could not be loaded" in e.message for e in context_errors
         )
 
-
     def test_output_field_observable_by_downstream(self):
         """Downstream action can observe an output_field-produced field."""
         workflow_config = {
