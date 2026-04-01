@@ -333,6 +333,7 @@ class TestLimitStatusInvalidation:
 
         storage = MagicMock()
         storage.list_target_files.return_value = ["file.json"]
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         result = executor.execute_action_sync(
@@ -351,6 +352,7 @@ class TestLimitStatusInvalidation:
 
         storage = MagicMock()
         storage.list_target_files.return_value = ["file.json"]
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         result = executor.execute_action_sync(

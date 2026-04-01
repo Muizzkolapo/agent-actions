@@ -89,6 +89,7 @@ class RunCommand:
                 use_tools=self.args.use_tools,
                 run_upstream=self.args.upstream,
                 run_downstream=self.args.downstream,
+                fresh=self.args.fresh,
                 project_root=project_root,
             )
         )
@@ -187,6 +188,12 @@ class RunCommand:
     is_flag=True,
     help="Execute all downstream workflows that depend on this workflow",
 )
+@click.option(
+    "--fresh",
+    is_flag=True,
+    default=False,
+    help="Clear stored results and status before execution (useful after failed runs)",
+)
 @handles_user_errors("run")
 @requires_project
 def run(
@@ -197,6 +204,7 @@ def run(
     concurrency_limit: int = 5,
     upstream: bool = False,
     downstream: bool = False,
+    fresh: bool = False,
     project_root: Path | None = None,
 ) -> None:
     """
@@ -211,6 +219,7 @@ def run(
         agac run -a my_agent --upstream
         agac run -a my_agent --downstream
         agac run -a my_agent --execution-mode parallel
+        agac run -a my_agent --fresh
     """
     args = RunCommandArgs(
         agent=agent,
@@ -220,6 +229,7 @@ def run(
         concurrency_limit=concurrency_limit,
         upstream=upstream,
         downstream=downstream,
+        fresh=fresh,
     )
     command = RunCommand(args)
     command.execute(project_root=project_root)

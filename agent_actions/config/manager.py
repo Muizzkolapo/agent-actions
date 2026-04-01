@@ -10,7 +10,11 @@ import yaml
 from pydantic import ValidationError
 
 from agent_actions.config.environment import EnvironmentConfig
-from agent_actions.config.path_config import load_project_config, resolve_project_root
+from agent_actions.config.path_config import (
+    find_project_root_dir,
+    load_project_config,
+    resolve_project_root,
+)
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import WorkflowConfig
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
@@ -349,7 +353,8 @@ class ConfigManager:
     def load_environment_config(self) -> EnvironmentConfig:
         """Load and validate environment configuration."""
         try:
-            self.environment_config = EnvironmentConfig()
+            env_file = self._resolve_dotenv()
+            self.environment_config = EnvironmentConfig(_env_file=env_file)  # type: ignore[call-arg]
             return self.environment_config
         except ValidationError as e:
             raise ConfigurationError(
@@ -357,6 +362,14 @@ class ConfigManager:
                 context={"operation": "load_environment_config"},
                 cause=e,
             ) from e
+
+    def _resolve_dotenv(self) -> Path | None:
+        """Return the absolute path to ``.env`` at the project root, or ``None``."""
+        root = self.project_root or find_project_root_dir()
+        if root is None:
+            return None
+        env_path = Path(root) / ".env"
+        return env_path if env_path.is_file() else None
 
     def get_agent_config(self, agent_type: str) -> AgentConfig | None:
         """Get typed agent configuration by agent type."""

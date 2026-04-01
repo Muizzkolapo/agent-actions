@@ -417,6 +417,11 @@ class SchemaExtractor:
             field_name = self._extract_field_name(ref)
             if field_name:
                 output.passthrough_fields.add(field_name)
+            elif isinstance(ref, str) and ".*" in ref:
+                # Wildcard passthrough: "source.*" → record the source name
+                source_name = ref.split(".", 1)[0]
+                if source_name:
+                    output.passthrough_wildcard_sources.add(source_name)
 
         scope_observe = context_scope.get("observe", [])
         for ref in scope_observe:
