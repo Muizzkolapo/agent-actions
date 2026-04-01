@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.errors import AgentActionsError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ExhaustedRecordEvent,
     ResultCollectedEvent,

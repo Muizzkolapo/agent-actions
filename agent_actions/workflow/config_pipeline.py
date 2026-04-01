@@ -8,7 +8,7 @@ from rich.console import Console
 
 from agent_actions.config.manager import ConfigManager
 from agent_actions.input.loaders.udf import discover_udfs
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     UDFDiscoveryCompleteEvent,
     UDFDiscoveryStartEvent,

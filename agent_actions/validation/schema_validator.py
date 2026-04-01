@@ -9,7 +9,7 @@ from typing import Any
 import jsonschema  # type: ignore[import-untyped]
 import yaml
 
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     DataValidationFailedEvent,
     DataValidationPassedEvent,

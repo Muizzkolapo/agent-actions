@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
 )

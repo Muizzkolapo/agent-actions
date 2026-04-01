@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from rich.console import Console
 
 from agent_actions.errors import ConfigurationError, ProcessingError
-from agent_actions.logging.core import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     BatchErrorEvent,
     BatchPassthroughEvent,

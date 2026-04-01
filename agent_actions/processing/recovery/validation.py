@@ -5,13 +5,6 @@ import logging
 import threading
 from collections.abc import Callable
 
-from agent_actions.logging import fire_event
-from agent_actions.logging.events import (
-    DataValidationFailedEvent,
-    DataValidationPassedEvent,
-    DataValidationStartedEvent,
-)
-
 logger = logging.getLogger(__name__)
 
 _VALIDATION_REGISTRY: dict[str, tuple[Callable[[dict], bool], str]] = {}
@@ -33,6 +26,13 @@ def reprompt_validation(feedback_message: str):
 
         @functools.wraps(func)
         def wrapped_func(response: dict) -> bool:
+            from agent_actions.logging.core.manager import fire_event
+            from agent_actions.logging.events import (
+                DataValidationFailedEvent,
+                DataValidationPassedEvent,
+                DataValidationStartedEvent,
+            )
+
             fire_event(
                 DataValidationStartedEvent(
                     validator_type=f"RepromptValidation:{func_name}",

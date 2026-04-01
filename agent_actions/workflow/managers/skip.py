@@ -10,7 +10,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     FilterItemRequest,
     get_global_guard_filter,
 )
-from agent_actions.logging.core import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ActionSkipEvent
 from agent_actions.output.response.config_fields import get_default
 

@@ -28,7 +28,7 @@ from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestra
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import WorkflowServicesInitializationStartEvent
 
 logger = logging.getLogger(__name__)

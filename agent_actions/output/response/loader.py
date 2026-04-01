@@ -9,13 +9,14 @@ from pathlib import Path
 from agent_actions.errors import (
     SchemaValidationError,
 )
-from agent_actions.logging import LoggerFactory, fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     SchemaConstructionCompleteEvent,
     SchemaConstructionStartedEvent,
     SchemaLoadedEvent,
     SchemaLoadingStartedEvent,
 )
+from agent_actions.logging.factory import LoggerFactory
 from agent_actions.utils.constants import SCHEMA_SUFFIXES
 from agent_actions.utils.file_utils import load_structured_file
 from agent_actions.utils.path_utils import resolve_relative_to

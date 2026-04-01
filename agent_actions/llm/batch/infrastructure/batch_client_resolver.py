@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.batch_base import BaseBatchClient
 from agent_actions.llm.providers.batch_client_factory import BatchClientFactory
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import CacheHitEvent, CacheMissEvent
 
 

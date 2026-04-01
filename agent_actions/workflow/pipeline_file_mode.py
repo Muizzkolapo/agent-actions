@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import AgentActionsError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.types import (

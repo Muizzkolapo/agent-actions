@@ -4,12 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.processing import (
-    GuardStatus,
-    PreparationContext,
-    PreparedTask,
-    TaskPreparer,
-)
+from agent_actions.processing.prepared_task import GuardStatus, PreparationContext, PreparedTask
+from agent_actions.processing.task_preparer import TaskPreparer
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import VendorAPIError
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
 
 logger = logging.getLogger(__name__)

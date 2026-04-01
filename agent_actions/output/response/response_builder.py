@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any
 
 from agent_actions.llm.providers.usage_tracker import set_last_usage
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMResponseEvent
 from agent_actions.output.response.config_fields import get_default
 

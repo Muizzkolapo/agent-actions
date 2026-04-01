@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.defaults import PromptDefaults
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ValidationStartEvent
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.validation.base_validator import BaseValidator

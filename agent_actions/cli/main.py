@@ -21,13 +21,15 @@ from agent_actions.cli.skills import skills
 from agent_actions.cli.status import status
 from agent_actions.errors import ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import batch
-from agent_actions.logging import LoggerFactory, LoggingConfig, fire_event
+from agent_actions.logging.config import LoggingConfig
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import (
     CLIArgumentParsingEvent,
     CLIInitCompleteEvent,
     CLIInitStartEvent,
 )
+from agent_actions.logging.factory import LoggerFactory
 from agent_actions.utils.safe_format import format_exception_chain_for_debug
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
 

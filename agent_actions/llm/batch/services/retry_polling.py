@@ -5,7 +5,7 @@ import time
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.batch_base import BaseBatchClient
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchProgressEvent
 from agent_actions.utils.module_loader import load_module_from_path
 
