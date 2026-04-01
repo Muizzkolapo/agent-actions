@@ -34,27 +34,19 @@ def _peek_requires_json_mode(agent_config_dir: Path, agent_name: str) -> bool:
     defaults.json_mode is explicitly False and no action overrides it to True.
     """
     config_path = agent_config_dir / f"{agent_name}.yml"
-    if not config_path.exists():
-        return True  # safe default: require schema
     try:
         with open(config_path) as f:
             data: dict[str, Any] = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return True
     except Exception:
         logger.debug("Could not peek at agent config %s; assuming JSON mode", config_path)
         return True
 
     defaults = data.get("defaults") or {}
-    default_json_mode = defaults.get("json_mode")
-
-    # If the default is explicitly False, check whether any action overrides to True
-    if default_json_mode is False:
-        for action in data.get("actions", []):
-            if action.get("json_mode") is True:
-                return True
-        return False
-
-    # Default is True or unset (json_mode defaults to True at runtime)
-    return True
+    if defaults.get("json_mode") is not False:
+        return True
+    return any(action.get("json_mode") is True for action in data.get("actions", []))
 
 
 def find_config_file(
@@ -239,10 +231,10 @@ class ProjectPathsFactory:
                 path_validator.validate(
                     {"operation": "validate_directory", "path": path, "path_name": dir_name}
                 )
-            # Schema dir is required only when the agent uses JSON mode.
-            # Non-JSON-mode agents (json_mode: false) don't need schemas.
-            if _peek_requires_json_mode(agent_config_dir, agent_name):
+            require_schema = _peek_requires_json_mode(agent_config_dir, agent_name)
+            if require_schema or paths.schema_dir.exists():
                 factory.path_manager.validate_standard_path(PathType.SCHEMA, paths.schema_dir)
+            if require_schema:
                 path_validator.validate(
                     {
                         "operation": "validate_directory",
@@ -250,8 +242,6 @@ class ProjectPathsFactory:
                         "path_name": "schema_dir",
                     }
                 )
-            elif paths.schema_dir.exists():
-                factory.path_manager.validate_standard_path(PathType.SCHEMA, paths.schema_dir)
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
                 path = getattr(paths, dir_name)
                 if auto_create:
