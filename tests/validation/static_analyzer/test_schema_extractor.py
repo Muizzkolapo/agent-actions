@@ -157,6 +157,35 @@ class TestSchemaExtractor:
         # Should NOT have nested fields at top level
         assert "name" not in schema.available_fields
 
+    def test_output_field_produces_named_field(self):
+        """Test that output_field declares the named field in schema_fields."""
+        config = {
+            "name": "classify",
+            "json_mode": False,
+            "output_field": "issue_type",
+            "prompt": "Classify this issue",
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert "issue_type" in schema.schema_fields
+        assert "issue_type" in schema.available_fields
+        assert "content" in schema.available_fields
+        # raw_response should NOT appear — output_field replaces it
+        assert "raw_response" not in schema.available_fields
+
+    def test_non_json_without_output_field_defaults_to_raw_response(self):
+        """Regression guard: non-JSON mode without output_field still produces raw_response."""
+        config = {
+            "name": "agent",
+            "json_mode": False,
+            "prompt": "Generate something",
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert "raw_response" in schema.available_fields
+        assert "content" in schema.available_fields
+        assert schema.is_schemaless
+
     def test_hitl_agent_uses_canonical_hitl_schema(self):
         """Test HITL action uses the canonical HITL output schema."""
         config = {
