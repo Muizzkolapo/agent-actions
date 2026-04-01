@@ -156,9 +156,7 @@ class StorageBackend(ABC):
         authors are forced to implement it and ``--fresh`` cannot silently
         leave stale data behind.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} must implement delete_target()"
-        )
+        raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
 
     def close(self) -> None:  # noqa: B027
         """Close the storage backend and release resources."""

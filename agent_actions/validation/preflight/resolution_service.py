@@ -203,10 +203,7 @@ class WorkflowResolutionService:
 
                     errors.append(
                         StaticTypeError(
-                            message=(
-                                f"Seed file not found: {file_spec} "
-                                f"(resolved to {resolved})"
-                            ),
+                            message=(f"Seed file not found: {file_spec} (resolved to {resolved})"),
                             location=FieldLocation(
                                 agent_name=action_name,
                                 config_field=f"context_scope.seed_path.{field_name}",

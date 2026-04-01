@@ -81,11 +81,7 @@ class ActionStateManager:
     def get_pending_actions(self, agents: list[str]) -> list[str]:
         """Return actions that are not yet completed or failed (runnable)."""
         terminal = {"completed", "failed"}
-        return [
-            agent
-            for agent in agents
-            if self.get_status(agent) not in terminal
-        ]
+        return [agent for agent in agents if self.get_status(agent) not in terminal]
 
     def get_batch_submitted_actions(self, agents: list[str]) -> list[str]:
         """Return actions with batch jobs submitted."""
@@ -123,9 +119,7 @@ class ActionStateManager:
     def is_workflow_done(self) -> bool:
         """Return True if all actions are in a terminal state (completed or failed)."""
         terminal = {"completed", "failed"}
-        return all(
-            details.get("status") in terminal for details in self.action_status.values()
-        )
+        return all(details.get("status") in terminal for details in self.action_status.values())
 
     def has_any_failed(self) -> bool:
         """Return True if any action has 'failed' status."""

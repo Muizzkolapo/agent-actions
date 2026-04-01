@@ -562,9 +562,7 @@ class WorkflowStaticAnalyzer:
 
         return warnings
 
-    def _trace_field_through_chain(
-        self, source: str, field: str, target: str
-    ) -> bool:
+    def _trace_field_through_chain(self, source: str, field: str, target: str) -> bool:
         """Check if a field from *source* can reach *target* through passthrough chains.
 
         BFS backwards from *target* through dependencies.  At each intermediate
