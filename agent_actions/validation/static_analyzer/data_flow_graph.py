@@ -15,6 +15,7 @@ class OutputSchema:
     schema_fields: set[str] = field(default_factory=set)
     observe_fields: set[str] = field(default_factory=set)
     passthrough_fields: set[str] = field(default_factory=set)
+    passthrough_wildcard_sources: set[str] = field(default_factory=set)
     dropped_fields: set[str] = field(default_factory=set)
     json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
