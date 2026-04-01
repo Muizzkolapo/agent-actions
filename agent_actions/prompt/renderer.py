@@ -208,9 +208,9 @@ class ConfigRenderingService:
         return cast(ActionConfigMap, data)
 
     @staticmethod
-    def _workflow_needs_schema(config: ActionConfigMap) -> bool:
+    def _workflow_needs_schema(config: dict[str, Any]) -> bool:
         """Return True if any action in the workflow uses JSON mode (needs schemas)."""
-        defaults = config.get("defaults") or {}
+        defaults: dict[str, Any] = config.get("defaults") or {}
         if defaults.get("json_mode") is not False:
             return True
         return any(a.get("json_mode") is True for a in (config.get("actions") or []))
