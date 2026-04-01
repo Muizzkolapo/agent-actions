@@ -25,10 +25,15 @@ class LogLevel(str, Enum):
 
 
 class EnvironmentConfig(BaseSettings):
-    """Environment configuration loaded from environment variables with validation."""
+    """Environment configuration loaded from environment variables with validation.
+
+    The ``.env`` file is resolved by the caller (typically ``ConfigManager``)
+    and passed via the ``_env_file`` constructor parameter so that the path is
+    always relative to the project root — not the current working directory.
+    """
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+        env_file=None, env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
     openai_api_key: SecretStr | None = Field(
         default=None, description="OpenAI API Key for GPT models"
