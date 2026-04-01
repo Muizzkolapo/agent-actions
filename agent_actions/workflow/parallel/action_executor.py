@@ -4,6 +4,7 @@ Action-level execution orchestration module.
 
 import asyncio
 import copy
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -13,6 +14,8 @@ from rich.console import Console
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -177,7 +180,7 @@ class ActionLevelOrchestrator:
         self._fire_action_result_event(action_name, original_idx, total_actions, result)
 
         if not result.success:
-            raise result.error
+            logger.warning("Action '%s' failed: %s", action_name, result.error)
 
     async def _execute_parallel_actions(self, params: ParallelExecutionParams):
         """Execute multiple actions in parallel."""
@@ -228,10 +231,12 @@ class ActionLevelOrchestrator:
 
         if errors:
             error_details = "\n".join([f"  - {action}: {str(exc)}" for action, exc in errors])
-            error_msg = (
-                f"Multiple actions failed in parallel action {params.level_idx}:\n{error_details}"
+            logger.warning(
+                "Level %d: %d action(s) failed:\n%s",
+                params.level_idx,
+                len(errors),
+                error_details,
             )
-            raise WorkflowError(error_msg, context={"level_idx": params.level_idx})
 
     def _fire_action_result_event(self, action_name: str, idx: int, total: int, result):
         """Fire action complete or failed event for an execution result."""
@@ -268,15 +273,15 @@ class ActionLevelOrchestrator:
         batch_pending = state_manager.get_batch_submitted_actions(level_actions)
 
         if batch_pending:
-            # Check for partial failures
+            # Log partial failures but don't raise — circuit breaker handles cascade
             failed_actions = state_manager.get_failed_actions(level_actions)
             if failed_actions:
-                error_msg = (
-                    f"Partial failure in parallel action {level_idx}: "
-                    f"{', '.join(failed_actions)} failed while "
-                    "batch jobs were submitted"
+                logger.warning(
+                    "Level %d: %s failed while batch jobs pending for %s",
+                    level_idx,
+                    ", ".join(failed_actions),
+                    ", ".join(batch_pending),
                 )
-                raise WorkflowError(error_msg, context={"level_idx": level_idx})
 
             # Batch jobs submitted, need to wait
             duration = (datetime.now() - start_time).total_seconds()
@@ -295,8 +300,8 @@ class ActionLevelOrchestrator:
         Returns:
             True if level completed, False if batch jobs pending.
 
-        Raises:
-            WorkflowError: If any action fails during execution.
+        Failed actions are logged but do not raise — the circuit breaker
+        in ActionExecutor handles downstream skipping.
         """
         start_time = datetime.now()
 

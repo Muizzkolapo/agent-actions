@@ -26,3 +26,4 @@ class RunCommandArgs(BaseModel):
     downstream: bool = Field(
         False, description="Execute all downstream workflows that depend on this workflow"
     )
+    fresh: bool = Field(False, description="Clear stored results and status before execution")

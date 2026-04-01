@@ -124,7 +124,14 @@ class StaticDataLoader:
         return file_spec  # Use as-is
 
     def _resolve_path(self, file_path: str, field_name: str) -> Path:
-        """Resolve file path relative to static_data_dir with security validation."""
+        """Resolve file path relative to static_data_dir with security validation.
+
+        Delegates core traversal prevention to the shared ``resolve_seed_path``
+        utility and wraps any failure in a ``StaticDataLoadError`` with rich
+        context for diagnostics.
+        """
+        from agent_actions.utils.path_security import resolve_seed_path
+
         path = Path(file_path)
 
         # Reject absolute paths immediately
@@ -140,39 +147,26 @@ class StaticDataLoader:
                 },
             )
 
-        # Resolve relative to static_data_dir
-        resolved = (self.static_data_dir / path).resolve()
-
-        # Validate security
-        self._validate_path_security(resolved, field_name, file_path)
-
-        logger.debug("Resolved path for field '%s': %s", field_name, resolved)
-        return resolved
-
-    def _validate_path_security(
-        self, resolved_path: Path, field_name: str, original_path: str
-    ) -> None:
-        """Validate that resolved path doesn't escape static_data_dir."""
         try:
-            # This will raise ValueError if path is outside static_data_dir
-            resolved_path.relative_to(self.static_data_dir)
+            resolved = resolve_seed_path(file_path, self.static_data_dir)
         except ValueError as exc:
             logger.error(
-                "Path traversal attempt detected for field '%s': %s -> %s",
+                "Path traversal attempt detected for field '%s': %s",
                 field_name,
-                original_path,
-                resolved_path,
+                file_path,
             )
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': File path escapes static data directory",
                 context={
                     "field_name": field_name,
-                    "original_path": original_path,
-                    "resolved_path": str(resolved_path),
+                    "original_path": file_path,
                     "static_data_dir": str(self.static_data_dir),
                     "error_type": "path_traversal_attempt",
                 },
             ) from exc
+
+        logger.debug("Resolved path for field '%s': %s", field_name, resolved)
+        return resolved
 
     def _load_file(self, file_path: Path, field_name: str) -> Any:
         """Load file content based on file extension."""
