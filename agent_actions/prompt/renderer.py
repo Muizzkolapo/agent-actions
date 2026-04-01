@@ -213,9 +213,7 @@ class ConfigRenderingService:
         defaults = config.get("defaults") or {}
         if defaults.get("json_mode") is not False:
             return True
-        return any(
-            a.get("json_mode") is True for a in (config.get("actions") or [])
-        )
+        return any(a.get("json_mode") is True for a in (config.get("actions") or []))
 
     def _build_agent_entry_from_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Build agent entry dictionary from action configuration."""
@@ -400,9 +398,7 @@ class ConfigRenderingService:
                 schema_validate_instance.validate(
                     {
                         "agent_name": agent_name,
-                        "schema_dir": resolve_relative_to(
-                            schema_path, Path(template_dir).parent
-                        ),
+                        "schema_dir": resolve_relative_to(schema_path, Path(template_dir).parent),
                     }
                 )
             except Exception as e:
