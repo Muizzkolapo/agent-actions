@@ -498,9 +498,7 @@ class ProcessingPipeline:
         if data and not output:
             from agent_actions.processing.types import ProcessingStatus
 
-            failed_results = [
-                r for r in results if r.status == ProcessingStatus.FAILED
-            ]
+            failed_results = [r for r in results if r.status == ProcessingStatus.FAILED]
             if failed_results:
                 failed_msgs = [r.error for r in failed_results if r.error]
                 summary = "; ".join(failed_msgs[:3])
