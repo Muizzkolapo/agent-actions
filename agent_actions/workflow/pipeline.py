@@ -19,7 +19,7 @@ from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import ProcessingContext, ProcessingMode
+from agent_actions.processing.types import ProcessingContext, ProcessingMode, ProcessingStatus
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
@@ -496,8 +496,6 @@ class ProcessingPipeline:
         # Guard filters (SKIPPED/FILTERED status) legitimately produce 0 output —
         # only FAILED results indicate processing errors (e.g. 401 auth).
         if data and not output:
-            from agent_actions.processing.types import ProcessingStatus
-
             failed_results = [r for r in results if r.status == ProcessingStatus.FAILED]
             if failed_results:
                 failed_msgs = [r.error for r in failed_results if r.error]
