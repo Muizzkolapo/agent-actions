@@ -19,6 +19,7 @@ from agent_actions.logging.events import (
     BatchCompleteEvent,
     BatchSubmittedEvent,
 )
+from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
@@ -174,6 +175,26 @@ class ActionExecutor:
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is not None:
             try:
+                # Check disposition FIRST — a failed action may have partial
+                # results in storage.  The disposition is the authoritative
+                # signal; output existence is irrelevant when it's set.
+                if storage_backend.has_disposition(
+                    action_name,
+                    DISPOSITION_FAILED,
+                    record_id=NODE_LEVEL_RECORD_ID,
+                ):
+                    logger.info(
+                        "Action %s has DISPOSITION_FAILED from prior run — re-running",
+                        action_name,
+                    )
+                    storage_backend.clear_disposition(
+                        action_name,
+                        DISPOSITION_FAILED,
+                        record_id=NODE_LEVEL_RECORD_ID,
+                    )
+                    self.deps.state_manager.update_status(action_name, "pending")
+                    return (False, None)
+
                 target_files = storage_backend.list_target_files(action_name)
                 if not target_files:
                     logger.info(
@@ -335,12 +356,31 @@ class ActionExecutor:
             ),
         )
 
+    def _write_failed_disposition(self, action_name: str, reason: str) -> None:
+        """Write DISPOSITION_FAILED to storage so downstream and future runs detect the failure."""
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is not None:
+            try:
+                storage_backend.set_disposition(
+                    action_name=action_name,
+                    record_id=NODE_LEVEL_RECORD_ID,
+                    disposition=DISPOSITION_FAILED,
+                    reason=reason[:500],
+                )
+            except Exception as disp_err:
+                logger.warning(
+                    "Failed to write DISPOSITION_FAILED for %s: %s",
+                    action_name,
+                    disp_err,
+                )
+
     def _handle_run_failure(
         self, params: ActionRunParams, error: Exception
     ) -> ActionExecutionResult:
         """Handle action run failure."""
         duration = (datetime.now() - params.start_time).total_seconds()
         self.deps.state_manager.update_status(params.action_name, "failed")
+        self._write_failed_disposition(params.action_name, str(error))
 
         if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
@@ -372,6 +412,68 @@ class ActionExecutor:
                         "error": str(cleanup_error),
                     },
                 )
+
+    def _check_upstream_health(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> str | None:
+        """Return the name of a failed upstream dependency, or None if all healthy."""
+        dependencies = action_config.get("dependencies", [])
+        if not dependencies:
+            return None
+        for dep in dependencies:
+            if not isinstance(dep, str):
+                continue
+            if self.deps.state_manager.is_failed(dep):
+                return dep
+            # Also check disposition — covers cascaded failures from prior levels
+            storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+            if storage_backend is not None and storage_backend.has_disposition(
+                dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+            ):
+                return dep
+        return None
+
+    def _handle_dependency_skip(
+        self,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        start_time: datetime,
+        failed_dependency: str,
+    ) -> ActionExecutionResult:
+        """Handle action skip due to upstream dependency failure."""
+        reason = f"Upstream dependency '{failed_dependency}' failed"
+        self.deps.state_manager.update_status(action_name, "failed")
+        self._write_failed_disposition(action_name, reason)
+
+        duration = (datetime.now() - start_time).total_seconds()
+        total_actions = (
+            len(self.deps.action_runner.execution_order)
+            if hasattr(self.deps.action_runner, "execution_order")
+            else 0
+        )
+        fire_event(
+            ActionSkipEvent(
+                action_name=action_name,
+                action_index=action_idx,
+                total_actions=total_actions,
+                skip_reason=reason,
+            )
+        )
+
+        if self.run_tracker is not None and self.run_id is not None:
+            config = ActionCompleteConfig(
+                run_id=self.run_id,
+                action_name=action_name,
+                status="skipped",
+                duration_seconds=duration,
+                skip_reason=reason,
+            )
+            self.run_tracker.record_action_complete(config=config)
+
+        return ActionExecutionResult(
+            success=True, status="skipped", metrics=ExecutionMetrics(duration=duration)
+        )
 
     def execute_action_sync(
         self,
@@ -412,6 +514,14 @@ class ActionExecutor:
 
         if current_status == "batch_submitted":
             return self._handle_batch_check(action_name, action_idx, action_config, start_time)
+
+        # Circuit breaker: skip if any upstream dependency has failed.
+        # Must run BEFORE get_previous_outputs to avoid reading corrupt data.
+        failed_dep = self._check_upstream_health(action_name, action_config)
+        if failed_dep is not None:
+            return self._handle_dependency_skip(
+                action_name, action_idx, action_config, start_time, failed_dep
+            )
 
         previous_outputs = self.deps.output_manager.get_previous_outputs(action_idx)
         if self.deps.skip_evaluator.should_skip_action(action_config, previous_outputs):
@@ -467,6 +577,13 @@ class ActionExecutor:
         if current_status == "batch_submitted":
             return await self._handle_batch_check_async(
                 action_name, action_idx, action_config, start_time
+            )
+
+        # Circuit breaker: skip if any upstream dependency has failed.
+        failed_dep = self._check_upstream_health(action_name, action_config)
+        if failed_dep is not None:
+            return self._handle_dependency_skip(
+                action_name, action_idx, action_config, start_time, failed_dep
             )
 
         previous_outputs = self.deps.output_manager.get_previous_outputs(action_idx)
@@ -538,6 +655,7 @@ class ActionExecutor:
             )
 
         self.deps.state_manager.update_status(action_name, "failed")
+        self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
         fire_event(
             BatchCompleteEvent(
                 batch_id=action_config.get("batch_id", ""),
@@ -611,6 +729,7 @@ class ActionExecutor:
             )
 
         self.deps.state_manager.update_status(action_name, "failed")
+        self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
         fire_event(
             BatchCompleteEvent(
                 batch_id=action_config.get("batch_id", ""),

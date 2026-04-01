@@ -3,8 +3,6 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 from agent_actions.workflow.models import (
@@ -126,15 +124,15 @@ class TestRunSingleAgent:
 
         assert should_stop is True
 
-    def test_failure_raises(self):
-        """Failed result should raise the error."""
+    def test_failure_continues(self):
+        """Failed result should log and continue (circuit breaker handles downstream)."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
         error = RuntimeError("agent crashed")
         wf.services.core.action_executor.execute_action_sync.return_value = _failed_result(error)
 
-        with pytest.raises(RuntimeError, match="agent crashed"):
-            wf._run_single_action(0, "agent_a", 2)
+        should_stop = wf._run_single_action(0, "agent_a", 2)
+        assert should_stop is False
 
     def test_fires_agent_start(self):
         """Should fire agent_start event before execution."""
@@ -186,6 +184,7 @@ class TestRunWorkflowWithContext:
             status="batch_submitted", output_folder=None
         )
         wf.services.core.state_manager.is_workflow_complete.return_value = False
+        wf.services.core.state_manager.is_workflow_done.return_value = False
 
         mgr = MagicMock()
         mgr.context.return_value.__enter__ = MagicMock()
@@ -195,23 +194,23 @@ class TestRunWorkflowWithContext:
 
         assert result is None
 
-    def test_exception_calls_handle_workflow_error_and_reraises(self):
-        """Exception should call handle_workflow_error and re-raise."""
+    def test_failure_returns_completed_with_failures(self):
+        """Failed action should produce completed_with_failures, not raise."""
         wf = _build_workflow(execution_order=["agent_a"])
         wf.services.core.state_manager.is_completed.return_value = False
         error = RuntimeError("boom")
         wf.services.core.action_executor.execute_action_sync.return_value = _failed_result(error)
+        wf.services.core.state_manager.is_workflow_complete.return_value = False
+        wf.services.core.state_manager.is_workflow_done.return_value = True
+        wf.services.core.state_manager.get_failed_actions.return_value = ["agent_a"]
 
         mgr = MagicMock()
         mgr.context.return_value.__enter__ = MagicMock()
         mgr.context.return_value.__exit__ = MagicMock(return_value=False)
-        with (
-            patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr),
-            pytest.raises(RuntimeError, match="boom"),
-        ):
-            wf._run_workflow_with_context(datetime.now())
+        with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
+            result = wf._run_workflow_with_context(datetime.now())
 
-        wf.event_logger.handle_workflow_error.assert_called_once()
+        assert result == ("completed_with_failures", {"failed": ["agent_a"]})
         assert wf.state.failed is True
 
     def test_downstream_resolved_after_completion(self):

@@ -149,6 +149,17 @@ class StorageBackend(ABC):
         """Delete matching disposition records. Returns count deleted."""
         return 0
 
+    def delete_target(self, action_name: str) -> int:
+        """Delete all target data for an action. Returns count deleted.
+
+        Subclasses **must** override — the default raises so that backend
+        authors are forced to implement it and ``--fresh`` cannot silently
+        leave stale data behind.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement delete_target()"
+        )
+
     def close(self) -> None:  # noqa: B027
         """Close the storage backend and release resources."""
         pass
