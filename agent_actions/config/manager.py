@@ -307,13 +307,6 @@ class ConfigManager:
         from agent_actions.output.response.config_schema import AgentConfig
         from agent_actions.prompt.context.scope_inference import infer_dependencies
         from agent_actions.utils.graph_utils import topological_sort
-        from agent_actions.validation.config_validator import ConfigValidator
-
-        instance_config = ConfigValidator()
-        agent_configs_dict = {
-            agent_type: config.model_dump() for agent_type, config in self.agent_configs.items()
-        }
-        instance_config.validate(agent_configs_dict)
 
         workflow_actions = list(self.agent_configs.keys())
 
