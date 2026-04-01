@@ -1,0 +1,55 @@
+[
+  {
+    "id": "ISSUE-2024-001",
+    "title": "API returns 401 Unauthorized after token refresh",
+    "body": "## Description\n\nAfter upgrading to version 2.3.0, we're seeing intermittent 401 errors when making API calls right after a token refresh.\n\n## Steps to Reproduce\n\n1. Authenticate and get initial access token\n2. Wait for token to expire (or force expiration)\n3. Token refresh succeeds (returns new token)\n4. Immediately make API call with new token\n5. ~30% of the time, get 401 Unauthorized\n\n## Expected Behavior\n\nAPI calls with freshly refreshed tokens should always succeed.\n\n## Actual Behavior\n\nIntermittent 401 errors. Retrying after 1-2 seconds usually works.\n\n## Environment\n\n- API Version: 2.3.0\n- Client SDK: Python 1.5.2\n- OS: Ubuntu 22.04\n- Python: 3.11\n\n## Error Log\n\n```\n2024-01-20 14:32:15 ERROR auth_handler: Token validation failed\n2024-01-20 14:32:15 ERROR auth_handler: JWT signature verification failed\nTraceback:\n  File \"auth_handler.py\", line 142, in validate_token\n    decoded = jwt.decode(token, key, algorithms=['RS256'])\njwt.exceptions.InvalidSignatureError: Signature verification failed\n```\n\n## Impact\n\nThis is blocking our production deployment. We have automated jobs that run every hour and they're failing ~30% of the time.\n\n## Additional Context\n\nThis started happening after the 2.3.0 upgrade. Rolling back to 2.2.5 fixes the issue but we need the new features in 2.3.0.",
+    "reporter": "alice@example.com",
+    "labels": ["bug", "authentication", "production"],
+    "environment": {
+      "api_version": "2.3.0",
+      "client_sdk": "Python 1.5.2",
+      "os": "Ubuntu 22.04"
+    },
+    "created_at": "2024-01-20T14:35:00Z",
+    "priority": "high"
+  },
+  {
+    "id": "ISSUE-2024-002",
+    "title": "Request: Add bulk export feature for reports",
+    "body": "## Feature Request\n\nWe'd love to have a way to export multiple reports at once instead of downloading them one by one.\n\n## Use Case\n\nAt the end of each month, we need to download ~50 reports for compliance. Currently this takes about an hour of manual clicking.\n\n## Proposed Solution\n\n1. Add checkboxes to select multiple reports\n2. \"Export Selected\" button that generates a ZIP file\n3. Option to schedule recurring bulk exports\n\n## Alternatives Considered\n\nWe tried using the API but it's rate-limited and still requires individual calls per report.\n\n## Additional Context\n\nWe're an enterprise customer and this would save us significant time each month. Happy to be a beta tester!",
+    "reporter": "bob@enterprise.com",
+    "labels": ["feature-request", "reports", "enterprise"],
+    "environment": {
+      "plan": "enterprise",
+      "users": 150
+    },
+    "created_at": "2024-01-21T09:15:00Z",
+    "priority": "medium"
+  },
+  {
+    "id": "ISSUE-2024-003",
+    "title": "Typo on billing settings page",
+    "body": "## Description\n\nThe billing settings page says \"Subcription\" instead of \"Subscription\" in the plan summary card. Minor cosmetic issue.\n\n## Steps to Reproduce\n\n1. Go to Settings > Billing\n2. Look at the plan summary heading\n\n## Expected Behavior\n\n\"Subscription\" spelled correctly.\n\n## Additional Context\n\nNot blocking anything, just noticed it.",
+    "reporter": "carol@example.com",
+    "labels": ["ui", "low-priority"],
+    "environment": {
+      "browser": "Chrome 121"
+    },
+    "created_at": "2024-01-22T11:00:00Z",
+    "priority": "low"
+  },
+  {
+    "id": "ISSUE-2024-004",
+    "title": "Dashboard latency spikes during peak hours",
+    "body": "## Description\n\nThe analytics dashboard takes 15-30 seconds to load between 9-11 AM EST when most of our team is active. During off-peak hours it loads in under 2 seconds.\n\n## Impact\n\nOur sales team relies on the dashboard for morning standups. The delays are causing them to skip the data review entirely and make decisions without current numbers.\n\n## Environment\n\n- Plan: Team (50 users)\n- Browser: Chrome, Firefox (both affected)\n- Region: US-East\n\n## What we've tried\n\n- Clearing browser cache doesn't help\n- Different browsers same result\n- VPN on/off makes no difference\n\n## Timeline\n\nStarted approximately 2 weeks ago. Coincides with when we added 20 new team members.",
+    "reporter": "dan@startup.io",
+    "labels": ["performance", "dashboard", "urgent"],
+    "environment": {
+      "plan": "team",
+      "users": 50,
+      "region": "us-east"
+    },
+    "created_at": "2024-01-22T08:45:00Z",
+    "priority": "high"
+  }
+]
