@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel
+
 from agent_actions.utils.path_security import resolve_seed_path
 from agent_actions.validation.static_analyzer.errors import (
     FieldLocation,
@@ -25,13 +27,13 @@ logger = logging.getLogger(__name__)
 # Vendor name → config class mapping.  Built lazily on first access to
 # avoid importing all vendor configs (and transitively their SDKs) at
 # module level.
-_VENDOR_CONFIG_MAP: dict[str, type] | None = None
+_VENDOR_CONFIG_MAP: dict[str, type[BaseModel]] | None = None
 
 # Sentinel substrings in api_key_env_name that indicate no real key is needed.
 _NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
 
 
-def _get_vendor_config_map() -> dict[str, type]:
+def _get_vendor_config_map() -> dict[str, type[BaseModel]]:
     """Build vendor → config class map on first call (lazy)."""
     global _VENDOR_CONFIG_MAP  # noqa: PLW0603
     if _VENDOR_CONFIG_MAP is not None:
@@ -74,7 +76,8 @@ def _get_api_key_env_name(vendor: str) -> str | None:
     field_info = config_cls.model_fields.get("api_key_env_name")
     if field_info is None:
         return None
-    return field_info.default
+    default = field_info.default
+    return str(default) if default is not None else None
 
 
 class WorkflowResolutionService:

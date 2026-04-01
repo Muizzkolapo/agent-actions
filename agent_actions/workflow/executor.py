@@ -421,8 +421,6 @@ class ActionExecutor:
         if not dependencies:
             return None
         for dep in dependencies:
-            if not isinstance(dep, str):
-                continue
             if self.deps.state_manager.is_failed(dep):
                 return dep
             # Also check disposition — covers cascaded failures from prior levels
