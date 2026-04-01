@@ -9,13 +9,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from rich.console import Console
 
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

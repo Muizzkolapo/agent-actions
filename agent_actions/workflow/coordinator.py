@@ -152,8 +152,7 @@ class AgentWorkflow:
                 self.storage_backend.clear_disposition(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
-        self.services.core.state_manager._initialize_default_status()
-        self.services.core.state_manager._save_status()
+        self.services.core.state_manager.reset()
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
         )
@@ -343,9 +342,9 @@ class AgentWorkflow:
 
                 state_mgr = self.services.core.state_manager
                 duration = (datetime.now() - workflow_start).total_seconds()
-                self.event_logger.finalize_workflow(elapsed_time=duration)
 
                 if state_mgr.is_workflow_complete():
+                    self.event_logger.finalize_workflow(elapsed_time=duration)
                     downstream_success = self._resolve_downstream_workflows()
                     if not downstream_success:
                         return None
@@ -353,6 +352,7 @@ class AgentWorkflow:
 
                 if state_mgr.is_workflow_done():
                     self.state.failed = True
+                    self.event_logger.finalize_workflow(elapsed_time=duration)
                     failed = state_mgr.get_failed_actions(self.execution_order)
                     return ("completed_with_failures", {"failed": failed})
 

@@ -31,6 +31,11 @@ class ActionStateManager:
         else:
             self._initialize_default_status()
 
+    def reset(self) -> None:
+        """Reset all actions to 'pending' status and persist."""
+        self._initialize_default_status()
+        self._save_status()
+
     def _initialize_default_status(self):
         """Initialize all actions with 'pending' status."""
         self.action_status = {action: {"status": "pending"} for action in self.execution_order}

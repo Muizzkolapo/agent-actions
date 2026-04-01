@@ -3,6 +3,8 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 from agent_actions.workflow.models import (
@@ -211,6 +213,26 @@ class TestRunWorkflowWithContext:
             result = wf._run_workflow_with_context(datetime.now())
 
         assert result == ("completed_with_failures", {"failed": ["agent_a"]})
+        assert wf.state.failed is True
+
+    def test_unexpected_exception_calls_handle_workflow_error_and_reraises(self):
+        """Unexpected crash (not a failed result) should call handle_workflow_error and re-raise."""
+        wf = _build_workflow(execution_order=["agent_a"])
+        wf.services.core.state_manager.is_completed.return_value = False
+        wf.services.core.action_executor.execute_action_sync.side_effect = RuntimeError(
+            "unexpected crash"
+        )
+
+        mgr = MagicMock()
+        mgr.context.return_value.__enter__ = MagicMock()
+        mgr.context.return_value.__exit__ = MagicMock(return_value=False)
+        with (
+            patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr),
+            pytest.raises(RuntimeError, match="unexpected crash"),
+        ):
+            wf._run_workflow_with_context(datetime.now())
+
+        wf.event_logger.handle_workflow_error.assert_called_once()
         assert wf.state.failed is True
 
     def test_downstream_resolved_after_completion(self):

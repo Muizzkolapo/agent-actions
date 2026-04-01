@@ -569,15 +569,17 @@ class WorkflowStaticAnalyzer:
         node, checks whether the field survives (exact passthrough, wildcard
         passthrough, or dynamic schema).
         """
+        from collections import deque
+
         target_node = self.graph.get_node(target)
         if not target_node:
             return False
 
         visited: set[str] = set()
-        queue = list(target_node.dependencies)
+        queue = deque(target_node.dependencies)
 
         while queue:
-            current = queue.pop(0)
+            current = queue.popleft()
             if current in visited:
                 continue
             visited.add(current)
