@@ -60,7 +60,7 @@ Each agentic workflow YAML file defines defaults and actions. Let's explore how 
 # agent_config/my_workflow.yml
 name: my_workflow
 description: "Extract and validate facts"
-version: "1.0.0"
+# version: "1.0.0"  # Optional — for your own bookkeeping
 
 defaults:
   model_vendor: openai
