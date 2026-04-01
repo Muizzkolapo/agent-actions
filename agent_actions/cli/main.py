@@ -184,7 +184,15 @@ class CLI:
 def main_entrypoint(argv: Sequence[str] | None = None) -> int:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    from agent_actions.config.path_config import find_project_root_dir
+
+    project_root = find_project_root_dir()
+    if project_root:
+        env_path = project_root / ".env"
+        if env_path.is_file():
+            load_dotenv(env_path)
+    else:
+        load_dotenv()
     app = CLI()
     return app.execute(argv)
 

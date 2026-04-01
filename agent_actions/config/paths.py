@@ -93,6 +93,8 @@ class PathManager:
         Raises:
             ProjectRootNotFoundError: If project root cannot be found.
         """
+        from agent_actions.config.path_config import find_project_root_dir
+
         # When start_path is None (CWD), return cached root if available
         # and CWD hasn't changed since the root was resolved.
         # When start_path is explicit, always re-resolve (skip reading cache)
@@ -109,34 +111,25 @@ class PathManager:
 
         search_path = Path(start_path or Path.cwd()).resolve()
 
-        current = search_path
-        while current != current.parent:
-            marker_path = current / self.config.marker_file
-            if marker_path.exists():
-                if self.config.cache_paths:
-                    self._project_root = current
-                    self._cached_cwd = search_path if start_path is None else None
-                return current
+        result = find_project_root_dir(search_path, marker_file=self.config.marker_file)
+        if result is None:
+            raise ProjectRootNotFoundError(
+                f"Project root not found. Searched for '{self.config.marker_file}', 'agent_actions', or 'agent_config' "
+                f"starting from {search_path}"
+            )
 
-            # Fallback: check for 'agent_actions' (package root) or 'agent_config' directory
-            # 'agent_actions' is the definitive project marker per user specification.
-            if (current / "agent_actions").is_dir() or (current / "agent_config").is_dir():
-                logger.warning(
-                    "Project root found via fallback heuristic (no marker file '%s'): %s",
-                    self.config.marker_file,
-                    current,
-                )
-                if self.config.cache_paths:
-                    self._project_root = current
-                    self._cached_cwd = search_path if start_path is None else None
-                return current
+        # Warn when found via fallback heuristic (no marker file present)
+        if not (result / self.config.marker_file).exists():
+            logger.warning(
+                "Project root found via fallback heuristic (no marker file '%s'): %s",
+                self.config.marker_file,
+                result,
+            )
 
-            current = current.parent
-
-        raise ProjectRootNotFoundError(
-            f"Project root not found. Searched for '{self.config.marker_file}', 'agent_actions', or 'agent_config' "
-            f"starting from {search_path}"
-        )
+        if self.config.cache_paths:
+            self._project_root = result
+            self._cached_cwd = search_path if start_path is None else None
+        return result
 
     def get_standard_path(
         self,
