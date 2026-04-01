@@ -1,78 +1,60 @@
-"""Tests for schema_dir validation conditional on json_mode.
+"""Tests for schema validation conditional on json_mode.
 
-Non-JSON-mode agents (json_mode: false in defaults, no action override)
-should not require a schema directory to exist.
+Non-JSON-mode workflows (json_mode: false in defaults, no action override)
+should skip schema directory validation entirely.
 """
 
 from __future__ import annotations
 
-import yaml
-
-from agent_actions.config.project_paths import _peek_requires_json_mode
+from agent_actions.prompt.renderer import ConfigRenderingService
 
 
-class TestPeekRequiresJsonMode:
-    """Unit tests for _peek_requires_json_mode helper."""
+class TestWorkflowNeedsSchema:
+    """Unit tests for ConfigRenderingService._workflow_needs_schema."""
 
-    def test_returns_true_when_config_missing(self, tmp_path):
-        """Missing config file → safe default: require schema."""
-        assert _peek_requires_json_mode(tmp_path, "nonexistent") is True
-
-    def test_returns_true_when_json_mode_unset(self, tmp_path):
+    def test_returns_true_when_json_mode_unset(self):
         """No json_mode in defaults → defaults to True at runtime."""
-        config = {"name": "test", "defaults": {"model_name": "gpt-4"}, "actions": []}
-        (tmp_path / "test.yml").write_text(yaml.dump(config))
-        assert _peek_requires_json_mode(tmp_path, "test") is True
+        config = {"defaults": {"model_name": "gpt-4"}, "actions": []}
+        assert ConfigRenderingService._workflow_needs_schema(config) is True
 
-    def test_returns_true_when_json_mode_true(self, tmp_path):
+    def test_returns_true_when_json_mode_true(self):
         """Explicit json_mode: true in defaults."""
-        config = {"name": "test", "defaults": {"json_mode": True}, "actions": []}
-        (tmp_path / "test.yml").write_text(yaml.dump(config))
-        assert _peek_requires_json_mode(tmp_path, "test") is True
+        config = {"defaults": {"json_mode": True}, "actions": []}
+        assert ConfigRenderingService._workflow_needs_schema(config) is True
 
-    def test_returns_false_when_json_mode_false(self, tmp_path):
+    def test_returns_false_when_json_mode_false(self):
         """json_mode: false in defaults, no action overrides."""
-        config = {
-            "name": "test",
-            "defaults": {"json_mode": False},
-            "actions": [{"name": "step1"}],
-        }
-        (tmp_path / "test.yml").write_text(yaml.dump(config))
-        assert _peek_requires_json_mode(tmp_path, "test") is False
+        config = {"defaults": {"json_mode": False}, "actions": [{"name": "step1"}]}
+        assert ConfigRenderingService._workflow_needs_schema(config) is False
 
-    def test_returns_true_when_default_false_but_action_overrides(self, tmp_path):
+    def test_returns_true_when_default_false_but_action_overrides(self):
         """json_mode: false in defaults but one action sets json_mode: true."""
         config = {
-            "name": "test",
             "defaults": {"json_mode": False},
             "actions": [
                 {"name": "step1"},
                 {"name": "step2", "json_mode": True},
             ],
         }
-        (tmp_path / "test.yml").write_text(yaml.dump(config))
-        assert _peek_requires_json_mode(tmp_path, "test") is True
+        assert ConfigRenderingService._workflow_needs_schema(config) is True
 
-    def test_returns_false_when_all_actions_also_false(self, tmp_path):
+    def test_returns_false_when_all_actions_also_false(self):
         """json_mode: false everywhere — no schema needed."""
         config = {
-            "name": "test",
             "defaults": {"json_mode": False},
             "actions": [
                 {"name": "step1", "json_mode": False},
                 {"name": "step2"},
             ],
         }
-        (tmp_path / "test.yml").write_text(yaml.dump(config))
-        assert _peek_requires_json_mode(tmp_path, "test") is False
+        assert ConfigRenderingService._workflow_needs_schema(config) is False
 
-    def test_returns_true_when_no_defaults_section(self, tmp_path):
+    def test_returns_true_when_no_defaults_section(self):
         """No defaults section at all → json_mode defaults to True."""
-        config = {"name": "test", "actions": [{"name": "step1"}]}
-        (tmp_path / "test.yml").write_text(yaml.dump(config))
-        assert _peek_requires_json_mode(tmp_path, "test") is True
+        config = {"actions": [{"name": "step1"}]}
+        assert ConfigRenderingService._workflow_needs_schema(config) is True
 
-    def test_returns_true_on_malformed_yaml(self, tmp_path):
-        """Malformed YAML → safe default: require schema."""
-        (tmp_path / "test.yml").write_text(": : invalid yaml {{")
-        assert _peek_requires_json_mode(tmp_path, "test") is True
+    def test_returns_true_when_defaults_is_none(self):
+        """defaults: null in config."""
+        config = {"defaults": None, "actions": []}
+        assert ConfigRenderingService._workflow_needs_schema(config) is True

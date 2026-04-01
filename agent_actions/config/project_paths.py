@@ -5,9 +5,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
-import yaml
 
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathManager, PathType
@@ -20,33 +17,6 @@ from agent_actions.utils.file_handler import FileHandler
 from agent_actions.utils.path_utils import resolve_absolute_path
 
 logger = logging.getLogger(__name__)
-
-
-def _peek_requires_json_mode(agent_config_dir: Path, agent_name: str) -> bool:
-    """Quick YAML peek to determine if an agent requires JSON mode.
-
-    Returns True (schema directory required) when:
-    - The config cannot be read (safe default)
-    - defaults.json_mode is not explicitly False, OR
-    - Any action explicitly sets json_mode to True
-
-    Returns False (schema directory not required) only when
-    defaults.json_mode is explicitly False and no action overrides it to True.
-    """
-    config_path = agent_config_dir / f"{agent_name}.yml"
-    try:
-        with open(config_path) as f:
-            data: dict[str, Any] = yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        return True
-    except Exception:
-        logger.debug("Could not peek at agent config %s; assuming JSON mode", config_path)
-        return True
-
-    defaults = data.get("defaults") or {}
-    if defaults.get("json_mode") is not False:
-        return True
-    return any(action.get("json_mode") is True for action in data.get("actions", []))
 
 
 def find_config_file(
@@ -230,17 +200,6 @@ class ProjectPathsFactory:
                 path = getattr(paths, dir_name)
                 path_validator.validate(
                     {"operation": "validate_directory", "path": path, "path_name": dir_name}
-                )
-            require_schema = _peek_requires_json_mode(agent_config_dir, agent_name)
-            if require_schema or paths.schema_dir.exists():
-                factory.path_manager.validate_standard_path(PathType.SCHEMA, paths.schema_dir)
-            if require_schema:
-                path_validator.validate(
-                    {
-                        "operation": "validate_directory",
-                        "path": paths.schema_dir,
-                        "path_name": "schema_dir",
-                    }
                 )
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
                 path = getattr(paths, dir_name)
