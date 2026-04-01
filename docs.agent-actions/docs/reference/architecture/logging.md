@@ -257,7 +257,7 @@ Events can be emitted two ways:
 
 **Direct Events:**
 ```python
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import WorkflowStartEvent
 
 fire_event(WorkflowStartEvent(
@@ -339,7 +339,7 @@ This ensures proper attribution of events to the correct workflow in the executi
 ### Testing Event Emission
 
 ```python
-from agent_actions.logging.core import EventManager
+from agent_actions.logging.core.manager import EventManager
 from agent_actions.logging.events import WorkflowStartEvent
 
 def test_workflow_event():
@@ -519,7 +519,7 @@ logger.print("Processing item", style="info")
 
 **After:**
 ```python
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ProgressEvent
 
 fire_event(ProgressEvent(
