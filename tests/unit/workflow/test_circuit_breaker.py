@@ -302,3 +302,120 @@ class TestLevelCompletionColoring:
 
         assert has_failed
         assert has_skipped
+
+    def test_yellow_for_completed_with_failures(self, tmp_path):
+        """Level line is yellow when action has partial failures."""
+        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "completed_with_failures")
+
+        has_failed = mgr.get_failed_actions(["a", "b"])
+        has_partial = any(mgr.is_completed_with_failures(a) for a in ["a", "b"])
+
+        assert not has_failed
+        assert has_partial
+
+
+class TestResolveCompletionStatus:
+    """Tests for _resolve_completion_status()."""
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_returns_completed_when_no_failures(self, mock_fire, executor, mock_deps):
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = []
+        assert executor._resolve_completion_status("agent_a") == "completed"
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_returns_completed_with_failures_when_items_failed(
+        self, mock_fire, executor, mock_deps
+    ):
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
+        ]
+        assert executor._resolve_completion_status("agent_a") == "completed_with_failures"
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_returns_completed_when_no_storage_backend(self, mock_fire, executor, mock_deps):
+        mock_deps.action_runner.storage_backend = None
+        assert executor._resolve_completion_status("agent_a") == "completed"
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_returns_completed_on_storage_error(self, mock_fire, executor, mock_deps):
+        mock_deps.action_runner.storage_backend.get_failed_items.side_effect = RuntimeError(
+            "DB error"
+        )
+        assert executor._resolve_completion_status("agent_a") == "completed"
+
+
+class TestCircuitBreakerIgnoresPartial:
+    """completed_with_failures must NOT trigger circuit breaker."""
+
+    def test_completed_with_failures_not_detected_by_upstream_health(self, executor, mock_deps):
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
+        mock_deps.action_runner.storage_backend = None
+
+        config = {"dependencies": ["agent_a"]}
+        result = executor._check_upstream_health("agent_b", config)
+        assert result is None
+
+
+class TestGetFailedItems:
+    """Tests for StorageBackend.get_failed_items() default implementation."""
+
+    def test_filters_node_level_sentinel(self):
+        from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID, StorageBackend
+
+        class FakeBackend(StorageBackend):
+            @classmethod
+            def create(cls, **kwargs):
+                return cls()
+
+            @property
+            def backend_type(self):
+                return "fake"
+
+            def initialize(self):
+                pass
+
+            def write_target(self, *a, **kw):
+                pass
+
+            def read_target(self, *a, **kw):
+                return []
+
+            def write_source(self, *a, **kw):
+                pass
+
+            def read_source(self, *a, **kw):
+                return []
+
+            def list_target_files(self, *a, **kw):
+                return []
+
+            def list_source_files(self, *a, **kw):
+                return []
+
+            def preview_target(self, *a, **kw):
+                return {}
+
+            def get_storage_stats(self):
+                return {}
+
+            def delete_target(self, *a, **kw):
+                return 0
+
+            def get_disposition(self, action_name, record_id=None, disposition=None):
+                return [
+                    {
+                        "record_id": NODE_LEVEL_RECORD_ID,
+                        "disposition": "failed",
+                        "reason": "total wipeout",
+                    },
+                    {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"},
+                    {"record_id": "guid-2", "disposition": "failed", "reason": "429"},
+                ]
+
+        backend = FakeBackend()
+        items = backend.get_failed_items("action_a")
+        assert len(items) == 2
+        assert all(i["record_id"] != NODE_LEVEL_RECORD_ID for i in items)

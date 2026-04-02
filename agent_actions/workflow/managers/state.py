@@ -7,6 +7,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Status sets used across the workflow engine. Import from here to avoid
+# scattered set literals that drift when new statuses are added.
+COMPLETED_STATUSES: frozenset[str] = frozenset({"completed", "completed_with_failures"})
+TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {"completed", "failed", "skipped", "completed_with_failures"}
+)
+
 
 class ActionStateManager:
     """Manages action execution state persistence and queries."""
@@ -72,8 +79,8 @@ class ActionStateManager:
         return self.action_status.get(action_name, {"status": "pending"})
 
     def is_completed(self, action_name: str) -> bool:
-        """Return True if action is completed."""
-        return self.get_status(action_name) == "completed"
+        """Return True if action completed (including partial failures)."""
+        return self.get_status(action_name) in COMPLETED_STATUSES
 
     def is_batch_submitted(self, action_name: str) -> bool:
         """Return True if action has batch jobs submitted."""
@@ -87,10 +94,13 @@ class ActionStateManager:
         """Return True if action was skipped due to upstream dependency failure."""
         return self.get_status(action_name) == "skipped"
 
+    def is_completed_with_failures(self, action_name: str) -> bool:
+        """Return True if action completed with partial item failures."""
+        return self.get_status(action_name) == "completed_with_failures"
+
     def get_pending_actions(self, agents: list[str]) -> list[str]:
-        """Return actions that are not yet completed, failed, or skipped (runnable)."""
-        terminal = {"completed", "failed", "skipped"}
-        return [agent for agent in agents if self.get_status(agent) not in terminal]
+        """Return actions that are not yet in a terminal state (runnable)."""
+        return [agent for agent in agents if self.get_status(agent) not in TERMINAL_STATUSES]
 
     def get_batch_submitted_actions(self, agents: list[str]) -> list[str]:
         """Return actions with batch jobs submitted."""
@@ -122,13 +132,16 @@ class ActionStateManager:
         return summary
 
     def is_workflow_complete(self) -> bool:
-        """Return True if all actions have 'completed' status."""
-        return all(details.get("status") == "completed" for details in self.action_status.values())
+        """Return True if all actions completed (including partial failures)."""
+        return all(
+            details.get("status") in COMPLETED_STATUSES for details in self.action_status.values()
+        )
 
     def is_workflow_done(self) -> bool:
-        """Return True if all actions are in a terminal state (completed, failed, or skipped)."""
-        terminal = {"completed", "failed", "skipped"}
-        return all(details.get("status") in terminal for details in self.action_status.values())
+        """Return True if all actions are in a terminal state."""
+        return all(
+            details.get("status") in TERMINAL_STATUSES for details in self.action_status.values()
+        )
 
     def has_any_failed(self) -> bool:
         """Return True if any action has 'failed' status."""

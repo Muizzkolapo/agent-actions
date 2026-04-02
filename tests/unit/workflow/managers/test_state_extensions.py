@@ -152,3 +152,44 @@ class TestWorkflowDoneWithSkipped:
 
         summary = mgr.get_summary()
         assert summary == {"completed": 1, "skipped": 1, "failed": 1}
+
+
+class TestCompletedWithFailures:
+    """Tests for completed_with_failures status."""
+
+    def test_is_completed_with_failures(self, tmp_path):
+        mgr = ActionStateManager(tmp_path / "s.json", ["a"])
+        mgr.update_status("a", "completed_with_failures")
+        assert mgr.is_completed_with_failures("a") is True
+        assert mgr.is_completed("a") is True  # is_completed includes partial
+
+    def test_is_completed_with_failures_false(self, tmp_path):
+        mgr = ActionStateManager(tmp_path / "s.json", ["a", "b"])
+        mgr.update_status("a", "completed")
+        assert mgr.is_completed_with_failures("a") is False
+        assert mgr.is_completed_with_failures("b") is False
+
+    def test_get_pending_excludes_completed_with_failures(self, tmp_path):
+        mgr = ActionStateManager(tmp_path / "s.json", ["a", "b"])
+        mgr.update_status("a", "completed_with_failures")
+        assert mgr.get_pending_actions(["a", "b"]) == ["b"]
+
+    def test_is_workflow_complete_with_partial(self, tmp_path):
+        mgr = ActionStateManager(tmp_path / "s.json", ["a", "b"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "completed_with_failures")
+        assert mgr.is_workflow_complete() is True
+
+    def test_is_workflow_done_with_partial(self, tmp_path):
+        mgr = ActionStateManager(tmp_path / "s.json", ["a", "b"])
+        mgr.update_status("a", "completed_with_failures")
+        mgr.update_status("b", "failed")
+        assert mgr.is_workflow_done() is True
+
+    def test_summary_with_partial(self, tmp_path):
+        mgr = ActionStateManager(tmp_path / "s.json", ["a", "b", "c"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "completed_with_failures")
+        mgr.update_status("c", "failed")
+        summary = mgr.get_summary()
+        assert summary == {"completed": 1, "completed_with_failures": 1, "failed": 1}
