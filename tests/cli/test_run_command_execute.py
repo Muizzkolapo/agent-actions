@@ -178,7 +178,7 @@ class TestRunCommandStatusMessages:
 
     def test_done_all_skipped_none_failed_shows_success(self, tmp_path, capsys):
         """All terminal, none failed (some skipped by guards) → SUCCESS."""
-        self._execute(
+        tracker = self._execute(
             tmp_path,
             {"is_workflow_complete": False, "is_workflow_done": True, "has_any_failed": False},
         )
@@ -186,6 +186,7 @@ class TestRunCommandStatusMessages:
         assert "Successfully completed agent run" in out
         assert "batch" not in out.lower()
         assert "paused" not in out.lower()
+        assert tracker.finalize_workflow_run.call_args[1]["status"] == "SUCCESS"
 
     # -- FAILED paths --------------------------------------------------------
 
@@ -293,6 +294,8 @@ class TestRunCommandStatusMessages:
         )
         out = capsys.readouterr().out
         assert "Workflow paused for:" in out
+        assert "pending: 2" in out
+        assert "completed: 1" in out
         assert "Run again to continue" in out
         assert "batch" not in out.lower()
         assert tracker.finalize_workflow_run.call_args[1]["status"] == "PAUSED"

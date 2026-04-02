@@ -158,8 +158,9 @@ class RunCommand:
                 else:
                     status = "PAUSED"
                     summary = state_mgr.get_summary()
+                    status_parts = ", ".join(f"{k}: {v}" for k, v in summary.items())
                     click.echo(
-                        f"Workflow paused for: {self.args.agent} (status: {summary}). "
+                        f"Workflow paused for: {self.args.agent} ({status_parts}). "
                         f"Run again to continue."
                     )
 
