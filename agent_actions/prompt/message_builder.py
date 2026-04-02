@@ -172,6 +172,7 @@ PROVIDER_MESSAGE_CONFIGS: dict[str, ProviderMessageConfig] = {
         json_role=MessageRole.SYSTEM_ONLY,
         non_json_role=MessageRole.SYSTEM_ONLY,
         schema_injection=SchemaInjection.NONE,
+        json_rules=("RULES: Respond in valid JSON format.",),
     ),
     "cohere": ProviderMessageConfig(
         json_prompt_style=PromptStyle.TAGGED,
@@ -338,6 +339,9 @@ class MessageBuilder:
                 "",  # blank line between tags
                 f"<|begin_of_text|>:: {context_str} :<|end_of_text|>",
             ]
+            if rules:
+                parts.append("")
+                parts.extend(rules)
             joined = "\n".join(parts)
             return f"\n{joined}\n"
 
