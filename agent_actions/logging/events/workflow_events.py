@@ -51,6 +51,7 @@ class WorkflowCompleteEvent(BaseEvent):
     workflow_name: str = ""
     elapsed_time: float = 0.0
     actions_completed: int = 0
+    actions_partial: int = 0
     actions_skipped: int = 0
     actions_failed: int = 0
     total_tokens: int = 0
@@ -60,13 +61,14 @@ class WorkflowCompleteEvent(BaseEvent):
         self.category = EventCategories.WORKFLOW
         self.message = (
             f"Completed workflow {self.workflow_name} in {self.elapsed_time:.2f}s | "
-            f"{self.actions_completed} completed | {self.actions_skipped} skipped | "
-            f"{self.actions_failed} failed"
+            f"{self.actions_completed} completed | {self.actions_partial} partial | "
+            f"{self.actions_skipped} skipped | {self.actions_failed} failed"
         )
         self.data = {
             "workflow_name": self.workflow_name,
             "elapsed_time": self.elapsed_time,
             "actions_completed": self.actions_completed,
+            "actions_partial": self.actions_partial,
             "actions_skipped": self.actions_skipped,
             "actions_failed": self.actions_failed,
             "total_tokens": self.total_tokens,

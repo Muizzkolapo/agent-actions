@@ -26,6 +26,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ class ActionExecutor:
         self, action_name: str, action_config: ActionConfigDict, current_status: str
     ) -> str:
         """Reset to pending if limit config changed since last completion."""
-        if current_status != "completed":
+        if current_status not in COMPLETED_STATUSES:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
         if details.get("record_limit") != action_config.get("record_limit") or details.get(
@@ -332,17 +333,20 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
-        # Normal completion
+        # Normal completion — check for partial item failures
+        final_status = self._resolve_completion_status(params.action_name)
+
         self.deps.state_manager.update_status(
-            params.action_name, "completed", **self._limit_metadata(params.action_config)
+            params.action_name, final_status, **self._limit_metadata(params.action_config)
         )
         tokens = get_last_usage()
 
+        tracker_status = "success" if final_status == "completed" else "partial"
         if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=params.action_name,
-                status="success",
+                status=tracker_status,
                 duration_seconds=duration,
                 tokens=tokens,
                 files_processed=0,
@@ -352,7 +356,7 @@ class ActionExecutor:
         return ActionExecutionResult(
             success=True,
             output_folder=output_folder,
-            status="completed",
+            status=final_status,
             metrics=ExecutionMetrics(
                 duration=duration,
                 tokens=tokens,
@@ -397,6 +401,23 @@ class ActionExecutor:
                     action_name,
                     disp_err,
                 )
+
+    def _resolve_completion_status(self, action_name: str) -> str:
+        """Return 'completed_with_failures' if item-level failures exist, else 'completed'."""
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is not None:
+            try:
+                item_failures = storage_backend.get_failed_items(action_name)
+                if item_failures:
+                    logger.warning(
+                        "Action '%s' completed with %d item-level failure(s)",
+                        action_name,
+                        len(item_failures),
+                    )
+                    return "completed_with_failures"
+            except Exception as e:
+                logger.warning("Could not check partial failures for %s: %s", action_name, e)
+        return "completed"
 
     def _handle_run_failure(
         self, params: ActionRunParams, error: Exception
@@ -536,7 +557,7 @@ class ActionExecutor:
             action_name, action_config, current_status
         )
 
-        if current_status == "completed":
+        if current_status in COMPLETED_STATUSES:
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:
@@ -598,7 +619,7 @@ class ActionExecutor:
             action_name, action_config, current_status
         )
 
-        if current_status == "completed":
+        if current_status in COMPLETED_STATUSES:
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:
@@ -654,8 +675,9 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
+            final_status = self._resolve_completion_status(action_name)
             self.deps.state_manager.update_status(
-                action_name, "completed", **self._limit_metadata(action_config)
+                action_name, final_status, **self._limit_metadata(action_config)
             )
             fire_event(
                 BatchCompleteEvent(
@@ -670,7 +692,7 @@ class ActionExecutor:
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
-                status="completed",
+                status=final_status,
                 metrics=ExecutionMetrics(duration=duration),
             )
 
@@ -728,8 +750,9 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
+            final_status = self._resolve_completion_status(action_name)
             self.deps.state_manager.update_status(
-                action_name, "completed", **self._limit_metadata(action_config)
+                action_name, final_status, **self._limit_metadata(action_config)
             )
             fire_event(
                 BatchCompleteEvent(
@@ -744,7 +767,7 @@ class ActionExecutor:
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
-                status="completed",
+                status=final_status,
                 metrics=ExecutionMetrics(duration=duration),
             )
 

@@ -14,6 +14,7 @@ from rich.console import Console
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +244,7 @@ class ActionLevelOrchestrator:
 
     def _fire_action_result_event(self, action_name: str, idx: int, total: int, result):
         """Fire action complete or failed event for an execution result."""
-        if result.success and result.status == "completed":
+        if result.success and result.status in COMPLETED_STATUSES:
             tokens = result.metrics.tokens if result.metrics and result.metrics.tokens else {}
             fire_event(
                 ActionCompleteEvent(
@@ -355,10 +356,13 @@ class ActionLevelOrchestrator:
         duration = (datetime.now() - start_time).total_seconds()
 
         has_failed = params.state_manager.get_failed_actions(params.level_actions)
+        has_partial = any(
+            params.state_manager.is_completed_with_failures(a) for a in params.level_actions
+        )
         has_skipped = any(params.state_manager.is_skipped(a) for a in params.level_actions)
         if has_failed:
             color = "red"
-        elif has_skipped:
+        elif has_partial or has_skipped:
             color = "yellow"
         else:
             color = "green"

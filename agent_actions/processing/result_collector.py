@@ -1,6 +1,7 @@
 """Shared result aggregation for processing output records."""
 
 import collections
+import json
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -178,12 +179,27 @@ class ResultCollector:
                     )
                 )
                 if storage_backend and result.source_guid:
+                    snapshot_source = result.source_snapshot or result.input_record
+                    input_snapshot_str = None
+                    if snapshot_source and isinstance(snapshot_source, dict):
+                        try:
+                            input_snapshot_str = json.dumps(
+                                snapshot_source, ensure_ascii=False, default=str
+                            )
+                        except (TypeError, ValueError) as snap_err:
+                            logger.debug(
+                                "Could not serialize input snapshot for %s: %s",
+                                result.source_guid,
+                                snap_err,
+                            )
+                            input_snapshot_str = None
                     _safe_set_disposition(
                         storage_backend,
                         agent_name,
                         result.source_guid,
                         DISPOSITION_FAILED,
                         reason=result.error or "processing_error",
+                        input_snapshot=input_snapshot_str,
                     )
 
             elif status == ProcessingStatus.FILTERED:
