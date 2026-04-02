@@ -503,6 +503,64 @@ class TestResultCollectorDispositions:
 
         backend.set_disposition.assert_not_called()
 
+    def test_deferred_result_writes_disposition(self):
+        """DEFERRED records write a disposition with source_guid as record_id."""
+        backend = self._make_backend()
+        deferred = ProcessingResult.deferred(
+            task_id="task-123",
+            source_guid="src-def",
+        )
+
+        ResultCollector.collect_results(
+            [deferred],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent",
+            "src-def",
+            "deferred",
+            reason="batch_queued:task_id=task-123",
+        )
+
+    def test_deferred_result_no_source_guid_no_disposition(self):
+        """DEFERRED records without source_guid skip the disposition write."""
+        backend = self._make_backend()
+        deferred = ProcessingResult.deferred(
+            task_id="task-456",
+            source_guid=None,
+        )
+
+        ResultCollector.collect_results(
+            [deferred],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_not_called()
+
+    def test_deferred_result_counted_in_stats(self):
+        """DEFERRED records are counted in CollectionStats.deferred."""
+        deferred = ProcessingResult.deferred(
+            task_id="task-789",
+            source_guid="src-d",
+        )
+
+        _, stats = ResultCollector.collect_results(
+            [deferred],
+            {},
+            "agent",
+            is_first_stage=False,
+        )
+
+        assert stats.deferred == 1
+        assert stats.success == 0
+
     def test_mixed_statuses_write_correct_dispositions(self):
         """Multiple statuses in one batch write the right dispositions."""
         backend = self._make_backend()
@@ -525,3 +583,25 @@ class TestResultCollectorDispositions:
         calls = backend.set_disposition.call_args_list
         assert calls[0] == (("agent", "filt", "filtered"), {"reason": "guard_filter"})
         assert calls[1] == (("agent", "fail", "failed"), {"reason": "err", "input_snapshot": None})
+
+    def test_mixed_with_deferred_writes_all_dispositions(self):
+        """DEFERRED + other statuses each write their own disposition."""
+        backend = self._make_backend()
+
+        results = [
+            ProcessingResult.deferred(task_id="t-1", source_guid="src-d"),
+            ProcessingResult.filtered(source_guid="src-f"),
+        ]
+
+        ResultCollector.collect_results(
+            results,
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        assert backend.set_disposition.call_count == 2
+        calls = backend.set_disposition.call_args_list
+        assert calls[0] == (("agent", "src-d", "deferred"), {"reason": "batch_queued:task_id=t-1"})
+        assert calls[1] == (("agent", "src-f", "filtered"), {"reason": "guard_filter"})

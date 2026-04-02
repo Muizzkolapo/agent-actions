@@ -173,19 +173,34 @@ class TestOutputFieldDeduplication:
 
 
 class TestDeferredStatusHandling:
-    """DEFERRED status should be handled with INFO log, not 'Unhandled'."""
+    """DEFERRED status should be handled with disposition write, not just a log."""
 
-    def test_deferred_status_logs_info(self):
-        from agent_actions.processing.result_collector import ResultCollector
-
-        result = MagicMock()
-        result.status = ProcessingStatus.DEFERRED
-        result.source_guid = "test-guid"
-        result.output_data = None
-        result.skip_reason = None
-
-        collector = ResultCollector.__new__(ResultCollector)
-        collector.logger = MagicMock()
-
-        # Verify the DEFERRED branch exists as a known status
+    def test_deferred_status_exists(self):
+        """Verify the DEFERRED branch exists as a known status."""
         assert hasattr(ProcessingStatus, "DEFERRED")
+
+    def test_deferred_writes_disposition(self):
+        """DEFERRED records write a DISPOSITION_DEFERRED to the storage backend."""
+        from agent_actions.processing.result_collector import ResultCollector
+        from agent_actions.processing.types import ProcessingResult
+
+        deferred = ProcessingResult.deferred(
+            task_id="task-abc",
+            source_guid="test-guid",
+        )
+        backend = MagicMock()
+
+        ResultCollector.collect_results(
+            [deferred],
+            {},
+            "test_agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "test_agent",
+            "test-guid",
+            "deferred",
+            reason="batch_queued:task_id=task-abc",
+        )

@@ -15,7 +15,7 @@ from agent_actions.logging.events import (
     BatchResultsProcessedEvent,
     BatchStatusEvent,
 )
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
+from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_PASSTHROUGH
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -142,6 +142,36 @@ class BatchLifecycleManager:
                 )
             )
             raise
+
+        self._warn_orphaned_deferred(agent_name)
+
+    def _warn_orphaned_deferred(self, agent_name: str) -> None:
+        """Log a warning if DEFERRED dispositions remain after batch processing.
+
+        Orphaned DEFERRED records indicate records that were queued for batch
+        execution but never received a final result — e.g. due to a submission
+        failure or a provider-side drop.  This is diagnostic only and never
+        raises.
+        """
+        try:
+            orphans = self.storage_backend.get_disposition(
+                agent_name, disposition=DISPOSITION_DEFERRED
+            )
+            if orphans:
+                sample_ids = [r.get("record_id", "?") for r in orphans[:10]]
+                logger.warning(
+                    "[%s] %d record(s) still in DEFERRED state after batch completion "
+                    "— possible orphans: %s",
+                    agent_name,
+                    len(orphans),
+                    sample_ids,
+                )
+        except Exception:
+            logger.debug(
+                "Could not check for orphaned DEFERRED dispositions for %s",
+                agent_name,
+                exc_info=True,
+            )
 
     def check_batch_submission(
         self, agent_name: str, agent_idx: int, agent_io_path: Path

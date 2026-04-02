@@ -461,18 +461,24 @@ class ResultCollectionCompleteEvent(BaseEvent):
     total_failed: int = 0
     total_exhausted: int = 0
     total_unprocessed: int = 0
+    total_deferred: int = 0
     guard_condition: str = ""
     guard_on_false: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.DATA_PROCESSING
-        self.message = (
-            f"[{self.action_name}] Result collection complete: "
-            f"{self.total_success} success, {self.total_skipped} skipped, "
-            f"{self.total_filtered} filtered, {self.total_failed} failed, "
-            f"{self.total_exhausted} exhausted, {self.total_unprocessed} unprocessed"
-        )
+        parts = [
+            f"{self.total_success} success",
+            f"{self.total_skipped} skipped",
+            f"{self.total_filtered} filtered",
+            f"{self.total_failed} failed",
+            f"{self.total_exhausted} exhausted",
+            f"{self.total_unprocessed} unprocessed",
+        ]
+        if self.total_deferred:
+            parts.append(f"{self.total_deferred} deferred")
+        self.message = f"[{self.action_name}] Result collection complete: " + ", ".join(parts)
         self.data = {
             "action_name": self.action_name,
             "total_success": self.total_success,
@@ -481,6 +487,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
             "total_failed": self.total_failed,
             "total_exhausted": self.total_exhausted,
             "total_unprocessed": self.total_unprocessed,
+            "total_deferred": self.total_deferred,
             "guard_condition": self.guard_condition,
             "guard_on_false": self.guard_on_false,
         }

@@ -16,6 +16,7 @@ from agent_actions.logging.events import (
 )
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
@@ -48,6 +49,7 @@ class CollectionStats:
     skipped: int = 0
     filtered: int = 0
     exhausted: int = 0
+    deferred: int = 0
     unprocessed: int = 0
 
 
@@ -262,10 +264,27 @@ class ResultCollector:
                     )
 
             elif status == ProcessingStatus.DEFERRED:
+                task_id = result.task_id or ""
                 logger.info(
-                    "Collected DEFERRED result source_guid=%s",
+                    "Collected DEFERRED result source_guid=%s task_id=%s",
                     result.source_guid,
+                    task_id,
                 )
+                fire_event(
+                    ResultCollectedEvent(
+                        action_name=agent_name,
+                        result_index=idx,
+                        status="deferred",
+                    )
+                )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_DEFERRED,
+                        reason=f"batch_queued:task_id={task_id}",
+                    )
 
             else:
                 logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
@@ -283,6 +302,7 @@ class ResultCollector:
                 total_failed=stats["failed"],
                 total_exhausted=stats["exhausted"],
                 total_unprocessed=stats["unprocessed"],
+                total_deferred=stats["deferred"],
                 guard_condition=guard_condition,
                 guard_on_false=guard_on_false,
             )
@@ -316,6 +336,7 @@ class ResultCollector:
             skipped=stats["skipped"],
             filtered=stats["filtered"],
             exhausted=stats["exhausted"],
+            deferred=stats["deferred"],
             unprocessed=stats["unprocessed"],
         )
 
