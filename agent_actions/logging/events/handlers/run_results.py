@@ -31,9 +31,10 @@ class ActionResult:
     empty_output_records: int = 0
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    guard_stats: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "unique_id": self.unique_id,
             "action_name": self.action_name,
             "action_index": self.action_index,
@@ -50,6 +51,9 @@ class ActionResult:
                 "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             },
         }
+        if self.guard_stats is not None:
+            result["guard_stats"] = self.guard_stats
+        return result
 
 
 class RunResultsCollector:
@@ -81,10 +85,10 @@ class RunResultsCollector:
         }
 
     def accepts(self, event: BaseEvent) -> bool:
-        """Accept workflow, action, and RecordEmptyOutput events."""
+        """Accept workflow, action, RecordEmptyOutput, and ResultCollectionComplete events."""
         if event.category in ("workflow", "action"):
             return True
-        if event.event_type == "RecordEmptyOutputEvent":
+        if event.event_type in ("RecordEmptyOutputEvent", "ResultCollectionCompleteEvent"):
             return True
         return False
 
@@ -109,6 +113,8 @@ class RunResultsCollector:
             self._handle_action_skip(event)
         elif event_type == "ActionFailedEvent":
             self._handle_action_failed(event)
+        elif event_type == "ResultCollectionCompleteEvent":
+            self._handle_result_collection_complete(event)
         elif event_type == "RecordEmptyOutputEvent":
             self._handle_empty_output(event)
 
@@ -264,6 +270,28 @@ class RunResultsCollector:
                 error_message=error_msg,
                 completed_at=event.meta.timestamp,
             )
+
+    def _handle_result_collection_complete(self, event: BaseEvent) -> None:
+        action_name = event.data.get("action_name", "")
+        total_filtered = event.data.get("total_filtered", 0)
+        guard_condition = event.data.get("guard_condition", "")
+
+        if action_name not in self._results:
+            return
+
+        if not total_filtered and not guard_condition:
+            return
+
+        total_success = event.data.get("total_success", 0)
+        total_skipped = event.data.get("total_skipped", 0)
+        total_passed = total_success + total_skipped
+
+        self._results[action_name].guard_stats = {
+            "condition": guard_condition,
+            "passed": total_passed,
+            "filtered": total_filtered,
+            "on_false": event.data.get("guard_on_false", ""),
+        }
 
     def _handle_empty_output(self, event: BaseEvent) -> None:
         action_name = event.data.get("action_name", "")

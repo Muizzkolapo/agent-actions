@@ -85,6 +85,17 @@ class TaskPreparer:
                     guard_behavior=guard_result.behavior,
                     prompt_context=field_context,
                 )
+            if guard_result.behavior == "warn":
+                guard_clause = (
+                    (guard_config.get("clause", "") if isinstance(guard_config, dict) else "")
+                    or conditional_clause
+                    or ""
+                )
+                logger.warning(
+                    "[%s] Record failed guard condition (%s) — passing through (warn mode)",
+                    context.agent_name,
+                    guard_clause,
+                )
 
         prep_result = self._render_prompt(content, context, field_context)
 

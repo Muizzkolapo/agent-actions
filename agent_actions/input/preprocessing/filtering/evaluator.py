@@ -24,7 +24,7 @@ class GuardResult:
     """Result of guard evaluation."""
 
     should_execute: bool
-    behavior: str | None = None  # 'skip' | 'filter' | None
+    behavior: str | None = None  # 'skip' | 'filter' | 'warn' | None
     error: str | None = None
     matched: bool = True
 
@@ -44,6 +44,11 @@ class GuardResult:
         return cls(should_execute=False, behavior="filter", matched=False, error=error)
 
     @classmethod
+    def warned(cls) -> "GuardResult":
+        """Guard failed with warn behavior - proceed but flag for logging."""
+        return cls(should_execute=True, behavior="warn", matched=False)
+
+    @classmethod
     def from_filter_result(
         cls, filter_result: FilterResult, behavior: str, passthrough_on_error: bool
     ) -> "GuardResult":
@@ -60,12 +65,16 @@ class GuardResult:
                 behavior,
                 filter_result.error,
             )
+            if behavior == "warn":
+                return cls.warned()
             if behavior == "skip":
                 return cls.skipped(error=filter_result.error)
             return cls.filtered(error=filter_result.error)
 
         if not filter_result.matched:
             logger.debug("Guard: condition not matched, behavior='%s'", behavior)
+            if behavior == "warn":
+                return cls.warned()
             if behavior == "skip":
                 return cls.skipped()
             return cls.filtered()
@@ -160,7 +169,7 @@ class GuardEvaluator:
             raise ConfigValidationError(
                 "behavior",
                 f"Guard behavior '{behavior}' is not supported in guard evaluation. "
-                f"Only 'skip' and 'filter' are valid on_false values for guards.",
+                f"Only 'skip', 'filter', and 'warn' are valid on_false values for guards.",
                 context={"behavior": behavior},
             )
         passthrough_on_error = guard_config.get("passthrough_on_error", True)
@@ -177,6 +186,8 @@ class GuardEvaluator:
             logger.warning("Guard: guard condition evaluation exception: %s", e)
             if passthrough_on_error:
                 return GuardResult.passed()
+            if behavior == "warn":
+                return GuardResult.warned()
             if behavior == "skip":
                 return GuardResult.skipped(error=str(e))
             return GuardResult.filtered(error=str(e))
