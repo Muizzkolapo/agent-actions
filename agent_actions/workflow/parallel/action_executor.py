@@ -162,10 +162,10 @@ class ActionLevelOrchestrator:
                 sorted_actions = sorted(level, key=lambda a: action_indices[a])
                 action_list = ", ".join(sorted_actions)
                 self.console.print(
-                    f"[blue]  Action {i}: {len(level)} actions in parallel - {action_list}[/blue]"
+                    f"[blue]  Step {i}: {len(level)} actions in parallel - {action_list}[/blue]"
                 )
             else:
-                self.console.print(f"[dim]  Action {i}: {level[0]} (sequential)[/dim]")
+                self.console.print(f"[dim]  Step {i}: {level[0]} (sequential)[/dim]")
 
     async def _execute_single_action(self, action_name: str, action_indices: dict, action_executor):
         """Execute a single action asynchronously."""
@@ -290,7 +290,7 @@ class ActionLevelOrchestrator:
             # Batch jobs submitted, need to wait
             duration = (datetime.now() - start_time).total_seconds()
             self.console.print(
-                f"[yellow]Action {level_idx}: {len(batch_pending)} "
+                f"[yellow]Step {level_idx}: {len(batch_pending)} "
                 f"batch job(s) submitted ({duration:.2f}s)[/yellow]"
             )
             self.console.print("[yellow]Run workflow again to check batch status[/yellow]")
@@ -325,12 +325,12 @@ class ActionLevelOrchestrator:
 
         if not pending_actions:
             self.console.print(
-                f"[yellow]Action {params.level_idx}: All actions complete (skipped)[/yellow]"
+                f"[yellow]Step {params.level_idx}: All actions complete (skipped)[/yellow]"
             )
             return True
 
         self.console.print(
-            f"[cyan]Action {params.level_idx}: Starting {len(pending_actions)} action(s)...[/cyan]"
+            f"[cyan]Step {params.level_idx}: Starting {len(pending_actions)} action(s)...[/cyan]"
         )
 
         if len(pending_actions) == 1:
@@ -366,7 +366,5 @@ class ActionLevelOrchestrator:
             color = "yellow"
         else:
             color = "green"
-        self.console.print(
-            f"[{color}]Action {params.level_idx} complete ({duration:.2f}s)[/{color}]"
-        )
+        self.console.print(f"[{color}]Step {params.level_idx} complete ({duration:.2f}s)[/{color}]")
         return True
