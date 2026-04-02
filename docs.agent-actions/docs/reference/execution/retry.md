@@ -74,5 +74,6 @@ retry:
 
 ## See Also
 
+- [Failure Handling](./failure-handling.md) - Partial failures, `on_partial_failure`, and the execution tally
 - [Reprompting](../validation/reprompting.md) - Handling invalid LLM outputs
 - [Run Modes](./run-modes.md) - Batch vs online execution
