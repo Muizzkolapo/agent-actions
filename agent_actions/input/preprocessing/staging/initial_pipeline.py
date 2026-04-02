@@ -15,7 +15,7 @@ from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import ProcessingContext, ProcessingMode
+from agent_actions.processing.types import ProcessingContext
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY
@@ -683,7 +683,7 @@ def _process_online_mode_with_record_processor(
     processing_context = ProcessingContext(
         agent_config=cast("ActionConfigDict", ctx.agent_config),
         agent_name=ctx.agent_name,
-        mode=ProcessingMode.ONLINE,
+        mode=RunMode.ONLINE,
         is_first_stage=True,
         file_path=str(file_path),
         output_directory=str(output_directory),

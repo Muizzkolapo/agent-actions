@@ -15,7 +15,7 @@ class ProcessingMode(Enum):
     This enum controls *how* a single component runs: synchronously, asynchronously,
     or auto-detected.  Values: SYNC, ASYNC, AUTO.
 
-    Not to be confused with ``processing.types.ProcessingMode`` which controls the
+    Not to be confused with ``config.types.RunMode`` which controls the
     *pipeline-level* dispatch mode (ONLINE vs BATCH).
     """
 

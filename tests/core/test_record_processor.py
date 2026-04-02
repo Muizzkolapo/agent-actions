@@ -4,10 +4,10 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_actions.config.types import RunMode
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.types import (
     ProcessingContext,
-    ProcessingMode,
     ProcessingResult,
     ProcessingStatus,
 )
@@ -129,7 +129,7 @@ class TestConfigurationErrorHandling:
             agent_name="test_action",
             agent_indices={"test_action": 0},
             is_first_stage=False,
-            mode=ProcessingMode.BATCH,
+            mode=RunMode.BATCH,
         )
 
         # ConfigurationError should be re-raised, not caught
@@ -160,7 +160,7 @@ class TestConfigurationErrorHandling:
             agent_name="test_action",
             agent_indices={"test_action": 0},
             is_first_stage=False,
-            mode=ProcessingMode.BATCH,
+            mode=RunMode.BATCH,
         )
 
         # TemplateVariableError should be re-raised, not caught
@@ -182,7 +182,7 @@ class TestConfigurationErrorHandling:
             agent_name="test_action",
             agent_indices={"test_action": 0},
             is_first_stage=False,
-            mode=ProcessingMode.BATCH,
+            mode=RunMode.BATCH,
         )
 
         # Other exceptions should be caught and converted to failed results

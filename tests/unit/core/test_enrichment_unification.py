@@ -8,10 +8,10 @@ and metadata. These tests verify the fix.
 
 import pytest
 
+from agent_actions.config.types import RunMode
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.types import (
     ProcessingContext,
-    ProcessingMode,
     ProcessingResult,
     RecoveryMetadata,
     RetryMetadata,
@@ -40,7 +40,7 @@ def _make_context(agent_config, record_index=0, is_first_stage=True, current_ite
     return ProcessingContext(
         agent_config=agent_config,
         agent_name=agent_config.get("agent_type", "test"),
-        mode=ProcessingMode.ONLINE,
+        mode=RunMode.ONLINE,
         is_first_stage=is_first_stage,
         record_index=record_index,
         current_item=current_item,

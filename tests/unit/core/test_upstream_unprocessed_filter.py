@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.config.types import RunMode
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.processor import RecordProcessor
@@ -20,7 +21,6 @@ from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.processing.types import (
     ProcessingContext,
-    ProcessingMode,
     ProcessingResult,
     ProcessingStatus,
 )
@@ -129,7 +129,7 @@ class TestRecordProcessorUnprocessed:
         context = ProcessingContext(
             agent_config=config,
             agent_name="test_action",
-            mode=ProcessingMode.ONLINE,
+            mode=RunMode.ONLINE,
             is_first_stage=False,
         )
 
@@ -203,7 +203,7 @@ class TestEnrichmentUnprocessed:
         context = ProcessingContext(
             agent_config=config,
             agent_name="enrich_action",
-            mode=ProcessingMode.ONLINE,
+            mode=RunMode.ONLINE,
             is_first_stage=True,
             record_index=0,
         )
@@ -234,7 +234,7 @@ class TestEnrichmentUnprocessed:
         context = ProcessingContext(
             agent_config=config,
             agent_name="meta_action",
-            mode=ProcessingMode.ONLINE,
+            mode=RunMode.ONLINE,
             is_first_stage=True,
             record_index=0,
         )

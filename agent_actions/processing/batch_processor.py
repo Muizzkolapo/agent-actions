@@ -2,9 +2,11 @@
 
 from typing import Any, Optional
 
+from agent_actions.config.types import RunMode
+
 from .invocation import BatchProvider, InvocationStrategy
 from .record_processor import RecordProcessor
-from .types import ProcessingContext, ProcessingMode, ProcessingResult
+from .types import ProcessingContext, ProcessingResult
 
 
 class BatchProcessor:
@@ -19,7 +21,7 @@ class BatchProcessor:
         agent_config: dict[str, Any],
         agent_name: str,
         strategy: InvocationStrategy | None = None,
-        mode: ProcessingMode = ProcessingMode.ONLINE,
+        mode: RunMode = RunMode.ONLINE,
         provider: Optional["BatchProvider"] = None,
     ):
         self._processor = RecordProcessor(

@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, Optional, cast
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, SchemaValidationError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
@@ -29,7 +30,6 @@ from .prepared_task import GuardStatus, PreparationContext
 from .task_preparer import TaskPreparer, get_task_preparer
 from .types import (
     ProcessingContext,
-    ProcessingMode,
     ProcessingResult,
     ProcessingStatus,
 )
@@ -54,13 +54,13 @@ class RecordProcessor:
         agent_config: dict[str, Any],
         agent_name: str,
         strategy: InvocationStrategy | None = None,
-        mode: ProcessingMode = ProcessingMode.ONLINE,
+        mode: RunMode = RunMode.ONLINE,
         provider: Optional["BatchProvider"] = None,
     ):
         self.agent_config = agent_config
         self.agent_name = agent_name
 
-        if strategy is not None and (mode != ProcessingMode.ONLINE or provider is not None):
+        if strategy is not None and (mode != RunMode.ONLINE or provider is not None):
             logger.warning(
                 "Both 'strategy' and 'mode'/'provider' specified for %s; "
                 "'strategy' takes precedence",
