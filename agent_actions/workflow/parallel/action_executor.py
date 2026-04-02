@@ -353,5 +353,16 @@ class ActionLevelOrchestrator:
             return False
 
         duration = (datetime.now() - start_time).total_seconds()
-        self.console.print(f"[green]Action {params.level_idx} complete ({duration:.2f}s)[/green]")
+
+        has_failed = params.state_manager.get_failed_actions(params.level_actions)
+        has_skipped = any(params.state_manager.is_skipped(a) for a in params.level_actions)
+        if has_failed:
+            color = "red"
+        elif has_skipped:
+            color = "yellow"
+        else:
+            color = "green"
+        self.console.print(
+            f"[{color}]Action {params.level_idx} complete ({duration:.2f}s)[/{color}]"
+        )
         return True

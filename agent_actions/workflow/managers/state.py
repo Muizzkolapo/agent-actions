@@ -83,9 +83,13 @@ class ActionStateManager:
         """Return True if action has failed."""
         return self.get_status(action_name) == "failed"
 
+    def is_skipped(self, action_name: str) -> bool:
+        """Return True if action was skipped due to upstream dependency failure."""
+        return self.get_status(action_name) == "skipped"
+
     def get_pending_actions(self, agents: list[str]) -> list[str]:
-        """Return actions that are not yet completed or failed (runnable)."""
-        terminal = {"completed", "failed"}
+        """Return actions that are not yet completed, failed, or skipped (runnable)."""
+        terminal = {"completed", "failed", "skipped"}
         return [agent for agent in agents if self.get_status(agent) not in terminal]
 
     def get_batch_submitted_actions(self, agents: list[str]) -> list[str]:
@@ -122,8 +126,8 @@ class ActionStateManager:
         return all(details.get("status") == "completed" for details in self.action_status.values())
 
     def is_workflow_done(self) -> bool:
-        """Return True if all actions are in a terminal state (completed or failed)."""
-        terminal = {"completed", "failed"}
+        """Return True if all actions are in a terminal state (completed, failed, or skipped)."""
+        terminal = {"completed", "failed", "skipped"}
         return all(details.get("status") in terminal for details in self.action_status.values())
 
     def has_any_failed(self) -> bool:
