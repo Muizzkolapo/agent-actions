@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: Guard conditions can now reference output_field values directly (e.g., `severity != "low"` instead of `assess_severity.severity != "low"`), with improved error messages suggesting dot-notation paths for unresolved fields
+time: 2026-04-02T06:30:00.000000Z
