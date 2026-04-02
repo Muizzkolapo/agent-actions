@@ -1,4 +1,4 @@
-"""Tests for ActionStateManager.is_workflow_done() and updated get_pending_actions()."""
+"""Tests for ActionStateManager extension methods (is_workflow_done, get_pending_actions, get_skipped_actions, etc.)."""
 
 from agent_actions.workflow.managers.state import ActionStateManager
 
@@ -193,3 +193,24 @@ class TestCompletedWithFailures:
         mgr.update_status("c", "failed")
         summary = mgr.get_summary()
         assert summary == {"completed": 1, "completed_with_failures": 1, "failed": 1}
+
+
+class TestGetSkippedActions:
+    """Tests for get_skipped_actions()."""
+
+    def test_returns_skipped_actions(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a", "b", "c"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "skipped")
+        mgr.update_status("c", "failed")
+
+        assert mgr.get_skipped_actions(["a", "b", "c"]) == ["b"]
+
+    def test_returns_empty_when_none_skipped(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a", "b"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "failed")
+
+        assert mgr.get_skipped_actions(["a", "b"]) == []
