@@ -283,12 +283,10 @@ class RunResultsCollector:
             return
 
         total_success = event.data.get("total_success", 0)
-        total_skipped = event.data.get("total_skipped", 0)
-        total_passed = total_success + total_skipped
 
         self._results[action_name].guard_stats = {
             "condition": guard_condition,
-            "passed": total_passed,
+            "passed": total_success,
             "filtered": total_filtered,
             "on_false": event.data.get("guard_on_false", ""),
         }

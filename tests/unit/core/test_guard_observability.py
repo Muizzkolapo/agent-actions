@@ -151,6 +151,27 @@ class TestRunResultsCollectorGuardStats:
         assert result.guard_stats["passed"] == 5
         assert result.guard_stats["filtered"] == 3
 
+    def test_guard_stats_passed_excludes_skipped(self, collector):
+        """Skipped records (on_false=skip tombstones) must not count as passed."""
+        collector.handle(WorkflowStartEvent(workflow_name="test_wf", action_count=1))
+        collector.handle(ActionStartEvent(action_name="mixed", action_index=0))
+        collector.handle(ActionCompleteEvent(action_name="mixed", action_index=0))
+
+        collector.handle(
+            ResultCollectionCompleteEvent(
+                action_name="mixed",
+                total_success=3,
+                total_skipped=2,
+                total_filtered=5,
+                guard_condition="status == active",
+                guard_on_false="filter",
+            )
+        )
+
+        result = collector._results["mixed"]
+        assert result.guard_stats is not None
+        assert result.guard_stats["passed"] == 3  # only success, not skipped
+
 
 # ---------------------------------------------------------------------------
 # 4. All-filtered warning log
@@ -274,3 +295,84 @@ class TestGuardResultWarnMode:
         )
         assert guard_result.should_execute is True
         assert guard_result.behavior == "warn"
+
+
+# ---------------------------------------------------------------------------
+# 6. TaskPreparer warn-mode per-record logging
+# ---------------------------------------------------------------------------
+
+
+class TestTaskPreparerWarnLogging:
+    """Tests for per-record warning log in task_preparer when guard behavior is warn."""
+
+    def test_warn_mode_logs_per_record_warning(self):
+        from unittest.mock import MagicMock, patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+        context = MagicMock(spec=PreparationContext)
+        context.agent_name = "test_action"
+        context.agent_config = {
+            "guard": {
+                "clause": "quality_score > 0.5",
+                "scope": "item",
+                "behavior": "warn",
+            },
+        }
+        context.is_first_stage = False
+        context.source_data = None
+        context.agent_indices = None
+        context.dependency_configs = None
+        context.workflow_metadata = None
+        context.version_context = None
+        context.file_path = None
+        context.output_directory = None
+        context.storage_backend = None
+        context.current_item = None
+        context.record_index = 0
+
+        item = {"content": {"quality_score": 0.1}, "source_guid": "sg-1"}
+
+        warned_result = GuardResult.warned()
+
+        target_logger = logging.getLogger("agent_actions.processing.task_preparer")
+        captured: list[logging.LogRecord] = []
+
+        class _CaptureHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                captured.append(record)
+
+        handler = _CaptureHandler(level=logging.WARNING)
+        target_logger.addHandler(handler)
+        try:
+            with (
+                patch.object(preparer, "_normalize_input", return_value=(item, "sg-1", item)),
+                patch.object(preparer, "_is_upstream_unprocessed", return_value=False),
+                patch.object(preparer, "_load_full_context", return_value={"quality_score": 0.1}),
+                patch.object(preparer, "_evaluate_guard", return_value=warned_result),
+                patch.object(
+                    preparer,
+                    "_render_prompt",
+                    return_value=MagicMock(
+                        formatted_prompt="p",
+                        llm_context={},
+                        passthrough_fields={},
+                        prompt_context={},
+                    ),
+                ),
+            ):
+                result = preparer.prepare(item, context)
+        finally:
+            target_logger.removeHandler(handler)
+
+        # Record should be processed normally (not filtered/skipped)
+        assert result.guard_status.value == "passed"
+
+        # Warning should mention the guard condition and warn mode
+        assert any(
+            "passing through (warn mode)" in r.getMessage()
+            and "quality_score > 0.5" in r.getMessage()
+            for r in captured
+        )
