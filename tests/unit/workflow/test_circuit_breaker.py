@@ -653,6 +653,4 @@ class TestPauseOnPartialFailure:
         from agent_actions.config.schema import ActionConfig
 
         with pytest.raises(ValidationError):
-            ActionConfig(
-                name="test", prompt="x", intent="x", on_partial_failure="invalid"
-            )
+            ActionConfig(name="test", prompt="x", intent="x", on_partial_failure="invalid")
