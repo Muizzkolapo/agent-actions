@@ -137,12 +137,22 @@ class GuardStrategy(SkipStrategy):
         try:
             filter_service = get_global_guard_filter()
 
-            context_data = {
-                "previous_outputs": previous_outputs or {},
+            prev = previous_outputs or {}
+            context_data: dict[str, Any] = {
+                "previous_outputs": prev,
                 "agent_type": agent_config.get("agent_type"),
                 "dependencies": agent_config.get("dependencies", []),
-                "agent_config": {k: v for k, v in agent_config.items() if k not in ["guard"]},
+                "agent_config": {k: v for k, v in agent_config.items() if k != "guard"},
             }
+            # Flatten action outputs to top-level so guards can use dot notation
+            # e.g., assess_severity.severity != "low"
+            for action_name, action_output in prev.items():
+                if action_name not in context_data:
+                    # Unwrap single-item lists (common output_field pattern)
+                    if isinstance(action_output, list) and len(action_output) == 1:
+                        context_data[action_name] = action_output[0]
+                    else:
+                        context_data[action_name] = action_output
 
             logger.debug(
                 "Evaluating action-level guard for %s",

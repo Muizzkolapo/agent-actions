@@ -173,10 +173,19 @@ def evaluate_node(
             available = (
                 ", ".join(sorted(data.keys())) if isinstance(data, dict) else "(non-dict data)"
             )
-            raise MissingFieldError(
+            msg = (
                 f"Guard condition references field '{node.field_path}' which does not exist "
                 f"in the data. Available top-level fields: {available}"
             )
+            # Suggest dot-notation paths if the field exists as a sub-field
+            suggestions = [
+                f"{top_key}.{node.field_path}"
+                for top_key, top_val in data.items()
+                if isinstance(top_val, dict) and node.field_path in top_val
+            ] if isinstance(data, dict) else []
+            if suggestions:
+                msg += f". Did you mean: {', '.join(suggestions)}?"
+            raise MissingFieldError(msg)
         return value
 
     if isinstance(node, LiteralNode):

@@ -193,6 +193,61 @@ class TestGuardStrategy:
         call_args = filt.filter_item.call_args[0][0]
         assert "guard" not in call_args.data.get("agent_config", {})
 
+    def test_flattens_previous_outputs_to_top_level(self, strategy):
+        """Action outputs from previous_outputs are accessible as top-level keys."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "classify": [{"category": "bug"}],
+            "classify_meta": {"status": "completed"},
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Action outputs should be flattened to top-level
+        assert "classify" in call_args.data
+        assert "classify_meta" in call_args.data
+        # previous_outputs should still be present for backward compat
+        assert "previous_outputs" in call_args.data
+
+    def test_unwraps_single_item_lists(self, strategy):
+        """Single-item list outputs are unwrapped to their dict for dot notation."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "assess": [{"severity": "high"}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Single-item list should be unwrapped to dict
+        assert call_args.data["assess"] == {"severity": "high"}
+
+    def test_multi_item_lists_not_unwrapped(self, strategy):
+        """Multi-item list outputs are kept as lists."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "extract": [{"id": 1}, {"id": 2}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Multi-item list should remain as-is
+        assert call_args.data["extract"] == [{"id": 1}, {"id": 2}]
+
 
 # ── LegacySkipIfStrategy ──────────────────────────────────────────────
 

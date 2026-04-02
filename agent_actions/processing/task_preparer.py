@@ -190,6 +190,29 @@ class TaskPreparer:
             storage_backend=context.storage_backend,
         )
 
+        # Promote output_field values to top-level so guards can reference them directly.
+        # E.g., if action "assess_severity" has output_field="severity", then
+        # field_context["severity"] = field_context["assess_severity"]["severity"]
+        # so guards can write `severity != "low"` instead of `assess_severity.severity != "low"`.
+        if context.dependency_configs:
+            for dep_name, dep_config in context.dependency_configs.items():
+                if not dep_config or "output_field" not in dep_config:
+                    continue
+                of_name = dep_config["output_field"]
+                dep_data = field_context.get(dep_name)
+                if isinstance(dep_data, dict) and of_name in dep_data:
+                    if of_name not in field_context:
+                        field_context[of_name] = dep_data[of_name]
+                    else:
+                        logger.warning(
+                            "output_field '%s' from action '%s' collides with existing "
+                            "field in context — use '%s.%s' in guard conditions instead",
+                            of_name,
+                            dep_name,
+                            dep_name,
+                            of_name,
+                        )
+
         return field_context
 
     @staticmethod
