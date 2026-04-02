@@ -31,6 +31,8 @@ def mock_deps():
     deps.action_runner.workflow_name = "test_workflow"
     deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
     deps.action_runner.execution_order = ["agent_a", "agent_b"]
+    # Default: no item-level failures (so actions complete as "completed", not "completed_with_failures")
+    deps.action_runner.storage_backend.get_failed_items.return_value = []
     # Default status details for limit-change detection (no limits stored)
     deps.state_manager.get_status_details.return_value = {"status": "completed"}
     return deps

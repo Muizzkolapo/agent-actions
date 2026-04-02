@@ -475,7 +475,7 @@ class AgentWorkflow:
             if result.status == "skipped":
                 return False  # Continue to next action
 
-            if result.output_folder and result.status == "completed":
+            if result.output_folder and result.status in {"completed", "completed_with_failures"}:
                 self.state.ephemeral_directories.append(
                     {
                         "output_folder": result.output_folder,

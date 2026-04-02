@@ -146,7 +146,7 @@ class ActionExecutor:
         self, action_name: str, action_config: ActionConfigDict, current_status: str
     ) -> str:
         """Reset to pending if limit config changed since last completion."""
-        if current_status != "completed":
+        if current_status not in {"completed", "completed_with_failures"}:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
         if details.get("record_limit") != action_config.get("record_limit") or details.get(
@@ -332,17 +332,33 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
-        # Normal completion
+        # Normal completion — check for partial item failures
+        final_status = "completed"
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is not None:
+            try:
+                item_failures = storage_backend.get_failed_items(params.action_name)
+                if item_failures:
+                    final_status = "completed_with_failures"
+                    logger.warning(
+                        "Action '%s' completed with %d item-level failure(s)",
+                        params.action_name,
+                        len(item_failures),
+                    )
+            except Exception as e:
+                logger.debug("Could not check partial failures for %s: %s", params.action_name, e)
+
         self.deps.state_manager.update_status(
-            params.action_name, "completed", **self._limit_metadata(params.action_config)
+            params.action_name, final_status, **self._limit_metadata(params.action_config)
         )
         tokens = get_last_usage()
 
+        tracker_status = "success" if final_status == "completed" else "partial"
         if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=params.action_name,
-                status="success",
+                status=tracker_status,
                 duration_seconds=duration,
                 tokens=tokens,
                 files_processed=0,
@@ -352,7 +368,7 @@ class ActionExecutor:
         return ActionExecutionResult(
             success=True,
             output_folder=output_folder,
-            status="completed",
+            status=final_status,
             metrics=ExecutionMetrics(
                 duration=duration,
                 tokens=tokens,
@@ -536,7 +552,7 @@ class ActionExecutor:
             action_name, action_config, current_status
         )
 
-        if current_status == "completed":
+        if current_status in {"completed", "completed_with_failures"}:
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:
@@ -598,7 +614,7 @@ class ActionExecutor:
             action_name, action_config, current_status
         )
 
-        if current_status == "completed":
+        if current_status in {"completed", "completed_with_failures"}:
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:

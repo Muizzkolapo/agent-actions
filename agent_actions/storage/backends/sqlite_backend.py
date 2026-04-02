@@ -49,6 +49,7 @@ class SQLiteBackend(StorageBackend):
             disposition TEXT NOT NULL,
             reason TEXT,
             relative_path TEXT,
+            input_snapshot TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(action_name, record_id, disposition)
         )
@@ -165,6 +166,11 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_RECORD_SQL)
+                # Migration: add input_snapshot column for existing databases
+                try:
+                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN input_snapshot TEXT")
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -491,6 +497,7 @@ class SQLiteBackend(StorageBackend):
         disposition: str | Disposition,
         reason: str | None = None,
         relative_path: str | None = None,
+        input_snapshot: str | None = None,
     ) -> None:
         """Write a disposition record (INSERT OR REPLACE)."""
         action_name = self._validate_identifier(action_name, "action_name")
@@ -501,6 +508,9 @@ class SQLiteBackend(StorageBackend):
             raise ValueError(
                 f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
             )
+        # Cap input_snapshot at 10KB to prevent storage bloat
+        if input_snapshot and len(input_snapshot) > 10240:
+            input_snapshot = input_snapshot[:10240]
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -508,10 +518,11 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO record_disposition
-                    (action_name, record_id, disposition, reason, relative_path, created_at)
-                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    (action_name, record_id, disposition, reason, relative_path,
+                     input_snapshot, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    (action_name, record_id, disposition, reason, relative_path),
+                    (action_name, record_id, disposition, reason, relative_path, input_snapshot),
                 )
                 self.connection.commit()
                 logger.debug(
@@ -545,7 +556,8 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
 
         query = (
-            "SELECT action_name, record_id, disposition, reason, relative_path, created_at"
+            "SELECT action_name, record_id, disposition, reason, relative_path,"
+            " input_snapshot, created_at"
             " FROM record_disposition WHERE action_name = ?"
         )
         params: list[str] = [action_name]

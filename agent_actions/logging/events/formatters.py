@@ -81,14 +81,19 @@ class AgentActionsFormatter:
         ts = self._timestamp(event)
         elapsed = event.data.get("elapsed_time", 0.0)
         completed = event.data.get("actions_completed", 0)
+        partial = event.data.get("actions_partial", 0)
         skipped = event.data.get("actions_skipped", 0)
         failed = event.data.get("actions_failed", 0)
 
         ok = self._status("OK") if completed > 0 else "OK"
+        part = self._status("PARTIAL") if partial > 0 else "PARTIAL"
         skip = self._status("SKIP") if skipped > 0 else "SKIP"
         err = self._status("ERROR") if failed > 0 else "ERROR"
 
-        return f"{ts}Completed in {elapsed:.2f}s | {completed} {ok} | {skipped} {skip} | {failed} {err}"
+        return (
+            f"{ts}Completed in {elapsed:.2f}s | {completed} {ok} | "
+            f"{partial} {part} | {skipped} {skip} | {failed} {err}"
+        )
 
     def _format_workflow_failed(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
