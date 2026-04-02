@@ -182,22 +182,24 @@ class ActionExecutor:
                 # Check disposition FIRST — a failed action may have partial
                 # results in storage.  The disposition is the authoritative
                 # signal; output existence is irrelevant when it's set.
-                if storage_backend.has_disposition(
-                    action_name,
-                    DISPOSITION_FAILED,
-                    record_id=NODE_LEVEL_RECORD_ID,
-                ):
-                    logger.info(
-                        "Action %s has DISPOSITION_FAILED from prior run — re-running",
+                for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
+                    if storage_backend.has_disposition(
                         action_name,
-                    )
-                    storage_backend.clear_disposition(
-                        action_name,
-                        DISPOSITION_FAILED,
+                        disp,
                         record_id=NODE_LEVEL_RECORD_ID,
-                    )
-                    self.deps.state_manager.update_status(action_name, "pending")
-                    return (False, None)
+                    ):
+                        logger.info(
+                            "Action %s has %s from prior run — re-running",
+                            action_name,
+                            disp,
+                        )
+                        storage_backend.clear_disposition(
+                            action_name,
+                            disp,
+                            record_id=NODE_LEVEL_RECORD_ID,
+                        )
+                        self.deps.state_manager.update_status(action_name, "pending")
+                        return (False, None)
 
                 target_files = storage_backend.list_target_files(action_name)
                 if not target_files:
@@ -471,7 +473,10 @@ class ActionExecutor:
         State is set to ``"skipped"`` so transitive dependents also skip via
         ``is_skipped``.  ``success=True`` keeps independent branches alive.
         """
-        reason = f"Upstream dependency '{failed_dependency}' failed"
+        dep_status = (
+            "skipped" if self.deps.state_manager.is_skipped(failed_dependency) else "failed"
+        )
+        reason = f"Upstream dependency '{failed_dependency}' {dep_status}"
         self.deps.state_manager.update_status(action_name, "skipped")
         self._write_skipped_disposition(action_name, reason)
 

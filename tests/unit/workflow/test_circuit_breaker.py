@@ -68,6 +68,7 @@ class TestCheckUpstreamHealth:
     def test_dep_failed_via_state_manager(self, executor, mock_deps):
         """One dep failed (state_manager.is_failed) returns dep name."""
         mock_deps.state_manager.is_failed.return_value = True
+        mock_deps.state_manager.is_skipped.return_value = False
 
         config = {"dependencies": ["agent_a"]}
         result = executor._check_upstream_health("agent_b", config)
@@ -238,8 +239,66 @@ class TestWriteSkippedDisposition:
             reason="Upstream failed",
         )
 
+    def test_logs_warning_on_storage_error(self, executor, mock_deps, caplog):
+        """Logs warning on storage error (doesn't raise)."""
+        storage = MagicMock()
+        storage.set_disposition.side_effect = RuntimeError("DB error")
+        mock_deps.action_runner.storage_backend = storage
+
+        executor._write_skipped_disposition("agent_b", "Upstream failed")
+
     def test_noops_when_storage_backend_is_none(self, executor, mock_deps):
         """No-ops when storage backend is None."""
         mock_deps.action_runner.storage_backend = None
 
         executor._write_skipped_disposition("agent_b", "Upstream failed")
+
+
+class TestLevelCompletionColoring:
+    """Tests for level completion line color logic (red/yellow/green)."""
+
+    def test_green_when_all_ok(self, tmp_path):
+        """Level line is green when all actions completed successfully."""
+        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "completed")
+
+        has_failed = mgr.get_failed_actions(["a", "b"])
+        has_skipped = any(mgr.is_skipped(a) for a in ["a", "b"])
+
+        assert not has_failed
+        assert not has_skipped
+
+    def test_red_when_action_failed(self, tmp_path):
+        """Level line is red when any action failed."""
+        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "failed")
+
+        has_failed = mgr.get_failed_actions(["a", "b"])
+        assert has_failed
+
+    def test_yellow_when_action_skipped(self, tmp_path):
+        """Level line is yellow when actions are skipped but none failed."""
+        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "skipped")
+
+        has_failed = mgr.get_failed_actions(["a", "b"])
+        has_skipped = any(mgr.is_skipped(a) for a in ["a", "b"])
+
+        assert not has_failed
+        assert has_skipped
+
+    def test_red_takes_precedence_over_yellow(self, tmp_path):
+        """Red (failed) takes precedence over yellow (skipped)."""
+        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b", "c"])
+        mgr.update_status("a", "completed")
+        mgr.update_status("b", "failed")
+        mgr.update_status("c", "skipped")
+
+        has_failed = mgr.get_failed_actions(["a", "b", "c"])
+        has_skipped = any(mgr.is_skipped(a) for a in ["a", "b", "c"])
+
+        assert has_failed
+        assert has_skipped
