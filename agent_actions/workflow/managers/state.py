@@ -7,6 +7,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Status sets used across the workflow engine. Import from here to avoid
+# scattered set literals that drift when new statuses are added.
+COMPLETED_STATUSES: frozenset[str] = frozenset({"completed", "completed_with_failures"})
+TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {"completed", "failed", "skipped", "completed_with_failures"}
+)
+
 
 class ActionStateManager:
     """Manages action execution state persistence and queries."""
@@ -73,7 +80,7 @@ class ActionStateManager:
 
     def is_completed(self, action_name: str) -> bool:
         """Return True if action completed (including partial failures)."""
-        return self.get_status(action_name) in {"completed", "completed_with_failures"}
+        return self.get_status(action_name) in COMPLETED_STATUSES
 
     def is_batch_submitted(self, action_name: str) -> bool:
         """Return True if action has batch jobs submitted."""
@@ -93,8 +100,7 @@ class ActionStateManager:
 
     def get_pending_actions(self, agents: list[str]) -> list[str]:
         """Return actions that are not yet in a terminal state (runnable)."""
-        terminal = {"completed", "failed", "skipped", "completed_with_failures"}
-        return [agent for agent in agents if self.get_status(agent) not in terminal]
+        return [agent for agent in agents if self.get_status(agent) not in TERMINAL_STATUSES]
 
     def get_batch_submitted_actions(self, agents: list[str]) -> list[str]:
         """Return actions with batch jobs submitted."""
@@ -128,14 +134,14 @@ class ActionStateManager:
     def is_workflow_complete(self) -> bool:
         """Return True if all actions completed (including partial failures)."""
         return all(
-            details.get("status") in {"completed", "completed_with_failures"}
-            for details in self.action_status.values()
+            details.get("status") in COMPLETED_STATUSES for details in self.action_status.values()
         )
 
     def is_workflow_done(self) -> bool:
         """Return True if all actions are in a terminal state."""
-        terminal = {"completed", "failed", "skipped", "completed_with_failures"}
-        return all(details.get("status") in terminal for details in self.action_status.values())
+        return all(
+            details.get("status") in TERMINAL_STATUSES for details in self.action_status.values()
+        )
 
     def has_any_failed(self) -> bool:
         """Return True if any action has 'failed' status."""

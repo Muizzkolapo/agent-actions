@@ -14,6 +14,7 @@ from agent_actions.logging.events import (
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
 
 logger = logging.getLogger(__name__)
@@ -90,10 +91,7 @@ class WorkflowEventLogger:
 
     def log_action_result(self, params: ActionLogParams):
         """Log action execution result via event system."""
-        if params.result.success and params.result.status in {
-            "completed",
-            "completed_with_failures",
-        }:
+        if params.result.success and params.result.status in COMPLETED_STATUSES:
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
                 tokens = params.result.tokens

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -221,10 +222,7 @@ class ManifestManager:
     def is_action_completed(self, action_name: str) -> bool:
         """Return True if action completed (including partial failures)."""
         action = self.manifest.get("actions", {}).get(action_name)
-        return action is not None and action.get("status") in {
-            "completed",
-            "completed_with_failures",
-        }
+        return action is not None and action.get("status") in COMPLETED_STATUSES
 
     def is_action_skipped(self, action_name: str) -> bool:
         """Return True if action status is 'skipped'."""
@@ -346,7 +344,7 @@ class ManifestManager:
         """Return all completed action names (including partial failures)."""
         completed = []
         for action_name, action_data in self.manifest.get("actions", {}).items():
-            if action_data.get("status") in {"completed", "completed_with_failures"}:
+            if action_data.get("status") in COMPLETED_STATUSES:
                 completed.append(action_name)
         return completed
 

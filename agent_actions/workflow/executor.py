@@ -26,6 +26,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ class ActionExecutor:
         self, action_name: str, action_config: ActionConfigDict, current_status: str
     ) -> str:
         """Reset to pending if limit config changed since last completion."""
-        if current_status not in {"completed", "completed_with_failures"}:
+        if current_status not in COMPLETED_STATUSES:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
         if details.get("record_limit") != action_config.get("record_limit") or details.get(
@@ -556,7 +557,7 @@ class ActionExecutor:
             action_name, action_config, current_status
         )
 
-        if current_status in {"completed", "completed_with_failures"}:
+        if current_status in COMPLETED_STATUSES:
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:
@@ -618,7 +619,7 @@ class ActionExecutor:
             action_name, action_config, current_status
         )
 
-        if current_status in {"completed", "completed_with_failures"}:
+        if current_status in COMPLETED_STATUSES:
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:
