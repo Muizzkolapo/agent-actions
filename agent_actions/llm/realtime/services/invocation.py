@@ -8,27 +8,33 @@ import logging
 from typing import Any
 
 from agent_actions.llm.providers.agac.client import AgacClient
-from agent_actions.llm.providers.anthropic.client import AnthropicClient
-from agent_actions.llm.providers.cohere.client import CohereClient
-from agent_actions.llm.providers.groq.client import GroqClient
 from agent_actions.llm.providers.hitl.client import HitlClient
-from agent_actions.llm.providers.mistral.client import MistralClient
-from agent_actions.llm.providers.ollama.client import OllamaClient
-from agent_actions.llm.providers.openai.client import OpenAIClient
 from agent_actions.llm.providers.tools.client import ToolClient
 
 logger = logging.getLogger(__name__)
 
-# Client registry
+# Vendor → pip package name, used for actionable DependencyError messages.
+_VENDOR_PACKAGES: dict[str, str] = {
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "cohere": "cohere",
+    "groq": "groq",
+    "ollama": "ollama",
+    "gemini": "google-genai",
+    "mistral": "mistralai",
+}
+
+# Client registry — external SDK providers use lazy "module:Class" strings
+# so the CLI doesn't crash when an unused provider's SDK is absent or broken.
 CLIENT_REGISTRY: dict[str, Any] = {
-    "openai": OpenAIClient,
-    "ollama": OllamaClient,
-    # Lazy import avoids deprecated SDK warnings for non-Gemini commands.
+    "openai": "agent_actions.llm.providers.openai.client:OpenAIClient",
+    "ollama": "agent_actions.llm.providers.ollama.client:OllamaClient",
     "gemini": "agent_actions.llm.providers.gemini.client:GeminiClient",
-    "cohere": CohereClient,
-    "mistral": MistralClient,
-    "anthropic": AnthropicClient,
-    "groq": GroqClient,
+    "cohere": "agent_actions.llm.providers.cohere.client:CohereClient",
+    "mistral": "agent_actions.llm.providers.mistral.client:MistralClient",
+    "anthropic": "agent_actions.llm.providers.anthropic.client:AnthropicClient",
+    "groq": "agent_actions.llm.providers.groq.client:GroqClient",
+    # Internal providers — no external SDK deps, safe to import eagerly.
     "tool": ToolClient,
     "agac-provider": AgacClient,
     "hitl": HitlClient,
@@ -44,7 +50,20 @@ def _resolve_client(model_vendor: str) -> Any:
     entry = CLIENT_REGISTRY[model_vendor]
     if isinstance(entry, str):
         module_path, class_name = entry.split(":", 1)
-        cls = getattr(importlib.import_module(module_path), class_name)
+        try:
+            cls = getattr(importlib.import_module(module_path), class_name)
+        except ImportError:
+            from agent_actions.errors import DependencyError
+
+            package = _VENDOR_PACKAGES.get(model_vendor, model_vendor)
+            raise DependencyError(
+                f"{model_vendor} provider requires the '{package}' package",
+                context={
+                    "client_type": model_vendor,
+                    "package": package,
+                    "install_command": f"uv pip install {package}",
+                },
+            ) from None
         CLIENT_REGISTRY[model_vendor] = cls
         return cls
     return entry

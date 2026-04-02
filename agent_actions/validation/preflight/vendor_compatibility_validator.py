@@ -21,14 +21,19 @@ def _resolve_capabilities(vendor: str) -> dict[str, Any] | None:
     Handles lazy string entries in CLIENT_REGISTRY (e.g. gemini) by importing
     them on demand, avoiding eager SDK imports at module level.
 
-    Returns ``None`` if the resolved class has no ``CAPABILITIES`` attribute.
+    Returns ``None`` if the resolved class has no ``CAPABILITIES`` attribute
+    or if the provider's SDK is not installed.
     """
     entry = CLIENT_REGISTRY.get(vendor)
     if entry is None:
         return None
     if isinstance(entry, str):
         module_path, class_name = entry.split(":", 1)
-        cls = getattr(importlib.import_module(module_path), class_name)
+        try:
+            cls = getattr(importlib.import_module(module_path), class_name)
+        except ImportError:
+            return None
+        CLIENT_REGISTRY[vendor] = cls
     else:
         cls = entry
     caps = getattr(cls, "CAPABILITIES", None)
