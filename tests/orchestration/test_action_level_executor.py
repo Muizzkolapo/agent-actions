@@ -1,6 +1,7 @@
 """Tests for ActionLevelOrchestrator functionality."""
 
 import pytest
+from rich.console import Console
 
 from agent_actions.errors import WorkflowError
 from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
@@ -287,6 +288,67 @@ class TestLoopDependencyExpansion:
         assert levels[0] == ["setup"]
         assert set(levels[1]) == {"loop_1", "loop_2"}
         assert levels[2] == ["consumer"]
+
+
+class TestLogExecutionLevels:
+    """Test that log_execution_levels uses 'Step' labels consistent with the header."""
+
+    def test_header_shows_action_and_step_counts(self):
+        """Header should show total actions and total steps."""
+        execution_order = ["a", "b", "c", "d"]
+        configs = {
+            "a": {"dependencies": []},
+            "b": {"dependencies": []},
+            "c": {"dependencies": ["a", "b"]},
+            "d": {"dependencies": ["c"]},
+        }
+        orchestrator = ActionLevelOrchestrator(execution_order, configs)
+        levels = orchestrator.compute_execution_levels()
+
+        from io import StringIO
+
+        buf = StringIO()
+        orchestrator.console = Console(file=buf, highlight=False, no_color=True)
+        action_indices = {name: i for i, name in enumerate(execution_order)}
+        orchestrator.log_execution_levels(levels, action_indices)
+        output = buf.getvalue()
+
+        assert "4 action(s) in 3 step(s)" in output
+
+    def test_detail_lines_use_step_label(self):
+        """Detail lines should say 'Step N' not 'Action N'."""
+        execution_order = ["a", "b", "c", "d"]
+        configs = {
+            "a": {"dependencies": []},
+            "b": {"dependencies": []},
+            "c": {"dependencies": ["a", "b"]},
+            "d": {"dependencies": ["c"]},
+        }
+        orchestrator = ActionLevelOrchestrator(execution_order, configs)
+        levels = orchestrator.compute_execution_levels()
+
+        from io import StringIO
+
+        buf = StringIO()
+        orchestrator.console = Console(file=buf, highlight=False, no_color=True)
+        action_indices = {name: i for i, name in enumerate(execution_order)}
+        orchestrator.log_execution_levels(levels, action_indices)
+        output = buf.getvalue()
+
+        # Should use "Step" not "Action" for level labels
+        assert "Step 0:" in output
+        assert "Step 1:" in output
+        assert "Step 2:" in output
+        # Parallel step should show action names
+        assert "2 actions in parallel" in output
+        # Sequential steps should show action name
+        assert "(sequential)" in output
+        # Should NOT use "Action N:" for step labels
+        lines = output.strip().split("\n")
+        for line in lines[1:]:  # skip header
+            assert "Action 0:" not in line
+            assert "Action 1:" not in line
+            assert "Action 2:" not in line
 
 
 class TestShouldUseParallelExecution:
