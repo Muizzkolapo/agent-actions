@@ -219,9 +219,12 @@ class ManifestManager:
         return None
 
     def is_action_completed(self, action_name: str) -> bool:
-        """Return True if action status is 'completed'."""
+        """Return True if action completed (including partial failures)."""
         action = self.manifest.get("actions", {}).get(action_name)
-        return action is not None and action.get("status") == "completed"
+        return action is not None and action.get("status") in {
+            "completed",
+            "completed_with_failures",
+        }
 
     def is_action_skipped(self, action_name: str) -> bool:
         """Return True if action status is 'skipped'."""
@@ -339,10 +342,10 @@ class ManifestManager:
             self._save_manifest()
 
     def get_completed_actions(self) -> list[str]:
-        """Return all completed action names."""
+        """Return all completed action names (including partial failures)."""
         completed = []
         for action_name, action_data in self.manifest.get("actions", {}).items():
-            if action_data.get("status") == "completed":
+            if action_data.get("status") in {"completed", "completed_with_failures"}:
                 completed.append(action_name)
         return completed
 

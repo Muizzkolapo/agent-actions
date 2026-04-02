@@ -164,7 +164,10 @@ class WorkflowDependencyOrchestrator:
         try:
             with open(upstream_status_file, encoding="utf-8") as f:
                 status_data = json.load(f)
-            return all(details.get("status") == "completed" for details in status_data.values())
+            return all(
+                details.get("status") in {"completed", "completed_with_failures"}
+                for details in status_data.values()
+            )
         except (OSError, json.JSONDecodeError, KeyError):
             return False
 

@@ -333,20 +333,7 @@ class ActionExecutor:
             )
 
         # Normal completion — check for partial item failures
-        final_status = "completed"
-        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        if storage_backend is not None:
-            try:
-                item_failures = storage_backend.get_failed_items(params.action_name)
-                if item_failures:
-                    final_status = "completed_with_failures"
-                    logger.warning(
-                        "Action '%s' completed with %d item-level failure(s)",
-                        params.action_name,
-                        len(item_failures),
-                    )
-            except Exception as e:
-                logger.debug("Could not check partial failures for %s: %s", params.action_name, e)
+        final_status = self._resolve_completion_status(params.action_name)
 
         self.deps.state_manager.update_status(
             params.action_name, final_status, **self._limit_metadata(params.action_config)
@@ -413,6 +400,23 @@ class ActionExecutor:
                     action_name,
                     disp_err,
                 )
+
+    def _resolve_completion_status(self, action_name: str) -> str:
+        """Return 'completed_with_failures' if item-level failures exist, else 'completed'."""
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is not None:
+            try:
+                item_failures = storage_backend.get_failed_items(action_name)
+                if item_failures:
+                    logger.warning(
+                        "Action '%s' completed with %d item-level failure(s)",
+                        action_name,
+                        len(item_failures),
+                    )
+                    return "completed_with_failures"
+            except Exception as e:
+                logger.debug("Could not check partial failures for %s: %s", action_name, e)
+        return "completed"
 
     def _handle_run_failure(
         self, params: ActionRunParams, error: Exception
@@ -670,8 +674,9 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
+            final_status = self._resolve_completion_status(action_name)
             self.deps.state_manager.update_status(
-                action_name, "completed", **self._limit_metadata(action_config)
+                action_name, final_status, **self._limit_metadata(action_config)
             )
             fire_event(
                 BatchCompleteEvent(
@@ -686,7 +691,7 @@ class ActionExecutor:
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
-                status="completed",
+                status=final_status,
                 metrics=ExecutionMetrics(duration=duration),
             )
 
@@ -744,8 +749,9 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
+            final_status = self._resolve_completion_status(action_name)
             self.deps.state_manager.update_status(
-                action_name, "completed", **self._limit_metadata(action_config)
+                action_name, final_status, **self._limit_metadata(action_config)
             )
             fire_event(
                 BatchCompleteEvent(
@@ -760,7 +766,7 @@ class ActionExecutor:
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
-                status="completed",
+                status=final_status,
                 metrics=ExecutionMetrics(duration=duration),
             )
 
