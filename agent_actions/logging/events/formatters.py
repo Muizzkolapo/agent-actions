@@ -16,6 +16,7 @@ class AgentActionsFormatter:
     # Status colors for Rich
     COLORS = {
         "OK": "green",
+        "PARTIAL": "yellow",
         "SKIP": "yellow",
         "CACHED": "cyan",
         "ERROR": "red",

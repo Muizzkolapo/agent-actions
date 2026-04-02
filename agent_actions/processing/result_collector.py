@@ -186,7 +186,12 @@ class ResultCollector:
                             input_snapshot_str = json.dumps(
                                 snapshot_source, ensure_ascii=False, default=str
                             )
-                        except (TypeError, ValueError):
+                        except (TypeError, ValueError) as snap_err:
+                            logger.debug(
+                                "Could not serialize input snapshot for %s: %s",
+                                result.source_guid,
+                                snap_err,
+                            )
                             input_snapshot_str = None
                     _safe_set_disposition(
                         storage_backend,

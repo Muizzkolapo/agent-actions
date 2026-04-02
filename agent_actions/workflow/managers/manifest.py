@@ -254,8 +254,9 @@ class ManifestManager:
         self,
         action_name: str,
         record_count: int | None = None,
+        status: str = "completed",
     ) -> None:
-        """Mark an action as completed.
+        """Mark an action as completed (or completed_with_failures).
 
         Raises:
             KeyError: If action not found in manifest.
@@ -269,7 +270,7 @@ class ManifestManager:
                     "ManifestManager._manifest is None; "
                     "initialize_manifest() or load_manifest() must be called first"
                 )
-            self._manifest["actions"][action_name]["status"] = "completed"
+            self._manifest["actions"][action_name]["status"] = status
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             if record_count is not None:
                 self._manifest["actions"][action_name]["record_count"] = record_count

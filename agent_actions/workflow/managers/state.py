@@ -72,8 +72,8 @@ class ActionStateManager:
         return self.action_status.get(action_name, {"status": "pending"})
 
     def is_completed(self, action_name: str) -> bool:
-        """Return True if action is completed."""
-        return self.get_status(action_name) == "completed"
+        """Return True if action completed (including partial failures)."""
+        return self.get_status(action_name) in {"completed", "completed_with_failures"}
 
     def is_batch_submitted(self, action_name: str) -> bool:
         """Return True if action has batch jobs submitted."""

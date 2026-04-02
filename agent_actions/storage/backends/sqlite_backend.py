@@ -169,8 +169,9 @@ class SQLiteBackend(StorageBackend):
                 # Migration: add input_snapshot column for existing databases
                 try:
                     cursor.execute("ALTER TABLE record_disposition ADD COLUMN input_snapshot TEXT")
+                    logger.debug("Added input_snapshot column to record_disposition")
                 except sqlite3.OperationalError:
-                    pass  # Column already exists
+                    logger.debug("input_snapshot column already exists in record_disposition")
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -508,9 +509,12 @@ class SQLiteBackend(StorageBackend):
             raise ValueError(
                 f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
             )
-        # Cap input_snapshot at 10KB to prevent storage bloat
+        # Cap input_snapshot at 10KB to prevent storage bloat.
+        # Wrap truncated content so consumers can detect and skip invalid JSON.
         if input_snapshot and len(input_snapshot) > 10240:
-            input_snapshot = input_snapshot[:10240]
+            input_snapshot = (
+                '{"__truncated__": true, "partial": ' + json.dumps(input_snapshot[:8192]) + "}"
+            )
 
         with self._lock:
             cursor = self.connection.cursor()

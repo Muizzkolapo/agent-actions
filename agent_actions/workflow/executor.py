@@ -415,7 +415,7 @@ class ActionExecutor:
                     )
                     return "completed_with_failures"
             except Exception as e:
-                logger.debug("Could not check partial failures for %s: %s", action_name, e)
+                logger.warning("Could not check partial failures for %s: %s", action_name, e)
         return "completed"
 
     def _handle_run_failure(
