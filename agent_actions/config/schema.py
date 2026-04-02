@@ -399,7 +399,7 @@ class WorkflowConfig(BaseModel):
 
     name: str = Field(..., description="Workflow name")
     description: str = Field(..., description="Workflow description")
-    version: str = Field(..., description="Workflow version")
+    version: str | None = Field(default=None, description="Workflow version")
     defaults: DefaultsConfig | None = Field(default=None, description="Default settings")
     actions: list[ActionConfig] = Field(..., description="Workflow actions")
 

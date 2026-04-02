@@ -3,7 +3,6 @@
 ################################################################################
 name: {{WORKFLOW_NAME}}
 description: "{{WORKFLOW_DESCRIPTION}}"
-version: "1.0.0"
 
 # Global defaults applied to all actions unless overridden
 defaults:

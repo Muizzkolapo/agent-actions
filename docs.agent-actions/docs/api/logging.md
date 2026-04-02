@@ -9,7 +9,7 @@ Complete API reference for agent-actions' event-based logging system.
 Emit an event to all registered handlers.
 
 ```python
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import WorkflowStartEvent
 
 fire_event(WorkflowStartEvent(
@@ -35,7 +35,7 @@ Events are automatically enriched with correlation context from the EventManager
 Get the EventManager singleton instance.
 
 ```python
-from agent_actions.logging import get_manager
+from agent_actions.logging.core.manager import get_manager
 
 manager = get_manager()
 manager.set_context(workflow_name="my_workflow")
@@ -54,7 +54,7 @@ Factory class for initializing and managing the logging system.
 Initialize the unified logging system with event handlers.
 
 ```python
-from agent_actions.logging import LoggerFactory
+from agent_actions.logging.factory import LoggerFactory
 
 manager = LoggerFactory.initialize(
     output_dir="/path/to/workflow/agent_io",
@@ -197,7 +197,7 @@ Central event dispatcher that routes events to handlers.
 Get the EventManager singleton instance.
 
 ```python
-from agent_actions.logging.core import EventManager
+from agent_actions.logging.core.manager import EventManager
 
 manager = EventManager.get()
 ```
@@ -225,7 +225,7 @@ manager.initialize()
 Register an event handler.
 
 ```python
-from agent_actions.logging.core import ConsoleEventHandler
+from agent_actions.logging.core.handlers import ConsoleEventHandler
 
 handler = ConsoleEventHandler()
 manager.register(handler)
@@ -758,7 +758,8 @@ class MyHandler(EventHandler):
 Outputs events to the console using Rich formatting.
 
 ```python
-from agent_actions.logging.core import ConsoleEventHandler, EventLevel
+from agent_actions.logging.core.events import EventLevel
+from agent_actions.logging.core.handlers import ConsoleEventHandler
 
 handler = ConsoleEventHandler(
     min_level=EventLevel.INFO,
@@ -780,7 +781,8 @@ handler = ConsoleEventHandler(
 Writes events to a JSON file in NDJSON format.
 
 ```python
-from agent_actions.logging.core import JSONFileHandler, EventLevel
+from agent_actions.logging.core.events import EventLevel
+from agent_actions.logging.core.handlers import JSONFileHandler
 from pathlib import Path
 
 handler = JSONFileHandler(
@@ -873,7 +875,7 @@ file_config = FileHandlerConfig(
 Event severity levels.
 
 ```python
-from agent_actions.logging.core import EventLevel
+from agent_actions.logging.core.events import EventLevel
 
 EventLevel.DEBUG    # Detailed diagnostic information
 EventLevel.INFO     # General informational messages
@@ -905,7 +907,8 @@ EventCategory.SYSTEM       # System-level events
 ### Basic Workflow Logging
 
 ```python
-from agent_actions.logging import LoggerFactory, fire_event
+from agent_actions.logging.factory import LoggerFactory
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     WorkflowStartEvent,
     ActionStartEvent,
@@ -953,7 +956,7 @@ LoggerFactory.flush()
 ### Custom Event Handler
 
 ```python
-from agent_actions.logging import get_manager
+from agent_actions.logging.core.manager import get_manager
 from agent_actions.logging.core.handlers import EventHandler
 from agent_actions.logging.events.base import BaseEvent
 
@@ -986,7 +989,7 @@ manager.register(handler)
 ### Context Scoping
 
 ```python
-from agent_actions.logging import get_manager, fire_event
+from agent_actions.logging.core.manager import get_manager, fire_event
 from agent_actions.logging.events import ActionStartEvent
 
 manager = get_manager()

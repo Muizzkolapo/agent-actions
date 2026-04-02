@@ -141,7 +141,7 @@ class MyCustomEvent(BaseEvent):
 Then emit the event:
 
 ```python
-from agent_actions.logging import fire_event
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import MyCustomEvent
 
 fire_event(MyCustomEvent(
@@ -186,7 +186,7 @@ class MyHandler(EventHandler):
 Register handlers with the EventManager:
 
 ```python
-from agent_actions.logging import get_manager
+from agent_actions.logging.core.manager import get_manager
 
 manager = get_manager()
 manager.register(MyHandler())
@@ -197,7 +197,7 @@ manager.register(MyHandler())
 Test event emission and handling:
 
 ```python
-from agent_actions.logging.core import EventManager
+from agent_actions.logging.core.manager import EventManager
 from agent_actions.logging.events import WorkflowStartEvent
 
 def test_workflow_event():
@@ -228,7 +228,7 @@ def test_workflow_event():
 Events automatically inherit context from the CorrelationContext:
 
 ```python
-from agent_actions.logging import get_manager
+from agent_actions.logging.core.manager import get_manager
 
 # Set context (automatically propagates to all events)
 manager = get_manager()

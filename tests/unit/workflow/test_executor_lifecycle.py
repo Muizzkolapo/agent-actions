@@ -53,6 +53,7 @@ class TestExecuteAgentSync:
         mock_deps.state_manager.get_status.return_value = "completed"
         storage = MagicMock()
         storage.list_target_files.return_value = ["file1.json"]
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         result = executor.execute_action_sync(
@@ -74,6 +75,7 @@ class TestExecuteAgentSync:
         mock_deps.state_manager.get_status.return_value = "completed"
         storage = MagicMock()
         storage.list_target_files.return_value = []
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         mock_deps.skip_evaluator.should_skip_action.return_value = False
@@ -99,6 +101,7 @@ class TestExecuteAgentSync:
         mock_deps.state_manager.get_status.return_value = "completed"
         storage = MagicMock()
         storage.list_target_files.side_effect = OSError("SQLite lock")
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         mock_deps.skip_evaluator.should_skip_action.return_value = False
@@ -407,6 +410,7 @@ class TestVerifyCompletionStatus:
         """Agent with output files should be skipped (already done)."""
         storage = MagicMock()
         storage.list_target_files.return_value = ["file.json"]
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         should_skip, result = executor._verify_completion_status("agent_a")
@@ -418,6 +422,7 @@ class TestVerifyCompletionStatus:
         """Agent with no output files should be reset to pending."""
         storage = MagicMock()
         storage.list_target_files.return_value = []
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         should_skip, result = executor._verify_completion_status("agent_a")
@@ -439,6 +444,7 @@ class TestVerifyCompletionStatus:
         """Any exception during verification should reset to pending and re-run."""
         storage = MagicMock()
         storage.list_target_files.side_effect = exc
+        storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
 
         should_skip, result = executor._verify_completion_status("agent_a")

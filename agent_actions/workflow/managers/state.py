@@ -31,6 +31,11 @@ class ActionStateManager:
         else:
             self._initialize_default_status()
 
+    def reset(self) -> None:
+        """Reset all actions to 'pending' status and persist."""
+        self._initialize_default_status()
+        self._save_status()
+
     def _initialize_default_status(self):
         """Initialize all actions with 'pending' status."""
         self.action_status = {action: {"status": "pending"} for action in self.execution_order}
@@ -79,8 +84,9 @@ class ActionStateManager:
         return self.get_status(action_name) == "failed"
 
     def get_pending_actions(self, agents: list[str]) -> list[str]:
-        """Return actions that are not yet completed."""
-        return [agent for agent in agents if not self.is_completed(agent)]
+        """Return actions that are not yet completed or failed (runnable)."""
+        terminal = {"completed", "failed"}
+        return [agent for agent in agents if self.get_status(agent) not in terminal]
 
     def get_batch_submitted_actions(self, agents: list[str]) -> list[str]:
         """Return actions with batch jobs submitted."""
@@ -114,6 +120,11 @@ class ActionStateManager:
     def is_workflow_complete(self) -> bool:
         """Return True if all actions have 'completed' status."""
         return all(details.get("status") == "completed" for details in self.action_status.values())
+
+    def is_workflow_done(self) -> bool:
+        """Return True if all actions are in a terminal state (completed or failed)."""
+        terminal = {"completed", "failed"}
+        return all(details.get("status") in terminal for details in self.action_status.values())
 
     def has_any_failed(self) -> bool:
         """Return True if any action has 'failed' status."""

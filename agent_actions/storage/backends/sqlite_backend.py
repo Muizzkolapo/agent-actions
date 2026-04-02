@@ -636,6 +636,35 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
+    def delete_target(self, action_name: str) -> int:
+        """Delete all target data for a specific action. Returns count deleted."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    "DELETE FROM target_data WHERE action_name = ?",
+                    (action_name,),
+                )
+                self.connection.commit()
+                deleted = cursor.rowcount
+                logger.debug(
+                    "Deleted %d target records for %s",
+                    deleted,
+                    action_name,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                return deleted
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to delete target for %s: %s",
+                    action_name,
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                raise
+
     @staticmethod
     def _format_size(size_bytes: int) -> str:
         """Format bytes as human-readable size."""
