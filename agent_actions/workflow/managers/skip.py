@@ -164,6 +164,16 @@ class GuardStrategy(SkipStrategy):
                 else:
                     context_data[action_name] = action_output
 
+            # Promote output_field values to top-level (best-effort heuristic).
+            # When a flattened action is a single-key dict, promote that key so
+            # guards can write `severity != "low"` instead of `assess_severity.severity`.
+            for key in list(context_data.keys()):
+                val = context_data[key]
+                if isinstance(val, dict) and len(val) == 1:
+                    field_name, field_value = next(iter(val.items()))
+                    if field_name not in context_data:
+                        context_data[field_name] = field_value
+
             logger.debug(
                 "Evaluating action-level guard for %s",
                 agent_name,

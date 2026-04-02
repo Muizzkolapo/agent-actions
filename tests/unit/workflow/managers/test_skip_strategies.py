@@ -265,6 +265,40 @@ class TestGuardStrategy:
         # Reserved key should keep original value, not be overwritten
         assert call_args.data["dependencies"] == ["b"]
 
+    def test_promotes_output_field_values_to_top_level(self, strategy):
+        """Single-key dict outputs are promoted so guards can use bare field names."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "assess": [{"severity": "high"}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Single-key dict unwrapped from list, then field promoted to top-level
+        assert call_args.data["assess"] == {"severity": "high"}
+        assert call_args.data["severity"] == "high"
+
+    def test_empty_list_action_output(self, strategy):
+        """Empty list action output is stored as-is without unwrapping."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "empty_action": [],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        assert call_args.data["empty_action"] == []
+
     def test_multi_item_lists_not_unwrapped(self, strategy):
         """Multi-item list outputs are kept as lists."""
         filt = _make_filter(FakeFilterResult(success=True, matched=True))

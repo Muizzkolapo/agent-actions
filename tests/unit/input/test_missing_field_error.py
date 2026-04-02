@@ -74,6 +74,17 @@ class TestMissingFieldError:
         with pytest.raises(MissingFieldError, match=r"Did you mean: assess_severity\.severity\?"):
             evaluate_node(node, data)
 
+    def test_missing_field_multiple_suggestions(self):
+        """When a field exists in multiple top-level dicts, all are suggested."""
+        node = FieldNode("name")
+        data = {
+            "action_a": {"name": "Alice"},
+            "action_b": {"name": "Bob"},
+            "source": {"text": "test"},
+        }
+        with pytest.raises(MissingFieldError, match=r"action_a\.name.*action_b\.name"):
+            evaluate_node(node, data)
+
     def test_missing_field_no_suggestion_when_not_sub_field(self):
         """When the field doesn't exist anywhere, no suggestion is shown."""
         node = FieldNode("nonexistent")

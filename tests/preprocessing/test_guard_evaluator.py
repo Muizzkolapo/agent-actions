@@ -448,6 +448,44 @@ class TestOutputFieldPromotionInTaskPreparer:
         assert "severity" in result
         assert result["severity"] == "high"
 
+    def test_output_field_collision_logs_warning(self):
+        """When output_field name collides, a warning is logged."""
+        import logging
+        from unittest.mock import patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+
+        mock_field_context = {
+            "assess_severity": {"severity": "high"},
+            "severity": "existing_value",
+        }
+
+        context = PreparationContext(
+            agent_config={"context_scope": {}},
+            agent_name="draft_response",
+            dependency_configs={
+                "assess_severity": {"output_field": "severity", "idx": 0},
+            },
+        )
+
+        tp_logger = logging.getLogger("agent_actions.processing.task_preparer")
+        with patch(
+            "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+            return_value=mock_field_context,
+        ), patch.object(tp_logger, "warning") as mock_warn:
+            preparer._load_full_context(
+                content={},
+                source_content={},
+                context=context,
+                current_item=None,
+            )
+
+        mock_warn.assert_called_once()
+        assert "collides" in mock_warn.call_args[0][0]
+
     def test_no_dependency_configs_no_promotion(self):
         """When dependency_configs is None, no promotion happens (no crash)."""
         from unittest.mock import patch
