@@ -13,6 +13,7 @@ class GuardBehavior(str, Enum):
 
     SKIP = "skip"
     FILTER = "filter"
+    WARN = "warn"
     WRITE_TO = "write_to"
     REPROCESS = "reprocess"
 
