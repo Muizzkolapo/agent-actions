@@ -193,6 +193,129 @@ class TestGuardStrategy:
         call_args = filt.filter_item.call_args[0][0]
         assert "guard" not in call_args.data.get("agent_config", {})
 
+    def test_flattens_previous_outputs_to_top_level(self, strategy):
+        """Action outputs from previous_outputs are accessible as top-level keys."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "classify": [{"category": "bug"}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Action outputs should be flattened to top-level
+        assert "classify" in call_args.data
+        # previous_outputs should still be present for backward compat
+        assert "previous_outputs" in call_args.data
+
+    def test_unwraps_single_item_lists(self, strategy):
+        """Single-item list outputs are unwrapped to their dict for dot notation."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "assess": [{"severity": "high"}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Single-item list should be unwrapped to dict
+        assert call_args.data["assess"] == {"severity": "high"}
+
+    def test_meta_keys_not_flattened(self, strategy):
+        """Internal _meta metadata keys are excluded from top-level flattening."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "classify": [{"category": "bug"}],
+            "classify_meta": {"status": "completed"},
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        assert "classify" in call_args.data
+        assert "classify_meta" not in call_args.data
+
+    def test_reserved_key_collision_skips(self, strategy):
+        """Action named like a reserved key is not flattened to top-level."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+            "dependencies": ["b"],
+        }
+        previous_outputs = {
+            "dependencies": [{"data": "value"}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Reserved key should keep original value, not be overwritten
+        assert call_args.data["dependencies"] == ["b"]
+
+    def test_promotes_output_field_values_to_top_level(self, strategy):
+        """Single-key dict outputs are promoted so guards can use bare field names."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "assess": [{"severity": "high"}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Single-key dict unwrapped from list, then field promoted to top-level
+        assert call_args.data["assess"] == {"severity": "high"}
+        assert call_args.data["severity"] == "high"
+
+    def test_empty_list_action_output(self, strategy):
+        """Empty list action output is stored as-is without unwrapping."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "empty_action": [],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        assert call_args.data["empty_action"] == []
+
+    def test_multi_item_lists_not_unwrapped(self, strategy):
+        """Multi-item list outputs are kept as lists."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "extract": [{"id": 1}, {"id": 2}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Multi-item list should remain as-is
+        assert call_args.data["extract"] == [{"id": 1}, {"id": 2}]
+
 
 # ── LegacySkipIfStrategy ──────────────────────────────────────────────
 

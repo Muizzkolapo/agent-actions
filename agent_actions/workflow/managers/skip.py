@@ -137,12 +137,42 @@ class GuardStrategy(SkipStrategy):
         try:
             filter_service = get_global_guard_filter()
 
-            context_data = {
-                "previous_outputs": previous_outputs or {},
+            prev = previous_outputs or {}
+            context_data: dict[str, Any] = {
+                "previous_outputs": prev,
                 "agent_type": agent_config.get("agent_type"),
                 "dependencies": agent_config.get("dependencies", []),
-                "agent_config": {k: v for k, v in agent_config.items() if k not in ["guard"]},
+                "agent_config": {k: v for k, v in agent_config.items() if k != "guard"},
             }
+            # Flatten action outputs to top-level so guards can use dot notation
+            # e.g., assess_severity.severity != "low"
+            for action_name, action_output in prev.items():
+                # Skip internal metadata keys (e.g., "classify_meta")
+                if action_name.endswith("_meta"):
+                    continue
+                if action_name in context_data:
+                    logger.debug(
+                        "Action '%s' collides with reserved context key — "
+                        "use previous_outputs.%s in guard conditions",
+                        action_name,
+                        action_name,
+                    )
+                    continue
+                # Unwrap single-item lists (common output_field pattern)
+                if isinstance(action_output, list) and len(action_output) == 1:
+                    context_data[action_name] = action_output[0]
+                else:
+                    context_data[action_name] = action_output
+
+            # Promote output_field values to top-level (best-effort heuristic).
+            # When a flattened action is a single-key dict, promote that key so
+            # guards can write `severity != "low"` instead of `assess_severity.severity`.
+            for key in list(context_data.keys()):
+                val = context_data[key]
+                if isinstance(val, dict) and len(val) == 1:
+                    field_name, field_value = next(iter(val.items()))
+                    if field_name not in context_data:
+                        context_data[field_name] = field_value
 
             logger.debug(
                 "Evaluating action-level guard for %s",

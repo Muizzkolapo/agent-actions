@@ -256,6 +256,274 @@ class TestGuardEvaluator:
         assert result["ctx_field"] == "ctx_value"
 
 
+class TestOutputFieldPromotion:
+    """Tests for output_field promotion in guard evaluation context.
+
+    When an upstream action declares output_field, the field value should be
+    promoted to top-level in the evaluation context so guards can reference
+    it directly (e.g., `severity != "low"` instead of `assess_severity.severity != "low"`).
+    """
+
+    @pytest.fixture
+    def mock_guard_filter(self):
+        mock = MagicMock(spec=GuardFilter)
+        return mock
+
+    @pytest.fixture
+    def evaluator(self, mock_guard_filter):
+        return GuardEvaluator(guard_filter=mock_guard_filter)
+
+    def test_promoted_output_field_in_eval_context(self, evaluator):
+        """Promoted output_field is accessible as top-level key in evaluation context."""
+        # Simulate field_context after output_field promotion in task_preparer
+        context = {
+            "assess_severity": {"severity": "high"},
+            "severity": "high",  # Promoted by task_preparer
+        }
+
+        result = evaluator._build_evaluation_context(
+            item={"content": {"text": "test"}},
+            context=context,
+        )
+
+        # severity should be a top-level key (promoted from assess_severity.severity)
+        assert "severity" in result
+        assert result["severity"] == "high"
+        # Original namespace should also be accessible
+        assert "assess_severity" in result
+        assert result["assess_severity"]["severity"] == "high"
+
+    def test_dot_notation_in_eval_context(self, evaluator):
+        """Dot notation to access nested output_field values works in the eval context."""
+        context = {
+            "assess_severity": {"severity": "high"},
+        }
+
+        result = evaluator._build_evaluation_context(
+            item={"content": {"text": "test"}},
+            context=context,
+        )
+
+        # assess_severity is a top-level dict, so dot notation should resolve
+        from agent_actions.utils.dict import get_nested_value
+
+        assert get_nested_value(result, "assess_severity.severity") == "high"
+
+    def test_guard_receives_promoted_field(self, evaluator, mock_guard_filter):
+        """Guard filter receives the promoted output_field in data dict."""
+        mock_guard_filter.filter_item.return_value = FilterResult(success=True, matched=True)
+
+        context = {
+            "assess_severity": {"severity": "high"},
+            "severity": "high",  # Promoted
+        }
+        guard_config = {"clause": 'severity != "low"', "scope": "item", "behavior": "skip"}
+
+        evaluator.evaluate_with_context(
+            item={"content": {}},
+            guard_config=guard_config,
+            context=context,
+        )
+
+        # Verify filter was called with data containing promoted field
+        call_args = mock_guard_filter.filter_item.call_args[0][0]
+        assert "severity" in call_args.data
+        assert call_args.data["severity"] == "high"
+
+
+class TestOutputFieldPromotionInTaskPreparer:
+    """Tests for output_field promotion logic in TaskPreparer._load_full_context."""
+
+    def test_promote_output_field_to_top_level(self):
+        """output_field values from dependency_configs are promoted to top-level in field_context."""
+        from unittest.mock import patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+
+        # Mock build_field_context_with_history to return controlled field_context
+        mock_field_context = {
+            "assess_severity": {"severity": "high"},
+            "source": {"text": "input"},
+        }
+
+        context = PreparationContext(
+            agent_config={"context_scope": {}},
+            agent_name="draft_response",
+            dependency_configs={
+                "assess_severity": {"output_field": "severity", "idx": 0},
+                "other_action": {"idx": 1},
+            },
+        )
+
+        with patch(
+            "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+            return_value=mock_field_context,
+        ):
+            result = preparer._load_full_context(
+                content={"text": "test"},
+                source_content={"text": "source"},
+                context=context,
+                current_item=None,
+            )
+
+        # output_field value should be promoted to top-level
+        assert "severity" in result
+        assert result["severity"] == "high"
+        # Original namespace should still exist
+        assert result["assess_severity"] == {"severity": "high"}
+
+    def test_output_field_collision_skips_promotion(self):
+        """When output_field name collides with existing field, promotion is skipped."""
+        from unittest.mock import patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+
+        # "severity" already exists as a top-level field
+        mock_field_context = {
+            "assess_severity": {"severity": "high"},
+            "severity": "existing_value",  # Already present
+        }
+
+        context = PreparationContext(
+            agent_config={"context_scope": {}},
+            agent_name="draft_response",
+            dependency_configs={
+                "assess_severity": {"output_field": "severity", "idx": 0},
+            },
+        )
+
+        with patch(
+            "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+            return_value=mock_field_context,
+        ):
+            result = preparer._load_full_context(
+                content={},
+                source_content={},
+                context=context,
+                current_item=None,
+            )
+
+        # Should NOT overwrite existing field
+        assert result["severity"] == "existing_value"
+
+    def test_promote_output_field_from_list_dep_data(self):
+        """output_field promotion works when dep_data is a single-item list (common storage shape)."""
+        from unittest.mock import patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+
+        mock_field_context = {
+            "assess_severity": [{"severity": "high"}],  # List shape from storage
+            "source": {"text": "input"},
+        }
+
+        context = PreparationContext(
+            agent_config={"context_scope": {}},
+            agent_name="draft_response",
+            dependency_configs={
+                "assess_severity": {"output_field": "severity", "idx": 0},
+            },
+        )
+
+        with patch(
+            "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+            return_value=mock_field_context,
+        ):
+            result = preparer._load_full_context(
+                content={},
+                source_content={},
+                context=context,
+                current_item=None,
+            )
+
+        assert "severity" in result
+        assert result["severity"] == "high"
+
+    def test_output_field_collision_logs_warning(self):
+        """When output_field name collides, a warning is logged."""
+        import logging
+        from unittest.mock import patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+
+        mock_field_context = {
+            "assess_severity": {"severity": "high"},
+            "severity": "existing_value",
+        }
+
+        context = PreparationContext(
+            agent_config={"context_scope": {}},
+            agent_name="draft_response",
+            dependency_configs={
+                "assess_severity": {"output_field": "severity", "idx": 0},
+            },
+        )
+
+        tp_logger = logging.getLogger("agent_actions.processing.task_preparer")
+        with (
+            patch(
+                "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+                return_value=mock_field_context,
+            ),
+            patch.object(tp_logger, "warning") as mock_warn,
+        ):
+            preparer._load_full_context(
+                content={},
+                source_content={},
+                context=context,
+                current_item=None,
+            )
+
+        mock_warn.assert_called_once()
+        assert "collides" in mock_warn.call_args[0][0]
+
+    def test_no_dependency_configs_no_promotion(self):
+        """When dependency_configs is None, no promotion happens (no crash)."""
+        from unittest.mock import patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+
+        mock_field_context = {
+            "assess_severity": {"severity": "high"},
+        }
+
+        context = PreparationContext(
+            agent_config={"context_scope": {}},
+            agent_name="draft_response",
+            dependency_configs=None,
+        )
+
+        with patch(
+            "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+            return_value=mock_field_context,
+        ):
+            result = preparer._load_full_context(
+                content={},
+                source_content={},
+                context=context,
+                current_item=None,
+            )
+
+        # No promotion, but no crash
+        assert "severity" not in result
+        assert result["assess_severity"] == {"severity": "high"}
+
+
 class TestHelpersIntegration:
     """Tests for integration with processing/helpers.py."""
 
