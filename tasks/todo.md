@@ -6,7 +6,7 @@ Reference: `failures.txt`, PR #67 (added circuit breaker but upstream never sign
 
 ---
 
-## Phase 1 — Bugfix: Accurate tally + level coloring (REVISED)
+## Phase 1 — Bugfix: Accurate tally + level coloring (DONE — PR #80)
 
 **Discovery:** PR #67 already added the zero-output check at `pipeline.py:493-508`. The total-wipeout case (0/N items) already propagates as `"failed"`. The remaining bugs were:
 - `_handle_dependency_skip` used `status="failed"` → tally showed 0 SKIP
@@ -41,34 +41,35 @@ Reference: `failures.txt`, PR #67 (added circuit breaker but upstream never sign
 
 **Goal:** When K/N items succeed, action is `completed_with_failures`, item-level failures are persisted and surfaced.
 
-- [ ] **2.1** Add `completed_with_failures` status to state manager
-  - New terminal status alongside `completed` and `failed`
-  - Circuit breaker ignores this status (descendants run on partial output)
-  - Tally counts it as `PARTIAL`
-  - Verify: `pytest`, `ruff check .`
+- [x] **2.1** Storage backend: extend disposition with `input_snapshot`
+  - Added `input_snapshot` param to abstract `set_disposition()` and `get_failed_items()` to base class
+  - SQLite: added column, schema migration, 10KB cap with `__truncated__` sentinel for valid JSON
+  - `get_disposition()` returns `input_snapshot` in results
 
-- [ ] **2.2** Item-level failure tracking in storage backend
-  - Persist which items (by `source_guid` or index) failed and the error message
-  - Storage schema addition (e.g., `item_failures` table or disposition record)
-  - Verify: unit test asserting failed items are persisted and retrievable
+- [x] **2.2** Result collector: write input snapshots for failed items
+  - `collect_results()` serializes `source_snapshot or input_record` as JSON for FAILED items
+  - Passes via `_safe_set_disposition(**kwargs)` — no return type change needed
+  - Discovery: executor queries `get_failed_items()` directly from storage — no plumbing needed
 
-- [ ] **2.3** Populate `completed_with_failures` from executor
-  - After action runner returns: if `items_succeeded > 0 AND items_succeeded < items_attempted` → status `completed_with_failures`
-  - Write item-level failures to storage backend
-  - Verify: `pytest`, manual run with partial failure confirms new status + persisted failures
+- [x] **2.3** Executor: `completed_with_failures` status
+  - `_resolve_completion_status()` queries storage for item-level failures after success
+  - Used in online path + both batch paths (sync/async)
+  - State manager: `is_completed_with_failures()`, updated all terminal sets
+  - `is_completed()` includes partial, circuit breaker ignores it
+  - 9 status checks across 6 files updated; extracted `COMPLETED_STATUSES` and `TERMINAL_STATUSES` constants
 
-- [ ] **2.4** Surface partial failures in output
-  - Action completion log: `"Action 'X': 9/10 items OK, 1 failed (see item failures)"`
-  - Tally: `"8 OK | 1 PARTIAL | 0 SKIP | 2 ERROR"`
-  - Level line: yellow for levels containing `completed_with_failures` actions
-  - Verify: manual run, visual inspection
+- [x] **2.4** Tally and display
+  - `WorkflowCompleteEvent`: added `actions_partial`
+  - Formatter: `"N OK | M PARTIAL | S SKIP | K ERROR"` with yellow coloring
+  - Level line: yellow for levels with partial failures
 
-- [ ] **2.5** Tests for Phase 2
-  - Test: partial failure → status is `completed_with_failures`, not `completed` or `failed`
-  - Test: item-level failures are persisted with guid + error
-  - Test: descendants of `completed_with_failures` action still run (not skipped)
-  - Test: tally shows PARTIAL count
-  - Verify: `pytest`
+- [x] **2.5** Tests + review fixes
+  - 13 new tests: `_resolve_completion_status` (4 paths), `get_failed_items` sentinel filtering,
+    circuit breaker ignores partial, `is_completed_with_failures`, terminal sets, level coloring
+  - Review fixes: `is_completed()` includes partial, PARTIAL in COLORS dict, WARNING-level
+    exception logging, valid JSON truncation, `mark_action_completed` accepts status,
+    `dependency.py`/`manifest.py` accept partial, migration logging
+  - PR #92, 4292 tests pass
 
 ---
 
@@ -76,17 +77,33 @@ Reference: `failures.txt`, PR #67 (added circuit breaker but upstream never sign
 
 **Goal:** Workflow pauses on partial failure (default), user can retry failed items or continue. Configurable retry policy.
 
-- [ ] **3.1** Pause-and-surface on partial failure (default behavior)
-  - After a level containing `completed_with_failures` actions, pause workflow
-  - Print summary: `"9/10 OK, 1 failed. Run 'agac retry <action>' or 'agac run --continue'"`
-  - List failed items with truncated error messages
-  - Verify: manual run with partial failure → workflow pauses with clear message
+**PR A: Pause-and-surface + on_partial_failure config**
 
-- [ ] **3.2** `on_partial_failure` config option
-  - Per-action or workflow-level config: `on_partial_failure: pause | continue`
-  - Default: `pause`
-  - `continue`: skip the pause, proceed with partial results (for automated pipelines)
-  - Verify: `pytest`, manual run with `continue` config → no pause
+- [ ] **3.1** Config: `on_partial_failure` field (defaults + per-action inheritance)
+  - `ActionConfig`: `on_partial_failure: Literal["continue", "pause"] = "continue"`
+  - `DefaultsConfig`: `on_partial_failure: ... | None = None`
+  - `SIMPLE_CONFIG_FIELDS`: `"on_partial_failure": "continue"`
+  - `ActionConfigDict`: add field
+  - `WorkflowState`: add `pause_reason: str | None = None`
+  - `LevelExecutionParams`: add `on_partial_failure`, `workflow_state`, `storage_backend`
+
+- [ ] **3.2** Pause logic: async + sequential paths
+  - `execute_level_async`: detect partial + pause → print summary, set pause_reason, return False
+  - Annotate batch-pending path with `pause_reason = "batch_pending"`
+  - `_run_single_action`: detect partial + pause → print summary, set pause_reason, return True
+  - Summary method: list action names, item counts, truncated errors
+
+- [ ] **3.3** CLI: correct pause message per pause_reason
+  - `run.py`: check `workflow.state.pause_reason` for message selection
+  - "partial_failure" → partial-specific message
+  - None/other → existing batch-pending message
+
+- [ ] **3.4** Tests for PR A
+  - Config schema + inheritance
+  - Async pause (partial+pause → False, partial+continue → True, no partial → True)
+  - Sequential pause
+  - CLI message selection
+  - Summary output
 
 - [ ] **3.3** `agac retry` command / `--retry-failed` flag
   - `agac retry <action>`: re-run only failed items for the specified action

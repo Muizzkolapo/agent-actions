@@ -40,6 +40,9 @@ class LevelExecutionParams:
     state_manager: Any
     action_executor: Any
     concurrency_limit: int = 5
+    on_partial_failure: str = "continue"
+    workflow_state: Any = None
+    storage_backend: Any = None
 
 
 class ActionLevelOrchestrator:
@@ -270,6 +273,36 @@ class ActionLevelOrchestrator:
             )
         # batch_submitted: BatchSubmittedEvent already fired by executor
 
+    def _print_partial_failure_summary(self, params: LevelExecutionParams) -> None:
+        """Print a summary of partial failures in the level."""
+        partial_actions = [
+            a for a in params.level_actions if params.state_manager.is_completed_with_failures(a)
+        ]
+        self.console.print("[yellow]Workflow paused — partial failure(s) detected:[/yellow]")
+        for action_name in partial_actions:
+            try:
+                if params.storage_backend is not None:
+                    failed_items = params.storage_backend.get_failed_items(action_name)
+                    self.console.print(
+                        f"[yellow]  {action_name}: {len(failed_items)} item(s) failed[/yellow]"
+                    )
+                    for item in failed_items[:5]:
+                        reason = str(item.get("reason", "unknown"))[:80]
+                        self.console.print(f"[dim]    - {reason}[/dim]")
+                    if len(failed_items) > 5:
+                        self.console.print(f"[dim]    ... and {len(failed_items) - 5} more[/dim]")
+                else:
+                    self.console.print(
+                        f"[yellow]  {action_name}: partial failures (details unavailable)[/yellow]"
+                    )
+            except Exception:
+                self.console.print(
+                    f"[yellow]  {action_name}: partial failures (could not load details)[/yellow]"
+                )
+        self.console.print(
+            "[yellow]Run 'agac run' again to continue with partial results.[/yellow]"
+        )
+
     def _check_batch_status(
         self, level_idx: int, level_actions: list[str], state_manager, start_time: datetime
     ) -> bool:
@@ -351,6 +384,8 @@ class ActionLevelOrchestrator:
         if not self._check_batch_status(
             params.level_idx, params.level_actions, params.state_manager, start_time
         ):
+            if params.workflow_state is not None:
+                params.workflow_state.pause_reason = "batch_pending"
             return False
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -369,4 +404,11 @@ class ActionLevelOrchestrator:
         self.console.print(
             f"[{color}]Action {params.level_idx} complete ({duration:.2f}s)[/{color}]"
         )
+
+        # Pause on partial failure if configured
+        if has_partial and params.on_partial_failure == "pause":
+            self._print_partial_failure_summary(params)
+            if params.workflow_state is not None:
+                params.workflow_state.pause_reason = "partial_failure"
+            return False
         return True

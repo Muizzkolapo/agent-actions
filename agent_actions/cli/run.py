@@ -124,6 +124,12 @@ class RunCommand:
             if workflow.services.core.state_manager.is_workflow_complete():
                 status = "SUCCESS"
                 click.echo(f"Successfully completed agent run for: {self.args.agent}")
+            elif workflow.state.pause_reason == "partial_failure":
+                status = "PAUSED"
+                click.echo(
+                    "Workflow paused - partial failure(s) detected. "
+                    "Run again to continue with partial results."
+                )
             else:
                 status = "PAUSED"
                 click.echo(

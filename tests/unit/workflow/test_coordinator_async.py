@@ -64,6 +64,9 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     # Dependency orchestrator (needed for _resolve_downstream_workflows)
     wf.dependency_orchestrator = MagicMock()
 
+    # Storage backend
+    wf.storage_backend = MagicMock()
+
     return wf
 
 

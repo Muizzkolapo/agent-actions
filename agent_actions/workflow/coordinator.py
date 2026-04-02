@@ -326,6 +326,14 @@ class AgentWorkflow:
                                 action_index=self.action_indices[action_name],
                             )
 
+                    # Resolve on_partial_failure: "pause" wins if any action in the level wants it
+                    level_on_partial = "continue"
+                    for a in level_actions:
+                        cfg = self.metadata.action_configs.get(a, {})
+                        if cfg and cfg.get("on_partial_failure") == "pause":
+                            level_on_partial = "pause"
+                            break
+
                     orchestrator = self.services.core.action_level_orchestrator
                     level_complete = await orchestrator.execute_level_async(
                         LevelExecutionParams(
@@ -335,6 +343,9 @@ class AgentWorkflow:
                             state_manager=self.services.core.state_manager,
                             action_executor=self.services.core.action_executor,
                             concurrency_limit=concurrency_limit,
+                            on_partial_failure=level_on_partial,
+                            workflow_state=self.state,
+                            storage_backend=self.storage_backend,
                         )
                     )
 
@@ -483,8 +494,44 @@ class AgentWorkflow:
                         "ephemeral": action_config.get("ephemeral", False),
                     }
                 )
+
+            # Pause on partial failure if configured
+            if (
+                result.status == "completed_with_failures"
+                and action_config.get("on_partial_failure") == "pause"
+            ):
+                self._print_sequential_partial_summary(action_name)
+                self.state.pause_reason = "partial_failure"
+                return True  # Stop the loop
+
             return False
 
         # Action failed — log and continue (circuit breaker handles downstream)
         logger.warning("Action '%s' failed: %s", action_name, result.error)
         return False
+
+    def _print_sequential_partial_summary(self, action_name: str) -> None:
+        """Print a summary of partial failures for a single action (sequential path)."""
+        self.console.print("[yellow]Workflow paused — partial failure(s) detected:[/yellow]")
+        try:
+            if self.storage_backend is not None:
+                failed_items = self.storage_backend.get_failed_items(action_name)
+                self.console.print(
+                    f"[yellow]  {action_name}: {len(failed_items)} item(s) failed[/yellow]"
+                )
+                for item in failed_items[:5]:
+                    reason = str(item.get("reason", "unknown"))[:80]
+                    self.console.print(f"[dim]    - {reason}[/dim]")
+                if len(failed_items) > 5:
+                    self.console.print(f"[dim]    ... and {len(failed_items) - 5} more[/dim]")
+            else:
+                self.console.print(
+                    f"[yellow]  {action_name}: partial failures (details unavailable)[/yellow]"
+                )
+        except Exception:
+            self.console.print(
+                f"[yellow]  {action_name}: partial failures (could not load details)[/yellow]"
+            )
+        self.console.print(
+            "[yellow]Run 'agac run' again to continue with partial results.[/yellow]"
+        )

@@ -51,6 +51,7 @@ class WorkflowState:
     previous_action_type: str | None = None
     ephemeral_directories: list[dict[str, Any]] | None = None
     failed: bool = False
+    pause_reason: str | None = None
 
     def __post_init__(self):
         """Initialize mutable defaults."""
