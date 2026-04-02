@@ -4,7 +4,7 @@ import importlib
 
 import pytest
 
-from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
+from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY, _VENDOR_PACKAGES
 from agent_actions.validation.preflight.vendor_compatibility_validator import (
     VALID_VENDORS,
     VendorCompatibilityValidator,
@@ -92,6 +92,15 @@ class TestVendorParity:
                 config[field] = "test-value"
             result = validator.validate_vendor_config(config)
             assert result, f"Vendor '{vendor}' failed preflight: {validator.get_errors()}"
+
+    def test_vendor_packages_covers_all_lazy_entries(self):
+        """Every lazy-string entry in CLIENT_REGISTRY must have a _VENDOR_PACKAGES mapping."""
+        lazy_vendors = {k for k, v in CLIENT_REGISTRY.items() if isinstance(v, str)}
+        missing = lazy_vendors - set(_VENDOR_PACKAGES)
+        assert not missing, (
+            f"Lazy vendors missing from _VENDOR_PACKAGES: {missing}. "
+            "Add entries so DependencyError shows the correct pip package name."
+        )
 
     def test_clear_cache_reinitialises_on_next_access(self):
         """clear_cache() resets the cache so the next call to _get_vendor_capabilities re-builds it."""
