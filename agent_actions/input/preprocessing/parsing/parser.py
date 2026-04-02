@@ -44,9 +44,22 @@ from .ast_nodes import (
     LogicalOperator,
     WhereClauseAST,
 )
-from .operators import get_operator_info, list_operators
+from .operators import list_operators
 
 logger = logging.getLogger(__name__)
+
+# Unified operator lookup: maps both enum name ("NE") and symbol/value ("!=")
+# to ComparisonOperator members. Derived from the enum — single source of truth.
+_OPERATOR_LOOKUP: dict[str, ComparisonOperator] = {}
+for _member in ComparisonOperator:
+    _OPERATOR_LOOKUP[_member.name] = _member  # "NE" -> ComparisonOperator.NE
+    _OPERATOR_LOOKUP[_member.value] = _member  # "!=" -> ComparisonOperator.NE
+
+# First words of multi-word operators, for greedy token consumption in _parse_comparison.
+_MULTI_WORD_STARTS: set[str] = set()
+for _key in _OPERATOR_LOOKUP:
+    if " " in _key:
+        _MULTI_WORD_STARTS.add(_key.split()[0].upper())
 
 
 def _get_lru_cache_info(cached_func):
@@ -182,7 +195,7 @@ class WhereClauseParser:
         comparison_ops.sort(key=lambda x: len(x[0]), reverse=True)
         return comparison_ops
 
-    def _create_operator_literal(self, symbol: str, name: str):
+    def _create_operator_literal(self, symbol: str):
         """Create a pyparsing literal for a single operator."""
         op_literal: ParserElement
         if " " in symbol:
@@ -192,15 +205,12 @@ class WhereClauseParser:
                 op_literal = op_literal + CaselessKeyword(word)
         else:
             op_literal = Literal(symbol)
-        op_literal.add_parse_action(lambda t, name=name: name)
         return op_literal
 
     def _build_comparison_operators(self):
         """Build comparison operators from the registry."""
         comparison_ops = self._collect_comparison_operators()
-        op_literals = [
-            self._create_operator_literal(symbol, name) for symbol, name in comparison_ops
-        ]
+        op_literals = [self._create_operator_literal(symbol) for symbol, _name in comparison_ops]
 
         if not op_literals:
             return Literal("==")  # Fallback
@@ -240,36 +250,48 @@ class WhereClauseParser:
         return LogicalNode(LogicalOperator.NOT, operand)
 
     def _parse_comparison(self, tokens):
-        """Parse comparison operations."""
+        """Parse comparison operations with unified operator lookup."""
         result = tokens[0][0]
+        items = tokens[0]
 
         i = 1
-        while i < len(tokens[0]):
-            operator_name = tokens[0][i]
+        while i < len(items):
+            raw_token = items[i]
+            operator_key = raw_token.upper() if isinstance(raw_token, str) else str(raw_token)
+            consumed = 1
 
-            try:
-                info = get_operator_info(operator_name)
-                operator_enum = (
-                    ComparisonOperator(info.symbol)
-                    if info
-                    else self._map_operator_name(operator_name)
-                )
-            except (ValueError, AttributeError) as e:
-                logger.warning(
-                    "Failed to map operator '%s', using fallback mapping: %s",
-                    operator_name,
-                    e,
-                    extra={"operator_name": operator_name},
-                )
-                operator_enum = self._map_operator_name(operator_name)
+            # Greedy multi-word matching: if this token starts a multi-word operator
+            # (e.g., "NOT" in "NOT IN", "IS" in "IS NOT NULL"), accumulate tokens.
+            if operator_key not in _OPERATOR_LOOKUP and operator_key in _MULTI_WORD_STARTS:
+                candidate = operator_key
+                for j in range(i + 1, len(items)):
+                    next_tok = items[j]
+                    if not isinstance(next_tok, str):
+                        break
+                    candidate = candidate + " " + next_tok.upper()
+                    consumed += 1
+                    if candidate in _OPERATOR_LOOKUP:
+                        operator_key = candidate
+                        break
 
-            if i + 1 < len(tokens[0]):
-                right_operand = tokens[0][i + 1]
+            if operator_key not in _OPERATOR_LOOKUP:
+                logger.error(
+                    "Unknown comparison operator: '%s'",
+                    raw_token,
+                    extra={"operator_name": raw_token},
+                )
+                raise ParseException(f"Unknown comparison operator: '{raw_token}'")
+
+            operator_enum = _OPERATOR_LOOKUP[operator_key]
+            i += consumed
+
+            if i < len(items):
+                right_operand = items[i]
                 result = ComparisonNode(result, operator_enum, right_operand)
-                i += 2
-            else:
-                result = ComparisonNode(result, operator_enum)
                 i += 1
+            else:
+                # Unary operator (IS NULL, IS NOT NULL)
+                result = ComparisonNode(result, operator_enum)
 
         return result
 
@@ -298,31 +320,6 @@ class WhereClauseParser:
             else:
                 break
         return result
-
-    def _map_operator_name(self, operator_name: str) -> ComparisonOperator:
-        """Map operator name to ComparisonOperator enum."""
-        mapping = {
-            "EQ": ComparisonOperator.EQ,
-            "NE": ComparisonOperator.NE,
-            "LT": ComparisonOperator.LT,
-            "LE": ComparisonOperator.LE,
-            "GT": ComparisonOperator.GT,
-            "GE": ComparisonOperator.GE,
-            "IN": ComparisonOperator.IN,
-            "NOT_IN": ComparisonOperator.NOT_IN,
-            "CONTAINS": ComparisonOperator.CONTAINS,
-            "NOT_CONTAINS": ComparisonOperator.NOT_CONTAINS,
-            "LIKE": ComparisonOperator.LIKE,
-            "NOT_LIKE": ComparisonOperator.NOT_LIKE,
-            "BETWEEN": ComparisonOperator.BETWEEN,
-            "NOT_BETWEEN": ComparisonOperator.NOT_BETWEEN,
-            "IS_NULL": ComparisonOperator.IS_NULL,
-            "IS_NOT_NULL": ComparisonOperator.IS_NOT_NULL,
-        }
-
-        if operator_name in mapping:
-            return mapping[operator_name]
-        return ComparisonOperator.EQ
 
     @lru_cache(maxsize=1000)  # noqa: B019
     def parse_cached(self, where_clause: str) -> ParseResult:
