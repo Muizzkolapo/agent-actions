@@ -21,7 +21,11 @@ from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.workflow.pipeline_file_mode import (
@@ -497,6 +501,21 @@ class ProcessingPipeline:
             is_first_stage=False,
             storage_backend=self.config.storage_backend,
         )
+
+        # If input had records but no actual work was done (all guard-skipped/
+        # filtered/unprocessed), signal this to the executor via a node-level
+        # disposition so the tally shows SKIP instead of OK.
+        # Exhausted records represent real processing attempts that failed after
+        # retries, so they must NOT trigger the skip signal.
+        if data and stats.success == 0 and stats.failed == 0 and stats.exhausted == 0:
+            storage_backend = self.config.storage_backend
+            if storage_backend is not None:
+                storage_backend.set_disposition(
+                    self.config.action_name,
+                    NODE_LEVEL_RECORD_ID,
+                    DISPOSITION_SKIPPED,
+                    reason="All records guard-skipped or filtered",
+                )
 
         # If input had records but output is empty AND there are actual failures
         # (not just guard-filtered/skipped records), raise so the executor marks
