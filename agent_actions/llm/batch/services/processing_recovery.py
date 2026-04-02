@@ -26,6 +26,7 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
@@ -515,6 +516,9 @@ def write_record_dispositions(
     finalize_batch_output() (multi-batch collection path).  These are
     mutually exclusive entry points — a given batch never flows through both.
 
+    Also clears any prior DEFERRED disposition for each record, since the
+    batch result represents the final status (ARCH-003).
+
     Disposition writes are telemetry — errors are logged but never propagated.
     """
     if not service._storage_backend:
@@ -524,6 +528,23 @@ def write_record_dispositions(
         if not source_guid:
             continue
         metadata = item.get("metadata", {})
+
+        try:
+            # Clear the DEFERRED disposition now that the batch result has
+            # arrived.  For success records this is the only disposition
+            # action; for non-success records the final disposition is
+            # written immediately below.
+            service._storage_backend.clear_disposition(
+                action_name,
+                disposition=DISPOSITION_DEFERRED,
+                record_id=source_guid,
+            )
+        except Exception:
+            logger.debug(
+                "Could not clear DEFERRED disposition for %s (may not exist)",
+                source_guid,
+                exc_info=True,
+            )
 
         try:
             if metadata.get("retry_exhausted"):
