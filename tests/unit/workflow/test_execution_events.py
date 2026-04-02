@@ -15,6 +15,7 @@ from agent_actions.logging.events import (
     WorkflowStartEvent,
 )
 from agent_actions.workflow.execution_events import WorkflowEventLogger
+from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
     CoreServices,
@@ -125,7 +126,7 @@ class TestLogAgentSkip:
 
 
 class TestLogAgentResult:
-    def _make_result(self, success=True, status="completed", error=None, tokens=None):
+    def _make_result(self, success=True, status=ActionStatus.COMPLETED, error=None, tokens=None):
         r = MagicMock()
         r.success = success
         r.status = status
@@ -159,7 +160,7 @@ class TestLogAgentResult:
 
     def test_failed_fires_agent_failed(self, event_logger):
         error = RuntimeError("agent crashed")
-        result = self._make_result(success=False, status="failed", error=error)
+        result = self._make_result(success=False, status=ActionStatus.FAILED, error=error)
         params = ActionLogParams(
             idx=0,
             action_name="agent_a",
@@ -185,7 +186,7 @@ class TestLogAgentResult:
 
     def test_batch_submitted_no_extra_event(self, event_logger):
         """batch_submitted results should not fire additional events."""
-        result = self._make_result(success=True, status="batch_submitted")
+        result = self._make_result(success=True, status=ActionStatus.BATCH_SUBMITTED)
         params = ActionLogParams(
             idx=0,
             action_name="agent_a",

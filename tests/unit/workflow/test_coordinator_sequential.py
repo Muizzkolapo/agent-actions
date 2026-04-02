@@ -7,6 +7,7 @@ import pytest
 
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
+from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.models import (
     CoreServices,
     SupportServices,
@@ -63,7 +64,7 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     return wf
 
 
-def _success_result(status="completed", output_folder="/output"):
+def _success_result(status=ActionStatus.COMPLETED, output_folder="/output"):
     return ActionExecutionResult(
         success=True,
         status=status,
@@ -75,7 +76,7 @@ def _success_result(status="completed", output_folder="/output"):
 def _failed_result(error=None):
     return ActionExecutionResult(
         success=False,
-        status="failed",
+        status=ActionStatus.FAILED,
         error=error or RuntimeError("agent failed"),
         metrics=ExecutionMetrics(duration=0.5),
     )
@@ -119,7 +120,7 @@ class TestRunSingleAgent:
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
         wf.services.core.action_executor.execute_action_sync.return_value = _success_result(
-            status="batch_submitted", output_folder=None
+            status=ActionStatus.BATCH_SUBMITTED, output_folder=None
         )
 
         should_stop = wf._run_single_action(0, "agent_a", 2)
@@ -183,7 +184,7 @@ class TestRunWorkflowWithContext:
         wf = _build_workflow(execution_order=["agent_a"])
         wf.services.core.state_manager.is_completed.return_value = False
         wf.services.core.action_executor.execute_action_sync.return_value = _success_result(
-            status="batch_submitted", output_folder=None
+            status=ActionStatus.BATCH_SUBMITTED, output_folder=None
         )
         wf.services.core.state_manager.is_workflow_complete.return_value = False
         wf.services.core.state_manager.is_workflow_done.return_value = False
