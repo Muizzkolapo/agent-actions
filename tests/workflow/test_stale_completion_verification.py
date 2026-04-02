@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
+from agent_actions.workflow.managers.state import ActionStatus
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -68,7 +69,7 @@ class TestVerifyCompletionStatus:
         result = executor.verify_completion_status("write_description")
         assert result is False
         executor.deps.state_manager.update_status.assert_called_once_with(
-            "write_description", "pending"
+            "write_description", ActionStatus.PENDING
         )
 
     def test_returns_false_when_storage_backend_raises(self):
@@ -80,7 +81,7 @@ class TestVerifyCompletionStatus:
         result = executor.verify_completion_status("write_description")
         assert result is False
         executor.deps.state_manager.update_status.assert_called_once_with(
-            "write_description", "pending"
+            "write_description", ActionStatus.PENDING
         )
 
     def test_returns_true_when_no_storage_backend(self):
@@ -140,7 +141,7 @@ class TestExecuteLevelAsyncVerification:
             from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 
             return ActionExecutionResult(
-                success=True, status="completed", metrics=ExecutionMetrics()
+                success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics()
             )
 
         action_executor.execute_action_async.side_effect = _fake_execute
@@ -420,7 +421,7 @@ class TestExecuteLevelAsyncMixedLevel:
             from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 
             return ActionExecutionResult(
-                success=True, status="completed", metrics=ExecutionMetrics()
+                success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics()
             )
 
         action_executor.execute_action_async.side_effect = _fake_execute
@@ -489,7 +490,7 @@ class TestCoordinatorSequentialVerification:
 
         mock = self._make_coordinator_mock(storage_has_data=False)
         mock.services.core.action_executor.execute_action_sync.return_value = ActionExecutionResult(
-            success=True, status="completed", metrics=ExecutionMetrics()
+            success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics()
         )
 
         result = AgentWorkflow._run_single_action(

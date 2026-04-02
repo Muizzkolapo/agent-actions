@@ -15,7 +15,7 @@ from agent_actions.logging.core.manager import get_manager
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
-from agent_actions.workflow.managers.state import COMPLETED_STATUSES
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
     RuntimeContext,
@@ -470,10 +470,10 @@ class AgentWorkflow:
         )
 
         if result.success:
-            if result.status == "batch_submitted":
+            if result.status == ActionStatus.BATCH_SUBMITTED:
                 return True
 
-            if result.status == "skipped":
+            if result.status == ActionStatus.SKIPPED:
                 return False  # Continue to next action
 
             if result.output_folder and result.status in COMPLETED_STATUSES:
