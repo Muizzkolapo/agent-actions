@@ -1,7 +1,10 @@
 """Vendor compatibility validator for pre-flight validation."""
 
 import importlib
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.output.response.config_fields import get_default
@@ -31,7 +34,8 @@ def _resolve_capabilities(vendor: str) -> dict[str, Any] | None:
         module_path, class_name = entry.split(":", 1)
         try:
             cls = getattr(importlib.import_module(module_path), class_name)
-        except ImportError:
+        except (ImportError, AttributeError):
+            logger.debug("Skipping capabilities for '%s': SDK not available", vendor)
             return None
         CLIENT_REGISTRY[vendor] = cls
     else:

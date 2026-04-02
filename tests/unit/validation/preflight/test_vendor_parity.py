@@ -1,10 +1,12 @@
 """Vendor parity tests — ensures each client class declares CAPABILITIES."""
 
+import copy
 import importlib
+from unittest.mock import patch
 
 import pytest
 
-from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY, _VENDOR_PACKAGES
+from agent_actions.llm.realtime.services.invocation import _VENDOR_PACKAGES, CLIENT_REGISTRY
 from agent_actions.validation.preflight.vendor_compatibility_validator import (
     VALID_VENDORS,
     VendorCompatibilityValidator,
@@ -12,11 +14,17 @@ from agent_actions.validation.preflight.vendor_compatibility_validator import (
     _resolve_capabilities,
 )
 
+# Snapshot the original registry so tests can restore lazy-string entries
+# after earlier tests resolve them into class objects.
+_ORIGINAL_REGISTRY = copy.copy(CLIENT_REGISTRY)
+
 
 @pytest.fixture(autouse=True)
 def reset_vendor_cache():
     VendorCompatibilityValidator.clear_cache()
     yield
+    # Restore lazy-string entries that may have been resolved during the test.
+    CLIENT_REGISTRY.update(_ORIGINAL_REGISTRY)
     VendorCompatibilityValidator.clear_cache()
 
 
@@ -108,3 +116,31 @@ class TestVendorParity:
         VendorCompatibilityValidator.clear_cache()
         caps_second = _get_vendor_capabilities()
         assert caps_first == caps_second
+
+    def test_resolve_client_raises_dependency_error_on_missing_sdk(self):
+        """_resolve_client must raise DependencyError with correct context when SDK is missing."""
+        from agent_actions.errors import DependencyError
+        from agent_actions.llm.realtime.services.invocation import _resolve_client
+
+        # Force a lazy string entry so the import path is exercised.
+        CLIENT_REGISTRY["mistral"] = _ORIGINAL_REGISTRY["mistral"]
+
+        with patch.object(importlib, "import_module", side_effect=ImportError("no module")):
+            with pytest.raises(DependencyError) as exc_info:
+                _resolve_client("mistral")
+
+        err = exc_info.value
+        assert "mistralai" in str(err)
+        assert err.context["package"] == "mistralai"
+        assert err.context["install_command"] == "uv pip install mistralai"
+        assert err.context["client_type"] == "mistral"
+
+    def test_resolve_capabilities_returns_none_on_missing_sdk(self):
+        """_resolve_capabilities must return None (not crash) when SDK is missing."""
+        # Force a lazy string entry.
+        CLIENT_REGISTRY["mistral"] = _ORIGINAL_REGISTRY["mistral"]
+
+        with patch.object(importlib, "import_module", side_effect=ImportError("no module")):
+            result = _resolve_capabilities("mistral")
+
+        assert result is None

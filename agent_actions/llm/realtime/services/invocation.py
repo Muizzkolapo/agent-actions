@@ -51,8 +51,9 @@ def _resolve_client(model_vendor: str) -> Any:
     if isinstance(entry, str):
         module_path, class_name = entry.split(":", 1)
         try:
-            cls = getattr(importlib.import_module(module_path), class_name)
-        except ImportError:
+            mod = importlib.import_module(module_path)
+            cls = getattr(mod, class_name)
+        except (ImportError, AttributeError) as err:
             from agent_actions.errors import DependencyError
 
             package = _VENDOR_PACKAGES.get(model_vendor, model_vendor)
@@ -63,7 +64,7 @@ def _resolve_client(model_vendor: str) -> Any:
                     "package": package,
                     "install_command": f"uv pip install {package}",
                 },
-            ) from None
+            ) from err
         CLIENT_REGISTRY[model_vendor] = cls
         return cls
     return entry
@@ -109,6 +110,7 @@ class ClientInvocationService:
 
         Raises:
             ValueError: If client is not supported
+            DependencyError: If the provider's SDK package is not installed
         """
         if model_vendor not in CLIENT_REGISTRY:
             raise ValueError(f"Unsupported model vendor: {model_vendor}")
