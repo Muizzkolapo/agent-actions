@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 from agent_actions.workflow.workspace_index import WorkspaceIndex
 
 if TYPE_CHECKING:
@@ -164,7 +165,9 @@ class WorkflowDependencyOrchestrator:
         try:
             with open(upstream_status_file, encoding="utf-8") as f:
                 status_data = json.load(f)
-            return all(details.get("status") == "completed" for details in status_data.values())
+            return all(
+                details.get("status") in COMPLETED_STATUSES for details in status_data.values()
+            )
         except (OSError, json.JSONDecodeError, KeyError):
             return False
 

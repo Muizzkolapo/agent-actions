@@ -21,6 +21,7 @@ class TestHandleBatchCheckEventFiring:
         deps.action_runner = MagicMock()
         deps.action_runner.workflow_name = "test_workflow"
         deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
+        deps.action_runner.storage_backend.get_failed_items.return_value = []
         return deps
 
     @pytest.fixture

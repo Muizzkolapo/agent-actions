@@ -118,8 +118,14 @@ class StorageBackend(ABC):
         disposition: str | Disposition,
         reason: str | None = None,
         relative_path: str | None = None,
+        input_snapshot: str | None = None,
     ) -> None:
-        """Write a disposition record (use NODE_LEVEL_RECORD_ID for node-level signals)."""
+        """Write a disposition record (use NODE_LEVEL_RECORD_ID for node-level signals).
+
+        Args:
+            input_snapshot: JSON-serialized input record for failed items.
+                Implementations SHOULD truncate to a reasonable limit (recommended 10KB).
+        """
         # No-op: subclass must override to persist dispositions.
 
     def get_disposition(
@@ -148,6 +154,14 @@ class StorageBackend(ABC):
     ) -> int:
         """Delete matching disposition records. Returns count deleted."""
         return 0
+
+    def get_failed_items(self, action_name: str) -> list[dict[str, Any]]:
+        """Return item-level failure dispositions, excluding node-level sentinels."""
+        return [
+            d
+            for d in self.get_disposition(action_name, disposition=DISPOSITION_FAILED)
+            if d.get("record_id") != NODE_LEVEL_RECORD_ID
+        ]
 
     def delete_target(self, action_name: str) -> int:
         """Delete all target data for an action. Returns count deleted.

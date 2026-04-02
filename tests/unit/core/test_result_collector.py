@@ -355,6 +355,7 @@ class TestResultCollectorDispositions:
             "src-fail",
             "failed",
             reason="timeout",
+            input_snapshot=None,
         )
 
     def test_failed_result_default_reason(self):
@@ -381,6 +382,7 @@ class TestResultCollectorDispositions:
             "src-fail2",
             "failed",
             reason="processing_error",
+            input_snapshot=None,
         )
 
     def test_skipped_result_writes_disposition(self):
@@ -522,4 +524,4 @@ class TestResultCollectorDispositions:
         assert backend.set_disposition.call_count == 2
         calls = backend.set_disposition.call_args_list
         assert calls[0] == (("agent", "filt", "filtered"), {"reason": "guard_filter"})
-        assert calls[1] == (("agent", "fail", "failed"), {"reason": "err"})
+        assert calls[1] == (("agent", "fail", "failed"), {"reason": "err", "input_snapshot": None})

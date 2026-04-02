@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -219,9 +220,9 @@ class ManifestManager:
         return None
 
     def is_action_completed(self, action_name: str) -> bool:
-        """Return True if action status is 'completed'."""
+        """Return True if action completed (including partial failures)."""
         action = self.manifest.get("actions", {}).get(action_name)
-        return action is not None and action.get("status") == "completed"
+        return action is not None and action.get("status") in COMPLETED_STATUSES
 
     def is_action_skipped(self, action_name: str) -> bool:
         """Return True if action status is 'skipped'."""
@@ -251,8 +252,9 @@ class ManifestManager:
         self,
         action_name: str,
         record_count: int | None = None,
+        status: str = "completed",
     ) -> None:
-        """Mark an action as completed.
+        """Mark an action as completed (or completed_with_failures).
 
         Raises:
             KeyError: If action not found in manifest.
@@ -266,7 +268,7 @@ class ManifestManager:
                     "ManifestManager._manifest is None; "
                     "initialize_manifest() or load_manifest() must be called first"
                 )
-            self._manifest["actions"][action_name]["status"] = "completed"
+            self._manifest["actions"][action_name]["status"] = status
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             if record_count is not None:
                 self._manifest["actions"][action_name]["record_count"] = record_count
@@ -339,10 +341,10 @@ class ManifestManager:
             self._save_manifest()
 
     def get_completed_actions(self) -> list[str]:
-        """Return all completed action names."""
+        """Return all completed action names (including partial failures)."""
         completed = []
         for action_name, action_data in self.manifest.get("actions", {}).items():
-            if action_data.get("status") == "completed":
+            if action_data.get("status") in COMPLETED_STATUSES:
                 completed.append(action_name)
         return completed
 
