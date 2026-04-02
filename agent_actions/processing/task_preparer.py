@@ -200,6 +200,9 @@ class TaskPreparer:
                     continue
                 of_name = dep_config["output_field"]
                 dep_data = field_context.get(dep_name)
+                # Unwrap single-item list (common storage shape for output_field actions)
+                if isinstance(dep_data, list) and len(dep_data) == 1:
+                    dep_data = dep_data[0]
                 if isinstance(dep_data, dict) and of_name in dep_data:
                     if of_name not in field_context:
                         field_context[of_name] = dep_data[of_name]

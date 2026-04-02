@@ -202,7 +202,6 @@ class TestGuardStrategy:
         }
         previous_outputs = {
             "classify": [{"category": "bug"}],
-            "classify_meta": {"status": "completed"},
         }
         with patch(GUARD_FILTER_PATH, return_value=filt):
             strategy.should_skip(cfg, previous_outputs)
@@ -210,7 +209,6 @@ class TestGuardStrategy:
         call_args = filt.filter_item.call_args[0][0]
         # Action outputs should be flattened to top-level
         assert "classify" in call_args.data
-        assert "classify_meta" in call_args.data
         # previous_outputs should still be present for backward compat
         assert "previous_outputs" in call_args.data
 
@@ -230,6 +228,42 @@ class TestGuardStrategy:
         call_args = filt.filter_item.call_args[0][0]
         # Single-item list should be unwrapped to dict
         assert call_args.data["assess"] == {"severity": "high"}
+
+    def test_meta_keys_not_flattened(self, strategy):
+        """Internal _meta metadata keys are excluded from top-level flattening."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+        }
+        previous_outputs = {
+            "classify": [{"category": "bug"}],
+            "classify_meta": {"status": "completed"},
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        assert "classify" in call_args.data
+        assert "classify_meta" not in call_args.data
+
+    def test_reserved_key_collision_skips(self, strategy):
+        """Action named like a reserved key is not flattened to top-level."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {"scope": "action", "clause": "x > 1"},
+            "agent_type": "a",
+            "dependencies": ["b"],
+        }
+        previous_outputs = {
+            "dependencies": [{"data": "value"}],
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            strategy.should_skip(cfg, previous_outputs)
+
+        call_args = filt.filter_item.call_args[0][0]
+        # Reserved key should keep original value, not be overwritten
+        assert call_args.data["dependencies"] == ["b"]
 
     def test_multi_item_lists_not_unwrapped(self, strategy):
         """Multi-item list outputs are kept as lists."""

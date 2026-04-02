@@ -412,6 +412,42 @@ class TestOutputFieldPromotionInTaskPreparer:
         # Should NOT overwrite existing field
         assert result["severity"] == "existing_value"
 
+    def test_promote_output_field_from_list_dep_data(self):
+        """output_field promotion works when dep_data is a single-item list (common storage shape)."""
+        from unittest.mock import patch
+
+        from agent_actions.processing.prepared_task import PreparationContext
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        preparer = TaskPreparer()
+
+        mock_field_context = {
+            "assess_severity": [{"severity": "high"}],  # List shape from storage
+            "source": {"text": "input"},
+        }
+
+        context = PreparationContext(
+            agent_config={"context_scope": {}},
+            agent_name="draft_response",
+            dependency_configs={
+                "assess_severity": {"output_field": "severity", "idx": 0},
+            },
+        )
+
+        with patch(
+            "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+            return_value=mock_field_context,
+        ):
+            result = preparer._load_full_context(
+                content={},
+                source_content={},
+                context=context,
+                current_item=None,
+            )
+
+        assert "severity" in result
+        assert result["severity"] == "high"
+
     def test_no_dependency_configs_no_promotion(self):
         """When dependency_configs is None, no promotion happens (no crash)."""
         from unittest.mock import patch
