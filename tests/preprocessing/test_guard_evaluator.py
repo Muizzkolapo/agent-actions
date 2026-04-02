@@ -472,10 +472,13 @@ class TestOutputFieldPromotionInTaskPreparer:
         )
 
         tp_logger = logging.getLogger("agent_actions.processing.task_preparer")
-        with patch(
-            "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
-            return_value=mock_field_context,
-        ), patch.object(tp_logger, "warning") as mock_warn:
+        with (
+            patch(
+                "agent_actions.prompt.context.scope_builder.build_field_context_with_history",
+                return_value=mock_field_context,
+            ),
+            patch.object(tp_logger, "warning") as mock_warn,
+        ):
             preparer._load_full_context(
                 content={},
                 source_content={},
