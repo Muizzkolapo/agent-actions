@@ -17,7 +17,11 @@ from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY
 
 if TYPE_CHECKING:
@@ -700,6 +704,31 @@ def _process_online_mode_with_record_processor(
         is_first_stage=True,
         storage_backend=ctx.storage_backend,
     )
+
+    # If input had records but no actual work was done (all guard-skipped/
+    # filtered/unprocessed), signal this to the executor via a node-level
+    # disposition so the tally shows SKIP instead of OK.
+    if (
+        data_chunk
+        and stats.success == 0
+        and stats.failed == 0
+        and stats.exhausted == 0
+        and stats.deferred == 0
+    ):
+        if ctx.storage_backend is not None:
+            try:
+                ctx.storage_backend.set_disposition(
+                    ctx.agent_name,
+                    NODE_LEVEL_RECORD_ID,
+                    DISPOSITION_SKIPPED,
+                    reason="All records guard-skipped or filtered",
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to write guard-skip disposition for %s: %s",
+                    ctx.agent_name,
+                    e,
+                )
 
     # If input had records but output is empty AND there are actual failures,
     # raise so the executor marks the action as failed and the circuit breaker

@@ -323,6 +323,7 @@ class TestResolveCompletionStatus:
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_completed_when_no_failures(self, mock_fire, executor, mock_deps):
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = []
         assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
 
@@ -330,6 +331,7 @@ class TestResolveCompletionStatus:
     def test_returns_completed_with_failures_when_items_failed(
         self, mock_fire, executor, mock_deps
     ):
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
         ]
@@ -344,10 +346,29 @@ class TestResolveCompletionStatus:
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_completed_on_storage_error(self, mock_fire, executor, mock_deps):
-        mock_deps.action_runner.storage_backend.get_failed_items.side_effect = RuntimeError(
+        mock_deps.action_runner.storage_backend.has_disposition.side_effect = RuntimeError(
             "DB error"
         )
         assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_returns_skipped_when_all_records_guard_skipped(self, mock_fire, executor, mock_deps):
+        """When pipeline sets DISPOSITION_SKIPPED at node level, status should be 'skipped'."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
+        mock_deps.action_runner.storage_backend.has_disposition.assert_called_once_with(
+            "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+        )
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_guard_skipped_checked_before_failed_items(self, mock_fire, executor, mock_deps):
+        """Guard-skipped disposition is checked before item-level failures."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
+        ]
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
+        mock_deps.action_runner.storage_backend.get_failed_items.assert_not_called()
 
 
 class TestCircuitBreakerIgnoresPartial:

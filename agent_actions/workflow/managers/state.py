@@ -147,6 +147,10 @@ class ActionStateManager:
         """Return actions that have failed."""
         return [agent for agent in agents if self.is_failed(agent)]
 
+    def get_skipped_actions(self, agents: list[str]) -> list[str]:
+        """Return actions that were skipped."""
+        return [agent for agent in agents if self.is_skipped(agent)]
+
     def mark_running_as_failed(self) -> list[str]:
         """Mark all actions in 'running' or 'checking_batch' status as failed.
 

@@ -121,15 +121,48 @@ class RunCommand:
             use_parallel = self._determine_execution_mode(workflow)
             self._run_workflow_execution(workflow, use_parallel)
 
-            if workflow.services.core.state_manager.is_workflow_complete():
+            state_mgr = workflow.services.core.state_manager
+            execution_order = workflow.execution_order
+
+            if state_mgr.is_workflow_complete():
+                # All actions completed (possibly with item-level failures)
                 status = "SUCCESS"
                 click.echo(f"Successfully completed agent run for: {self.args.agent}")
+
+            elif state_mgr.is_workflow_done():
+                # All actions terminal — check if any actually failed
+                if state_mgr.has_any_failed():
+                    status = "FAILED"
+                    failed = state_mgr.get_failed_actions(execution_order)
+                    skipped = state_mgr.get_skipped_actions(execution_order)
+                    parts = [f"Workflow finished with failures for: {self.args.agent}"]
+                    parts.append(f"  Failed actions: {', '.join(failed)}")
+                    if skipped:
+                        parts.append(f"  Skipped actions: {', '.join(skipped)}")
+                    click.echo("\n".join(parts))
+                else:
+                    # All terminal, none failed (some may be skipped by guards)
+                    status = "SUCCESS"
+                    click.echo(f"Successfully completed agent run for: {self.args.agent}")
+
             else:
-                status = "PAUSED"
-                click.echo(
-                    "Workflow paused - batch job(s) submitted. "
-                    "Run again to check status and continue."
-                )
+                # Not all terminal — check for actual batch jobs
+                batch_actions = state_mgr.get_batch_submitted_actions(execution_order)
+                if batch_actions:
+                    status = "PAUSED"
+                    click.echo(
+                        f"Workflow paused - batch job(s) submitted for: "
+                        f"{', '.join(batch_actions)}. "
+                        f"Run again to check status and continue."
+                    )
+                else:
+                    status = "PAUSED"
+                    summary = state_mgr.get_summary()
+                    status_parts = ", ".join(f"{k}: {v}" for k, v in summary.items())
+                    click.echo(
+                        f"Workflow paused for: {self.args.agent} ({status_parts}). "
+                        f"Run again to continue."
+                    )
 
         except Exception:
             status = "FAILED"
@@ -155,6 +188,9 @@ class RunCommand:
                 LoggerFactory.flush()
             except Exception as e:
                 logger.debug("Failed to flush event handlers: %s", e, exc_info=True)
+
+        if status == "FAILED":
+            raise SystemExit(1)
 
 
 @click.command()
