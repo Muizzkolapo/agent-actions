@@ -377,7 +377,6 @@ class TestDeferredResultInProcessor:
         response=None, deferred=True) fell through to the RP002 filter
         branch, discarding queued batch tasks.
         """
-        from agent_actions.config.types import RunMode
         from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
         from agent_actions.processing.processor import RecordProcessor
         from agent_actions.processing.types import (
