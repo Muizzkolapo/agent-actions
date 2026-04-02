@@ -490,7 +490,7 @@ class ProcessingPipeline:
             results = self.record_processor.process_batch(data, context)
 
         # Collect success results
-        output = ResultCollector.collect_results(
+        output, stats = ResultCollector.collect_results(
             results,
             cast(dict[str, Any], self.config.action_config),
             self.config.action_name,
@@ -501,19 +501,11 @@ class ProcessingPipeline:
         # If input had records but output is empty AND there are actual failures
         # (not just guard-filtered/skipped records), raise so the executor marks
         # the action as failed and the circuit breaker skips downstream dependents.
-        # Guard filters (SKIPPED/FILTERED status) legitimately produce 0 output —
-        # only FAILED results indicate processing errors (e.g. 401 auth).
-        if data and not output:
-            from agent_actions.processing.types import ProcessingStatus
-
-            failed_results = [r for r in results if r.status == ProcessingStatus.FAILED]
-            if failed_results:
-                failed_msgs = [r.error for r in failed_results if r.error]
-                summary = "; ".join(failed_msgs[:3])
-                raise RuntimeError(
-                    f"Action '{self.config.action_name}' produced 0 records — "
-                    f"all {len(data)} input item(s) failed: {summary}"
-                )
+        if data and not output and stats.failed > 0:
+            raise RuntimeError(
+                f"Action '{self.config.action_name}' produced 0 records — "
+                f"all {len(data)} input item(s) failed ({stats.failed} failures)"
+            )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 

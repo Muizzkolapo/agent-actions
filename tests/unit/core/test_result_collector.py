@@ -76,7 +76,7 @@ def test_result_collector_aggregates_statuses_first_stage():
     failed = ProcessingResult.failed(error="Boom", source_guid="src-4")
     filtered = ProcessingResult.filtered(source_guid="src-5")
 
-    output = ResultCollector.collect_results(
+    output, _ = ResultCollector.collect_results(
         [success, skipped, exhausted, failed, filtered],
         agent_config,
         "fallback_name",
@@ -125,7 +125,7 @@ def test_result_collector_uses_input_record_downstream():
     )
     exhausted.data = [exhausted_data]
 
-    output = ResultCollector.collect_results(
+    output, _ = ResultCollector.collect_results(
         [exhausted],
         agent_config,
         "downstream",
@@ -140,7 +140,7 @@ def test_result_collector_uses_input_record_downstream():
 def test_result_collector_handles_none_data():
     result = ProcessingResult(status=ProcessingStatus.SUCCESS, data=None)  # type: ignore[arg-type]
 
-    output = ResultCollector.collect_results(
+    output, _ = ResultCollector.collect_results(
         [result],
         agent_config={},
         agent_name="test",
@@ -275,7 +275,7 @@ def test_result_collector_on_exhausted_return_last_does_not_raise():
     exhausted.data = [exhausted_data]
 
     # Should not raise, should return exhausted record
-    output = ResultCollector.collect_results(
+    output, _ = ResultCollector.collect_results(
         [exhausted],
         agent_config,
         "test_agent",
@@ -479,7 +479,7 @@ class TestResultCollectorDispositions:
         failed = ProcessingResult.failed(error="boom", source_guid="src-fail")
 
         # Should not raise
-        output = ResultCollector.collect_results(
+        output, _ = ResultCollector.collect_results(
             [filtered, failed],
             {},
             "agent",

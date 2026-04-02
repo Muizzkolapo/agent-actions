@@ -335,7 +335,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
         assert item_out["source_guid"] == "sg-1"
 
     # Verify ResultCollector flattens correctly
-    output = ResultCollector.collect_results(
+    output, _ = ResultCollector.collect_results(
         [result], agent_config, agent_name, is_first_stage=False
     )
     assert len(output) == 3
@@ -392,7 +392,7 @@ def test_result_collector_does_not_raise_on_partial_failure():
         ProcessingResult.failed(error="connection timeout"),
     ]
 
-    output = ResultCollector.collect_results(
+    output, _ = ResultCollector.collect_results(
         results,
         agent_config={"kind": "tool"},
         agent_name="partial_tool",
@@ -413,7 +413,7 @@ def test_result_collector_does_not_raise_when_all_filtered():
         ProcessingResult.filtered(),
     ]
 
-    output = ResultCollector.collect_results(
+    output, _ = ResultCollector.collect_results(
         results,
         agent_config={"kind": "tool"},
         agent_name="filter_tool",
