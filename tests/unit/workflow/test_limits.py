@@ -14,13 +14,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
-from agent_actions.workflow.managers.state import ActionStateManager
+from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from agent_actions.workflow.runner_file_processing import (
     _file_limit_reached,
     process_directory_files,
     process_merged_files,
 )
-
 
 # ── _file_limit_reached helper ────────────────────────────────────────
 
@@ -302,9 +301,9 @@ class TestLimitStatusInvalidation:
 
     def test_limits_changed_resets_to_pending(self, executor, mock_deps):
         """Action completed with limit=10, re-run with limit=None should re-execute."""
-        mock_deps.state_manager.get_status.return_value = "completed"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         mock_deps.state_manager.get_status_details.return_value = {
-            "status": "completed",
+            "status": ActionStatus.COMPLETED,
             "record_limit": 10,
             "file_limit": None,
         }
@@ -319,13 +318,13 @@ class TestLimitStatusInvalidation:
 
         # Should have reset to pending, then run the action
         update_calls = mock_deps.state_manager.update_status.call_args_list
-        assert update_calls[0] == (("act_a", "pending"),)
+        assert update_calls[0] == (("act_a", ActionStatus.PENDING),)
 
     def test_same_limits_skips_action(self, executor, mock_deps):
         """Action completed with same limits should be skipped."""
-        mock_deps.state_manager.get_status.return_value = "completed"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         mock_deps.state_manager.get_status_details.return_value = {
-            "status": "completed",
+            "status": ActionStatus.COMPLETED,
             "record_limit": 10,
             "file_limit": 2,
         }
@@ -341,13 +340,13 @@ class TestLimitStatusInvalidation:
         )
 
         assert result.success is True
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
         mock_deps.action_runner.run_action.assert_not_called()
 
     def test_no_limits_old_status_no_invalidation(self, executor, mock_deps):
         """Old status file without limit keys + config with no limits = no invalidation."""
-        mock_deps.state_manager.get_status.return_value = "completed"
-        mock_deps.state_manager.get_status_details.return_value = {"status": "completed"}
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
+        mock_deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
         action_config = {}
 
         storage = MagicMock()
@@ -360,7 +359,7 @@ class TestLimitStatusInvalidation:
         )
 
         assert result.success is True
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
         mock_deps.action_runner.run_action.assert_not_called()
 
 

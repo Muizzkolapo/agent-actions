@@ -2,16 +2,42 @@
 
 import json
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+class ActionStatus(str, Enum):
+    """Action lifecycle statuses.
+
+    Using str mixin so enum values serialize as plain strings in JSON
+    and compare equal to their string values for backward compatibility.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    BATCH_SUBMITTED = "batch_submitted"
+    CHECKING_BATCH = "checking_batch"
+    COMPLETED = "completed"
+    COMPLETED_WITH_FAILURES = "completed_with_failures"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 # Status sets used across the workflow engine. Import from here to avoid
 # scattered set literals that drift when new statuses are added.
-COMPLETED_STATUSES: frozenset[str] = frozenset({"completed", "completed_with_failures"})
-TERMINAL_STATUSES: frozenset[str] = frozenset(
-    {"completed", "failed", "skipped", "completed_with_failures"}
+COMPLETED_STATUSES: frozenset[ActionStatus] = frozenset(
+    {ActionStatus.COMPLETED, ActionStatus.COMPLETED_WITH_FAILURES}
+)
+TERMINAL_STATUSES: frozenset[ActionStatus] = frozenset(
+    {
+        ActionStatus.COMPLETED,
+        ActionStatus.FAILED,
+        ActionStatus.SKIPPED,
+        ActionStatus.COMPLETED_WITH_FAILURES,
+    }
 )
 
 
@@ -45,7 +71,9 @@ class ActionStateManager:
 
     def _initialize_default_status(self):
         """Initialize all actions with 'pending' status."""
-        self.action_status = {action: {"status": "pending"} for action in self.execution_order}
+        self.action_status = {
+            action: {"status": ActionStatus.PENDING} for action in self.execution_order
+        }
 
     def _save_status(self):
         """Persist current status to file."""
@@ -56,7 +84,7 @@ class ActionStateManager:
         except (OSError, ValueError, TypeError) as e:
             logger.error("Error saving status: %s", e)
 
-    def update_status(self, action_name: str, status: str, **metadata):
+    def update_status(self, action_name: str, status: ActionStatus, **metadata):
         """Update action status and persist to file."""
         if action_name not in self.action_status:
             self.action_status[action_name] = {}
@@ -69,14 +97,14 @@ class ActionStateManager:
 
         self._save_status()
 
-    def get_status(self, action_name: str) -> str:
-        """Return current status of an action, defaulting to 'pending'."""
-        status: str = self.action_status.get(action_name, {}).get("status", "pending")
-        return status
+    def get_status(self, action_name: str) -> ActionStatus:
+        """Return current status of an action, defaulting to PENDING."""
+        raw = self.action_status.get(action_name, {}).get("status", ActionStatus.PENDING)
+        return ActionStatus(raw)
 
     def get_status_details(self, action_name: str) -> dict[str, Any]:
         """Return full status details for an action."""
-        return self.action_status.get(action_name, {"status": "pending"})
+        return self.action_status.get(action_name, {"status": ActionStatus.PENDING})
 
     def is_completed(self, action_name: str) -> bool:
         """Return True if action completed (including partial failures)."""
@@ -84,19 +112,28 @@ class ActionStateManager:
 
     def is_batch_submitted(self, action_name: str) -> bool:
         """Return True if action has batch jobs submitted."""
-        return self.get_status(action_name) == "batch_submitted"
+        return self.get_status(action_name) == ActionStatus.BATCH_SUBMITTED
 
     def is_failed(self, action_name: str) -> bool:
         """Return True if action has failed."""
-        return self.get_status(action_name) == "failed"
+        return self.get_status(action_name) == ActionStatus.FAILED
 
     def is_skipped(self, action_name: str) -> bool:
         """Return True if action was skipped due to upstream dependency failure."""
-        return self.get_status(action_name) == "skipped"
+        return self.get_status(action_name) == ActionStatus.SKIPPED
 
     def is_completed_with_failures(self, action_name: str) -> bool:
         """Return True if action completed with partial item failures."""
-        return self.get_status(action_name) == "completed_with_failures"
+        return self.get_status(action_name) == ActionStatus.COMPLETED_WITH_FAILURES
+
+    def is_terminal(self, action_name: str) -> bool:
+        """Return True if action is in a terminal state (no further transitions)."""
+        return self.get_status(action_name) in TERMINAL_STATUSES
+
+    def is_in_progress(self, action_name: str) -> bool:
+        """Return True if action has started but not reached a terminal state."""
+        status = self.get_status(action_name)
+        return status not in TERMINAL_STATUSES and status != ActionStatus.PENDING
 
     def get_pending_actions(self, agents: list[str]) -> list[str]:
         """Return actions that are not yet in a terminal state (runnable)."""
@@ -121,17 +158,17 @@ class ActionStateManager:
         """
         marked: list[str] = []
         for action_name, details in self.action_status.items():
-            if details.get("status") in ["running", "checking_batch"]:
+            if details.get("status") in (ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH):
                 marked.append(action_name)
         for action_name in marked:
-            self.update_status(action_name, "failed")
+            self.update_status(action_name, ActionStatus.FAILED)
         return marked
 
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of action statuses."""
         summary: dict[str, int] = {}
         for details in self.action_status.values():
-            status = details.get("status", "unknown")
+            status = details.get("status", ActionStatus.PENDING)
             summary[status] = summary.get(status, 0) + 1
         return summary
 
@@ -149,4 +186,6 @@ class ActionStateManager:
 
     def has_any_failed(self) -> bool:
         """Return True if any action has 'failed' status."""
-        return any(details.get("status") == "failed" for details in self.action_status.values())
+        return any(
+            details.get("status") == ActionStatus.FAILED for details in self.action_status.values()
+        )

@@ -18,7 +18,7 @@ from agent_actions.workflow.executor import (
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
 from agent_actions.workflow.managers.output import ActionOutputManager
 from agent_actions.workflow.managers.skip import SkipEvaluator
-from agent_actions.workflow.managers.state import ActionStateManager
+from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
 
 @pytest.fixture
@@ -129,7 +129,9 @@ class TestHandleDependencySkip:
 
         executor._handle_dependency_skip("agent_b", 1, {}, start_time, "agent_a")
 
-        mock_deps.state_manager.update_status.assert_called_once_with("agent_b", "skipped")
+        mock_deps.state_manager.update_status.assert_called_once_with(
+            "agent_b", ActionStatus.SKIPPED
+        )
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_writes_skipped_disposition(self, mock_fire, executor, mock_deps):
@@ -185,7 +187,7 @@ class TestHandleDependencySkip:
 
         assert isinstance(result, ActionExecutionResult)
         assert result.success is True
-        assert result.status == "skipped"
+        assert result.status == ActionStatus.SKIPPED
 
 
 class TestWriteFailedDisposition:
@@ -260,8 +262,8 @@ class TestLevelCompletionColoring:
     def test_green_when_all_ok(self, tmp_path):
         """Level line is green when all actions completed successfully."""
         mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "completed")
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.COMPLETED)
 
         has_failed = mgr.get_failed_actions(["a", "b"])
         has_skipped = any(mgr.is_skipped(a) for a in ["a", "b"])
@@ -272,8 +274,8 @@ class TestLevelCompletionColoring:
     def test_red_when_action_failed(self, tmp_path):
         """Level line is red when any action failed."""
         mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.FAILED)
 
         has_failed = mgr.get_failed_actions(["a", "b"])
         assert has_failed
@@ -281,8 +283,8 @@ class TestLevelCompletionColoring:
     def test_yellow_when_action_skipped(self, tmp_path):
         """Level line is yellow when actions are skipped but none failed."""
         mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "skipped")
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.SKIPPED)
 
         has_failed = mgr.get_failed_actions(["a", "b"])
         has_skipped = any(mgr.is_skipped(a) for a in ["a", "b"])
@@ -293,9 +295,9 @@ class TestLevelCompletionColoring:
     def test_red_takes_precedence_over_yellow(self, tmp_path):
         """Red (failed) takes precedence over yellow (skipped)."""
         mgr = ActionStateManager(tmp_path / "status.json", ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
-        mgr.update_status("c", "skipped")
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.FAILED)
+        mgr.update_status("c", ActionStatus.SKIPPED)
 
         has_failed = mgr.get_failed_actions(["a", "b", "c"])
         has_skipped = any(mgr.is_skipped(a) for a in ["a", "b", "c"])
@@ -306,8 +308,8 @@ class TestLevelCompletionColoring:
     def test_yellow_for_completed_with_failures(self, tmp_path):
         """Level line is yellow when action has partial failures."""
         mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "completed_with_failures")
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.COMPLETED_WITH_FAILURES)
 
         has_failed = mgr.get_failed_actions(["a", "b"])
         has_partial = any(mgr.is_completed_with_failures(a) for a in ["a", "b"])
@@ -323,7 +325,7 @@ class TestResolveCompletionStatus:
     def test_returns_completed_when_no_failures(self, mock_fire, executor, mock_deps):
         mock_deps.action_runner.storage_backend.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = []
-        assert executor._resolve_completion_status("agent_a") == "completed"
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_completed_with_failures_when_items_failed(
@@ -333,25 +335,27 @@ class TestResolveCompletionStatus:
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
         ]
-        assert executor._resolve_completion_status("agent_a") == "completed_with_failures"
+        assert (
+            executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED_WITH_FAILURES
+        )
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_completed_when_no_storage_backend(self, mock_fire, executor, mock_deps):
         mock_deps.action_runner.storage_backend = None
-        assert executor._resolve_completion_status("agent_a") == "completed"
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_completed_on_storage_error(self, mock_fire, executor, mock_deps):
         mock_deps.action_runner.storage_backend.has_disposition.side_effect = RuntimeError(
             "DB error"
         )
-        assert executor._resolve_completion_status("agent_a") == "completed"
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_skipped_when_all_records_guard_skipped(self, mock_fire, executor, mock_deps):
         """When pipeline sets DISPOSITION_SKIPPED at node level, status should be 'skipped'."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
-        assert executor._resolve_completion_status("agent_a") == "skipped"
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
         mock_deps.action_runner.storage_backend.has_disposition.assert_called_once_with(
             "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         )
@@ -363,7 +367,7 @@ class TestResolveCompletionStatus:
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
         ]
-        assert executor._resolve_completion_status("agent_a") == "skipped"
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
         mock_deps.action_runner.storage_backend.get_failed_items.assert_not_called()
 
 

@@ -7,6 +7,7 @@ import pytest
 
 from agent_actions.logging.events.batch_events import BatchCompleteEvent, BatchSubmittedEvent
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
+from agent_actions.workflow.managers.state import ActionStatus
 
 
 class TestHandleBatchCheckEventFiring:
@@ -43,7 +44,7 @@ class TestHandleBatchCheckEventFiring:
             )
 
         assert result.success is True
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
 
         # Verify BatchCompleteEvent was fired
         mock_fire.assert_called_once()
@@ -67,7 +68,7 @@ class TestHandleBatchCheckEventFiring:
             )
 
         assert result.success is True
-        assert result.status == "batch_submitted"
+        assert result.status == ActionStatus.BATCH_SUBMITTED
 
         # Verify BatchSubmittedEvent was fired
         mock_fire.assert_called_once()
@@ -89,7 +90,7 @@ class TestHandleBatchCheckEventFiring:
             )
 
         assert result.success is False
-        assert result.status == "failed"
+        assert result.status == ActionStatus.FAILED
 
         # Verify BatchCompleteEvent was fired with failure
         mock_fire.assert_called_once()
