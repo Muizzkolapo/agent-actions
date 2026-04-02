@@ -643,7 +643,7 @@ class TestPauseOnPartialFailure:
         """on_partial_failure defaults to 'continue' on ActionConfig."""
         from agent_actions.config.schema import ActionConfig
 
-        action = ActionConfig(name="test", prompt="do something")
+        action = ActionConfig(name="test", prompt="do something", intent="test")
         assert action.on_partial_failure == "continue"
 
     def test_config_schema_rejects_invalid(self):
@@ -653,4 +653,6 @@ class TestPauseOnPartialFailure:
         from agent_actions.config.schema import ActionConfig
 
         with pytest.raises(ValidationError):
-            ActionConfig(name="test", prompt="do something", on_partial_failure="invalid")
+            ActionConfig(
+                name="test", prompt="x", intent="x", on_partial_failure="invalid"
+            )
