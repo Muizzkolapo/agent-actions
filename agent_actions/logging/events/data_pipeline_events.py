@@ -461,6 +461,8 @@ class ResultCollectionCompleteEvent(BaseEvent):
     total_failed: int = 0
     total_exhausted: int = 0
     total_unprocessed: int = 0
+    guard_condition: str = ""
+    guard_on_false: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -479,6 +481,8 @@ class ResultCollectionCompleteEvent(BaseEvent):
             "total_failed": self.total_failed,
             "total_exhausted": self.total_exhausted,
             "total_unprocessed": self.total_unprocessed,
+            "guard_condition": self.guard_condition,
+            "guard_on_false": self.guard_on_false,
         }
 
     @property

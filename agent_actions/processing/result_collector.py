@@ -238,6 +238,10 @@ class ResultCollector:
             else:
                 logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
 
+        guard_config = agent_config.get("guard", {})
+        guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""
+        guard_on_false = guard_config.get("behavior", "") if isinstance(guard_config, dict) else ""
+
         fire_event(
             ResultCollectionCompleteEvent(
                 action_name=agent_name,
@@ -247,8 +251,20 @@ class ResultCollector:
                 total_failed=stats["failed"],
                 total_exhausted=stats["exhausted"],
                 total_unprocessed=stats["unprocessed"],
+                guard_condition=guard_condition,
+                guard_on_false=guard_on_false,
             )
         )
+
+        total_input = len(results)
+        if stats["filtered"] > 0 and stats["filtered"] == total_input and total_input > 0:
+            logger.warning(
+                "[%s] All %d records filtered by guard (%s). "
+                "Downstream actions will receive no input.",
+                agent_name,
+                total_input,
+                guard_condition or "unknown condition",
+            )
 
         tombstone_count = stats["skipped"] + stats["exhausted"] + stats["unprocessed"]
         if tombstone_count > 0:
