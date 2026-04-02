@@ -478,10 +478,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
         ]
         if self.total_deferred:
             parts.append(f"{self.total_deferred} deferred")
-        self.message = (
-            f"[{self.action_name}] Result collection complete: "
-            + ", ".join(parts)
-        )
+        self.message = f"[{self.action_name}] Result collection complete: " + ", ".join(parts)
         self.data = {
             "action_name": self.action_name,
             "total_success": self.total_success,
