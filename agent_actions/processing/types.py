@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.config.types import ActionConfigDict
+from agent_actions.config.types import ActionConfigDict, RunMode
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -20,13 +20,6 @@ class ProcessingStatus(Enum):
     EXHAUSTED = "exhausted"  # Retry exhausted
     DEFERRED = "deferred"  # Deferred for batch execution
     UNPROCESSED = "unprocessed"  # Upstream failed/skipped this record
-
-
-class ProcessingMode(Enum):
-    """Workflow-level data flow mode: ONLINE (synchronous) or BATCH (queued)."""
-
-    ONLINE = "online"
-    BATCH = "batch"
 
 
 @dataclass
@@ -285,7 +278,7 @@ class ProcessingContext:
 
     agent_config: ActionConfigDict
     agent_name: str
-    mode: ProcessingMode = ProcessingMode.ONLINE
+    mode: RunMode = RunMode.ONLINE
     is_first_stage: bool = False
     source_data: list[dict[str, Any]] = field(default_factory=list)
     file_path: str | None = None

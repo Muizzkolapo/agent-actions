@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional, cast
 
+from agent_actions.config.types import RunMode
+
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
     from agent_actions.storage.backend import StorageBackend
@@ -64,7 +66,7 @@ class PreparationContext:
     agent_config: dict[str, Any]
     agent_name: str
     is_first_stage: bool = False
-    is_batch_mode: bool = False
+    mode: RunMode = RunMode.ONLINE
     source_data: list[dict[str, Any]] | None = None
     agent_indices: dict[str, int] | None = None
     dependency_configs: dict[str, Any] | None = None
@@ -80,14 +82,13 @@ class PreparationContext:
     @classmethod
     def from_processing_context(cls, context: "ProcessingContext") -> "PreparationContext":
         """Create PreparationContext from a ProcessingContext."""
-        from agent_actions.processing.types import ProcessingMode
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
         return cls(
             agent_config=cast(dict[str, Any], context.agent_config),
             agent_name=context.agent_name,
             is_first_stage=context.is_first_stage,
-            is_batch_mode=context.mode == ProcessingMode.BATCH,
+            mode=context.mode,
             source_data=context.source_data,
             agent_indices=context.agent_indices,
             dependency_configs=context.dependency_configs,

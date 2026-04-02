@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from agent_actions.processing.recovery.response_validator import ResponseValidator
 
+from agent_actions.config.types import RunMode
 from agent_actions.processing.invocation.batch import BatchStrategy
 from agent_actions.processing.invocation.online import OnlineStrategy
 from agent_actions.processing.invocation.strategy import BatchProvider, InvocationStrategy
-from agent_actions.processing.types import ProcessingMode
 
 
 class InvocationStrategyFactory:
@@ -18,7 +18,7 @@ class InvocationStrategyFactory:
 
     @staticmethod
     def create(
-        mode: ProcessingMode,
+        mode: RunMode,
         agent_config: dict[str, Any],
         provider: BatchProvider | None = None,
     ) -> InvocationStrategy:
@@ -27,7 +27,7 @@ class InvocationStrategyFactory:
         Raises:
             ValueError: If BATCH mode requested without provider.
         """
-        if mode == ProcessingMode.BATCH:
+        if mode == RunMode.BATCH:
             if provider is None:
                 raise ValueError(
                     f"BatchProvider required for BATCH mode (action: '{agent_config.get('agent_type', 'unknown')}')"
