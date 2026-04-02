@@ -307,6 +307,7 @@ class TestHandleRunSuccess:
 
         assert result.success is True
         assert result.status == "skipped"
+        assert result.output_folder == "/out"
         mock_deps.state_manager.update_status.assert_called_with("agent_a", "skipped")
 
         from agent_actions.logging.events import ActionSkipEvent
@@ -316,6 +317,25 @@ class TestHandleRunSuccess:
         ]
         assert len(skip_events) == 1
         assert skip_events[0][0][0].skip_reason == "All records guard-skipped"
+        assert skip_events[0][0][0].action_index == 0
+        assert skip_events[0][0][0].total_actions == 2  # from execution_order fixture
+
+    def test_guard_all_skipped_records_in_run_tracker(self, executor, mock_deps):
+        """Guard-all-skipped should record in run_tracker with skip_reason."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        executor.run_tracker = MagicMock()
+        executor.run_id = "run-123"
+        params = self._make_params()
+
+        with patch("agent_actions.workflow.executor.fire_event"):
+            result = executor._handle_run_success(params, "/out", 1.0, None)
+
+        assert result.status == "skipped"
+        executor.run_tracker.record_action_complete.assert_called_once()
+        call_kwargs = executor.run_tracker.record_action_complete.call_args
+        config = call_kwargs[1]["config"] if "config" in call_kwargs[1] else call_kwargs[0][0]
+        assert config.status == "skipped"
+        assert config.skip_reason == "All records guard-skipped"
 
 
 # ── _handle_run_failure ────────────────────────────────────────────────

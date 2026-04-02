@@ -505,17 +505,30 @@ class ProcessingPipeline:
         # If input had records but no actual work was done (all guard-skipped/
         # filtered/unprocessed), signal this to the executor via a node-level
         # disposition so the tally shows SKIP instead of OK.
-        # Exhausted records represent real processing attempts that failed after
-        # retries, so they must NOT trigger the skip signal.
-        if data and stats.success == 0 and stats.failed == 0 and stats.exhausted == 0:
+        # Exhausted/deferred records represent real processing attempts, so they
+        # must NOT trigger the skip signal.
+        if (
+            data
+            and stats.success == 0
+            and stats.failed == 0
+            and stats.exhausted == 0
+            and stats.deferred == 0
+        ):
             storage_backend = self.config.storage_backend
             if storage_backend is not None:
-                storage_backend.set_disposition(
-                    self.config.action_name,
-                    NODE_LEVEL_RECORD_ID,
-                    DISPOSITION_SKIPPED,
-                    reason="All records guard-skipped or filtered",
-                )
+                try:
+                    storage_backend.set_disposition(
+                        self.config.action_name,
+                        NODE_LEVEL_RECORD_ID,
+                        DISPOSITION_SKIPPED,
+                        reason="All records guard-skipped or filtered",
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to write guard-skip disposition for %s: %s",
+                        self.config.action_name,
+                        e,
+                    )
 
         # If input had records but output is empty AND there are actual failures
         # (not just guard-filtered/skipped records), raise so the executor marks
