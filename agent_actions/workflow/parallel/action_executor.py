@@ -19,6 +19,35 @@ from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 logger = logging.getLogger(__name__)
 
 
+def _print_failure_summary(
+    console: "Console", action_names: list[str], storage_backend: object | None
+) -> None:
+    """Print a summary of partial failures for the given actions."""
+    console.print("[yellow]Workflow paused — partial failure(s) detected:[/yellow]")
+    for action_name in action_names:
+        try:
+            if storage_backend is not None:
+                failed_items = storage_backend.get_failed_items(action_name)  # type: ignore[union-attr]
+                console.print(
+                    f"[yellow]  {action_name}: {len(failed_items)} item(s) failed[/yellow]"
+                )
+                for item in failed_items[:5]:
+                    reason = str(item.get("reason", "unknown"))[:80]
+                    console.print(f"[dim]    - {reason}[/dim]")
+                if len(failed_items) > 5:
+                    console.print(f"[dim]    ... and {len(failed_items) - 5} more[/dim]")
+            else:
+                console.print(
+                    f"[yellow]  {action_name}: partial failures (details unavailable)[/yellow]"
+                )
+        except Exception:
+            logger.warning("Could not load failed items for %s", action_name, exc_info=True)
+            console.print(
+                f"[yellow]  {action_name}: partial failures (could not load details)[/yellow]"
+            )
+    console.print("[yellow]Run 'agac run' again to continue with partial results.[/yellow]")
+
+
 @dataclass
 class ParallelExecutionParams:
     """Parameters for executing parallel actions."""
@@ -278,30 +307,7 @@ class ActionLevelOrchestrator:
         partial_actions = [
             a for a in params.level_actions if params.state_manager.is_completed_with_failures(a)
         ]
-        self.console.print("[yellow]Workflow paused — partial failure(s) detected:[/yellow]")
-        for action_name in partial_actions:
-            try:
-                if params.storage_backend is not None:
-                    failed_items = params.storage_backend.get_failed_items(action_name)
-                    self.console.print(
-                        f"[yellow]  {action_name}: {len(failed_items)} item(s) failed[/yellow]"
-                    )
-                    for item in failed_items[:5]:
-                        reason = str(item.get("reason", "unknown"))[:80]
-                        self.console.print(f"[dim]    - {reason}[/dim]")
-                    if len(failed_items) > 5:
-                        self.console.print(f"[dim]    ... and {len(failed_items) - 5} more[/dim]")
-                else:
-                    self.console.print(
-                        f"[yellow]  {action_name}: partial failures (details unavailable)[/yellow]"
-                    )
-            except Exception:
-                self.console.print(
-                    f"[yellow]  {action_name}: partial failures (could not load details)[/yellow]"
-                )
-        self.console.print(
-            "[yellow]Run 'agac run' again to continue with partial results.[/yellow]"
-        )
+        _print_failure_summary(self.console, partial_actions, params.storage_backend)
 
     def _check_batch_status(
         self, level_idx: int, level_actions: list[str], state_manager, start_time: datetime

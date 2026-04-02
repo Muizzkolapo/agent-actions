@@ -512,26 +512,6 @@ class AgentWorkflow:
 
     def _print_sequential_partial_summary(self, action_name: str) -> None:
         """Print a summary of partial failures for a single action (sequential path)."""
-        self.console.print("[yellow]Workflow paused — partial failure(s) detected:[/yellow]")
-        try:
-            if self.storage_backend is not None:
-                failed_items = self.storage_backend.get_failed_items(action_name)
-                self.console.print(
-                    f"[yellow]  {action_name}: {len(failed_items)} item(s) failed[/yellow]"
-                )
-                for item in failed_items[:5]:
-                    reason = str(item.get("reason", "unknown"))[:80]
-                    self.console.print(f"[dim]    - {reason}[/dim]")
-                if len(failed_items) > 5:
-                    self.console.print(f"[dim]    ... and {len(failed_items) - 5} more[/dim]")
-            else:
-                self.console.print(
-                    f"[yellow]  {action_name}: partial failures (details unavailable)[/yellow]"
-                )
-        except Exception:
-            self.console.print(
-                f"[yellow]  {action_name}: partial failures (could not load details)[/yellow]"
-            )
-        self.console.print(
-            "[yellow]Run 'agac run' again to continue with partial results.[/yellow]"
-        )
+        from agent_actions.workflow.parallel.action_executor import _print_failure_summary
+
+        _print_failure_summary(self.console, [action_name], self.storage_backend)
