@@ -693,13 +693,22 @@ def _process_online_mode_with_record_processor(
 
     results = processor.process_batch(data_chunk, processing_context)
 
-    processed_items = ResultCollector.collect_results(
+    processed_items, stats = ResultCollector.collect_results(
         results,
         ctx.agent_config,
         ctx.agent_name,
         is_first_stage=True,
         storage_backend=ctx.storage_backend,
     )
+
+    # If input had records but output is empty AND there are actual failures,
+    # raise so the executor marks the action as failed and the circuit breaker
+    # skips downstream dependents.
+    if data_chunk and not processed_items and stats.failed > 0:
+        raise RuntimeError(
+            f"Action '{ctx.agent_name}' produced 0 records — "
+            f"all {len(data_chunk)} input item(s) failed ({stats.failed} failures)"
+        )
 
     if ctx.storage_backend is None:
         raise AgentActionsError(

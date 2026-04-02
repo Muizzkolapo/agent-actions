@@ -3,6 +3,7 @@
 import collections
 import json
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.errors import AgentActionsError
@@ -36,6 +37,18 @@ def _get_retry_attempts(result: ProcessingResult) -> str | int:
     if result.recovery_metadata and result.recovery_metadata.retry:
         return result.recovery_metadata.retry.attempts
     return "unknown"
+
+
+@dataclass
+class CollectionStats:
+    """Counts from result collection — returned alongside output records."""
+
+    success: int = 0
+    failed: int = 0
+    skipped: int = 0
+    filtered: int = 0
+    exhausted: int = 0
+    unprocessed: int = 0
 
 
 def _safe_set_disposition(
@@ -72,8 +85,11 @@ class ResultCollector:
         *,
         is_first_stage: bool,
         storage_backend: Optional["StorageBackend"] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Flatten ProcessingResult entries into output records.
+
+        Returns:
+            Tuple of (output_records, stats). Stats contain counts by status.
 
         Raises:
             AgentActionsError: If on_exhausted=raise and records exhausted retries.
@@ -294,7 +310,14 @@ class ResultCollector:
                 stats["unprocessed"],
             )
 
-        return output
+        return output, CollectionStats(
+            success=stats["success"],
+            failed=stats["failed"],
+            skipped=stats["skipped"],
+            filtered=stats["filtered"],
+            exhausted=stats["exhausted"],
+            unprocessed=stats["unprocessed"],
+        )
 
     @staticmethod
     def _check_exhausted_raise(

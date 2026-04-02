@@ -106,7 +106,12 @@ class TestOnlineModeReturnsPath:
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
             MockProc.return_value.process_batch.return_value = [{"result": "ok"}]
-            MockCollector.collect_results.return_value = [{"result": "ok"}]
+            from agent_actions.processing.result_collector import CollectionStats
+
+            MockCollector.collect_results.return_value = (
+                [{"result": "ok"}],
+                CollectionStats(success=1),
+            )
 
             result = _process_online_mode_with_record_processor(
                 data_chunk, ctx, str(input_file), str(base), str(output)

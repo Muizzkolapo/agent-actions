@@ -162,7 +162,7 @@ class TestResultCollectorUnprocessed:
             ProcessingResult.success(data=[{"content": "ok2"}]),
         ]
 
-        output = ResultCollector.collect_results(
+        output, _ = ResultCollector.collect_results(
             results,
             agent_config={"agent_type": "test"},
             agent_name="test",
@@ -181,7 +181,7 @@ class TestResultCollectorUnprocessed:
             ),
         ]
 
-        output = ResultCollector.collect_results(
+        output, _ = ResultCollector.collect_results(
             results,
             agent_config={"agent_type": "test"},
             agent_name="test",
