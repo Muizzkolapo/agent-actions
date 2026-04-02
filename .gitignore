@@ -49,3 +49,4 @@ MagicMock/
 .agent_status.json
 **/agent_io/target/
 *.db
+.claude/

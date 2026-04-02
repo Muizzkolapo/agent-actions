@@ -56,6 +56,8 @@ SIMPLE_CONFIG_FIELDS = {
     # Limit controls (None = unlimited)
     "record_limit": None,
     "file_limit": None,
+    # Partial failure behavior
+    "on_partial_failure": "continue",
 }
 
 

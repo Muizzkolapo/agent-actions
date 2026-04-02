@@ -201,6 +201,11 @@ class ActionConfig(BaseModel):
         description="Behavior when action produces empty output: warn (log warning), "
         "error (fail workflow), skip (continue, emit event)",
     )
+    on_partial_failure: Literal["continue", "pause"] = Field(
+        default="continue",
+        description="Behavior when action has partial item failures: "
+        "continue (proceed with successful records) or pause (halt workflow with summary)",
+    )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
     api_key: SecretStr | None = Field(default=None, description="API key")
@@ -352,6 +357,9 @@ class DefaultsConfig(BaseModel):
     strict_schema: bool | None = Field(default=None, description="Default strict schema flag")
     on_schema_mismatch: Literal["warn", "reprompt", "reject"] | None = Field(
         default=None, description="Default schema mismatch mode"
+    )
+    on_partial_failure: Literal["continue", "pause"] | None = Field(
+        default=None, description="Default partial failure behavior for all actions"
     )
 
     # --- Expander-consumed keys ---

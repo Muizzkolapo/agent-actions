@@ -19,6 +19,37 @@ from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 logger = logging.getLogger(__name__)
 
 
+def _print_failure_summary(
+    console: "Console", action_names: list[str], storage_backend: object | None
+) -> None:
+    """Print a summary of partial failures for the given actions."""
+    console.print("[yellow]Workflow paused — partial failure(s) detected:[/yellow]")
+    for action_name in action_names:
+        try:
+            if storage_backend is not None:
+                failed_items = storage_backend.get_failed_items(action_name)  # type: ignore[union-attr]
+                console.print(
+                    f"[yellow]  {action_name}: {len(failed_items)} item(s) failed[/yellow]"
+                )
+                from rich.markup import escape
+
+                for item in failed_items[:5]:
+                    reason = escape(str(item.get("reason", "unknown"))[:80])
+                    console.print(f"[dim]    - {reason}[/dim]")
+                if len(failed_items) > 5:
+                    console.print(f"[dim]    ... and {len(failed_items) - 5} more[/dim]")
+            else:
+                console.print(
+                    f"[yellow]  {action_name}: partial failures (details unavailable)[/yellow]"
+                )
+        except Exception:
+            logger.warning("Could not load failed items for %s", action_name, exc_info=True)
+            console.print(
+                f"[yellow]  {action_name}: partial failures (could not load details)[/yellow]"
+            )
+    console.print("[yellow]Run 'agac run' again to continue with partial results.[/yellow]")
+
+
 @dataclass
 class ParallelExecutionParams:
     """Parameters for executing parallel actions."""
@@ -40,6 +71,9 @@ class LevelExecutionParams:
     state_manager: Any
     action_executor: Any
     concurrency_limit: int = 5
+    on_partial_failure: str = "continue"
+    workflow_state: Any = None
+    storage_backend: Any = None
 
 
 class ActionLevelOrchestrator:
@@ -270,6 +304,13 @@ class ActionLevelOrchestrator:
             )
         # batch_submitted: BatchSubmittedEvent already fired by executor
 
+    def _print_partial_failure_summary(self, params: LevelExecutionParams) -> None:
+        """Print a summary of partial failures in the level."""
+        partial_actions = [
+            a for a in params.level_actions if params.state_manager.is_completed_with_failures(a)
+        ]
+        _print_failure_summary(self.console, partial_actions, params.storage_backend)
+
     def _check_batch_status(
         self, level_idx: int, level_actions: list[str], state_manager, start_time: datetime
     ) -> bool:
@@ -302,7 +343,7 @@ class ActionLevelOrchestrator:
         """Execute all actions in a level asynchronously.
 
         Returns:
-            True if level completed, False if batch jobs pending.
+            True if level completed, False if batch jobs pending or paused on partial failure.
 
         Failed actions are logged but do not raise — the circuit breaker
         in ActionExecutor handles downstream skipping.
@@ -351,6 +392,8 @@ class ActionLevelOrchestrator:
         if not self._check_batch_status(
             params.level_idx, params.level_actions, params.state_manager, start_time
         ):
+            if params.workflow_state is not None:
+                params.workflow_state.pause_reason = "batch_pending"
             return False
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -369,4 +412,11 @@ class ActionLevelOrchestrator:
         self.console.print(
             f"[{color}]Action {params.level_idx} complete ({duration:.2f}s)[/{color}]"
         )
+
+        # Pause on partial failure if configured
+        if has_partial and params.on_partial_failure == "pause":
+            self._print_partial_failure_summary(params)
+            if params.workflow_state is not None:
+                params.workflow_state.pause_reason = "partial_failure"
+            return False
         return True
