@@ -256,7 +256,8 @@ class ProcessingPipeline:
             HITL_VENDOR,
         ] or params.action_config.get("kind") in ["tool", "hitl"]
 
-        if params.action_config.get("run_mode") == RunMode.BATCH and not is_synchronous:
+        run_mode = params.action_config.get("run_mode")
+        if run_mode == RunMode.BATCH and not is_synchronous:
             return ProcessingPipeline._handle_batch_generation(
                 BatchPipelineParams(
                     pipeline_action_config=params.action_config,
@@ -268,6 +269,13 @@ class ProcessingPipeline:
                     workflow_metadata=params.workflow_metadata,
                     storage_backend=params.storage_backend,
                 )
+            )
+        if run_mode == RunMode.BATCH and is_synchronous:
+            logger.warning(
+                "Action '%s' has run_mode=batch but kind '%s' requires synchronous "
+                "execution. Running in online mode.",
+                params.action_name,
+                params.action_config.get("kind", params.action_config.get("model_vendor")),
             )
         pipeline = create_processing_pipeline_from_params(
             action_config=params.action_config,

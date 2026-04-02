@@ -28,6 +28,14 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
         run_mode = RunMode(raw_run_mode) if isinstance(raw_run_mode, str) else raw_run_mode
 
         if run_mode == RunMode.BATCH:
+            kind = normalized_entry.get("kind", "").lower()
+            if kind in ("tool", "hitl"):
+                errors.append(
+                    f"{desc} kind '{kind}' does not support batch processing. "
+                    f"Tool and HITL actions execute synchronously. "
+                    f"Set run_mode='online' or change kind to 'llm'."
+                )
+
             model_vendor = str(normalized_entry.get("model_vendor", "")).lower()
 
             if model_vendor:
