@@ -154,9 +154,12 @@ class TestStringEquivalence:
         assert env.prompt_body == expected
 
     def test_groq_json(self):
-        expected = _original_groq_json(PROMPT, CONTEXT_STR)
+        base = _original_groq_json(PROMPT, CONTEXT_STR)
         env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=True)
-        assert env.messages[0].content == expected
+        content = env.messages[0].content
+        # Base Groq format is preserved; json rule is appended
+        assert base.strip() in content
+        assert "JSON" in content
 
     def test_groq_non_json(self):
         expected = _original_groq_non_json(PROMPT, CONTEXT_STR)
