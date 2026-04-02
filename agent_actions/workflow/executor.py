@@ -19,7 +19,11 @@ from agent_actions.logging.events import (
     BatchCompleteEvent,
     BatchSubmittedEvent,
 )
-from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_FAILED,
+    DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
@@ -72,7 +76,7 @@ class ActionExecutionResult:
 
     success: bool
     output_folder: str | None = None
-    status: str = "completed"  # 'completed', 'batch_submitted', 'failed'
+    status: str = "completed"  # 'completed', 'batch_submitted', 'failed', 'skipped'
     error: Exception | None = None
     metrics: ExecutionMetrics = field(default_factory=ExecutionMetrics)
 
@@ -374,6 +378,24 @@ class ActionExecutor:
                     disp_err,
                 )
 
+    def _write_skipped_disposition(self, action_name: str, reason: str) -> None:
+        """Write DISPOSITION_SKIPPED to storage so downstream and future runs detect the skip."""
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is not None:
+            try:
+                storage_backend.set_disposition(
+                    action_name=action_name,
+                    record_id=NODE_LEVEL_RECORD_ID,
+                    disposition=DISPOSITION_SKIPPED,
+                    reason=reason[:500],
+                )
+            except Exception as disp_err:
+                logger.warning(
+                    "Failed to write DISPOSITION_SKIPPED for %s: %s",
+                    action_name,
+                    disp_err,
+                )
+
     def _handle_run_failure(
         self, params: ActionRunParams, error: Exception
     ) -> ActionExecutionResult:
@@ -416,17 +438,22 @@ class ActionExecutor:
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
     ) -> str | None:
-        """Return the name of a failed upstream dependency, or None if all healthy."""
+        """Return the name of a failed or skipped upstream dependency, or None if all healthy."""
         dependencies = action_config.get("dependencies", [])
         if not dependencies:
             return None
         for dep in dependencies:
-            if self.deps.state_manager.is_failed(dep):
+            if self.deps.state_manager.is_failed(dep) or self.deps.state_manager.is_skipped(dep):
                 return dep
-            # Also check disposition — covers cascaded failures from prior levels
+            # Also check disposition — covers cascaded failures/skips from prior levels
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-            if storage_backend is not None and storage_backend.has_disposition(
-                dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+            if storage_backend is not None and (
+                storage_backend.has_disposition(
+                    dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+                )
+                or storage_backend.has_disposition(
+                    dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+                )
             ):
                 return dep
         return None
@@ -441,12 +468,12 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle action skip due to upstream dependency failure.
 
-        State is set to ``"failed"`` so transitive dependents also skip via
-        ``is_failed``.  ``success=True`` keeps independent branches alive.
+        State is set to ``"skipped"`` so transitive dependents also skip via
+        ``is_skipped``.  ``success=True`` keeps independent branches alive.
         """
         reason = f"Upstream dependency '{failed_dependency}' failed"
-        self.deps.state_manager.update_status(action_name, "failed")
-        self._write_failed_disposition(action_name, reason)
+        self.deps.state_manager.update_status(action_name, "skipped")
+        self._write_skipped_disposition(action_name, reason)
 
         duration = (datetime.now() - start_time).total_seconds()
         total_actions = (
@@ -467,14 +494,14 @@ class ActionExecutor:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=action_name,
-                status="failed",
+                status="skipped",
                 duration_seconds=duration,
                 skip_reason=reason,
             )
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=True, status="failed", metrics=ExecutionMetrics(duration=duration)
+            success=True, status="skipped", metrics=ExecutionMetrics(duration=duration)
         )
 
     def execute_action_sync(

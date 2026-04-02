@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_FAILED,
+    DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.workflow.executor import (
     ActionExecutionResult,
     ActionExecutor,
@@ -54,6 +58,7 @@ class TestCheckUpstreamHealth:
     def test_all_deps_healthy_returns_none(self, executor, mock_deps):
         """All dependencies healthy — returns None."""
         mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
         mock_deps.action_runner.storage_backend = None
 
         config = {"dependencies": ["agent_a"]}
@@ -68,24 +73,43 @@ class TestCheckUpstreamHealth:
         result = executor._check_upstream_health("agent_b", config)
         assert result == "agent_a"
 
+    def test_dep_skipped_via_state_manager(self, executor, mock_deps):
+        """One dep skipped (state_manager.is_skipped) returns dep name."""
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = True
+
+        config = {"dependencies": ["agent_a"]}
+        result = executor._check_upstream_health("agent_b", config)
+        assert result == "agent_a"
+
     def test_dep_failed_via_disposition(self, executor, mock_deps):
         """One dep has DISPOSITION_FAILED in storage returns dep name."""
         mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
         storage = MagicMock()
-        storage.has_disposition.return_value = True
+        storage.has_disposition.side_effect = lambda dep, disp, **kw: disp == DISPOSITION_FAILED
         mock_deps.action_runner.storage_backend = storage
 
         config = {"dependencies": ["agent_a"]}
         result = executor._check_upstream_health("agent_b", config)
-
         assert result == "agent_a"
-        storage.has_disposition.assert_called_once_with(
-            "agent_a", DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
-        )
+
+    def test_dep_skipped_via_disposition(self, executor, mock_deps):
+        """One dep has DISPOSITION_SKIPPED in storage returns dep name."""
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
+        storage = MagicMock()
+        storage.has_disposition.side_effect = lambda dep, disp, **kw: disp == DISPOSITION_SKIPPED
+        mock_deps.action_runner.storage_backend = storage
+
+        config = {"dependencies": ["agent_a"]}
+        result = executor._check_upstream_health("agent_b", config)
+        assert result == "agent_a"
 
     def test_no_storage_backend_only_checks_state_manager(self, executor, mock_deps):
         """No storage backend — only checks state_manager."""
         mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
         mock_deps.action_runner.storage_backend = None
 
         config = {"dependencies": ["agent_a"]}
@@ -97,18 +121,18 @@ class TestHandleDependencySkip:
     """Tests for _handle_dependency_skip()."""
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_updates_state_to_failed(self, mock_fire, executor, mock_deps):
-        """Updates state to 'failed'."""
+    def test_updates_state_to_skipped(self, mock_fire, executor, mock_deps):
+        """Updates state to 'skipped'."""
         mock_deps.action_runner.storage_backend = None
         start_time = datetime.now()
 
         executor._handle_dependency_skip("agent_b", 1, {}, start_time, "agent_a")
 
-        mock_deps.state_manager.update_status.assert_called_once_with("agent_b", "failed")
+        mock_deps.state_manager.update_status.assert_called_once_with("agent_b", "skipped")
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_writes_failed_disposition(self, mock_fire, executor, mock_deps):
-        """Writes DISPOSITION_FAILED to storage."""
+    def test_writes_skipped_disposition(self, mock_fire, executor, mock_deps):
+        """Writes DISPOSITION_SKIPPED to storage."""
         storage = MagicMock()
         mock_deps.action_runner.storage_backend = storage
         start_time = datetime.now()
@@ -117,7 +141,7 @@ class TestHandleDependencySkip:
 
         storage.set_disposition.assert_called_once()
         call_kwargs = storage.set_disposition.call_args
-        assert call_kwargs[1]["disposition"] == DISPOSITION_FAILED
+        assert call_kwargs[1]["disposition"] == DISPOSITION_SKIPPED
         assert call_kwargs[1]["action_name"] == "agent_b"
 
     @patch("agent_actions.workflow.executor.fire_event")
@@ -137,7 +161,7 @@ class TestHandleDependencySkip:
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_records_in_run_tracker_if_available(self, mock_fire, executor, mock_deps):
-        """Records in run_tracker if available."""
+        """Records in run_tracker with status 'skipped'."""
         mock_deps.action_runner.storage_backend = None
         executor.run_tracker = MagicMock()
         executor.run_id = "run-123"
@@ -147,12 +171,12 @@ class TestHandleDependencySkip:
 
         executor.run_tracker.record_action_complete.assert_called_once()
         config = executor.run_tracker.record_action_complete.call_args[1]["config"]
-        assert config.status == "failed"
+        assert config.status == "skipped"
         assert config.run_id == "run-123"
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_returns_failed_result_with_success_true(self, mock_fire, executor, mock_deps):
-        """Returns ActionExecutionResult(success=True, status='failed') — failed state, but independent branches continue."""
+    def test_returns_skipped_result_with_success_true(self, mock_fire, executor, mock_deps):
+        """Returns ActionExecutionResult(success=True, status='skipped') — skipped state, but independent branches continue."""
         mock_deps.action_runner.storage_backend = None
         start_time = datetime.now()
 
@@ -160,7 +184,7 @@ class TestHandleDependencySkip:
 
         assert isinstance(result, ActionExecutionResult)
         assert result.success is True
-        assert result.status == "failed"
+        assert result.status == "skipped"
 
 
 class TestWriteFailedDisposition:
@@ -195,3 +219,27 @@ class TestWriteFailedDisposition:
 
         # Should not raise; nothing happens
         executor._write_failed_disposition("agent_a", "Some error")
+
+
+class TestWriteSkippedDisposition:
+    """Tests for _write_skipped_disposition()."""
+
+    def test_writes_disposition_when_storage_available(self, executor, mock_deps):
+        """Writes DISPOSITION_SKIPPED when storage backend is available."""
+        storage = MagicMock()
+        mock_deps.action_runner.storage_backend = storage
+
+        executor._write_skipped_disposition("agent_b", "Upstream failed")
+
+        storage.set_disposition.assert_called_once_with(
+            action_name="agent_b",
+            record_id=NODE_LEVEL_RECORD_ID,
+            disposition=DISPOSITION_SKIPPED,
+            reason="Upstream failed",
+        )
+
+    def test_noops_when_storage_backend_is_none(self, executor, mock_deps):
+        """No-ops when storage backend is None."""
+        mock_deps.action_runner.storage_backend = None
+
+        executor._write_skipped_disposition("agent_b", "Upstream failed")
