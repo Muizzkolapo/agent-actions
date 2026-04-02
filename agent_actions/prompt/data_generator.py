@@ -11,14 +11,12 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.di.container import registry
 from agent_actions.config.interfaces import IGenerator, ProcessingMode
+from agent_actions.config.types import RunMode
 from agent_actions.errors import GenerationError
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingStatus,
-)
-from agent_actions.processing.types import (
-    ProcessingMode as CoreProcessingMode,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,7 +76,7 @@ class DataGenerator(IGenerator):
             context = ProcessingContext(
                 agent_config=cast(ActionConfigDict, self.agent_config),
                 agent_name=self.agent_name,
-                mode=CoreProcessingMode.ONLINE,
+                mode=RunMode.ONLINE,
                 is_first_stage=False,  # This is subsequent-stage processing
                 source_data=source_content if isinstance(source_content, list) else [],
                 file_path=file_path,

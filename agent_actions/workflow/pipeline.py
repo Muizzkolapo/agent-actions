@@ -19,7 +19,7 @@ from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import ProcessingContext, ProcessingMode
+from agent_actions.processing.types import ProcessingContext
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
@@ -448,7 +448,7 @@ class ProcessingPipeline:
         context = ProcessingContext(
             agent_config=self.config.action_config,
             agent_name=self.config.action_name,
-            mode=ProcessingMode.ONLINE,
+            mode=RunMode.ONLINE,
             is_first_stage=False,
             source_data=source_data,  # Pass the loaded source data
             file_path=file_path,

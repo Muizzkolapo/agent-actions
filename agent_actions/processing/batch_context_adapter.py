@@ -2,10 +2,9 @@
 
 from typing import Any, cast
 
-from agent_actions.config.types import ActionConfigDict
+from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.processing.types import (
     ProcessingContext,
-    ProcessingMode,
     ProcessingResult,
     RecoveryMetadata,
 )
@@ -25,7 +24,7 @@ class BatchContextAdapter:
         return ProcessingContext(
             agent_config=cast(ActionConfigDict, agent_config),
             agent_name=agent_config.get("agent_type", "unknown_action"),
-            mode=ProcessingMode.BATCH,
+            mode=RunMode.BATCH,
             is_first_stage=False,
             current_item=original_row,
             record_index=record_index,

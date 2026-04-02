@@ -5,7 +5,6 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from agent_actions.config.types import RunMode
 from agent_actions.processing.prepared_task import (
     GuardStatus,
     PreparationContext,
@@ -261,13 +260,11 @@ class TaskPreparer:
         """Render prompt template using pre-loaded field context."""
         from agent_actions.prompt.service import PromptPreparationService
 
-        mode: RunMode = RunMode.BATCH if context.is_batch_mode else RunMode.ONLINE
-
         return PromptPreparationService.prepare_prompt_with_field_context(
             agent_config=context.agent_config,
             agent_name=context.agent_name,
             contents=content if isinstance(content, dict) else {},
-            mode=mode,
+            mode=context.mode,
             field_context=field_context,
             tools_path=context.tools_path,
         )

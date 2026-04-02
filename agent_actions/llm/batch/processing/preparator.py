@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
@@ -256,7 +257,7 @@ class BatchTaskPreparator:
             agent_config=agent_config,
             agent_name=agent_name,
             is_first_stage=False,  # Batch is always subsequent-stage
-            is_batch_mode=True,  # Batch processing mode
+            mode=RunMode.BATCH,
             source_data=source_data,
             agent_indices=self.action_indices,
             dependency_configs=self.dependency_configs,

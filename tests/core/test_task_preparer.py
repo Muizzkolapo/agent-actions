@@ -68,12 +68,13 @@ class TestPreparationContext:
 
     def test_from_processing_context(self):
         """Test creating PreparationContext from ProcessingContext."""
-        from agent_actions.processing.types import ProcessingContext, ProcessingMode
+        from agent_actions.config.types import RunMode
+        from agent_actions.processing.types import ProcessingContext
 
         processing_ctx = ProcessingContext(
             agent_config={"agent_type": "test", "prompt": "test"},
             agent_name="test_agent",
-            mode=ProcessingMode.ONLINE,
+            mode=RunMode.ONLINE,
             is_first_stage=True,
             source_data=[{"a": 1}],
             file_path="/tmp/test.json",
@@ -94,34 +95,36 @@ class TestPreparationContextBatchMode:
     """Tests for batch mode derivation in PreparationContext."""
 
     def test_preparation_context_batch_mode_derived(self):
-        """is_batch_mode is True when ProcessingContext.mode is BATCH."""
-        from agent_actions.processing.types import ProcessingContext, ProcessingMode
+        """mode is RunMode.BATCH when ProcessingContext.mode is BATCH."""
+        from agent_actions.config.types import RunMode
+        from agent_actions.processing.types import ProcessingContext
 
         processing_ctx = ProcessingContext(
             agent_config={"agent_type": "test", "prompt": "test"},
             agent_name="test_agent",
-            mode=ProcessingMode.BATCH,
+            mode=RunMode.BATCH,
             is_first_stage=True,
         )
 
         prep_ctx = PreparationContext.from_processing_context(processing_ctx)
 
-        assert prep_ctx.is_batch_mode is True
+        assert prep_ctx.mode == RunMode.BATCH
 
     def test_preparation_context_online_mode_not_batch(self):
-        """is_batch_mode is False when ProcessingContext.mode is ONLINE."""
-        from agent_actions.processing.types import ProcessingContext, ProcessingMode
+        """mode is RunMode.ONLINE when ProcessingContext.mode is ONLINE."""
+        from agent_actions.config.types import RunMode
+        from agent_actions.processing.types import ProcessingContext
 
         processing_ctx = ProcessingContext(
             agent_config={"agent_type": "test", "prompt": "test"},
             agent_name="test_agent",
-            mode=ProcessingMode.ONLINE,
+            mode=RunMode.ONLINE,
             is_first_stage=True,
         )
 
         prep_ctx = PreparationContext.from_processing_context(processing_ctx)
 
-        assert prep_ctx.is_batch_mode is False
+        assert prep_ctx.mode == RunMode.ONLINE
 
 
 class TestTaskPreparerNormalization:
@@ -354,14 +357,16 @@ class TestGuardEvaluatedOnce:
 
 
 class TestModeSelection:
-    """Tests for batch/online mode selection based on is_batch_mode flag."""
+    """Tests for batch/online mode selection based on RunMode."""
 
     @patch(
         "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
     )
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     def test_online_mode_uses_online(self, mock_load_ctx, mock_prepare):
-        """Test that online processing (is_batch_mode=False) uses online mode."""
+        """Test that online processing (mode=RunMode.ONLINE) uses online mode."""
+        from agent_actions.config.types import RunMode
+
         mock_load_ctx.return_value = {"content": "test"}
 
         mock_result = MagicMock()
@@ -371,29 +376,29 @@ class TestModeSelection:
         mock_result.prompt_context = {}
         mock_prepare.return_value = mock_result
 
-        # Online context - is_batch_mode=False (default)
         context = PreparationContext(
             agent_config={"agent_type": "test", "prompt": "test"},
             agent_name="test",
             is_first_stage=True,
-            is_batch_mode=False,
-            version_context=None,  # No loop context, but should still be online
+            mode=RunMode.ONLINE,
+            version_context=None,
         )
 
         preparer = TaskPreparer()
         preparer.prepare({"content": "test"}, context)
 
-        # Verify online mode was used
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
-        assert call_kwargs["mode"] == "online"
+        assert call_kwargs["mode"] == RunMode.ONLINE
 
     @patch(
         "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
     )
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     def test_batch_mode_uses_batch(self, mock_load_ctx, mock_prepare):
-        """Test that batch processing (is_batch_mode=True) uses batch mode."""
+        """Test that batch processing (mode=RunMode.BATCH) uses batch mode."""
+        from agent_actions.config.types import RunMode
+
         mock_load_ctx.return_value = {"content": "test"}
 
         mock_result = MagicMock()
@@ -403,21 +408,19 @@ class TestModeSelection:
         mock_result.prompt_context = {}
         mock_prepare.return_value = mock_result
 
-        # Batch context - is_batch_mode=True
         context = PreparationContext(
             agent_config={"agent_type": "test", "prompt": "test"},
             agent_name="test",
             is_first_stage=False,
-            is_batch_mode=True,
+            mode=RunMode.BATCH,
         )
 
         preparer = TaskPreparer()
         preparer.prepare({"content": "test"}, context)
 
-        # Verify batch mode was used
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
-        assert call_kwargs["mode"] == "batch"
+        assert call_kwargs["mode"] == RunMode.BATCH
 
     @patch(
         "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
@@ -425,6 +428,8 @@ class TestModeSelection:
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     def test_online_with_loop_uses_online(self, mock_load_ctx, mock_prepare):
         """Test that online processing with loop context also uses online mode."""
+        from agent_actions.config.types import RunMode
+
         mock_load_ctx.return_value = {"content": "test"}
 
         mock_result = MagicMock()
@@ -434,22 +439,20 @@ class TestModeSelection:
         mock_result.prompt_context = {}
         mock_prepare.return_value = mock_result
 
-        # Online context with loop
         context = PreparationContext(
             agent_config={"agent_type": "test", "prompt": "test"},
             agent_name="test",
             is_first_stage=False,
-            is_batch_mode=False,
-            version_context={"iteration": 1},  # Has loop context
+            mode=RunMode.ONLINE,
+            version_context={"iteration": 1},
         )
 
         preparer = TaskPreparer()
         preparer.prepare({"content": "test"}, context)
 
-        # Verify online mode was used
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
-        assert call_kwargs["mode"] == "online"
+        assert call_kwargs["mode"] == RunMode.ONLINE
 
 
 class TestGuardBeforePromptRendering:

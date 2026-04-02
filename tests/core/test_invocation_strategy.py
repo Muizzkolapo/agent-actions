@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.config.types import RunMode
 from agent_actions.processing.invocation import (
     BatchStrategy,
     BatchSubmissionResult,
@@ -12,7 +13,7 @@ from agent_actions.processing.invocation import (
     OnlineStrategy,
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
-from agent_actions.processing.types import ProcessingContext, ProcessingMode
+from agent_actions.processing.types import ProcessingContext
 
 
 @pytest.fixture
@@ -62,7 +63,7 @@ def basic_context():
     return ProcessingContext(
         agent_config={"agent_type": "test_agent", "prompt": "test"},
         agent_name="test_agent",
-        mode=ProcessingMode.ONLINE,
+        mode=RunMode.ONLINE,
     )
 
 
@@ -339,7 +340,7 @@ class TestInvocationStrategyFactory:
         """Test BATCH mode raises error without provider."""
         with pytest.raises(ValueError, match="BatchProvider required"):
             InvocationStrategyFactory.create(
-                mode=ProcessingMode.BATCH,
+                mode=RunMode.BATCH,
                 agent_config={"agent_type": "test"},
             )
 
@@ -355,7 +356,7 @@ class TestRecordProcessorModeWiring:
             RecordProcessor(
                 agent_config={},
                 agent_name="test",
-                mode=ProcessingMode.BATCH,
+                mode=RunMode.BATCH,
             )
 
 
@@ -376,11 +377,11 @@ class TestDeferredResultInProcessor:
         response=None, deferred=True) fell through to the RP002 filter
         branch, discarding queued batch tasks.
         """
+        from agent_actions.config.types import RunMode
         from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
         from agent_actions.processing.processor import RecordProcessor
         from agent_actions.processing.types import (
             ProcessingContext,
-            ProcessingMode,
             ProcessingStatus,
         )
 
@@ -414,7 +415,7 @@ class TestDeferredResultInProcessor:
         context = ProcessingContext(
             agent_config={"agent_type": "test"},
             agent_name="test",
-            mode=ProcessingMode.BATCH,
+            mode=RunMode.BATCH,
         )
 
         result = processor.process({"raw": "data"}, context)
