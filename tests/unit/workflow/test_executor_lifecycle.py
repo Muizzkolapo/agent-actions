@@ -33,6 +33,8 @@ def mock_deps():
     deps.action_runner.execution_order = ["agent_a", "agent_b"]
     # Default: no item-level failures (so actions complete as "completed", not "completed_with_failures")
     deps.action_runner.storage_backend.get_failed_items.return_value = []
+    # Default: no guard-all-skipped disposition
+    deps.action_runner.storage_backend.has_disposition.return_value = False
     # Default status details for limit-change detection (no limits stored)
     deps.state_manager.get_status_details.return_value = {"status": "completed"}
     return deps
@@ -294,6 +296,46 @@ class TestHandleRunSuccess:
 
         assert result.metrics.model_vendor == "anthropic"
         assert result.metrics.model_name == "claude"
+
+    def test_guard_all_skipped_returns_skipped(self, executor, mock_deps):
+        """When all records are guard-skipped, status should be 'skipped' and ActionSkipEvent fired."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        params = self._make_params()
+
+        with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
+            result = executor._handle_run_success(params, "/out", 1.0, None)
+
+        assert result.success is True
+        assert result.status == "skipped"
+        assert result.output_folder == "/out"
+        mock_deps.state_manager.update_status.assert_called_with("agent_a", "skipped")
+
+        from agent_actions.logging.events import ActionSkipEvent
+
+        skip_events = [
+            call for call in mock_fire.call_args_list if isinstance(call[0][0], ActionSkipEvent)
+        ]
+        assert len(skip_events) == 1
+        assert skip_events[0][0][0].skip_reason == "All records guard-skipped"
+        assert skip_events[0][0][0].action_index == 0
+        assert skip_events[0][0][0].total_actions == 2  # from execution_order fixture
+
+    def test_guard_all_skipped_records_in_run_tracker(self, executor, mock_deps):
+        """Guard-all-skipped should record in run_tracker with skip_reason."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        executor.run_tracker = MagicMock()
+        executor.run_id = "run-123"
+        params = self._make_params()
+
+        with patch("agent_actions.workflow.executor.fire_event"):
+            result = executor._handle_run_success(params, "/out", 1.0, None)
+
+        assert result.status == "skipped"
+        executor.run_tracker.record_action_complete.assert_called_once()
+        call_kwargs = executor.run_tracker.record_action_complete.call_args
+        config = call_kwargs[1]["config"] if "config" in call_kwargs[1] else call_kwargs[0][0]
+        assert config.status == "skipped"
+        assert config.skip_reason == "All records guard-skipped"
 
 
 # ── _handle_run_failure ────────────────────────────────────────────────
