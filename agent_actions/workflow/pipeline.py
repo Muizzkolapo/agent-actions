@@ -539,6 +539,17 @@ class ProcessingPipeline:
                 f"all {len(data)} input item(s) failed ({stats.failed} failures)"
             )
 
+        # Tool actions that return empty output should be treated as failures
+        # rather than silently succeeding.  The guard-skip check above already
+        # handles stats.success == 0; this catches the case where the tool call
+        # itself "succeeded" (stats.success > 0) but produced zero output
+        # records (e.g. tool returned [] or enrichment dropped all items).
+        if data and not output and self.is_tool_action and stats.success > 0:
+            raise RuntimeError(
+                f"Tool action '{self.config.action_name}' produced 0 output records "
+                f"from {len(data)} input item(s) — tool returned empty result"
+            )
+
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     @staticmethod
