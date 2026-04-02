@@ -373,3 +373,135 @@ class TestParserBooleanLiterals:
         )
         assert result.ast.evaluate({field: 1}) is True
         assert result.ast.evaluate({field: 2}) is False
+
+
+class TestParserOperatorMapping:
+    """Regression tests for issue #98: parser must map all operator symbols correctly.
+
+    These tests parse WHERE clauses through WhereClauseParser and verify the resulting
+    AST contains the correct ComparisonOperator enum value, catching any silent
+    mismapping (e.g., != silently becoming ==).
+    """
+
+    @pytest.fixture
+    def parser(self):
+        return WhereClauseParser()
+
+    @pytest.fixture
+    def data(self):
+        return {
+            "age": 25,
+            "name": "John Doe",
+            "email": "john@example.com",
+            "status": "active",
+            "score": 85,
+            "tags": ["python", "javascript"],
+            "balance": None,
+        }
+
+    # --- Single-symbol operators ---
+
+    def test_eq_operator(self, parser, data):
+        result = parser.parse('status == "active"')
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "status": "inactive"}) is False
+
+    def test_ne_operator(self, parser, data):
+        """Regression: != must NOT silently become ==."""
+        result = parser.parse('status != "inactive"')
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "status": "inactive"}) is False
+
+    def test_lt_operator(self, parser, data):
+        result = parser.parse("age < 30")
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "age": 30}) is False
+
+    def test_le_operator(self, parser, data):
+        result = parser.parse("age <= 25")
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "age": 26}) is False
+
+    def test_gt_operator(self, parser, data):
+        result = parser.parse("age > 20")
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "age": 20}) is False
+
+    def test_ge_operator(self, parser, data):
+        result = parser.parse("age >= 25")
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "age": 24}) is False
+
+    # --- Word operators ---
+
+    def test_in_operator(self, parser, data):
+        result = parser.parse('status IN ["active", "pending"]')
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "status": "deleted"}) is False
+
+    def test_contains_operator(self, parser, data):
+        result = parser.parse('email CONTAINS "@example.com"')
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "email": "john@gmail.com"}) is False
+
+    def test_like_operator(self, parser, data):
+        result = parser.parse('name LIKE "John%"')
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "name": "Jane Doe"}) is False
+
+    # --- Multi-word operators ---
+
+    def test_not_in_operator(self, parser, data):
+        result = parser.parse('status NOT IN ["deleted", "banned"]')
+        assert result.success
+        assert result.ast.evaluate(data) is True
+        assert result.ast.evaluate({**data, "status": "deleted"}) is False
+
+    # --- Critical regression tests ---
+
+    def test_ne_does_not_silently_become_eq(self, parser):
+        """The exact bug from issue #98: != must produce NE, not EQ."""
+        result = parser.parse('status != "active"')
+        assert result.success
+        # With the bug: this would return True (== "active" matches "active")
+        # With the fix: this correctly returns False (!= "active" when status IS "active")
+        assert result.ast.evaluate({"status": "active"}) is False
+        assert result.ast.evaluate({"status": "inactive"}) is True
+
+    def test_gt_does_not_silently_become_eq(self, parser):
+        """Regression: > must produce GT, not EQ."""
+        result = parser.parse("age > 25")
+        assert result.success
+        assert result.ast.evaluate({"age": 25}) is False
+        assert result.ast.evaluate({"age": 30}) is True
+
+    def test_all_symbolic_operators_produce_distinct_enums(self, parser):
+        """Ensure each symbolic operator produces a different ComparisonOperator."""
+        clauses = {
+            "==": "age == 25",
+            "!=": "age != 25",
+            "<": "age < 25",
+            "<=": "age <= 25",
+            ">": "age > 25",
+            ">=": "age >= 25",
+        }
+        seen_ops = {}
+        for symbol, clause in clauses.items():
+            result = parser.parse(clause)
+            assert result.success, f"Failed to parse: {clause}"
+            root = result.ast.root
+            assert isinstance(root, ComparisonNode), f"Expected ComparisonNode for {clause}"
+            seen_ops[symbol] = root.operator
+
+        # All 6 operators must be distinct enum members
+        values = list(seen_ops.values())
+        assert len(values) == len(set(values)), f"Operators are not distinct: {seen_ops}"
