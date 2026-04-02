@@ -419,3 +419,238 @@ class TestGetFailedItems:
         items = backend.get_failed_items("action_a")
         assert len(items) == 2
         assert all(i["record_id"] != NODE_LEVEL_RECORD_ID for i in items)
+
+
+class TestPauseOnPartialFailure:
+    """Tests for on_partial_failure pause behavior."""
+
+    def _make_mock_state_manager(self, statuses: dict[str, str]):
+        """Create a mock state manager with given action statuses."""
+        mgr = MagicMock()
+        mgr.is_completed.side_effect = lambda a: statuses.get(a) in {
+            "completed",
+            "completed_with_failures",
+        }
+        mgr.is_completed_with_failures.side_effect = (
+            lambda a: statuses.get(a) == "completed_with_failures"
+        )
+        mgr.is_skipped.side_effect = lambda a: statuses.get(a) == "skipped"
+        mgr.is_failed.side_effect = lambda a: statuses.get(a) == "failed"
+        mgr.get_pending_actions.return_value = []
+        mgr.get_failed_actions.side_effect = lambda actions: [
+            a for a in actions if statuses.get(a) == "failed"
+        ]
+        mgr.get_batch_submitted_actions.return_value = []
+        return mgr
+
+    def _make_level_params(self, statuses, on_partial="continue", pending=None):
+        """Build LevelExecutionParams with mock state that transitions during execution.
+
+        Actions start as 'pending' (so they get dispatched), then after execution
+        the state_manager reports the final statuses for the post-execution checks.
+        """
+        from unittest.mock import AsyncMock
+
+        from agent_actions.workflow.executor import ActionExecutionResult
+        from agent_actions.workflow.models import WorkflowState
+        from agent_actions.workflow.parallel.action_executor import LevelExecutionParams
+
+        state = WorkflowState()
+        mgr = MagicMock()
+
+        # Before execution: actions are "pending"
+        if pending is None:
+            pending = list(statuses.keys())
+        mgr.is_completed.return_value = False
+        mgr.get_pending_actions.return_value = pending
+        mgr.get_batch_submitted_actions.return_value = []
+
+        # After execution: state_manager reports final statuses
+        mgr.get_failed_actions.side_effect = lambda actions: [
+            a for a in actions if statuses.get(a) == "failed"
+        ]
+        mgr.is_completed_with_failures.side_effect = (
+            lambda a: statuses.get(a) == "completed_with_failures"
+        )
+        mgr.is_skipped.side_effect = lambda a: statuses.get(a) == "skipped"
+
+        # Mock executor that returns completed_with_failures
+        mock_executor = MagicMock()
+        mock_executor.execute_action_async = AsyncMock(
+            return_value=ActionExecutionResult(success=True, status=list(statuses.values())[0])
+        )
+
+        storage = MagicMock(
+            get_failed_items=MagicMock(return_value=[{"reason": "timeout", "record_id": "g1"}])
+        )
+
+        params = LevelExecutionParams(
+            level_idx=0,
+            level_actions=list(statuses.keys()),
+            action_indices={a: i for i, a in enumerate(statuses.keys())},
+            state_manager=mgr,
+            action_executor=mock_executor,
+            on_partial_failure=on_partial,
+            workflow_state=state,
+            storage_backend=storage,
+        )
+        return params, state
+
+    @pytest.mark.asyncio
+    async def test_async_pause_returns_false_when_partial_and_pause(self):
+        """execute_level_async returns False when partial + pause config."""
+        from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
+
+        params, state = self._make_level_params(
+            {"a": "completed_with_failures"}, on_partial="pause"
+        )
+        orchestrator = ActionLevelOrchestrator(
+            execution_order=["a"], action_configs={"a": {"agent_type": "a"}}
+        )
+        result = await orchestrator.execute_level_async(params)
+        assert result is False
+        assert state.pause_reason == "partial_failure"
+
+    @pytest.mark.asyncio
+    async def test_async_continues_when_partial_and_continue(self):
+        """execute_level_async returns True when partial + continue config."""
+        from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
+
+        params, state = self._make_level_params(
+            {"a": "completed_with_failures"}, on_partial="continue"
+        )
+        orchestrator = ActionLevelOrchestrator(
+            execution_order=["a"], action_configs={"a": {"agent_type": "a"}}
+        )
+        result = await orchestrator.execute_level_async(params)
+        assert result is True
+        assert state.pause_reason is None
+
+    @pytest.mark.asyncio
+    async def test_async_returns_true_when_no_partial(self):
+        """execute_level_async returns True when all actions completed cleanly."""
+        from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
+
+        params, state = self._make_level_params({"a": "completed"}, on_partial="pause")
+        orchestrator = ActionLevelOrchestrator(
+            execution_order=["a"], action_configs={"a": {"agent_type": "a"}}
+        )
+        result = await orchestrator.execute_level_async(params)
+        assert result is True
+        assert state.pause_reason is None
+
+    @pytest.mark.asyncio
+    async def test_batch_pending_sets_pause_reason(self):
+        """Batch-pending path sets pause_reason to 'batch_pending'."""
+        from unittest.mock import AsyncMock
+
+        from agent_actions.workflow.executor import ActionExecutionResult
+        from agent_actions.workflow.models import WorkflowState
+        from agent_actions.workflow.parallel.action_executor import (
+            ActionLevelOrchestrator,
+            LevelExecutionParams,
+        )
+
+        state = WorkflowState()
+        mgr = MagicMock()
+        mgr.is_completed.return_value = False
+        # Action is pending so it gets dispatched
+        mgr.get_pending_actions.return_value = ["a"]
+        # After execution, batch is submitted
+        mgr.get_batch_submitted_actions.return_value = ["a"]
+        mgr.get_failed_actions.return_value = []
+
+        mock_executor = MagicMock()
+        mock_executor.execute_action_async = AsyncMock(
+            return_value=ActionExecutionResult(success=True, status="batch_submitted")
+        )
+
+        params = LevelExecutionParams(
+            level_idx=0,
+            level_actions=["a"],
+            action_indices={"a": 0},
+            state_manager=mgr,
+            action_executor=mock_executor,
+            workflow_state=state,
+        )
+
+        orchestrator = ActionLevelOrchestrator(
+            execution_order=["a"], action_configs={"a": {"agent_type": "a"}}
+        )
+        result = await orchestrator.execute_level_async(params)
+        assert result is False
+        assert state.pause_reason == "batch_pending"
+
+    def test_print_failure_summary_with_storage(self):
+        """_print_failure_summary prints action names and reasons."""
+        from io import StringIO
+
+        from rich.console import Console
+
+        from agent_actions.workflow.parallel.action_executor import _print_failure_summary
+
+        buf = StringIO()
+        console = Console(file=buf, no_color=True, width=120)
+        mock_backend = MagicMock()
+        mock_backend.get_failed_items.return_value = [
+            {"reason": "timeout error", "record_id": "g1"},
+            {"reason": "rate limit 429", "record_id": "g2"},
+        ]
+
+        _print_failure_summary(console, ["action_a"], mock_backend)
+
+        output = buf.getvalue()
+        assert "action_a" in output
+        assert "2 item(s) failed" in output
+        assert "timeout error" in output
+        assert "rate limit 429" in output
+
+    def test_print_failure_summary_no_storage(self):
+        """_print_failure_summary handles None storage backend."""
+        from io import StringIO
+
+        from rich.console import Console
+
+        from agent_actions.workflow.parallel.action_executor import _print_failure_summary
+
+        buf = StringIO()
+        console = Console(file=buf, no_color=True, width=120)
+
+        _print_failure_summary(console, ["action_a"], None)
+
+        output = buf.getvalue()
+        assert "details unavailable" in output
+
+    def test_print_failure_summary_storage_error(self):
+        """_print_failure_summary handles storage exceptions gracefully."""
+        from io import StringIO
+
+        from rich.console import Console
+
+        from agent_actions.workflow.parallel.action_executor import _print_failure_summary
+
+        buf = StringIO()
+        console = Console(file=buf, no_color=True, width=120)
+        mock_backend = MagicMock()
+        mock_backend.get_failed_items.side_effect = RuntimeError("DB crash")
+
+        _print_failure_summary(console, ["action_a"], mock_backend)
+
+        output = buf.getvalue()
+        assert "could not load details" in output
+
+    def test_config_schema_defaults(self):
+        """on_partial_failure defaults to 'continue' on ActionConfig."""
+        from agent_actions.config.schema import ActionConfig
+
+        action = ActionConfig(name="test", prompt="do something")
+        assert action.on_partial_failure == "continue"
+
+    def test_config_schema_rejects_invalid(self):
+        """on_partial_failure rejects invalid values."""
+        from pydantic import ValidationError
+
+        from agent_actions.config.schema import ActionConfig
+
+        with pytest.raises(ValidationError):
+            ActionConfig(name="test", prompt="do something", on_partial_failure="invalid")

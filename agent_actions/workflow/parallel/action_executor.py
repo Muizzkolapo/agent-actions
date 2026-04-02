@@ -31,8 +31,10 @@ def _print_failure_summary(
                 console.print(
                     f"[yellow]  {action_name}: {len(failed_items)} item(s) failed[/yellow]"
                 )
+                from rich.markup import escape
+
                 for item in failed_items[:5]:
-                    reason = str(item.get("reason", "unknown"))[:80]
+                    reason = escape(str(item.get("reason", "unknown"))[:80])
                     console.print(f"[dim]    - {reason}[/dim]")
                 if len(failed_items) > 5:
                     console.print(f"[dim]    ... and {len(failed_items) - 5} more[/dim]")
@@ -341,7 +343,7 @@ class ActionLevelOrchestrator:
         """Execute all actions in a level asynchronously.
 
         Returns:
-            True if level completed, False if batch jobs pending.
+            True if level completed, False if batch jobs pending or paused on partial failure.
 
         Failed actions are logged but do not raise — the circuit breaker
         in ActionExecutor handles downstream skipping.
