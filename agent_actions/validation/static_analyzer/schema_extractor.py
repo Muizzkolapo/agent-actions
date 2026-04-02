@@ -319,8 +319,9 @@ class SchemaExtractor:
             json_mode = config.get("json_mode", get_default("json_mode"))
             if not json_mode:
                 output.is_schemaless = True
+                output_field = config.get("output_field", get_default("output_field"))
+                output.schema_fields.add(output_field)
                 output.schema_fields.add("content")
-                output.schema_fields.add("raw_response")
                 return
 
             output.is_schemaless = True
@@ -416,6 +417,11 @@ class SchemaExtractor:
             field_name = self._extract_field_name(ref)
             if field_name:
                 output.passthrough_fields.add(field_name)
+            elif isinstance(ref, str) and ".*" in ref:
+                # Wildcard passthrough: "source.*" → record the source name
+                source_name = ref.split(".", 1)[0]
+                if source_name:
+                    output.passthrough_wildcard_sources.add(source_name)
 
         scope_observe = context_scope.get("observe", [])
         for ref in scope_observe:

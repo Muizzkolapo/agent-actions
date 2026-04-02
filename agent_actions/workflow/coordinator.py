@@ -86,6 +86,10 @@ class AgentWorkflow:
             self.metadata, config, self.storage_backend, self.console
         )
 
+        # Fresh run: clear stored results + status before anything else
+        if config.fresh:
+            self._clear_for_fresh_run()
+
         # Dependency orchestration + session
         self._init_dependency_orchestrator()
         self.workflow_session_id = self._generate_workflow_session_id()
@@ -125,8 +129,33 @@ class AgentWorkflow:
                 hint="Fix the guard condition syntax errors above before running the workflow.",
             )
 
+        # Resolution checks: API keys, seed files, vendor batch compatibility
+        from agent_actions.validation.preflight.resolution_service import (
+            WorkflowResolutionService,
+        )
+
+        resolution_result = WorkflowResolutionService(
+            action_configs=self.action_configs,
+            workflow_config_path=self.config.paths.constructor_path,
+            project_root=self.config.project_root,
+        ).resolve_all()
+        resolution_result.raise_if_invalid()
+
     def _validate_guard_conditions(self) -> list[str]:
         return validate_guard_conditions(self.action_configs)
+
+    def _clear_for_fresh_run(self) -> None:
+        """Clear stored results, dispositions, and status for a fresh run."""
+        for action_name in self.execution_order:
+            try:
+                self.storage_backend.delete_target(action_name)
+                self.storage_backend.clear_disposition(action_name)
+            except Exception as e:
+                logger.warning("Failed to clear stored data for %s: %s", action_name, e)
+        self.services.core.state_manager.reset()
+        self.console.print(
+            "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
+        )
 
     # ── Properties ──────────────────────────────────────────────────────
 
@@ -311,14 +340,23 @@ class AgentWorkflow:
                     if not level_complete:
                         return
 
+                state_mgr = self.services.core.state_manager
                 duration = (datetime.now() - workflow_start).total_seconds()
-                self.event_logger.finalize_workflow(elapsed_time=duration)
 
-                downstream_success = self._resolve_downstream_workflows()
-                if not downstream_success:
-                    return None
+                if state_mgr.is_workflow_complete():
+                    self.event_logger.finalize_workflow(elapsed_time=duration)
+                    downstream_success = self._resolve_downstream_workflows()
+                    if not downstream_success:
+                        return None
+                    return ("success", {})
 
-                return ("success", {})
+                if state_mgr.is_workflow_done():
+                    self.state.failed = True
+                    self.event_logger.finalize_workflow(elapsed_time=duration)
+                    failed = state_mgr.get_failed_actions(self.execution_order)
+                    return ("completed_with_failures", {"failed": failed})
+
+                return None
 
             except Exception as e:
                 duration = (datetime.now() - workflow_start).total_seconds()
@@ -362,8 +400,10 @@ class AgentWorkflow:
                     if should_stop:
                         break
 
-                if self.services.core.state_manager.is_workflow_complete():
-                    duration = (datetime.now() - workflow_start).total_seconds()
+                state_mgr = self.services.core.state_manager
+                duration = (datetime.now() - workflow_start).total_seconds()
+
+                if state_mgr.is_workflow_complete():
                     self.event_logger.finalize_workflow(elapsed_time=duration)
 
                     downstream_success = self._resolve_downstream_workflows()
@@ -371,6 +411,13 @@ class AgentWorkflow:
                         return None
 
                     return ("success", {})
+
+                if state_mgr.is_workflow_done():
+                    # All actions reached a terminal state but some failed
+                    self.state.failed = True
+                    self.event_logger.finalize_workflow(elapsed_time=duration)
+                    failed = state_mgr.get_failed_actions(self.execution_order)
+                    return ("completed_with_failures", {"failed": failed})
 
                 return None
 
@@ -425,6 +472,9 @@ class AgentWorkflow:
             if result.status == "batch_submitted":
                 return True
 
+            if result.status == "skipped":
+                return False  # Continue to next action
+
             if result.output_folder and result.status == "completed":
                 self.state.ephemeral_directories.append(
                     {
@@ -434,4 +484,6 @@ class AgentWorkflow:
                 )
             return False
 
-        raise result.error
+        # Action failed — log and continue (circuit breaker handles downstream)
+        logger.warning("Action '%s' failed: %s", action_name, result.error)
+        return False

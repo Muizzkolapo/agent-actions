@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: Resolve .env files from project root instead of CWD, fixing env var loading in worktrees and subdirectories
+time: 2026-04-01T19:19:00.000000Z

@@ -35,7 +35,7 @@ tool_path: ["tools"]
 ```yaml
 name: my_workflow
 description: "Workflow description"
-version: "1.0.0"
+# version: "1.0.0"  # Optional
 
 defaults:
   model_vendor: openai
