@@ -151,7 +151,10 @@ class ActionLevelOrchestrator:
 
     def log_execution_levels(self, levels: list[list[str]], action_indices: dict[str, int]):
         """Log execution levels for user transparency."""
-        self.console.print(f"[blue]📊 Execution: {len(levels)} action(s)[/blue]")
+        total_actions = sum(len(level) for level in levels)
+        self.console.print(
+            f"[blue]📊 Execution: {total_actions} action(s) in {len(levels)} step(s)[/blue]"
+        )
 
         for i, level in enumerate(levels):
             if len(level) > 1:
