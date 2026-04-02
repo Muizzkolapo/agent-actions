@@ -26,7 +26,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.workflow.managers.state import COMPLETED_STATUSES
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class ActionExecutionResult:
 
     success: bool
     output_folder: str | None = None
-    status: str = "completed"  # 'completed', 'batch_submitted', 'failed', 'skipped'
+    status: ActionStatus = ActionStatus.COMPLETED
     error: Exception | None = None
     metrics: ExecutionMetrics = field(default_factory=ExecutionMetrics)
 
@@ -144,8 +144,8 @@ class ActionExecutor:
         }
 
     def _maybe_invalidate_completed_status(
-        self, action_name: str, action_config: ActionConfigDict, current_status: str
-    ) -> str:
+        self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
+    ) -> ActionStatus:
         """Reset to pending if limit config changed since last completion."""
         if current_status not in COMPLETED_STATUSES:
             return current_status
@@ -154,8 +154,8 @@ class ActionExecutor:
             "file_limit"
         ) != action_config.get("file_limit"):
             logger.info("Limit config changed for %s, resetting to pending", action_name)
-            self.deps.state_manager.update_status(action_name, "pending")
-            return "pending"
+            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            return ActionStatus.PENDING
         return current_status
 
     def verify_completion_status(self, action_name: str) -> bool:
@@ -199,7 +199,7 @@ class ActionExecutor:
                             disp,
                             record_id=NODE_LEVEL_RECORD_ID,
                         )
-                        self.deps.state_manager.update_status(action_name, "pending")
+                        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                         return (False, None)
 
                 target_files = storage_backend.list_target_files(action_name)
@@ -208,12 +208,14 @@ class ActionExecutor:
                         "Action %s completed but no output in storage - re-running",
                         action_name,
                     )
-                    self.deps.state_manager.update_status(action_name, "pending")
+                    self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                     return (False, None)
                 return (
                     True,
                     ActionExecutionResult(
-                        success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
+                        success=True,
+                        status=ActionStatus.COMPLETED,
+                        metrics=ExecutionMetrics(duration=0.0),
                     ),
                 )
             except Exception as e:
@@ -223,12 +225,12 @@ class ActionExecutor:
                     e,
                     exc_info=True,
                 )
-                self.deps.state_manager.update_status(action_name, "pending")
+                self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                 return (False, None)
         return (
             True,
             ActionExecutionResult(
-                success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
+                success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics(duration=0.0)
             ),
         )
 
@@ -242,7 +244,7 @@ class ActionExecutor:
         """Handle action skip due to WHERE clause condition."""
         self.deps.output_manager.create_passthrough_output(action_idx, action_name)
         self.deps.state_manager.update_status(
-            action_name, "completed", **self._limit_metadata(action_config)
+            action_name, ActionStatus.COMPLETED, **self._limit_metadata(action_config)
         )
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -271,7 +273,7 @@ class ActionExecutor:
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=True, status="skipped", metrics=ExecutionMetrics(duration=duration)
+            success=True, status=ActionStatus.SKIPPED, metrics=ExecutionMetrics(duration=duration)
         )
 
     def _track_action_start(self, params: ActionRunParams) -> None:
@@ -303,17 +305,19 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle successful action run result."""
         if batch_status == "batch_submitted":
-            self.deps.state_manager.update_status(params.action_name, "batch_submitted")
+            self.deps.state_manager.update_status(params.action_name, ActionStatus.BATCH_SUBMITTED)
             fire_event(BatchSubmittedEvent(action_name=params.action_name))
             return ActionExecutionResult(
                 success=True,
-                status="batch_submitted",
+                status=ActionStatus.BATCH_SUBMITTED,
                 metrics=ExecutionMetrics(duration=duration),
             )
 
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
-                params.action_name, "completed", **self._limit_metadata(params.action_config)
+                params.action_name,
+                ActionStatus.COMPLETED,
+                **self._limit_metadata(params.action_config),
             )
             logger.info(
                 "Action completed (passthrough)",
@@ -329,7 +333,7 @@ class ActionExecutor:
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
-                status="completed",
+                status=ActionStatus.COMPLETED,
                 metrics=ExecutionMetrics(duration=duration),
             )
 
@@ -341,7 +345,7 @@ class ActionExecutor:
         )
         tokens = get_last_usage()
 
-        tracker_status = "success" if final_status == "completed" else "partial"
+        tracker_status = "success" if final_status == ActionStatus.COMPLETED else "partial"
         if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
@@ -402,8 +406,8 @@ class ActionExecutor:
                     disp_err,
                 )
 
-    def _resolve_completion_status(self, action_name: str) -> str:
-        """Return 'completed_with_failures' if item-level failures exist, else 'completed'."""
+    def _resolve_completion_status(self, action_name: str) -> ActionStatus:
+        """Return COMPLETED_WITH_FAILURES if item-level failures exist, else COMPLETED."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is not None:
             try:
@@ -414,17 +418,17 @@ class ActionExecutor:
                         action_name,
                         len(item_failures),
                     )
-                    return "completed_with_failures"
+                    return ActionStatus.COMPLETED_WITH_FAILURES
             except Exception as e:
                 logger.warning("Could not check partial failures for %s: %s", action_name, e)
-        return "completed"
+        return ActionStatus.COMPLETED
 
     def _handle_run_failure(
         self, params: ActionRunParams, error: Exception
     ) -> ActionExecutionResult:
         """Handle action run failure."""
         duration = (datetime.now() - params.start_time).total_seconds()
-        self.deps.state_manager.update_status(params.action_name, "failed")
+        self.deps.state_manager.update_status(params.action_name, ActionStatus.FAILED)
         self._write_failed_disposition(params.action_name, str(error))
 
         if self.run_tracker is not None and self.run_id is not None:
@@ -438,7 +442,10 @@ class ActionExecutor:
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
+            success=False,
+            status=ActionStatus.FAILED,
+            error=error,
+            metrics=ExecutionMetrics(duration=duration),
         )
 
     def _cleanup_correlation(
@@ -498,7 +505,7 @@ class ActionExecutor:
             "skipped" if self.deps.state_manager.is_skipped(failed_dependency) else "failed"
         )
         reason = f"Upstream dependency '{failed_dependency}' {dep_status}"
-        self.deps.state_manager.update_status(action_name, "skipped")
+        self.deps.state_manager.update_status(action_name, ActionStatus.SKIPPED)
         self._write_skipped_disposition(action_name, reason)
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -527,7 +534,7 @@ class ActionExecutor:
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=True, status="skipped", metrics=ExecutionMetrics(duration=duration)
+            success=True, status=ActionStatus.SKIPPED, metrics=ExecutionMetrics(duration=duration)
         )
 
     def execute_action_sync(
@@ -567,7 +574,7 @@ class ActionExecutor:
                 return result
             current_status = self.deps.state_manager.get_status(action_name)
 
-        if current_status == "batch_submitted":
+        if current_status == ActionStatus.BATCH_SUBMITTED:
             return self._handle_batch_check(action_name, action_idx, action_config, start_time)
 
         # Circuit breaker: skip if any upstream dependency has failed.
@@ -629,7 +636,7 @@ class ActionExecutor:
                 return result
             current_status = self.deps.state_manager.get_status(action_name)
 
-        if current_status == "batch_submitted":
+        if current_status == ActionStatus.BATCH_SUBMITTED:
             return await self._handle_batch_check_async(
                 action_name, action_idx, action_config, start_time
             )
@@ -663,7 +670,7 @@ class ActionExecutor:
         start_time: datetime,
     ) -> ActionExecutionResult:
         """Handle batch job status checking (synchronous)."""
-        self.deps.state_manager.update_status(action_name, "checking_batch")
+        self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         workflow_name = self.deps.action_runner.workflow_name
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         output_directory = str(agent_io_path / "target" / action_name)
@@ -697,7 +704,7 @@ class ActionExecutor:
             )
 
         if batch_status == "in_progress":
-            self.deps.state_manager.update_status(action_name, "batch_submitted")
+            self.deps.state_manager.update_status(action_name, ActionStatus.BATCH_SUBMITTED)
             fire_event(
                 BatchSubmittedEvent(
                     batch_id=action_config.get("batch_id", ""),
@@ -707,10 +714,12 @@ class ActionExecutor:
                 )
             )
             return ActionExecutionResult(
-                success=True, status="batch_submitted", metrics=ExecutionMetrics(duration=duration)
+                success=True,
+                status=ActionStatus.BATCH_SUBMITTED,
+                metrics=ExecutionMetrics(duration=duration),
             )
 
-        self.deps.state_manager.update_status(action_name, "failed")
+        self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
         fire_event(
             BatchCompleteEvent(
@@ -724,7 +733,10 @@ class ActionExecutor:
         )
         error = Exception(f"Batch job for {action_name} failed")
         return ActionExecutionResult(
-            success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
+            success=False,
+            status=ActionStatus.FAILED,
+            error=error,
+            metrics=ExecutionMetrics(duration=duration),
         )
 
     async def _handle_batch_check_async(
@@ -735,7 +747,7 @@ class ActionExecutor:
         start_time: datetime,
     ) -> ActionExecutionResult:
         """Handle batch job status checking (asynchronous)."""
-        self.deps.state_manager.update_status(action_name, "checking_batch")
+        self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         workflow_name = self.deps.action_runner.workflow_name
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         output_directory = str(agent_io_path / "target" / action_name)
@@ -772,7 +784,7 @@ class ActionExecutor:
             )
 
         if batch_status == "in_progress":
-            self.deps.state_manager.update_status(action_name, "batch_submitted")
+            self.deps.state_manager.update_status(action_name, ActionStatus.BATCH_SUBMITTED)
             fire_event(
                 BatchSubmittedEvent(
                     batch_id=action_config.get("batch_id", ""),
@@ -782,10 +794,12 @@ class ActionExecutor:
                 )
             )
             return ActionExecutionResult(
-                success=True, status="batch_submitted", metrics=ExecutionMetrics(duration=duration)
+                success=True,
+                status=ActionStatus.BATCH_SUBMITTED,
+                metrics=ExecutionMetrics(duration=duration),
             )
 
-        self.deps.state_manager.update_status(action_name, "failed")
+        self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
         fire_event(
             BatchCompleteEvent(
@@ -799,12 +813,15 @@ class ActionExecutor:
         )
         error = Exception(f"Batch job for {action_name} failed")
         return ActionExecutionResult(
-            success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
+            success=False,
+            status=ActionStatus.FAILED,
+            error=error,
+            metrics=ExecutionMetrics(duration=duration),
         )
 
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
-        self.deps.state_manager.update_status(params.action_name, "running")
+        self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
         original_setup = self._setup_correlation(params.action_idx)
 
@@ -827,7 +844,7 @@ class ActionExecutor:
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
-        self.deps.state_manager.update_status(params.action_name, "running")
+        self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
         original_setup = self._setup_correlation(params.action_idx)
 

@@ -16,7 +16,7 @@ from agent_actions.workflow.executor import (
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
 from agent_actions.workflow.managers.output import ActionOutputManager
 from agent_actions.workflow.managers.skip import SkipEvaluator
-from agent_actions.workflow.managers.state import ActionStateManager
+from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def mock_deps():
     # Default: no item-level failures (so actions complete as "completed", not "completed_with_failures")
     deps.action_runner.storage_backend.get_failed_items.return_value = []
     # Default status details for limit-change detection (no limits stored)
-    deps.state_manager.get_status_details.return_value = {"status": "completed"}
+    deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     return deps
 
 
@@ -52,7 +52,7 @@ class TestExecuteAgentSync:
 
     def test_completed_with_output_skips(self, executor, mock_deps):
         """Already-completed agent with output files should be skipped."""
-        mock_deps.state_manager.get_status.return_value = "completed"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         storage = MagicMock()
         storage.list_target_files.return_value = ["file1.json"]
         storage.has_disposition.return_value = False
@@ -63,7 +63,7 @@ class TestExecuteAgentSync:
         )
 
         assert result.success is True
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
         mock_deps.action_runner.run_action.assert_not_called()
 
     def test_completed_no_output_reruns(self, executor, mock_deps):
@@ -74,7 +74,7 @@ class TestExecuteAgentSync:
         skip evaluation → _execute_action_run. get_status is only called once at the
         top of execute_action_sync.
         """
-        mock_deps.state_manager.get_status.return_value = "completed"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         storage = MagicMock()
         storage.list_target_files.return_value = []
         storage.has_disposition.return_value = False
@@ -91,7 +91,7 @@ class TestExecuteAgentSync:
             )
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", "pending")
+        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.PENDING)
 
     def test_storage_error_during_verify_reruns_agent(self, executor, mock_deps):
         """Storage error during verification should reset to pending and re-run the agent.
@@ -100,7 +100,7 @@ class TestExecuteAgentSync:
         → resets to "pending" and returns (False, None) → execution falls through to
         skip evaluation → _execute_action_run.
         """
-        mock_deps.state_manager.get_status.return_value = "completed"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         storage = MagicMock()
         storage.list_target_files.side_effect = OSError("SQLite lock")
         storage.has_disposition.return_value = False
@@ -117,13 +117,13 @@ class TestExecuteAgentSync:
             )
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", "pending")
+        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.PENDING)
         mock_deps.skip_evaluator.should_skip_action.assert_called_once()
         mock_deps.action_runner.run_action.assert_called_once()
 
     def test_batch_submitted_dispatches(self, executor, mock_deps):
         """Batch_submitted status should dispatch to batch check handler."""
-        mock_deps.state_manager.get_status.return_value = "batch_submitted"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
 
         with patch("agent_actions.workflow.executor.fire_event"):
@@ -131,12 +131,12 @@ class TestExecuteAgentSync:
                 "agent_a", action_idx=0, action_config={}, is_last_action=False
             )
 
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
         mock_deps.batch_manager.handle_batch_agent.assert_called_once()
 
     def test_batch_in_progress_returns_batch_submitted(self, executor, mock_deps):
         """Batch in_progress should return batch_submitted and fire BatchSubmittedEvent."""
-        mock_deps.state_manager.get_status.return_value = "batch_submitted"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = (None, "in_progress")
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
@@ -148,14 +148,16 @@ class TestExecuteAgentSync:
             )
 
         assert result.success is True
-        assert result.status == "batch_submitted"
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", "batch_submitted")
+        assert result.status == ActionStatus.BATCH_SUBMITTED
+        mock_deps.state_manager.update_status.assert_any_call(
+            "agent_a", ActionStatus.BATCH_SUBMITTED
+        )
         event = mock_fire.call_args[0][0]
         assert isinstance(event, BatchSubmittedEvent)
 
     def test_batch_failed_returns_failed(self, executor, mock_deps):
         """Batch failure should mark failed and fire BatchCompleteEvent with failed=1."""
-        mock_deps.state_manager.get_status.return_value = "batch_submitted"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = (None, "failed")
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
@@ -167,8 +169,8 @@ class TestExecuteAgentSync:
             )
 
         assert result.success is False
-        assert result.status == "failed"
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", "failed")
+        assert result.status == ActionStatus.FAILED
+        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.FAILED)
         event = mock_fire.call_args[0][0]
         assert isinstance(event, BatchCompleteEvent)
         assert event.failed == 1
@@ -176,7 +178,7 @@ class TestExecuteAgentSync:
 
     def test_skip_evaluator_creates_passthrough(self, executor, mock_deps):
         """When skip evaluator says skip, should create passthrough output."""
-        mock_deps.state_manager.get_status.return_value = "pending"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.PENDING
         mock_deps.skip_evaluator.should_skip_action.return_value = True
 
         with patch("agent_actions.workflow.executor.fire_event"):
@@ -184,12 +186,12 @@ class TestExecuteAgentSync:
                 "agent_a", action_idx=0, action_config={"agent_type": "a"}, is_last_action=False
             )
 
-        assert result.status == "skipped"
+        assert result.status == ActionStatus.SKIPPED
         mock_deps.output_manager.create_passthrough_output.assert_called_once()
 
     def test_normal_path_runs_agent(self, executor, mock_deps):
         """Normal pending agent should go through _execute_action_run."""
-        mock_deps.state_manager.get_status.return_value = "pending"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.PENDING
         mock_deps.skip_evaluator.should_skip_action.return_value = False
         mock_deps.action_runner.run_action.return_value = "/output"
         mock_deps.output_manager.setup_correlation_wrapper.return_value = None
@@ -201,12 +203,12 @@ class TestExecuteAgentSync:
             )
 
         assert result.success is True
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
         mock_deps.action_runner.run_action.assert_called_once()
 
     def test_run_failure_marks_failed(self, executor, mock_deps):
         """Exception during agent run should mark failed and return error."""
-        mock_deps.state_manager.get_status.return_value = "pending"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.PENDING
         mock_deps.skip_evaluator.should_skip_action.return_value = False
         mock_deps.action_runner.run_action.side_effect = RuntimeError("agent crashed")
         mock_deps.output_manager.setup_correlation_wrapper.return_value = None
@@ -216,13 +218,13 @@ class TestExecuteAgentSync:
         )
 
         assert result.success is False
-        assert result.status == "failed"
+        assert result.status == ActionStatus.FAILED
         assert isinstance(result.error, RuntimeError)
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", "failed")
+        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.FAILED)
 
     def test_no_storage_backend_skips_verification(self, executor, mock_deps):
         """Completed agent with no storage_backend should skip (no files to verify)."""
-        mock_deps.state_manager.get_status.return_value = "completed"
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         mock_deps.action_runner.storage_backend = None
 
         result = executor.execute_action_sync(
@@ -230,7 +232,7 @@ class TestExecuteAgentSync:
         )
 
         assert result.success is True
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
 
 
 # ── _handle_run_success ────────────────────────────────────────────────
@@ -256,18 +258,20 @@ class TestHandleRunSuccess:
         with patch("agent_actions.workflow.executor.fire_event"):
             result = executor._handle_run_success(params, "/out", 1.0, "batch_submitted")
 
-        assert result.status == "batch_submitted"
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", "batch_submitted")
+        assert result.status == ActionStatus.BATCH_SUBMITTED
+        mock_deps.state_manager.update_status.assert_called_with(
+            "agent_a", ActionStatus.BATCH_SUBMITTED
+        )
 
     def test_passthrough_status(self, executor, mock_deps):
         """passthrough batch_status should mark completed."""
         params = self._make_params()
         result = executor._handle_run_success(params, "/out", 1.0, "passthrough")
 
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
         assert result.output_folder == "/out"
         mock_deps.state_manager.update_status.assert_called_with(
-            "agent_a", "completed", record_limit=None, file_limit=None
+            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None
         )
 
     def test_normal_completion_with_tokens(self, executor, mock_deps):
@@ -279,7 +283,7 @@ class TestHandleRunSuccess:
         ):
             result = executor._handle_run_success(params, "/out", 2.5, None)
 
-        assert result.status == "completed"
+        assert result.status == ActionStatus.COMPLETED
         assert result.metrics.tokens == {"total_tokens": 100}
         assert result.metrics.model_vendor == "openai"
         assert result.metrics.model_name == "gpt-4"
@@ -314,9 +318,9 @@ class TestHandleRunFailure:
         result = executor._handle_run_failure(params, error)
 
         assert result.success is False
-        assert result.status == "failed"
+        assert result.status == ActionStatus.FAILED
         assert result.error is error
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", "failed")
+        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.FAILED)
 
     def test_records_in_run_tracker_when_available(self, executor, mock_deps):
         """When run_tracker + run_id are set, should record action complete."""
@@ -360,7 +364,7 @@ class TestExecuteAgentRun:
             result = executor._execute_action_run(params)
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", "running")
+        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.RUNNING)
 
     def test_failure_calls_handle_run_failure(self, executor, mock_deps):
         """Exception should result in _handle_run_failure path."""
@@ -377,7 +381,7 @@ class TestExecuteAgentRun:
         result = executor._execute_action_run(params)
 
         assert result.success is False
-        assert result.status == "failed"
+        assert result.status == ActionStatus.FAILED
 
     def test_correlation_setup_and_cleanup(self, executor, mock_deps):
         """Correlation wrapper should be set up and cleaned up."""
@@ -431,7 +435,7 @@ class TestVerifyCompletionStatus:
 
         assert should_skip is False
         assert result is None
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", "pending")
+        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.PENDING)
 
     @pytest.mark.parametrize(
         "exc",
@@ -453,7 +457,7 @@ class TestVerifyCompletionStatus:
 
         assert should_skip is False
         assert result is None
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", "pending")
+        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.PENDING)
 
     def test_no_backend_returns_skip(self, executor, mock_deps):
         """No storage backend should skip (trust the status)."""
@@ -477,10 +481,10 @@ class TestHandleAgentSkip:
             result = executor._handle_action_skip("agent_a", 0, {}, datetime.now())
 
         assert result.success is True
-        assert result.status == "skipped"
+        assert result.status == ActionStatus.SKIPPED
         mock_deps.output_manager.create_passthrough_output.assert_called_once_with(0, "agent_a")
         mock_deps.state_manager.update_status.assert_called_with(
-            "agent_a", "completed", record_limit=None, file_limit=None
+            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None
         )
         mock_fire.assert_called_once()
 

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent_actions.workflow.managers.state import ActionStateManager
+from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
 
 class TestStateManagerInitialization:
@@ -15,8 +15,8 @@ class TestStateManagerInitialization:
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["agent_a", "agent_b"])
 
-        assert mgr.get_status("agent_a") == "pending"
-        assert mgr.get_status("agent_b") == "pending"
+        assert mgr.get_status("agent_a") == ActionStatus.PENDING
+        assert mgr.get_status("agent_b") == ActionStatus.PENDING
 
     def test_loads_existing_status_file(self, tmp_path):
         """Should load previously persisted status."""
@@ -24,7 +24,7 @@ class TestStateManagerInitialization:
         status_file.write_text(json.dumps({"agent_a": {"status": "completed"}}))
 
         mgr = ActionStateManager(status_file, ["agent_a"])
-        assert mgr.get_status("agent_a") == "completed"
+        assert mgr.get_status("agent_a") == ActionStatus.COMPLETED
 
     def test_corrupted_file_falls_back_to_defaults(self, tmp_path):
         """Should fall back to pending when status file is invalid JSON."""
@@ -32,7 +32,7 @@ class TestStateManagerInitialization:
         status_file.write_text("NOT VALID JSON {{{")
 
         mgr = ActionStateManager(status_file, ["agent_a"])
-        assert mgr.get_status("agent_a") == "pending"
+        assert mgr.get_status("agent_a") == ActionStatus.PENDING
 
 
 class TestUpdateStatus:
@@ -43,7 +43,7 @@ class TestUpdateStatus:
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["agent_a"])
 
-        mgr.update_status("agent_a", "completed")
+        mgr.update_status("agent_a", ActionStatus.COMPLETED)
 
         saved = json.loads(status_file.read_text())
         assert saved["agent_a"]["status"] == "completed"
@@ -53,7 +53,7 @@ class TestUpdateStatus:
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["agent_a"])
 
-        mgr.update_status("agent_a", "failed", error="something broke")
+        mgr.update_status("agent_a", ActionStatus.FAILED, error="something broke")
 
         saved = json.loads(status_file.read_text())
         assert saved["agent_a"]["error"] == "something broke"
@@ -63,10 +63,10 @@ class TestUpdateStatus:
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["agent_a"])
 
-        mgr.update_status("agent_a", "running")
-        mgr.update_status("agent_a", "completed")
+        mgr.update_status("agent_a", ActionStatus.RUNNING)
+        mgr.update_status("agent_a", ActionStatus.COMPLETED)
 
-        assert mgr.get_status("agent_a") == "completed"
+        assert mgr.get_status("agent_a") == ActionStatus.COMPLETED
 
 
 class TestStatusQueries:
@@ -76,20 +76,20 @@ class TestStatusQueries:
     def mgr(self, tmp_path):
         status_file = tmp_path / "status.json"
         m = ActionStateManager(status_file, ["a", "b", "c"])
-        m.update_status("a", "completed")
-        m.update_status("b", "batch_submitted")
-        m.update_status("c", "failed")
+        m.update_status("a", ActionStatus.COMPLETED)
+        m.update_status("b", ActionStatus.BATCH_SUBMITTED)
+        m.update_status("c", ActionStatus.FAILED)
         return m
 
     def test_get_status_returns_current(self, mgr):
-        assert mgr.get_status("a") == "completed"
+        assert mgr.get_status("a") == ActionStatus.COMPLETED
 
     def test_get_status_unknown_agent_defaults_pending(self, mgr):
-        assert mgr.get_status("nonexistent") == "pending"
+        assert mgr.get_status("nonexistent") == ActionStatus.PENDING
 
     def test_get_status_details_returns_full_dict(self, mgr):
         details = mgr.get_status_details("a")
-        assert details["status"] == "completed"
+        assert details["status"] == ActionStatus.COMPLETED
 
     def test_is_completed(self, mgr):
         assert mgr.is_completed("a") is True
@@ -103,6 +103,20 @@ class TestStatusQueries:
         assert mgr.is_failed("c") is True
         assert mgr.is_failed("a") is False
 
+    def test_is_terminal(self, mgr):
+        assert mgr.is_terminal("a") is True  # completed
+        assert mgr.is_terminal("c") is True  # failed
+        assert mgr.is_terminal("b") is False  # batch_submitted
+
+    def test_is_in_progress(self, mgr):
+        assert mgr.is_in_progress("b") is True  # batch_submitted
+        assert mgr.is_in_progress("a") is False  # completed (terminal)
+
+    def test_is_in_progress_pending_is_false(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["x"])
+        assert mgr.is_in_progress("x") is False  # pending, not started
+
 
 class TestAgentListQueries:
     """Tests for list-based agent queries."""
@@ -111,8 +125,8 @@ class TestAgentListQueries:
     def mgr(self, tmp_path):
         status_file = tmp_path / "status.json"
         m = ActionStateManager(status_file, ["a", "b", "c"])
-        m.update_status("a", "completed")
-        m.update_status("b", "batch_submitted")
+        m.update_status("a", ActionStatus.COMPLETED)
+        m.update_status("b", ActionStatus.BATCH_SUBMITTED)
         # c stays pending
         return m
 
@@ -125,7 +139,7 @@ class TestAgentListQueries:
         assert batch == ["b"]
 
     def test_get_failed_actions(self, mgr):
-        mgr.update_status("c", "failed")
+        mgr.update_status("c", ActionStatus.FAILED)
         failed = mgr.get_failed_actions(["a", "b", "c"])
         assert failed == ["c"]
 
@@ -136,83 +150,83 @@ class TestWorkflowLevel:
     def test_mark_running_as_failed_marks_running(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a", "b"])
-        mgr.update_status("a", "running")
+        mgr.update_status("a", ActionStatus.RUNNING)
 
         result = mgr.mark_running_as_failed()
 
         assert result == ["a"]
-        assert mgr.get_status("a") == "failed"
+        assert mgr.get_status("a") == ActionStatus.FAILED
 
     def test_mark_running_as_failed_marks_checking_batch(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
-        mgr.update_status("a", "checking_batch")
+        mgr.update_status("a", ActionStatus.CHECKING_BATCH)
 
         result = mgr.mark_running_as_failed()
 
         assert result == ["a"]
-        assert mgr.get_status("a") == "failed"
+        assert mgr.get_status("a") == ActionStatus.FAILED
 
     def test_mark_running_as_failed_marks_all(self, tmp_path):
         """All running/checking_batch agents should be marked failed."""
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "running")
-        mgr.update_status("b", "running")
-        mgr.update_status("c", "checking_batch")
+        mgr.update_status("a", ActionStatus.RUNNING)
+        mgr.update_status("b", ActionStatus.RUNNING)
+        mgr.update_status("c", ActionStatus.CHECKING_BATCH)
 
         result = mgr.mark_running_as_failed()
 
         assert set(result) == {"a", "b", "c"}
-        assert mgr.get_status("a") == "failed"
-        assert mgr.get_status("b") == "failed"
-        assert mgr.get_status("c") == "failed"
+        assert mgr.get_status("a") == ActionStatus.FAILED
+        assert mgr.get_status("b") == ActionStatus.FAILED
+        assert mgr.get_status("c") == ActionStatus.FAILED
 
     def test_mark_running_as_failed_returns_empty_if_none_running(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
-        mgr.update_status("a", "completed")
+        mgr.update_status("a", ActionStatus.COMPLETED)
 
         assert mgr.mark_running_as_failed() == []
 
     def test_is_workflow_complete_true(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "completed")
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.COMPLETED)
 
         assert mgr.is_workflow_complete() is True
 
     def test_is_workflow_complete_false(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a", "b"])
-        mgr.update_status("a", "completed")
+        mgr.update_status("a", ActionStatus.COMPLETED)
 
         assert mgr.is_workflow_complete() is False
 
     def test_has_any_failed(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a", "b"])
-        mgr.update_status("a", "failed")
+        mgr.update_status("a", ActionStatus.FAILED)
 
         assert mgr.has_any_failed() is True
 
     def test_has_any_failed_none(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
-        mgr.update_status("a", "completed")
+        mgr.update_status("a", ActionStatus.COMPLETED)
 
         assert mgr.has_any_failed() is False
 
     def test_get_summary(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "completed")
-        mgr.update_status("c", "failed")
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.COMPLETED)
+        mgr.update_status("c", ActionStatus.FAILED)
 
         summary = mgr.get_summary()
-        assert summary == {"completed": 2, "failed": 1}
+        assert summary == {ActionStatus.COMPLETED: 2, ActionStatus.FAILED: 1}
 
     def test_is_workflow_complete_empty_agents(self, tmp_path):
         """Empty agent list: all() on empty iterable returns True — document this behavior."""
@@ -226,9 +240,9 @@ class TestWorkflowLevel:
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
 
-        mgr.update_status("unknown_agent", "running")
+        mgr.update_status("unknown_agent", ActionStatus.RUNNING)
 
-        assert mgr.get_status("unknown_agent") == "running"
+        assert mgr.get_status("unknown_agent") == ActionStatus.RUNNING
         saved = json.loads(status_file.read_text())
         assert "unknown_agent" in saved
 
@@ -236,11 +250,11 @@ class TestWorkflowLevel:
         """Status persisted by one manager should be loadable by another."""
         status_file = tmp_path / "status.json"
         mgr1 = ActionStateManager(status_file, ["a", "b"])
-        mgr1.update_status("a", "completed")
-        mgr1.update_status("b", "failed", error="timeout")
+        mgr1.update_status("a", ActionStatus.COMPLETED)
+        mgr1.update_status("b", ActionStatus.FAILED, error="timeout")
 
         mgr2 = ActionStateManager(status_file, ["a", "b"])
 
-        assert mgr2.get_status("a") == "completed"
-        assert mgr2.get_status("b") == "failed"
+        assert mgr2.get_status("a") == ActionStatus.COMPLETED
+        assert mgr2.get_status("b") == ActionStatus.FAILED
         assert mgr2.get_status_details("b")["error"] == "timeout"

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.workflow.managers.state import COMPLETED_STATUSES
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class ManifestManager:
                 self._manifest["actions"][action_name] = {
                     "index": idx,
                     "level": action_level,
-                    "status": "pending",
+                    "status": ActionStatus.PENDING,
                     "started_at": None,
                     "completed_at": None,
                     "output_dir": action_name,  # Simple name, no index prefix
@@ -227,7 +227,7 @@ class ManifestManager:
     def is_action_skipped(self, action_name: str) -> bool:
         """Return True if action status is 'skipped'."""
         action = self.manifest.get("actions", {}).get(action_name)
-        return action is not None and action.get("status") == "skipped"
+        return action is not None and action.get("status") == ActionStatus.SKIPPED
 
     def mark_action_started(self, action_name: str) -> None:
         """Mark an action as started.
@@ -244,7 +244,7 @@ class ManifestManager:
                     "ManifestManager._manifest is None; "
                     "initialize_manifest() or load_manifest() must be called first"
                 )
-            self._manifest["actions"][action_name]["status"] = "running"
+            self._manifest["actions"][action_name]["status"] = ActionStatus.RUNNING
             self._manifest["actions"][action_name]["started_at"] = datetime.now().isoformat()
             self._save_manifest()
 
@@ -252,7 +252,7 @@ class ManifestManager:
         self,
         action_name: str,
         record_count: int | None = None,
-        status: str = "completed",
+        status: ActionStatus = ActionStatus.COMPLETED,
     ) -> None:
         """Mark an action as completed (or completed_with_failures).
 
@@ -289,7 +289,7 @@ class ManifestManager:
                     "ManifestManager._manifest is None; "
                     "initialize_manifest() or load_manifest() must be called first"
                 )
-            self._manifest["actions"][action_name]["status"] = "skipped"
+            self._manifest["actions"][action_name]["status"] = ActionStatus.SKIPPED
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             if reason:
                 self._manifest["actions"][action_name]["skip_reason"] = reason
@@ -310,7 +310,7 @@ class ManifestManager:
                     "ManifestManager._manifest is None; "
                     "initialize_manifest() or load_manifest() must be called first"
                 )
-            self._manifest["actions"][action_name]["status"] = "failed"
+            self._manifest["actions"][action_name]["status"] = ActionStatus.FAILED
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             self._manifest["actions"][action_name]["error"] = error
             self._save_manifest()
