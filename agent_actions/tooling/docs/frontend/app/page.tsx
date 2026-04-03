@@ -64,7 +64,7 @@ function Dashboard() {
 
   return (
     <SidebarProvider>
-      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} onSearchClick={() => setSearchOpen(true)} />
+      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} onSearchClick={() => setSearchOpen(true)} projectName={projectName} />
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} onNavigate={handleNavigate} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/80 backdrop-blur-md px-4 sticky top-0 z-10">
