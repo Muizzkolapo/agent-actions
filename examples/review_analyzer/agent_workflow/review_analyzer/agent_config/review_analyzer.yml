@@ -29,6 +29,7 @@ version: "1.0.0"
 defaults:
   json_mode: true
   granularity: Record
+  is_operational: true
   run_mode: online
   model_vendor: openai
   model_name: gpt-4o-mini
