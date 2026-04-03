@@ -466,9 +466,8 @@ class ConfigManager:
         try:
             from agent_actions.config.path_config import get_project_name
 
-            path_manager = PathManager(project_root=self.project_root)
-            project_name = get_project_name(path_manager.get_project_root())
-        except (OSError, ConfigValidationError, ProjectRootNotFoundError) as exc:
+            project_name = get_project_name(self.project_root)
+        except (OSError, ConfigValidationError) as exc:
             logger.debug("Could not retrieve project_name for summary: %s", exc)
 
         return {

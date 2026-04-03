@@ -65,6 +65,13 @@ class TestGetProjectName:
         assert result == "123"
         assert isinstance(result, str)
 
+    def test_returns_none_for_empty_string(self, tmp_path):
+        config_file = tmp_path / "agent_actions.yml"
+        config_file.write_text(yaml.safe_dump({"project_name": ""}))
+
+        result = get_project_name(tmp_path)
+        assert result is None
+
     def test_returns_none_on_config_load_error(self, tmp_path):
         with patch(
             "agent_actions.config.path_config.load_project_config",

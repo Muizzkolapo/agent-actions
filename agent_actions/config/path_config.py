@@ -130,12 +130,13 @@ def get_project_name(project_root: Path) -> str | None:
         return None
 
     name = config.get("project_name")
-    if name is None:
+    if not name:
         logger.debug(
             "No 'project_name' in agent_actions.yml — "
             "add 'project_name: <name>' or re-run 'agac init'."
         )
-    return str(name) if name is not None else None
+        return None
+    return str(name)
 
 
 def get_tool_dirs(project_root: Path) -> list[str]:

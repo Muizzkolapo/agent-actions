@@ -411,11 +411,14 @@ def init_example(
     # Inject project_name into the example's agent_actions.yml
     config_file = dest / "agent_actions.yml"
     if config_file.exists():
-        with open(config_file, encoding="utf-8") as f:
-            config = yaml.safe_load(f) or {}
-        config[PROJECT_NAME_KEY] = dest_name
-        with open(config_file, "w", encoding="utf-8") as f:
-            yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+        try:
+            with open(config_file, encoding="utf-8") as f:
+                config = yaml.safe_load(f) or {}
+            config[PROJECT_NAME_KEY] = dest_name
+            with open(config_file, "w", encoding="utf-8") as f:
+                yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+        except (yaml.YAMLError, OSError) as exc:
+            logger.warning("Could not inject project_name into %s: %s", config_file, exc)
 
     click.echo(f"Created project from example '{name}': {dest}")
     click.echo("\nNext steps:")
