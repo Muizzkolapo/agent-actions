@@ -139,8 +139,12 @@ class AgentWorkflow:
             action_configs=self.action_configs,
             workflow_config_path=self.config.paths.constructor_path,
             project_root=self.config.project_root,
+            verify_keys=self.config.verify_keys,
         ).resolve_all()
         resolution_result.raise_if_invalid()
+
+        for warning in resolution_result.warnings:
+            logger.warning("Pre-flight: %s", warning.message)
 
     def _validate_guard_conditions(self) -> list[str]:
         return validate_guard_conditions(self.action_configs)
@@ -228,6 +232,7 @@ class AgentWorkflow:
                 use_tools=use_tools,
                 run_upstream=run_upstream,
                 run_downstream=run_downstream,
+                verify_keys=self.config.verify_keys,
                 project_root=self.config.project_root,
             )
         )
