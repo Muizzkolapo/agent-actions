@@ -259,6 +259,7 @@ class ActionExecutor:
                 action_index=action_idx,
                 total_actions=total_actions,
                 skip_reason="WHERE clause condition not met",
+                mode=action_config.get("run_mode", ""),
             )
         )
 
@@ -353,6 +354,7 @@ class ActionExecutor:
                     action_index=params.action_idx,
                     total_actions=total_actions,
                     skip_reason="All records guard-skipped",
+                    mode=params.action_config.get("run_mode", ""),
                 )
             )
             if self.run_tracker is not None and self.run_id is not None:
@@ -559,6 +561,7 @@ class ActionExecutor:
                 action_index=action_idx,
                 total_actions=total_actions,
                 skip_reason=reason,
+                mode=action_config.get("run_mode", ""),
             )
         )
 
