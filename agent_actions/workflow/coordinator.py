@@ -445,7 +445,7 @@ class AgentWorkflow:
 
         self.event_logger.fire_action_start(idx, action_name, total_actions, action_config)
 
-        run_mode = str(action_config.get("run_mode", ""))
+        run_mode = action_config.get("run_mode", "")
 
         if self.services.core.state_manager.is_completed(action_name):
             if self.services.core.action_executor.verify_completion_status(action_name):

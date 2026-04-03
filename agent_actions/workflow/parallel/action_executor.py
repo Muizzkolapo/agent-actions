@@ -181,7 +181,7 @@ class ActionLevelOrchestrator:
             is_last_action=is_last,
         )
 
-        run_mode = str(action_config.get("run_mode", ""))
+        run_mode = action_config.get("run_mode", "")
         self._fire_action_result_event(action_name, original_idx, total_actions, result, run_mode)
 
         if not result.success:
@@ -217,12 +217,12 @@ class ActionLevelOrchestrator:
                             error_message=str(exc),
                             error_detail=get_error_detail(exc),
                             error_type=type(exc).__name__,
-                            mode=str(action_config.get("run_mode", "")),
+                            mode=action_config.get("run_mode", ""),
                         )
                     )
                     raise
 
-                run_mode = str(action_config.get("run_mode", ""))
+                run_mode = action_config.get("run_mode", "")
                 self._fire_action_result_event(
                     action, original_idx, total_actions, result, run_mode
                 )
