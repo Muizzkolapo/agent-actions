@@ -87,9 +87,7 @@ def process_file_mode_tool(
                 f"got {type(raw_response).__name__}"
             )
 
-        # Tool returned empty result despite having input — return FAILED
-        # so ResultCollector counts stats.failed and the existing
-        # zero-output check in the pipeline raises naturally.
+        # Empty tool output with non-empty input → FAILED (see _MANIFEST.md)
         if not raw_response and data:
             return [
                 ProcessingResult.failed(
