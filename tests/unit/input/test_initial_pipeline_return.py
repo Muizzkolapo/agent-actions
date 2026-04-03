@@ -2,6 +2,9 @@
 
 Both _process_batch_mode() and _process_online_mode_with_record_processor()
 must return a string path to the output file.
+
+Also covers failure-path behaviour (#82): zero-output detection, guard-skip
+disposition, and tool-action empty-output check.
 """
 
 import json
@@ -16,6 +19,7 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import (
     _process_online_mode_with_record_processor,
 )
 from agent_actions.llm.batch.core.batch_models import SubmissionResult
+from agent_actions.processing.result_collector import CollectionStats
 
 
 @pytest.fixture
@@ -106,8 +110,6 @@ class TestOnlineModeReturnsPath:
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
             MockProc.return_value.process_batch.return_value = [{"result": "ok"}]
-            from agent_actions.processing.result_collector import CollectionStats
-
             MockCollector.collect_results.return_value = (
                 [{"result": "ok"}],
                 CollectionStats(success=1),
@@ -163,34 +165,153 @@ class TestInitialPipelineZeroSuccessFailure:
             )
 
     def test_all_failed_raises(self, tmp_dirs):
-        """All records FAILED → RuntimeError."""
-        from agent_actions.processing.result_collector import CollectionStats
-
+        """All records FAILED -> RuntimeError."""
         stats = CollectionStats(failed=3)
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
             self._run_online(tmp_dirs, stats, output=[])
 
     def test_all_exhausted_raises(self, tmp_dirs):
-        """All records EXHAUSTED (tombstones in output) → RuntimeError."""
-        from agent_actions.processing.result_collector import CollectionStats
-
+        """All records EXHAUSTED (tombstones in output) -> RuntimeError."""
         stats = CollectionStats(exhausted=3)
         tombstones = [{"_unprocessed": True}] * 3
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
             self._run_online(tmp_dirs, stats, output=tombstones)
 
     def test_mixed_failed_exhausted_raises(self, tmp_dirs):
-        """Mixed FAILED + EXHAUSTED → RuntimeError with both counts."""
-        from agent_actions.processing.result_collector import CollectionStats
-
+        """Mixed FAILED + EXHAUSTED -> RuntimeError with both counts."""
         stats = CollectionStats(failed=2, exhausted=1)
         with pytest.raises(RuntimeError, match=r"2 failed, 1 exhausted"):
             self._run_online(tmp_dirs, stats, output=[{"_unprocessed": True}])
 
     def test_partial_success_no_raise(self, tmp_dirs):
-        """Some succeed + some fail → no raise."""
-        from agent_actions.processing.result_collector import CollectionStats
-
+        """Some succeed + some fail -> no raise."""
         stats = CollectionStats(success=1, failed=2)
         result = self._run_online(tmp_dirs, stats, output=[{"result": "ok"}])
         assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# Guard-skip, empty-input, and tool-action tests (#82)
+# ---------------------------------------------------------------------------
+
+_PATCH_PREFIX = "agent_actions.input.preprocessing.staging.initial_pipeline"
+
+
+@pytest.fixture
+def online_ctx(tmp_dirs):
+    """Reusable online-mode context with mocked storage backend."""
+    base, output, input_file = tmp_dirs
+    storage = MagicMock()
+    ctx = InitialStageContext(
+        agent_config={},
+        agent_name="test_agent",
+        file_path=str(input_file),
+        base_directory=str(base),
+        output_directory=str(output),
+        storage_backend=storage,
+    )
+    return ctx, base, output, input_file
+
+
+def _call_online(data_chunk, ctx, input_file, base, output):
+    """Helper to invoke _process_online_mode_with_record_processor."""
+    return _process_online_mode_with_record_processor(
+        data_chunk, ctx, str(input_file), str(base), str(output)
+    )
+
+
+class TestInitialPipelineGuardSkipAndToolAction:
+    """Tests for guard-skip disposition, empty input, and tool-action check."""
+
+    def test_guard_skip_writes_disposition_and_does_not_raise(self, online_ctx):
+        """All records guard-skipped -> disposition written, no raise."""
+        ctx, base, output, input_file = online_ctx
+        data_chunk = [{"id": "1"}]
+
+        with (
+            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.FileWriter"),
+        ):
+            MockProc.return_value.process_batch.return_value = []
+            MockCollector.collect_results.return_value = (
+                [],
+                CollectionStats(),  # all zeros
+            )
+
+            result = _call_online(data_chunk, ctx, input_file, base, output)
+
+        assert isinstance(result, str)
+        ctx.storage_backend.set_disposition.assert_called_once_with(
+            "test_agent",
+            "__node__",
+            "skipped",
+            reason="All records guard-skipped or filtered",
+        )
+
+    def test_empty_input_does_not_raise(self, online_ctx):
+        """Empty input -> no failure check fires."""
+        ctx, base, output, input_file = online_ctx
+        data_chunk = []
+
+        with (
+            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.FileWriter"),
+        ):
+            MockProc.return_value.process_batch.return_value = []
+            MockCollector.collect_results.return_value = (
+                [],
+                CollectionStats(),
+            )
+
+            result = _call_online(data_chunk, ctx, input_file, base, output)
+            assert isinstance(result, str)
+
+    @pytest.mark.parametrize(
+        "config",
+        [
+            {"model_vendor": "tool"},
+            {"kind": "tool"},
+        ],
+        ids=["model_vendor=tool", "kind=tool"],
+    )
+    def test_tool_action_empty_output_raises(self, online_ctx, config):
+        """Tool action with success but empty output must raise."""
+        ctx, base, output, input_file = online_ctx
+        ctx.agent_config = config
+        data_chunk = [{"id": "1"}]
+
+        with (
+            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.FileWriter"),
+        ):
+            MockProc.return_value.process_batch.return_value = []
+            MockCollector.collect_results.return_value = (
+                [],
+                CollectionStats(success=1),
+            )
+
+            with pytest.raises(RuntimeError, match="tool returned empty result"):
+                _call_online(data_chunk, ctx, input_file, base, output)
+
+    def test_non_tool_action_empty_success_no_raise(self, online_ctx):
+        """Non-tool action with success but empty output should NOT raise."""
+        ctx, base, output, input_file = online_ctx
+        ctx.agent_config = {"model_vendor": "openai"}
+        data_chunk = [{"id": "1"}]
+
+        with (
+            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.FileWriter"),
+        ):
+            MockProc.return_value.process_batch.return_value = []
+            MockCollector.collect_results.return_value = (
+                [],
+                CollectionStats(success=1),
+            )
+
+            result = _call_online(data_chunk, ctx, input_file, base, output)
+            assert isinstance(result, str)

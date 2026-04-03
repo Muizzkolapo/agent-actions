@@ -22,7 +22,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
 )
-from agent_actions.utils.constants import CHUNK_CONFIG_KEY
+from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -738,6 +738,17 @@ def _process_online_mode_with_record_processor(
             f"all {len(data_chunk)} input item(s) failed or exhausted "
             f"({stats.failed} failed, {stats.exhausted} exhausted)"
         )
+
+    # Tool actions that return empty output should be treated as failures
+    # rather than silently succeeding (mirrors pipeline.py check).
+    if data_chunk and not processed_items and stats.success > 0:
+        kind = str(ctx.agent_config.get("kind") or "").lower()
+        vendor = str(ctx.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+        if kind == "tool" or vendor == "tool":
+            raise RuntimeError(
+                f"Tool action '{ctx.agent_name}' produced 0 output records "
+                f"from {len(data_chunk)} input item(s) — tool returned empty result"
+            )
 
     if ctx.storage_backend is None:
         raise AgentActionsError(
