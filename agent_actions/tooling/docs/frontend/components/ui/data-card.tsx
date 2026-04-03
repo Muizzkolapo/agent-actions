@@ -81,7 +81,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
   if (getValueType(value) === "object") {
     return <CodeBlock value={value} />
   }
-  if (isLongFormField(fieldKey) && typeof value === "string" && value.length > 80) {
+  if (typeof value === "string" && (isLongFormField(fieldKey) ? value.length > 80 : value.length > 120)) {
     return <ProseBlock text={value} />
   }
   return <CellValue value={value} />

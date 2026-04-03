@@ -254,7 +254,8 @@ export class QueryResultsPanel implements vscode.Disposable {
                     + '<button class="expand-btn">Show more</button>';
             }
             if (str.length > 120) {
-                return '<span class="val-string" title="' + esc(str) + '">' + esc(str.slice(0, 120)) + '\\u2026</span>';
+                return '<p class="prose clamped">' + esc(str) + '</p>'
+                    + '<button class="expand-btn">Show more</button>';
             }
             return '<span class="val-string">' + esc(str) + '</span>';
         }
