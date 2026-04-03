@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agent_actions.tooling.docs.scanner.data_scanners import extract_action_metrics, scan_logs
+from agent_actions.tooling.docs.scanner.data_scanners import (
+    extract_action_metrics,
+    extract_runtime_warnings,
+    scan_logs,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -117,3 +121,114 @@ class TestExtractActionMetricsLineCap:
         extract_action_metrics(events_path)
         captured = capfd.readouterr()
         assert "line limit" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# extract_runtime_warnings
+# ---------------------------------------------------------------------------
+
+
+def _warn_event(action_name: str, message: str, level: str = "warn") -> dict:
+    return {
+        "event_type": "LogEvent",
+        "code": "X000",
+        "level": level,
+        "message": message,
+        "meta": {
+            "timestamp": "2026-04-03T09:44:13Z",
+            "action_name": action_name,
+        },
+        "data": {},
+    }
+
+
+class TestExtractRuntimeWarnings:
+    def test_captures_warn_level(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(json.dumps(_warn_event("my_action", "All records filtered")) + "\n")
+
+        result = extract_runtime_warnings(events_path)
+
+        assert len(result) == 1
+        assert result[0]["level"] == "warn"
+        assert result[0]["message"] == "All records filtered"
+        assert result[0]["action_name"] == "my_action"
+
+    def test_captures_error_level(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(json.dumps(_warn_event("act", "Something broke", level="error")) + "\n")
+
+        result = extract_runtime_warnings(events_path)
+
+        assert len(result) == 1
+        assert result[0]["level"] == "error"
+
+    def test_ignores_info_and_debug(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(json.dumps(_warn_event("a", "info msg", level="info")) + "\n")
+            f.write(json.dumps(_warn_event("b", "debug msg", level="debug")) + "\n")
+
+        result = extract_runtime_warnings(events_path)
+
+        assert result == []
+
+    def test_mixed_levels(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(json.dumps(_warn_event("a", "ok", level="info")) + "\n")
+            f.write(json.dumps(_warn_event("b", "bad", level="warn")) + "\n")
+            f.write(json.dumps(_warn_event("c", "worse", level="error")) + "\n")
+            f.write(json.dumps(_action_event("d")) + "\n")  # not a warn/error
+
+        result = extract_runtime_warnings(events_path)
+
+        assert len(result) == 2
+        assert result[0]["action_name"] == "b"
+        assert result[1]["action_name"] == "c"
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        result = extract_runtime_warnings(tmp_path / "nonexistent.json")
+        assert result == []
+
+    def test_empty_file_returns_empty(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        events_path.write_text("")
+        result = extract_runtime_warnings(events_path)
+        assert result == []
+
+    def test_malformed_json_lines_skipped(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write("not valid json\n")
+            f.write(json.dumps(_warn_event("a", "real warning")) + "\n")
+            f.write("{truncated\n")
+
+        result = extract_runtime_warnings(events_path)
+
+        assert len(result) == 1
+        assert result[0]["action_name"] == "a"
+
+    def test_blank_lines_skipped(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write("\n")
+            f.write("  \n")
+            f.write(json.dumps(_warn_event("a", "found it")) + "\n")
+
+        result = extract_runtime_warnings(events_path)
+
+        assert len(result) == 1
+
+    def test_emits_warning_at_line_limit(self, tmp_path, capfd):
+        """Logs a warning when the 100k line cap is reached."""
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            for i in range(100_001):
+                f.write(json.dumps(_warn_event(f"a_{i}", f"warn {i}")) + "\n")
+
+        extract_runtime_warnings(events_path)
+        captured = capfd.readouterr()
+        assert "line limit" in captured.err

@@ -289,6 +289,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         # Load events.json for detailed execution data
         events_path = target_dir / "events.json"
         action_metrics = {}
+        runtime_warnings: list[dict[str, Any]] = []
         if events_path.exists():
             try:
                 action_metrics = extract_action_metrics(events_path)
@@ -298,6 +299,14 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
                     events_path,
                     e,
                     exc_info=True,
+                )
+            try:
+                runtime_warnings = extract_runtime_warnings(events_path)
+            except (OSError, ValueError) as e:
+                logger.debug(
+                    "Failed to extract runtime warnings from %s: %s",
+                    events_path,
+                    e,
                 )
 
         # Load .manifest.json for execution plan and per-action status
@@ -314,6 +323,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             "workflow_name": workflow_name,
             "latest_run": latest_run,
             "action_metrics": action_metrics,
+            "runtime_warnings": runtime_warnings,
             "manifest": manifest_data,
             "run_results_path": str(run_results_path) if run_results_path.exists() else None,
             "events_path": str(events_path) if events_path.exists() else None,
@@ -413,6 +423,61 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
         logger.debug("Could not read events log from %s: %s", events_path, e)
 
     return logs_data
+
+
+def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
+    """Extract warn/error-level LogEvents from a target events.json file.
+
+    These are operational warnings emitted during workflow execution
+    (e.g., "All N records filtered by guard") that the docs site should
+    surface alongside static validation events.
+    """
+    import json
+
+    warnings: list[dict[str, Any]] = []
+
+    _LOG_LINE_LIMIT = 100_000
+    try:
+        with open(events_path, encoding="utf-8") as f:
+            line_count = 0
+            for line in itertools.islice(f, _LOG_LINE_LIMIT):
+                line_count += 1
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                level = event.get("level")
+                if level not in ("warn", "error"):
+                    continue
+
+                meta = event.get("meta", {})
+                warnings.append(
+                    {
+                        "level": level,
+                        "message": event.get("message", ""),
+                        "action_name": meta.get("action_name"),
+                        "timestamp": meta.get("timestamp"),
+                        "event_type": event.get("event_type"),
+                        "code": event.get("code"),
+                    }
+                )
+
+            if line_count >= _LOG_LINE_LIMIT:
+                logger.warning(
+                    "extract_runtime_warnings: line limit (%d) reached for %s; "
+                    "some events may be omitted",
+                    _LOG_LINE_LIMIT,
+                    events_path,
+                )
+
+    except OSError as e:
+        logger.debug("Could not read runtime warnings from %s: %s", events_path, e)
+
+    return warnings
 
 
 def extract_action_metrics(events_path: Path) -> dict[str, Any]:
