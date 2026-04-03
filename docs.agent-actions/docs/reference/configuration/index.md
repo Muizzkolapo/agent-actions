@@ -195,7 +195,7 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 | Groq | `groq` | ✅ | llama-3.3-70b-versatile |
 | Mistral | `mistral` | ✅ | mistral-large-latest |
 | Cohere | `cohere` | ❌ | command-r-plus |
-| Ollama | `ollama` | ❌ | llama3, mistral |
+| Ollama | `ollama` | ✅ | llama3, mistral |
 
 ## Environment Variables
 

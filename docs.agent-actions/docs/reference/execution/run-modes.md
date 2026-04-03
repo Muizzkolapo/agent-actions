@@ -68,7 +68,7 @@ defaults:
 | Google Gemini | Yes | Varies |
 | Groq | Yes | Varies |
 | Mistral | Yes | Varies |
-| Ollama | No (local) | N/A |
+| Ollama | Yes (local) | N/A |
 
 ### Batch Commands
 
