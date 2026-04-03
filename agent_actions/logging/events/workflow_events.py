@@ -117,6 +117,7 @@ class ActionStartEvent(BaseEvent):
     total_actions: int = 0
     action_type: str = ""
     input_path: str = ""
+    mode: str = ""  # "online" or "batch" — see RunMode
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -129,6 +130,7 @@ class ActionStartEvent(BaseEvent):
             "total_actions": self.total_actions,
             "action_type": self.action_type,
             "input_path": self.input_path,
+            "mode": self.mode,
         }
 
     @property
@@ -147,6 +149,7 @@ class ActionCompleteEvent(BaseEvent):
     output_path: str = ""
     record_count: int = 0
     tokens: dict[str, int] = field(default_factory=dict)
+    mode: str = ""  # "online" or "batch" — see RunMode
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -164,6 +167,7 @@ class ActionCompleteEvent(BaseEvent):
             "output_path": self.output_path,
             "record_count": self.record_count,
             "tokens": self.tokens,
+            "mode": self.mode,
         }
 
     @property
@@ -179,6 +183,7 @@ class ActionSkipEvent(BaseEvent):
     action_index: int = 0
     total_actions: int = 0
     skip_reason: str = ""
+    mode: str = ""  # "online" or "batch" — see RunMode
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -190,6 +195,7 @@ class ActionSkipEvent(BaseEvent):
             "action_index": self.action_index,
             "total_actions": self.total_actions,
             "skip_reason": self.skip_reason,
+            "mode": self.mode,
         }
 
     @property
@@ -209,6 +215,7 @@ class ActionFailedEvent(BaseEvent):
     error_type: str = ""
     execution_time: float = 0.0
     suggestion: str = ""
+    mode: str = ""  # "online" or "batch" — see RunMode
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
@@ -224,6 +231,7 @@ class ActionFailedEvent(BaseEvent):
             "error_type": self.error_type,
             "execution_time": self.execution_time,
             "suggestion": self.suggestion,
+            "mode": self.mode,
         }
 
     @property
@@ -239,6 +247,7 @@ class ActionCachedEvent(BaseEvent):
     action_index: int = 0
     total_actions: int = 0
     cache_key: str = ""
+    mode: str = ""  # "online" or "batch" — see RunMode
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -250,6 +259,7 @@ class ActionCachedEvent(BaseEvent):
             "action_index": self.action_index,
             "total_actions": self.total_actions,
             "cache_key": self.cache_key,
+            "mode": self.mode,
         }
 
     @property

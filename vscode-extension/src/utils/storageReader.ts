@@ -224,7 +224,7 @@ def find_agent_actions():
         except (PermissionError, OSError):
             continue
 
-    # Strategy 4: Look one level deeper (e.g., qanalabs/agent-actions in sibling dirs)
+    # Strategy 4: Look one level deeper (e.g., org/project in sibling dirs)
     for parent in workflow_path.parents:
         try:
             for sibling in parent.iterdir():

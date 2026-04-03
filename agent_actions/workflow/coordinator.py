@@ -12,6 +12,11 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.logging.core.manager import get_manager
+from agent_actions.storage.backend import (
+    DISPOSITION_FAILED,
+    DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
@@ -90,6 +95,8 @@ class AgentWorkflow:
         # Fresh run: clear stored results + status before anything else
         if config.fresh:
             self._clear_for_fresh_run()
+        else:
+            self._reset_retryable_actions()
 
         # Dependency orchestration + session
         self._init_dependency_orchestrator()
@@ -161,6 +168,28 @@ class AgentWorkflow:
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
         )
+
+    def _reset_retryable_actions(self) -> None:
+        """Reset failed/skipped/running actions to pending so re-runs retry them.
+
+        Clears only node-level FAILED/SKIPPED dispositions (the signals the
+        circuit breaker checks).  Record-level dispositions (EXHAUSTED,
+        DEFERRED, etc.) are preserved as audit trail.
+        """
+        reset_actions = self.services.core.state_manager.reset_retryable()
+        if not reset_actions:
+            return
+        for action_name in reset_actions:
+            try:
+                self.storage_backend.clear_disposition(
+                    action_name, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+                )
+                self.storage_backend.clear_disposition(
+                    action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+                )
+            except Exception as e:
+                logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
+        logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
 
     # ── Properties ──────────────────────────────────────────────────────
 
@@ -450,9 +479,11 @@ class AgentWorkflow:
 
         self.event_logger.fire_action_start(idx, action_name, total_actions, action_config)
 
+        run_mode = action_config.get("run_mode", "")
+
         if self.services.core.state_manager.is_completed(action_name):
             if self.services.core.action_executor.verify_completion_status(action_name):
-                self.event_logger.log_action_skip(idx, action_name, total_actions)
+                self.event_logger.log_action_skip(idx, action_name, total_actions, run_mode)
                 return False
             # verify_completion_status reset the action to "pending" — fall through to re-run
 
@@ -471,6 +502,7 @@ class AgentWorkflow:
                 result=result,
                 end_time=end_time,
                 duration=duration,
+                run_mode=run_mode,
             )
         )
 

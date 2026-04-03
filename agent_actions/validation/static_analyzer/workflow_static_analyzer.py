@@ -101,11 +101,17 @@ class WorkflowStaticAnalyzer:
         # Step 1: Build data flow graph
         self._build_graph()
 
-        # Step 2: Run type checker
+        # Step 2: Expand wildcard field references (namespace.* → concrete fields)
+        expansion_errors = self._expand_wildcards()
+
+        # Step 3: Run type checker
         checker = StaticTypeChecker(self.graph)
         result = checker.check_all()
 
-        # Step 2b: Reserved action name validation
+        for error in expansion_errors:
+            result.add_error(error)
+
+        # Step 3b: Reserved action name validation
         for error in self._check_reserved_action_names():
             result.add_error(error)
 
@@ -124,6 +130,10 @@ class WorkflowStaticAnalyzer:
         # Step 2f: Validate drop directives target schema/observe fields
         for error in self._check_drop_directives():
             result.add_error(error)
+
+        # Step 2g: Detect guard-nullable fields flowing into tool schemas
+        for warning in self._check_guard_nullable_fields():
+            result.add_warning(warning)
 
         # Step 3: Check for unused dependencies (add as warnings)
         warnings = checker.check_unused_dependencies()
@@ -153,6 +163,108 @@ class WorkflowStaticAnalyzer:
         self.graph.build_edges_from_requirements()
 
         self._built = True
+
+    # ── Wildcard expansion ────────────────────────────────────────────
+
+    def _expand_wildcards(self) -> list[StaticTypeError]:
+        """Expand ``namespace.*`` references into concrete field references.
+
+        Treats ``namespace.*`` as syntactic sugar for listing every field in
+        the namespace's output schema.  For actions with known schemas the
+        wildcard is replaced in-place so downstream checks operate on concrete
+        field refs.  Dynamic / schemaless schemas cannot be expanded and the
+        ``*`` is left as-is (downstream checks already skip these).
+
+        Unknown namespaces produce errors — the same treatment explicit field
+        references receive.
+        """
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            action_name = action.get("name", "unknown")
+            original_scope = action.get("context_scope")
+            if not original_scope or not isinstance(original_scope, dict):
+                continue
+
+            # Shallow-copy so we don't mutate the caller's config.
+            context_scope = {**original_scope}
+            action["context_scope"] = context_scope
+
+            for directive in ("observe", "passthrough", "drop"):
+                refs = context_scope.get(directive)
+                if not isinstance(refs, list):
+                    continue
+
+                expanded: list[str] = []
+                for ref in refs:
+                    if not isinstance(ref, str) or "." not in ref:
+                        expanded.append(ref)
+                        continue
+
+                    ns_name, field_name = ref.split(".", 1)
+
+                    if field_name != "*":
+                        expanded.append(ref)
+                        continue
+
+                    # ── Wildcard reference: namespace.* ──
+
+                    # Special namespaces and loop are runtime-provided; skip.
+                    if ns_name in SPECIAL_NAMESPACES or ns_name == "loop":
+                        expanded.append(ref)
+                        continue
+
+                    # Namespace must be a known action in the workflow.
+                    dep_node = self.graph.get_node(ns_name)
+                    if not dep_node:
+                        errors.append(
+                            StaticTypeError(
+                                message=(
+                                    f"Wildcard reference '{ref}' in "
+                                    f"context_scope.{directive} of action "
+                                    f"'{action_name}' targets unknown action "
+                                    f"'{ns_name}'"
+                                ),
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.{directive}",
+                                    raw_reference=ref,
+                                ),
+                                referenced_agent=ns_name,
+                                referenced_field="*",
+                                hint=(
+                                    f"No action named '{ns_name}' exists in "
+                                    f"this workflow. Check for typos."
+                                ),
+                            )
+                        )
+                        continue
+
+                    output = dep_node.output_schema
+
+                    # Dynamic — fields resolved at runtime, can't expand.
+                    if output.is_dynamic:
+                        expanded.append(ref)
+                        continue
+
+                    # Schemaless — no schema defined, zero fields to expand.
+                    # Drop the ref: "give me everything" from nothing = nothing.
+                    if output.is_schemaless:
+                        continue
+
+                    # Expand into concrete field references.
+                    # Empty schemas also resolve to nothing (wildcard on zero
+                    # fields = zero refs).
+                    fields = output.schema_fields | output.observe_fields
+                    expanded.extend(f"{ns_name}.{f}" for f in sorted(fields))
+
+                context_scope[directive] = expanded
+
+        return errors
 
     def _check_reserved_action_names(self) -> list[StaticTypeError]:
         """Return errors for actions using reserved names."""
@@ -252,10 +364,6 @@ class WorkflowStaticAnalyzer:
                                 hint=f"Add '{dep_name}' to dependencies or remove this reference.",
                             )
                         )
-                        continue
-
-                    # Skip wildcard - can't validate specific fields
-                    if field_name == "*":
                         continue
 
                     # Validate field exists in dependency's output schema
@@ -427,8 +535,6 @@ class WorkflowStaticAnalyzer:
 
                 if dep_name in SPECIAL_NAMESPACES or dep_name == "loop":
                     continue
-                if field_name == "*":
-                    continue
 
                 dep_node = self.graph.get_node(dep_name)
                 if not dep_node:
@@ -488,6 +594,199 @@ class WorkflowStaticAnalyzer:
 
         return errors
 
+    def _check_guard_nullable_fields(self) -> list[StaticTypeWarning]:
+        """Detect fields that may be None due to upstream guard filtering.
+
+        When an action has ``guard.on_false`` set to ``"filter"`` or ``"skip"``,
+        its output fields will be ``None`` for records that fail the guard.  If a
+        downstream **tool** action observes those fields and its output schema
+        declares a non-nullable type (e.g. ``type: object``), the workflow will
+        crash at runtime with a schema validation error.
+
+        Covers both direct observation (tool observes ``guarded.field``) and
+        transitive passthrough (tool observes ``intermediate.field`` where
+        ``intermediate`` passthroughs from a guarded action).
+
+        This check is a **warning** (not an error) because:
+        - The tool implementation may handle ``None`` internally.
+        - The guard condition may never actually filter in practice.
+        - The field may be populated from a different source in the fan-in.
+        """
+        warnings: list[StaticTypeWarning] = []
+        actions = self.workflow_config.get("actions", [])
+
+        # Step 1: Identify guarded actions with filter/skip behavior and their fields.
+        guarded_actions: dict[str, dict[str, str]] = {}  # name -> {condition, behavior}
+        guarded_fields: dict[str, set[str]] = {}  # name -> output field names
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "")
+            guard = action.get("guard")
+            if not guard:
+                continue
+
+            if isinstance(guard, dict):
+                condition = guard.get("condition", str(guard))
+                behavior = guard.get("on_false", "filter")
+            elif isinstance(guard, str):
+                condition = guard
+                behavior = "filter"  # string guards default to filter
+            else:
+                continue
+
+            if behavior in ("filter", "skip"):
+                guarded_actions[name] = {"condition": condition, "behavior": behavior}
+                node = self.graph.get_node(name)
+                if node:
+                    guarded_fields[name] = node.output_schema.schema_fields.copy()
+
+        if not guarded_actions:
+            return warnings
+
+        # Step 2: For each downstream tool, trace observe refs back to guarded
+        #         actions — both direct and via passthrough intermediates.
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            consumer_name = action.get("name", "unknown")
+            consumer_node = self.graph.get_node(consumer_name)
+            if not consumer_node:
+                continue
+
+            # Only tool actions have strict output schema validation.
+            if consumer_node.agent_kind != ActionKind.TOOL:
+                continue
+
+            context_scope = action.get("context_scope", {})
+            if not isinstance(context_scope, dict):
+                continue
+
+            observe_refs = context_scope.get("observe", [])
+            if not isinstance(observe_refs, list):
+                continue
+
+            # Build a map: guarded_source -> set of observed field names.
+            # Includes both direct refs and transitive passthrough refs.
+            observed_from_guarded: dict[str, set[str]] = {}
+            for ref in observe_refs:
+                if not isinstance(ref, str) or "." not in ref:
+                    continue
+                source_name, field_name = ref.split(".", 1)
+                if field_name == "*":
+                    continue
+
+                # Case 1: Direct observation of a guarded action.
+                if source_name in guarded_actions:
+                    observed_from_guarded.setdefault(source_name, set()).add(field_name)
+                    continue
+
+                # Case 2: Transitive — source is an intermediate that
+                # passthroughs from a guarded action.
+                source_node = self.graph.get_node(source_name)
+                if not source_node:
+                    continue
+                source_output = source_node.output_schema
+                for g_name in guarded_actions:
+                    if g_name not in source_node.dependencies:
+                        continue
+                    # Wildcard passthrough: "G.*" → all of G's fields flow through
+                    if g_name in source_output.passthrough_wildcard_sources:
+                        if field_name in guarded_fields.get(g_name, set()):
+                            observed_from_guarded.setdefault(g_name, set()).add(field_name)
+                    # Specific passthrough: field_name matches a guarded field
+                    elif field_name in source_output.passthrough_fields:
+                        if field_name in guarded_fields.get(g_name, set()):
+                            observed_from_guarded.setdefault(g_name, set()).add(field_name)
+
+            if not observed_from_guarded:
+                continue
+
+            # Look up the consumer's output schema to find field type declarations.
+            consumer_schema = consumer_node.output_schema.json_schema
+            if not consumer_schema:
+                continue
+
+            # Build field_name -> declared_type from the schema.
+            schema_field_types = self._extract_field_types_from_schema(consumer_schema)
+            if not schema_field_types:
+                continue
+
+            # Step 3: Emit warnings for non-nullable fields sourced from guarded actions.
+            for source_name, fields in observed_from_guarded.items():
+                guard_info = guarded_actions[source_name]
+                for field_name in sorted(fields):
+                    declared_type = schema_field_types.get(field_name)
+                    if declared_type is None:
+                        continue  # Field not declared in consumer schema — no risk.
+                    if self._type_allows_null(declared_type):
+                        continue
+
+                    warnings.append(
+                        StaticTypeWarning(
+                            message=(
+                                f"Field '{field_name}' in tool action '{consumer_name}' "
+                                f"may be None when guarded action '{source_name}' filters "
+                                f"(guard: {guard_info['condition']}, "
+                                f"on_false: {guard_info['behavior']}). "
+                                f"Schema declares type '{declared_type}' which rejects None."
+                            ),
+                            location=FieldLocation(
+                                agent_name=consumer_name,
+                                config_field="schema",
+                                raw_reference=f"{source_name}.{field_name}",
+                            ),
+                            referenced_agent=source_name,
+                            referenced_field=field_name,
+                            hint=(
+                                f"Either remove '{field_name}' from the schema, "
+                                f"or handle None in the tool implementation before returning."
+                            ),
+                        )
+                    )
+
+        return warnings
+
+    @staticmethod
+    def _extract_field_types_from_schema(schema: dict[str, Any] | list) -> dict[str, str]:
+        """Extract {field_name: type_string} from a JSON schema or list-style schema."""
+        result: dict[str, str] = {}
+
+        if isinstance(schema, list):
+            # List-style schema: [{"id": "field", "type": "object"}, ...]
+            for item in schema:
+                if isinstance(item, dict):
+                    field_id = item.get("id") or item.get("name", "")
+                    field_type = item.get("type", "")
+                    if field_id and field_type:
+                        result[field_id] = field_type
+        elif isinstance(schema, dict):
+            # Standard JSON Schema with "properties"
+            props = schema.get("properties", {})
+            if isinstance(props, dict):
+                for field_id, field_def in props.items():
+                    if isinstance(field_def, dict):
+                        result[field_id] = field_def.get("type", "")
+            # Also handle "items" for array schemas
+            items = schema.get("items")
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        field_id = item.get("id") or item.get("name", "")
+                        field_type = item.get("type", "")
+                        if field_id and field_type:
+                            result[field_id] = field_type
+
+        return result
+
+    @staticmethod
+    def _type_allows_null(declared_type: str | list) -> bool:
+        """Return True if the declared type explicitly allows null values."""
+        if isinstance(declared_type, list):
+            return "null" in declared_type
+        return declared_type == "null"
+
     def _check_lineage_reachability(self) -> list[StaticTypeWarning]:
         """Check that observe references to non-direct-dependencies are reachable.
 
@@ -523,6 +822,9 @@ class WorkflowStaticAnalyzer:
 
                 if source_name in SPECIAL_NAMESPACES or source_name == "loop":
                     continue
+                # Remaining wildcards are dynamic/schemaless (known schemas
+                # were expanded by _expand_wildcards).  Can't trace individual
+                # fields through the chain, so skip lineage check.
                 if field_name == "*":
                     continue
 

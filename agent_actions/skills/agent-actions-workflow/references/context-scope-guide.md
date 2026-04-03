@@ -85,6 +85,8 @@ Forward fields to output **without** including in LLM context.
 
 Static reference data loaded via `seed_data:` in the workflow config and accessed via the `seed.` prefix in templates.
 
+**WARNING:** The config key is `seed_data:` but the runtime reference prefix is `seed.` — NOT `seed_data.`. Using `seed_data.rubric` in templates or observe directives will silently resolve to empty. This is the most common namespace mistake.
+
 **Config key vs reference prefix:**
 
 | Where | Syntax | Example |
@@ -96,7 +98,7 @@ Static reference data loaded via `seed_data:` in the workflow config and accesse
 defaults:
   context_scope:
     seed_path:
-      exam_syllabus: $file:mcp_qanalabs_syllabus.json
+      exam_syllabus: $file:syllabus.json
 
 actions:
   - name: extract_facts
