@@ -1,144 +1,76 @@
-# Agent-Actions Example Projects
+# agent-actions Examples
 
-Sample workflows demonstrating Agent-Actions patterns in real-world scenarios. Each directory is a **standalone project** you can copy, configure, and run independently.
+Six workflows demonstrating agent-actions patterns — from single-vendor local models to multi-vendor parallel pipelines with human review.
+
+## Examples
+
+| Example | Actions | Vendors | Key Patterns |
+|---------|---------|---------|--------------|
+| [review_analyzer](./review_analyzer) | 8 | Groq, Ollama, OpenAI | Parallel consensus voting (3 scorers), version merge, guards, progressive context (observe/drop/passthrough), seed data |
+| [incident_triage](./incident_triage) | 11 | Groq, Ollama, OpenAI | Parallel severity voting (3 classifiers), conditional escalation (SEV1/SEV2 guard), multi-seed data, parallel impact branches |
+| [product_listing_enrichment](./product_listing_enrichment) | 6 | Gemini, OpenAI | Strict LLM/Tool alternation, progressive context (drop raw_specs after distillation), guard-based skip, seed data |
+| [support_resolution](./support_resolution) | 7 | Ollama | `json_mode: false`, `output_field` (no schema needed), works with any model including local 3B, guard as cost control |
+| [contract_reviewer](./contract_reviewer) | 4 | OpenAI | Map-Reduce (split → per-clause analysis → FILE granularity aggregate), context scoping with drop |
+| [book_catalog_enrichment](./book_catalog_enrichment) | 15 | Ollama, Groq, OpenAI | HITL review, reprompt validation, grounded recommendations (LLM → Tool search → LLM rank), 4-way parallel fan-out |
 
 ## Quick Start
 
 ```bash
-# 1. Pick a project
-cd examples/incident_triage
+pip install agent-actions
 
-# 2. Configure credentials
-cp .env.example .env
-# Edit .env with your API keys
-
-# 3. Run the workflow
-agac run -a incident_triage
+# Pick any example and run it
+cd examples/review_analyzer
+agac run -a review_analyzer
 ```
 
-## Projects
+All workflows default to `record_limit: 2` for quick testing. Remove or increase that setting in the workflow YAML to process full datasets.
 
-### [incident_triage](./incident_triage)
+## Requirements
 
-Automated incident triage: classify severity, assess impact, assign teams, generate response plans.
-
-| Pattern | How it's used |
-|---------|---------------|
-| Parallel evaluation | 3 independent severity classifiers |
-| Aggregation | Weighted consensus via tool action |
-| Dynamic injection | Team assignment from seed data |
-| Guards | Executive summary only for SEV1/SEV2 |
-
----
-
-### [automated_ml_pipeline](./automated_ml_pipeline)
-
-End-to-end AutoML: data quality gating, feature engineering, parallel model training, champion selection, conditional deployment.
-
-| Pattern | How it's used |
-|---------|---------------|
-| Quality gates | Data must score >= 0.7 to proceed |
-| Parallel training | 3 algorithms trained simultaneously |
-| Loop consumption | Merge evaluations for model selection |
-| Conditional deployment | Deploy only if readiness >= 0.8 |
-
----
-
-### [book_catalog_enrichment](./book_catalog_enrichment)
-
-Enrich book entries with BISAC classification, marketing copy, SEO, recommendations, and quality scoring.
-
-| Pattern | How it's used |
-|---------|---------------|
-| Reprompt validation | Auto-retry on invalid BISAC codes / short descriptions |
-| Grounded retrieval | Search real catalog before recommending (prevents hallucination) |
-| Parallel branches | SEO, recommendations, reading level run concurrently |
-| Passthrough | Preserve source metadata through pipeline |
-
----
-
-### [prompt_injection_detection](./prompt_injection_detection)
-
-Multi-layer prompt injection defense: regex scanning, statistical anomaly scoring, semantic analysis, and composite risk judgment.
-
-| Pattern | How it's used |
-|---------|---------------|
-| Tool + LLM pipeline | 4 statistical detectors feed into LLM interpretation |
-| Guard-based routing | Different report types for BLOCK vs PASS decisions |
-| Score aggregation | Composite risk from multiple detection layers |
-
----
-
-### [root_cause_analysis](./root_cause_analysis)
-
-Causal discovery for system anomalies: parallel hypothesis generation, evidence-based validation, causal chain construction, remediation planning.
-
-| Pattern | How it's used |
-|---------|---------------|
-| Multi-strategy parallel | 3 reasoning strategies (data-driven, topology, pattern-matching) |
-| Weighted evidence scoring | Rank hypotheses by evidence quality and consensus |
-| Seed data enrichment | System topology, historical incidents, causal patterns |
-| Causal chain construction | Root cause to observed symptom with mechanisms |
-
----
-
-### [support_resolution](./support_resolution)
-
-Issue-to-resolution pipeline: analyze a support ticket, research in parallel, generate customer response, internal task, and draft PR.
-
-| Pattern | How it's used |
-|---------|---------------|
-| Parallel research | 3 research strategies (codebase, docs, similar issues) |
-| Fan-in synthesis | Merge and deduplicate research findings |
-| Multi-output | Customer response + internal task + PR draft |
-| Conditional PR | Draft PR only when code change is needed |
-| Batch mode | Uses Anthropic Claude (batch execution) |
-
----
-
-## Project Structure
-
-Every project follows the same layout:
-
-```
-<project>/
-  agent_actions.yml          # Project-level config (model, storage, tool paths)
-  .env.example               # API key template (copy to .env)
-  agent_workflow/
-    <workflow>/
-      agent_config/
-        <workflow>.yml        # Workflow definition (actions, dependencies, guards)
-      seed_data/              # Reference data injected into context
-      agent_io/
-        staging/              # Input data goes here
-        target/               # Output data lands here
-      README.md               # Workflow-specific documentation
-  schema/                     # Output schemas for each action
-  tools/                      # Custom tool implementations (Python UDFs)
-  prompt_store/               # LLM prompt templates
-```
+- Python 3.10+
+- API keys for the vendors each example uses (see the example's README)
+- For Ollama examples: `ollama pull llama3.2:latest`
 
 ## Pattern Index
 
-| Pattern | Example Projects |
-|---------|-----------------|
-| Parallel evaluation + aggregation | incident_triage, root_cause_analysis, support_resolution |
-| Guards (conditional execution) | incident_triage, automated_ml_pipeline, prompt_injection_detection, support_resolution |
-| Reprompt validation | book_catalog_enrichment |
-| Grounded retrieval | book_catalog_enrichment |
-| Dynamic content injection | incident_triage |
-| Quality gates | automated_ml_pipeline |
-| Passthrough (data lineage) | book_catalog_enrichment, automated_ml_pipeline, incident_triage |
-| Seed data enrichment | incident_triage, root_cause_analysis |
-| Batch execution | support_resolution |
+| Pattern | Examples |
+|---------|----------|
+| Parallel voting + merge | review_analyzer, incident_triage |
+| Guards (conditional execution) | All except contract_reviewer |
+| Multi-vendor model selection | review_analyzer, incident_triage, product_listing_enrichment, book_catalog_enrichment |
+| Retry + reprompt validation | All (retry); review_analyzer, incident_triage, product_listing_enrichment, contract_reviewer, book_catalog_enrichment (reprompt) |
+| Seed data injection | All |
+| Progressive context (observe/drop/passthrough) | All |
+| Map-Reduce + FILE granularity | contract_reviewer |
+| HITL (human-in-the-loop) review | book_catalog_enrichment |
+| Grounded retrieval (anti-hallucination) | book_catalog_enrichment |
+| Non-JSON mode + output_field | support_resolution |
+| Local model support (Ollama) | support_resolution, review_analyzer, incident_triage, book_catalog_enrichment |
 
-## Configuration
+## Project Structure
 
-All projects default to **OpenAI GPT-4o-mini** except `support_resolution` which uses **Anthropic Claude Sonnet**. To change the model, edit `defaults` in the workflow YAML:
+Every example follows the same layout:
 
-```yaml
-defaults:
-  model_vendor: openai        # or: anthropic
-  model_name: gpt-4o-mini     # or: claude-sonnet-4-20250514
-  api_key: OPENAI_API_KEY     # env var name (resolved from .env)
+```
+<example>/
+├── README.md                         # What it does, patterns taught, quick start
+├── agent_actions.yml                 # Project-level config
+├── docs/
+│   └── flow.png                      # Pipeline diagram
+├── agent_workflow/
+│   └── <workflow>/
+│       ├── agent_config/
+│       │   └── <workflow>.yml        # Workflow definition (actions, deps, guards)
+│       ├── agent_io/
+│       │   ├── staging/              # Input data
+│       │   └── target/               # Output per action
+│       └── seed_data/                # Reference data injected into context
+├── prompt_store/
+│   └── <workflow>.md                 # LLM prompt templates
+├── schema/
+│   └── <workflow>/                   # Output schemas per action
+└── tools/
+    ├── <workflow>/                   # Tool implementations (UDFs)
+    └── shared/                       # Shared reprompt validations
+        └── reprompt_validations.py
 ```
