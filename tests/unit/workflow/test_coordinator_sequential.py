@@ -259,8 +259,14 @@ class TestRunWorkflowWithContext:
 class TestResetRetryableActions:
     """Tests for _reset_retryable_actions called at coordinator startup."""
 
-    def test_resets_and_clears_dispositions(self):
-        """Should call reset_retryable and clear dispositions for each reset action."""
+    def test_resets_and_clears_node_level_dispositions(self):
+        """Should clear only node-level FAILED/SKIPPED dispositions, not record-level."""
+        from agent_actions.storage.backend import (
+            DISPOSITION_FAILED,
+            DISPOSITION_SKIPPED,
+            NODE_LEVEL_RECORD_ID,
+        )
+
         wf = _build_workflow()
         wf.storage_backend = MagicMock()
         wf.services.core.state_manager.reset_retryable.return_value = ["agent_a"]
@@ -268,7 +274,13 @@ class TestResetRetryableActions:
         wf._reset_retryable_actions()
 
         wf.services.core.state_manager.reset_retryable.assert_called_once()
-        wf.storage_backend.clear_disposition.assert_called_once_with("agent_a")
+        assert wf.storage_backend.clear_disposition.call_count == 2
+        wf.storage_backend.clear_disposition.assert_any_call(
+            "agent_a", DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+        )
+        wf.storage_backend.clear_disposition.assert_any_call(
+            "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+        )
 
     def test_no_reset_no_disposition_calls(self):
         """No actions to reset means no disposition clearing."""

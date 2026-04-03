@@ -12,6 +12,11 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.logging.core.manager import get_manager
+from agent_actions.storage.backend import (
+    DISPOSITION_FAILED,
+    DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
@@ -165,13 +170,23 @@ class AgentWorkflow:
         )
 
     def _reset_retryable_actions(self) -> None:
-        """Reset failed/skipped/running actions to pending so re-runs retry them."""
+        """Reset failed/skipped/running actions to pending so re-runs retry them.
+
+        Clears only node-level FAILED/SKIPPED dispositions (the signals the
+        circuit breaker checks).  Record-level dispositions (EXHAUSTED,
+        DEFERRED, etc.) are preserved as audit trail.
+        """
         reset_actions = self.services.core.state_manager.reset_retryable()
         if not reset_actions:
             return
         for action_name in reset_actions:
             try:
-                self.storage_backend.clear_disposition(action_name)
+                self.storage_backend.clear_disposition(
+                    action_name, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+                )
+                self.storage_backend.clear_disposition(
+                    action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+                )
             except Exception as e:
                 logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)

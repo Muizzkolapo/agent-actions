@@ -314,6 +314,17 @@ class TestResetRetryable:
         assert mgr.get_status("a") == ActionStatus.COMPLETED_WITH_FAILURES
         assert reset == []
 
+    def test_resets_checking_batch_to_pending(self, tmp_path):
+        """CHECKING_BATCH from a prior crash should be retried."""
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.CHECKING_BATCH)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.PENDING
+        assert reset == ["a"]
+
     def test_preserves_batch_submitted(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
