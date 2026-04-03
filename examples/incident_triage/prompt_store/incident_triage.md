@@ -207,17 +207,17 @@ Generate an initial incident response plan with actionable steps.
 
 ## INCIDENT CONTEXT
 
-**Incident**: {{ assign_response_team.title }}
+**Incident**: {{ extract_incident_details.title }}
 
-**Description**: {{ assign_response_team.description }}
+**Description**: {{ extract_incident_details.description }}
 
 **Severity**: {{ assign_response_team.final_severity }}
 
 **Assigned Teams**: {{ assign_response_team.assigned_teams }}
 
-**Customer Impact**: {{ assign_response_team.customer_impact_level }}
+**Customer Impact**: {{ assess_customer_impact.customer_impact_level }}
 
-**Affected Systems**: {{ assign_response_team.affected_systems }}
+**Affected Systems**: {{ assign_response_team.affected_services }}
 
 **Urgency**: {{ assign_response_team.urgency_level }}
 

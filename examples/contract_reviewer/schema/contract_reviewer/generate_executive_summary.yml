@@ -11,6 +11,16 @@ fields:
     type: array
     items:
       type: object
+      properties:
+        title:
+          type: string
+          description: "Brief title of the concern"
+        description:
+          type: string
+          description: "Detailed description of the concern"
+        impact:
+          type: string
+          description: "Potential impact of the concern"
     description: "Top 3-5 concerns ranked by severity, each with title, description, and impact"
   - id: recommended_next_steps
     type: array

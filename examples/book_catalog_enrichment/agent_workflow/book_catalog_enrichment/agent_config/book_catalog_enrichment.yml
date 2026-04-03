@@ -18,6 +18,7 @@ defaults:
   api_key: OPENAI_API_KEY
   is_operational: true
   prompt_debug: false  # Enable to see reprompt feedback in action
+  record_limit: 2      # Remove for full processing
   context_scope:
     seed_path:
       book_catalog: $file:book_catalog.json
@@ -33,20 +34,78 @@ actions:
     intent: "Classify book into BISAC categories based on title, author, and description"
     schema: classify_genre
     prompt: $book_catalog_enrichment.Classify_Book_Genre
+    model_vendor: ollama                          # BISAC classification — fixed taxonomy, works with local models
+    model_name: llama3.2:latest
     prompt_debug: true
     context_scope:
       observe:
         - source.*
-      # Add reprompt configuration                                                                                                                                                                                   
-    reprompt:                                                                                                                                                                                                      
-      validation: "check_valid_bisac"   # Name of registered validation UDF                                                                                                                                        
-      max_attempts: 3                    # Max reprompt attempts                                                                                                                                                   
-      on_exhausted: "return_last"        # or "raise"       
+      # Add reprompt configuration
+    reprompt:
+      validation: "check_valid_bisac"   # Name of registered validation UDF
+      max_attempts: 3                    # Max reprompt attempts
+      on_exhausted: "return_last"        # or "raise"
+  # ============================================================================
+  # STEP 1.5a: AI PRE-REVIEW OF CLASSIFICATION
+  # ============================================================================
+  - name: ai_review_classification
+    dependencies: [classify_genre]
+    intent: "AI reviews BISAC classification quality and flags issues for human"
+    schema: ai_review_classification
+    prompt: $book_catalog_enrichment.AI_Review_Classification
+    model_vendor: groq
+    model_name: llama-3.1-8b-instant
+    api_key: GROQ_API_KEY
+    context_scope:
+      observe:
+        - classify_genre.primary_bisac_code
+        - classify_genre.primary_bisac_name
+        - classify_genre.secondary_bisac_codes
+        - classify_genre.classification_reasoning
+        - source.title
+        - source.authors
+        - source.description
+
+  # ============================================================================
+  # STEP 1.5b: HUMAN REVIEW OF CLASSIFICATION (with AI assessment)
+  # ============================================================================
+  - name: review_classification
+    dependencies: [ai_review_classification]
+    kind: hitl
+    run_mode: online
+    intent: "Human reviews BISAC classification alongside AI assessment"
+    schema: review_classification
+    granularity: file
+    hitl:
+      port: 3001
+      instructions: |
+        **Human-AI Collaborative Review of BISAC Classification**
+
+        The AI has pre-reviewed this classification. Review both the original
+        classification and the AI's assessment, then approve or correct.
+
+        - If AI status is PASS with high confidence, a quick confirmation may suffice.
+        - If AI status is FLAG or REJECT, pay close attention to the issues found.
+    context_scope:
+      observe:
+        - classify_genre.primary_bisac_code
+        - classify_genre.primary_bisac_name
+        - classify_genre.secondary_bisac_codes
+        - classify_genre.classification_reasoning
+        - ai_review_classification.review_status
+        - ai_review_classification.confidence_score
+        - ai_review_classification.issues_found
+        - ai_review_classification.suggested_correction
+        - ai_review_classification.review_reasoning
+        - source.title
+        - source.authors
+        - source.description
+
   # ============================================================================
   # STEP 2: VALIDATE BISAC CODES
   # ============================================================================
   - name: validate_bisac
-    dependencies: [classify_genre]
+    dependencies: [review_classification]
     kind: tool
     impl: validate_bisac_codes
     intent: "Validate and normalize BISAC classification codes"
@@ -54,7 +113,7 @@ actions:
     granularity: Record
     context_scope:
       observe:
-        - classify_genre.*
+        - review_classification.*
 
   # ============================================================================
   # STEP 3: WRITE MARKETING DESCRIPTION
@@ -82,20 +141,6 @@ actions:
       max_attempts: 3  # Try up to 3 times
       on_exhausted: return_last  # Return best attempt even if validation fails
 
-
-  # ============================================================================
-  # STEP 4: VALIDATE DESCRIPTION
-  # ============================================================================
-  - name: validate_description
-    dependencies: [write_description]
-    kind: tool
-    impl: validate_description
-    intent: "Validate marketing description meets quality standards"
-    schema: validate_description
-    granularity: Record
-    context_scope:
-      observe:
-        - write_description.*
 
   # ============================================================================
   # STEP 5: GENERATE SEO KEYWORDS

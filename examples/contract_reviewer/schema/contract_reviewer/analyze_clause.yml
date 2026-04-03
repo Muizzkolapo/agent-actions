@@ -16,11 +16,31 @@ fields:
     type: array
     items:
       type: object
+      properties:
+        party:
+          type: string
+          description: "The party responsible for the obligation"
+        description:
+          type: string
+          description: "Description of the obligation"
+        type:
+          type: string
+          description: "Type of obligation e.g. 'performance', 'payment', 'compliance'"
     description: "Obligations identified in this clause, each with party, description, and type"
   - id: deadlines
     type: array
     items:
       type: object
+      properties:
+        description:
+          type: string
+          description: "Description of the deadline or time-bound requirement"
+        date:
+          type: string
+          description: "The deadline date or timeframe"
+        consequence:
+          type: string
+          description: "Consequence of missing the deadline"
     description: "Deadlines or time-bound requirements found in this clause"
   - id: reasoning
     type: string

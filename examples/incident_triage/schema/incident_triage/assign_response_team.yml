@@ -1,0 +1,49 @@
+name: assign_response_team
+description: Dynamically assigned response team based on affected systems and severity
+fields:
+  - id: assigned_teams
+    type: array
+    items:
+      type: string
+    description: "Teams assigned to respond"
+  - id: team_contacts
+    type: array
+    items:
+      type: string
+    description: "Primary contacts for assigned teams"
+  - id: team_slack_channels
+    type: array
+    items:
+      type: string
+    description: "Slack channels for assigned teams"
+  - id: primary_system
+    type: string
+    description: "Primary affected system or service"
+  - id: service_tier
+    type: string
+    description: "Service tier from catalog"
+  - id: response_sla
+    type: string
+    description: "Expected response SLA"
+  - id: response_message
+    type: string
+    description: "Formatted response message with severity and system"
+  - id: urgency_level
+    type: string
+    description: "Urgency indicator for the incident"
+  - id: requires_executive_notification
+    type: boolean
+    description: "Whether executive notification is needed"
+  - id: escalation_path
+    type: array
+    items:
+      type: string
+    description: "Escalation levels activated"
+  - id: team_routing_source
+    type: string
+    description: "Whether routing used service_catalog or fallback_rules"
+required:
+  - assigned_teams
+  - primary_system
+  - urgency_level
+  - requires_executive_notification

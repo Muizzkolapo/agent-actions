@@ -1,0 +1,37 @@
+name: format_triage_output
+description: Complete formatted triage output with all assessments
+fields:
+  - id: triage_id
+    type: string
+    description: "Unique triage identifier"
+  - id: timestamp
+    type: string
+    description: "Incident report timestamp"
+  - id: incident
+    type: object
+    description: "Extracted incident details"
+  - id: severity
+    type: object
+    description: "Severity assessment with consensus results"
+  - id: impact
+    type: object
+    description: "Customer and system impact assessment"
+  - id: teams
+    type: object
+    description: "Team assignment and routing details"
+  - id: response
+    type: object
+    description: "Response plan with actions and communication"
+  - id: executive_summary
+    type: object
+    description: "Executive summary (null if below SEV2)"
+  - id: metadata
+    type: object
+    description: "Workflow metadata"
+required:
+  - triage_id
+  - incident
+  - severity
+  - teams
+  - response
+  - metadata
