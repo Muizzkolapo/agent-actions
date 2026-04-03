@@ -128,8 +128,11 @@ class WorkflowStaticAnalyzer:
             result.add_error(error)
 
         # Step 2f: Validate drop directives target schema/observe fields
-        for error in self._check_drop_directives():
+        drop_errors, drop_warnings = self._check_drop_directives()
+        for error in drop_errors:
             result.add_error(error)
+        for warning in drop_warnings:
+            result.add_warning(warning)
 
         # Step 2g: Detect guard-nullable fields flowing into tool schemas
         for warning in self._check_guard_nullable_fields():
@@ -505,14 +508,16 @@ class WorkflowStaticAnalyzer:
 
         return errors
 
-    def _check_drop_directives(self) -> list[StaticTypeError]:
-        """Validate that drop directives reference actual schema/observe fields.
+    def _check_drop_directives(
+        self,
+    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning]]:
+        """Validate that drop directives reference reachable schema/observe fields.
 
-        Drop directives remove fields from the LLM context.  If the referenced
-        field is a passthrough field (not in the LLM context namespace), the
-        drop is a no-op and the user should be warned.
+        Returns (errors, warnings).  Unreachable namespaces produce warnings
+        (drops are defensive no-ops).  Invalid field references produce errors.
         """
         errors: list[StaticTypeError] = []
+        warnings: list[StaticTypeWarning] = []
         actions = self.workflow_config.get("actions", [])
 
         for action in actions:
@@ -527,6 +532,10 @@ class WorkflowStaticAnalyzer:
             if not isinstance(drop_refs, list):
                 continue
 
+            # Compute reachable upstream once per action (lazy).
+            reachable: set[str] | None = None
+            warned_unreachable: set[str] = set()
+
             for drop_ref in drop_refs:
                 if not isinstance(drop_ref, str) or "." not in drop_ref:
                     continue
@@ -538,7 +547,38 @@ class WorkflowStaticAnalyzer:
 
                 dep_node = self.graph.get_node(dep_name)
                 if not dep_node:
-                    continue  # Unknown dep — caught by other checks
+                    continue  # Unknown dep — caught by expansion pass
+
+                # Reachability check: is this namespace in the dependency chain?
+                if reachable is None:
+                    reachable = self.graph.get_reachable_upstream_names(action_name)
+                if dep_name not in reachable:
+                    if dep_name not in warned_unreachable:
+                        warned_unreachable.add(dep_name)
+                        warnings.append(
+                            StaticTypeWarning(
+                                message=(
+                                    f"Drop directive targets namespace "
+                                    f"'{dep_name}' in action '{action_name}', "
+                                    f"but '{dep_name}' is not in its dependency "
+                                    f"chain. This drop has no effect."
+                                ),
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field="context_scope.drop",
+                                    raw_reference=drop_ref,
+                                ),
+                                referenced_agent=dep_name,
+                                referenced_field=field_name,
+                                hint=(
+                                    f"'{dep_name}' is not a dependency of "
+                                    f"'{action_name}' — its fields will never "
+                                    f"appear in context. Remove this drop or "
+                                    f"add '{dep_name}' to dependencies."
+                                ),
+                            )
+                        )
+                    continue
 
                 output = dep_node.output_schema
                 if output.is_dynamic or output.is_schemaless:
@@ -592,7 +632,7 @@ class WorkflowStaticAnalyzer:
                         )
                     )
 
-        return errors
+        return errors, warnings
 
     def _check_guard_nullable_fields(self) -> list[StaticTypeWarning]:
         """Detect fields that may be None due to upstream guard filtering.
