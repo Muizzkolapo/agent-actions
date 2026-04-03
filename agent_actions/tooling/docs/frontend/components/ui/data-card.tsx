@@ -89,7 +89,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
 
 function ProseBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false)
-  const needsClamp = text.length > 200
+  const needsClamp = text.length > 120
 
   return (
     <div>
