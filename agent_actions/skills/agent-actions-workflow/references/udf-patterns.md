@@ -99,6 +99,52 @@ def run_dedup(data: list[dict]) -> FileUDFResult:
     return FileUDFResult(outputs=outputs, input_count=len(data))
 ```
 
+## How Observed Fields Arrive in UDFs
+
+Three access modes depending on how upstream data was produced:
+
+### 1. Standard observed fields (FLAT)
+
+Observed fields are flattened directly into `content`. They are NOT nested under the action name.
+
+```python
+# CORRECT — flat access
+title = content.get("listing_title", "")
+
+# WRONG — returns empty dict, all downstream defaults
+copy = content.get("write_marketing_copy", {})
+title = copy.get("listing_title", "")  # always ""
+```
+
+### 2. `output_field` values (under ACTION NAME)
+
+With `json_mode: false` and `output_field`, the value lives under the action name, not the field name.
+
+```python
+# CORRECT — use the action name
+issue_type = content.get("classify_issue", "")
+
+# WRONG — returns default
+issue_type = content.get("issue_type", "")
+```
+
+### 3. Version consumption merge (NESTED — the one exception)
+
+Versioned data IS nested under expanded action names. This is the only case where nested access is correct.
+
+```python
+scorer_1 = content.get("score_quality_1", {}).get("overall_score")
+scorer_2 = content.get("score_quality_2", {}).get("overall_score")
+```
+
+### 4. Seed data (under `seed` namespace)
+
+Seed data observed as `seed.marketplace_rules` arrives under `content["seed"]["marketplace_rules"]`.
+
+```python
+rules = content.get("seed", {}).get("marketplace_rules", {})
+```
+
 ## Common Mistakes
 
 ```python
@@ -109,6 +155,17 @@ def bad_udf(data):
 # WRONG: Returned dict instead of list (without passthrough)
 def bad_udf(data):
     return {'result': 'value'}  # Must be [{'result': 'value'}]
+
+# WRONG: Nested access for observed fields (use flat access)
+def bad_udf(data):
+    content = data.get("content", data)
+    result = content.get("upstream_action", {}).get("field")  # always None
+    # CORRECT: result = content.get("field")
+
+# WRONG: Default doesn't match schema type
+def bad_udf(data):
+    return [{"name": None}]  # schema says type: string → validation error
+    # CORRECT: return [{"name": ""}]
 ```
 
 ## Type Mapping

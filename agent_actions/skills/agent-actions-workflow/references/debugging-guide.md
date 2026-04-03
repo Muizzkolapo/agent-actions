@@ -33,6 +33,46 @@ flowchart TD
 | **2. Schema** | Type/field validation | Schema constraints + reprompt |
 | **3. Guard** | Semantic validation | Condition expressions |
 
+## Pre-Run Verification
+
+Before running a workflow, check these common blockers:
+
+```bash
+# 1. API keys exist for all vendors used
+env | grep -E "OPENAI_API_KEY|ANTHROPIC_API_KEY|GROQ_API_KEY" | cut -d= -f1
+
+# 2. Seed files referenced in config actually exist
+ls agent_workflow/<workflow>/seed_data/
+
+# 3. Clear stale cache from failed prior runs
+rm -rf agent_workflow/<workflow>/agent_io/target/*
+rm -rf agent_workflow/<workflow>/agent_io/source/
+```
+
+## Stale Cache Diagnosis
+
+**Symptom:** Re-running after a failure completes in 0.03s. Actions show "completed" with empty output.
+
+**Cause:** Failed runs cache empty results. The framework sees "completed" status and skips re-execution, serving cached empties.
+
+**Diagnosis:**
+```bash
+# Check for suspiciously fast completions and empty outputs
+for dir in agent_workflow/<workflow>/agent_io/target/*/; do
+  size=$(stat -f%z "$dir/sample.json" 2>/dev/null || echo "0")
+  if [ "$size" -le 2 ]; then
+    echo "EMPTY: $dir"
+  fi
+done
+```
+
+**Fix:** Clear target and source directories, then re-run:
+```bash
+rm -rf agent_workflow/<workflow>/agent_io/target/*
+rm -rf agent_workflow/<workflow>/agent_io/source/
+agac run -a <workflow>
+```
+
 ## Quick Diagnostics
 
 ### Check Record Counts Per Stage
