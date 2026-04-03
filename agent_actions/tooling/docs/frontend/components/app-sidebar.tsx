@@ -73,7 +73,7 @@ export function AppSidebar({ activeSection, onNavigate, onSearchClick }: AppSide
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold tracking-tight text-foreground">Agent Actions</span>
-            <span className="text-[10px] text-muted-foreground tracking-wide uppercase">QanaLabs</span>
+            <span className="text-[10px] text-muted-foreground tracking-wide uppercase">Documentation</span>
           </div>
         </div>
       </SidebarHeader>

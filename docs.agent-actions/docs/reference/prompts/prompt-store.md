@@ -27,7 +27,7 @@ Reference prompts in YAML using the `$` syntax:
 
 ```yaml
 - name: extract_facts
-  prompt: $qanalabs_quiz_gen.Extract_Facts
+  prompt: $my_workflow.Extract_Facts
 ```
 
 Format: `$filename.Prompt_Name` (filename without `.md`)
@@ -96,12 +96,12 @@ Content: {{ source.content }}
 ```yaml
 actions:
   - name: fact_extractor
-    prompt: $qanalabs_quiz_gen.Fact_extraction
+    prompt: $my_workflow.Fact_extraction
     schema: candidate_facts_list
 
   - name: canonicalize_facts
     dependencies: fact_extractor
-    prompt: $qanalabs_quiz_gen.Canonicalize_Facts
+    prompt: $my_workflow.Canonicalize_Facts
     schema: candidate_facts_list
 ```
 
@@ -310,6 +310,6 @@ Enable `prompt_debug` to see rendered prompts:
 
 ```yaml
 - name: extract_facts
-  prompt: $qanalabs_quiz_gen.Fact_extraction
+  prompt: $my_workflow.Fact_extraction
   prompt_debug: true
 ```
