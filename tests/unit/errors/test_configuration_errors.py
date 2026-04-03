@@ -9,7 +9,7 @@ class TestDuplicateFunctionError:
     def test_suggestions_in_detailed_message(self):
         err = DuplicateFunctionError(
             function_name="aggregate_validation_votes",
-            existing_location="qanalabs-quiz-gen.aggregate_validation_votes",
+            existing_location="my-workflow.aggregate_validation_votes",
             existing_file="/path/existing.py",
             new_location="code_options_quiz.aggregate_validation_votes",
             new_file="/path/new.py",

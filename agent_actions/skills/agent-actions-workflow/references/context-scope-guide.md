@@ -96,7 +96,7 @@ Static reference data loaded via `seed_data:` in the workflow config and accesse
 defaults:
   context_scope:
     seed_path:
-      exam_syllabus: $file:mcp_qanalabs_syllabus.json
+      exam_syllabus: $file:syllabus.json
 
 actions:
   - name: extract_facts

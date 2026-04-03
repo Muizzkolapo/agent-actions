@@ -134,7 +134,7 @@ export function RunsScreen() {
               {run.status.toLowerCase()}
             </span>
             <div className="min-w-0">
-              <span className="text-xs font-mono text-[hsl(var(--primary))]">{run.id.replace("run_qanalabs_quiz_gen_", "quiz_gen#")}</span>
+              <span className="text-xs font-mono text-[hsl(var(--primary))]">{run.id.replace(/^run_.*?_(\d{8}_\d{6})$/, "#$1").replace(/^run_/, "")}</span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
                   {formatTimestampShort(run.started)}

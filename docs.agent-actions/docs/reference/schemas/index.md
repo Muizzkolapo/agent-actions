@@ -368,7 +368,7 @@ required:
   - name  # description is optional
 ```
 
-## Examples from qanalabs
+## Examples
 
 ### Fact Extraction Schema
 
