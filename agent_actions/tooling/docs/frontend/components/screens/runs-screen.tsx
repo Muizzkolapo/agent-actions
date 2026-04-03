@@ -239,6 +239,9 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
       {/* Error */}
       {run.error && <ErrorBlock error={run.error} />}
 
+      {/* Execution timeline (Gantt) */}
+      {actionEntries.length > 0 && <ExecutionTimeline run={run} />}
+
       {/* Action execution timeline */}
       {actionEntries.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-5">
@@ -438,6 +441,172 @@ function RunStatusBadge({ status }: { status: RunStatus }) {
       {status === "running" && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))] animate-pulse" />}
       {status.toLowerCase()}
     </Badge>
+  )
+}
+
+/* --- Execution timeline (Gantt) --- */
+
+function actionStatusColor(status: string): string {
+  if (status === "success") return "hsl(var(--success))"
+  if (status === "failed") return "hsl(var(--destructive))"
+  if (status === "skipped") return "hsl(var(--muted-foreground))"
+  return "hsl(var(--primary))"
+}
+
+function ExecutionTimeline({ run }: { run: Run }) {
+  const entries = Object.entries(run.actions)
+  const runStart = new Date(run.started).getTime()
+
+  // Compute absolute start/end for each action in seconds from run start
+  const bars = entries.map(([name, a]) => {
+    let startSec: number | null = null
+    let endSec: number | null = null
+
+    if (a.started) {
+      startSec = (new Date(a.started).getTime() - runStart) / 1000
+    }
+    if (a.ended) {
+      endSec = (new Date(a.ended).getTime() - runStart) / 1000
+    }
+
+    // Derive missing values from dur
+    if (startSec != null && endSec == null && a.dur > 0) {
+      endSec = startSec + a.dur
+    }
+    if (endSec != null && startSec == null && a.dur > 0) {
+      startSec = endSec - a.dur
+    }
+
+    return { name, action: a, startSec, endSec }
+  })
+
+  // Check if we have enough timing data for a real timeline
+  const barsWithTiming = bars.filter((b) => b.startSec != null && b.endSec != null)
+
+  // If no bars have timing data, fall back to a sequential layout based on completed_at order
+  if (barsWithTiming.length === 0) {
+    // Use completion timestamps to build a relative view
+    const completionBars = bars
+      .filter((b) => b.endSec != null)
+      .sort((a, b) => a.endSec! - b.endSec!)
+
+    if (completionBars.length === 0) return null
+
+    const maxEnd = Math.max(...completionBars.map((b) => b.endSec!))
+    if (maxEnd <= 0) return null
+
+    return (
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h3 className="text-sm font-medium text-foreground mb-0.5">Execution Timeline</h3>
+        <p className="text-[10px] text-muted-foreground mb-4">by completion time</p>
+        <div className="flex flex-col gap-1.5">
+          {completionBars.map(({ name, action: a, endSec }) => {
+            const pctEnd = (endSec! / maxEnd) * 100
+            const barWidth = Math.max(pctEnd, 2)
+            const color = actionStatusColor(a.status)
+
+            return (
+              <div key={name} className="flex items-center gap-3 h-7">
+                <span className="text-[10px] font-mono text-muted-foreground w-[140px] truncate text-right shrink-0">
+                  {name}
+                </span>
+                <div className="flex-1 relative h-5">
+                  <div
+                    className="absolute top-0.5 h-4 rounded-sm transition-all duration-300"
+                    style={{
+                      left: 0,
+                      width: `${barWidth}%`,
+                      backgroundColor: color,
+                      opacity: a.status === "skipped" ? 0.3 : 0.7,
+                    }}
+                  />
+                </div>
+                <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums w-12 text-right shrink-0">
+                  {a.dur > 0 ? formatDuration(a.dur) : "\u2014"}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        {/* Time axis */}
+        <div className="flex items-center gap-3 mt-2">
+          <span className="w-[140px] shrink-0" />
+          <div className="flex-1 flex justify-between">
+            <span className="text-[9px] font-mono text-muted-foreground/40">0s</span>
+            <span className="text-[9px] font-mono text-muted-foreground/40">{formatDuration(maxEnd)}</span>
+          </div>
+          <span className="w-12 shrink-0" />
+        </div>
+      </div>
+    )
+  }
+
+  // Full timeline with start/end data
+  const maxEnd = Math.max(...barsWithTiming.map((b) => b.endSec!), run.duration)
+  if (maxEnd <= 0) return null
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <h3 className="text-sm font-medium text-foreground mb-4">Execution Timeline</h3>
+      <div className="flex flex-col gap-1.5">
+        {bars.map(({ name, action: a, startSec, endSec }) => {
+          const hasData = startSec != null && endSec != null
+          const pctLeft = hasData ? (startSec! / maxEnd) * 100 : 0
+          const pctWidth = hasData ? Math.max(((endSec! - startSec!) / maxEnd) * 100, 1) : 0
+          const color =
+            a.status === "success" ? "hsl(var(--success))"
+            : a.status === "failed" ? "hsl(var(--destructive))"
+            : a.status === "skipped" ? "hsl(var(--muted-foreground))"
+            : "hsl(var(--primary))"
+
+          return (
+            <div key={name} className="flex items-center gap-3 h-7">
+              <span className="text-[10px] font-mono text-muted-foreground w-[140px] truncate text-right shrink-0">
+                {name}
+              </span>
+              <div className="flex-1 relative h-5">
+                {hasData ? (
+                  <div
+                    className="absolute top-0.5 h-4 rounded-sm transition-all duration-300"
+                    style={{
+                      left: `${pctLeft}%`,
+                      width: `${pctWidth}%`,
+                      backgroundColor: color,
+                      opacity: a.status === "skipped" ? 0.3 : 0.7,
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="absolute top-0.5 h-4 rounded-sm"
+                    style={{
+                      left: 0,
+                      width: "100%",
+                      backgroundColor: color,
+                      opacity: 0.08,
+                    }}
+                  />
+                )}
+              </div>
+              <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums w-12 text-right shrink-0">
+                {a.dur > 0 ? formatDuration(a.dur) : "\u2014"}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      {/* Time axis */}
+      <div className="flex items-center gap-3 mt-2">
+        <span className="w-[140px] shrink-0" />
+        <div className="flex-1 flex justify-between">
+          <span className="text-[9px] font-mono text-muted-foreground/40">0s</span>
+          {maxEnd > 10 && (
+            <span className="text-[9px] font-mono text-muted-foreground/40">{formatDuration(maxEnd / 2)}</span>
+          )}
+          <span className="text-[9px] font-mono text-muted-foreground/40">{formatDuration(maxEnd)}</span>
+        </div>
+        <span className="w-12 shrink-0" />
+      </div>
+    </div>
   )
 }
 
