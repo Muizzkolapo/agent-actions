@@ -451,17 +451,17 @@ class TestVendorRunModeCompatibility:
     """Tests for _check_vendor_run_mode_compatibility()."""
 
     def test_batch_mode_with_non_batch_vendor_produces_error(self):
-        """Batch mode with a non-batch vendor (e.g., ollama) produces error."""
+        """Batch mode with a non-batch vendor (e.g., cohere) produces error."""
         svc = WorkflowResolutionService(
             action_configs={
-                "local_action": {"model_vendor": "ollama", "run_mode": "batch"},
+                "local_action": {"model_vendor": "cohere", "run_mode": "batch"},
             },
         )
         result = svc.resolve_all()
 
         batch_errors = [e for e in result.errors if "batch" in e.message.lower()]
         assert len(batch_errors) == 1
-        assert "ollama" in batch_errors[0].message
+        assert "cohere" in batch_errors[0].message
 
     def test_online_mode_passes_for_any_vendor(self):
         """Online mode passes for any vendor (no batch mode check needed)."""
