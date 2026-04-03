@@ -41,7 +41,7 @@ function Dashboard() {
 
   // Project name from catalog metadata (set by generator from directory name).
   // Falls back to path heuristic for older catalog.json files without the field.
-  const projectName = catalogProjectName ?? (() => {
+  const projectName = catalogProjectName || (() => {
     if (workflows.length === 0) return "project"
     const p = workflows[0].path || ""
     const parts = p.replace(/\\/g, "/").split("/").filter(Boolean)
