@@ -1,0 +1,26 @@
+name: aggregate_severity
+description: Weighted consensus severity from multiple independent classifiers
+fields:
+  - id: final_severity
+    type: string
+    description: "Consensus severity level (SEV1-SEV5)"
+  - id: confidence_score
+    type: number
+    description: "Average confidence across matching votes (0-1)"
+  - id: consensus_method
+    type: string
+    description: "Method used to reach consensus"
+  - id: is_split_decision
+    type: boolean
+    description: "Whether all classifiers disagreed"
+  - id: vote_summary
+    type: string
+    description: "Compiled reasoning from all classifiers"
+  - id: severity_distribution
+    type: object
+    description: "Count of votes per severity level"
+required:
+  - final_severity
+  - confidence_score
+  - is_split_decision
+  - vote_summary

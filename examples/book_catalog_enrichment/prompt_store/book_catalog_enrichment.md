@@ -39,6 +39,46 @@ Classify this book into appropriate BISAC categories. Select 1-3 categories that
 {end_prompt}
 
 
+{prompt AI_Review_Classification}
+You are a senior librarian and BISAC classification expert performing quality review of automated genre classifications.
+
+## INPUT
+Book metadata:
+- Title: {{ source.title }}
+- Authors: {{ source.authors }}
+- Description: {{ source.description }}
+
+Automated classification result:
+- Primary BISAC Code: {{ classify_genre.primary_bisac_code }}
+- Primary BISAC Name: {{ classify_genre.primary_bisac_name }}
+- Secondary Codes: {{ classify_genre.secondary_bisac_codes }}
+- Classification Reasoning: {{ classify_genre.classification_reasoning }}
+
+## TASK
+Review the automated BISAC classification for accuracy and quality. Assess whether:
+1. The primary category correctly captures the book's main subject
+2. The BISAC code format is valid (e.g., COM051000)
+3. Secondary categories are genuinely relevant (not redundant or too broad)
+4. The reasoning is sound and well-supported by the book's metadata
+
+## OUTPUT SCHEMA
+```json
+{
+  "review_status": "PASS | FLAG | REJECT",
+  "confidence_score": 1-10,
+  "issues_found": ["List of specific issues, empty array if none"],
+  "suggested_correction": "Alternative classification if issues found, empty string if none",
+  "review_reasoning": "Detailed explanation of the review assessment"
+}
+```
+
+## REVIEW CRITERIA
+- **PASS**: Classification is accurate, well-reasoned, and uses valid BISAC codes
+- **FLAG**: Classification is plausible but has minor issues worth human attention (e.g., a more specific code exists, secondary codes are questionable)
+- **REJECT**: Classification is clearly wrong, uses invalid codes, or reasoning doesn't match the book metadata
+{end_prompt}
+
+
 {prompt Write_Marketing_Description}
 You are a professional book marketing copywriter who creates compelling product descriptions for online bookstores.
 

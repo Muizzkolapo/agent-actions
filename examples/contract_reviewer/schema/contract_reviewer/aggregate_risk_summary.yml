@@ -23,17 +23,59 @@ fields:
     type: array
     items:
       type: object
+      properties:
+        clause_number:
+          type: integer
+          description: "The clause number in the contract"
+        clause_title:
+          type: string
+          description: "Title of the high-risk clause"
+        risk_indicators:
+          type: array
+          items:
+            type: string
+          description: "Risk indicators found in this clause"
+        recommended_action:
+          type: string
+          description: "Recommended action for this clause"
     description: "Details of each high-risk clause including clause_number, clause_title, risk_indicators, and recommended_action"
   - id: total_obligations
     type: array
     items:
       type: object
+      properties:
+        party:
+          type: string
+          description: "The responsible party"
+        obligations:
+          type: array
+          items:
+            type: string
+          description: "List of obligations for this party"
     description: "All obligations across the contract grouped by responsible party"
   - id: key_deadlines
     type: array
     items:
       type: object
+      properties:
+        description:
+          type: string
+          description: "Description of the deadline"
+        date:
+          type: string
+          description: "The deadline date or timeframe"
+        urgency:
+          type: string
+          description: "Urgency level: 'immediate', 'short-term', 'long-term'"
+        clause_number:
+          type: integer
+          description: "The clause this deadline comes from"
     description: "All time-bound requirements sorted by urgency"
+  - id: parties
+    type: array
+    items:
+      type: string
+    description: "Parties involved in the contract"
   - id: negotiation_priority
     type: array
     items:

@@ -19,6 +19,16 @@ fields:
     type: array
     items:
       type: object
+      properties:
+        current_language:
+          type: string
+          description: "The current contractual language to be changed"
+        proposed_change:
+          type: string
+          description: "The proposed alternative language"
+        rationale:
+          type: string
+          description: "Reason for the proposed change"
     description: "Specific points to negotiate, each with current_language, proposed_change, and rationale"
   - id: precedent_concerns
     type: string

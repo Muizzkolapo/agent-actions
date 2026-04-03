@@ -69,7 +69,7 @@ You are routing a support ticket to the right team.
 **Severity**: {{ assess_severity.severity }}
 **Product Area**: {{ identify_area.product_area }}
 
-**Routing Rules**: {{ seed_data.routing_rules }}
+**Routing Rules**: {{ seed.routing_rules }}
 
 Based on the routing rules, which team should handle this? Answer with the team name only. Nothing else.
 {end_prompt}

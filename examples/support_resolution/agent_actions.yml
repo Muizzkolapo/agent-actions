@@ -1,4 +1,3 @@
-project_name: support_resolution
 default_agent_config:
   chunk_config:
     overlap: 500
@@ -6,4 +5,5 @@ default_agent_config:
   model_name: llama3
   ephemeral: false
   prompt_debug: false
+schema_path: schema
 tool_path: ["tools"]

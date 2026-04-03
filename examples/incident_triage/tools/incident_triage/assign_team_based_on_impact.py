@@ -66,7 +66,7 @@ def assign_team_based_on_impact(data: dict[str, Any]) -> dict[str, Any]:
     # Initialize variables with defaults to avoid unbound errors
     primary_team = None
     matched_service = None
-    service_tier = None
+    service_tier = "unknown"
     primary_system = None
     response_sla = "Unknown"
 
