@@ -90,6 +90,8 @@ class AgentWorkflow:
         # Fresh run: clear stored results + status before anything else
         if config.fresh:
             self._clear_for_fresh_run()
+        else:
+            self._reset_retryable_actions()
 
         # Dependency orchestration + session
         self._init_dependency_orchestrator()
@@ -161,6 +163,18 @@ class AgentWorkflow:
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
         )
+
+    def _reset_retryable_actions(self) -> None:
+        """Reset failed/skipped/running actions to pending so re-runs retry them."""
+        reset_actions = self.services.core.state_manager.reset_retryable()
+        if not reset_actions:
+            return
+        for action_name in reset_actions:
+            try:
+                self.storage_backend.clear_disposition(action_name)
+            except Exception as e:
+                logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
+        logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
 
     # ── Properties ──────────────────────────────────────────────────────
 
