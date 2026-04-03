@@ -101,7 +101,7 @@ def run_dedup(data: list[dict]) -> FileUDFResult:
 
 ## How Observed Fields Arrive in UDFs
 
-Three access modes depending on how upstream data was produced:
+Four access modes depending on how upstream data was produced:
 
 ### 1. Standard observed fields (FLAT)
 
@@ -116,17 +116,21 @@ copy = content.get("write_marketing_copy", {})
 title = copy.get("listing_title", "")  # always ""
 ```
 
-### 2. `output_field` values (under ACTION NAME)
+### 2. `output_field` values (under the FIELD NAME, not the action name)
 
-With `json_mode: false` and `output_field`, the value lives under the action name, not the field name.
+With `json_mode: false` and `output_field`, the raw text is stored under the `output_field` name (default: `raw_response`). After observe flattening, access by field name.
 
 ```python
-# CORRECT — use the action name
-issue_type = content.get("classify_issue", "")
+# Config: output_field: severity  (on action "assess_severity")
 
-# WRONG — returns default
-issue_type = content.get("issue_type", "")
+# CORRECT — use the output_field name
+severity = content.get("severity", "")
+
+# WRONG — action name doesn't work here
+severity = content.get("assess_severity", "")  # returns default
 ```
+
+**Note:** The default `output_field` is `raw_response`. If you don't set `output_field:` in the YAML, access via `content.get("raw_response", "")`.
 
 ### 3. Version consumption merge (NESTED — the one exception)
 

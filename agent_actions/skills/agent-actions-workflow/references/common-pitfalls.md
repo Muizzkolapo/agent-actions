@@ -314,7 +314,7 @@ agac run -a <workflow>
   dependencies: [assess_severity]  # classify_issue is transitively upstream
 ```
 
-Context references in `observe` are auto-resolved by the framework. Only declare what's needed for execution ordering.
+`dependencies` controls execution ordering and file flow. If an action is already transitively upstream through the dependency chain, listing it again is redundant.
 
 ## 18. Running Full Data During Development
 
@@ -357,3 +357,50 @@ Remove limits when ready for production. Changing limits between runs automatica
 ```
 
 **Note:** With passthrough, UDF returns `dict` (not list) with ONLY new fields.
+
+## 20. Guard Conditions Can't Reference `output_field` Values
+
+**Symptom:** Guard condition `severity != "low"` doesn't filter as expected.
+
+**Cause:** With `output_field`, the value lives under the output field name in the data namespace, but guard conditions can't resolve it. This is a known framework limitation.
+
+**No working syntax currently.** If you need to filter on non-JSON output, use a tool action to post-process instead of a guard.
+
+## 21. `additionalProperties: false` Blocks Unlisted UDF Fields
+
+**Symptom:** Schema validation error on a field your UDF returns.
+
+**Cause:** Schema has `additionalProperties: false` but UDF returns a field not listed in the schema.
+
+**Fix:** Add every field your UDF returns to the schema, even computed/derived fields.
+
+```yaml
+# If UDF returns {"title": "...", "parties": [...], "risk_score": 0.8}
+# then schema must list ALL three:
+fields:
+  - id: title
+    type: string
+  - id: parties
+    type: array
+  - id: risk_score
+    type: number
+additionalProperties: false
+```
+
+## 22. Drop Directives on Passthrough Fields Match Nothing
+
+**Symptom:** Drop directive produces repeated runtime warnings but doesn't drop anything.
+
+**Cause:** Drop directives only apply to schema fields in observed namespaces. Passthrough fields are not in the schema namespace — they're merged after validation.
+
+```yaml
+# WRONG — passthrough fields can't be dropped
+context_scope:
+  drop:
+    - upstream_action.passthrough_field  # matches nothing, warns
+
+# If you need to exclude passthrough fields, don't passthrough them:
+context_scope:
+  passthrough:
+    - upstream_action.field_i_want      # selective, not wildcard
+```

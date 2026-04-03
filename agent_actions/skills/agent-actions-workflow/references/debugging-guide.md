@@ -59,7 +59,7 @@ rm -rf agent_workflow/<workflow>/agent_io/source/
 ```bash
 # Check for suspiciously fast completions and empty outputs
 for dir in agent_workflow/<workflow>/agent_io/target/*/; do
-  size=$(stat -f%z "$dir/sample.json" 2>/dev/null || echo "0")
+  size=$(wc -c < "$dir/sample.json" 2>/dev/null || echo "0")
   if [ "$size" -le 2 ]; then
     echo "EMPTY: $dir"
   fi
