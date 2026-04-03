@@ -61,7 +61,7 @@ Feature support varies by vendor:
 | Google | ✅ | ✅ | ✅ | ✅ |
 | Groq | ✅ | ✅ | ✅ | ❌ |
 | Mistral | ✅ | ✅ | ✅ | ❌ |
-| Ollama | ✅ | ❌ | ✅ | ✅ |
+| Ollama | ✅ | ✅ | ✅ | ✅ |
 
 ## Schema Validation
 
