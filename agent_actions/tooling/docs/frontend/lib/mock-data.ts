@@ -138,7 +138,7 @@ export interface ValidationGroup {
 export interface DataNode {
   id: string             // "workflow.action_name"
   node: string           // "extract_raw_qa_3"
-  workflow: string        // "qanalabs_quiz_gen_fake"
+  workflow: string        // "my_workflow"
   recordCount: number
   files: string[]
   preview: Record<string, unknown>[]
