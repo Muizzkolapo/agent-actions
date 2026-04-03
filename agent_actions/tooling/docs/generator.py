@@ -283,10 +283,26 @@ class CatalogGenerator:
         )
         catalog["stats"]["total_runs"] = len(runs_data) if runs_data else 0
 
+        # Merge runtime warnings/errors from all workflows into catalog logs
+        all_runtime_warnings: list[dict] = []
+        all_runtime_errors: list[dict] = []
+        if runs_data:
+            for wf_run in runs_data.values():
+                all_runtime_warnings.extend(wf_run.get("runtime_warnings", []))
+                all_runtime_errors.extend(wf_run.get("runtime_errors", []))
+
+        if not isinstance(catalog.get("logs"), dict):
+            catalog["logs"] = {}
+        catalog["logs"]["runtime_warnings"] = all_runtime_warnings
+        catalog["logs"]["runtime_errors"] = all_runtime_errors
+
         # Update validation stats from logs
         if logs_data:
             catalog["stats"]["validation_errors"] = len(logs_data.get("validation_errors", []))
             catalog["stats"]["validation_warnings"] = len(logs_data.get("validation_warnings", []))
+
+        catalog["stats"]["runtime_warnings"] = len(all_runtime_warnings)
+        catalog["stats"]["runtime_errors"] = len(all_runtime_errors)
 
         # Update stats for new categories
         catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0

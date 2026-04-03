@@ -300,6 +300,14 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
                     exc_info=True,
                 )
 
+        # Extract runtime warnings/errors from events.json
+        runtime_events: dict[str, list[dict[str, Any]]] = {}
+        if events_path.exists():
+            try:
+                runtime_events = extract_runtime_warnings(events_path)
+            except (OSError, ValueError) as e:
+                logger.debug("Failed to extract runtime warnings from %s: %s", events_path, e)
+
         # Load .manifest.json for execution plan and per-action status
         manifest_path = target_dir / ".manifest.json"
         manifest_data = None
@@ -314,6 +322,8 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             "workflow_name": workflow_name,
             "latest_run": latest_run,
             "action_metrics": action_metrics,
+            "runtime_warnings": runtime_events.get("runtime_warnings", []),
+            "runtime_errors": runtime_events.get("runtime_errors", []),
             "manifest": manifest_data,
             "run_results_path": str(run_results_path) if run_results_path.exists() else None,
             "events_path": str(events_path) if events_path.exists() else None,
@@ -490,3 +500,61 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
         logger.debug("Could not read action metrics from %s: %s", events_path, e)
 
     return action_metrics
+
+
+def extract_runtime_warnings(events_path: Path) -> dict[str, list[dict[str, Any]]]:
+    """Extract runtime warn/error events from a per-workflow events.json.
+
+    Returns:
+        {"runtime_warnings": [...], "runtime_errors": [...]} where each entry
+        has {target, message, timestamp, category, action_name, event_type}.
+    """
+    import json
+
+    warnings: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    _LOG_LINE_LIMIT = 100_000
+    try:
+        with open(events_path, encoding="utf-8") as f:
+            for line in itertools.islice(f, _LOG_LINE_LIMIT):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                level = event.get("level")
+                if level not in ("warn", "error"):
+                    continue
+
+                # Skip validation events — they're already captured by scan_logs()
+                event_type = event.get("event_type", "")
+                if event_type in ("ValidationErrorEvent", "ValidationWarningEvent"):
+                    continue
+
+                meta = event.get("meta", {})
+                action_name = meta.get("action_name", "")
+                workflow_name = meta.get("workflow_name", "")
+                target = action_name or workflow_name or event.get("category", "unknown")
+
+                entry = {
+                    "target": target,
+                    "message": event.get("message", ""),
+                    "timestamp": meta.get("timestamp", ""),
+                    "category": event.get("category", ""),
+                    "action_name": action_name,
+                    "event_type": event_type,
+                }
+
+                if level == "warn":
+                    warnings.append(entry)
+                else:
+                    errors.append(entry)
+
+    except OSError as e:
+        logger.debug("Could not read runtime warnings from %s: %s", events_path, e)
+
+    return {"runtime_warnings": warnings, "runtime_errors": errors}
