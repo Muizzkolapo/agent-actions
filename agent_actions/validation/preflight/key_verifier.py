@@ -5,7 +5,8 @@ key is accepted by the vendor.  Called only when --verify-keys is passed.
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ def _probe_gemini(api_key: str) -> ProbeResult:
 
 # ── Registry ──────────────────────────────────────────────────────────
 
-_PROBE_REGISTRY: dict[str, callable] = {
+_PROBE_REGISTRY: dict[str, Callable[[str], ProbeResult]] = {
     "openai": _probe_openai,
     "anthropic": _probe_anthropic,
     "groq": _probe_groq,
@@ -143,7 +144,7 @@ def verify_keys(
     logger.info("Verifying API keys for %d vendor(s)...", len(tasks))
 
     with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-        futures = {
+        futures: dict[Future[ProbeResult], str] = {
             pool.submit(_PROBE_REGISTRY[vendor], key): vendor for vendor, (_, key) in tasks.items()
         }
         for future in as_completed(futures, timeout=_PROBE_TIMEOUT_SECONDS + 2):
