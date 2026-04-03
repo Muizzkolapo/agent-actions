@@ -54,63 +54,7 @@ The final tool action builds three views from each enriched record — one for t
 
 ## Pipeline
 
-```
-                    ┌─────────────────────────┐
-                    │     classify_genre      │  LLM
-                    │  [reprompt: BISAC fmt]  │
-                    └───────────┬─────────────┘
-                                │
-                    ┌───────────┴─────────────┐
-                    │     validate_bisac      │  Tool
-                    └───────────┬─────────────┘
-                                │
-                    ┌───────────┴─────────────┐
-                    │    write_description    │  LLM
-                    │  [reprompt: word count] │
-                    └───────────┬─────────────┘
-                                │
-                    ┌───────────┴─────────────┐
-                    │   validate_description  │  Tool
-                    └───────────┬─────────────┘
-                                │
-         ┌──────────────────────┼──────────────────────┐
-         │                      │                      │
-┌────────┴────────┐   ┌────────┴────────┐   ┌────────┴────────┐
-│  generate_seo   │   │ generate_search │   │ assess_reading_ │  LLM × 3
-│                 │   │    _criteria    │   │     level       │  (parallel)
-└────────┬────────┘   └────────┬────────┘   └────────┬────────┘
-         │                     │                     │
-         │            ┌────────┴────────┐            │
-         │            │retrieve_candid- │  Tool       │
-         │            │     ates        │             │
-         │            │[seed catalog]   │            │
-         │            └────────┬────────┘            │
-         │                     │                     │
-         │            ┌────────┴────────┐            │
-         │            │  generate_reco- │  LLM        │
-         │            │  mmendations    │             │
-         │            │[from real books]│            │
-         │            └────────┬────────┘            │
-         │                     │                     │
-         └──────────────────────┼──────────────────────┘
-                                │
-                    ┌───────────┴─────────────┐
-                    │     score_quality       │  LLM  [merge all branches]
-                    └───────────┬─────────────┘
-                                │
-                    ┌───────────┴─────────────┐
-                    │      format_entry       │  Tool
-                    └───────────┬─────────────┘
-                                │
-                    ┌───────────┴─────────────┐
-                    │     filter_quality      │  Tool
-                    └───────────┬─────────────┘
-                                │  guard: passes_filter
-                    ┌───────────┴─────────────┐
-                    │    select_for_users     │  Tool
-                    │  seo / mgmt / dev views │
-                    └─────────────────────────┘
-```
+<p align="center"><img src="../../docs/flow.png" width="800"/></p>
 
 ## Actions
 

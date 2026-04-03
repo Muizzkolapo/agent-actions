@@ -29,14 +29,18 @@ version: "1.0.0"
 defaults:
   json_mode: true
   granularity: Record
-  run_mode: batch
+  run_mode: online
   model_vendor: openai
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   is_operational: true
+  record_limit: 2      # Remove for full processing
   context_scope:
     seed_path:
       rubric: $file:evaluation_rubric.json
+  retry:
+    enabled: true
+    max_attempts: 2
 
   data_source:
     type: local
@@ -53,10 +57,10 @@ actions:
   # ═══════════════════════════════════════════════════════════════════════════
   - name: extract_claims
     intent: "Extract factual claims, product aspects, and sentiment signals from review text"
-    schema: review_analyzer/extract_claims
+    schema: extract_claims
     prompt: $review_analyzer.Extract_Claims
-    model_vendor: groq                          # ← Cheap model for extraction
-    model_name: llama-3.3-70b-versatile
+    model_vendor: groq
+    model_name: llama-3.1-8b-instant
     api_key: GROQ_API_KEY
     context_scope:
       observe:
@@ -73,9 +77,6 @@ actions:
         - source.review_date
         - source.product_name
         - source.product_category
-    retry:
-      enabled: true
-      max_attempts: 3
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STEP 2: SCORE REVIEW QUALITY (3 independent parallel scorers)
@@ -84,29 +85,32 @@ actions:
   # and the rubric, but NEVER each other's scores. This is context isolation:
   # biased reviewers = useless pipeline.
   #
-  # Two lines of YAML = 3 parallel LLM calls. In n8n: 3 HTTP nodes + custom
-  # JavaScript merge node + manual wiring.
+  # Two lines of YAML = 3 parallel LLM calls.
   # ═══════════════════════════════════════════════════════════════════════════
   - name: score_quality
     dependencies: [extract_claims]
     intent: "Independently score review quality against rubric criteria"
-    schema: review_analyzer/score_quality
+    schema: score_quality
     prompt: $review_analyzer.Score_Quality
+    model_vendor: ollama                          # Numeric scoring — parallel voting compensates for weaker model
+    model_name: llama3.2:latest
+    reprompt:
+      validation: check_required_fields
+      max_attempts: 2
+      on_exhausted: return_last
     versions:
       param: scorer_id                          # ← 3 parallel scorers
       range: [1, 2, 3]
       mode: parallel
     context_scope:
       observe:
-        - extract_claims.claims                 # ← Scorers see extracted claims
+        - extract_claims.factual_claims           # ← Scorers see extracted claims
         - extract_claims.product_aspects
         - extract_claims.sentiment_signals
         - source.review_text                    # ← And original review text
-        - seed_data.rubric                      # ← And the scoring rubric
+        - seed.rubric                            # ← And the scoring rubric
       drop:
         - source.star_rating                    # ← Still excluded from scoring
-        - extract_claims.review_id
-        - extract_claims.reviewer_name
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STEP 3: AGGREGATE QUALITY SCORES
@@ -119,13 +123,15 @@ actions:
     kind: tool
     impl: aggregate_quality_scores
     intent: "Compute weighted consensus score from 3 independent quality scorers"
-    schema: review_analyzer/aggregate_scores
+    schema: aggregate_scores
     version_consumption:
       source: score_quality                     # ← Declarative fan-in
       pattern: merge                            #    from parallel versions
     context_scope:
       observe:
-        - score_quality.*
+        - score_quality_1.*
+        - score_quality_2.*
+        - score_quality_3.*
       passthrough:
         - extract_claims.*
 
@@ -144,11 +150,11 @@ actions:
   - name: generate_response
     dependencies: [aggregate_scores]
     intent: "Draft a professional merchant response for high-quality reviews"
-    schema: review_analyzer/generate_response
+    schema: generate_response
     prompt: $review_analyzer.Generate_Response
-    model_vendor: anthropic                     # ← Best reasoning for responses
-    model_name: claude-sonnet-4-20250514
-    api_key: ANTHROPIC_API_KEY
+    # model_vendor: anthropic                   # ← Uncomment for better reasoning
+    # model_name: claude-sonnet-4-20250514
+    # api_key: ANTHROPIC_API_KEY
     guard:
       condition: 'consensus_score >= 6'         # ← Pre-check gate: skip low quality
       on_false: "filter"                        #    LLM never fires for junk reviews
@@ -156,7 +162,7 @@ actions:
       observe:
         - source.review_text                    # ← Sees the original review
         - source.review_title
-        - extract_claims.claims                 # ← Sees extracted claims
+        - extract_claims.factual_claims                 # ← Sees extracted claims
         - extract_claims.product_aspects
         - extract_claims.sentiment_signals
         - aggregate_scores.consensus_score      # ← Sees the score
@@ -182,7 +188,7 @@ actions:
   - name: extract_product_insights
     dependencies: [aggregate_scores]
     intent: "Classify actionable product feedback into improvement categories"
-    schema: review_analyzer/extract_product_insights
+    schema: extract_product_insights
     prompt: $review_analyzer.Extract_Product_Insights
     guard:
       condition: 'consensus_score >= 6'         # ← Same gate — skip junk
@@ -190,9 +196,9 @@ actions:
     context_scope:
       observe:
         - source.review_text
-        - extract_claims.claims
+        - extract_claims.factual_claims
         - extract_claims.product_aspects
-        - seed_data.rubric.product_feedback_categories
+        - seed.rubric.product_feedback_categories
       passthrough:
         - source.review_id
         - source.product_name
@@ -209,7 +215,7 @@ actions:
     kind: tool
     impl: format_analysis_output
     intent: "Package review analysis, merchant response, and product insights into final output"
-    schema: review_analyzer/format_output
+    schema: format_output
     context_scope:
       observe:
         - generate_response.*

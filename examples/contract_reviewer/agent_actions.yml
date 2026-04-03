@@ -1,4 +1,3 @@
-project_name: contract_reviewer
 default_agent_config:
   api_key: OPENAI_API_KEY
   chunk_config:

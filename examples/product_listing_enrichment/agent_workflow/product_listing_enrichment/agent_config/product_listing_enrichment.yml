@@ -33,6 +33,7 @@ defaults:
   api_key: OPENAI_API_KEY
   is_operational: true
   prompt_debug: false
+  record_limit: 2      # Remove for full processing
   context_scope:
     seed_path:
       brand_voice: $file:brand_voice.json
@@ -57,15 +58,22 @@ actions:
   # ══════════════════════════════════════════════════════════════════════════
   - name: generate_description
     intent: "Generate a structured product description from raw technical specs and image context"
-    schema: product_listing_enrichment/generate_description
+    schema: generate_description
     prompt: $product_listing_enrichment.Generate_Product_Description
+    model_vendor: gemini                          # Cheap extraction — Gemini Flash for simple tasks
+    model_name: gemini-2.5-flash
+    api_key: GEMINI_API_KEY
+    reprompt:
+      validation: check_required_fields
+      max_attempts: 2
+      on_exhausted: return_last
     context_scope:
       observe:
         - source.raw_specs
         - source.product_images_description
         - source.product_name
         - source.brand
-        - seed_data.brand_voice
+        - seed.brand_voice
       passthrough:
         - source.product_id
         - source.product_category
@@ -83,7 +91,7 @@ actions:
     kind: tool
     impl: fetch_competitor_prices
     intent: "Look up competitor pricing data for competitive positioning"
-    schema: product_listing_enrichment/fetch_competitor_prices
+    schema: fetch_competitor_prices
     granularity: Record
     context_scope:
       observe:
@@ -102,15 +110,19 @@ actions:
   - name: write_marketing_copy
     dependencies: [fetch_competitor_prices]
     intent: "Write compelling marketplace copy with competitive positioning"
-    schema: product_listing_enrichment/write_marketing_copy
+    schema: write_marketing_copy
     prompt: $product_listing_enrichment.Write_Marketing_Copy
+    reprompt:
+      validation: check_required_fields
+      max_attempts: 2
+      on_exhausted: return_last
     context_scope:
       observe:
         - generate_description.*
         - fetch_competitor_prices.competitor_prices
         - fetch_competitor_prices.price_position
-        - seed_data.brand_voice
-        - seed_data.marketplace_rules
+        - seed.brand_voice
+        - seed.marketplace_rules
       drop:
         - source.raw_specs
       passthrough:
@@ -130,12 +142,12 @@ actions:
     kind: tool
     impl: validate_marketplace_compliance
     intent: "Check marketing copy against marketplace character limits and required fields"
-    schema: product_listing_enrichment/validate_compliance
+    schema: validate_compliance
     granularity: Record
     context_scope:
       observe:
         - write_marketing_copy.*
-        - seed_data.marketplace_rules
+        - seed.marketplace_rules
 
   # ══════════════════════════════════════════════════════════════════════════
   # STEP 5: OPTIMIZE SEO (LLM, guarded)
@@ -147,11 +159,11 @@ actions:
   - name: optimize_seo
     dependencies: [validate_compliance]
     intent: "Optimize listing for marketplace search ranking and discoverability"
-    schema: product_listing_enrichment/optimize_seo
+    schema: optimize_seo
     prompt: $product_listing_enrichment.Optimize_SEO
     guard:
       condition: 'compliance_passed == true'
-      on_false: "filter"
+      on_false: "skip"
     context_scope:
       observe:
         - write_marketing_copy.*
@@ -173,7 +185,7 @@ actions:
     kind: tool
     impl: format_marketplace_listing
     intent: "Package all enriched data into final marketplace-ready listing format"
-    schema: product_listing_enrichment/format_listing
+    schema: format_listing
     granularity: Record
     context_scope:
       observe:

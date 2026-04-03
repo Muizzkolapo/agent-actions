@@ -1,0 +1,26 @@
+name: ai_review_classification
+description: AI pre-review assessment of BISAC classification quality before human review
+fields:
+  - id: review_status
+    type: string
+    description: "AI assessment: PASS, FLAG, or REJECT"
+  - id: confidence_score
+    type: number
+    description: "AI confidence in the classification (1-10)"
+  - id: issues_found
+    type: array
+    items:
+      type: string
+    description: "List of potential issues identified by AI"
+  - id: suggested_correction
+    type: string
+    description: "AI suggested alternative classification if issues found, empty string if none"
+  - id: review_reasoning
+    type: string
+    description: "AI explanation of its review assessment"
+required:
+  - review_status
+  - confidence_score
+  - issues_found
+  - review_reasoning
+additionalProperties: false
