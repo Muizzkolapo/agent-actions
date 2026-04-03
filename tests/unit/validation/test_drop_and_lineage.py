@@ -244,8 +244,8 @@ class TestExpandWildcards:
         assert len(errors) == 0
         assert config["actions"][0]["context_scope"]["drop"] == ["A.*"]
 
-    def test_schemaless_left_as_wildcard(self):
-        """Wildcard on schemaless action is left unexpanded."""
+    def test_schemaless_resolves_to_nothing(self):
+        """Wildcard on schemaless action resolves to empty (no fields to expand)."""
         graph = self._make_graph(
             [
                 ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
@@ -259,7 +259,7 @@ class TestExpandWildcards:
         errors = analyzer._expand_wildcards()
 
         assert len(errors) == 0
-        assert config["actions"][0]["context_scope"]["passthrough"] == ["A.*"]
+        assert config["actions"][0]["context_scope"]["passthrough"] == []
 
     def test_unknown_action_errors(self):
         """Wildcard on non-existent action produces an error."""
@@ -342,8 +342,8 @@ class TestExpandWildcards:
             assert "A.*" not in refs
             assert sorted(refs) == ["A.f1", "A.f2"]
 
-    def test_empty_schema_keeps_wildcard(self):
-        """Wildcard on known but empty schema is kept (downstream can report)."""
+    def test_empty_schema_resolves_to_nothing(self):
+        """Wildcard on known but empty schema resolves to empty list."""
         graph = self._make_graph(
             [
                 ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
@@ -357,7 +357,7 @@ class TestExpandWildcards:
         errors = analyzer._expand_wildcards()
 
         assert len(errors) == 0
-        assert config["actions"][0]["context_scope"]["observe"] == ["A.*"]
+        assert config["actions"][0]["context_scope"]["observe"] == []
 
     def test_observe_fields_included_in_expansion(self):
         """Expansion includes both schema_fields and observe_fields."""

@@ -101,18 +101,17 @@ class WorkflowStaticAnalyzer:
         # Step 1: Build data flow graph
         self._build_graph()
 
-        # Step 1b: Expand wildcard field references (namespace.* → concrete fields)
+        # Step 2: Expand wildcard field references (namespace.* → concrete fields)
         expansion_errors = self._expand_wildcards()
 
-        # Step 2: Run type checker
+        # Step 3: Run type checker
         checker = StaticTypeChecker(self.graph)
         result = checker.check_all()
 
-        # Step 1b (cont.): Add expansion errors to result
         for error in expansion_errors:
             result.add_error(error)
 
-        # Step 2b: Reserved action name validation
+        # Step 3b: Reserved action name validation
         for error in self._check_reserved_action_names():
             result.add_error(error)
 
@@ -187,9 +186,13 @@ class WorkflowStaticAnalyzer:
                 continue
 
             action_name = action.get("name", "unknown")
-            context_scope = action.get("context_scope")
-            if not context_scope or not isinstance(context_scope, dict):
+            original_scope = action.get("context_scope")
+            if not original_scope or not isinstance(original_scope, dict):
                 continue
+
+            # Shallow-copy so we don't mutate the caller's config.
+            context_scope = {**original_scope}
+            action["context_scope"] = context_scope
 
             for directive in ("observe", "passthrough", "drop"):
                 refs = context_scope.get(directive)
@@ -243,20 +246,21 @@ class WorkflowStaticAnalyzer:
 
                     output = dep_node.output_schema
 
-                    # Dynamic / schemaless — can't expand, leave as-is.
-                    if output.is_dynamic or output.is_schemaless:
+                    # Dynamic — fields resolved at runtime, can't expand.
+                    if output.is_dynamic:
                         expanded.append(ref)
                         continue
 
+                    # Schemaless — no schema defined, zero fields to expand.
+                    # Drop the ref: "give me everything" from nothing = nothing.
+                    if output.is_schemaless:
+                        continue
+
                     # Expand into concrete field references.
+                    # Empty schemas also resolve to nothing (wildcard on zero
+                    # fields = zero refs).
                     fields = output.schema_fields | output.observe_fields
-                    if fields:
-                        expanded.extend(f"{ns_name}.{f}" for f in sorted(fields))
-                    else:
-                        # Schema is known but has zero fields — the wildcard
-                        # resolves to nothing.  Keep the ref so downstream
-                        # checks can report it if needed.
-                        expanded.append(ref)
+                    expanded.extend(f"{ns_name}.{f}" for f in sorted(fields))
 
                 context_scope[directive] = expanded
 
