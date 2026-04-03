@@ -129,7 +129,7 @@ Formats events for user-facing CLI output using Rich.
 
 **Example Output:**
 ```
-19:40:16 | ▶ WORKFLOW qanalabs_quiz_gen started (5 actions, parallel)
+19:40:16 | ▶ WORKFLOW support_resolution started (5 actions, parallel)
 19:40:17 | 1/5 START action: extract_raw_qa...
 19:40:32 | 1/5 DONE extract_raw_qa (15.23s, 1.2K tokens)
 19:40:32 | 2/5 START action: flatten_raw_questions...
@@ -158,10 +158,10 @@ Writes events to a JSON file in NDJSON format (one JSON object per line).
   "timestamp": "2024-01-15T19:40:16.123Z",
   "event_type": "workflow_start",
   "category": "workflow",
-  "message": "Starting workflow qanalabs_quiz_gen",
+  "message": "Starting workflow support_resolution",
   "meta": {
     "invocation_id": "run_xyz789",
-    "workflow_name": "qanalabs_quiz_gen",
+    "workflow_name": "support_resolution",
     "correlation_id": "corr_def456"
   },
   "data": {
@@ -190,7 +190,7 @@ Collects workflow execution data and outputs a `run_results.json` artifact.
 {
   "metadata": {
     "invocation_id": "run_xyz789",
-    "workflow_name": "qanalabs_quiz_gen",
+    "workflow_name": "support_resolution",
     "agent_count": 5,
     "execution_mode": "parallel",
     "started_at": "2024-01-15T19:40:16.000Z",
@@ -200,12 +200,12 @@ Collects workflow execution data and outputs a `run_results.json` artifact.
   },
   "results": [
     {
-      "unique_id": "qanalabs_quiz_gen.extract_raw_qa",
+      "unique_id": "support_resolution.extract_raw_qa",
       "agent_name": "extract_raw_qa",
       "agent_index": 1,
       "status": "success",
       "execution_time": 15.23,
-      "output_folder": "qanalabs_quiz_gen/agent_io/target/extract_raw_qa",
+      "output_folder": "support_resolution/agent_io/target/extract_raw_qa",
       "record_count": 100,
       "tokens": {
         "prompt_tokens": 800,

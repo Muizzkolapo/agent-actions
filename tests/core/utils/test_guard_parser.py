@@ -170,10 +170,10 @@ class TestGuardParserIntegration:
 
     def test_nested_module_udf(self):
         """Test UDF with deeply nested module paths."""
-        guard = "udf:qanalabs.tools.quiz_gen.validators.check_answer_quality"
+        guard = "udf:myproject.tools.quiz_gen.validators.check_answer_quality"
         result = GuardParser.parse(guard)
         assert result.type == GuardType.UDF
-        assert result.expression == "qanalabs.tools.quiz_gen.validators.check_answer_quality"
+        assert result.expression == "myproject.tools.quiz_gen.validators.check_answer_quality"
 
 
 if __name__ == "__main__":

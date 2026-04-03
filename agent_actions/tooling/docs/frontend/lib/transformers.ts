@@ -400,6 +400,7 @@ export interface CatalogData {
   validationWarningGroups: ValidationGroup[]
   workflowData: WorkflowDataSummary[]
   generatedAt: string
+  projectName: string | null
 }
 
 export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): CatalogData {
@@ -416,5 +417,6 @@ export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): Catalo
     validationWarningGroups: warnings,
     workflowData: transformWorkflowData(catalog),
     generatedAt: catalog.metadata?.generated_at ?? "",
+    projectName: catalog.metadata?.project_name ?? null,
   }
 }
