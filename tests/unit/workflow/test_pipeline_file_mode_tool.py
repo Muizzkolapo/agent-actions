@@ -77,6 +77,79 @@ def test_file_tool_plain_list_still_works():
     assert results[0].data[0]["content"]["score"] == 0.9
 
 
+# --- Empty tool output detection ---
+
+
+def test_file_tool_empty_response_with_input_returns_failed():
+    """Tool returning [] with non-empty input should return ProcessingResult.failed().
+
+    This is the root cause fix: the result status must reflect reality so
+    that the existing stats.failed check in the pipeline raises naturally,
+    without tool-specific special cases.
+    """
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert len(results) == 1
+    assert results[0].status == ProcessingStatus.FAILED
+    assert "returned empty result" in results[0].error
+    assert "2 input record(s)" in results[0].error
+
+
+def test_file_tool_empty_response_with_empty_input_ok():
+    """Tool returning [] with empty input should NOT be marked failed."""
+    pipeline, context = _make_pipeline_and_context()
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        results = pipeline._process_file_mode_tool([], [], context)
+
+    assert len(results) == 1
+    assert results[0].status == ProcessingStatus.SUCCESS
+    assert results[0].data == []
+
+
+def test_file_tool_empty_response_feeds_existing_failure_check():
+    """Empty tool result -> stats.failed=1 -> existing zero-output check raises.
+
+    Verifies the FAILED result integrates with ResultCollector and the
+    pipeline's generic failure detection — no tool-specific branches needed.
+    """
+    from agent_actions.processing.result_collector import ResultCollector
+
+    pipeline, context = _make_pipeline_and_context()
+    input_data = [{"content": {"a": 1}}, {"content": {"b": 2}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    output, stats = ResultCollector.collect_results(
+        results,
+        {"kind": "tool"},
+        "my_file_tool",
+        is_first_stage=False,
+    )
+
+    assert stats.failed == 1
+    assert stats.success == 0
+    assert output == []
+
+
 # --- Error surfacing ---
 
 

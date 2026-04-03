@@ -153,3 +153,48 @@ class TestGuardSkipDisposition:
 
         # Should not raise
         self._run_with_stats(pipeline, config, stats, fp, base, out)
+
+
+class TestZeroOutputFailureCheck:
+    """The generic zero-output failure check (stats.failed > 0) fires for any
+    action type, including tool actions whose empty output is now correctly
+    represented as ProcessingResult.failed().
+    """
+
+    def _run_with_stats(self, pipeline, config, stats, file_path, base_dir, output_dir, data=None):
+        if data is None:
+            data = [{"id": "1"}, {"id": "2"}]
+        pipeline.record_processor.process_batch.return_value = []
+        with patch(
+            "agent_actions.workflow.pipeline.ResultCollector.collect_results",
+            return_value=([], stats),
+        ):
+            pipeline.process(file_path, base_dir, output_dir, data=data)
+
+    def test_raises_when_all_failed(self, pipeline_and_mocks):
+        """Empty output with stats.failed > 0 raises regardless of action type."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(failed=2)
+        with pytest.raises(RuntimeError, match="produced 0 records"):
+            self._run_with_stats(pipeline, config, stats, fp, base, out)
+
+    def test_tool_action_feeds_same_check(self, pipeline_and_mocks):
+        """Tool action empty output (stats.failed=1) triggers the same generic check."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        pipeline.is_tool_action = True
+        stats = CollectionStats(failed=1)
+        with pytest.raises(RuntimeError, match="produced 0 records"):
+            self._run_with_stats(pipeline, config, stats, fp, base, out)
+
+    def test_no_raise_when_output_exists(self, pipeline_and_mocks):
+        """Non-empty output should not raise even with some failures."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        output = [{"content": {"result": "ok"}}]
+        stats = CollectionStats(success=1, failed=1)
+        pipeline.record_processor.process_batch.return_value = []
+        with patch(
+            "agent_actions.workflow.pipeline.ResultCollector.collect_results",
+            return_value=(output, stats),
+        ):
+            pipeline.process(fp, base, out, data=[{"id": "1"}])
+        pipeline.output_handler.save_main_output.assert_called_once()
