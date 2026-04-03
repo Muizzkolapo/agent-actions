@@ -251,3 +251,53 @@ class TestRunWorkflowWithContext:
 
         assert result == ("success", {})
         wf._resolve_downstream_workflows.assert_called_once()
+
+
+# ── _reset_retryable_actions ─────────────────────────────────────────
+
+
+class TestResetRetryableActions:
+    """Tests for _reset_retryable_actions called at coordinator startup."""
+
+    def test_resets_and_clears_node_level_dispositions(self):
+        """Should clear only node-level FAILED/SKIPPED dispositions, not record-level."""
+        from agent_actions.storage.backend import (
+            DISPOSITION_FAILED,
+            DISPOSITION_SKIPPED,
+            NODE_LEVEL_RECORD_ID,
+        )
+
+        wf = _build_workflow()
+        wf.storage_backend = MagicMock()
+        wf.services.core.state_manager.reset_retryable.return_value = ["agent_a"]
+
+        wf._reset_retryable_actions()
+
+        wf.services.core.state_manager.reset_retryable.assert_called_once()
+        assert wf.storage_backend.clear_disposition.call_count == 2
+        wf.storage_backend.clear_disposition.assert_any_call(
+            "agent_a", DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+        )
+        wf.storage_backend.clear_disposition.assert_any_call(
+            "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+        )
+
+    def test_no_reset_no_disposition_calls(self):
+        """No actions to reset means no disposition clearing."""
+        wf = _build_workflow()
+        wf.storage_backend = MagicMock()
+        wf.services.core.state_manager.reset_retryable.return_value = []
+
+        wf._reset_retryable_actions()
+
+        wf.storage_backend.clear_disposition.assert_not_called()
+
+    def test_disposition_error_is_logged_not_raised(self):
+        """Storage errors during disposition clear should not crash startup."""
+        wf = _build_workflow()
+        wf.storage_backend = MagicMock()
+        wf.storage_backend.clear_disposition.side_effect = RuntimeError("DB locked")
+        wf.services.core.state_manager.reset_retryable.return_value = ["agent_a"]
+
+        # Should not raise
+        wf._reset_retryable_actions()
