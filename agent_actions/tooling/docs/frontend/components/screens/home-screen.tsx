@@ -15,7 +15,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const successRuns = runs.filter((r) => r.status === "SUCCESS").length
   const failedRuns = runs.filter((r) => r.status === "FAILED").length
   const runningWfs = workflows.filter((w) => w.manifestStatus === "running").length
-  const successRate = stats.total_runs > 0 ? Math.round((successRuns / stats.total_runs) * 100) : 0
+  const successRate = runs.length > 0 ? Math.round((successRuns / runs.length) * 100) : 0
   const totalIssues = stats.validation_errors + stats.validation_warnings
 
   return (
@@ -43,11 +43,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         />
         <StatCard
           label="Runs"
-          value={stats.total_runs}
+          value={runs.length}
           accent={failedRuns > 0 ? "destructive" : "success"}
           sub={`${successRate}% pass rate`}
           subColor={failedRuns > 0 ? "text-[hsl(var(--destructive))]" : "text-[hsl(var(--success))]"}
-          sparkData={[1, 3, 2, 5, 4, 6, stats.total_runs]}
+          sparkData={[1, 3, 2, 5, 4, 6, runs.length]}
           onClick={() => onNavigate("runs")}
           delay={120}
         />
