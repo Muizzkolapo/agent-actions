@@ -29,10 +29,12 @@ class BatchTaskPreparator:
         action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         storage_backend: Any | None = None,
+        version_context: dict[str, Any] | None = None,
     ):
         self.action_indices = action_indices or {}
         self.dependency_configs = dependency_configs or {}
         self.storage_backend = storage_backend
+        self.version_context = version_context
 
     def prepare_tasks(
         self,
@@ -262,6 +264,7 @@ class BatchTaskPreparator:
             agent_indices=self.action_indices,
             dependency_configs=self.dependency_configs,
             workflow_metadata=workflow_metadata,
+            version_context=self.version_context,
             file_path=file_path,
             output_directory=output_directory,
             tools_path=tools_path,

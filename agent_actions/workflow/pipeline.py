@@ -72,6 +72,7 @@ class BatchPipelineParams:
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     data: list[dict[str, Any]] | None = None  # Pre-loaded data (skips file read)
+    version_context: dict[str, Any] | None = None
 
 
 @dataclass
@@ -151,6 +152,40 @@ class ProcessingPipeline:
         )
 
     @staticmethod
+    def _build_pipeline_context(
+        action_config: ActionConfigDict,
+        action_configs: dict[str, Any] | None,
+    ) -> tuple[dict[str, int] | None, dict[str, Any] | None, dict[str, Any] | None]:
+        """Build shared pipeline context for both batch and online paths.
+
+        ARCHITECTURE INVARIANT: Both batch and online pipelines MUST use this
+        method to build pipeline-level context (agent indices, dependency configs,
+        version context).  Do not add mode-specific context building outside
+        this function.  This prevents the divergence class of bugs where a new
+        context field is added to one path but missed in the other (see #87).
+
+        Returns:
+            (agent_indices, dependency_configs, version_context)
+        """
+        agent_indices = None
+        dependency_configs = None
+        if action_configs:
+            agent_indices = {
+                name: kconf.get("idx", 999)
+                for name, kconf in action_configs.items()
+                if kconf is not None and "idx" in kconf
+            }
+            dependency_configs = action_configs
+
+        version_context = None
+        if action_config.get("is_versioned_agent"):
+            version_context = action_config.get("_version_context")
+            if version_context:
+                version_context = dict(version_context)  # Copy to avoid mutation
+
+        return agent_indices, dependency_configs, version_context
+
+    @staticmethod
     def _handle_batch_generation(params: BatchPipelineParams) -> str:
         """Handle batch mode processing."""
         agent_indices = None
@@ -165,6 +200,7 @@ class ProcessingPipeline:
             action_indices=agent_indices,
             dependency_configs=params.batch_action_configs,
             storage_backend=params.storage_backend,
+            version_context=params.version_context,
         )
         client_resolver = BatchClientResolver(client_cache={}, default_client=None)
         context_manager = BatchContextManager()
@@ -262,6 +298,10 @@ class ProcessingPipeline:
 
         run_mode = params.action_config.get("run_mode")
         if run_mode == RunMode.BATCH and not is_synchronous:
+            _, _, version_context = ProcessingPipeline._build_pipeline_context(
+                params.action_config,
+                params.action_configs,
+            )
             return ProcessingPipeline._handle_batch_generation(
                 BatchPipelineParams(
                     pipeline_action_config=params.action_config,
@@ -272,6 +312,7 @@ class ProcessingPipeline:
                     batch_action_configs=params.action_configs,
                     workflow_metadata=params.workflow_metadata,
                     storage_backend=params.storage_backend,
+                    version_context=version_context,
                 )
             )
         if run_mode == RunMode.BATCH and is_synchronous:
@@ -358,6 +399,7 @@ class ProcessingPipeline:
         base_directory: str,
         output_directory: str,
         source_data: Any | None = None,
+        version_context: dict[str, Any] | None = None,
     ):
         """Handle batch mode processing.
 
@@ -367,6 +409,7 @@ class ProcessingPipeline:
             base_directory: Base directory for processing
             output_directory: Directory for output files
             source_data: Optional source data for {{ source.* }} templates
+            version_context: Optional version context for {{ i }}, {{ version.* }} templates
         """
         result_path = self._handle_batch_generation(
             BatchPipelineParams(
@@ -380,6 +423,7 @@ class ProcessingPipeline:
                 workflow_metadata=self.config.workflow_metadata,
                 storage_backend=self.config.storage_backend,
                 data=data,  # Pass pre-loaded data to avoid file read
+                version_context=version_context,
             )
         )
         return result_path
@@ -429,32 +473,20 @@ class ProcessingPipeline:
             )
             # source_data remains 'data' (the fallback)
 
+        # Build shared pipeline context BEFORE the batch/online fork.
+        # See _build_pipeline_context() docstring for the architecture invariant.
+        agent_indices, dependency_configs, version_context = self._build_pipeline_context(
+            self.config.action_config,
+            self.config.action_configs,
+        )
+
         # Batch mode check (tools and HITL run synchronously, not in batch)
         run_mode = self.config.action_config.get("run_mode")
         if run_mode == RunMode.BATCH and not (self.is_tool_action or self.is_hitl_action):
-            self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
+            self._handle_batch_mode(
+                data, file_path, base_directory, output_directory, source_data, version_context
+            )
             return
-
-        # Prepare agent indices and dependency configs for context
-        # (These might be needed if RecordProcessor does historical lookups)
-        agent_indices = None
-        dependency_configs = None
-        if self.config.action_configs:
-            agent_indices = {
-                name: kconf.get("idx", 999)
-                for name, kconf in self.config.action_configs.items()
-                if kconf is not None and "idx" in kconf
-            }
-            dependency_configs = self.config.action_configs
-
-        # Extract version context for versioned agents
-        # This enables {{ i }}, {{ version.length }}, etc. in Jinja2 templates
-        version_context = None
-        agent_config = self.config.action_config
-        if agent_config.get("is_versioned_agent"):
-            version_context = agent_config.get("_version_context")
-            if version_context:
-                version_context = dict(version_context)  # Copy to avoid mutation
 
         # Create processing context
         context = ProcessingContext(
