@@ -256,6 +256,86 @@ class TestWriteSkippedDisposition:
         executor._write_skipped_disposition("agent_b", "Upstream failed")
 
 
+class TestZeroSuccessCircuitBreakerChain:
+    """End-to-end: pipeline RuntimeError → executor FAILED → circuit breaker skips downstream.
+
+    Proves the full chain that issues #82 and #97 require:
+    1. Pipeline raises RuntimeError when all records fail/exhaust
+    2. Executor catches it in _handle_run_failure → sets FAILED + DISPOSITION_FAILED
+    3. Circuit breaker (_check_upstream_health) detects FAILED on downstream action
+    """
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_runtime_error_sets_failed_and_disposition(self, mock_fire, executor, mock_deps):
+        """RuntimeError from pipeline → executor sets FAILED status + DISPOSITION_FAILED."""
+        storage = MagicMock()
+        mock_deps.action_runner.storage_backend = storage
+
+        error = RuntimeError(
+            "Action 'extract_claims' produced 0 successful records — "
+            "all 5 input item(s) failed or exhausted (3 failed, 2 exhausted)"
+        )
+        params = MagicMock()
+        params.action_name = "extract_claims"
+        params.start_time = datetime.now()
+
+        result = executor._handle_run_failure(params, error)
+
+        # Status set to FAILED
+        mock_deps.state_manager.update_status.assert_called_once_with(
+            "extract_claims", ActionStatus.FAILED
+        )
+        # DISPOSITION_FAILED written
+        storage.set_disposition.assert_called_once_with(
+            action_name="extract_claims",
+            record_id=NODE_LEVEL_RECORD_ID,
+            disposition=DISPOSITION_FAILED,
+            reason=str(error),
+        )
+        # Result indicates failure
+        assert result.success is False
+        assert result.status == ActionStatus.FAILED
+
+    def test_failed_upstream_triggers_circuit_breaker(self, executor, mock_deps):
+        """After upstream marked FAILED, circuit breaker returns the failed dep name."""
+        mock_deps.state_manager.is_failed.return_value = True
+        mock_deps.state_manager.is_skipped.return_value = False
+
+        config = {"dependencies": ["extract_claims"]}
+        result = executor._check_upstream_health("score_quality", config)
+
+        assert result == "extract_claims"
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_full_chain_failure_then_skip(self, mock_fire, executor, mock_deps):
+        """Full chain: upstream fails → downstream skipped by circuit breaker."""
+        storage = MagicMock()
+        mock_deps.action_runner.storage_backend = storage
+
+        # Step 1: upstream action fails
+        error = RuntimeError("produced 0 successful records")
+        params = MagicMock()
+        params.action_name = "extract_claims"
+        params.start_time = datetime.now()
+        executor._handle_run_failure(params, error)
+
+        # Step 2: state manager now reports extract_claims as failed
+        mock_deps.state_manager.is_failed.side_effect = lambda name: name == "extract_claims"
+        mock_deps.state_manager.is_skipped.return_value = False
+
+        # Step 3: circuit breaker fires for downstream
+        downstream_config = {"dependencies": ["extract_claims"]}
+        failed_dep = executor._check_upstream_health("score_quality", downstream_config)
+        assert failed_dep == "extract_claims"
+
+        # Step 4: downstream gets skipped
+        result = executor._handle_dependency_skip(
+            "score_quality", 1, downstream_config, datetime.now(), failed_dep
+        )
+        assert result.status == ActionStatus.SKIPPED
+        mock_deps.state_manager.update_status.assert_any_call("score_quality", ActionStatus.SKIPPED)
+
+
 class TestLevelCompletionColoring:
     """Tests for level completion line color logic (red/yellow/green)."""
 
