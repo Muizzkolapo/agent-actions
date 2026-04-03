@@ -2,6 +2,7 @@
 
 Performs a single comprehensive resolution pass across all actions:
 - API key environment variable presence
+- API key format validation (warns on suspicious patterns)
 - Seed file ($file:) reference existence
 - Provider capability / run_mode compatibility
 
@@ -10,6 +11,7 @@ Uses the same resolution utilities that runtime uses, ensuring no divergence.
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,7 @@ from agent_actions.utils.path_security import resolve_seed_path
 from agent_actions.validation.static_analyzer.errors import (
     FieldLocation,
     StaticTypeError,
+    StaticTypeWarning,
     StaticValidationResult,
 )
 
@@ -31,6 +34,17 @@ _VENDOR_CONFIG_MAP: dict[str, type[BaseModel]] | None = None
 
 # Sentinel substrings in api_key_env_name that indicate no real key is needed.
 _NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
+
+# Vendor → compiled regex for expected API key format.
+# Based on client_base.py:redact_sensitive_data() and logging/filters.py,
+# widened where needed to match real key formats (e.g. OpenAI sk-proj-*).
+_VENDOR_KEY_PATTERNS: dict[str, re.Pattern[str]] = {
+    "openai": re.compile(r"^sk-[a-zA-Z0-9-]{20,}$"),
+    "anthropic": re.compile(r"^(sk-ant-[a-zA-Z0-9-]{20,}|anthropic-[a-zA-Z0-9-]{20,})$"),
+    "gemini": re.compile(r"^AIza[a-zA-Z0-9_-]{35}$"),
+    "google": re.compile(r"^AIza[a-zA-Z0-9_-]{35}$"),
+    "groq": re.compile(r"^gsk_[a-zA-Z0-9]{20,}$"),
+}
 
 
 def _get_vendor_config_map() -> dict[str, type[BaseModel]]:
@@ -88,18 +102,27 @@ class WorkflowResolutionService:
         action_configs: dict[str, dict[str, Any]],
         workflow_config_path: str | None = None,
         project_root: Path | None = None,
+        verify_keys: bool = False,
     ):
         self.action_configs = action_configs
         self.workflow_config_path = workflow_config_path
         self.project_root = project_root
+        self.verify_keys = verify_keys
 
     def resolve_all(self) -> StaticValidationResult:
         """Run all resolution checks and return aggregated result."""
         result = StaticValidationResult()
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
-            for error in self._check_api_keys():
+            errors, warnings, vendor_keys = self._check_api_keys()
+            for error in errors:
                 result.add_error(error)
+            for warning in warnings:
+                result.add_warning(warning)
+
+            # Probe vendor endpoints when --verify-keys is set and keys exist.
+            if self.verify_keys and vendor_keys and not result.errors:
+                self._verify_api_keys(vendor_keys, result)
 
         for error in self._check_seed_file_references():
             result.add_error(error)
@@ -109,11 +132,53 @@ class WorkflowResolutionService:
 
         return result
 
+    def _verify_api_keys(
+        self,
+        vendor_keys: dict[str, str],
+        result: StaticValidationResult,
+    ) -> None:
+        """Probe vendor endpoints to verify keys are valid (not just present)."""
+        from agent_actions.validation.preflight.key_verifier import verify_keys
+
+        for probe_result in verify_keys(vendor_keys):
+            if not probe_result.ok:
+                result.add_error(
+                    StaticTypeError(
+                        message=(
+                            f"API key for vendor '{probe_result.vendor}' is invalid: "
+                            f"{probe_result.error}"
+                        ),
+                        location=FieldLocation(
+                            agent_name="(workflow)",
+                            config_field="api_key",
+                            raw_reference=probe_result.vendor,
+                        ),
+                        referenced_agent="(workflow)",
+                        referenced_field="api_key",
+                        hint=(
+                            f"The {probe_result.vendor} API rejected the key. "
+                            f"Check that it is not expired or revoked."
+                        ),
+                    )
+                )
+
     # ── API key checks ─────────────────────────────────────────────────
 
-    def _check_api_keys(self) -> list[StaticTypeError]:
-        """Check that all required API key env vars are set."""
+    def _check_api_keys(
+        self,
+    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning], dict[str, str]]:
+        """Check that all required API key env vars are set and well-formed.
+
+        Returns (errors, warnings, vendor_keys).  Missing keys are errors.
+        Format mismatches are warnings.  vendor_keys maps each resolved
+        vendor → key value (deduplicated) for optional downstream probing.
+        """
         errors: list[StaticTypeError] = []
+        warnings: list[StaticTypeWarning] = []
+        # Dedup format checks: multiple actions may share the same vendor+key.
+        format_checked: set[tuple[str, str]] = set()
+        # Deduplicated vendor → resolved key value (first seen wins).
+        vendor_keys: dict[str, str] = {}
 
         for action_name, config in self.action_configs.items():
             vendor = (config.get("model_vendor") or "").lower()
@@ -131,15 +196,21 @@ class WorkflowResolutionService:
 
             # If the action config specifies a custom api_key, use that
             custom_key = config.get("api_key")
+            is_literal = False
             if custom_key:
                 custom_str = str(custom_key)
                 if custom_str.startswith("$"):
                     env_var_name = custom_str[1:]
                 else:
-                    # Literal key provided — skip env check
-                    continue
+                    is_literal = True
 
-            if not os.environ.get(env_var_name):
+            if is_literal:
+                key_value = str(custom_key)
+            else:
+                key_value = os.environ.get(env_var_name, "")
+
+            # Presence check (errors) — literal keys are always "present".
+            if not key_value:
                 errors.append(
                     StaticTypeError(
                         message=(
@@ -156,8 +227,42 @@ class WorkflowResolutionService:
                         hint=f"Set the environment variable: export {env_var_name}=your_key_here",
                     )
                 )
+                continue
 
-        return errors
+            # Track for downstream probing (first vendor occurrence wins).
+            if vendor not in vendor_keys:
+                vendor_keys[vendor] = key_value
+
+            # Format check (warnings) — only for vendors with known patterns.
+            pattern = _VENDOR_KEY_PATTERNS.get(vendor)
+            if pattern is None:
+                continue
+
+            dedup_key = (vendor, key_value)
+            if dedup_key in format_checked:
+                continue
+            format_checked.add(dedup_key)
+
+            if not pattern.match(key_value):
+                ref = "(literal)" if is_literal else env_var_name
+                warnings.append(
+                    StaticTypeWarning(
+                        message=(
+                            f"API key for vendor '{vendor}' does not match "
+                            f"expected format (action '{action_name}')"
+                        ),
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="api_key",
+                            raw_reference=ref,
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="api_key",
+                        hint=f"Expected pattern for {vendor}: {pattern.pattern}",
+                    )
+                )
+
+        return errors, warnings, vendor_keys
 
     # ── Seed file checks ───────────────────────────────────────────────
 

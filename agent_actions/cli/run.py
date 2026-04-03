@@ -90,6 +90,7 @@ class RunCommand:
                 run_upstream=self.args.upstream,
                 run_downstream=self.args.downstream,
                 fresh=self.args.fresh,
+                verify_keys=self.args.verify_keys,
                 project_root=project_root,
             )
         )
@@ -230,6 +231,12 @@ class RunCommand:
     default=False,
     help="Clear stored results and status before execution (useful after failed runs)",
 )
+@click.option(
+    "--verify-keys",
+    is_flag=True,
+    default=False,
+    help="Verify API keys are valid by probing vendor endpoints before execution",
+)
 @handles_user_errors("run")
 @requires_project
 def run(
@@ -241,6 +248,7 @@ def run(
     upstream: bool = False,
     downstream: bool = False,
     fresh: bool = False,
+    verify_keys: bool = False,
     project_root: Path | None = None,
 ) -> None:
     """
@@ -266,6 +274,7 @@ def run(
         upstream=upstream,
         downstream=downstream,
         fresh=fresh,
+        verify_keys=verify_keys,
     )
     command = RunCommand(args)
     command.execute(project_root=project_root)
