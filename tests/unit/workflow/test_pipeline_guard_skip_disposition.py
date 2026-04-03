@@ -101,20 +101,22 @@ class TestGuardSkipDisposition:
         config.storage_backend.set_disposition.assert_not_called()
 
     def test_no_disposition_when_some_failed(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED must NOT be written if any record failed."""
+        """DISPOSITION_SKIPPED must NOT be written if any record failed (raises instead)."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(failed=1, skipped=1)
 
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            self._run_with_stats(pipeline, config, stats, fp, base, out)
 
         config.storage_backend.set_disposition.assert_not_called()
 
     def test_no_disposition_when_records_exhausted(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED must NOT be written if records exhausted retries."""
+        """DISPOSITION_SKIPPED must NOT be written if records exhausted retries (raises instead)."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(exhausted=2)
 
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            self._run_with_stats(pipeline, config, stats, fp, base, out)
 
         config.storage_backend.set_disposition.assert_not_called()
 
@@ -221,3 +223,104 @@ class TestToolActionZeroOutputDetection:
 
         # Should complete normally — output_handler.save_main_output called
         pipeline.output_handler.save_main_output.assert_called_once()
+
+
+class TestZeroSuccessFailure:
+    """Tests for the zero-success failure check.
+
+    When all records fail or exhaust retries (stats.success == 0) and there
+    are actual failures (stats.failed + stats.exhausted > 0), the pipeline
+    should raise RuntimeError so the executor marks the action as failed
+    and the circuit breaker skips downstream dependents.
+    """
+
+    def _run_with_stats(self, pipeline, config, stats, fp, base, out, data=None, output=None):
+        """Call process() with mocked collect_results."""
+        if data is None:
+            data = [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+        if output is None:
+            output = data  # default: mock returns input as output
+
+        pipeline.record_processor.process_batch.return_value = []
+
+        with patch(
+            "agent_actions.workflow.pipeline.ResultCollector.collect_results",
+            return_value=(output, stats),
+        ):
+            pipeline.process(fp, base, out, data=data)
+
+    def test_all_failed_raises(self, pipeline_and_mocks):
+        """All records FAILED with zero output → RuntimeError."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(failed=3)
+
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
+
+    def test_all_exhausted_raises(self, pipeline_and_mocks):
+        """All records EXHAUSTED (tombstones in output) → RuntimeError.
+
+        This is the blind spot: EXHAUSTED records produce tombstone data
+        that makes the output list non-empty, but zero records actually
+        succeeded. The old check (`not output`) missed this.
+        """
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(exhausted=3)
+        tombstones = [{"_unprocessed": True}] * 3
+
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            self._run_with_stats(pipeline, config, stats, fp, base, out, output=tombstones)
+
+    def test_mixed_failed_exhausted_raises(self, pipeline_and_mocks):
+        """Mixed FAILED + EXHAUSTED with zero successes → RuntimeError."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(failed=2, exhausted=1)
+        tombstones = [{"_unprocessed": True}]
+
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            self._run_with_stats(pipeline, config, stats, fp, base, out, output=tombstones)
+
+    def test_error_message_includes_both_counts(self, pipeline_and_mocks):
+        """Error message should include both failed and exhausted counts."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(failed=2, exhausted=1)
+
+        with pytest.raises(RuntimeError, match=r"2 failed, 1 exhausted"):
+            self._run_with_stats(
+                pipeline, config, stats, fp, base, out, output=[{"_unprocessed": True}]
+            )
+
+    def test_partial_success_with_failures_no_raise(self, pipeline_and_mocks):
+        """Some records succeed + some fail → no raise (partial success is OK)."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(success=1, failed=2)
+        output = [{"result": "ok"}]
+
+        # Should not raise — partial success
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=output)
+
+        pipeline.output_handler.save_main_output.assert_called_once()
+
+    def test_partial_success_with_exhausted_no_raise(self, pipeline_and_mocks):
+        """Some records succeed + some exhaust → no raise."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(success=2, exhausted=1)
+        output = [{"result": "ok"}, {"result": "ok2"}, {"_unprocessed": True}]
+
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=output)
+
+        pipeline.output_handler.save_main_output.assert_called_once()
+
+    def test_all_deferred_no_raise(self, pipeline_and_mocks):
+        """All records deferred (batch queued) → no raise."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(deferred=3)
+
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
+
+    def test_empty_input_no_raise(self, pipeline_and_mocks):
+        """Empty input data → no raise (nothing to fail)."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats()
+
+        self._run_with_stats(pipeline, config, stats, fp, base, out, data=[], output=[])

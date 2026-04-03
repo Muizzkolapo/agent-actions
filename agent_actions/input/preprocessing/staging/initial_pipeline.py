@@ -730,13 +730,17 @@ def _process_online_mode_with_record_processor(
                     e,
                 )
 
-    # If input had records but output is empty AND there are actual failures,
-    # raise so the executor marks the action as failed and the circuit breaker
-    # skips downstream dependents.
-    if data_chunk and not processed_items and stats.failed > 0:
+    # If input had records but none succeeded AND there are actual failures
+    # (failed or exhausted — not just guard-filtered/skipped), raise so the
+    # executor marks the action as failed and the circuit breaker skips
+    # downstream dependents.  We check stats.success rather than
+    # `not processed_items` because EXHAUSTED records produce tombstone data
+    # that inflates the output list despite representing zero real successes.
+    if data_chunk and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
         raise RuntimeError(
-            f"Action '{ctx.agent_name}' produced 0 records — "
-            f"all {len(data_chunk)} input item(s) failed ({stats.failed} failures)"
+            f"Action '{ctx.agent_name}' produced 0 successful records — "
+            f"all {len(data_chunk)} input item(s) failed "
+            f"({stats.failed} failed, {stats.exhausted} exhausted)"
         )
 
     if ctx.storage_backend is None:
