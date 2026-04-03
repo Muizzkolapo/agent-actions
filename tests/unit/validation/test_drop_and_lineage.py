@@ -30,7 +30,7 @@ class TestCheckDropDirectives:
         is_dynamic=False,
         is_schemaless=False,
     ):
-        """Build a graph with source -> upstream -> downstream."""
+        """Build a graph with source -> upstream_action -> downstream_action."""
         graph = DataFlowGraph()
         graph.add_node(
             DataFlowNode(
@@ -53,14 +53,6 @@ class TestCheckDropDirectives:
                 dependencies={"source"},
             )
         )
-        graph.add_node(
-            DataFlowNode(
-                name="downstream",
-                agent_kind=ActionKind.LLM,
-                output_schema=OutputSchema(schema_fields=set()),
-                dependencies={"upstream"},
-            )
-        )
         return graph
 
     def test_drop_on_schema_field_no_error(self):
@@ -80,7 +72,7 @@ class TestCheckDropDirectives:
         }
         analyzer = _build_analyzer_with_graph(workflow_config, graph)
 
-        errors, _warnings = analyzer._check_drop_directives()
+        errors = analyzer._check_drop_directives()
         assert len(errors) == 0
 
     def test_drop_on_passthrough_field_produces_error(self):
@@ -102,7 +94,7 @@ class TestCheckDropDirectives:
         }
         analyzer = _build_analyzer_with_graph(workflow_config, graph)
 
-        errors, _warnings = analyzer._check_drop_directives()
+        errors = analyzer._check_drop_directives()
         assert len(errors) == 1
         assert "passthrough" in errors[0].message.lower()
         assert "forwarded_field" in errors[0].message
@@ -123,7 +115,7 @@ class TestCheckDropDirectives:
         }
         analyzer = _build_analyzer_with_graph(workflow_config, graph)
 
-        errors, _warnings = analyzer._check_drop_directives()
+        errors = analyzer._check_drop_directives()
         assert len(errors) == 1
         msg = errors[0].message.lower()
         assert "non-existent" in msg or "nonexistent" in msg
@@ -149,7 +141,7 @@ class TestCheckDropDirectives:
         expansion_errors = analyzer._expand_wildcards()
         assert len(expansion_errors) == 0
 
-        errors, _warnings = analyzer._check_drop_directives()
+        errors = analyzer._check_drop_directives()
         assert len(errors) == 0
 
         # Verify the wildcard was expanded to concrete fields.
@@ -173,7 +165,7 @@ class TestCheckDropDirectives:
         }
         analyzer = _build_analyzer_with_graph(workflow_config, graph)
 
-        errors, _warnings = analyzer._check_drop_directives()
+        errors = analyzer._check_drop_directives()
         assert len(errors) == 0
 
     def test_drop_on_observe_field_no_error(self):
@@ -195,97 +187,8 @@ class TestCheckDropDirectives:
         }
         analyzer = _build_analyzer_with_graph(workflow_config, graph)
 
-        errors, _warnings = analyzer._check_drop_directives()
+        errors = analyzer._check_drop_directives()
         assert len(errors) == 0
-
-    def test_drop_on_unreachable_namespace_warns(self):
-        """Drop on a namespace not in the dependency chain produces a warning."""
-        graph = DataFlowGraph()
-        graph.add_node(
-            DataFlowNode(
-                name="source",
-                agent_kind=ActionKind.SOURCE,
-                output_schema=OutputSchema(is_dynamic=True),
-            )
-        )
-        graph.add_node(
-            DataFlowNode(
-                name="action_a",
-                agent_kind=ActionKind.LLM,
-                output_schema=OutputSchema(schema_fields={"field_x"}),
-                dependencies={"source"},
-            )
-        )
-        graph.add_node(
-            DataFlowNode(
-                name="action_b",
-                agent_kind=ActionKind.LLM,
-                output_schema=OutputSchema(schema_fields={"result"}),
-                dependencies={"source"},
-            )
-        )
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "action_b",
-                    "depends_on": ["source"],
-                    "context_scope": {
-                        "drop": ["action_a.field_x"],
-                    },
-                },
-            ],
-        }
-        analyzer = _build_analyzer_with_graph(workflow_config, graph)
-
-        errors, warnings = analyzer._check_drop_directives()
-        assert len(errors) == 0
-        assert len(warnings) == 1
-        assert "not in its dependency chain" in warnings[0].message
-        assert "action_a" in warnings[0].message
-        assert "action_b" in warnings[0].message
-
-    def test_drop_on_unreachable_namespace_deduplicates(self):
-        """Multiple drops on the same unreachable namespace produce one warning."""
-        graph = DataFlowGraph()
-        graph.add_node(
-            DataFlowNode(
-                name="source",
-                agent_kind=ActionKind.SOURCE,
-                output_schema=OutputSchema(is_dynamic=True),
-            )
-        )
-        graph.add_node(
-            DataFlowNode(
-                name="unreachable",
-                agent_kind=ActionKind.LLM,
-                output_schema=OutputSchema(schema_fields={"f1", "f2", "f3"}),
-                dependencies={"source"},
-            )
-        )
-        graph.add_node(
-            DataFlowNode(
-                name="consumer",
-                agent_kind=ActionKind.LLM,
-                output_schema=OutputSchema(schema_fields={"out"}),
-                dependencies={"source"},
-            )
-        )
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "consumer",
-                    "depends_on": ["source"],
-                    "context_scope": {
-                        "drop": ["unreachable.f1", "unreachable.f2", "unreachable.f3"],
-                    },
-                },
-            ],
-        }
-        analyzer = _build_analyzer_with_graph(workflow_config, graph)
-
-        errors, warnings = analyzer._check_drop_directives()
-        assert len(errors) == 0
-        assert len(warnings) == 1  # One warning, not three
 
 
 class TestExpandWildcards:
