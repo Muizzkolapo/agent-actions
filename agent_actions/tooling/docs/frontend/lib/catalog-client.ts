@@ -20,6 +20,8 @@ export interface RawCatalogJson {
     recent_invocations: unknown[]
     validation_errors: RawValidationEntry[]
     validation_warnings: RawValidationEntry[]
+    runtime_warnings?: RawValidationEntry[]
+    runtime_errors?: RawValidationEntry[]
   }
   stats: {
     total_workflows: number
