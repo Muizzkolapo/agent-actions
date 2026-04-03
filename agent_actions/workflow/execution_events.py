@@ -75,10 +75,11 @@ class WorkflowEventLogger:
                 action_index=idx,
                 total_actions=total_actions,
                 action_type=action_config.get("type", ""),
+                mode=str(action_config.get("run_mode", "")),
             )
         )
 
-    def log_action_skip(self, idx: int, action_name: str, total_actions: int):
+    def log_action_skip(self, idx: int, action_name: str, total_actions: int, run_mode: str = ""):
         """Log skipped action."""
         fire_event(
             ActionSkipEvent(
@@ -86,6 +87,7 @@ class WorkflowEventLogger:
                 action_index=idx,
                 total_actions=total_actions,
                 skip_reason="already completed",
+                mode=run_mode,
             )
         )
 
@@ -103,6 +105,7 @@ class WorkflowEventLogger:
                     execution_time=params.duration,
                     output_path=params.result.output_folder or "",
                     tokens=tokens,
+                    mode=params.run_mode,
                 )
             )
         elif not params.result.success:
@@ -117,6 +120,7 @@ class WorkflowEventLogger:
                     else "",
                     error_type=type(params.result.error).__name__ if params.result.error else "",
                     execution_time=params.duration,
+                    mode=params.run_mode,
                 )
             )
         # batch_submitted: BatchSubmittedEvent already fired by executor

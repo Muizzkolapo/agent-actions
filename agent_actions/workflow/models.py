@@ -87,6 +87,7 @@ class ActionLogParams:
     result: Any
     end_time: datetime
     duration: float
+    run_mode: str = ""
 
 
 @dataclass

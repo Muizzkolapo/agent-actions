@@ -100,7 +100,7 @@ class TestRunSingleAgent:
         wf.event_logger.fire_action_start.assert_called_once_with(
             0, "agent_a", 2, {"agent_type": "agent_a", "type": "llm"}
         )
-        wf.event_logger.log_action_skip.assert_called_once_with(0, "agent_a", 2)
+        wf.event_logger.log_action_skip.assert_called_once_with(0, "agent_a", 2, "")
         wf.services.core.action_executor.execute_action_sync.assert_not_called()
 
     def test_success_appends_ephemeral(self):
