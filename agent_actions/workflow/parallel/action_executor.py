@@ -181,7 +181,8 @@ class ActionLevelOrchestrator:
             is_last_action=is_last,
         )
 
-        self._fire_action_result_event(action_name, original_idx, total_actions, result)
+        run_mode = action_config.get("run_mode", "")
+        self._fire_action_result_event(action_name, original_idx, total_actions, result, run_mode)
 
         if not result.success:
             logger.warning("Action '%s' failed: %s", action_name, result.error)
@@ -216,11 +217,15 @@ class ActionLevelOrchestrator:
                             error_message=str(exc),
                             error_detail=get_error_detail(exc),
                             error_type=type(exc).__name__,
+                            mode=action_config.get("run_mode", ""),
                         )
                     )
                     raise
 
-                self._fire_action_result_event(action, original_idx, total_actions, result)
+                run_mode = action_config.get("run_mode", "")
+                self._fire_action_result_event(
+                    action, original_idx, total_actions, result, run_mode
+                )
                 return result
 
         tasks = [run_with_limit(action) for action in params.pending_actions]
@@ -242,7 +247,9 @@ class ActionLevelOrchestrator:
                 error_details,
             )
 
-    def _fire_action_result_event(self, action_name: str, idx: int, total: int, result):
+    def _fire_action_result_event(
+        self, action_name: str, idx: int, total: int, result, run_mode: str = ""
+    ):
         """Fire action complete or failed event for an execution result."""
         if result.success and result.status in COMPLETED_STATUSES:
             tokens = result.metrics.tokens if result.metrics and result.metrics.tokens else {}
@@ -254,6 +261,7 @@ class ActionLevelOrchestrator:
                     execution_time=result.metrics.duration if result.metrics else 0.0,
                     output_path=result.output_folder or "",
                     tokens=tokens,
+                    mode=run_mode,
                 )
             )
         elif not result.success:
@@ -266,6 +274,7 @@ class ActionLevelOrchestrator:
                     error_detail=get_error_detail(result.error) if result.error else "",
                     error_type=type(result.error).__name__ if result.error else "",
                     execution_time=result.metrics.duration if result.metrics else 0.0,
+                    mode=run_mode,
                 )
             )
         # batch_submitted: BatchSubmittedEvent already fired by executor

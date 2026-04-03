@@ -450,9 +450,11 @@ class AgentWorkflow:
 
         self.event_logger.fire_action_start(idx, action_name, total_actions, action_config)
 
+        run_mode = action_config.get("run_mode", "")
+
         if self.services.core.state_manager.is_completed(action_name):
             if self.services.core.action_executor.verify_completion_status(action_name):
-                self.event_logger.log_action_skip(idx, action_name, total_actions)
+                self.event_logger.log_action_skip(idx, action_name, total_actions, run_mode)
                 return False
             # verify_completion_status reset the action to "pending" — fall through to re-run
 
@@ -471,6 +473,7 @@ class AgentWorkflow:
                 result=result,
                 end_time=end_time,
                 duration=duration,
+                run_mode=run_mode,
             )
         )
 
