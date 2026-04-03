@@ -446,10 +446,16 @@ function RunStatusBadge({ status }: { status: RunStatus }) {
 
 /* --- Execution timeline (Gantt) --- */
 
+function actionStatusColor(status: string): string {
+  if (status === "success") return "hsl(var(--success))"
+  if (status === "failed") return "hsl(var(--destructive))"
+  if (status === "skipped") return "hsl(var(--muted-foreground))"
+  return "hsl(var(--primary))"
+}
+
 function ExecutionTimeline({ run }: { run: Run }) {
   const entries = Object.entries(run.actions)
   const runStart = new Date(run.started).getTime()
-  const runEnd = run.ended ? new Date(run.ended).getTime() : runStart + run.duration * 1000
 
   // Compute absolute start/end for each action in seconds from run start
   const bars = entries.map(([name, a]) => {
@@ -491,16 +497,13 @@ function ExecutionTimeline({ run }: { run: Run }) {
 
     return (
       <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="text-sm font-medium text-foreground mb-4">Execution Timeline</h3>
+        <h3 className="text-sm font-medium text-foreground mb-0.5">Execution Timeline</h3>
+        <p className="text-[10px] text-muted-foreground mb-4">by completion time</p>
         <div className="flex flex-col gap-1.5">
           {completionBars.map(({ name, action: a, endSec }) => {
             const pctEnd = (endSec! / maxEnd) * 100
             const barWidth = Math.max(pctEnd, 2)
-            const color =
-              a.status === "success" ? "hsl(var(--success))"
-              : a.status === "failed" ? "hsl(var(--destructive))"
-              : a.status === "skipped" ? "hsl(var(--muted-foreground))"
-              : "hsl(var(--primary))"
+            const color = actionStatusColor(a.status)
 
             return (
               <div key={name} className="flex items-center gap-3 h-7">
