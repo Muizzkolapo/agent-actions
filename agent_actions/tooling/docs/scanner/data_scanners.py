@@ -439,7 +439,9 @@ def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
     _LOG_LINE_LIMIT = 100_000
     try:
         with open(events_path, encoding="utf-8") as f:
+            line_count = 0
             for line in itertools.islice(f, _LOG_LINE_LIMIT):
+                line_count += 1
                 line = line.strip()
                 if not line:
                     continue
@@ -462,6 +464,14 @@ def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
                         "event_type": event.get("event_type"),
                         "code": event.get("code"),
                     }
+                )
+
+            if line_count >= _LOG_LINE_LIMIT:
+                logger.warning(
+                    "extract_runtime_warnings: line limit (%d) reached for %s; "
+                    "some events may be omitted",
+                    _LOG_LINE_LIMIT,
+                    events_path,
                 )
 
     except OSError as e:

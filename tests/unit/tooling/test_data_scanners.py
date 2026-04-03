@@ -198,3 +198,37 @@ class TestExtractRuntimeWarnings:
         events_path.write_text("")
         result = extract_runtime_warnings(events_path)
         assert result == []
+
+    def test_malformed_json_lines_skipped(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write("not valid json\n")
+            f.write(json.dumps(_warn_event("a", "real warning")) + "\n")
+            f.write("{truncated\n")
+
+        result = extract_runtime_warnings(events_path)
+
+        assert len(result) == 1
+        assert result[0]["action_name"] == "a"
+
+    def test_blank_lines_skipped(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write("\n")
+            f.write("  \n")
+            f.write(json.dumps(_warn_event("a", "found it")) + "\n")
+
+        result = extract_runtime_warnings(events_path)
+
+        assert len(result) == 1
+
+    def test_emits_warning_at_line_limit(self, tmp_path, capfd):
+        """Logs a warning when the 100k line cap is reached."""
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            for i in range(100_001):
+                f.write(json.dumps(_warn_event(f"a_{i}", f"warn {i}")) + "\n")
+
+        extract_runtime_warnings(events_path)
+        captured = capfd.readouterr()
+        assert "line limit" in captured.err
