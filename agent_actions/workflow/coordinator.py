@@ -80,6 +80,7 @@ class AgentWorkflow:
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
         self._run_static_validation()
+        self._strip_unreachable_drops()
 
         # Storage & services
         self.storage_backend = initialize_storage_backend(config, self.metadata, self.console)
@@ -152,6 +153,68 @@ class AgentWorkflow:
 
         for warning in resolution_result.warnings:
             logger.warning("Pre-flight: %s", warning.message)
+
+    def _strip_unreachable_drops(self) -> None:
+        """Remove drop directives targeting unreachable namespaces from action configs.
+
+        After static validation, the runtime action_configs still contain drops
+        that reference namespaces outside the action's dependency chain.  These
+        are no-ops that produce noisy per-record runtime warnings.  Strip them
+        so the runtime never sees them.
+        """
+        all_action_names = set(self.action_configs.keys())
+
+        for action_name, config in self.action_configs.items():
+            context_scope = config.get("context_scope")
+            if not context_scope or not isinstance(context_scope, dict):
+                continue
+
+            drop_refs = context_scope.get("drop")
+            if not isinstance(drop_refs, list) or not drop_refs:
+                continue
+
+            # Compute transitive upstream reachable set from depends_on.
+            reachable = self._get_reachable_actions(action_name)
+
+            filtered: list[str] = []
+            for ref in drop_refs:
+                if not isinstance(ref, str) or "." not in ref:
+                    filtered.append(ref)
+                    continue
+
+                ns_name = ref.split(".", 1)[0]
+
+                # Keep drops on special namespaces, loop, and reachable actions.
+                if ns_name not in all_action_names or ns_name in reachable:
+                    filtered.append(ref)
+                    continue
+
+                # Unreachable action namespace — strip the drop.
+                logger.debug(
+                    "Stripped unreachable drop '%s' from action '%s'",
+                    ref,
+                    action_name,
+                )
+
+            if len(filtered) != len(drop_refs):
+                context_scope["drop"] = filtered
+
+    def _get_reachable_actions(self, action_name: str) -> set[str]:
+        """Compute the transitive upstream set reachable from an action."""
+        reachable: set[str] = set()
+        stack = list(self.action_configs.get(action_name, {}).get("depends_on") or [])
+
+        while stack:
+            dep = stack.pop()
+            if dep in reachable:
+                continue
+            reachable.add(dep)
+            dep_config = self.action_configs.get(dep, {})
+            for upstream in dep_config.get("depends_on") or []:
+                if upstream not in reachable:
+                    stack.append(upstream)
+
+        return reachable
 
     def _validate_guard_conditions(self) -> list[str]:
         return validate_guard_conditions(self.action_configs)
