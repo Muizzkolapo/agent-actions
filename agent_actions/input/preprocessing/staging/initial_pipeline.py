@@ -22,7 +22,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
 )
-from agent_actions.utils.constants import CHUNK_CONFIG_KEY
+from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -730,14 +730,25 @@ def _process_online_mode_with_record_processor(
                     e,
                 )
 
-    # If input had records but output is empty AND there are actual failures,
-    # raise so the executor marks the action as failed and the circuit breaker
-    # skips downstream dependents.
-    if data_chunk and not processed_items and stats.failed > 0:
+    # Zero-success failure: raise so executor marks FAILED and circuit
+    # breaker skips downstream.  See _MANIFEST.md design note for rationale.
+    if data_chunk and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
         raise RuntimeError(
-            f"Action '{ctx.agent_name}' produced 0 records — "
-            f"all {len(data_chunk)} input item(s) failed ({stats.failed} failures)"
+            f"Action '{ctx.agent_name}' produced 0 successful records — "
+            f"all {len(data_chunk)} input item(s) failed or exhausted "
+            f"({stats.failed} failed, {stats.exhausted} exhausted)"
         )
+
+    # Tool actions that return empty output should be treated as failures
+    # rather than silently succeeding (mirrors pipeline.py check).
+    if data_chunk and not processed_items and stats.success > 0:
+        kind = str(ctx.agent_config.get("kind") or "").lower()
+        vendor = str(ctx.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+        if kind == "tool" or vendor == "tool":
+            raise RuntimeError(
+                f"Tool action '{ctx.agent_name}' produced 0 output records "
+                f"from {len(data_chunk)} input item(s) — tool returned empty result"
+            )
 
     if ctx.storage_backend is None:
         raise AgentActionsError(

@@ -30,3 +30,18 @@ Agent Actions.
 | `service_init.py` | Module | Service assembly and storage backend initialization extracted from coordinator. | `config`, `workflow` |
 | `strategies.py` | Module | Pluggable strategies for action execution (loop/parallel). | `workflow`, `validation` |
 | `workspace_index.py` | Module | `WorkspaceIndex`: scans workflow dirs to build dependency graphs. Config file glob uses `sorted()` for deterministic selection. | `tooling`, `file_io` |
+
+## Design Notes
+
+### Zero-success failure check (`pipeline.py`)
+
+Both `pipeline.py` and `initial_pipeline.py` raise `RuntimeError` when `stats.success == 0`
+and `stats.failed + stats.exhausted > 0`. This uses `stats.success` rather than `not output`
+because EXHAUSTED records produce tombstone data that inflates the output list despite
+representing zero real successes.
+
+This intentionally overrides `on_exhausted="return_last"` when ALL records exhaust.
+`return_last` is designed for partial failures where some records succeed alongside exhausted
+tombstones. When zero records succeed, tombstone-only output is not useful and downstream
+actions would produce garbage. `_check_exhausted_raise` in `ResultCollector` handles
+`on_exhausted="raise"` independently (runs before collection).

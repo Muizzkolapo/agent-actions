@@ -581,13 +581,25 @@ class ProcessingPipeline:
                         e,
                     )
 
-        # If input had records but output is empty AND there are actual failures
-        # (not just guard-filtered/skipped records), raise so the executor marks
-        # the action as failed and the circuit breaker skips downstream dependents.
-        if data and not output and stats.failed > 0:
+        # Zero-success failure: raise so executor marks FAILED and circuit
+        # breaker skips downstream.  Uses stats.success (not `not output`)
+        # because EXHAUSTED tombstones inflate the output list.
+        if data and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
             raise RuntimeError(
-                f"Action '{self.config.action_name}' produced 0 records — "
-                f"all {len(data)} input item(s) failed ({stats.failed} failures)"
+                f"Action '{self.config.action_name}' produced 0 successful records — "
+                f"all {len(data)} input item(s) failed or exhausted "
+                f"({stats.failed} failed, {stats.exhausted} exhausted)"
+            )
+
+        # Tool actions that return empty output should be treated as failures
+        # rather than silently succeeding.  The guard-skip check above already
+        # handles stats.success == 0; this catches the case where the tool call
+        # itself "succeeded" (stats.success > 0) but produced zero output
+        # records (e.g. tool returned [] or enrichment dropped all items).
+        if data and not output and self.is_tool_action and stats.success > 0:
+            raise RuntimeError(
+                f"Tool action '{self.config.action_name}' produced 0 output records "
+                f"from {len(data)} input item(s) — tool returned empty result"
             )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

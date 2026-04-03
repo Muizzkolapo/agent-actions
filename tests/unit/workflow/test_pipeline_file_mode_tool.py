@@ -77,6 +77,58 @@ def test_file_tool_plain_list_still_works():
     assert results[0].data[0]["content"]["score"] == 0.9
 
 
+# --- Empty tool output detection ---
+
+
+def test_file_tool_empty_response_with_input_raises():
+    """Tool returning [] with non-empty input should raise AgentActionsError."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        with pytest.raises(AgentActionsError, match="returned empty result"):
+            pipeline._process_file_mode_tool(input_data, input_data, context)
+
+
+def test_file_tool_empty_response_with_empty_input_ok():
+    """Tool returning [] with empty input should NOT raise (no input = no failure)."""
+    pipeline, context = _make_pipeline_and_context()
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        results = pipeline._process_file_mode_tool([], [], context)
+
+    assert len(results) == 1
+    assert results[0].status == ProcessingStatus.SUCCESS
+    assert results[0].data == []
+
+
+def test_file_tool_empty_response_error_includes_record_count():
+    """The error from empty tool response should include input record count."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [{"content": {"a": 1}}, {"content": {"b": 2}}, {"content": {"c": 3}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        with pytest.raises(AgentActionsError) as exc_info:
+            pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert exc_info.value.context["agent_name"] == "my_file_tool"
+    assert exc_info.value.context["record_count"] == 3
+
+
 # --- Error surfacing ---
 
 
