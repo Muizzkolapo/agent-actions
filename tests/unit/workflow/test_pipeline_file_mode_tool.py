@@ -80,8 +80,8 @@ def test_file_tool_plain_list_still_works():
 # --- Empty tool output detection ---
 
 
-def test_file_tool_empty_response_with_input_raises():
-    """Tool returning [] with non-empty input should raise AgentActionsError."""
+def test_file_tool_empty_response_with_input_returns_failed():
+    """Tool returning [] with non-empty input returns ProcessingResult.failed()."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
@@ -93,12 +93,16 @@ def test_file_tool_empty_response_with_input_raises():
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([], True),
     ):
-        with pytest.raises(AgentActionsError, match="returned empty result"):
-            pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert len(results) == 1
+    assert results[0].status == ProcessingStatus.FAILED
+    assert "returned empty result" in results[0].error
+    assert "2 input record(s)" in results[0].error
 
 
 def test_file_tool_empty_response_with_empty_input_ok():
-    """Tool returning [] with empty input should NOT raise (no input = no failure)."""
+    """Tool returning [] with empty input should NOT be marked failed."""
     pipeline, context = _make_pipeline_and_context()
 
     with patch(
@@ -112,21 +116,29 @@ def test_file_tool_empty_response_with_empty_input_ok():
     assert results[0].data == []
 
 
-def test_file_tool_empty_response_error_includes_record_count():
-    """The error from empty tool response should include input record count."""
-    pipeline, context = _make_pipeline_and_context()
+def test_file_tool_empty_response_feeds_existing_failure_check():
+    """Empty tool result -> stats.failed=1 -> existing zero-success check fires."""
+    from agent_actions.processing.result_collector import ResultCollector
 
-    input_data = [{"content": {"a": 1}}, {"content": {"b": 2}}, {"content": {"c": 3}}]
+    pipeline, context = _make_pipeline_and_context()
+    input_data = [{"content": {"a": 1}}, {"content": {"b": 2}}]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([], True),
     ):
-        with pytest.raises(AgentActionsError) as exc_info:
-            pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    assert exc_info.value.context["agent_name"] == "my_file_tool"
-    assert exc_info.value.context["record_count"] == 3
+    output, stats = ResultCollector.collect_results(
+        results,
+        {"kind": "tool"},
+        "my_file_tool",
+        is_first_stage=False,
+    )
+
+    assert stats.failed == 1
+    assert stats.success == 0
+    assert output == []
 
 
 # --- Error surfacing ---
