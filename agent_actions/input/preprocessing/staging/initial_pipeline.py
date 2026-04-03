@@ -736,10 +736,13 @@ def _process_online_mode_with_record_processor(
     # downstream dependents.  We check stats.success rather than
     # `not processed_items` because EXHAUSTED records produce tombstone data
     # that inflates the output list despite representing zero real successes.
+    #
+    # Note: this intentionally overrides on_exhausted="return_last" when ALL
+    # records exhaust.  See comment in pipeline.py for rationale.
     if data_chunk and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
         raise RuntimeError(
             f"Action '{ctx.agent_name}' produced 0 successful records — "
-            f"all {len(data_chunk)} input item(s) failed "
+            f"all {len(data_chunk)} input item(s) failed or exhausted "
             f"({stats.failed} failed, {stats.exhausted} exhausted)"
         )
 

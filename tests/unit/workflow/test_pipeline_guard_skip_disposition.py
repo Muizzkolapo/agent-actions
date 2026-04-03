@@ -254,7 +254,7 @@ class TestZeroSuccessFailure:
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(failed=3)
 
-        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+        with pytest.raises(RuntimeError, match="failed or exhausted"):
             self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
 
     def test_all_exhausted_raises(self, pipeline_and_mocks):
@@ -324,3 +324,98 @@ class TestZeroSuccessFailure:
         stats = CollectionStats()
 
         self._run_with_stats(pipeline, config, stats, fp, base, out, data=[], output=[])
+
+
+class TestZeroSuccessWithRealResults:
+    """Integration tests using real ProcessingResult objects through ResultCollector.
+
+    These tests do NOT mock collect_results — they send real ProcessingResult
+    objects through the actual collection pipeline to verify the full chain:
+    process_batch returns results → collect_results produces stats → pipeline
+    check raises RuntimeError.
+    """
+
+    def test_all_exhausted_real_results_raises(self, pipeline_and_mocks):
+        """Real EXHAUSTED ProcessingResults through actual collect_results → RuntimeError."""
+        from agent_actions.processing.types import ProcessingResult
+
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        config.action_config = {"kind": "llm"}
+
+        exhausted_results = [
+            ProcessingResult.exhausted(
+                "timeout after 3 attempts",
+                data=[{"_unprocessed": True, "source_guid": f"guid_{i}"}],
+                source_guid=f"guid_{i}",
+            )
+            for i in range(3)
+        ]
+
+        pipeline.record_processor.process_batch.return_value = exhausted_results
+
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+
+    def test_all_failed_real_results_raises(self, pipeline_and_mocks):
+        """Real FAILED ProcessingResults through actual collect_results → RuntimeError."""
+        from agent_actions.processing.types import ProcessingResult
+
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        config.action_config = {"kind": "llm"}
+
+        failed_results = [
+            ProcessingResult.failed(
+                "Error code: 401 - Invalid API Key",
+                source_guid=f"guid_{i}",
+            )
+            for i in range(3)
+        ]
+
+        pipeline.record_processor.process_batch.return_value = failed_results
+
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+
+    def test_mixed_real_results_raises(self, pipeline_and_mocks):
+        """Mixed FAILED + EXHAUSTED real results → RuntimeError."""
+        from agent_actions.processing.types import ProcessingResult
+
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        config.action_config = {"kind": "llm"}
+
+        results = [
+            ProcessingResult.failed("401 Unauthorized", source_guid="guid_0"),
+            ProcessingResult.failed("401 Unauthorized", source_guid="guid_1"),
+            ProcessingResult.exhausted(
+                "timeout after 3 attempts",
+                data=[{"_unprocessed": True}],
+                source_guid="guid_2",
+            ),
+        ]
+
+        pipeline.record_processor.process_batch.return_value = results
+
+        with pytest.raises(RuntimeError, match=r"2 failed, 1 exhausted"):
+            pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+
+    def test_partial_success_real_results_no_raise(self, pipeline_and_mocks):
+        """Mix of SUCCESS + FAILED real results → no raise (partial success)."""
+        from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        config.action_config = {"kind": "llm"}
+
+        results = [
+            ProcessingResult(
+                status=ProcessingStatus.SUCCESS,
+                data=[{"result": "ok", "source_guid": "guid_0"}],
+                executed=True,
+                source_guid="guid_0",
+            ),
+            ProcessingResult.failed("401 Unauthorized", source_guid="guid_1"),
+        ]
+
+        pipeline.record_processor.process_batch.return_value = results
+        pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}])
+
+        pipeline.output_handler.save_main_output.assert_called_once()

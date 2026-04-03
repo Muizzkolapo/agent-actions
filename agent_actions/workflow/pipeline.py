@@ -536,10 +536,17 @@ class ProcessingPipeline:
         # downstream dependents.  We check stats.success rather than `not output`
         # because EXHAUSTED records produce tombstone data that inflates the
         # output list despite representing zero real successes.
+        #
+        # Note: this intentionally overrides on_exhausted="return_last" when ALL
+        # records exhaust.  return_last is designed for partial failures where
+        # some records succeed and exhausted tombstones flow alongside real data.
+        # When zero records succeed, tombstone-only output is not useful and
+        # downstream actions would produce garbage.  _check_exhausted_raise in
+        # ResultCollector already handles on_exhausted="raise" independently.
         if data and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
             raise RuntimeError(
                 f"Action '{self.config.action_name}' produced 0 successful records — "
-                f"all {len(data)} input item(s) failed "
+                f"all {len(data)} input item(s) failed or exhausted "
                 f"({stats.failed} failed, {stats.exhausted} exhausted)"
             )
 
