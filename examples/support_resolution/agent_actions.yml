@@ -1,3 +1,4 @@
+project_name: support_resolution
 default_agent_config:
   chunk_config:
     overlap: 500

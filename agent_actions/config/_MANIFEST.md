@@ -72,6 +72,7 @@ Key Functions
 | `paths.py` | `PathManager.clean_path` | Method | Remove files/dirs with project-boundary guard. |
 | `path_config.py` | `load_project_config` | Function | Load project-level config from YAML. |
 | `path_config.py` | `resolve_project_root` | Function | Resolve project root, defaulting to `Path.cwd()`. |
+| `path_config.py` | `get_project_name` | Function | Return `project_name` from project config, or `None` with warning if absent. |
 | `path_config.py` | `get_tool_dirs` | Function | Resolve tool directory names from project config, defaulting to `["tools"]`. |
 
 ## Cross-Module Touchpoints

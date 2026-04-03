@@ -9,6 +9,7 @@ from agent_actions.utils.constants import (
     API_KEY_KEY,
     CHUNK_CONFIG_KEY,
     MODEL_NAME_KEY,
+    PROJECT_NAME_KEY,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,11 +90,12 @@ class ProjectInitializer:
 
         # Create default configuration file
         config_data = {
+            PROJECT_NAME_KEY: self.project_name,
             "default_agent_config": {
                 API_KEY_KEY: "OPENAI_API_KEY",
                 MODEL_NAME_KEY: "gpt-3.5-turbo",
                 CHUNK_CONFIG_KEY: {"chunk_size": 300, "overlap": 10},
-            }
+            },
         }
         self.create_file(self.config_file, yaml.safe_dump(config_data, default_flow_style=False))
         logger.info("Successfully initialized project: %s", self.project_name)
