@@ -24,3 +24,8 @@ since FileReader already returns `list[dict]` via pandas.
 
 This means CSV/XML files are read twice (once wasted). A follow-up could skip FileReader
 entirely for these file types.
+
+### Zero-success failure check (`initial_pipeline.py`)
+
+Mirrors the check in `workflow/pipeline.py`. See `workflow/_MANIFEST.md` design note for
+full rationale on why `stats.success == 0` is used instead of `not output`.
