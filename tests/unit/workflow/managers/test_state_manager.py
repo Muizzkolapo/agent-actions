@@ -258,3 +258,117 @@ class TestWorkflowLevel:
         assert mgr2.get_status("a") == ActionStatus.COMPLETED
         assert mgr2.get_status("b") == ActionStatus.FAILED
         assert mgr2.get_status_details("b")["error"] == "timeout"
+
+
+class TestResetRetryable:
+    """Tests for reset_retryable() — re-run retry behavior."""
+
+    def test_resets_failed_to_pending(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.FAILED)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.PENDING
+        assert reset == ["a"]
+
+    def test_resets_skipped_to_pending(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.SKIPPED)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.PENDING
+        assert reset == ["a"]
+
+    def test_resets_running_to_pending(self, tmp_path):
+        """RUNNING from a prior crash should be retried."""
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.RUNNING)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.PENDING
+        assert reset == ["a"]
+
+    def test_preserves_completed(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.COMPLETED)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.COMPLETED
+        assert reset == []
+
+    def test_preserves_completed_with_failures(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.COMPLETED_WITH_FAILURES)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.COMPLETED_WITH_FAILURES
+        assert reset == []
+
+    def test_resets_checking_batch_to_pending(self, tmp_path):
+        """CHECKING_BATCH from a prior crash should be retried."""
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.CHECKING_BATCH)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.PENDING
+        assert reset == ["a"]
+
+    def test_preserves_batch_submitted(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.BATCH_SUBMITTED)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.BATCH_SUBMITTED
+        assert reset == []
+
+    def test_mixed_statuses(self, tmp_path):
+        """Only non-completed terminal + running actions should be reset."""
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a", "b", "c", "d", "e"])
+        mgr.update_status("a", ActionStatus.COMPLETED)
+        mgr.update_status("b", ActionStatus.FAILED)
+        mgr.update_status("c", ActionStatus.SKIPPED)
+        mgr.update_status("d", ActionStatus.BATCH_SUBMITTED)
+        mgr.update_status("e", ActionStatus.RUNNING)
+
+        reset = mgr.reset_retryable()
+
+        assert mgr.get_status("a") == ActionStatus.COMPLETED
+        assert mgr.get_status("b") == ActionStatus.PENDING
+        assert mgr.get_status("c") == ActionStatus.PENDING
+        assert mgr.get_status("d") == ActionStatus.BATCH_SUBMITTED
+        assert mgr.get_status("e") == ActionStatus.PENDING
+        assert set(reset) == {"b", "c", "e"}
+
+    def test_persists_to_disk(self, tmp_path):
+        """Reset should be persisted so a new manager instance sees PENDING."""
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a"])
+        mgr.update_status("a", ActionStatus.FAILED)
+        mgr.reset_retryable()
+
+        mgr2 = ActionStateManager(status_file, ["a"])
+        assert mgr2.get_status("a") == ActionStatus.PENDING
+
+    def test_empty_returns_empty(self, tmp_path):
+        """All-pending status file returns empty reset list."""
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a", "b"])
+
+        reset = mgr.reset_retryable()
+
+        assert reset == []
