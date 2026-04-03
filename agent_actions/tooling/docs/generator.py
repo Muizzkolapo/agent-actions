@@ -125,11 +125,13 @@ class CatalogGenerator:
             schemas_with_refs[schema_name] = schema_data.copy()
             schemas_with_refs[schema_name]["used_by"] = []
 
+        project_name = self.project_path.name if self.project_path else None
         catalog = {
             "metadata": {
                 "generated_at": datetime.now().isoformat(),
                 "total_workflows": len(self.workflows_data),
                 "generator_version": "1.1.0",
+                "project_name": project_name,
             },
             "workflows": {},
             "actions": {},  # Flattened index for faster lookup

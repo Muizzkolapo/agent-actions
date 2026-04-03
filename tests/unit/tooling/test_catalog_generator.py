@@ -87,3 +87,13 @@ class TestCatalogGeneratorHappyPath:
         result = gen.generate(**_empty_inputs())
         assert "metadata" in result
         assert "generated_at" in result["metadata"]
+
+    def test_metadata_contains_project_name(self):
+        gen = _make_generator(project_path="/home/user/my_project")
+        result = gen.generate(**_empty_inputs())
+        assert result["metadata"]["project_name"] == "my_project"
+
+    def test_metadata_project_name_none_without_path(self):
+        gen = CatalogGenerator({}, project_path=None)
+        result = gen.generate(**_empty_inputs())
+        assert result["metadata"]["project_name"] is None
