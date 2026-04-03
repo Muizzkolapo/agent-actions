@@ -59,7 +59,7 @@ actions:
 The `DefaultsConfig` schema defines only the core defaultable fields above. Additional fields like `api_key`, `context_scope`, `is_operational`, and `prompt_debug` are resolved at runtime through configuration merging and may not be explicitly defined in the defaults schema.
 :::
 
-## Example from qanalabs
+## Example
 
 ```yaml
 defaults:
@@ -71,7 +71,7 @@ defaults:
 
 actions:
   - name: extract_facts
-    prompt: $qanalabs_quiz_gen.Fact_extraction
+    prompt: $my_workflow.Fact_extraction
     schema: candidate_facts_list
     # Inherits: model_vendor, model_name, json_mode, granularity, run_mode
 

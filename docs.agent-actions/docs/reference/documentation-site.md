@@ -73,7 +73,7 @@ The catalog is your project's table of contents. Browse all agentic workflows wi
 
 The screenshot below shows a detailed agentic workflow view. Notice how the DAG visualization makes it easy to understand the execution order at a glance.
 
-![Workflow Detail](/img/docs-site/workflows_qanalabs_quiz_gen.png)
+![Workflow Detail](/img/docs-site/workflow_detail.png)
 
 ### Run History
 

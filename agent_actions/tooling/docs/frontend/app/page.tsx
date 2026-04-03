@@ -28,7 +28,7 @@ export default function Page() {
 function Dashboard() {
   const [activeSection, setActiveSection] = useState("home")
   const [navKeys, setNavKeys] = useState<Record<string, number>>({})
-  const { workflows } = useCatalogData()
+  const { workflows, projectName: catalogProjectName } = useCatalogData()
   const { open: searchOpen, setOpen: setSearchOpen } = useCommandSearch()
 
   // Reset drill-down state when re-clicking the same sidebar item
@@ -39,7 +39,9 @@ function Dashboard() {
     })
   }, [])
 
-  const projectName = (() => {
+  // Project name from catalog metadata (set by generator from directory name).
+  // Falls back to path heuristic for older catalog.json files without the field.
+  const projectName = catalogProjectName || (() => {
     if (workflows.length === 0) return "project"
     const p = workflows[0].path || ""
     const parts = p.replace(/\\/g, "/").split("/").filter(Boolean)
@@ -64,7 +66,7 @@ function Dashboard() {
 
   return (
     <SidebarProvider>
-      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} onSearchClick={() => setSearchOpen(true)} />
+      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} onSearchClick={() => setSearchOpen(true)} projectName={projectName} />
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} onNavigate={handleNavigate} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/80 backdrop-blur-md px-4 sticky top-0 z-10">
