@@ -1,0 +1,38 @@
+name: format_output
+description: Final triage record assembled from all upstream fields
+fields:
+  - id: ticket_id
+    type: string
+    description: "Original ticket identifier"
+  - id: title
+    type: string
+    description: "Ticket title"
+  - id: reporter
+    type: string
+    description: "Who submitted the ticket"
+  - id: issue_type
+    type: string
+    description: "Classified issue category"
+  - id: severity
+    type: string
+    description: "Assessed severity level"
+  - id: product_area
+    type: string
+    description: "Affected product area"
+  - id: assigned_team
+    type: string
+    description: "Team routed to handle this ticket"
+  - id: summary
+    type: string
+    description: "One-line triage summary"
+  - id: suggested_response
+    type: string
+    description: "Draft customer response (empty if low severity)"
+  - id: status
+    type: string
+    description: "Triage status"
+required:
+  - ticket_id
+  - issue_type
+  - severity
+  - status

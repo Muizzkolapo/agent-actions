@@ -63,8 +63,8 @@ def format_incident_triage(data: dict[str, Any]) -> list[dict[str, Any]]:
         "estimated_tte": content.get("estimated_tte", "TBD"),
     }
 
-    # Executive summary (if present)
-    executive_summary = None
+    # Executive summary (if present, empty object if not — schema requires object type)
+    executive_summary = {}
     if content.get("executive_summary"):
         executive_summary = {
             "summary": content.get("executive_summary", ""),

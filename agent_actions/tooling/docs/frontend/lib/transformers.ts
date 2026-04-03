@@ -86,6 +86,13 @@ function buildActionMetrics(raw?: RawAction["metrics"]): ActionMetrics {
     },
     success_count: raw?.success_count ?? 0,
     failed_count: raw?.failed_count ?? 0,
+    filtered_count: raw?.filtered_count ?? 0,
+    skipped_count: raw?.skipped_count ?? 0,
+    exhausted_count: raw?.exhausted_count ?? 0,
+    latency_ms: raw?.latency_ms ?? 0,
+    provider: raw?.provider ?? null,
+    model: raw?.model ?? null,
+    cache_miss_count: raw?.cache_miss_count ?? 0,
   }
 }
 
