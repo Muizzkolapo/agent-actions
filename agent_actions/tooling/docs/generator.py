@@ -158,6 +158,8 @@ class CatalogGenerator:
                 "total_runs": 0,
                 "validation_errors": 0,
                 "validation_warnings": 0,
+                "runtime_warnings": 0,
+                "runtime_errors": 0,
                 "total_vendors": 0,
                 "total_error_types": 0,
                 "total_event_types": 0,
@@ -287,6 +289,18 @@ class CatalogGenerator:
         if logs_data:
             catalog["stats"]["validation_errors"] = len(logs_data.get("validation_errors", []))
             catalog["stats"]["validation_warnings"] = len(logs_data.get("validation_warnings", []))
+
+        # Aggregate runtime warnings/errors from run data
+        if runs_data:
+            all_runtime = []
+            for wf_data in runs_data.values():
+                all_runtime.extend(wf_data.get("runtime_warnings", []))
+            catalog["stats"]["runtime_warnings"] = sum(
+                1 for w in all_runtime if w.get("level") == "warn"
+            )
+            catalog["stats"]["runtime_errors"] = sum(
+                1 for w in all_runtime if w.get("level") == "error"
+            )
 
         # Update stats for new categories
         catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0
@@ -425,6 +439,12 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     if validation_errors > 0 or validation_warnings > 0:
         click.echo(
             f"  Parsed logs: {validation_errors} error{'s' if validation_errors != 1 else ''}, {validation_warnings} warning{'s' if validation_warnings != 1 else ''}"
+        )
+    runtime_warns = stats.get("runtime_warnings", 0)
+    runtime_errs = stats.get("runtime_errors", 0)
+    if runtime_warns > 0 or runtime_errs > 0:
+        click.echo(
+            f"  Runtime events: {runtime_errs} error{'s' if runtime_errs != 1 else ''}, {runtime_warns} warning{'s' if runtime_warns != 1 else ''}"
         )
     if total_vendors > 0:
         click.echo(f"  Scanned {total_vendors} vendor{'s' if total_vendors != 1 else ''}")
