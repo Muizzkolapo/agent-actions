@@ -1,5 +1,7 @@
 """Tests for WorkflowResolutionService pre-flight checks."""
 
+from unittest.mock import Mock, patch
+
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
 )
@@ -292,3 +294,41 @@ class TestVendorRunModeCompatibility:
 
         batch_errors = [e for e in result.errors if "batch" in e.message.lower()]
         assert len(batch_errors) == 0
+
+    def test_batch_client_creation_failure_produces_error(self):
+        """If BatchClientFactory.create_client raises, pre-flight reports an error."""
+        svc = WorkflowResolutionService(
+            action_configs={
+                "my_action": {"model_vendor": "openai", "run_mode": "batch"},
+            },
+        )
+        with patch(
+            "agent_actions.llm.providers.batch_client_factory.BatchClientFactory.create_client",
+            side_effect=RuntimeError("SDK not installed"),
+        ):
+            errors = svc._check_vendor_run_mode_compatibility()
+
+        batch_errors = [e for e in errors if "could not create batch client" in e.message.lower()]
+        assert len(batch_errors) == 1
+        assert "openai" in batch_errors[0].message
+        assert "SDK not installed" in batch_errors[0].message
+
+    def test_batch_client_validate_config_failure_produces_error(self):
+        """If batch client validate_config returns invalid, pre-flight reports it."""
+        svc = WorkflowResolutionService(
+            action_configs={
+                "my_action": {"model_vendor": "openai", "run_mode": "batch"},
+            },
+        )
+        mock_client = Mock()
+        mock_client.validate_config.return_value = (False, "model_name is required")
+
+        with patch(
+            "agent_actions.llm.providers.batch_client_factory.BatchClientFactory.create_client",
+            return_value=mock_client,
+        ):
+            errors = svc._check_vendor_run_mode_compatibility()
+
+        batch_errors = [e for e in errors if "batch client validation failed" in e.message.lower()]
+        assert len(batch_errors) == 1
+        assert "model_name is required" in batch_errors[0].message

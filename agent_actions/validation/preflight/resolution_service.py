@@ -267,6 +267,52 @@ class WorkflowResolutionService:
                         hint=f"Use run_mode: online for {vendor} actions, or choose a batch-capable vendor.",
                     )
                 )
+                continue
+
+            # Deeper validation: verify the batch client can be created and
+            # accepts the agent configuration.  Catches missing vendor SDKs
+            # and invalid batch client configuration before runtime.
+            try:
+                from agent_actions.llm.providers.batch_client_factory import (
+                    BatchClientFactory,
+                )
+
+                client = BatchClientFactory.create_client(vendor)
+                is_valid, error_msg = client.validate_config(config)
+                if not is_valid:
+                    errors.append(
+                        StaticTypeError(
+                            message=(
+                                f"Action '{action_name}' batch client validation failed "
+                                f"for vendor '{vendor}': {error_msg}"
+                            ),
+                            location=FieldLocation(
+                                agent_name=action_name,
+                                config_field="model_vendor",
+                                raw_reference=f"vendor={vendor}",
+                            ),
+                            referenced_agent=action_name,
+                            referenced_field="model_vendor",
+                            hint="Check model_name and other vendor-specific fields.",
+                        )
+                    )
+            except Exception as exc:
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"Action '{action_name}' could not create batch client "
+                            f"for vendor '{vendor}': {exc}"
+                        ),
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="model_vendor",
+                            raw_reference=f"vendor={vendor}",
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="model_vendor",
+                        hint="Ensure the vendor's SDK is installed and configuration is valid.",
+                    )
+                )
 
         return errors
 

@@ -355,23 +355,34 @@ def _prepare_text_chunks_batch(
 
 
 def _prepare_json_batch(
-    content: str, batch_id: str, node_id: str, file_path: str, agent_name: str
+    content: Any, batch_id: str, node_id: str, file_path: str, agent_name: str
 ) -> list[dict[str, Any]]:
-    """Prepare JSON content for batch mode."""
-    try:
-        parsed = json.loads(content)
-    except (ValueError, TypeError, json.JSONDecodeError) as e:
-        logger.warning(
-            "Failed to parse JSON from %s: %s",
-            file_path,
-            str(e),
-            extra={
-                "file_path": file_path,
-                "agent_name": agent_name,
-                "operation": "json_parse",
-                "content_length": len(content) if content else 0,
-            },
-        )
+    """Prepare JSON content for batch mode.
+
+    ``content`` may be a pre-parsed Python object (list/dict) when the
+    upstream ``FileReader._read_json()`` has already called ``json.load()``,
+    or a raw JSON string from other callers.
+    """
+    if isinstance(content, (list, dict)):
+        # Already deserialized by FileReader — use directly.
+        parsed = content
+    elif isinstance(content, str):
+        try:
+            parsed = json.loads(content)
+        except (ValueError, json.JSONDecodeError) as e:
+            logger.warning(
+                "Failed to parse JSON from %s: %s",
+                file_path,
+                str(e),
+                extra={
+                    "file_path": file_path,
+                    "agent_name": agent_name,
+                    "operation": "json_parse",
+                    "content_length": len(content),
+                },
+            )
+            parsed = content
+    else:
         parsed = content
 
     if isinstance(parsed, list):
