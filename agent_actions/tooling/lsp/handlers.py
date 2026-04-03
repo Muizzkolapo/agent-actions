@@ -31,7 +31,7 @@ SEMANTIC_TOKEN_TYPE_MAP = {
 }
 
 
-def build_hover_content(reference, index: ProjectIndex) -> str | None:
+def build_hover_content(reference, index: ProjectIndex, current_file=None) -> str | None:
     """Build markdown hover content for a reference."""
     if reference.type == ReferenceType.PROMPT:
         prompt = index.get_prompt(reference.value)
@@ -56,6 +56,9 @@ def build_hover_content(reference, index: ProjectIndex) -> str | None:
             return f"**Schema**: `{reference.value}`\n\nFile: `{schema.location.file_path}`{fields_preview}"
 
     elif reference.type == ReferenceType.ACTION:
+        meta = index.get_action_metadata(reference.value, current_file)
+        if meta:
+            return _build_action_hover(meta)
         location = index.get_action(reference.value)
         if location:
             return f"**Action**: `{reference.value}`\n\nDefined at line {location.line + 1}"
@@ -64,6 +67,47 @@ def build_hover_content(reference, index: ProjectIndex) -> str | None:
         return _build_seed_file_hover(reference, index)
 
     return None
+
+
+def _build_action_hover(meta) -> str:
+    """Build a rich markdown hover card from ActionMetadata."""
+    from .models import ActionMetadata
+
+    m: ActionMetadata = meta
+    lines = [f"**Action**: `{m.name}`"]
+
+    if m.dependencies:
+        lines.append(f"\n**Dependencies**: {', '.join(f'`{d}`' for d in m.dependencies)}")
+
+    if m.versions_summary:
+        lines.append(f"\n**Versions**: {m.versions_summary}")
+
+    if m.prompt_ref:
+        lines.append(f"\n**Prompt**: `{m.prompt_ref}`")
+
+    if m.impl_ref:
+        lines.append(f"\n**Tool**: `{m.impl_ref}`")
+
+    if m.schema_ref:
+        lines.append(f"\n**Schema**: `{m.schema_ref}`")
+
+    if m.guard_condition:
+        lines.append(f"\n**Guard**: `{m.guard_condition}`")
+
+    if m.reprompt_validation:
+        lines.append(f"\n**Reprompt**: `{m.reprompt_validation}`")
+
+    if m.context_observe:
+        observe_list = ", ".join(f"`{o}`" for o in m.context_observe[:8])
+        lines.append(f"\n**Observe**: {observe_list}")
+
+    if m.context_passthrough:
+        pt_list = ", ".join(f"`{p}`" for p in m.context_passthrough[:6])
+        lines.append(f"\n**Passthrough**: {pt_list}")
+
+    lines.append(f"\n_Defined at line {m.location.line + 1}_")
+
+    return "\n".join(lines)
 
 
 def _build_seed_file_hover(reference, index: ProjectIndex) -> str | None:

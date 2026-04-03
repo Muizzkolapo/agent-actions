@@ -205,7 +205,7 @@ def hover(params: lsp.HoverParams) -> lsp.Hover | None:
     if not reference:
         return None
 
-    content = build_hover_content(reference, index)
+    content = build_hover_content(reference, index, current_file=current_file)
     if not content:
         return None
 
