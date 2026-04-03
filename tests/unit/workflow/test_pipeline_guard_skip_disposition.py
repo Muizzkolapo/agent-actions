@@ -157,72 +157,24 @@ class TestGuardSkipDisposition:
         self._run_with_stats(pipeline, config, stats, fp, base, out)
 
 
-class TestToolActionZeroOutputDetection:
-    """Tests for the tool-specific zero-output safety net in the pipeline.
-
-    When a tool action's result collection reports stats.success > 0 but
-    output is empty, the pipeline should raise so the executor marks the
-    action as failed in the tally.
+class TestToolActionEmptyOutputUsesGenericPath:
+    """Tool actions with empty output flow through the generic zero-success
+    check via ProcessingResult.failed() — no tool-specific branch needed.
     """
 
-    def _run_with_stats(self, pipeline, config, stats, file_path, base_dir, output_dir, data=None):
-        """Call process() with mocked collect_results returning empty output."""
-        if data is None:
-            data = [{"id": "1"}, {"id": "2"}]
+    def test_tool_failed_result_triggers_zero_success_check(self, pipeline_and_mocks):
+        """Tool empty output (stats.failed=1, success=0) triggers the generic check."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        pipeline.is_tool_action = True
+        stats = CollectionStats(failed=1)
 
         pipeline.record_processor.process_batch.return_value = []
-
         with patch(
             "agent_actions.workflow.pipeline.ResultCollector.collect_results",
-            return_value=([], stats),  # empty output
+            return_value=([], stats),
         ):
-            pipeline.process(file_path, base_dir, output_dir, data=data)
-
-    def test_tool_action_empty_output_raises(self, pipeline_and_mocks):
-        """Tool action with input but zero output (stats.success > 0) should raise."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        pipeline.is_tool_action = True
-        stats = CollectionStats(success=1)
-
-        with pytest.raises(RuntimeError, match="produced 0 output records"):
-            self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-    def test_non_tool_action_empty_output_does_not_raise(self, pipeline_and_mocks):
-        """Non-tool action with empty output and stats.success > 0 should NOT raise."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        pipeline.is_tool_action = False
-        stats = CollectionStats(success=1)
-
-        # Should not raise — existing behavior for non-tool actions preserved
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-    def test_tool_action_empty_input_does_not_raise(self, pipeline_and_mocks):
-        """Tool action with empty input should NOT raise (no input = no failure)."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        pipeline.is_tool_action = True
-        stats = CollectionStats()
-
-        # Should not raise — empty input is not a failure
-        self._run_with_stats(pipeline, config, stats, fp, base, out, data=[])
-
-    def test_tool_action_with_output_does_not_raise(self, pipeline_and_mocks):
-        """Tool action producing output should NOT raise."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        pipeline.is_tool_action = True
-        data = [{"id": "1"}]
-        output = [{"content": {"result": "ok"}}]
-        stats = CollectionStats(success=1)
-
-        pipeline.record_processor.process_batch.return_value = []
-
-        with patch(
-            "agent_actions.workflow.pipeline.ResultCollector.collect_results",
-            return_value=(output, stats),  # non-empty output
-        ):
-            pipeline.process(fp, base, out, data=data)
-
-        # Should complete normally — output_handler.save_main_output called
-        pipeline.output_handler.save_main_output.assert_called_once()
+            with pytest.raises(RuntimeError, match="produced 0 successful records"):
+                pipeline.process(fp, base, out, data=[{"id": "1"}])
 
 
 class TestZeroSuccessFailure:
