@@ -241,7 +241,82 @@ Use this opener: {{ inject_opener.suggested_opener }}
 
 See: **[Dynamic Content Injection](dynamic-content-injection.md)**
 
-## 14. Running Full Data During Development
+## 14. `seed_data.` vs `seed.` Namespace
+
+**Symptom:** Seed data in prompts/observe resolves to empty or undefined.
+
+**Cause:** The config key is `seed_data:` (or `seed_path:`) but the runtime namespace is `seed.` — not `seed_data.`.
+
+**Wrong:**
+```yaml
+observe:
+  - seed_data.rubric         # ← Wrong namespace
+```
+```
+{{ seed_data.rubric.score_range }}   ← Won't resolve
+```
+
+**Correct:**
+```yaml
+observe:
+  - seed.rubric              # ← Correct namespace
+```
+```
+{{ seed.rubric.score_range }}        ← Works
+```
+
+## 15. UDF Defaults Don't Match Schema Types
+
+**Symptom:** Schema validation errors on UDF output despite fields being present.
+
+**Cause:** Default/fallback values in the UDF don't match the schema type.
+
+**Wrong:**
+```python
+service_tier = None    # schema says type: string → None fails validation
+assigned_teams = None  # schema says type: array → None fails validation
+```
+
+**Correct:**
+```python
+service_tier = ""      # empty string satisfies type: string
+assigned_teams = []    # empty list satisfies type: array
+```
+
+## 16. Stale Cache Poisons Re-runs
+
+**Symptom:** Re-running after a failure completes in 0.03s with empty output. Actions show "completed" from cached empty results.
+
+**Cause:** Failed runs cache empty results. Next run picks up cached empties instead of re-running.
+
+**Fix:**
+```bash
+rm -rf agent_workflow/<workflow>/agent_io/target/*
+rm -rf agent_workflow/<workflow>/agent_io/source/
+agac run -a <workflow>
+```
+
+## 17. Redundant Dependencies
+
+**Symptom:** Action declares dependencies it doesn't need.
+
+**Cause:** Confusing execution ordering (`dependencies`) with data access (`context_scope`). If action B is already upstream of action C through the dependency chain, you don't need to declare B as a dependency of D — only declare C.
+
+**Wrong:**
+```yaml
+- name: assign_team
+  dependencies: [classify_issue, assess_severity]  # classify_issue is redundant
+```
+
+**Correct:**
+```yaml
+- name: assign_team
+  dependencies: [assess_severity]  # classify_issue is transitively upstream
+```
+
+`dependencies` controls execution ordering and file flow. If an action is already transitively upstream through the dependency chain, listing it again is redundant.
+
+## 18. Running Full Data During Development
 
 **Symptom:** Workflow takes 30 minutes to run while iterating on prompts.
 
@@ -257,7 +332,7 @@ actions:
 
 Remove limits when ready for production. Changing limits between runs automatically invalidates the action's completion status so it re-executes.
 
-## 15. Missing passthrough When Injecting Content
+## 19. Missing passthrough When Injecting Content
 
 **Symptom:** Downstream action can't access upstream fields after injection.
 
@@ -282,3 +357,50 @@ Remove limits when ready for production. Changing limits between runs automatica
 ```
 
 **Note:** With passthrough, UDF returns `dict` (not list) with ONLY new fields.
+
+## 20. Guard Conditions Can't Reference `output_field` Values
+
+**Symptom:** Guard condition `severity != "low"` doesn't filter as expected.
+
+**Cause:** With `output_field`, the value lives under the output field name in the data namespace, but guard conditions can't resolve it. This is a known framework limitation.
+
+**No working syntax currently.** If you need to filter on non-JSON output, use a tool action to post-process instead of a guard.
+
+## 21. `additionalProperties: false` Blocks Unlisted UDF Fields
+
+**Symptom:** Schema validation error on a field your UDF returns.
+
+**Cause:** Schema has `additionalProperties: false` but UDF returns a field not listed in the schema.
+
+**Fix:** Add every field your UDF returns to the schema, even computed/derived fields.
+
+```yaml
+# If UDF returns {"title": "...", "parties": [...], "risk_score": 0.8}
+# then schema must list ALL three:
+fields:
+  - id: title
+    type: string
+  - id: parties
+    type: array
+  - id: risk_score
+    type: number
+additionalProperties: false
+```
+
+## 22. Drop Directives on Passthrough Fields Match Nothing
+
+**Symptom:** Drop directive produces repeated runtime warnings but doesn't drop anything.
+
+**Cause:** Drop directives only apply to schema fields in observed namespaces. Passthrough fields are not in the schema namespace — they're merged after validation.
+
+```yaml
+# WRONG — passthrough fields can't be dropped
+context_scope:
+  drop:
+    - upstream_action.passthrough_field  # matches nothing, warns
+
+# If you need to exclude passthrough fields, don't passthrough them:
+context_scope:
+  passthrough:
+    - upstream_action.field_i_want      # selective, not wildcard
+```
