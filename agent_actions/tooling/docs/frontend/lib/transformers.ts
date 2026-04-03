@@ -405,6 +405,8 @@ export interface CatalogData {
   toolFunctions: ToolFunction[]
   validationErrorGroups: ValidationGroup[]
   validationWarningGroups: ValidationGroup[]
+  runtimeErrorGroups: ValidationGroup[]
+  runtimeWarningGroups: ValidationGroup[]
   workflowData: WorkflowDataSummary[]
   generatedAt: string
   projectName: string | null
@@ -422,6 +424,8 @@ export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): Catalo
     toolFunctions: transformToolFunctions(catalog),
     validationErrorGroups: errors,
     validationWarningGroups: warnings,
+    runtimeErrorGroups: groupValidationEntries(catalog.logs?.runtime_errors ?? []),
+    runtimeWarningGroups: groupValidationEntries(catalog.logs?.runtime_warnings ?? []),
     workflowData: transformWorkflowData(catalog),
     generatedAt: catalog.metadata?.generated_at ?? "",
     projectName: catalog.metadata?.project_name ?? null,
