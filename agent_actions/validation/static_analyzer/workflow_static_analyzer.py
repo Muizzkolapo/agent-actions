@@ -101,11 +101,17 @@ class WorkflowStaticAnalyzer:
         # Step 1: Build data flow graph
         self._build_graph()
 
-        # Step 2: Run type checker
+        # Step 2: Expand wildcard field references (namespace.* → concrete fields)
+        expansion_errors = self._expand_wildcards()
+
+        # Step 3: Run type checker
         checker = StaticTypeChecker(self.graph)
         result = checker.check_all()
 
-        # Step 2b: Reserved action name validation
+        for error in expansion_errors:
+            result.add_error(error)
+
+        # Step 3b: Reserved action name validation
         for error in self._check_reserved_action_names():
             result.add_error(error)
 
@@ -157,6 +163,108 @@ class WorkflowStaticAnalyzer:
         self.graph.build_edges_from_requirements()
 
         self._built = True
+
+    # ── Wildcard expansion ────────────────────────────────────────────
+
+    def _expand_wildcards(self) -> list[StaticTypeError]:
+        """Expand ``namespace.*`` references into concrete field references.
+
+        Treats ``namespace.*`` as syntactic sugar for listing every field in
+        the namespace's output schema.  For actions with known schemas the
+        wildcard is replaced in-place so downstream checks operate on concrete
+        field refs.  Dynamic / schemaless schemas cannot be expanded and the
+        ``*`` is left as-is (downstream checks already skip these).
+
+        Unknown namespaces produce errors — the same treatment explicit field
+        references receive.
+        """
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            action_name = action.get("name", "unknown")
+            original_scope = action.get("context_scope")
+            if not original_scope or not isinstance(original_scope, dict):
+                continue
+
+            # Shallow-copy so we don't mutate the caller's config.
+            context_scope = {**original_scope}
+            action["context_scope"] = context_scope
+
+            for directive in ("observe", "passthrough", "drop"):
+                refs = context_scope.get(directive)
+                if not isinstance(refs, list):
+                    continue
+
+                expanded: list[str] = []
+                for ref in refs:
+                    if not isinstance(ref, str) or "." not in ref:
+                        expanded.append(ref)
+                        continue
+
+                    ns_name, field_name = ref.split(".", 1)
+
+                    if field_name != "*":
+                        expanded.append(ref)
+                        continue
+
+                    # ── Wildcard reference: namespace.* ──
+
+                    # Special namespaces and loop are runtime-provided; skip.
+                    if ns_name in SPECIAL_NAMESPACES or ns_name == "loop":
+                        expanded.append(ref)
+                        continue
+
+                    # Namespace must be a known action in the workflow.
+                    dep_node = self.graph.get_node(ns_name)
+                    if not dep_node:
+                        errors.append(
+                            StaticTypeError(
+                                message=(
+                                    f"Wildcard reference '{ref}' in "
+                                    f"context_scope.{directive} of action "
+                                    f"'{action_name}' targets unknown action "
+                                    f"'{ns_name}'"
+                                ),
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.{directive}",
+                                    raw_reference=ref,
+                                ),
+                                referenced_agent=ns_name,
+                                referenced_field="*",
+                                hint=(
+                                    f"No action named '{ns_name}' exists in "
+                                    f"this workflow. Check for typos."
+                                ),
+                            )
+                        )
+                        continue
+
+                    output = dep_node.output_schema
+
+                    # Dynamic — fields resolved at runtime, can't expand.
+                    if output.is_dynamic:
+                        expanded.append(ref)
+                        continue
+
+                    # Schemaless — no schema defined, zero fields to expand.
+                    # Drop the ref: "give me everything" from nothing = nothing.
+                    if output.is_schemaless:
+                        continue
+
+                    # Expand into concrete field references.
+                    # Empty schemas also resolve to nothing (wildcard on zero
+                    # fields = zero refs).
+                    fields = output.schema_fields | output.observe_fields
+                    expanded.extend(f"{ns_name}.{f}" for f in sorted(fields))
+
+                context_scope[directive] = expanded
+
+        return errors
 
     def _check_reserved_action_names(self) -> list[StaticTypeError]:
         """Return errors for actions using reserved names."""
@@ -256,10 +364,6 @@ class WorkflowStaticAnalyzer:
                                 hint=f"Add '{dep_name}' to dependencies or remove this reference.",
                             )
                         )
-                        continue
-
-                    # Skip wildcard - can't validate specific fields
-                    if field_name == "*":
                         continue
 
                     # Validate field exists in dependency's output schema
@@ -430,8 +534,6 @@ class WorkflowStaticAnalyzer:
                 dep_name, field_name = drop_ref.split(".", 1)
 
                 if dep_name in SPECIAL_NAMESPACES or dep_name == "loop":
-                    continue
-                if field_name == "*":
                     continue
 
                 dep_node = self.graph.get_node(dep_name)
@@ -720,6 +822,9 @@ class WorkflowStaticAnalyzer:
 
                 if source_name in SPECIAL_NAMESPACES or source_name == "loop":
                     continue
+                # Remaining wildcards are dynamic/schemaless (known schemas
+                # were expanded by _expand_wildcards).  Can't trace individual
+                # fields through the chain, so skip lineage check.
                 if field_name == "*":
                     continue
 
