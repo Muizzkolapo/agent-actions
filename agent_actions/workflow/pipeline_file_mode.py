@@ -87,14 +87,16 @@ def process_file_mode_tool(
                 f"got {type(raw_response).__name__}"
             )
 
-        # Tool returned empty result despite having input — treat as failure
-        # so the executor marks the action as ERROR in the tally and the
-        # circuit breaker skips downstream dependents.
+        # Empty tool output with non-empty input → FAILED (see _MANIFEST.md)
         if not raw_response and data:
-            raise ValueError(
-                f"Tool '{context.agent_name}' returned empty result "
-                f"from {len(data)} input record(s)"
-            )
+            return [
+                ProcessingResult.failed(
+                    error=(
+                        f"Tool '{context.agent_name}' returned empty result "
+                        f"from {len(data)} input record(s)"
+                    ),
+                )
+            ]
 
         # Reserved framework fields that go at top level, not in content
         RESERVED_FIELDS = {
