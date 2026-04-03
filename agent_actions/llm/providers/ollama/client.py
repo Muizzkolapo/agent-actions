@@ -60,7 +60,7 @@ class OllamaClient(BaseClient):
 
     CAPABILITIES: ClassVar[dict[str, Any]] = {
         "supports_json_mode": True,
-        "supports_batch": False,
+        "supports_batch": True,
         "supports_tools": True,
         "supports_vision": True,
         "required_fields": ["model_name"],
