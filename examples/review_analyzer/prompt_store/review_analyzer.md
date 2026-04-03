@@ -38,9 +38,9 @@ You are quality scorer {{ i }} of {{ version.length }} in an independent review 
 
 ## Scoring Rubric
 
-{{ seed_data.rubric.scoring_criteria | tojson }}
+{{ seed.rubric.scoring_criteria | tojson }}
 
-Score range: {{ seed_data.rubric.score_range.min }} to {{ seed_data.rubric.score_range.max }}
+Score range: {{ seed.rubric.score_range.min }} to {{ seed.rubric.score_range.max }}
 
 ## Review Data
 
@@ -48,7 +48,7 @@ Score range: {{ seed_data.rubric.score_range.min }} to {{ seed_data.rubric.score
 {{ source.review_text }}
 
 **Extracted claims**:
-{{ extract_claims.claims }}
+{{ extract_claims.factual_claims }}
 
 **Product aspects discussed**:
 {{ extract_claims.product_aspects }}
@@ -60,9 +60,9 @@ Score range: {{ seed_data.rubric.score_range.min }} to {{ seed_data.rubric.score
 
 Score this review on three criteria (each 1-10):
 
-1. **Helpfulness** (weight: {{ seed_data.rubric.scoring_criteria.helpfulness.weight }}): {{ seed_data.rubric.scoring_criteria.helpfulness.description }}
-2. **Specificity** (weight: {{ seed_data.rubric.scoring_criteria.specificity.weight }}): {{ seed_data.rubric.scoring_criteria.specificity.description }}
-3. **Authenticity** (weight: {{ seed_data.rubric.scoring_criteria.authenticity.weight }}): {{ seed_data.rubric.scoring_criteria.authenticity.description }}
+1. **Helpfulness** (weight: {{ seed.rubric.scoring_criteria.helpfulness.weight }}): {{ seed.rubric.scoring_criteria.helpfulness.description }}
+2. **Specificity** (weight: {{ seed.rubric.scoring_criteria.specificity.weight }}): {{ seed.rubric.scoring_criteria.specificity.description }}
+3. **Authenticity** (weight: {{ seed.rubric.scoring_criteria.authenticity.weight }}): {{ seed.rubric.scoring_criteria.authenticity.description }}
 
 Calculate the **overall_score** as a weighted average using the weights above.
 
@@ -84,7 +84,7 @@ You are a customer experience specialist drafting merchant responses to product 
 {{ source.review_text }}
 
 **Claims made**:
-{{ extract_claims.claims }}
+{{ extract_claims.factual_claims }}
 
 **Product aspects discussed**:
 {{ extract_claims.product_aspects }}
@@ -119,7 +119,7 @@ You are a product analyst extracting actionable feedback from customer reviews.
 
 ## Extracted Claims
 
-{{ extract_claims.claims }}
+{{ extract_claims.factual_claims }}
 
 ## Product Aspects Discussed
 
@@ -128,7 +128,7 @@ You are a product analyst extracting actionable feedback from customer reviews.
 ## Feedback Categories
 
 Classify each piece of feedback into one of these categories:
-{% for category in seed_data.rubric.product_feedback_categories %}
+{% for category in seed.rubric.product_feedback_categories %}
 - {{ category }}
 {% endfor %}
 

@@ -1,193 +1,258 @@
 # Product Listing Enrichment
 
-An [agent-actions](https://github.com/Muizzkolapo/agent-actions) example that transforms raw product specs into marketplace-ready listings with competitive positioning, compliance validation, and SEO optimization.
+<p align="center"><img src="docs/flow.png" width="700"/></p>
 
-**Pattern**: Tool + LLM Hybrid -- alternating between LLM reasoning and deterministic tool operations.
+A six-action pipeline that transforms raw product specs into marketplace-ready listings. It alternates strictly between LLM actions (language generation) and Tool actions (deterministic operations), demonstrating how to divide work by capability: LLMs handle language, tools handle data.
 
-## The Pattern
+## What You'll Learn
 
-LLM does language. Tools do data. Neither does the other's job.
+This example teaches four patterns that appear repeatedly in production agent workflows:
 
+1. **LLM/Tool hybrid pipeline** -- structuring a workflow so that LLMs and tools alternate, each doing what the other cannot.
+2. **Progressive context disclosure** -- controlling exactly what each action sees, and dropping context once it's been distilled into a better form.
+3. **Guard-based conditional skip** -- making an action run only when a previous action's output meets a condition.
+4. **Seed data injection** -- providing static reference material (brand guidelines, marketplace rules) that shapes LLM behavior without being part of the input records.
+
+## The Problem
+
+A marketplace seller has raw product data -- technical specs, images, a category, and a price. Turning that into a published listing requires several kinds of work:
+
+- **Language work**: describing specs in human terms, writing persuasive copy, optimizing for search. These require understanding nuance, tone, and intent. An LLM is the right tool.
+- **Data work**: looking up competitor prices, checking character limits, assembling final JSON. These are deterministic and exact. A traditional function is the right tool.
+
+Mixing these responsibilities in a single LLM call produces unreliable results -- LLMs miscount characters and hallucinate pricing data. A strict LLM-Tool-LLM-Tool-LLM-Tool pipeline gives you the best of both.
+
+## How It Works
+
+The pipeline has exactly 6 actions in strict alternation:
+
+### Action 1: `generate_description` (LLM)
+
+**Model**: Gemini (`gemini-2.5-flash`) -- cheap extraction from technical specs.
+
+Takes the raw specs, product images description, and brand voice seed data. The LLM translates technical specifications into a benefit-oriented description, key features, search keywords, and use cases. Pure language work. No tool could turn `"driver_size": "40mm"` into "rich, detailed sound from 40mm custom drivers."
+
+It observes (`observe`) `source.raw_specs`, `source.product_images_description`, `source.product_name`, `source.brand`, and `seed.brand_voice`. It passes through `source.product_id`, `source.product_category`, and `source.current_price` unchanged.
+
+### Action 2: `fetch_competitor_prices` (Tool)
+
+A deterministic function that looks up competitor pricing based on category and price. In production this would call a pricing API. No LLM needed -- pure data lookup.
+
+Observes `generate_description.search_keywords`, `source.product_category`, `source.current_price`.
+
+### Action 3: `write_marketing_copy` (LLM)
+
+**Model**: OpenAI (`gpt-4o-mini`) -- creative writing needs stronger reasoning.
+
+Now the LLM has both the product description (from step 1) and competitor pricing (from step 2). It writes marketplace listing copy that positions the product against the competition. This is where `source.raw_specs` gets dropped -- the LLM already distilled it into readable language in step 1, so there's no reason to pass the raw data forward.
+
+It observes `generate_description.*`, `fetch_competitor_prices.competitor_prices`, `fetch_competitor_prices.price_position`, `seed.brand_voice`, and `seed.marketplace_rules`. It drops `source.raw_specs`.
+
+### Action 4: `validate_compliance` (Tool)
+
+Checks the marketing copy against marketplace rules: character limits, required fields, prohibited content. A tool does this perfectly. No ambiguity about whether a string is 200 or 201 characters.
+
+Observes `write_marketing_copy.*` and `seed.marketplace_rules`.
+
+### Action 5: `optimize_seo` (LLM, guarded)
+
+**Model**: OpenAI (`gpt-4o-mini`) -- SEO reasoning benefits from the stronger default model.
+
+Optimizes keywords and titles for search ranking. This action is **guarded**: it only runs if `compliance_passed == true` from the previous step. No point optimizing copy that'll be rejected.
+
+Observes `write_marketing_copy.*`, `validate_compliance.*`, `source.product_category`, `source.brand`.
+
+### Action 6: `format_listing` (Tool)
+
+Assembles all upstream outputs into the final marketplace-ready JSON structure. Just packaging -- no creativity needed.
+
+Sees everything from all prior actions, plus source identifiers.
+
+## Key Patterns Explained
+
+### 1. LLM/Tool Hybrid Pipeline
+
+The core design principle: LLMs do language, tools do data. Every action in this workflow is explicitly typed. LLM actions have a `prompt` reference. Tool actions have `kind: tool` and an `impl` pointing to a Python function.
+
+```yaml
+# LLM action -- has a prompt, uses a per-action model override
+- name: generate_description
+  intent: "Generate a structured product description from raw technical specs and image context"
+  schema: generate_description
+  prompt: $product_listing_enrichment.Generate_Product_Description
+  model_vendor: gemini                # Cheap extraction from specs
+  model_name: gemini-2.5-flash
+  api_key: GEMINI_API_KEY
+
+# Tool action -- has kind: tool and impl, no model involved
+- name: fetch_competitor_prices
+  dependencies: [generate_description]
+  kind: tool
+  impl: fetch_competitor_prices
+  intent: "Look up competitor pricing data for competitive positioning"
+  schema: fetch_competitor_prices
 ```
- Raw Specs
-    |
-    v
- [1. generate_description]     LLM   -- Interpret specs into human language
-    |
-    v
- [2. fetch_competitor_prices]  TOOL  -- Look up market pricing data
-    |
-    v
- [3. write_marketing_copy]     LLM   -- Write copy with competitive positioning
-    |
-    v
- [4. validate_compliance]      TOOL  -- Check character limits & rules
-    |
-    v
- [5. optimize_seo]             LLM   -- Refine for search (guarded: only if compliant)
-    |
-    v
- [6. format_listing]           TOOL  -- Package final marketplace JSON
-    |
-    v
- Marketplace-Ready Listing
+
+The alternation is strict: LLM, Tool, LLM, Tool, LLM, Tool. Each LLM action generates language that a tool then processes or validates. Each tool action produces structured data that the next LLM action uses as context.
+
+### 2. Progressive Context Disclosure
+
+Each action sees only what it needs. The `context_scope` block controls this with three directives:
+
+- **`observe`** -- the action can read these fields (they appear in the prompt or tool input)
+- **`passthrough`** -- these fields are forwarded to the next action unchanged, without the current action processing them
+- **`drop`** -- these fields are explicitly removed from the context going forward
+
+The most important use of `drop` in this workflow is removing `raw_specs` after the first action:
+
+```yaml
+- name: write_marketing_copy
+  dependencies: [fetch_competitor_prices]
+  context_scope:
+    observe:
+      - generate_description.*
+      - fetch_competitor_prices.competitor_prices
+      - fetch_competitor_prices.price_position
+      - seed.brand_voice
+      - seed.marketplace_rules
+    drop:
+      - source.raw_specs
+    passthrough:
+      - source.product_id
+      - source.product_category
+      - source.current_price
+      - source.brand
 ```
 
-Why this alternation matters:
+Why drop `raw_specs`? Because `generate_description` already distilled the raw technical data into readable language. Passing both the raw specs and the distilled description to `write_marketing_copy` would waste tokens and risk the LLM contradicting its own earlier output. Once information has been transformed into a better form, drop the original.
 
-| Step | Type | Why this type? |
-|------|------|----------------|
-| generate_description | LLM | Translating raw specs ("40mm driver, 20Hz-40kHz") into benefits ("Rich, detailed audio across the full spectrum") requires language understanding |
-| fetch_competitor_prices | Tool | Price lookups are data operations -- deterministic, no hallucination risk |
-| write_marketing_copy | LLM | Crafting persuasive copy that weaves in competitive positioning requires creative reasoning |
-| validate_compliance | Tool | Counting characters and checking field presence is exact math -- LLMs are unreliable at counting |
-| optimize_seo | LLM | Understanding search intent and keyword relevance requires language understanding |
-| format_listing | Tool | Assembling JSON structure is mechanical -- no creativity needed |
+### 3. Guard-Based Conditional Skip
 
-## Context Flow
+The `optimize_seo` action uses a guard to skip itself when compliance validation fails:
 
-Each action sees only what it needs. Context narrows as the pipeline progresses:
-
-```
-Source data (raw_specs, images, price, category, brand)
-  |
-  +-- generate_description
-  |     sees: raw_specs, images, brand_voice
-  |     produces: product_title, short_description, key_features, search_keywords
-  |
-  +-- fetch_competitor_prices
-  |     sees: search_keywords, category, current_price
-  |     produces: competitor_prices, price_position, average_competitor_price
-  |
-  +-- write_marketing_copy
-  |     sees: generate_description.*, competitor pricing, brand_voice, marketplace_rules
-  |     DROPS: source.raw_specs (already distilled by step 1)
-  |     produces: listing_title, listing_description, bullet_points, search_keywords
-  |
-  +-- validate_compliance
-  |     sees: write_marketing_copy.*, marketplace_rules
-  |     produces: compliance_passed (bool), field_results, violations
-  |
-  +-- optimize_seo (GUARDED: only runs if compliance_passed == true)
-  |     sees: write_marketing_copy.*, validate_compliance.*, category
-  |     produces: optimized_title, primary_keywords, long_tail_keywords, backend_keywords
-  |
-  +-- format_listing
-        sees: everything upstream + source passthrough fields
-        produces: final marketplace-ready JSON
+```yaml
+- name: optimize_seo
+  dependencies: [validate_compliance]
+  guard:
+    condition: 'compliance_passed == true'
+    on_false: "skip"
+  context_scope:
+    observe:
+      - write_marketing_copy.*
+      - validate_compliance.*
+      - source.product_category
+      - source.brand
 ```
 
-Key context decisions:
-- **`source.raw_specs` is dropped** after step 1 -- the LLM already distilled it into readable language. Sending raw JSON to the copywriter wastes tokens and confuses the prompt.
-- **`optimize_seo` is guarded** -- if the copy fails compliance, there is no point optimizing it for search. The guard (`compliance_passed == true`) prevents wasted LLM calls.
-- **Seed data** (`brand_voice`, `marketplace_rules`) is injected at the workflow level and available to any action that needs it.
+`condition` references a field from the previous action's output (`validate_compliance.compliance_passed`). When it evaluates to `false`, the entire action is skipped -- no LLM call is made, no tokens are spent. The `on_false: "skip"` directive means downstream actions still run; the pipeline does not abort.
 
-## Data
+Guards prevent wasting tokens on actions whose preconditions aren't met. Other common examples: skipping translation when the source language already matches the target, or skipping summarization when the input is already short enough.
 
-### Input (8 products across 4 categories)
+### 4. Seed Data Injection
 
-| ID | Product | Category |
-|----|---------|----------|
-| PLE-001 | SoundWave Pro ANC Headphones | electronics |
-| PLE-002 | ChefElite 12-Cup Food Processor | kitchen |
-| PLE-003 | TrailMaster 55L Expedition Backpack | outdoor_gear |
-| PLE-004 | ErgoDesk Pro Standing Desk Converter | home_office |
-| PLE-005 | PureStream UV Water Purifier Bottle | outdoor_gear |
-| PLE-006 | SmartBrew Precision Pour-Over Coffee System | kitchen |
-| PLE-007 | LumoPanel LED Desk Lamp | home_office |
-| PLE-008 | ThermoForge Cast Iron Dutch Oven 6Qt | kitchen |
+Seed data provides static reference material that shapes LLM behavior. It's defined once in `defaults` and made available to any action that lists it in `observe`:
 
-Products have varying spec richness -- some have 12+ fields (PLE-006), others have 7 (PLE-005) -- to test how the pipeline handles different input quality.
+```yaml
+defaults:
+  context_scope:
+    seed_path:
+      brand_voice: $file:brand_voice.json
+      marketplace_rules: $file:marketplace_rules.json
+```
 
-### Seed Data
+The `brand_voice.json` file contains tone guidelines, prohibited words, preferred phrases, and formatting rules. The `marketplace_rules.json` file defines character limits, required fields, and prohibited content for each listing component.
 
-- **`brand_voice.json`** -- Tone guidelines, prohibited words, preferred phrases, target audience
-- **`marketplace_rules.json`** -- Character limits (title: 200, description: 2000, bullets: 5x250), required fields, prohibited content rules
+Actions reference seed data the same way they reference any other context:
 
-## Install
+```yaml
+context_scope:
+  observe:
+    - seed.brand_voice
+    - seed.marketplace_rules
+```
+
+Configuration stays in JSON files, not prompts. Brand voice changes? Edit `brand_voice.json`. Marketplace updates its rules? Edit `marketplace_rules.json`. No prompt surgery needed.
+
+### 5. Retry and Reprompt
+
+All LLM actions inherit retry from defaults -- transient API errors (rate limits, timeouts) are retried up to 2 times with backoff:
+
+```yaml
+defaults:
+  retry:
+    enabled: true
+    max_attempts: 2
+```
+
+`generate_description` and `write_marketing_copy` also have reprompt validation. If the LLM returns null fields or incomplete structured output, the framework rejects the response and reprompts automatically:
+
+```yaml
+reprompt:
+  validation: check_required_fields    # Rejects any response with null values
+  max_attempts: 2
+  on_exhausted: return_last            # Accept best attempt if retries fail
+```
+
+The `check_required_fields` UDF in `tools/shared/reprompt_validations.py` is generic -- it checks that no field in the response is null, without hardcoding field names.
+
+## Quick Start
+
+Install the CLI:
 
 ```bash
-pip install agent-actions
+pip install agent-actions-cli
 ```
 
-## Run
+Set your environment variables:
 
 ```bash
-# Copy the environment file and add your API key
-cp .env.example .env
+export OPENAI_API_KEY=...
+export GEMINI_API_KEY=...
+```
 
-# Run the workflow
+Run the agent:
+
+```bash
 agac run -a product_listing_enrichment
 ```
 
-The workflow runs against the included 8-product sample in `agent_io/staging/`. To enrich your own products, drop a JSON file there:
+By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full dataset.
 
-```json
-[
-  {
-    "product_id": "MY-001",
-    "product_name": "Your Product Name",
-    "product_category": "electronics",
-    "brand": "YourBrand",
-    "current_price": 99.99,
-    "raw_specs": {
-      "weight": "250g",
-      "battery_life": "10 hours"
-    },
-    "product_images_description": "Product shown on a white background."
-  }
-]
-```
+The pipeline will process each product record in `agent_io/staging/products.json` through all six actions and write the results to `agent_io/target/`.
 
-Output is written to `agent_io/target/format_listing/`.
-
-## File Structure
+## Project Structure
 
 ```
 product_listing_enrichment/
-|-- .env.example                          # API key template
-|-- agent_actions.yml                     # Project config (model, schema/tool paths)
-|-- README.md
-|
-|-- agent_workflow/product_listing_enrichment/
-|   |-- agent_config/
-|   |   +-- product_listing_enrichment.yml  # Workflow definition (6 actions)
-|   |-- agent_io/staging/
-|   |   +-- products.json                   # 8 sample products
-|   +-- seed_data/
-|       |-- brand_voice.json                # Tone & style guidelines
-|       +-- marketplace_rules.json          # Character limits & field rules
-|
-|-- prompt_store/
-|   +-- product_listing_enrichment.md       # 3 LLM prompts (describe, write, optimize)
-|
-|-- schema/product_listing_enrichment/
-|   |-- generate_description.yml            # Step 1 output schema
-|   |-- fetch_competitor_prices.yml         # Step 2 output schema
-|   |-- write_marketing_copy.yml            # Step 3 output schema
-|   |-- validate_compliance.yml             # Step 4 output schema
-|   |-- optimize_seo.yml                    # Step 5 output schema
-|   +-- format_listing.yml                  # Step 6 output schema
-|
-+-- tools/
-    |-- __init__.py
-    +-- product_listing_enrichment/
-        |-- __init__.py
-        |-- fetch_competitor_prices.py      # Mock competitor pricing lookup
-        |-- validate_marketplace_compliance.py  # Character limit & rule checker
-        +-- format_marketplace_listing.py   # Final JSON packager
+├── README.md
+├── docs/
+├── agent_actions.yml
+├── agent_workflow/
+│   └── product_listing_enrichment/
+│       ├── agent_config/
+│       │   └── product_listing_enrichment.yml
+│       ├── agent_io/
+│       │   ├── staging/
+│       │   │   └── products.json
+│       │   └── target/
+│       └── seed_data/
+│           ├── brand_voice.json
+│           └── marketplace_rules.json
+├── prompt_store/
+│   └── product_listing_enrichment.md
+├── schema/
+│   └── product_listing_enrichment/
+│       ├── generate_description.yml
+│       ├── fetch_competitor_prices.yml
+│       ├── write_marketing_copy.yml
+│       ├── validate_compliance.yml
+│       ├── optimize_seo.yml
+│       └── format_listing.yml
+└── tools/
+    ├── product_listing_enrichment/
+    │   ├── fetch_competitor_prices.py
+    │   ├── validate_marketplace_compliance.py
+    │   └── format_marketplace_listing.py
+    └── shared/
+        └── reprompt_validations.py
 ```
-
-## Customization
-
-### Swap the pricing tool for a real API
-
-Replace `fetch_competitor_prices.py` with a tool that calls your pricing API or database. The schema contract stays the same -- return `competitor_prices`, `price_position`, and `average_competitor_price`.
-
-### Adjust marketplace rules
-
-Edit `seed_data/marketplace_rules.json` to match your marketplace (Amazon, Shopify, eBay). The compliance tool reads limits dynamically from this file.
-
-### Change the brand voice
-
-Edit `seed_data/brand_voice.json` to match your brand. The LLM prompts reference `seed_data.brand_voice` for tone, prohibited words, and formatting rules.

@@ -22,14 +22,16 @@
 
 name: support_resolution
 description: "Triage support tickets using field-by-field construction — works with any model including Ollama"
-version: "2.0.0"
+version: "1.0.0"
 
 defaults:
   json_mode: false                    # ← Plain text responses, no JSON required
   granularity: Record
-  run_mode: online                    # Ollama doesn't support batch mode
+  run_mode: batch                    # Ollama doesn't support batch mode
   model_vendor: ollama                # Works with local models out of the box
-  model_name: llama3
+  model_name: llama3.2:latest
+  api_key: OLLAMA_API_KEY
+  record_limit: 2      # Remove for full processing
   data_source:
     type: local
     folder: ./staging
@@ -90,7 +92,7 @@ actions:
   # output_field → assigned_team
   # ==========================================================================
   - name: assign_team
-    dependencies: [classify_issue, assess_severity, identify_area]
+    dependencies: [assess_severity, identify_area]
     intent: "Route to the right team using routing rules"
     output_field: assigned_team
     prompt: $support_resolution.Assign_Team
@@ -99,14 +101,14 @@ actions:
         - classify_issue.issue_type
         - assess_severity.severity
         - identify_area.product_area
-        - seed_data.routing_rules
+        - seed.routing_rules
 
   # ==========================================================================
   # STEP 5: Summarize the issue
   # output_field → summary
   # ==========================================================================
   - name: summarize_issue
-    dependencies: [classify_issue, assess_severity, identify_area]
+    dependencies: [assess_severity, identify_area]
     intent: "Write a one-line summary for the triage dashboard"
     output_field: summary
     prompt: $support_resolution.Summarize_Issue
@@ -148,9 +150,10 @@ actions:
   # STEP 7: Package output (tool — assembles all fields)
   # ==========================================================================
   - name: format_output
-    dependencies: [draft_response, summarize_issue, assign_team]
+    dependencies: [draft_response]
     kind: tool
     impl: package_triage_result
+    schema: format_output
     intent: "Assemble all fields into final triage record"
     context_scope:
       observe:

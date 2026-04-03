@@ -11,7 +11,7 @@ You are an experienced contract attorney analyzing individual clauses for risk, 
 
 ## RISK ASSESSMENT CRITERIA
 
-{{ seed_data.risk_criteria }}
+{{ seed.risk_criteria }}
 
 ## TASK
 
@@ -73,7 +73,7 @@ You are a senior legal counsel performing deep analysis on a clause that has bee
 
 ## RISK CRITERIA REFERENCE
 
-{{ seed_data.risk_criteria }}
+{{ seed.risk_criteria }}
 
 ## TASK
 
@@ -147,7 +147,7 @@ Write a clear, actionable executive summary for business decision-makers:
 2. **Risk Verdict**: One clear recommendation: "Approve", "Approve with Conditions", "Requires Negotiation", or "Reject"
 3. **Top Concerns**: Rank the 3-5 most important issues by business impact, with brief descriptions
 4. **Recommended Next Steps**: Provide an ordered action plan (e.g., "1. Request revised liability cap", "2. Negotiate termination fee")
-5. **Approval Conditions**: If verdict is "Approve with Conditions", list what must change
+5. **Approval Conditions**: List specific changes required before the contract can be approved. Only empty if verdict is "Approve" with no reservations
 6. **Estimated Negotiation Effort**: How much back-and-forth to expect: "minimal", "moderate", "significant", or "extensive"
 
 ## WRITING GUIDELINES

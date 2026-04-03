@@ -30,6 +30,7 @@ from .component_scanners import (
 )
 from .data_scanners import (
     extract_action_metrics,
+    extract_runtime_warnings,
     scan_logs,
     scan_prompts,
     scan_runs,
@@ -55,6 +56,7 @@ __all__ = [
     "scan_runs",
     "scan_logs",
     "extract_action_metrics",
+    "extract_runtime_warnings",
     # Code scanners
     "scan_tool_functions",
     "extract_typed_dicts",

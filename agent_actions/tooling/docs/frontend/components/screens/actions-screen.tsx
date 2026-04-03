@@ -407,6 +407,7 @@ function ActionDetail({
 }) {
   const m = action.metrics
   const hasMetrics = m.execution_time != null || m.success_count > 0 || m.failed_count > 0
+    || m.filtered_count > 0 || m.skipped_count > 0
     || m.tokens?.prompt_tokens != null || m.tokens?.completion_tokens != null
 
   // Skip output badges when outputFields covers the same names (table is more informative)
@@ -687,6 +688,66 @@ function ActionDetail({
                   </span>
                   <span className="text-sm font-mono text-foreground">
                     {m.tokens?.prompt_tokens != null ? m.tokens.prompt_tokens.toLocaleString() : "\u2014"} prompt / {m.tokens?.completion_tokens != null ? m.tokens.completion_tokens.toLocaleString() : "\u2014"} completion
+                  </span>
+                </div>
+              )}
+              {m.filtered_count > 0 && (
+                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                    Filtered
+                  </span>
+                  <span className="text-sm font-mono text-amber-500">
+                    {m.filtered_count}
+                  </span>
+                </div>
+              )}
+              {m.skipped_count > 0 && (
+                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                    Skipped
+                  </span>
+                  <span className="text-sm font-mono text-muted-foreground">
+                    {m.skipped_count}
+                  </span>
+                </div>
+              )}
+              {m.exhausted_count > 0 && (
+                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                    Exhausted
+                  </span>
+                  <span className="text-sm font-mono text-[hsl(var(--destructive))]">
+                    {m.exhausted_count}
+                  </span>
+                </div>
+              )}
+              {m.latency_ms > 0 && (
+                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                    Avg LLM Latency
+                  </span>
+                  <span className="text-sm font-mono text-foreground">
+                    {m.latency_ms.toLocaleString()}ms
+                  </span>
+                </div>
+              )}
+              {m.provider && (
+                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                    Provider
+                  </span>
+                  <span className="text-sm font-mono text-foreground">
+                    {m.provider}{m.model ? ` / ${m.model}` : ""}
+                  </span>
+                </div>
+              )}
+              {m.cache_miss_count > 0 && (
+                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                    Cache Misses
+                  </span>
+                  <span className="text-sm font-mono text-muted-foreground">
+                    {m.cache_miss_count}
                   </span>
                 </div>
               )}

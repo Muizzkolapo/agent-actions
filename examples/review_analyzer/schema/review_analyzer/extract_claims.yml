@@ -1,7 +1,7 @@
 name: extract_claims
 description: Extracted factual claims, product aspects, and sentiment signals from a product review
 fields:
-  - id: claims
+  - id: factual_claims
     type: array
     description: "Specific factual claims made in the review (e.g., 'battery lasts 8 hours', 'broke after 2 weeks')"
     items:
@@ -33,6 +33,6 @@ fields:
     type: boolean
     description: "Whether the reviewer compares this product to alternatives"
 required:
-  - claims
+  - factual_claims
   - product_aspects
   - sentiment_signals

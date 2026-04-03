@@ -68,15 +68,10 @@ def aggregate_quality_scores(data: dict[str, Any]) -> dict[str, Any]:
             all_red_flags.extend(red_flags)
 
     if not scores:
-        return {
-            "consensus_score": 0,
-            "score_spread": 0,
-            "is_split_decision": False,
-            "strengths": [],
-            "weaknesses": [],
-            "red_flags": [],
-            "vote_summary": "No scores collected",
-        }
+        raise ValueError(
+            "All 3 scorers produced empty output — no scores to aggregate. "
+            "Check score_quality schema fields match what the LLM returns."
+        )
 
     # Consensus: average of weighted scores
     overall_scores = [s["overall"] for s in scores]

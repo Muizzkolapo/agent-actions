@@ -136,14 +136,14 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     all_deadlines.sort(key=lambda d: d.get("days", 999))
 
     # Prioritize negotiation items by risk score (highest first)
-    negotiation_items.sort(key=lambda n: n["risk_score"], reverse=True)
+    negotiation_items.sort(key=lambda n: n.get("risk_score") or 0, reverse=True)
     negotiation_priority = [
         f"Clause {n['clause_number']} ({n['clause_title']}): {n['action']}"
         for n in negotiation_items
     ]
 
     # Sort high-risk clauses by risk score (highest first)
-    high_risk_clauses.sort(key=lambda c: c["risk_score"], reverse=True)
+    high_risk_clauses.sort(key=lambda c: c.get("risk_score") or 0, reverse=True)
 
     result = {
         "contract_id": contract_id,

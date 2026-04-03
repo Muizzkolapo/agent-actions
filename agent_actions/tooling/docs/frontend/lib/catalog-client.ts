@@ -20,6 +20,8 @@ export interface RawCatalogJson {
     recent_invocations: unknown[]
     validation_errors: RawValidationEntry[]
     validation_warnings: RawValidationEntry[]
+    runtime_warnings?: RawValidationEntry[]
+    runtime_errors?: RawValidationEntry[]
   }
   stats: {
     total_workflows: number
@@ -70,6 +72,13 @@ export interface RawAction {
     tokens?: { prompt_tokens?: number; completion_tokens?: number }
     success_count?: number
     failed_count?: number
+    filtered_count?: number
+    skipped_count?: number
+    exhausted_count?: number
+    latency_ms?: number
+    provider?: string | null
+    model?: string | null
+    cache_miss_count?: number
   }
   tool_function?: RawToolFunction
   // Lineage fields

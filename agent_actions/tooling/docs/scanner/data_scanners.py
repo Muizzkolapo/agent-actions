@@ -289,6 +289,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         # Load events.json for detailed execution data
         events_path = target_dir / "events.json"
         action_metrics = {}
+        runtime_warnings: list[dict[str, Any]] = []
         if events_path.exists():
             try:
                 action_metrics = extract_action_metrics(events_path)
@@ -298,6 +299,14 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
                     events_path,
                     e,
                     exc_info=True,
+                )
+            try:
+                runtime_warnings = extract_runtime_warnings(events_path)
+            except (OSError, ValueError) as e:
+                logger.debug(
+                    "Failed to extract runtime warnings from %s: %s",
+                    events_path,
+                    e,
                 )
 
         # Load .manifest.json for execution plan and per-action status
@@ -314,6 +323,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             "workflow_name": workflow_name,
             "latest_run": latest_run,
             "action_metrics": action_metrics,
+            "runtime_warnings": runtime_warnings,
             "manifest": manifest_data,
             "run_results_path": str(run_results_path) if run_results_path.exists() else None,
             "events_path": str(events_path) if events_path.exists() else None,
@@ -415,6 +425,61 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
     return logs_data
 
 
+def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
+    """Extract warn/error-level LogEvents from a target events.json file.
+
+    These are operational warnings emitted during workflow execution
+    (e.g., "All N records filtered by guard") that the docs site should
+    surface alongside static validation events.
+    """
+    import json
+
+    warnings: list[dict[str, Any]] = []
+
+    _LOG_LINE_LIMIT = 100_000
+    try:
+        with open(events_path, encoding="utf-8") as f:
+            line_count = 0
+            for line in itertools.islice(f, _LOG_LINE_LIMIT):
+                line_count += 1
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                level = event.get("level")
+                if level not in ("warn", "error"):
+                    continue
+
+                meta = event.get("meta", {})
+                warnings.append(
+                    {
+                        "level": level,
+                        "message": event.get("message", ""),
+                        "action_name": meta.get("action_name"),
+                        "timestamp": meta.get("timestamp"),
+                        "event_type": event.get("event_type"),
+                        "code": event.get("code"),
+                    }
+                )
+
+            if line_count >= _LOG_LINE_LIMIT:
+                logger.warning(
+                    "extract_runtime_warnings: line limit (%d) reached for %s; "
+                    "some events may be omitted",
+                    _LOG_LINE_LIMIT,
+                    events_path,
+                )
+
+    except OSError as e:
+        logger.debug("Could not read runtime warnings from %s: %s", events_path, e)
+
+    return warnings
+
+
 def extract_action_metrics(events_path: Path) -> dict[str, Any]:
     """Extract per-action metrics from events.json file."""
     import json
@@ -452,6 +517,12 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                         "failed_count": 0,
                         "filtered_count": 0,
                         "skipped_count": 0,
+                        "exhausted_count": 0,
+                        "latency_ms": 0.0,
+                        "llm_request_count": 0,
+                        "provider": None,
+                        "model": None,
+                        "cache_miss_count": 0,
                     }
 
                 # Extract from ActionCompleteEvent
@@ -467,8 +538,9 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                     action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
                     action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
                     action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
+                    action_metrics[agent_name]["exhausted_count"] = data.get("total_exhausted", 0)
 
-                # Extract from LLMResponseEvent for token counts
+                # Extract from LLMResponseEvent for token counts, latency, provider
                 elif event_type == "LLMResponseEvent":
                     tokens = action_metrics[agent_name]["tokens"]
                     tokens["prompt_tokens"] = tokens.get("prompt_tokens", 0) + data.get(
@@ -477,6 +549,17 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                     tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
                         "completion_tokens", 0
                     )
+                    # Accumulate latency for averaging later
+                    action_metrics[agent_name]["latency_ms"] += data.get("latency_ms", 0.0)
+                    action_metrics[agent_name]["llm_request_count"] += 1
+                    # Capture provider/model from first LLM event
+                    if action_metrics[agent_name]["provider"] is None:
+                        action_metrics[agent_name]["provider"] = data.get("provider") or None
+                        action_metrics[agent_name]["model"] = data.get("model") or None
+
+                # Extract from CacheMissEvent
+                elif event_type == "CacheMissEvent":
+                    action_metrics[agent_name]["cache_miss_count"] += 1
 
             if line_count >= _LOG_LINE_LIMIT:
                 logger.warning(
@@ -488,5 +571,11 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
 
     except OSError as e:
         logger.debug("Could not read action metrics from %s: %s", events_path, e)
+
+    # Post-process: convert accumulated latency to average per LLM request.
+    for metrics in action_metrics.values():
+        req_count = metrics.pop("llm_request_count", 0)
+        if req_count > 0:
+            metrics["latency_ms"] = round(metrics["latency_ms"] / req_count, 1)
 
     return action_metrics

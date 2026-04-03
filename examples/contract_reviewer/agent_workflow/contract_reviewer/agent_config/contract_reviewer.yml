@@ -1,15 +1,12 @@
 ################################################################################
 # Contract Reviewer Workflow (Map-Reduce Pattern)
 ################################################################################
-# Description: Splits contracts into clauses, analyzes each for risk in
-#              parallel, flags high-risk clauses for deep review, aggregates
-#              findings, and generates an executive summary.
+# Description: Splits contracts into clauses, analyzes each for risk,
+#              aggregates findings, and generates an executive summary.
 #
 # Showcases:
 #   - Map-Reduce: split document -> process per-clause -> aggregate per-file
 #   - FILE granularity aggregation (sees ALL clauses at once)
-#   - Guard-based filtering (deep analysis only for high-risk clauses)
-#   - Multi-vendor models (Anthropic for legal reasoning, OpenAI for summary)
 #   - Context scoping with observe/passthrough/drop
 #   - Seed data enrichment (risk criteria reference)
 ################################################################################
@@ -25,9 +22,13 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
+  record_limit: 2      # Remove for full processing
   context_scope:
     seed_path:
       risk_criteria: $file:risk_criteria.json
+  retry:
+    enabled: true
+    max_attempts: 2
 
 actions:
 
@@ -41,7 +42,7 @@ actions:
     kind: tool
     impl: split_contract_by_clause
     intent: "Split contract full_text into individual numbered clauses"
-    schema: contract_reviewer/split_into_clauses
+    schema: split_into_clauses
     context_scope:
       observe:
         - source.full_text
@@ -62,17 +63,21 @@ actions:
   - name: analyze_clause
     dependencies: [split_into_clauses]
     intent: "Analyze a single contract clause for risk level, obligations, and deadlines"
-    schema: contract_reviewer/analyze_clause
+    schema: analyze_clause
     prompt: $contract_reviewer.Analyze_Clause
-    model_vendor: anthropic
-    model_name: claude-sonnet-4-20250514
-    api_key: ANTHROPIC_API_KEY
+    reprompt:
+      validation: check_required_fields
+      max_attempts: 2
+      on_exhausted: return_last
+    # model_vendor: anthropic                   # Uncomment for stronger legal analysis
+    # model_name: claude-sonnet-4-20250514
+    # api_key: ANTHROPIC_API_KEY
     context_scope:
       observe:
         - split_into_clauses.clause_number
         - split_into_clauses.clause_title
         - split_into_clauses.clause_text
-        - seed_data.risk_criteria
+        - seed.risk_criteria
       passthrough:
         - split_into_clauses.clause_number
         - split_into_clauses.clause_title
@@ -81,36 +86,7 @@ actions:
         - source.parties
 
   # ==========================================================================
-  # STAGE 3: GUARD — Deep analysis of high-risk clauses only
-  # ==========================================================================
-  # Guarded LLM action: only runs when analyze_clause classified the clause
-  # as "high" risk. Cross-references against the full contract text for
-  # broader context on how the clause interacts with other provisions.
-  # ==========================================================================
-  - name: flag_high_risk
-    dependencies: [analyze_clause]
-    intent: "Perform deep legal analysis of high-risk clauses with full contract context"
-    schema: contract_reviewer/flag_high_risk
-    prompt: $contract_reviewer.Flag_High_Risk
-    model_vendor: anthropic
-    model_name: claude-sonnet-4-20250514
-    api_key: ANTHROPIC_API_KEY
-    guard:
-      condition: 'risk_level == "high"'
-      on_false: "filter"
-    context_scope:
-      observe:
-        - analyze_clause.*
-        - source.full_text
-        - seed_data.risk_criteria
-      drop:
-        - split_into_clauses.clause_text      # Already in analyze_clause context
-      passthrough:
-        - source.contract_id
-        - source.title
-
-  # ==========================================================================
-  # STAGE 4: REDUCE — Aggregate all clause analyses into unified risk report
+  # STAGE 3: REDUCE — Aggregate all clause analyses into unified risk report
   # ==========================================================================
   # FILE granularity tool: sees ALL clause records at once.
   # Combines clause-level analyses into a single contract-level risk report.
@@ -121,18 +97,17 @@ actions:
     kind: tool
     impl: aggregate_clause_analyses
     intent: "Aggregate all clause analyses into a unified contract risk report"
-    schema: contract_reviewer/aggregate_risk_summary
+    schema: aggregate_risk_summary
     granularity: File
     context_scope:
       observe:
         - analyze_clause.*
-        - flag_high_risk.*
         - source.contract_id
         - source.title
         - source.parties
 
   # ==========================================================================
-  # STAGE 5: SUMMARIZE — Generate human-readable executive risk summary
+  # STAGE 4: SUMMARIZE — Generate human-readable executive risk summary
   # ==========================================================================
   # LLM action that takes the aggregated risk report and produces a
   # narrative executive summary. Does NOT see individual clause analyses
@@ -141,12 +116,11 @@ actions:
   - name: generate_executive_summary
     dependencies: [aggregate_risk_summary]
     intent: "Generate a human-readable executive risk summary from the aggregated report"
-    schema: contract_reviewer/generate_executive_summary
+    schema: generate_executive_summary
     prompt: $contract_reviewer.Generate_Executive_Summary
     context_scope:
       observe:
         - aggregate_risk_summary.*
       drop:
         - analyze_clause.*                    # Keep summary high-level
-        - flag_high_risk.*                    # Already captured in aggregate
         - split_into_clauses.*
