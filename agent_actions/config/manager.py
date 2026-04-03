@@ -462,7 +462,18 @@ class ConfigManager:
 
     def get_configuration_summary(self) -> dict[str, Any]:
         """Get a summary of all loaded configurations."""
+        project_name = None
+        try:
+            from agent_actions.config.path_config import get_project_name
+
+            project_name = get_project_name(self.project_root)
+        except (OSError, ConfigValidationError) as exc:
+            logger.debug("Could not retrieve project_name for summary: %s", exc)
+
         return {
+            "project": {
+                "name": project_name,
+            },
             "environment": {
                 "loaded": self.environment_config is not None,
                 "env": (

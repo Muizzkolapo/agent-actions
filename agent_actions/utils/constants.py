@@ -4,6 +4,7 @@
 # Corresponds to ActionKind.LLM.value from agent_actions.config.schema.
 DEFAULT_ACTION_KIND = "llm"
 
+PROJECT_NAME_KEY = "project_name"
 MODEL_VENDOR_KEY = "model_vendor"
 MODEL_NAME_KEY = "model_name"
 JSON_MODE_KEY = "json_mode"

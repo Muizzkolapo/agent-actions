@@ -1,3 +1,4 @@
+project_name: product_listing_enrichment
 default_agent_config:
   api_key: OPENAI_API_KEY
   model_name: gpt-4o-mini

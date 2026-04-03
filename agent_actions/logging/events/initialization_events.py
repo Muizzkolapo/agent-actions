@@ -396,14 +396,19 @@ class ProjectInitializedEvent(BaseEvent):
     """Fired when project initialization completes."""
 
     project_path: str = ""
+    project_name: str = ""
     elapsed_time: float = 0.0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.INITIALIZATION
-        self.message = f"Project initialized: {self.project_path} in {self.elapsed_time:.2f}s"
+        name_part = f" ({self.project_name})" if self.project_name else ""
+        self.message = (
+            f"Project initialized{name_part}: {self.project_path} in {self.elapsed_time:.2f}s"
+        )
         self.data = {
             "project_path": self.project_path,
+            "project_name": self.project_name,
             "elapsed_time": self.elapsed_time,
         }
 

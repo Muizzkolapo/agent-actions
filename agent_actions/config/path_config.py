@@ -106,6 +106,39 @@ def resolve_project_root(explicit_root: Path | None = None) -> Path:
     return explicit_root or Path.cwd()
 
 
+def get_project_name(project_root: Path) -> str | None:
+    """Return the project name from project configuration, or ``None`` if not set.
+
+    Reads ``project_name`` from ``agent_actions.yml``.  Returns ``None``
+    (with a warning) when the key is absent — for backward compatibility
+    with projects created before this field was introduced.
+
+    Args:
+        project_root: Resolved project root directory.
+
+    Returns:
+        Project name string, or ``None`` if not configured.
+    """
+    try:
+        config = load_project_config(project_root)
+    except (OSError, ConfigValidationError) as exc:
+        logger.debug("Could not load project_name from project config: %s", exc)
+        return None
+
+    if not config:
+        # No config file found — not an error, just no project config.
+        return None
+
+    name = config.get("project_name")
+    if not name:
+        logger.debug(
+            "No 'project_name' in agent_actions.yml — "
+            "add 'project_name: <name>' or re-run 'agac init'."
+        )
+        return None
+    return str(name)
+
+
 def get_tool_dirs(project_root: Path) -> list[str]:
     """Resolve tool directory names from project configuration.
 
