@@ -103,8 +103,11 @@ function parseActionEntry(entry: unknown): ParsedAction[] | null {
 }
 
 /**
- * Expand a versioned action into multiple concrete actions
- * Handles versions.range: [1, 2, 3] -> action_1, action_2, action_3
+ * Expand a versioned action into multiple concrete actions.
+ *
+ * Supports two range formats (mirroring the core engine in expander.py):
+ *   - Pair: [start, end] → expands to start..end inclusive
+ *   - Explicit list: [1, 2, 3] → used as-is
  */
 function expandVersions(
     baseName: string,
@@ -118,7 +121,18 @@ function expandVersions(
         return [];
     }
 
-    return range.map((version) => {
+    // When range is a [start, end] pair, expand to the full sequence.
+    // This matches the core engine: range(start, end + 1).
+    let rangeValues: (number | string)[] = range;
+    if (range.length === 2 && typeof range[0] === 'number' && typeof range[1] === 'number') {
+        const [start, end] = range as [number, number];
+        rangeValues = [];
+        for (let v = start; v <= end; v++) {
+            rangeValues.push(v);
+        }
+    }
+
+    return rangeValues.map((version) => {
         const versionSuffix = `_${version}`;
         const versionedName = `${baseName}${versionSuffix}`;
 
