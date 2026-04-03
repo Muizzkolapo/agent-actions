@@ -27,6 +27,7 @@ version: "1.0.0"
 defaults:
   json_mode: false                    # ← Plain text responses, no JSON required
   granularity: Record
+  is_operational: true
   run_mode: batch                    # Ollama doesn't support batch mode
   model_vendor: ollama                # Works with local models out of the box
   model_name: llama3.2:latest
