@@ -517,6 +517,12 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                         "failed_count": 0,
                         "filtered_count": 0,
                         "skipped_count": 0,
+                        "exhausted_count": 0,
+                        "latency_ms": 0.0,
+                        "llm_request_count": 0,
+                        "provider": None,
+                        "model": None,
+                        "cache_miss_count": 0,
                     }
 
                 # Extract from ActionCompleteEvent
@@ -532,8 +538,9 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                     action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
                     action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
                     action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
+                    action_metrics[agent_name]["exhausted_count"] = data.get("total_exhausted", 0)
 
-                # Extract from LLMResponseEvent for token counts
+                # Extract from LLMResponseEvent for token counts, latency, provider
                 elif event_type == "LLMResponseEvent":
                     tokens = action_metrics[agent_name]["tokens"]
                     tokens["prompt_tokens"] = tokens.get("prompt_tokens", 0) + data.get(
@@ -542,6 +549,17 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                     tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
                         "completion_tokens", 0
                     )
+                    # Accumulate latency for averaging later
+                    action_metrics[agent_name]["latency_ms"] += data.get("latency_ms", 0.0)
+                    action_metrics[agent_name]["llm_request_count"] += 1
+                    # Capture provider/model from first LLM event
+                    if action_metrics[agent_name]["provider"] is None:
+                        action_metrics[agent_name]["provider"] = data.get("provider") or None
+                        action_metrics[agent_name]["model"] = data.get("model") or None
+
+                # Extract from CacheMissEvent
+                elif event_type == "CacheMissEvent":
+                    action_metrics[agent_name]["cache_miss_count"] += 1
 
             if line_count >= _LOG_LINE_LIMIT:
                 logger.warning(
@@ -553,5 +571,11 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
 
     except OSError as e:
         logger.debug("Could not read action metrics from %s: %s", events_path, e)
+
+    # Post-process: convert accumulated latency to average per LLM request.
+    for metrics in action_metrics.values():
+        req_count = metrics.pop("llm_request_count", 0)
+        if req_count > 0:
+            metrics["latency_ms"] = round(metrics["latency_ms"] / req_count, 1)
 
     return action_metrics

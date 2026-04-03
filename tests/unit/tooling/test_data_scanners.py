@@ -232,3 +232,109 @@ class TestExtractRuntimeWarnings:
         extract_runtime_warnings(events_path)
         captured = capfd.readouterr()
         assert "line limit" in captured.err
+
+
+class TestExtractActionMetricsEnrichment:
+    """Tests for enriched action metrics: latency, provider, model, cache, disposition."""
+
+    def _write_events(self, path: Path, events: list[dict]) -> None:
+        with open(path, "w", encoding="utf-8") as f:
+            for event in events:
+                f.write(json.dumps(event) + "\n")
+
+    def test_llm_response_extracts_latency_and_provider(self, tmp_path):
+        """LLMResponseEvent populates avg latency, provider, and model."""
+        events_path = tmp_path / "events.json"
+        self._write_events(
+            events_path,
+            [
+                {
+                    "event_type": "LLMResponseEvent",
+                    "meta": {"action_name": "classify"},
+                    "data": {
+                        "action_name": "classify",
+                        "latency_ms": 200.0,
+                        "provider": "openai",
+                        "model": "gpt-4o-mini",
+                        "prompt_tokens": 100,
+                        "completion_tokens": 50,
+                    },
+                },
+                {
+                    "event_type": "LLMResponseEvent",
+                    "meta": {"action_name": "classify"},
+                    "data": {
+                        "action_name": "classify",
+                        "latency_ms": 400.0,
+                        "provider": "anthropic",
+                        "model": "claude-sonnet",
+                        "prompt_tokens": 100,
+                        "completion_tokens": 50,
+                    },
+                },
+            ],
+        )
+        result = extract_action_metrics(events_path)
+        m = result["classify"]
+        assert m["latency_ms"] == 300.0  # average of 200 and 400
+        assert m["provider"] == "openai"  # first event wins, not overwritten
+        assert m["model"] == "gpt-4o-mini"
+        assert "llm_request_count" not in m  # internal field must be stripped
+
+    def test_result_collection_extracts_exhausted(self, tmp_path):
+        """ResultCollectionCompleteEvent populates exhausted_count."""
+        events_path = tmp_path / "events.json"
+        self._write_events(
+            events_path,
+            [
+                {
+                    "event_type": "ResultCollectionCompleteEvent",
+                    "meta": {"action_name": "summarize"},
+                    "data": {
+                        "action_name": "summarize",
+                        "total_success": 8,
+                        "total_failed": 1,
+                        "total_filtered": 2,
+                        "total_skipped": 3,
+                        "total_exhausted": 4,
+                    },
+                },
+            ],
+        )
+        result = extract_action_metrics(events_path)
+        m = result["summarize"]
+        assert m["exhausted_count"] == 4
+        assert m["filtered_count"] == 2
+        assert m["skipped_count"] == 3
+
+    def test_cache_miss_events_counted(self, tmp_path):
+        """CacheMissEvent increments cache_miss_count per action."""
+        events_path = tmp_path / "events.json"
+        self._write_events(
+            events_path,
+            [
+                {
+                    "event_type": "CacheMissEvent",
+                    "meta": {"action_name": "extract"},
+                    "data": {"cache_type": "prompt_cache", "key": "k1"},
+                },
+                {
+                    "event_type": "CacheMissEvent",
+                    "meta": {"action_name": "extract"},
+                    "data": {"cache_type": "prompt_cache", "key": "k2"},
+                },
+            ],
+        )
+        result = extract_action_metrics(events_path)
+        assert result["extract"]["cache_miss_count"] == 2
+
+    def test_no_llm_events_leaves_defaults(self, tmp_path):
+        """Action with no LLM events has zero latency and null provider."""
+        events_path = tmp_path / "events.json"
+        self._write_events(events_path, [_action_event("tool_action")])
+        result = extract_action_metrics(events_path)
+        m = result["tool_action"]
+        assert m["latency_ms"] == 0.0
+        assert m["provider"] is None
+        assert m["model"] is None
+        assert m["cache_miss_count"] == 0
