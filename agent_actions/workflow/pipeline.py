@@ -530,19 +530,9 @@ class ProcessingPipeline:
                         e,
                     )
 
-        # If input had records but none succeeded AND there are actual failures
-        # (failed or exhausted — not just guard-filtered/skipped), raise so the
-        # executor marks the action as failed and the circuit breaker skips
-        # downstream dependents.  We check stats.success rather than `not output`
-        # because EXHAUSTED records produce tombstone data that inflates the
-        # output list despite representing zero real successes.
-        #
-        # Note: this intentionally overrides on_exhausted="return_last" when ALL
-        # records exhaust.  return_last is designed for partial failures where
-        # some records succeed and exhausted tombstones flow alongside real data.
-        # When zero records succeed, tombstone-only output is not useful and
-        # downstream actions would produce garbage.  _check_exhausted_raise in
-        # ResultCollector already handles on_exhausted="raise" independently.
+        # Zero-success failure: raise so executor marks FAILED and circuit
+        # breaker skips downstream.  Uses stats.success (not `not output`)
+        # because EXHAUSTED tombstones inflate the output list.
         if data and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
             raise RuntimeError(
                 f"Action '{self.config.action_name}' produced 0 successful records — "

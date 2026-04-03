@@ -730,15 +730,8 @@ def _process_online_mode_with_record_processor(
                     e,
                 )
 
-    # If input had records but none succeeded AND there are actual failures
-    # (failed or exhausted — not just guard-filtered/skipped), raise so the
-    # executor marks the action as failed and the circuit breaker skips
-    # downstream dependents.  We check stats.success rather than
-    # `not processed_items` because EXHAUSTED records produce tombstone data
-    # that inflates the output list despite representing zero real successes.
-    #
-    # Note: this intentionally overrides on_exhausted="return_last" when ALL
-    # records exhaust.  See comment in pipeline.py for rationale.
+    # Zero-success failure: raise so executor marks FAILED and circuit
+    # breaker skips downstream.  See _MANIFEST.md design note for rationale.
     if data_chunk and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
         raise RuntimeError(
             f"Action '{ctx.agent_name}' produced 0 successful records — "
