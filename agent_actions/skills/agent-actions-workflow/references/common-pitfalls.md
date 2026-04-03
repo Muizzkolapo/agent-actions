@@ -404,3 +404,88 @@ context_scope:
   passthrough:
     - upstream_action.field_i_want      # selective, not wildcard
 ```
+
+## 23. Tool UDF Accesses Fields via Namespaced Keys (Silent Default)
+
+**Symptom:** Tool action produces zero/default values for all records despite upstream actions completing successfully.
+
+**Cause:** UDFs access upstream fields via `content.get("action_name", {}).get("field", 0)` but the framework delivers fields FLAT — `content["field"]`, not `content["action_name"]["field"]`.
+
+**Wrong:**
+```python
+aggregate = content.get("aggregate_scores", {})
+score = aggregate.get("consensus_score", 0)  # Always 0!
+```
+
+**Correct:**
+```python
+score = content.get("consensus_score", 0)  # Fields are flat
+```
+
+## 24. Schema Field Name Doesn't Match LLM Output
+
+**Symptom:** Downstream action fails with "declared fields not found" even though the upstream action completed OK.
+
+**Cause:** The schema says `id: claims` but the LLM produces `factual_claims` (influenced by the prompt wording). Schema validation may not catch this if the field isn't required, and the wrong name flows into the storage backend.
+
+**Fix:**
+1. Check the storage backend output for the action
+2. Compare actual field names against schema `id:` values
+3. Rename the schema field to match what the LLM naturally produces
+4. Update all observe references and prompt templates
+
+## 25. Guard-Filtered Fields Cause Schema Validation Failures
+
+**Symptom:** `None is not of type 'object'` or `Additional properties are not allowed` on a downstream tool action.
+
+**Cause:** When an upstream action has `on_false: "filter"`, its output fields are absent for filtered records. If the downstream tool's schema declares those fields:
+- As `type: object` (not nullable) → rejects None
+- NOT in the schema at all → rejects as "additional properties" when the guard passes
+
+**Fix:** Declare the field in the schema but NOT in `required`. The tool should omit the key (not set it to None) when the upstream was filtered:
+```python
+if content.get("response_text"):
+    result["merchant_response"] = {"response_text": content["response_text"]}
+```
+
+## 26. Versions Range Off-by-One
+
+**Symptom:** `Dependency 'action_0' declared but not referenced in context_scope`
+
+**Cause:** `range: [0, 3]` creates versions 0,1,2,3 (4 versions) but the aggregate only observes `action_1.*`, `action_2.*`, `action_3.*`.
+
+**Fix:** Use `range: [1, 3]` for 3 versions (1-indexed), matching the observe references.
+
+## 27. Reprompt Validation UDF Not Discovered
+
+**Symptom:** Framework ignores the `reprompt.validation` setting — no reprompting happens.
+
+**Cause:** The UDF file exists but isn't in the tools discovery path.
+
+**Fix:** Put it in `tools/shared/reprompt_validations.py` with a `tools/shared/__init__.py`:
+```
+tools/
+├── my_workflow/
+│   └── my_tool.py
+└── shared/
+    ├── __init__.py
+    └── reprompt_validations.py
+```
+
+## 28. Guard Condition Uses != or > Operators
+
+**Symptom:** Guard skips ALL records even when field values should pass the condition.
+
+**Cause:** Known parser bug — the `WhereClauseParser` silently maps `!=` and `>` to `==`.
+
+**Test directly:**
+```python
+from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter, FilterItemRequest
+gf = GuardFilter()
+r = gf.filter_item(FilterItemRequest(data={"severity": "high"}, condition='severity != "low"'))
+print(r.matched)  # Returns False — BUG
+```
+
+**Workaround:** Avoid `!=` and `>` in guard conditions. Use positive conditions:
+- Instead of `severity != "low"` → use `severity == "medium" or severity == "high"`
+- Instead of `score > 6` → use `score >= 7`
