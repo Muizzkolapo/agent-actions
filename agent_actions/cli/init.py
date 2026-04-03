@@ -12,6 +12,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 import click
+import yaml
 
 from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.config.init import ProjectInitializer
@@ -27,6 +28,7 @@ from agent_actions.logging.events import (
     ProjectInitializedEvent,
     ProjectValidationEvent,
 )
+from agent_actions.utils.constants import PROJECT_NAME_KEY
 from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.validation.project_validator import ProjectValidator
 
@@ -287,7 +289,11 @@ class InitCommand:
 
         elapsed_time = (datetime.now() - start_time).total_seconds()
         fire_event(
-            ProjectInitializedEvent(project_path=str(self.project_dir), elapsed_time=elapsed_time)
+            ProjectInitializedEvent(
+                project_path=str(self.project_dir),
+                project_name=self.args.project_name,
+                elapsed_time=elapsed_time,
+            )
         )
 
         click.echo(f"Successfully initialized project: {self.args.project_name}")
@@ -401,6 +407,16 @@ def init_example(
     out = Path(output_dir) if output_dir else Path.cwd()
     dest = out / dest_name
     _fetch_example(name, dest, force=force)
+
+    # Inject project_name into the example's agent_actions.yml
+    config_file = dest / "agent_actions.yml"
+    if config_file.exists():
+        with open(config_file, encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+        config[PROJECT_NAME_KEY] = dest_name
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+
     click.echo(f"Created project from example '{name}': {dest}")
     click.echo("\nNext steps:")
     click.echo(f"  cd {dest_name}")
