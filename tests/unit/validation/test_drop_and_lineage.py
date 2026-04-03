@@ -122,7 +122,7 @@ class TestCheckDropDirectives:
         assert errors[0].available_fields  # Should have available fields
 
     def test_drop_with_wildcard_no_error(self):
-        """Drop with wildcard produces no error."""
+        """Drop with wildcard on a dependency expands and produces no error."""
         graph = self._make_graph_with_upstream(schema_fields={"summary"})
         workflow_config = {
             "actions": [
@@ -137,8 +137,17 @@ class TestCheckDropDirectives:
         }
         analyzer = _build_analyzer_with_graph(workflow_config, graph)
 
+        # Expansion must run first — wildcards are resolved before checks.
+        expansion_errors = analyzer._expand_wildcards()
+        assert len(expansion_errors) == 0
+
         errors = analyzer._check_drop_directives()
         assert len(errors) == 0
+
+        # Verify the wildcard was expanded to concrete fields.
+        drop_refs = workflow_config["actions"][0]["context_scope"]["drop"]
+        assert "upstream.*" not in drop_refs
+        assert "upstream.summary" in drop_refs
 
     def test_drop_on_dynamic_schema_no_error(self):
         """Drop on a dynamic schema produces no error (skipped)."""
@@ -180,6 +189,198 @@ class TestCheckDropDirectives:
 
         errors = analyzer._check_drop_directives()
         assert len(errors) == 0
+
+
+class TestExpandWildcards:
+    """Tests for _expand_wildcards() — wildcard-as-field-expansion compiler pass."""
+
+    def _make_graph(self, nodes):
+        """Build a graph from a list of (name, kind, output_schema, deps) tuples."""
+        graph = DataFlowGraph()
+        for name, kind, output, deps in nodes:
+            graph.add_node(
+                DataFlowNode(
+                    name=name,
+                    agent_kind=kind,
+                    output_schema=output,
+                    dependencies=deps,
+                )
+            )
+        return graph
+
+    def test_known_schema_expanded(self):
+        """Wildcard on action with known schema expands to concrete fields."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+                ("A", ActionKind.LLM, OutputSchema(schema_fields={"x", "y"}), {"source"}),
+            ]
+        )
+        config = {
+            "actions": [{"name": "B", "context_scope": {"observe": ["A.*"]}}],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        refs = config["actions"][0]["context_scope"]["observe"]
+        assert "A.*" not in refs
+        assert sorted(refs) == ["A.x", "A.y"]
+
+    def test_dynamic_schema_left_as_wildcard(self):
+        """Wildcard on dynamic schema is left unexpanded."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+                ("A", ActionKind.LLM, OutputSchema(is_dynamic=True), {"source"}),
+            ]
+        )
+        config = {
+            "actions": [{"name": "B", "context_scope": {"drop": ["A.*"]}}],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        assert config["actions"][0]["context_scope"]["drop"] == ["A.*"]
+
+    def test_schemaless_left_as_wildcard(self):
+        """Wildcard on schemaless action is left unexpanded."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+                ("A", ActionKind.LLM, OutputSchema(is_schemaless=True), {"source"}),
+            ]
+        )
+        config = {
+            "actions": [{"name": "B", "context_scope": {"passthrough": ["A.*"]}}],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        assert config["actions"][0]["context_scope"]["passthrough"] == ["A.*"]
+
+    def test_unknown_action_errors(self):
+        """Wildcard on non-existent action produces an error."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+            ]
+        )
+        config = {
+            "actions": [{"name": "B", "context_scope": {"drop": ["nonexistent.*"]}}],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 1
+        assert "unknown action" in errors[0].message.lower()
+        assert "nonexistent" in errors[0].message
+
+    def test_special_namespace_not_expanded(self):
+        """Wildcards on special namespaces (source, seed, etc.) are left as-is."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+            ]
+        )
+        config = {
+            "actions": [{"name": "B", "context_scope": {"observe": ["source.*"]}}],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        assert config["actions"][0]["context_scope"]["observe"] == ["source.*"]
+
+    def test_explicit_refs_untouched(self):
+        """Non-wildcard references are not modified."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+                ("A", ActionKind.LLM, OutputSchema(schema_fields={"x", "y"}), {"source"}),
+            ]
+        )
+        config = {
+            "actions": [
+                {"name": "B", "context_scope": {"observe": ["A.x"]}},
+            ],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        assert config["actions"][0]["context_scope"]["observe"] == ["A.x"]
+
+    def test_multiple_directives_expanded(self):
+        """Wildcards in observe, drop, and passthrough are all expanded."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+                ("A", ActionKind.LLM, OutputSchema(schema_fields={"f1", "f2"}), {"source"}),
+            ]
+        )
+        config = {
+            "actions": [
+                {
+                    "name": "B",
+                    "context_scope": {
+                        "observe": ["A.*"],
+                        "drop": ["A.*"],
+                        "passthrough": ["A.*"],
+                    },
+                },
+            ],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        for directive in ("observe", "drop", "passthrough"):
+            refs = config["actions"][0]["context_scope"][directive]
+            assert "A.*" not in refs
+            assert sorted(refs) == ["A.f1", "A.f2"]
+
+    def test_empty_schema_keeps_wildcard(self):
+        """Wildcard on known but empty schema is kept (downstream can report)."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+                ("A", ActionKind.LLM, OutputSchema(schema_fields=set()), {"source"}),
+            ]
+        )
+        config = {
+            "actions": [{"name": "B", "context_scope": {"observe": ["A.*"]}}],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        assert config["actions"][0]["context_scope"]["observe"] == ["A.*"]
+
+    def test_observe_fields_included_in_expansion(self):
+        """Expansion includes both schema_fields and observe_fields."""
+        graph = self._make_graph(
+            [
+                ("source", ActionKind.SOURCE, OutputSchema(is_dynamic=True), set()),
+                (
+                    "A",
+                    ActionKind.LLM,
+                    OutputSchema(schema_fields={"s1"}, observe_fields={"o1"}),
+                    {"source"},
+                ),
+            ]
+        )
+        config = {
+            "actions": [{"name": "B", "context_scope": {"observe": ["A.*"]}}],
+        }
+        analyzer = _build_analyzer_with_graph(config, graph)
+        errors = analyzer._expand_wildcards()
+
+        assert len(errors) == 0
+        refs = sorted(config["actions"][0]["context_scope"]["observe"])
+        assert refs == ["A.o1", "A.s1"]
 
 
 class TestCheckLineageReachability:
