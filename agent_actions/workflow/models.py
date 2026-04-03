@@ -35,6 +35,7 @@ class WorkflowRuntimeConfig:
     run_upstream: bool = False
     run_downstream: bool = False
     fresh: bool = False
+    verify_keys: bool = False
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None
 

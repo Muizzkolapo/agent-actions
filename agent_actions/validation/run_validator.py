@@ -27,3 +27,6 @@ class RunCommandArgs(BaseModel):
         False, description="Execute all downstream workflows that depend on this workflow"
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
+    verify_keys: bool = Field(
+        False, description="Verify API keys are valid by probing vendor endpoints before execution"
+    )
