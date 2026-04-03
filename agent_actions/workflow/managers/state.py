@@ -164,6 +164,27 @@ class ActionStateManager:
             self.update_status(action_name, ActionStatus.FAILED)
         return marked
 
+    def reset_retryable(self) -> list[str]:
+        """Reset non-completed terminal and in-progress actions to PENDING.
+
+        Called at workflow startup so that re-runs retry non-completed
+        actions while preserving completed results.  Callers should clear
+        storage dispositions for the returned action names.
+        """
+        retryable = {
+            ActionStatus.FAILED,
+            ActionStatus.SKIPPED,
+            ActionStatus.RUNNING,
+            ActionStatus.CHECKING_BATCH,
+        }
+        reset_names: list[str] = []
+        for action_name, details in self.action_status.items():
+            if details.get("status") in retryable:
+                reset_names.append(action_name)
+        for action_name in reset_names:
+            self.update_status(action_name, ActionStatus.PENDING)
+        return reset_names
+
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of action statuses."""
         summary: dict[str, int] = {}

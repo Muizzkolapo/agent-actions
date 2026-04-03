@@ -6,6 +6,7 @@ export interface RawCatalogJson {
     generated_at: string
     total_workflows: number
     generator_version?: string
+    project_name?: string | null
   }
   workflows: Record<string, RawWorkflow>
   actions: Record<string, RawAction & { workflow_id: string }>
