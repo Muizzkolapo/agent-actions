@@ -34,6 +34,7 @@ default_agent_config:
 
 schema_path: schema
 tool_path: ["tools"]
+seed_data_path: seed_data
 
 chunk_config:
   chunk_size: 4000
@@ -49,6 +50,7 @@ output_storage:
 | `default_agent_config` | Default settings inherited by all actions |
 | `schema_path` | Directory containing output schemas (default: `schema`) |
 | `tool_path` | Directories to scan for custom tools |
+| `seed_data_path` | Directory for static reference data (default: `seed_data`) |
 | `chunk_config` | Text chunking for large inputs |
 | `output_storage` | Storage backend config: `backend` (`sqlite`), `db_path` (database file location) |
 

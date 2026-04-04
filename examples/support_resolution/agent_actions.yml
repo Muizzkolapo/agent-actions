@@ -7,3 +7,4 @@ default_agent_config:
   prompt_debug: false
 schema_path: schema
 tool_path: ["tools"]
+seed_data_path: seed_data

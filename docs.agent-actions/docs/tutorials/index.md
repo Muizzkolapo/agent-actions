@@ -176,6 +176,7 @@ default_agent_config:
 
 schema_path: schema
 tool_path: ["tools"]
+seed_data_path: seed_data
 
 output_storage:
   backend: sqlite
