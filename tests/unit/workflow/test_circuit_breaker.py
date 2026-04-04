@@ -129,9 +129,10 @@ class TestHandleDependencySkip:
 
         executor._handle_dependency_skip("agent_b", 1, {}, start_time, "agent_a")
 
-        mock_deps.state_manager.update_status.assert_called_once_with(
-            "agent_b", ActionStatus.SKIPPED
-        )
+        call_args = mock_deps.state_manager.update_status.call_args
+        assert call_args[0] == ("agent_b", ActionStatus.SKIPPED)
+        assert "skip_reason" in call_args[1]
+        assert "execution_time" in call_args[1]
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_writes_skipped_disposition(self, mock_fire, executor, mock_deps):
@@ -281,10 +282,11 @@ class TestZeroSuccessCircuitBreakerChain:
 
         result = executor._handle_run_failure(params, error)
 
-        # Status set to FAILED
-        mock_deps.state_manager.update_status.assert_called_once_with(
-            "extract_claims", ActionStatus.FAILED
-        )
+        # Status set to FAILED with execution metadata
+        call_args = mock_deps.state_manager.update_status.call_args
+        assert call_args[0] == ("extract_claims", ActionStatus.FAILED)
+        assert "execution_time" in call_args[1]
+        assert "error_message" in call_args[1]
         # DISPOSITION_FAILED written
         storage.set_disposition.assert_called_once_with(
             action_name="extract_claims",
@@ -333,7 +335,12 @@ class TestZeroSuccessCircuitBreakerChain:
             "score_quality", 1, downstream_config, datetime.now(), failed_dep
         )
         assert result.status == ActionStatus.SKIPPED
-        mock_deps.state_manager.update_status.assert_any_call("score_quality", ActionStatus.SKIPPED)
+        # Verify state_manager was called with SKIPPED status + metadata
+        skip_calls = [
+            c for c in mock_deps.state_manager.update_status.call_args_list if c[0][0] == "score_quality"
+        ]
+        assert len(skip_calls) == 1
+        assert skip_calls[0][0][1] == ActionStatus.SKIPPED
 
 
 class TestLevelCompletionColoring:

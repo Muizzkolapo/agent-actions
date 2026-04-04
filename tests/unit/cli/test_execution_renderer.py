@@ -1,6 +1,8 @@
 """Tests for the execution summary renderer."""
 
 from io import StringIO
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from rich.console import Console
 
@@ -8,6 +10,7 @@ from agent_actions.cli.renderers.execution_renderer import (
     ActionResult,
     ExecutionRenderer,
     WorkflowExecutionSnapshot,
+    build_execution_snapshot,
 )
 
 
@@ -141,3 +144,107 @@ class TestExecutionRenderer:
         )
         output = _capture_render(snap)
         assert "..." in output
+
+
+def _mock_workflow(action_configs, status_details=None, levels=None, version=""):
+    """Build a mock workflow object for build_execution_snapshot tests."""
+    from agent_actions.workflow.managers.state import ActionStatus
+
+    state_mgr = MagicMock()
+
+    def _get_details(name):
+        if status_details and name in status_details:
+            return status_details[name]
+        return {"status": ActionStatus.PENDING}
+
+    state_mgr.get_status_details = _get_details
+
+    orchestrator = MagicMock()
+    orchestrator.compute_execution_levels.return_value = levels or [list(action_configs.keys())]
+
+    core = SimpleNamespace(state_manager=state_mgr, action_level_orchestrator=orchestrator)
+    services = SimpleNamespace(core=core)
+
+    manager = SimpleNamespace(user_config={"version": version} if version else {})
+    config = SimpleNamespace(manager=manager)
+    metadata = SimpleNamespace(
+        agent_name="test_wf",
+        action_configs=action_configs,
+    )
+
+    return SimpleNamespace(
+        action_configs=action_configs,
+        agent_name="test_wf",
+        services=services,
+        config=config,
+        metadata=metadata,
+    )
+
+
+class TestBuildExecutionSnapshot:
+    def test_reads_kind_from_config(self):
+        wf = _mock_workflow({"act_a": {"kind": "tool", "model_vendor": "", "model_name": ""}})
+        snap = build_execution_snapshot(wf, 1.0)
+        assert snap.action_results["act_a"].kind == "tool"
+
+    def test_defaults_kind_to_llm(self):
+        wf = _mock_workflow({"act_a": {"model_vendor": "openai", "model_name": "gpt-4o"}})
+        snap = build_execution_snapshot(wf, 1.0)
+        assert snap.action_results["act_a"].kind == "llm"
+
+    def test_extracts_execution_time(self):
+        from agent_actions.workflow.managers.state import ActionStatus
+
+        wf = _mock_workflow(
+            {"act_a": {"kind": "llm"}},
+            status_details={
+                "act_a": {"status": ActionStatus.COMPLETED, "execution_time": 2.5},
+            },
+        )
+        snap = build_execution_snapshot(wf, 3.0)
+        assert snap.action_results["act_a"].execution_time == 2.5
+
+    def test_extracts_error_message(self):
+        from agent_actions.workflow.managers.state import ActionStatus
+
+        wf = _mock_workflow(
+            {"act_a": {"kind": "llm"}},
+            status_details={
+                "act_a": {
+                    "status": ActionStatus.FAILED,
+                    "error_message": "API rate limit",
+                },
+            },
+        )
+        snap = build_execution_snapshot(wf, 1.0)
+        assert snap.action_results["act_a"].error_message == "API rate limit"
+
+    def test_extracts_skip_reason(self):
+        from agent_actions.workflow.managers.state import ActionStatus
+
+        wf = _mock_workflow(
+            {"act_a": {"kind": "tool"}},
+            status_details={
+                "act_a": {
+                    "status": ActionStatus.SKIPPED,
+                    "skip_reason": "upstream failed",
+                },
+            },
+        )
+        snap = build_execution_snapshot(wf, 1.0)
+        assert snap.action_results["act_a"].skip_reason == "upstream failed"
+
+    def test_reads_version_from_config(self):
+        wf = _mock_workflow({"a": {"kind": "llm"}}, version="2.1")
+        snap = build_execution_snapshot(wf, 1.0)
+        assert snap.workflow_version == "2.1"
+
+    def test_handles_enum_status(self):
+        from agent_actions.workflow.managers.state import ActionStatus
+
+        wf = _mock_workflow(
+            {"a": {"kind": "llm"}},
+            status_details={"a": {"status": ActionStatus.COMPLETED}},
+        )
+        snap = build_execution_snapshot(wf, 1.0)
+        assert snap.action_results["a"].status == "completed"

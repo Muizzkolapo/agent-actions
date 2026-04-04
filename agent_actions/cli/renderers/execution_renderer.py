@@ -79,7 +79,7 @@ def build_execution_snapshot(
         if hasattr(status, "value"):
             status = status.value
 
-        kind = config.get("type", config.get("agent_type", "llm"))
+        kind = config.get("kind", "llm")
         if kind not in _KNOWN_KINDS:
             kind = "llm"
 
