@@ -386,14 +386,13 @@ class WorkflowResolutionService:
         if not self.workflow_config_path:
             return None
 
-        from agent_actions.config.path_config import get_seed_data_path, resolve_project_root
+        from agent_actions.config.path_config import find_project_root_dir, get_seed_data_path
 
         seed_dir_name = "seed_data"
-        try:
-            project_root = resolve_project_root(None)
+        config_start = Path(self.workflow_config_path).parent
+        project_root = find_project_root_dir(config_start)
+        if project_root is not None:
             seed_dir_name = get_seed_data_path(project_root)
-        except Exception:
-            pass
 
         config_path = Path(self.workflow_config_path).resolve()
         current = config_path.parent
