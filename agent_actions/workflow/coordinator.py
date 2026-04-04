@@ -20,7 +20,7 @@ from agent_actions.storage.backend import (
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
-from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
     RuntimeContext,
@@ -576,13 +576,6 @@ class AgentWorkflow:
             if result.status == ActionStatus.SKIPPED:
                 return False  # Continue to next action
 
-            if result.output_folder and result.status in COMPLETED_STATUSES:
-                self.state.ephemeral_directories.append(
-                    {
-                        "output_folder": result.output_folder,
-                        "ephemeral": action_config.get("ephemeral", False),
-                    }
-                )
             return False
 
         # Action failed — log and continue (circuit breaker handles downstream)
