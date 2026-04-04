@@ -60,3 +60,38 @@
 | `PromptValidationError` | Class | Raised when prompt validation fails. | - |
 | `DataValidationError` | Class | Raised when data validation fails. | - |
 | `SchemaValidationError` | Class | Raised when schema validation fails. | - |
+
+## Project Surface
+
+> How this module interacts with the user's project files.
+
+The `errors` module has **zero direct project file surface**. It does not read, write, validate, or transform any user project files. It defines the exception hierarchy used by every other module.
+
+However, several error classes carry project-file context in their `context` dict, making them the user-visible surface when something goes wrong:
+
+| Symbol | Triggered By | User File Context |
+|--------|-------------|-------------------|
+| `ConfigurationError` | Invalid workflow YAML | `agent_config/{workflow}/{workflow}.yml` |
+| `ConfigValidationError` | Schema/key validation failure | `agent_actions.yml`, `agent_config/{workflow}/{workflow}.yml` |
+| `ProjectNotFoundError` | Missing `agent_actions.yml` | `agent_actions.yml` |
+| `AgentNotFoundError` | Missing agent config directory | `agent_config/{workflow}/` |
+| `FileLoadError` | Cannot read a config/schema/prompt file | `agent_config/{workflow}/{workflow}.yml`, `schema/{workflow}/{action}.yml`, `prompt_store/{workflow}.md` |
+| `FileWriteError` | Cannot write to output directory | `agent_io/target/{action}/` |
+| `SchemaValidationError` | LLM output mismatches schema | `schema/{workflow}/{action}.yml` |
+| `TemplateRenderingError` | Jinja2 template error in config | `templates/`, `agent_config/{workflow}/{workflow}.yml` |
+| `TemplateVariableError` | Undefined variable in prompt template | `prompt_store/{workflow}.md` |
+| `DuplicateFunctionError` | Duplicate `@udf_tool` names | `tools/{workflow}/` |
+| `FunctionNotFoundError` | `impl` reference not found | `tools/{workflow}/`, `agent_config/{workflow}/{workflow}.yml` (`actions[].impl`) |
+| `UDFLoadError` | Python import error in tool file | `tools/{workflow}/` |
+| `PreFlightValidationError` | Pre-run checks fail | `agent_config/{workflow}/{workflow}.yml`, `.env` |
+| `VendorConfigError` | Invalid vendor/API key config | `.env`, `agent_config/{workflow}/{workflow}.yml` (`actions[].api_key`, `actions[].model_vendor`) |
+| `EmptyOutputError` | Action produces no output | `agent_config/{workflow}/{workflow}.yml` (`actions[].on_empty`) |
+
+**Consumed by**: `config`, `validation`, `workflow`, `processing`, `cli`, `prompt`, `input`, `output`, `storage`, `llm` -- every module in the framework imports from `errors`.
+
+**Examples** -- see these errors in action:
+- [`examples/book_catalog_enrichment/agent_actions.yml`](../../examples/book_catalog_enrichment/agent_actions.yml) -- `ProjectNotFoundError` raised if this file is missing; `ConfigValidationError` raised if YAML is malformed or `schema_path` is absent
+- [`examples/book_catalog_enrichment/agent_workflow/book_catalog_enrichment/agent_config/book_catalog_enrichment.yml`](../../examples/book_catalog_enrichment/agent_workflow/book_catalog_enrichment/agent_config/book_catalog_enrichment.yml) -- `ConfigurationError` raised if workflow validation fails (duplicate actions, dangling deps, circular deps); `TemplateRenderingError` if Jinja2 template rendering fails
+- [`examples/book_catalog_enrichment/tools/book_catalog_enrichment/format_catalog_entry.py`](../../examples/book_catalog_enrichment/tools/book_catalog_enrichment/format_catalog_entry.py) -- `DuplicateFunctionError` if `@udf_tool` name collides; `FunctionNotFoundError` if `impl: format_catalog_entry` cannot resolve
+- [`examples/incident_triage/agent_workflow/incident_triage/agent_config/incident_triage.yml`](../../examples/incident_triage/agent_workflow/incident_triage/agent_config/incident_triage.yml) -- `VendorConfigError` surfaced during preflight if `GROQ_API_KEY` is missing; `ConfigurationError` if version config is invalid
+- [`examples/review_analyzer/schema/review_analyzer/score_quality.yml`](../../examples/review_analyzer/schema/review_analyzer/score_quality.yml) -- `SchemaValidationError` raised at runtime if LLM output does not match this schema's `properties`/`required` fields
