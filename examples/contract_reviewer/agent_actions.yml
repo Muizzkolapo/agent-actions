@@ -8,6 +8,7 @@ default_agent_config:
   prompt_debug: False
 schema_path: schema
 tool_path: ["tools"]
+seed_data_path: seed_data
 output_storage:
   backend: sqlite
   db_path: ./agent_io/outputs.db

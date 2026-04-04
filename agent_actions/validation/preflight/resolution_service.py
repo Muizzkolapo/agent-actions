@@ -378,18 +378,31 @@ class WorkflowResolutionService:
     # ── Helpers ────────────────────────────────────────────────────────
 
     def _resolve_seed_data_dir(self) -> Path | None:
-        """Resolve the seed_data directory from workflow config path."""
+        """Resolve the seed data directory from workflow config path.
+
+        Uses the ``seed_data_path`` setting from ``agent_actions.yml``
+        when available, falling back to ``"seed_data"``.
+        """
         if not self.workflow_config_path:
             return None
+
+        from agent_actions.config.path_config import get_seed_data_path, resolve_project_root
+
+        seed_dir_name = "seed_data"
+        try:
+            project_root = resolve_project_root(None)
+            seed_dir_name = get_seed_data_path(project_root)
+        except Exception:
+            pass
 
         config_path = Path(self.workflow_config_path).resolve()
         current = config_path.parent
         while current != current.parent:
             if (current / "agent_config").exists():
-                seed_dir = current / "seed_data"
+                seed_dir = current / seed_dir_name
                 return seed_dir if seed_dir.exists() else None
             if current.name == "agent_config":
-                seed_dir = current.parent / "seed_data"
+                seed_dir = current.parent / seed_dir_name
                 return seed_dir if seed_dir.exists() else None
             current = current.parent
 
