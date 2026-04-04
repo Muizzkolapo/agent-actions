@@ -36,5 +36,5 @@ Initial release.
 - Parallel consensus pattern (multiple voters + merge)
 - CLI (`agac`) with `run`, `batch`, `init`, `inspect`, `docs`, and `schema` commands
 - LSP server (`agac-lsp`) for editor integration with diagnostics and completions
-- Interactive documentation site via `agac docs serve`
+- Interactive documentation site via `agac docs`
 - Per-action observability: timing, token counts, and structured event logs

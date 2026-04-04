@@ -102,7 +102,7 @@ Switch providers per-action by changing `model_vendor`.
 - **User-defined functions** — Python tools for pre/post-processing and custom logic
 - **Reprompting** — auto-retry when LLM output doesn't match schema
 - **Observability** — per-action timing, token counts, and structured event logs
-- **Interactive docs** — `agac docs serve` generates a visual workflow dashboard
+- **Interactive docs** — `agac docs` builds and serves a visual workflow dashboard
 
 ## Documentation
 

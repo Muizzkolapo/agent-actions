@@ -1,5 +1,5 @@
 // Fetch catalog.json and runs.json from the artefact directory.
-// In production these are served by `agac docs serve` under /artefact/*.
+// In production these are served by `agac docs` under /artefact/*.
 
 export interface RawCatalogJson {
   metadata: {
@@ -207,7 +207,7 @@ export async function fetchCatalogData(): Promise<FetchResult> {
   ])
 
   if (catalogRes.status === 404) {
-    throw new Error("No catalog found. Run `agac docs generate` first.")
+    throw new Error("No catalog found. Run `agac docs` first.")
   }
   if (!catalogRes.ok) {
     throw new Error(`Failed to load catalog.json (HTTP ${catalogRes.status})`)

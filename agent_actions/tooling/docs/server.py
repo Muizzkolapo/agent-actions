@@ -85,7 +85,7 @@ def serve_docs(
 
     if not artefact_dir.exists():
         logger.error("artefact directory not found at %s", artefact_dir)
-        click.echo("Error: artefact/ directory not found!\n   Run 'agac docs generate' first.\n")
+        click.echo("Error: artefact/ directory not found!\n   Run 'agac docs' first.\n")
         return False
 
     # Check for required data files
@@ -94,7 +94,7 @@ def serve_docs(
 
     if not catalog_path.exists() or not runs_path.exists():
         logger.error("Data files not found in %s", artefact_dir)
-        click.echo("Error: Data files not found in artefact/\n   Run 'agac docs generate' first.\n")
+        click.echo("Error: Data files not found in artefact/\n   Run 'agac docs' first.\n")
         return False
 
     # Create handler class with bound directories

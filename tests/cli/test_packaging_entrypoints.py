@@ -16,7 +16,7 @@ def test_agac_lsp_entrypoint_points_to_tooling_server() -> None:
 
 
 def test_docs_site_exists_in_package() -> None:
-    """The static docs site must ship inside the wheel (used by ``agac docs serve``)."""
+    """The static docs site must ship inside the wheel (used by ``agac docs``)."""
     root = Path(__file__).resolve().parents[2]
     docs_site = root / "agent_actions" / "tooling" / "docs" / "docs_site"
     assert docs_site.is_dir(), "docs_site directory missing from package tree"

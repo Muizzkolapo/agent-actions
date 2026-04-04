@@ -158,66 +158,37 @@ This removes cached batch results. If you haven't retrieved batch results yet, d
 
 ## docs
 
-Generate and serve interactive documentation for your agentic workflows. The `docs` command group provides subcommands for generating data files, serving a documentation site, and running tests.
+Build and serve interactive documentation for your agentic workflows. The `docs` command scans your project, generates documentation data, and starts an HTTP server in one step.
 
 ```bash
-agac docs <subcommand> [options]
-```
-
-### Subcommands
-
-| Subcommand | Description |
-|------------|-------------|
-| `generate` | Generate documentation data files |
-| `serve` | Start HTTP server to view documentation |
-| `test` | Run Playwright tests to verify documentation site |
-
-### docs generate
-
-Generate documentation data files by scanning your project for workflows.
-
-```bash
-agac docs generate [options]
+agac docs [options]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
 | `-o, --output` | Output directory for generated files (default: `artefact`) |
-
-**Examples:**
-```bash
-# Generate documentation in default artefact directory
-agac docs generate
-
-# Generate to a custom directory
-agac docs generate --output ./custom-artefact
-```
-
-### docs serve
-
-Start an HTTP server to view the generated documentation.
-
-```bash
-agac docs serve [options]
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
 | `-p, --port` | Port to run server on (default: `8000`) |
 | `-a, --artefact` | Path to artefact directory (default: `./artefact`) |
 
 **Examples:**
 ```bash
-# Serve documentation on default port
-agac docs serve
+# Build and serve documentation on default port
+agac docs
 
 # Serve on a custom port
-agac docs serve --port 3000
+agac docs --port 3000
 
-# Serve from a custom artefact directory
-agac docs serve --artefact ./my-docs
+# Generate to a custom directory
+agac docs --output ./custom-artefact
+```
+
+### docs test
+
+Run Playwright tests to verify the documentation site renders correctly.
+
+```bash
+agac docs test [options]
 ```
 
 :::tip Run from Anywhere
