@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import traceback
 from pathlib import Path
 from typing import Literal, cast
@@ -117,15 +118,13 @@ class RunCommand:
 
         status = "FAILED"
         error_message = None
-        import time as _time
-
-        _wall_start = _time.monotonic()
+        wall_start = time.monotonic()
 
         try:
             use_parallel = self._determine_execution_mode(workflow)
             self._run_workflow_execution(workflow, use_parallel)
 
-            elapsed = _time.monotonic() - _wall_start
+            elapsed = time.monotonic() - wall_start
 
             # Render execution summary
             try:
