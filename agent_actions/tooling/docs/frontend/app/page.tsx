@@ -156,7 +156,7 @@ function ErrorState({ message }: { message: string }) {
             <span className="text-xs font-medium text-foreground">Quick fix</span>
           </div>
           <div className="rounded-lg bg-secondary/50 p-3 font-mono text-xs text-muted-foreground">
-            <span className="text-[hsl(var(--primary))]">$</span> agac docs generate
+            <span className="text-[hsl(var(--primary))]">$</span> agac docs
           </div>
         </div>
         <button

@@ -11,32 +11,31 @@ from agent_actions.tooling.docs.generator import generate_docs
 from agent_actions.tooling.docs.server import serve_docs
 
 
-@click.group()
-def docs():
-    """Generate and serve workflow documentation."""
-
-
-@docs.command()
+@click.group(invoke_without_command=True)
 @click.option(
     "--output",
     "-o",
     default="artefact",
     help="Output directory for generated files (default: artefact)",
 )
-@handles_user_errors("docs generate")
+@click.option("--port", "-p", default=8000, help="Port to run server on (default: 8000)")
+@handles_user_errors("docs")
 @requires_project
-def generate(output: str, project_root: Path | None = None):
-    """
-    Generate documentation data files.
+@click.pass_context
+def docs(ctx, output: str, port: int, project_root: Path | None = None):
+    """Build and serve workflow documentation.
 
-    Scans the current project directory for workflows and generates
-    catalog.json and runs.json in the artefact/ directory.
+    Generates catalog.json and runs.json, then starts the docs server.
 
     \b
     Examples:
-        agac docs generate
-        agac docs generate --output ./custom-artefact
+        agac docs
+        agac docs --port 3000
+        agac docs --output ./custom-artefact
     """
+    if ctx.invoked_subcommand is not None:
+        return
+
     project_path = resolve_project_root(project_root)
 
     output_dir = Path(output)
@@ -51,29 +50,8 @@ def generate(output: str, project_root: Path | None = None):
         click.echo("No workflows found to document.")
         raise click.Abort()
 
-
-@docs.command()
-@click.option("--port", "-p", default=8000, help="Port to run server on (default: 8000)")
-@click.option(
-    "--artefact", "-a", default=None, help="Path to artefact directory (default: ./artefact)"
-)
-@handles_user_errors("docs serve")
-@requires_project
-def serve(port: int, artefact: str | None, project_root: Path | None = None):
-    """
-    Start HTTP server to view documentation.
-
-    Serves the documentation site from the built-in docs_site directory.
-    Requires that 'docs generate' has been run first.
-
-    \b
-    Examples:
-        agac docs serve
-        agac docs serve --port 3000
-        agac docs serve --artefact ./my-docs
-    """
-    success = serve_docs(port, artefact_path=artefact, project_root=project_root)
-    if not success:
+    serve_result = serve_docs(port, artefact_path=str(output_dir), project_root=project_root)
+    if not serve_result:
         raise click.Abort()
 
 
@@ -145,23 +123,3 @@ def run_tests(test_suite: str, port: int, project_root: Path | None = None):
         click.echo(f"\n❌ {len(failed)} test(s) failed: {', '.join(failed)}")
         raise click.Abort()
     click.echo("\n✅ All tests passed!")
-
-
-@docs.command(hidden=True)
-@handles_user_errors("docs dev")
-def dev():
-    """
-    Start development environment.
-
-    Watches for changes and regenerates documentation automatically.
-    Serves the docs site with live reload.
-
-    \b
-    Example:
-        agac docs dev
-    """
-    click.echo("🚧 Development mode coming soon!")
-    click.echo("\nFor now, use:")
-    click.echo("  Terminal 1: agac docs generate && agac docs serve")
-    click.echo("  Terminal 2: agac docs test")
-    raise click.Abort()
