@@ -35,3 +35,30 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 - **input/context/historical.py**: Queries backend for historical node data lookups
 - **prompt/context/scope.py**: Passes `output_directory` for backend data resolution
 - **processing/processor.py**: Threads `output_directory` through prompt preparation
+
+## Project Surface
+
+> How this module interacts with the user's project files.
+
+| Symbol | User File | Interaction | Config Key |
+|--------|-----------|-------------|------------|
+| `get_storage_backend()` | `agent_io/target/{workflow}.db` | Writes | `storage_backend` |
+| `SQLiteBackend.initialize()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `SQLiteBackend.write_target()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `SQLiteBackend.read_target()` | `agent_io/target/{workflow}.db` | Reads | — |
+| `SQLiteBackend.write_source()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `SQLiteBackend.read_source()` | `agent_io/target/{workflow}.db` | Reads | — |
+| `SQLiteBackend.list_target_files()` | `agent_io/target/{workflow}.db` | Reads | — |
+| `SQLiteBackend.list_source_files()` | `agent_io/target/{workflow}.db` | Reads | — |
+| `SQLiteBackend.set_disposition()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `SQLiteBackend.get_disposition()` | `agent_io/target/{workflow}.db` | Reads | — |
+| `SQLiteBackend.delete_target()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `SQLiteBackend.preview_target()` | `agent_io/target/{workflow}.db` | Reads | — |
+| `SQLiteBackend.get_storage_stats()` | `agent_io/target/{workflow}.db` | Reads | — |
+
+**Internal only**: `StorageBackend` (ABC) — abstract interface, no direct file interaction. `Disposition` enum, `VALID_DISPOSITIONS`, `NODE_LEVEL_RECORD_ID` — constants consumed by workflow/processing modules, no project file surface. `SQLiteBackend._validate_identifier()` — internal security helper.
+
+**Examples** — see this module in action:
+- [`examples/product_listing_enrichment/agent_workflow/product_listing_enrichment/agent_io/target/`](../../examples/product_listing_enrichment/agent_workflow/product_listing_enrichment/agent_io/target/) — target directory containing `{workflow}.db` created by `get_storage_backend()`
+- [`examples/book_catalog_enrichment/agent_workflow/book_catalog_enrichment/agent_io/target/`](../../examples/book_catalog_enrichment/agent_workflow/book_catalog_enrichment/agent_io/target/) — SQLite database storing source/target data and disposition records
+- [`examples/support_resolution/agent_workflow/support_resolution/agent_io/target/`](../../examples/support_resolution/agent_workflow/support_resolution/agent_io/target/) — multi-action workflow demonstrating `list_target_files()` for dependency resolution

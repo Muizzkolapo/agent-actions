@@ -52,3 +52,29 @@ When `output_directory` is provided, `write_target()` computes the relative path
 - Stored as: `subdir/file.json` (not just `file.json`)
 
 This prevents file collisions when multiple files share the same name but live in different subdirectories.
+
+## Project Surface
+
+> How this module interacts with the user's project files.
+
+| Symbol | User File | Interaction | Config Key |
+|--------|-----------|-------------|------------|
+| `FileWriter.write_staging()` | `agent_io/staging/*.json` | Writes | — |
+| `FileWriter.write_staging()` | `agent_io/staging/*.txt` | Writes | — |
+| `FileWriter.write_staging()` | `agent_io/staging/*.csv` | Writes | — |
+| `FileWriter.write_target()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `FileWriter.write_source()` | `agent_io/source/*.json` | Writes | — |
+| `UnifiedSourceDataSaver.save_source_items()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `SchemaLoader.discover_schema_files()` | `schema/{workflow}/*.yml` | Reads | `schema_path` |
+| `SchemaLoader.load_schema()` | `schema/{workflow}/{schema_name}.yml` | Reads | `schema_name` |
+| `ResponseSchemaCompiler.compile()` | `schema/{workflow}/{schema_name}.yml` | Reads | `schema_name`, `schema` |
+| `ActionExpander.expand()` | `agent_config/{workflow}.yml` | Transforms | `kind`, `model_vendor`, `schema_name`, `context_scope` |
+| `inherit_simple_fields()` | `agent_config/{workflow}.yml` | Reads | all keys in `SIMPLE_CONFIG_FIELDS` |
+| `ResponseBuilder.build()` | `agent_io/target/{action}/*.json` | Transforms | `output_field` |
+
+**Internal only**: `_convert_json_schema_to_unified()`, `compile_field()`, `compile_unified_schema()` — internal schema conversion with no direct project file surface. `_inject_functions_into_schema()`, `_resolve_dispatch_in_schema()` — dispatch resolution internals.
+
+**Examples** — see this module in action:
+- [`examples/product_listing_enrichment/agent_workflow/product_listing_enrichment/agent_io/target/`](../../examples/product_listing_enrichment/agent_workflow/product_listing_enrichment/agent_io/target/) — target output directory written by `FileWriter.write_target()`
+- [`examples/product_listing_enrichment/agent_workflow/product_listing_enrichment/schema/`](../../examples/product_listing_enrichment/agent_workflow/product_listing_enrichment/schema/) — response schemas loaded by `SchemaLoader`
+- [`examples/book_catalog_enrichment/agent_workflow/book_catalog_enrichment/agent_io/source/`](../../examples/book_catalog_enrichment/agent_workflow/book_catalog_enrichment/agent_io/source/) — source data persisted by `UnifiedSourceDataSaver`
