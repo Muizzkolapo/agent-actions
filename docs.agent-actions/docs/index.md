@@ -43,6 +43,10 @@ See [Installation](./installation.md) for configuration options or [Troubleshoot
 
 **[Catalog enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/book_catalog_enrichment)** — Take raw book/product data, enrich with classifications, marketing copy, SEO keywords, and recommendations.
 
+**[Product listing enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/product_listing_enrichment)** — Transform raw product specs into marketplace-ready listings with a strict LLM/Tool alternation pipeline, guard-based conditional skips, and seed data injection.
+
+**[Support resolution](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/support_resolution)** — Triage support tickets without JSON mode — classify, assess severity, route, summarize, and draft responses using single-value output fields that work with any model, including local Ollama.
+
 ## What Agent Actions does for you
 
 **Build pipelines from YAML:** Define your workflow in plain YAML. Agent Actions handles DAG orchestration, parallelization, and dependency resolution.
