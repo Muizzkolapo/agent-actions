@@ -313,18 +313,30 @@ class CatalogGenerator:
             for exec_rec in executions_data:
                 status = (exec_rec.get("status") or "").upper()
                 if status == "FAILED":
-                    runtime_error_entries.append({
-                        "target": exec_rec.get("workflow_name") or exec_rec.get("workflow_id") or "unknown",
-                        "message": exec_rec.get("error_message") or f"Run {exec_rec.get('id', '?')} failed",
-                        "timestamp": exec_rec.get("ended_at") or exec_rec.get("started_at") or "",
-                    })
+                    runtime_error_entries.append(
+                        {
+                            "target": exec_rec.get("workflow_name")
+                            or exec_rec.get("workflow_id")
+                            or "unknown",
+                            "message": exec_rec.get("error_message")
+                            or f"Run {exec_rec.get('id', '?')} failed",
+                            "timestamp": exec_rec.get("ended_at")
+                            or exec_rec.get("started_at")
+                            or "",
+                        }
+                    )
                 for action_name, action_data in (exec_rec.get("actions") or {}).items():
                     if (action_data.get("status") or "").upper() == "FAILED":
-                        runtime_error_entries.append({
-                            "target": action_name,
-                            "message": action_data.get("error") or f"Action {action_name} failed in run {exec_rec.get('id', '?')}",
-                            "timestamp": action_data.get("ended_at") or exec_rec.get("started_at") or "",
-                        })
+                        runtime_error_entries.append(
+                            {
+                                "target": action_name,
+                                "message": action_data.get("error")
+                                or f"Action {action_name} failed in run {exec_rec.get('id', '?')}",
+                                "timestamp": action_data.get("ended_at")
+                                or exec_rec.get("started_at")
+                                or "",
+                            }
+                        )
 
         catalog["logs"]["runtime_warnings"] = runtime_warn_entries
         catalog["logs"]["runtime_errors"] = runtime_error_entries
