@@ -58,7 +58,6 @@ class RunCommand:
 
             set_path_manager(PathManager(project_root=project_root))
 
-        click.echo("Setting up project paths...")
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, project_root=project_root
         )
@@ -71,7 +70,6 @@ class RunCommand:
             check_alternatives=True,
             project_root=project_root,
         )
-        click.echo("Rendering and loading configuration...")
         ConfigRenderingService().render_and_load_config(
             self.agent_name,
             full_path,
@@ -79,7 +77,6 @@ class RunCommand:
             paths.rendered_workflows_dir,
             project_root=project_root,
         )
-        click.echo("Initializing agent workflow...")
         workflow = AgentWorkflow(
             WorkflowRuntimeConfig(
                 paths=WorkflowPaths(
@@ -114,8 +111,6 @@ class RunCommand:
             force=True,
         )
 
-        click.echo("Starting workflow execution...")
-
         status = "FAILED"
         error_message = None
         wall_start = time.monotonic()
@@ -142,9 +137,7 @@ class RunCommand:
             execution_order = workflow.execution_order
 
             if state_mgr.is_workflow_complete():
-                # All actions completed (possibly with item-level failures)
                 status = "SUCCESS"
-                click.echo(f"Successfully completed agent run for: {self.args.agent}")
 
             elif state_mgr.is_workflow_done():
                 # All actions terminal — check if any actually failed

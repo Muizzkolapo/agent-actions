@@ -470,7 +470,7 @@ class ProcessingPipeline:
                 # Should be a list, but handle single dict if returned
                 source_data = [loaded_source] if loaded_source else []  # type: ignore[unreachable]
 
-            logger.info("Loaded source data via SourceDataLoader for %s", file_path)
+            logger.debug("Loaded source data via SourceDataLoader for %s", file_path)
 
         except Exception as e:
             logger.error(

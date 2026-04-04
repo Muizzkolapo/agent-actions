@@ -117,7 +117,7 @@ class ManifestManager:
             # Ensure target directory exists and save
             self.target_dir.mkdir(parents=True, exist_ok=True)
             self._save_manifest()
-            logger.info("Initialized manifest for workflow %s", workflow_name)
+            logger.debug("Initialized manifest for workflow %s", workflow_name)
 
     def load_manifest(self) -> dict[str, Any]:
         """Load manifest from disk, returning empty dict if not found."""
