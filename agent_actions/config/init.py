@@ -35,6 +35,7 @@ class ProjectInitializer:
         self.schema_dir: Path = self.project_dir / "schema"
         self.templates_dir: Path = self.project_dir / "templates"
         self.tools_dir: Path = self.project_dir / "tools"
+        self.seed_data_dir: Path = self.project_dir / "seed_data"
         self.config_file: Path = self.project_dir / "agent_actions.yml"
 
     def create_directory(self, path: Path) -> None:
@@ -71,6 +72,7 @@ class ProjectInitializer:
         - schema/: JSON schemas for action outputs
         - templates/: Jinja2 templates for config rendering
         - tools/: Custom tool implementations
+        - seed_data/: Static reference data files
         - agent_actions.yml: Project configuration
 
         Runtime directories (artefact/, logs/, agent_io/) are created automatically during execution.
@@ -83,6 +85,7 @@ class ProjectInitializer:
             self.schema_dir,
             self.templates_dir,
             self.tools_dir,
+            self.seed_data_dir,
         ]
 
         for directory in directories:
@@ -96,6 +99,9 @@ class ProjectInitializer:
                 MODEL_NAME_KEY: "gpt-3.5-turbo",
                 CHUNK_CONFIG_KEY: {"chunk_size": 300, "overlap": 10},
             },
+            "schema_path": "schema",
+            "tool_path": ["tools"],
+            "seed_data_path": "seed_data",
         }
         self.create_file(self.config_file, yaml.safe_dump(config_data, default_flow_style=False))
         logger.info("Successfully initialized project: %s", self.project_name)

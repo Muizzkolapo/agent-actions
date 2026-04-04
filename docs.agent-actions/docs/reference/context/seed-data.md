@@ -21,9 +21,17 @@ defaults:
 
 | Syntax | Description |
 |--------|-------------|
-| `$file:filename.json` | Load JSON file from `seed_data/` directory |
-| `$file:filename.yaml` | Load YAML file from `seed_data/` directory |
-| `$file:path/to/file.json` | Load from subdirectory within `seed_data/` |
+| `$file:filename.json` | Load JSON file from the seed data directory |
+| `$file:filename.yaml` | Load YAML file from the seed data directory |
+| `$file:path/to/file.json` | Load from subdirectory within the seed data directory |
+
+### Custom Directory Name
+
+The seed data directory defaults to `seed_data/`. You can change it in `agent_actions.yml`:
+
+```yaml
+seed_data_path: reference_data   # defaults to "seed_data" if omitted
+```
 
 ## Directory Structure
 
@@ -32,7 +40,7 @@ my_workflow/
 ├── agent_config/
 │   └── my_workflow.yml
 ├── agent_io/
-└── seed_data/           # Seed data files here
+└── seed_data/           # Seed data files here (or your custom name)
     ├── syllabus.json
     └── rubric.yaml
 ```

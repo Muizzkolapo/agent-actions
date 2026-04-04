@@ -44,9 +44,9 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         <StatCard
           label="Runs"
           value={runs.length}
-          accent={failedRuns > 0 ? "destructive" : "success"}
+          accent={successRate >= 80 ? "success" : successRate >= 50 ? "warning" : "destructive"}
           sub={`${successRate}% pass rate`}
-          subColor={failedRuns > 0 ? "text-[hsl(var(--destructive))]" : "text-[hsl(var(--success))]"}
+          subColor={successRate >= 80 ? "text-[hsl(var(--success))]" : successRate >= 50 ? "text-[hsl(var(--warning))]" : "text-[hsl(var(--destructive))]"}
           sparkData={[1, 3, 2, 5, 4, 6, runs.length]}
           onClick={() => onNavigate("runs")}
           delay={120}
@@ -183,7 +183,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                       {run.success}/{run.total}
                     </span>
                   </div>
-                  <span className="text-xs font-mono text-foreground tabular-nums text-right">{run.duration}s</span>
+                  <span className="text-xs font-mono text-foreground tabular-nums text-right">{Math.round(run.duration || 0)}s</span>
                   <span className="text-xs font-mono text-muted-foreground tabular-nums text-right">
                     {run.tokens > 0 ? run.tokens.toLocaleString() : "\u2014"}
                   </span>
