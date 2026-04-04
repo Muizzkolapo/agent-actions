@@ -29,7 +29,7 @@ import type {
 // ─── Stats ───────────────────────────────────────────────────────────────────
 
 export function transformStats(catalog: RawCatalogJson): Stats {
-  return { ...catalog.stats }
+  return { ...catalog.stats, runtime_errors: catalog.stats.runtime_errors ?? 0, runtime_warnings: catalog.stats.runtime_warnings ?? 0 }
 }
 
 // ─── Workflows ───────────────────────────────────────────────────────────────

@@ -56,7 +56,7 @@ export function AppSidebar({ activeSection, onNavigate, onSearchClick, projectNa
   ]
 
   const systemNav = useMemo(() => [
-    { label: "Logs", icon: ScrollText, id: "logs", badge: String(stats.validation_errors) },
+    { label: "Logs", icon: ScrollText, id: "logs", badge: String(stats.validation_errors + stats.runtime_errors) },
   ], [stats])
 
   const generatedDate = generatedAt ? generatedAt.split("T")[0] : ""
