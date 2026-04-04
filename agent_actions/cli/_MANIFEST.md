@@ -84,3 +84,40 @@
 | `PreviewCommand` | Class | Implementation of the preview command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the preview command. | - |
 | `preview` | Function | Preview data stored in the SQLite storage backend. | - |
+
+## Project Surface
+
+> How this module interacts with the user's project files.
+
+| Symbol | User File | Interaction | Config Key |
+|--------|-----------|-------------|------------|
+| `main_entrypoint()` | `.env` | Reads | — |
+| `requires_project()` | `agent_actions.yml` | Reads | — |
+| `RunCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
+| `RunCommand.execute()` | `agent_io/staging/*.json` | Reads | `defaults.data_source` |
+| `RunCommand.execute()` | `agent_io/target/` | Writes | — |
+| `RunCommand.execute()` | `prompt_store/{workflow}.md` | Reads | `actions[].prompt` |
+| `RunCommand.execute()` | `templates/` | Reads | — |
+| `RenderCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
+| `RenderCommand.execute()` | `templates/` | Reads | — |
+| `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
+| `InitCommand.execute()` | `agent_config/`, `agent_io/`, `prompt_store/` | Writes | — |
+| `init_example()` | `agent_actions.yml` | Writes | `project_name` |
+| `StatusCommand.execute()` | `agent_io/.agent_status.json` | Reads | — |
+| `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
+| `SchemaCommand.execute()` | `schema/{workflow}/*.yml` | Reads | `schema_path` |
+| `PreviewCommand.execute()` | `agent_io/target/{workflow}.db` | Reads | `output_storage.backend` |
+| `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | `tool_path` |
+| `clean_cli()` | `agent_io/source/`, `agent_io/target/` | Writes | — |
+| `skills install` | `.claude/skills/`, `.codex/skills/` | Writes | — |
+| `docs()` | `artefact/catalog.json`, `artefact/runs.json` | Writes | — |
+
+**Internal only**: `handles_user_errors()`, `_LazyCLI`, `CLI._configure_logging()`, `CLI._register_signal_handlers()` — no direct project surface.
+
+**Examples** — see this module in action:
+- [`examples/support_resolution/agent_actions.yml`](../../examples/support_resolution/agent_actions.yml) — project config with Ollama vendor, consumed by `main_entrypoint()` and `requires_project()`
+- [`examples/support_resolution/agent_workflow/support_resolution/agent_config/support_resolution.yml`](../../examples/support_resolution/agent_workflow/support_resolution/agent_config/support_resolution.yml) — workflow config read by `RunCommand`, `SchemaCommand`, and `RenderCommand`
+- [`examples/support_resolution/agent_workflow/support_resolution/agent_io/staging/issues.json`](../../examples/support_resolution/agent_workflow/support_resolution/agent_io/staging/issues.json) — input data loaded during `agac run`
+- [`examples/support_resolution/tools/support_resolution/package_triage_result.py`](../../examples/support_resolution/tools/support_resolution/package_triage_result.py) — UDF discovered by `list-udfs` command
+- [`examples/book_catalog_enrichment/agent_actions.yml`](../../examples/book_catalog_enrichment/agent_actions.yml) — project config with SQLite storage backend, exercising `preview` command
+- [`examples/incident_triage/agent_workflow/incident_triage/agent_config/incident_triage.yml`](../../examples/incident_triage/agent_workflow/incident_triage/agent_config/incident_triage.yml) — multi-action workflow exercising `inspect` and `schema` commands
