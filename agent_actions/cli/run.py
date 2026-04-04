@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import traceback
 from pathlib import Path
 from typing import Literal, cast
@@ -117,10 +118,25 @@ class RunCommand:
 
         status = "FAILED"
         error_message = None
+        wall_start = time.monotonic()
 
         try:
             use_parallel = self._determine_execution_mode(workflow)
             self._run_workflow_execution(workflow, use_parallel)
+
+            elapsed = time.monotonic() - wall_start
+
+            # Render execution summary
+            try:
+                from agent_actions.cli.renderers.execution_renderer import (
+                    ExecutionRenderer,
+                    build_execution_snapshot,
+                )
+
+                snapshot = build_execution_snapshot(workflow, elapsed)
+                ExecutionRenderer(workflow.console).render(snapshot)
+            except Exception as render_err:
+                logger.debug("Execution summary render failed: %s", render_err)
 
             state_mgr = workflow.services.core.state_manager
             execution_order = workflow.execution_order

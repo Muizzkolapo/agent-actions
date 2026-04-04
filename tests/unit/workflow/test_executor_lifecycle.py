@@ -172,7 +172,13 @@ class TestExecuteAgentSync:
 
         assert result.success is False
         assert result.status == ActionStatus.FAILED
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.FAILED)
+        fail_calls = [
+            c
+            for c in mock_deps.state_manager.update_status.call_args_list
+            if c[0][1] == ActionStatus.FAILED
+        ]
+        assert len(fail_calls) >= 1
+        assert fail_calls[0][0][0] == "agent_a"
         event = mock_fire.call_args[0][0]
         assert isinstance(event, BatchCompleteEvent)
         assert event.failed == 1
@@ -222,7 +228,13 @@ class TestExecuteAgentSync:
         assert result.success is False
         assert result.status == ActionStatus.FAILED
         assert isinstance(result.error, RuntimeError)
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.FAILED)
+        fail_calls = [
+            c
+            for c in mock_deps.state_manager.update_status.call_args_list
+            if c[0][1] == ActionStatus.FAILED
+        ]
+        assert len(fail_calls) == 1
+        assert fail_calls[0][0][0] == "agent_a"
 
     def test_no_storage_backend_skips_verification(self, executor, mock_deps):
         """Completed agent with no storage_backend should skip (no files to verify)."""
@@ -312,7 +324,9 @@ class TestHandleRunSuccess:
         assert result.success is True
         assert result.status == ActionStatus.SKIPPED
         assert result.output_folder == "/out"
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.SKIPPED)
+        call_args = mock_deps.state_manager.update_status.call_args
+        assert call_args[0] == ("agent_a", ActionStatus.SKIPPED)
+        assert "skip_reason" in call_args[1]
 
         from agent_actions.logging.events import ActionSkipEvent
 
@@ -362,7 +376,9 @@ class TestHandleRunFailure:
         assert result.success is False
         assert result.status == ActionStatus.FAILED
         assert result.error is error
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.FAILED)
+        call_args = mock_deps.state_manager.update_status.call_args
+        assert call_args[0] == ("agent_a", ActionStatus.FAILED)
+        assert "error_message" in call_args[1]
 
     def test_records_in_run_tracker_when_available(self, executor, mock_deps):
         """When run_tracker + run_id are set, should record action complete."""
