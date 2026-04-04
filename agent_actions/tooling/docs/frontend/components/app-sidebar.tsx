@@ -63,7 +63,10 @@ export function AppSidebar({ activeSection, onNavigate, onSearchClick, projectNa
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-3 py-4">
-        <div className="flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
+        <button
+          onClick={() => onNavigate("home")}
+          className="flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center hover:opacity-80 transition-opacity"
+        >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg overflow-hidden" style={{ background: '#111520' }}>
             <svg width="22" height="22" viewBox="-2 10 100 80" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" transform="rotate(-30 14 68)"/>
@@ -72,11 +75,11 @@ export function AppSidebar({ activeSection, onNavigate, onSearchClick, projectNa
               <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0"/>
             </svg>
           </div>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+          <div className="flex flex-col group-data-[collapsible=icon]:hidden text-left">
             <span className="text-sm font-semibold tracking-tight text-foreground">Agent Actions</span>
             <span className="text-[10px] text-muted-foreground tracking-wide uppercase">{projectName || "Documentation"}</span>
           </div>
-        </div>
+        </button>
       </SidebarHeader>
 
       <SidebarContent>
