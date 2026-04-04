@@ -337,7 +337,9 @@ class TestZeroSuccessCircuitBreakerChain:
         assert result.status == ActionStatus.SKIPPED
         # Verify state_manager was called with SKIPPED status + metadata
         skip_calls = [
-            c for c in mock_deps.state_manager.update_status.call_args_list if c[0][0] == "score_quality"
+            c
+            for c in mock_deps.state_manager.update_status.call_args_list
+            if c[0][0] == "score_quality"
         ]
         assert len(skip_calls) == 1
         assert skip_calls[0][0][1] == ActionStatus.SKIPPED

@@ -202,17 +202,13 @@ class ExecutionRenderer:
         prefix = "  " if is_last else f"{_BOX_V} "
         inner_w = min(55, self.console.width - 8)
 
-        self.console.print(
-            Text(f"{prefix} {_BOX_TL}{_BOX_H * inner_w}{_BOX_TR}", style="dim cyan")
-        )
+        self.console.print(Text(f"{prefix} {_BOX_TL}{_BOX_H * inner_w}{_BOX_TR}", style="dim cyan"))
         for action_name in actions:
             result = snap.action_results.get(action_name)
             if not result:
                 continue
             self.console.print(self._format_action_line(result, f"{prefix} {_BOX_V}"))
-        self.console.print(
-            Text(f"{prefix} {_BOX_BL}{_BOX_H * inner_w}{_BOX_BR}", style="dim cyan")
-        )
+        self.console.print(Text(f"{prefix} {_BOX_BL}{_BOX_H * inner_w}{_BOX_BR}", style="dim cyan"))
 
     def _format_action_line(self, result: ActionResult, connector: str) -> Text:
         line = Text()
@@ -249,9 +245,7 @@ class ExecutionRenderer:
         if result.status == "skipped" and result.skip_reason:
             self.console.print(Text(f"{prefix}  ↳ skipped: {result.skip_reason}", style="dim"))
         elif result.status == "failed" and result.error_message:
-            self.console.print(
-                Text(f"{prefix}  ↳ error: {result.error_message[:80]}", style="red")
-            )
+            self.console.print(Text(f"{prefix}  ↳ error: {result.error_message[:80]}", style="red"))
 
     def _render_footer(self, snap: WorkflowExecutionSnapshot) -> None:
         status_counts = Counter(r.status for r in snap.action_results.values())
