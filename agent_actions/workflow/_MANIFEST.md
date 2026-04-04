@@ -45,3 +45,33 @@ This intentionally overrides `on_exhausted="return_last"` when ALL records exhau
 tombstones. When zero records succeed, tombstone-only output is not useful and downstream
 actions would produce garbage. `_check_exhausted_raise` in `ResultCollector` handles
 `on_exhausted="raise"` independently (runs before collection).
+
+## Project Surface
+
+> How this module interacts with the user's project files.
+
+| Symbol | User File | Interaction | Config Key |
+|--------|-----------|-------------|------------|
+| `load_workflow_configs()` | `agent_config/{workflow}.yml` | Reads | `name`, `actions`, `defaults` |
+| `load_workflow_configs()` | `agent_config/{workflow}.yml` | Validates | `actions[].dependencies`, `actions[].context_scope` |
+| `discover_workflow_udfs()` | `tools/{workflow}/*.py` | Reads | `defaults.tool_path` |
+| `AgentWorkflow.__init__()` | `agent_io/target/{workflow}.db` | Writes | — |
+| `AgentWorkflow.run()` | `agent_io/target/{action}/` | Writes | `actions[].name` |
+| `AgentWorkflow.run()` | `agent_io/staging/` | Reads | `defaults.data_source` |
+| `AgentWorkflow._run_static_validation()` | `agent_config/{workflow}.yml` | Validates | `actions[].schema`, `actions[].context_scope` |
+| `ActionRunner.setup_directories()` | `agent_io/target/{action}/` | Writes | `actions[].name` |
+| `ActionRunner._resolve_start_node_directories()` | `agent_io/staging/` | Reads | `defaults.data_source` |
+| `ActionRunner._resolve_dependency_directories()` | `agent_io/target/{dependency}/` | Reads | `actions[].dependencies` |
+| `WorkflowSchemaService.validate()` | `schema/{workflow}/{schema_name}.yml` | Reads | `actions[].schema` |
+| `WorkspaceIndex.scan_workspace()` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies[*].workflow` |
+| `ActionExecutor.execute_action_sync()` | `agent_io/target/{action}/` | Writes | `actions[].name` |
+| `ActionStateManager` | `agent_io/.agent_status.json` | Writes | — |
+
+**Internal only**: `_run_config_stage()`, `_strip_unreachable_drops()`, `_get_reachable_actions()`, `_generate_workflow_session_id()` — no direct project surface.
+
+**Examples** — see this module in action:
+- [`examples/incident_triage/.../incident_triage.yml`](../../examples/incident_triage/agent_workflow/incident_triage/agent_config/incident_triage.yml) — workflow with parallel versioned classifiers, fan-in aggregation, guard-based conditional escalation, and seed data injection
+- [`examples/review_analyzer/.../review_analyzer.yml`](../../examples/review_analyzer/agent_workflow/review_analyzer/agent_config/review_analyzer.yml) — multi-vendor model selection, parallel consensus scoring with version_consumption merge, and pre-check quality gates
+- [`examples/contract_reviewer/.../contract_reviewer.yml`](../../examples/contract_reviewer/agent_workflow/contract_reviewer/agent_config/contract_reviewer.yml) — map-reduce pattern with FILE granularity aggregation, guard-based deep analysis for high-risk clauses
+- [`examples/incident_triage/tools/incident_triage/aggregate_severity_votes.py`](../../examples/incident_triage/tools/incident_triage/aggregate_severity_votes.py) — UDF tool discovered by `discover_workflow_udfs()` at startup
+- [`examples/incident_triage/.../seed_data/team_roster.json`](../../examples/incident_triage/agent_workflow/incident_triage/seed_data/team_roster.json) — seed data loaded via `defaults.context_scope.seed_path`
