@@ -111,6 +111,7 @@ class CatalogGenerator:
         processing_states_data: dict[str, Any] | None = None,
         workflow_data: dict[str, Any] | None = None,
         readmes_data: dict[str, str] | None = None,
+        executions_data: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Generate the complete catalog structure."""
         # Initialize prompts with used_by tracking
@@ -283,7 +284,7 @@ class CatalogGenerator:
         catalog["stats"]["total_tool_functions"] = (
             len(tool_functions_data) if tool_functions_data else 0
         )
-        catalog["stats"]["total_runs"] = len(runs_data) if runs_data else 0
+        catalog["stats"]["total_runs"] = len(executions_data) if executions_data else 0
 
         # Update validation stats from logs
         if logs_data:
@@ -306,6 +307,36 @@ class CatalogGenerator:
                         runtime_error_entries.append(entry)
                     else:
                         runtime_warn_entries.append(entry)
+
+        # Surface failed executions from runs.json as runtime errors
+        if executions_data:
+            for exec_rec in executions_data:
+                status = (exec_rec.get("status") or "").upper()
+                if status == "FAILED":
+                    runtime_error_entries.append(
+                        {
+                            "target": exec_rec.get("workflow_name")
+                            or exec_rec.get("workflow_id")
+                            or "unknown",
+                            "message": exec_rec.get("error_message")
+                            or f"Run {exec_rec.get('id', '?')} failed",
+                            "timestamp": exec_rec.get("ended_at")
+                            or exec_rec.get("started_at")
+                            or "",
+                        }
+                    )
+                for action_name, action_data in (exec_rec.get("actions") or {}).items():
+                    if (action_data.get("status") or "").upper() == "FAILED":
+                        runtime_error_entries.append(
+                            {
+                                "target": action_name,
+                                "message": action_data.get("error")
+                                or f"Action {action_name} failed in run {exec_rec.get('id', '?')}",
+                                "timestamp": action_data.get("ended_at")
+                                or exec_rec.get("started_at")
+                                or "",
+                            }
+                        )
 
         catalog["logs"]["runtime_warnings"] = runtime_warn_entries
         catalog["logs"]["runtime_errors"] = runtime_error_entries
@@ -365,6 +396,17 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     workflow_data = scanner.scan_workflow_data(project_root)
     readmes_data = scanner.scan_readmes(project_root)
 
+    # Load existing runs.json executions so failed runs surface in catalog logs
+    executions_data: list[dict[str, Any]] = []
+    runs_path = output_dir / "runs.json"
+    if runs_path.exists():
+        try:
+            with open(runs_path, encoding="utf-8") as f:
+                runs_json = json.load(f)
+            executions_data = runs_json.get("executions", [])
+        except (OSError, json.JSONDecodeError) as e:
+            logger.debug("Failed to load runs.json for execution data: %s", e)
+
     # Step 2: Generate catalog
     catalog_gen = CatalogGenerator(
         workflows_data, project_path=project_path, tool_schemas=tool_functions_data
@@ -383,6 +425,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         processing_states_data=processing_states_data,
         workflow_data=workflow_data,
         readmes_data=readmes_data,
+        executions_data=executions_data,
     )
 
     # Step 3: Write data files
