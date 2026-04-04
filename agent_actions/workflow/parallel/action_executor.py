@@ -189,7 +189,6 @@ class ActionLevelOrchestrator:
 
     async def _execute_parallel_actions(self, params: ParallelExecutionParams):
         """Execute multiple actions in parallel."""
-        self.console.print(f"[blue]  → {len(params.pending_actions)} actions in parallel[/blue]")
         semaphore = asyncio.Semaphore(params.concurrency_limit)
 
         total_actions = len(self.execution_order)
@@ -339,7 +338,7 @@ class ActionLevelOrchestrator:
             return True
 
         self.console.print(
-            f"[cyan]Step {params.level_idx}: Starting {len(pending_actions)} action(s)...[/cyan]"
+            f"[cyan]Step {params.level_idx}: Starting {len(pending_actions)} {'action' if len(pending_actions) == 1 else 'actions'}...[/cyan]"
         )
 
         if len(pending_actions) == 1:

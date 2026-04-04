@@ -118,9 +118,8 @@ class PathManager:
                 f"starting from {search_path}"
             )
 
-        # Warn when found via fallback heuristic (no marker file present)
         if not (result / self.config.marker_file).exists():
-            logger.warning(
+            logger.debug(
                 "Project root found via fallback heuristic (no marker file '%s'): %s",
                 self.config.marker_file,
                 result,
