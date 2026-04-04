@@ -4,7 +4,6 @@ default_agent_config:
     overlap: 500
     chunk_size: 4000
   model_name: gpt-4o-mini
-  ephemeral: false
   prompt_debug: False
 schema_path: schema
 tool_path: ["tools"]

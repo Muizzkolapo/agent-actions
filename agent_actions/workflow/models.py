@@ -50,13 +50,7 @@ class WorkflowState:
     """Runtime state for workflow execution."""
 
     previous_action_type: str | None = None
-    ephemeral_directories: list[dict[str, Any]] | None = None
     failed: bool = False
-
-    def __post_init__(self):
-        """Initialize mutable defaults."""
-        if self.ephemeral_directories is None:
-            self.ephemeral_directories = []
 
 
 @dataclass
