@@ -223,4 +223,13 @@ def get_seed_data_path(project_root: Path) -> str:
     raw = config.get("seed_data_path")
     if raw is None:
         return "seed_data"
-    return str(raw)
+    name = str(raw)
+    # Reject path traversal patterns — seed_data_path must be a simple directory name
+    if ".." in name or "/" in name or "\\" in name:
+        logger.warning(
+            "seed_data_path %r contains path separators or traversal patterns; "
+            "using default 'seed_data'",
+            name,
+        )
+        return "seed_data"
+    return name
