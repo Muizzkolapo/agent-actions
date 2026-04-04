@@ -41,7 +41,7 @@ See [Installation](./installation.md) for configuration options or [Troubleshoot
 
 **[Review analysis](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/review_analyzer)** — Multi-model pipeline for product reviews — extract claims, score quality via parallel consensus, draft merchant responses, and surface product insights.
 
-**[Catalog enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/book_catalog_enrichment)** — Take raw book/product data, enrich with classifications, marketing copy, SEO keywords, and recommendations.
+**[Book catalog enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/book_catalog_enrichment)** — Enrich raw book metadata with genre classifications, marketing copy, SEO keywords, and reading recommendations. Demonstrates human-in-the-loop review for high-stakes editorial decisions.
 
 **[Product listing enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/product_listing_enrichment)** — Transform raw product specs into marketplace-ready listings with a strict LLM/Tool alternation pipeline, guard-based conditional skips, and seed data injection.
 
