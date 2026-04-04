@@ -183,7 +183,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                       {run.success}/{run.total}
                     </span>
                   </div>
-                  <span className="text-xs font-mono text-foreground tabular-nums text-right">{Math.round(run.duration)}s</span>
+                  <span className="text-xs font-mono text-foreground tabular-nums text-right">{Math.round(run.duration || 0)}s</span>
                   <span className="text-xs font-mono text-muted-foreground tabular-nums text-right">
                     {run.tokens > 0 ? run.tokens.toLocaleString() : "\u2014"}
                   </span>

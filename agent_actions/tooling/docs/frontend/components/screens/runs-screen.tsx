@@ -214,9 +214,9 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
     if (endSec != null && startSec == null && a.dur > 0) startSec = endSec - a.dur
     return { name, startSec, endSec }
   })
-  const barsWithTiming = ganttBars.filter((b) => b.startSec != null && b.endSec != null)
+  const barsWithTiming = ganttBars.filter((b) => b.startSec != null && b.endSec != null && !isNaN(b.startSec!) && !isNaN(b.endSec!))
   const showGantt = barsWithTiming.length >= 2
-  const ganttMax = showGantt ? Math.max(...barsWithTiming.map((b) => b.endSec!), run.duration) : 0
+  const ganttMax = showGantt ? Math.max(...barsWithTiming.map((b) => b.endSec!), run.duration, 0.001) : 0
   const ganttMap = new Map(ganttBars.map((b) => [b.name, b]))
 
   return (
