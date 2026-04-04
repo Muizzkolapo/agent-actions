@@ -1,6 +1,6 @@
 """Tests for runtime field propagation through the expander pipeline.
 
-Issue #1050: Action-level runtime fields (ephemeral, anthropic_version,
+Issue #1050: Action-level runtime fields (anthropic_version,
 enable_prompt_caching, max_execution_time, where_clause, enable_caching)
 must survive expansion and appear in the final agent dict.
 """
@@ -36,7 +36,6 @@ class TestRuntimeFieldPropagation:
     @pytest.mark.parametrize(
         "field,value",
         [
-            ("ephemeral", True),
             ("anthropic_version", "2023-06-01"),
             ("enable_prompt_caching", True),
             ("max_execution_time", 600),
@@ -56,7 +55,6 @@ class TestRuntimeFieldPropagation:
         result = _make_agent(action)
         # Optional fields default to None
         for field in [
-            "ephemeral",
             "anthropic_version",
             "enable_prompt_caching",
             "where_clause",
@@ -70,7 +68,6 @@ class TestRuntimeFieldPropagation:
         """Fields set in defaults propagate when action omits them."""
         action = _minimal_action()
         defaults = {
-            "ephemeral": True,
             "anthropic_version": "2023-06-01",
             "enable_prompt_caching": True,
             "max_execution_time": 300,
@@ -79,7 +76,6 @@ class TestRuntimeFieldPropagation:
         }
         result = _make_agent(action, defaults)
 
-        assert result["ephemeral"] is True
         assert result["anthropic_version"] == "2023-06-01"
         assert result["enable_prompt_caching"] is True
         assert result["max_execution_time"] == 300
@@ -109,7 +105,6 @@ class TestEndToEndPropagation:
     """Integration tests through expand_actions_to_agents (full pipeline)."""
 
     RUNTIME_FIELDS = {
-        "ephemeral": True,
         "anthropic_version": "2023-06-01",
         "enable_prompt_caching": True,
         "max_execution_time": 600,
@@ -170,7 +165,6 @@ class TestInheritSimpleFieldsRuntime:
         from agent_actions.output.response.config_fields import SIMPLE_CONFIG_FIELDS
 
         for field in [
-            "ephemeral",
             "anthropic_version",
             "enable_prompt_caching",
             "max_execution_time",

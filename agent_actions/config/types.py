@@ -152,7 +152,6 @@ class ActionConfigDict(TypedDict, total=False):
     where_clause: WhereClauseDict
 
     # Optional features
-    ephemeral: bool
     add_dispatch: bool
     reprompt: dict[str, Any]
     constraints: list[str]
@@ -217,7 +216,6 @@ class ActionEntryDict(TypedDict, total=False):
     conditional_clause: str | None
     where_clause: WhereClauseDict | None
     skip_if: str | None
-    ephemeral: bool | None
     add_dispatch: bool | None
     # Anthropic-specific configuration options
     # API version header for Anthropic requests (e.g., "2023-06-01")
