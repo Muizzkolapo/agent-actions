@@ -53,7 +53,6 @@ class ActionConfigValidationUtilities:
         CHUNK_CONFIG_KEY,
         "conditional_clause",
         "is_operational",
-        "ephemeral",
         "enabled",
         "add_dispatch",
         "output_field",
