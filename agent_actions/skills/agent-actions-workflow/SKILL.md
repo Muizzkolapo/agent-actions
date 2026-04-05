@@ -1,6 +1,6 @@
 ---
 name: agent-actions-workflow
-description: Build and debug agent-actions LLM workflows. Use when creating workflows, writing UDFs, configuring guards, setting up parallel/versioned actions, or debugging filtered pipelines with empty outputs. CRITICAL - Before creating or modifying ANY action, ALWAYS read the workflow first, understand the action anatomy, check parent outputs, and verify child inputs. Never make changes without understanding the full context. ALWAYS ask clarifying questions about goals, inputs, outputs, and edge cases before writing any code.
+description: Build and debug agent-actions agentic workflows. Use when creating workflows, writing UDFs, configuring guards, setting up parallel/versioned actions, or debugging filtered pipelines with empty outputs. CRITICAL - Before creating or modifying ANY action, ALWAYS read the workflow first, understand the action anatomy, check parent outputs, and verify child inputs. Never make changes without understanding the full context. ALWAYS ask clarifying questions about goals, inputs, outputs, and edge cases before writing any code.
 ---
 
 # Agent Actions Workflow Builder
