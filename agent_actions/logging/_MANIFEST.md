@@ -24,3 +24,22 @@ factories, filters, formatters, and the event-driven error/reporting plumbing.
 | `LoggerFactory` | Class | Manage logger creation, level setting, and debug state. | `logging` |
 | `filters.py` | Module | Custom filters (e.g., `RedactingFilter`) to sanitize sensitive payloads. | `logging` |
 | `formatters.py` | Module | Formatter helpers such as `JSONFormatter` used across services. | `logging` |
+
+## Project Surface
+
+| Symbol | File | Interaction | Config Key |
+|--------|------|-------------|------------|
+| `LoggingConfig.from_project_config()` | `agent_actions.yml` | Reads | `logging`, `logging.level`, `logging.file` |
+| `LoggingConfig.from_environment()` | `.env` | Reads | `AGENT_ACTIONS_DEBUG`, `AGENT_ACTIONS_LOG_LEVEL`, `AGENT_ACTIONS_LOG_FORMAT`, `AGENT_ACTIONS_LOG_DIR` |
+| `LoggerFactory.initialize()` | `agent_io/target/events.json` | Writes | — |
+| `LoggerFactory.initialize()` | `agent_io/target/errors.json` | Writes | — |
+| `RunResultsCollector` | `agent_io/target/run_results.json` | Writes | — |
+
+## Dependencies
+
+| Package | Direction | Why |
+|---------|-----------|-----|
+| `cli` | inbound | CLI initializes LoggerFactory and fires lifecycle events |
+| `workflow` | inbound | Workflow executor emits structured events during runs |
+| `config` | outbound | Reads project root to determine default log file paths |
+| `errors` | outbound | Translates internal errors into user-facing log messages |
