@@ -4,11 +4,11 @@ default_agent_config:
   chunk_config:
     overlap: 500
     chunk_size: 4000
-  ephemeral: false
   prompt_debug: false
 
 schema_path: schema
 tool_path: [tools]
+seed_data_path: seed_data
 
 output_storage:
   backend: sqlite

@@ -111,7 +111,8 @@ def discover_workflow_udfs(config: WorkflowRuntimeConfig, console: Console) -> N
             total_udfs += count
 
     if total_udfs > 0:
-        console.print(f"[green]\u2705 Discovered {total_udfs} Tools[/green]")
+        label = "Tool" if total_udfs == 1 else "Tools"
+        console.print(f"[green]\u2705 Discovered {total_udfs} {label}[/green]")
         fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
 

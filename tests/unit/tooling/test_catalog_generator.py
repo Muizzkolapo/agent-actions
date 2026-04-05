@@ -26,7 +26,7 @@ def _empty_inputs():
         data_loaders_data=[],
         processing_states_data=[],
         workflow_data={},
-        readmes_data=[],
+        readmes_data={},
     )
 
 

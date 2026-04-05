@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import rehypeRaw from "rehype-raw"
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
 import { Search, ArrowLeft, ArrowRight, Circle, Filter, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -11,6 +13,16 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useCatalogData } from "@/lib/catalog-context"
 import { WorkflowDAGView } from "@/components/workflow-dag"
 import type { Workflow, WorkflowStatus, Action } from "@/lib/mock-data"
+
+// Allow img tags with src, alt, width, height attributes and p with align
+const sanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    img: ["src", "alt", "width", "height"],
+    p: [...(defaultSchema.attributes?.p || []), "align"],
+  },
+}
 
 type WfSortKey = "name" | "actions" | "stages"
 type SortDir = "asc" | "desc"
@@ -317,15 +329,18 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
           </div>
         </TabsContent>
 
-        {/* Safety: react-markdown sanitizes HTML by default. Do NOT add
-            rehype-raw without also adding rehype-sanitize — README content
-            is user-supplied and could contain arbitrary HTML. */}
+        {/* rehype-raw enables HTML pass-through (needed for <img> tags in READMEs).
+            rehype-sanitize strips everything except the allowlisted tags/attributes
+            defined in sanitizeSchema above — README content is user-supplied. */}
         {workflow.readme && (
           <TabsContent value="readme" className="mt-4">
             <ScrollArea className="h-[600px]">
               <div className="rounded-xl border border-border bg-card p-6">
                 <article className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-mono prose-code:text-[hsl(var(--primary))] prose-code:bg-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-secondary prose-pre:border prose-pre:border-border">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+                  >
                     {workflow.readme}
                   </ReactMarkdown>
                 </article>

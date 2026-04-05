@@ -10,6 +10,7 @@ Import the package and call functions directly::
 """
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,7 @@ __all__ = [
     # Orchestration
     "scan_workflows",
     "scan_readmes",
+    "ReadmeData",
     # Data scanners
     "scan_prompts",
     "scan_schemas",
@@ -100,7 +102,15 @@ def scan_workflows(project_root: Path) -> dict[str, dict[str, Any]]:
     return workflows
 
 
-def scan_readmes(project_root: Path) -> dict[str, str]:
+@dataclass
+class ReadmeData:
+    """README content paired with its source directory for resolving relative paths."""
+
+    content: str
+    source_dir: Path  # directory containing the README, for resolving relative image paths
+
+
+def scan_readmes(project_root: Path) -> dict[str, ReadmeData]:
     """Scan for README.md files alongside agent_config directories.
 
     Uses last-write-wins on duplicate workflow stems, matching the
@@ -110,7 +120,7 @@ def scan_readmes(project_root: Path) -> dict[str, str]:
 
     READMEs larger than 100 KB are truncated with a trailing notice.
     """
-    readmes: dict[str, str] = {}
+    readmes: dict[str, ReadmeData] = {}
     artefact_dir = project_root / "artefact"
 
     for agent_config_dir in project_root.rglob("agent_config"):
@@ -133,7 +143,12 @@ def scan_readmes(project_root: Path) -> dict[str, str]:
             truncated = truncated.rsplit("\n", 1)[0]
             content = truncated + "\n\n---\n*README truncated (exceeds 100 KB)*\n"
 
+        source_dir = readme_path.parent
+
         for yaml_file in agent_config_dir.glob("*.yml"):
-            readmes[yaml_file.stem] = content
+            readmes[yaml_file.stem] = ReadmeData(
+                content=content,
+                source_dir=source_dir,
+            )
 
     return readmes

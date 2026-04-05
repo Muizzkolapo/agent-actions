@@ -103,8 +103,8 @@ class TestRunSingleAgent:
         wf.event_logger.log_action_skip.assert_called_once_with(0, "agent_a", 2, "")
         wf.services.core.action_executor.execute_action_sync.assert_not_called()
 
-    def test_success_appends_ephemeral(self):
-        """Successful completion should append to ephemeral_directories."""
+    def test_success_returns_false(self):
+        """Successful completion should return False (continue)."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
         wf.services.core.action_executor.execute_action_sync.return_value = _success_result()
@@ -112,8 +112,6 @@ class TestRunSingleAgent:
         should_stop = wf._run_single_action(0, "agent_a", 2)
 
         assert should_stop is False
-        assert len(wf.state.ephemeral_directories) == 1
-        assert wf.state.ephemeral_directories[0]["output_folder"] == "/output"
 
     def test_batch_submitted_stops(self):
         """batch_submitted result should stop the workflow loop."""

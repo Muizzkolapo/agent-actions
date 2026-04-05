@@ -63,7 +63,6 @@ class TestActionConfigForbidsUnknownKeys:
             "constraints": [],
             # Runtime-consumed (from AgentConfig)
             "where_clause": {"clause": "status = 'active'"},
-            "ephemeral": True,
             "anthropic_version": "2023-06-01",
             "enable_prompt_caching": True,
             "max_execution_time": 600,

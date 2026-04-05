@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import traceback
 from pathlib import Path
 from typing import Literal, cast
@@ -57,7 +58,6 @@ class RunCommand:
 
             set_path_manager(PathManager(project_root=project_root))
 
-        click.echo("Setting up project paths...")
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, project_root=project_root
         )
@@ -70,7 +70,6 @@ class RunCommand:
             check_alternatives=True,
             project_root=project_root,
         )
-        click.echo("Rendering and loading configuration...")
         ConfigRenderingService().render_and_load_config(
             self.agent_name,
             full_path,
@@ -78,7 +77,6 @@ class RunCommand:
             paths.rendered_workflows_dir,
             project_root=project_root,
         )
-        click.echo("Initializing agent workflow...")
         workflow = AgentWorkflow(
             WorkflowRuntimeConfig(
                 paths=WorkflowPaths(
@@ -113,22 +111,33 @@ class RunCommand:
             force=True,
         )
 
-        click.echo("Starting workflow execution...")
-
         status = "FAILED"
         error_message = None
+        wall_start = time.monotonic()
 
         try:
             use_parallel = self._determine_execution_mode(workflow)
             self._run_workflow_execution(workflow, use_parallel)
 
+            elapsed = time.monotonic() - wall_start
+
+            # Render execution summary
+            try:
+                from agent_actions.cli.renderers.execution_renderer import (
+                    ExecutionRenderer,
+                    build_execution_snapshot,
+                )
+
+                snapshot = build_execution_snapshot(workflow, elapsed)
+                ExecutionRenderer(workflow.console).render(snapshot)
+            except Exception as render_err:
+                logger.debug("Execution summary render failed: %s", render_err)
+
             state_mgr = workflow.services.core.state_manager
             execution_order = workflow.execution_order
 
             if state_mgr.is_workflow_complete():
-                # All actions completed (possibly with item-level failures)
                 status = "SUCCESS"
-                click.echo(f"Successfully completed agent run for: {self.args.agent}")
 
             elif state_mgr.is_workflow_done():
                 # All actions terminal — check if any actually failed
