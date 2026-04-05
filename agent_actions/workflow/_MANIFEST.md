@@ -45,3 +45,45 @@ This intentionally overrides `on_exhausted="return_last"` when ALL records exhau
 tombstones. When zero records succeed, tombstone-only output is not useful and downstream
 actions would produce garbage. `_check_exhausted_raise` in `ResultCollector` handles
 `on_exhausted="raise"` independently (runs before collection).
+
+## Project Surface
+
+| Symbol | File | Interaction | Config Key |
+|--------|------|-------------|------------|
+| `AgentWorkflow.__init__()` | `agent_config/{workflow}.yml` | Reads | `name`, `actions[]`, `defaults` |
+| `AgentWorkflow.__init__()` | `.env` | Reads | — |
+| `AgentWorkflow.run()` | `agent_io/target/{action}/` | Writes | — |
+| `AgentWorkflow.async_run()` | `agent_io/target/{action}/` | Writes | — |
+| `load_workflow_configs()` | `agent_config/{workflow}.yml` | Reads | `name`, `actions[]`, `defaults` |
+| `discover_workflow_udfs()` | `tools/{workflow}/*.py` | Reads | — |
+| `WorkflowSchemaService.from_action_configs()` | `schema/{workflow}/{action}.yml` | Validates | `actions[].schema` |
+| `WorkflowSchemaService.validate()` | `agent_config/{workflow}.yml` | Validates | `actions[].context_scope`, `actions[].schema` |
+| `WorkspaceIndex.scan_workspace()` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies` |
+| `ActionRunner.run_action()` | `agent_io/staging/` | Reads | — |
+| `ActionRunner.run_action()` | `agent_io/target/{action}/` | Writes | — |
+| `ProcessingPipeline` | `agent_io/target/{action}/` | Writes | `actions[].run_mode` |
+| `WorkflowDependencyOrchestrator` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies` |
+| `ArtifactLinker` | `agent_io/target/{action}/` | Reads | — |
+| `WorkflowEventLogger` | `agent_io/target/{action}/` | Reads | — |
+
+**Internal only**: `WorkflowRuntimeConfig`, `WorkflowPaths`, `WorkflowState`, `WorkflowMetadata`, `RuntimeContext`, `CoreServices`, `SupportServices`, `WorkflowServices`, `ActionLogParams`, `ActionExecutionResult`, `ExecutionMetrics`, `ActionRunParams`, `ExecutorDependencies`, `PipelineConfig`, `StrategyExecutionParams`, `FileProcessParams`, `ActionStrategy`, `InitialStrategy`, `StandardStrategy`, `ActionStateManager`, `ActionStatus`, `SkipEvaluator`, `BatchLifecycleManager`, `VersionOutputCorrelator`, `ActionOutputManager`, `ManifestManager`, `ActionLevelOrchestrator` — no direct project surface.
+
+## Dependencies
+
+| Package | Direction | Why |
+|---------|-----------|-----|
+| `config` | outbound | Loads workflow YAML via ConfigManager and resolves project paths |
+| `input` | outbound | File reading, UDF discovery, data preprocessing, and staging pipelines |
+| `llm` | outbound | LLM provider calls (realtime and batch) for action execution |
+| `logging` | outbound | Fires workflow/action lifecycle events and manages log context |
+| `output` | outbound | Schema loading and file writing for action results |
+| `processing` | outbound | Record-level processing, result collection, and dynamic agent dispatch |
+| `prompt` | outbound | Context scope parsing and field-reference resolution for prompts |
+| `storage` | outbound | SQLite backend for target persistence, dispositions, and state |
+| `tooling` | outbound | Run tracker and documentation generation |
+| `utils` | outbound | Constants, correlation IDs, UDF registry, and safe formatting |
+| `validation` | outbound | Static analysis, preflight resolution, and guard condition checks |
+| `errors` | outbound | Structured error types for configuration, workflow, and validation failures |
+| `models` | outbound | ActionSchema and field-info models for schema service |
+| `cli` | inbound | CLI `run` command creates and executes AgentWorkflow |
+| `config` | inbound | Config factory creates ActionRunner used by workflow services |
