@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import sys
+import traceback
 
 from tests.manual.smoke_test.registry import EXAMPLES
 from tests.manual.smoke_test.runner import cleanup, run_example
@@ -32,15 +33,21 @@ def main() -> int:
         print(f"  {example.name} ({example.actions} actions)")
         print(f"{'=' * 72}")
 
-        ctx = run_example(example)
-
+        ctx = None
         try:
+            ctx = run_example(example)
             results = run_checks(ctx)
             failures = print_results(example.name, results)
             total_pass += sum(1 for r in results if r.passed)
             total_fail += failures
+        except Exception:
+            # Per-example catch so remaining examples still run
+            print(f"  \033[31mERROR\033[0m  {example.name} crashed:")
+            traceback.print_exc()
+            total_fail += 1
         finally:
-            cleanup(ctx)
+            if ctx is not None:
+                cleanup(ctx)
 
     print(f"\n{'=' * 72}")
     print(f"  TOTAL: {total_pass} passed, {total_fail} failed")

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from tests.manual.smoke_test.checks import Check
 
 
 @dataclass
@@ -45,5 +48,4 @@ class Example:
     path: str  # relative to repo root, e.g. "examples/support_resolution"
     workflow: str  # workflow name (matches YAML stem)
     actions: int  # expected action count
-    checks: list[Any] = field(default_factory=list)
-    skip_actions: list[str] = field(default_factory=list)  # actions to skip (e.g. HITL)
+    checks: list[Check] = field(default_factory=list)

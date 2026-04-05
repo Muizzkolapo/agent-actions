@@ -51,16 +51,14 @@ class OutputStructure(Check):
             # Output went to SQLite storage — verify the DB has records
             db_path = db_files[0]
             try:
-                conn = sqlite3.connect(str(db_path))
-                cursor = conn.cursor()
-                # Check which tables have data
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                tables = [row[0] for row in cursor.fetchall()]
-                records = 0
-                for table in tables:
-                    cursor.execute(f"SELECT COUNT(*) FROM [{table}]")  # noqa: S608
-                    records += cursor.fetchone()[0]
-                conn.close()
+                with sqlite3.connect(str(db_path)) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = [row[0] for row in cursor.fetchall()]
+                    records = 0
+                    for table in tables:
+                        cursor.execute(f"SELECT COUNT(*) FROM [{table}]")  # noqa: S608
+                        records += cursor.fetchone()[0]
                 results.append(
                     CheckResult(
                         records > 0,

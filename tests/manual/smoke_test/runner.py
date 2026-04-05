@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -8,6 +9,8 @@ import tempfile
 from pathlib import Path
 
 from tests.manual.smoke_test.context import Example, RunContext
+
+logger = logging.getLogger(__name__)
 
 
 def _find_repo_root() -> Path:
@@ -31,7 +34,7 @@ def _override_vendor(config_path: Path) -> None:
     content = re.sub(r"(api_key:\s*)\S+", r"\1not_required", content)
 
     # Override any kind: hitl to kind: llm (so HITL actions run through AgacClient)
-    content = re.sub(r"(kind:\s*)hitl", r"\1llm", content)
+    content = re.sub(r"(kind:\s*)hitl\b", r"\1llm", content)
 
     # Force online mode so everything runs synchronously in one pass
     content = re.sub(r"(run_mode:\s*)\S+", r"\1online", content)
@@ -49,10 +52,17 @@ def run_example(example: Example) -> RunContext:
     project_dir = tmp / example.name
     shutil.copytree(example_src, project_dir)
 
-    # Find and override the workflow config
+    # Find and override the workflow config — validate at least one was found
     config_dir = project_dir / "agent_workflow" / example.workflow / "agent_config"
+    configs_overridden = 0
     for yml in config_dir.glob("*.yml"):
         _override_vendor(yml)
+        configs_overridden += 1
+
+    if configs_overridden == 0:
+        shutil.rmtree(tmp, ignore_errors=True)
+        msg = f"No .yml config files found in {config_dir} — would run against real LLM APIs"
+        raise FileNotFoundError(msg)
 
     # Run agac CLI
     result = subprocess.run(
