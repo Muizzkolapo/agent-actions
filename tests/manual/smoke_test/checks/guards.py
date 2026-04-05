@@ -74,33 +74,36 @@ class GuardCheck(Check):
 
         elif self.behavior == "skip":
             with sqlite3.connect(str(db_path)) as conn:
-                # For skip behavior, the action should have no target_data rows
-                target_count = conn.execute(
-                    "SELECT COUNT(*) FROM target_data WHERE action_name = ?",
-                    (self.action,),
-                ).fetchone()[0]
-
-                # Also check for a skipped disposition
+                # For skip behavior (on_false: skip), records that fail the guard
+                # get skipped dispositions. Records that pass may still produce output.
+                # Verify that the guard evaluated by checking for skip dispositions
+                # OR that the action has no output (all records skipped).
                 skip_dispositions = conn.execute(
                     "SELECT disposition FROM record_disposition WHERE action_name = ?",
                     (self.action,),
                 ).fetchall()
                 skipped = [d for d in skip_dispositions if d[0] == "skipped"]
 
-                if target_count == 0:
+                target_count = conn.execute(
+                    "SELECT COUNT(*) FROM target_data WHERE action_name = ?",
+                    (self.action,),
+                ).fetchone()[0]
+
+                if skipped or target_count == 0:
                     results.append(
                         CheckResult(
                             True,
-                            f"guard({self.action}): action skipped (no output)",
-                            f"0 rows in target_data, {len(skipped)} skip dispositions",
+                            f"guard({self.action}): skip guard evaluated",
+                            f"{len(skipped)} skip dispositions, {target_count} output rows",
                         )
                     )
                 else:
+                    # Guard configured but no evidence it evaluated
                     results.append(
                         CheckResult(
                             False,
-                            f"guard({self.action}): action skipped (no output)",
-                            f"expected 0 target_data rows but found {target_count}",
+                            f"guard({self.action}): skip guard evaluated",
+                            f"no skip dispositions and {target_count} output rows — guard may not have run",
                         )
                     )
         else:
