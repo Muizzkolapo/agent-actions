@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tests.manual.smoke_test.checks.guards import GuardCheck
 from tests.manual.smoke_test.checks.output_structure import OutputStructure
+from tests.manual.smoke_test.checks.parallel import ParallelVersions
 from tests.manual.smoke_test.checks.pipeline import PipelineCompleted
 from tests.manual.smoke_test.checks.reprompt import RepromptCheck
 from tests.manual.smoke_test.checks.schema_conformance import SchemaConformance
@@ -44,6 +45,47 @@ EXAMPLES: list[Example] = [
             GuardCheck(action="optimize_seo", behavior="skip"),
             RepromptCheck(action="generate_description"),
             RepromptCheck(action="write_marketing_copy"),
+        ],
+    ),
+    Example(
+        name="review_analyzer",
+        path="examples/review_analyzer",
+        workflow="review_analyzer",
+        actions=6,
+        checks=[
+            PipelineCompleted(),
+            OutputStructure(),
+            SchemaConformance(),
+            ParallelVersions(action="score_quality", versions=3),
+            GuardCheck(action="generate_response", behavior="filter"),
+            GuardCheck(action="extract_product_insights", behavior="filter"),
+            RepromptCheck(action="score_quality"),
+        ],
+    ),
+    Example(
+        name="contract_reviewer",
+        path="examples/contract_reviewer",
+        workflow="contract_reviewer",
+        actions=4,
+        checks=[
+            PipelineCompleted(),
+            OutputStructure(),
+            SchemaConformance(),
+            RepromptCheck(action="analyze_clause"),
+        ],
+    ),
+    Example(
+        name="book_catalog_enrichment",
+        path="examples/book_catalog_enrichment",
+        workflow="book_catalog_enrichment",
+        actions=14,
+        checks=[
+            PipelineCompleted(),
+            OutputStructure(),
+            SchemaConformance(),
+            GuardCheck(action="select_for_users", behavior="filter"),
+            RepromptCheck(action="classify_genre"),
+            RepromptCheck(action="write_description"),
         ],
     ),
 ]

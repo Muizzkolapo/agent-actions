@@ -24,6 +24,60 @@ def _find_repo_root() -> Path:
     raise RuntimeError(msg)
 
 
+def _strip_hitl_actions(content: str) -> str:
+    """Remove HITL actions and clean up dangling dependency references.
+
+    HITL actions start a web server and block waiting for human input — they
+    cannot be faked in a smoke test. Removing them and cleaning dependency
+    lists lets the rest of the pipeline run. Downstream actions that ONLY
+    depend on HITL actions become root actions (no dependencies).
+    """
+    import yaml
+
+    data = yaml.safe_load(content)
+    if not data or "actions" not in data or not isinstance(data["actions"], list):
+        return content
+
+    hitl_names = {
+        a["name"] for a in data["actions"] if isinstance(a, dict) and a.get("kind") == "hitl"
+    }
+    if not hitl_names:
+        return content
+
+    # Remove HITL actions and clean all references to them
+    filtered = []
+    for action in data["actions"]:
+        if not isinstance(action, dict):
+            continue
+        if action.get("kind") == "hitl":
+            continue
+        # Remove HITL actions from dependency lists
+        deps = action.get("dependencies", [])
+        if deps:
+            action["dependencies"] = [d for d in deps if d not in hitl_names]
+            if not action["dependencies"]:
+                del action["dependencies"]
+        # Remove HITL references from context_scope (observe/passthrough/drop)
+        scope = action.get("context_scope", {})
+        if isinstance(scope, dict):
+            for key in ("observe", "passthrough", "drop"):
+                refs = scope.get(key, [])
+                if isinstance(refs, list):
+                    scope[key] = [
+                        r
+                        for r in refs
+                        if not any(r.startswith(f"{h}.") or r == h for h in hitl_names)
+                    ]
+                    if not scope[key]:
+                        del scope[key]
+            if not scope:
+                del action["context_scope"]
+        filtered.append(action)
+
+    data["actions"] = filtered
+    return yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+
 def _override_vendor(config_path: Path) -> None:
     """Replace LLM vendor/model/key in the workflow config with agac-provider."""
     content = config_path.read_text()
@@ -33,8 +87,10 @@ def _override_vendor(config_path: Path) -> None:
     content = re.sub(r"(model_name:\s*)\S+", r"\1agac-model", content)
     content = re.sub(r"(api_key:\s*)\S+", r"\1not_required", content)
 
-    # Override any kind: hitl to kind: llm (so HITL actions run through AgacClient)
-    content = re.sub(r"(kind:\s*)hitl\b", r"\1llm", content)
+    # Remove HITL actions — they start a web server and hang waiting for input.
+    # Also remove them from other actions' dependency lists so the pipeline
+    # doesn't fail on dangling references.
+    content = _strip_hitl_actions(content)
 
     # Force online mode so everything runs synchronously in one pass
     content = re.sub(r"(run_mode:\s*)\S+", r"\1online", content)
