@@ -381,6 +381,10 @@ class FakeDataGenerator:
                         merged.update(result)
             return merged if merged else cls._generate_string(attempt, field_name=field_name)
 
+        # Handle unified schema format (fields list)
+        if "fields" in schema and isinstance(schema["fields"], list):
+            return cls._generate_from_fields(schema, attempt)
+
         # Get the type
         schema_type = schema.get("type")
 
@@ -711,6 +715,106 @@ class FakeDataGenerator:
                 result[req_field] = cls._generate_string(attempt, field_name=req_field)
 
         return result
+
+    @classmethod
+    def _generate_from_fields(cls, schema: dict[str, Any], attempt: int) -> dict[str, Any]:
+        """Generate data from a unified schema with a 'fields' list.
+
+        Unified schemas use the format:
+            {
+                "name": "...",
+                "fields": [
+                    {"id": "title", "type": "string", ...},
+                    {"id": "items", "type": "array", "items": {...}, ...},
+                    {"id": "meta", "type": "object", "properties": {...}, ...},
+                ],
+                "required": ["title", "items"],
+            }
+
+        Each field's ``id`` becomes the key in the output dict. The field's
+        ``type`` drives value generation. Object fields may carry
+        ``properties``; array fields may carry ``items``.
+
+        Args:
+            schema: Unified schema dict containing a ``fields`` list.
+            attempt: Attempt number controlling value quality/length.
+
+        Returns:
+            Dict mapping field ids to generated values.
+        """
+        result: dict[str, Any] = {}
+
+        for field in schema["fields"]:
+            if not isinstance(field, dict):
+                continue
+            field_id = field.get("id")
+            if not field_id:
+                continue
+
+            field_type = field.get("type", "string")
+            result[field_id] = cls._generate_field_value(field, field_type, attempt)
+
+        # Ensure required fields are present even if not in the fields list
+        for req_field in schema.get("required", []):
+            if req_field not in result:
+                result[req_field] = cls._generate_string(attempt, field_name=req_field)
+
+        return result
+
+    @classmethod
+    def _generate_field_value(cls, field: dict[str, Any], field_type: str, attempt: int) -> Any:
+        """Generate a value for a single unified-format field.
+
+        Converts the field definition into a JSON Schema-compatible dict
+        and delegates to the existing type-aware generators.
+
+        Args:
+            field: Unified field dict (has ``id``, ``type``, optionally
+                   ``items``, ``properties``, ``enum``, etc.).
+            field_type: The field's declared type.
+            attempt: Attempt number for quality variation.
+
+        Returns:
+            Generated value appropriate for the field type.
+        """
+        field_id = field.get("id", "")
+
+        # Handle enum values regardless of declared type
+        if "enum" in field and field["enum"]:
+            rng = cls._get_rng()
+            idx = (attempt - 1 + rng.randint(0, 100)) % len(field["enum"])
+            return field["enum"][idx]
+
+        if field_type == "string":
+            return cls._generate_string(attempt, field_name=field_id)
+        elif field_type == "number":
+            return cls._generate_number(attempt, field_name=field_id)
+        elif field_type == "integer":
+            return cls._generate_integer(attempt, field_name=field_id)
+        elif field_type == "boolean":
+            return cls._generate_boolean(attempt, field_name=field_id)
+        elif field_type == "array":
+            # Build a JSON Schema-style array schema from the field
+            array_schema: dict[str, Any] = {"type": "array"}
+            if "items" in field:
+                array_schema["items"] = field["items"]
+            else:
+                array_schema["items"] = {"type": "string"}
+            for key in ("minItems", "maxItems"):
+                if key in field:
+                    array_schema[key] = field[key]
+            return cls._generate_array(array_schema, attempt, field_id)
+        elif field_type == "object":
+            # Build a JSON Schema-style object schema from the field
+            obj_schema: dict[str, Any] = {"type": "object"}
+            if "properties" in field:
+                obj_schema["properties"] = field["properties"]
+            if "required" in field:
+                obj_schema["required"] = field["required"]
+            return cls._generate_object(obj_schema, attempt)
+        else:
+            # Unknown type — fall back to string generation
+            return cls._generate_string(attempt, field_name=field_id)
 
     @staticmethod
     def extract_schema_from_openai_request(body: dict[str, Any]) -> dict[str, Any] | None:
