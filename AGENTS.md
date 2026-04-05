@@ -6,24 +6,73 @@ These rules define how an AI coding agent should plan, execute, verify, communic
 
 ## Project Structure
 
-This project uses the **Agent Manifest Protocol (AMP)** for navigation.
+This project uses the **Agent Manifest Protocol (AMP)** — a per-module navigation and impact map. Every module has a `_MANIFEST.md`.
+
 **[> Open Codebase Map (agent_actions/_MANIFEST.md)](agent_actions/_MANIFEST.md)**
 
 ### Navigation Strategy
+
 1. **Start Here:** Use this file for high-level context.
-2. **Explore:** Follow the `_MANIFEST.md` link above to traverse the codebase structure.
-3. **Inspect:** Read individual `_MANIFEST.md` files in subdirectories to find specific symbols and dependencies.
-4. **Read Code:** Only read source files when you have pinpointed the exact location.
+2. **Find the module:** Follow the root `_MANIFEST.md` link above to find the module you need.
+3. **Read the manifest:** Each module's `_MANIFEST.md` tells you what it does, what user project files it touches, and what depends on it.
+4. **Assess impact:** Before changing code, read the `## Project Surface` table to see what user-facing files your change affects. Read `## Dependencies` to see what other modules will be impacted.
+5. **Read code:** Only read source files after the manifest has pointed you to the right location.
+
+### Manifest Structure
+
+Every `_MANIFEST.md` has these sections in this order:
+
+| Section | Purpose | Parseable |
+|---------|---------|-----------|
+| `# {Module Name}` | Module name and one-line description | Yes |
+| `## Sub-Modules` | Links to nested package manifests (optional) | Yes |
+| `## Modules` | Table of source files, types, exports, signals | Yes |
+| `## Project Surface` | What user project files this module reads/writes/validates | Yes |
+| `## Dependencies` | What depends on this module and what it depends on | Yes |
+| `## Notes` | Design decisions, gotchas, diagrams (optional) | No |
+
+The parseable sections use standardized table headers so tooling can extract JSON from markdown. See `bin/manifest-to-json.py`.
+
+### Project Surface — Impact Assessment
+
+The `## Project Surface` table maps framework symbols to user project files:
+
+```
+| Symbol | File | Interaction | Config Key |
+|--------|------|-------------|------------|
+```
+
+These are the **stable paths** that exist in every user's project:
+
+| Path | What it is |
+|------|-----------|
+| `agent_actions.yml` | Project config |
+| `agent_config/{workflow}.yml` | Workflow definition |
+| `prompt_store/{workflow}.md` | Prompt templates |
+| `schema/{workflow}/{action}.yml` | Output schemas |
+| `tools/{workflow}/*.py` | UDF tool scripts |
+| `seed_data/*.json` | Reference data |
+| `agent_io/staging/` | Input data |
+| `agent_io/target/{action}/` | Output data per action |
+| `.env` | Environment variables |
+
+Use this to answer: "I'm changing this code — what user files does it affect?" Or in reverse: "Something broke in my config — what framework code touches it?"
+
+### Manifest Maintenance
+
+When making code changes:
+- **Add/remove a module**: Update the `## Modules` table.
+- **Change what a symbol reads/writes**: Update the `## Project Surface` table.
+- **Add/remove a module dependency**: Update the `## Dependencies` table.
+- **New sub-package**: Create a `_MANIFEST.md` in it and link from the parent's `## Sub-Modules`.
 
 ### Development
+
 - **Install:** `uv sync`
 - **Activate:** `source .venv/bin/activate`
 - **Test:** `pytest`
 - **Lint:** `ruff check .`
 - **Format:** `ruff format .`
-
-### Manifest Maintenance
-Always update `_MANIFEST.md` files when making code changes that add, remove, or modify modules, classes, or functions.
 
 ---
 
