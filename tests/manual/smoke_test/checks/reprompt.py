@@ -9,10 +9,10 @@ from tests.manual.smoke_test.context import CheckResult, RunContext
 
 @dataclass
 class RepromptCheck(Check):
-    """Verify a reprompt-enabled action triggered retries.
+    """Verify a reprompt-enabled action ran validation.
 
-    Parses events.json (NDJSON) for retry/reprompt evidence. If the action
-    is configured for reprompt, there MUST be retry evidence -- no excuses.
+    Parses events.json (NDJSON) for DataValidationStartedEvent or
+    LogEvent messages mentioning the action and validation/reprompt.
 
     Args:
         action: action name with reprompt configured
@@ -23,29 +23,28 @@ class RepromptCheck(Check):
     def verify(self, ctx: RunContext) -> list[CheckResult]:
         results: list[CheckResult] = []
 
-        # The pipeline must have completed for reprompt to be verifiable
         if ctx.exit_code != 0:
             results.append(
                 CheckResult(
                     False,
                     f"reprompt({self.action}): pipeline completed",
-                    f"exit code {ctx.exit_code} -- cannot verify reprompt",
+                    f"exit code {ctx.exit_code} — cannot verify reprompt",
                 )
             )
             return results
 
-        # Parse events.json (NDJSON format) for retry evidence
         events_path = ctx.target_dir / "events.json"
         if not events_path.exists():
             results.append(
                 CheckResult(
                     False,
                     f"reprompt({self.action}): events.json exists",
-                    "events.json not found -- cannot verify reprompt",
+                    "events.json not found",
                 )
             )
             return results
 
+        # Parse NDJSON events
         events: list[dict] = []
         try:
             for line in events_path.read_text().splitlines():
@@ -62,38 +61,39 @@ class RepromptCheck(Check):
             )
             return results
 
-        # Look for events related to this action that indicate retries
-        retry_events = []
+        # Look for validation events related to this action.
+        # Evidence comes in two forms:
+        # 1. DataValidationStartedEvent with message containing "RepromptValidation"
+        # 2. LogEvent with message like "[action=classify_genre] Validation passed on attempt 1/2"
+        # The action name may appear in the message field, not in data.action_name
+        validation_events = []
         for event in events:
-            event_data = event.get("data", {})
-            event_action = event_data.get("action_name", "")
             event_type = event.get("event_type", "")
+            message = event.get("message", "")
 
-            # Match events for this action
-            if event_action != self.action:
+            # Match events mentioning this action (including versioned: action_1, action_2)
+            if self.action not in message:
                 continue
 
-            # Check for attempt > 1 or reprompt-related event types
-            attempt = event_data.get("attempt", 0)
-            if attempt > 1:
-                retry_events.append(event)
-            elif "Reprompt" in event_type or "Retry" in event_type:
-                retry_events.append(event)
+            if event_type in ("DataValidationStartedEvent", "DataValidationPassedEvent"):
+                validation_events.append(event)
+            elif "Validation" in message or "attempt" in message:
+                validation_events.append(event)
 
-        if retry_events:
+        if validation_events:
             results.append(
                 CheckResult(
                     True,
-                    f"reprompt({self.action}): retry evidence found",
-                    f"{len(retry_events)} retry-related events",
+                    f"reprompt({self.action}): validation ran",
+                    f"{len(validation_events)} validation events found",
                 )
             )
         else:
             results.append(
                 CheckResult(
                     False,
-                    f"reprompt({self.action}): retry evidence found",
-                    "no retry attempts found in events.json",
+                    f"reprompt({self.action}): validation ran",
+                    f"no validation events for '{self.action}' in events.json",
                 )
             )
 

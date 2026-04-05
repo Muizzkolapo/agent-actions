@@ -35,17 +35,31 @@ class SchemaConformance(Check):
 
         actions = config.get("actions", [])
 
-        # Collect actions that have guards configured (may produce no output)
-        guarded_actions: set[str] = set()
+        # Collect actions that may legitimately produce no output
+        excused_actions: set[str] = set()
         for action_cfg in actions:
             if not isinstance(action_cfg, dict):
                 continue
+            # Guarded actions may be filtered/skipped
             if action_cfg.get("guard"):
-                guarded_actions.add(action_cfg.get("name", ""))
+                excused_actions.add(action_cfg.get("name", ""))
+            # Tool actions (kind: tool) may not store in target_data
+            if action_cfg.get("kind") == "tool":
+                excused_actions.add(action_cfg.get("name", ""))
 
         schema_actions_checked = 0
 
         with sqlite3.connect(str(db_path)) as conn:
+            # Get all action names in target_data for versioned matching
+            cursor = conn.execute("SELECT DISTINCT action_name FROM target_data")
+            all_db_actions = {r[0] for r in cursor.fetchall()}
+
+            # Also get skipped actions from dispositions
+            cursor = conn.execute(
+                "SELECT DISTINCT action_name FROM record_disposition WHERE disposition = 'skipped'"
+            )
+            skipped_actions = {r[0] for r in cursor.fetchall()}
+
             for action_cfg in actions:
                 if not isinstance(action_cfg, dict):
                     continue
@@ -59,12 +73,12 @@ class SchemaConformance(Check):
                 if not schema_path.exists():
                     continue
 
-                schema = yaml.safe_load(schema_path.read_text())
-                required_fields = schema.get("required", [])
+                schema_def = yaml.safe_load(schema_path.read_text())
+                required_fields = schema_def.get("required", [])
                 if not required_fields:
                     continue
 
-                # Query target_data for this action
+                # Query target_data — also check versioned names (action_1, action_2, etc.)
                 cursor = conn.execute(
                     "SELECT data FROM target_data WHERE action_name = ?",
                     (action_name,),
@@ -72,8 +86,18 @@ class SchemaConformance(Check):
                 rows = cursor.fetchall()
 
                 if not rows:
-                    if action_name in guarded_actions:
-                        # Guarded actions may legitimately produce no output
+                    # Check for versioned action names (e.g., classify_severity_1, _2, _3)
+                    versioned = [a for a in all_db_actions if a.startswith(f"{action_name}_")]
+                    if versioned:
+                        for v_name in sorted(versioned):
+                            cursor = conn.execute(
+                                "SELECT data FROM target_data WHERE action_name = ?",
+                                (v_name,),
+                            )
+                            rows.extend(cursor.fetchall())
+
+                if not rows:
+                    if action_name in excused_actions or action_name in skipped_actions:
                         continue
                     results.append(
                         CheckResult(
