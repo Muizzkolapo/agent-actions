@@ -15,6 +15,8 @@ export interface Stats {
   total_runs: number
   validation_errors: number
   validation_warnings: number
+  runtime_errors: number
+  runtime_warnings: number
 }
 
 export interface WorkflowDefaults {
@@ -45,6 +47,13 @@ export interface ActionMetrics {
   tokens: { prompt_tokens?: number; completion_tokens?: number }
   success_count: number
   failed_count: number
+  filtered_count: number
+  skipped_count: number
+  exhausted_count: number
+  latency_ms: number
+  provider: string | null
+  model: string | null
+  cache_miss_count: number
 }
 
 export interface OutputField {

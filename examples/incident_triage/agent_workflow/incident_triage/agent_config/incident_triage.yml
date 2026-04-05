@@ -19,15 +19,20 @@ version: "1.0.0"
 defaults:
   json_mode: true
   granularity: Record
+  is_operational: true
   run_mode: online
   model_vendor: openai
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
+  record_limit: 2      # Remove for full processing
   context_scope:
     seed_path:
       team_roster: $file:team_roster.json
       service_catalog: $file:service_catalog.json
       runbook_catalog: $file:runbook_catalog.json
+  retry:
+    enabled: true
+    max_attempts: 2
 
 
 actions:
@@ -38,6 +43,13 @@ actions:
     intent: "Extract structured information from raw incident report"
     schema: extract_incident_details
     prompt: $incident_triage.Extract_Incident_Details
+    model_vendor: groq
+    model_name: llama-3.1-8b-instant
+    api_key: GROQ_API_KEY
+    reprompt:
+      validation: check_required_fields
+      max_attempts: 2
+      on_exhausted: return_last
     context_scope:
       observe:
         - source.incident_report
@@ -55,6 +67,12 @@ actions:
       mode: parallel
     schema: classify_severity
     prompt: $incident_triage.Classify_Severity
+    model_vendor: ollama                          # Classification from fixed categories — parallel voting compensates
+    model_name: llama3.2:latest
+    reprompt:
+      validation: check_required_fields
+      max_attempts: 2
+      on_exhausted: return_last
     context_scope:
       observe:
         - extract_incident_details.*
@@ -67,13 +85,16 @@ actions:
     dependencies: [classify_severity]
     kind: tool
     impl: aggregate_severity_votes
+    schema: aggregate_severity
     intent: "Aggregate severity classifications using weighted consensus"
     version_consumption:
       source: classify_severity
       pattern: merge
     context_scope:
       observe:
-        - classify_severity.*
+        - classify_severity_1.*
+        - classify_severity_2.*
+        - classify_severity_3.*
       passthrough:
         - extract_incident_details.*
 
@@ -107,11 +128,14 @@ actions:
     dependencies: [assess_customer_impact, assess_system_impact]
     kind: tool
     impl: assign_team_based_on_impact
+    schema: assign_response_team
     intent: "Dynamically assign response team based on affected systems and severity"
     context_scope:
       observe:
         - aggregate_severity.final_severity
         - assess_system_impact.affected_services
+        - seed.team_roster
+        - seed.service_catalog
       passthrough:
         - aggregate_severity.*
         - assess_customer_impact.*
@@ -129,6 +153,7 @@ actions:
       observe:
         - assign_response_team.*
         - extract_incident_details.*
+        - assess_customer_impact.customer_impact_level
 
   # ==========================================================================
   # STAGE 7: EXECUTIVE NOTIFICATION (SEV1/SEV2 only)
@@ -137,7 +162,7 @@ actions:
     dependencies: [generate_response_plan]
     intent: "Generate executive summary for high-severity incidents"
     guard:
-      condition: 'final_severity == "SEV1" or final_severity == "SEV2"'
+      condition: 'aggregate_severity.final_severity == "SEV1" or aggregate_severity.final_severity == "SEV2"'
       on_false: "filter"
     schema: generate_executive_summary
     prompt: $incident_triage.Generate_Executive_Summary
@@ -151,9 +176,10 @@ actions:
   # STAGE 8: FORMAT FINAL TRIAGE OUTPUT
   # ==========================================================================
   - name: format_triage_output
-    dependencies: [generate_response_plan]
+    dependencies: [generate_response_plan, generate_executive_summary]
     kind: tool
     impl: format_incident_triage
+    schema: format_triage_output
     intent: "Format complete triage output with all assessments"
     context_scope:
       observe:
@@ -164,3 +190,4 @@ actions:
         - assign_response_team.*
         - generate_response_plan.*
         - generate_executive_summary.*
+        - source.timestamp

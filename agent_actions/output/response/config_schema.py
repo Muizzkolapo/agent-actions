@@ -198,7 +198,6 @@ class AgentConfig(BaseModel):
     observe: list[str] = Field(default_factory=list)
     drops: list[str] = Field(default_factory=list)
     is_operational: bool = True
-    ephemeral: bool | None = None
     add_dispatch: bool | None = None
     run_mode: RunMode = RunMode.ONLINE
     json_mode: bool = Field(default=True, description="Enable JSON mode for structured output")

@@ -14,20 +14,17 @@ The screenshot below shows the documentation site homepage. You can explore your
 ## Quick Start
 
 ```bash
-# Generate documentation data
-agac docs generate
-
-# Serve the documentation site
-agac docs serve
+# Build and serve the documentation site
+agac docs
 
 # Open http://localhost:8000
 ```
 
 ## CLI Commands
 
-### `agac docs generate`
+### `agac docs`
 
-Scans your project and generates documentation data. Think of this as taking a snapshot of your entire project—every agentic workflow, prompt, and schema gets cataloged.
+Scans your project, generates documentation data, and serves an interactive documentation site. Think of this as taking a snapshot of your entire project—every agentic workflow, prompt, and schema gets cataloged—then immediately launching a browsable interface.
 
 **What it scans:**
 - Agentic workflows in `artefact/rendered_workflows/` and `*/agent_config/`
@@ -39,17 +36,9 @@ Scans your project and generates documentation data. Think of this as taking a s
 - `artefact/runs.json` — Execution history
 
 ```bash
-agac docs generate
-agac docs generate --output ./custom-artefact
-```
-
-### `agac docs serve`
-
-Starts HTTP server to view the documentation site.
-
-```bash
-agac docs serve
-agac docs serve --port 3000
+agac docs
+agac docs --port 3000
+agac docs --output ./custom-artefact
 ```
 
 ### `agac docs test`
@@ -105,9 +94,9 @@ Find resources quickly with full-text search across agentic workflows, actions, 
 
 ## Deployment
 
-The documentation site is a static HTML/CSS/JS application. After running `agac docs generate`, you can deploy it anywhere static files are served:
+The documentation site is a static HTML/CSS/JS application. After running `agac docs`, you can deploy it anywhere static files are served:
 
-- **Local development** — `agac docs serve`
+- **Local development** — `agac docs`
 - **Static hosting** — Copy the docs site to any web server (S3, Netlify, etc.)
 - **CI/CD** — Generate docs as part of your pipeline
 

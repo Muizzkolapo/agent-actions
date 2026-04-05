@@ -20,7 +20,7 @@ import type { ValidationGroup } from "@/lib/mock-data"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type LogTab = "errors" | "warnings"
+type LogTab = "errors" | "warnings" | "runtime"
 type SortDir = "asc" | "desc"
 
 interface SortState<K extends string> {
@@ -211,7 +211,7 @@ const warningsChartConfig = {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function LogsScreen() {
-  const { validationErrorGroups, validationWarningGroups, stats } = useCatalogData()
+  const { validationErrorGroups, validationWarningGroups, runtimeErrorGroups, runtimeWarningGroups, stats } = useCatalogData()
   const [activeTab, setActiveTab] = useState<LogTab>("errors")
   const [focusedTarget, setFocusedTarget] = useState<string | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<ValidationGroup | null>(null)
@@ -227,9 +227,16 @@ export function LogsScreen() {
   const errorSparkData = useMemo(() => buildSparkData(validationErrorGroups.flatMap((g) => g.timestamps)), [validationErrorGroups])
   const warningSparkData = useMemo(() => buildSparkData(validationWarningGroups.flatMap((g) => g.timestamps)), [validationWarningGroups])
 
+  const runtimeAllGroups = useMemo(
+    () => [...runtimeErrorGroups, ...runtimeWarningGroups].sort((a, b) => b.count - a.count),
+    [runtimeErrorGroups, runtimeWarningGroups],
+  )
+  const runtimeCount = runtimeErrorGroups.reduce((s, g) => s + g.count, 0) + runtimeWarningGroups.reduce((s, g) => s + g.count, 0)
+
   const tabs: { id: LogTab; label: string; count: number; icon: React.ReactNode; color: string }[] = [
     { id: "errors", label: "Errors", count: stats.validation_errors, icon: <AlertCircle className="h-3 w-3" />, color: "hsl(var(--destructive))" },
     { id: "warnings", label: "Warnings", count: stats.validation_warnings, icon: <AlertTriangle className="h-3 w-3" />, color: "hsl(var(--warning))" },
+    { id: "runtime", label: "Runtime", count: runtimeCount, icon: <Flame className="h-3 w-3" />, color: "hsl(var(--warning))" },
   ]
 
   // Stable reference for clearing focus (avoids re-triggering useEffect)
@@ -242,9 +249,15 @@ export function LogsScreen() {
     setSelectedGroup(null)
   }, [])
 
+  const activeGroups = useMemo(() => {
+    if (activeTab === "errors") return validationErrorGroups
+    if (activeTab === "warnings") return validationWarningGroups
+    return runtimeAllGroups
+  }, [activeTab, validationErrorGroups, validationWarningGroups, runtimeAllGroups])
+
   const totalForActiveTab = useMemo(
-    () => (activeTab === "errors" ? validationErrorGroups : validationWarningGroups).reduce((s, g) => s + g.count, 0),
-    [activeTab, validationErrorGroups, validationWarningGroups],
+    () => activeGroups.reduce((s, g) => s + g.count, 0),
+    [activeGroups],
   )
 
   // L3: SourceDetail view replaces the entire dashboard
@@ -407,6 +420,18 @@ export function LogsScreen() {
             seriesKey="warnings"
             chartConfig={warningsChartConfig}
             emptyLabel="No warnings"
+            focusedTarget={focusedTarget}
+            onClearFocus={clearFocus}
+            onViewDetail={setSelectedGroup}
+          />
+        )}
+        {activeTab === "runtime" && (
+          <ValidationBreakdown
+            groups={runtimeAllGroups}
+            colorVar="--warning"
+            seriesKey="warnings"
+            chartConfig={warningsChartConfig}
+            emptyLabel="No runtime warnings or errors"
             focusedTarget={focusedTarget}
             onClearFocus={clearFocus}
             onViewDetail={setSelectedGroup}

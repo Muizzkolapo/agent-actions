@@ -2,7 +2,7 @@
 
 import React from "react"
 import { useState } from "react"
-import { Search, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, Pause } from "lucide-react"
+import { Search, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, Pause, ChevronDown, Clock, Zap, Hash } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useCatalogData } from "@/lib/catalog-context"
@@ -200,151 +200,198 @@ export function RunsScreen() {
 
 function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
   const actionEntries = Object.entries(run.actions)
+  const [jsonOpen, setJsonOpen] = useState(false)
+  const statusColor = `hsl(var(${statusColorVar[run.status] || "--muted-foreground"}))`
+
+  // Compute Gantt data for inline timeline bars
+  const runStart = new Date(run.started).getTime()
+  const ganttBars = actionEntries.map(([name, a]) => {
+    let startSec: number | null = null
+    let endSec: number | null = null
+    if (a.started) startSec = (new Date(a.started).getTime() - runStart) / 1000
+    if (a.ended) endSec = (new Date(a.ended).getTime() - runStart) / 1000
+    if (startSec != null && endSec == null && a.dur > 0) endSec = startSec + a.dur
+    if (endSec != null && startSec == null && a.dur > 0) startSec = endSec - a.dur
+    return { name, startSec, endSec }
+  })
+  const barsWithTiming = ganttBars.filter((b) => b.startSec != null && b.endSec != null && !isNaN(b.startSec!) && !isNaN(b.endSec!))
+  const showGantt = barsWithTiming.length >= 2
+  const ganttMax = showGantt ? Math.max(...barsWithTiming.map((b) => b.endSec!), run.duration, 0.001) : 0
+  const ganttMap = new Map(ganttBars.map((b) => [b.name, b]))
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
+    <div className="flex flex-col gap-5">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-start gap-4">
         <button
           onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors mt-0.5"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-mono font-semibold text-foreground">{run.id}</h1>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-lg font-mono font-semibold text-foreground truncate">{run.id}</h1>
             <RunStatusBadge status={run.status} />
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {run.wf} &middot; {formatDuration(run.duration)} &middot; {run.success}/{run.total} actions
-            {run.failed > 0 && <> &middot; <span className="text-[hsl(var(--destructive))]">{run.failed} failed</span></>}
-            {run.skipped > 0 && <> &middot; {run.skipped} skipped</>}
-          </p>
+          <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground flex-wrap">
+            <span className="font-mono">{run.wf}</span>
+            <span className="opacity-30">/</span>
+            <span className="tabular-nums">{formatTimestamp(run.started)}</span>
+            {run.ended && (
+              <>
+                <span className="opacity-30">&rarr;</span>
+                <span className="tabular-nums">{formatTimestamp(run.ended)}</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Run info */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <InfoCard label="Workflow" value={run.wf} />
-        <InfoCard label="Started" value={formatTimestamp(run.started)} />
-        {run.ended && <InfoCard label="Ended" value={formatTimestamp(run.ended)} />}
-        <InfoCard label="Duration" value={formatDuration(run.duration)} />
-        <InfoCard label="Tokens" value={run.tokens.toLocaleString()} />
-        <InfoCard label="Succeeded" value={`${run.success} / ${run.total}`} />
-        {run.failed > 0 && <InfoCard label="Failed" value={String(run.failed)} />}
-        {run.skipped > 0 && <InfoCard label="Skipped" value={String(run.skipped)} />}
-      </div>
-
-      {/* Error */}
+      {/* ── Error (if failed — immediately visible) ────────────────────── */}
       {run.error && <ErrorBlock error={run.error} />}
 
-      {/* Action execution timeline */}
-      {actionEntries.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-sm font-medium text-foreground mb-4">Action Execution</h3>
-          <div className="flex flex-col gap-0">
+      {/* ── Stats strip ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-px rounded-xl overflow-hidden border border-border bg-border">
+        <StatCell icon={<Clock className="h-3.5 w-3.5" />} label="Duration" value={formatDuration(run.duration)} />
+        <StatCell icon={<Hash className="h-3.5 w-3.5" />} label="Actions" value={`${run.success + run.failed + run.skipped} / ${run.total}`} accent={run.failed > 0 ? "destructive" : undefined} />
+        <StatCell icon={<Zap className="h-3.5 w-3.5" />} label="Tokens" value={run.tokens > 0 ? run.tokens.toLocaleString() : "—"} />
+        <StatCell
+          icon={
+            run.status === "FAILED"
+              ? <XCircle className="h-3.5 w-3.5" />
+              : <CheckCircle2 className="h-3.5 w-3.5" />
+          }
+          label="Result"
+          value={run.failed > 0 ? `${run.failed} failed` : run.success > 0 ? `${run.success} passed` : run.status.toLowerCase()}
+          accent={run.failed > 0 ? "destructive" : run.success > 0 ? "success" : undefined}
+        />
+      </div>
+
+      {/* ── Action Execution (with inline Gantt when 2+ actions) ────── */}
+      {actionEntries.length > 0 ? (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+            <h3 className="text-sm font-medium text-foreground">Actions</h3>
+            {showGantt && (
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                0s — {formatDuration(ganttMax)}
+              </span>
+            )}
+          </div>
+          <div className="divide-y divide-border">
             {actionEntries.map(([name, a], i) => {
-              const color =
-                a.status === "success" ? "hsl(var(--success))"
-                : a.status === "running" ? "hsl(var(--primary))"
-                : a.status === "failed" ? "hsl(var(--destructive))"
-                : "hsl(var(--muted-foreground))"
+              const color = actionStatusColor(a.status)
+              const gantt = ganttMap.get(name)
+              const hasGanttData = showGantt && gantt?.startSec != null && gantt?.endSec != null
 
               return (
-                <div key={name} className="flex items-stretch gap-4">
-                  <div className="flex flex-col items-center w-8 shrink-0">
+                <div key={name} className="px-5 py-3">
+                  {/* Row 1: identity + metadata */}
+                  <div className="flex items-center gap-2.5">
+                    {/* Step indicator */}
                     <div
-                      className="flex h-7 w-7 items-center justify-center rounded-full ring-1"
-                      style={{
-                        backgroundColor: `${color}15`,
-                        boxShadow: `0 0 0 1px ${color}25`,
-                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded-full shrink-0"
+                      style={{ backgroundColor: `${color}15`, boxShadow: `0 0 0 1px ${color}25` }}
                     >
-                      <span className="text-[10px] font-mono font-semibold" style={{ color }}>
-                        {i + 1}
-                      </span>
+                      <span className="text-[9px] font-mono font-bold" style={{ color }}>{i + 1}</span>
                     </div>
-                    {i < actionEntries.length - 1 && (
-                      <div
-                        className="flex-1 w-px my-1"
-                        style={{
-                          backgroundColor: a.status === "success" ? "hsl(var(--success))" : "hsl(var(--border))",
-                          opacity: a.status === "success" ? 0.3 : 0.5,
-                        }}
-                      />
-                    )}
-                  </div>
 
-                  <div className="flex-1 flex items-center justify-between pb-4 min-h-[40px]">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={`w-14 justify-center text-[10px] font-normal rounded-md ${
-                          a.type === "llm"
-                            ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                            : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                        }`}
-                      >
-                        {a.type}
-                      </Badge>
-                      <span className="text-sm font-mono text-foreground">{name}</span>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] font-normal rounded-md"
-                        style={{
-                          backgroundColor: `${color}10`,
-                          color,
-                          borderColor: `${color}25`,
-                        }}
-                      >
-                        {a.status === "running" && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />}
-                        {a.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {a.vendor && (
-                        <span className="text-[10px] font-mono text-muted-foreground/60">{a.vendor}</span>
-                      )}
-                      {a.model && (
-                        <span className="text-[10px] font-mono text-purple-400">{a.model}</span>
-                      )}
-                      {a.impl && (
-                        <span className="text-[10px] font-mono text-emerald-400">{a.impl}()</span>
-                      )}
+                    {/* Type badge */}
+                    <Badge
+                      variant="outline"
+                      className={`w-12 justify-center text-[9px] font-normal rounded-md shrink-0 ${
+                        a.type === "llm"
+                          ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                          : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      }`}
+                    >
+                      {a.type}
+                    </Badge>
+
+                    {/* Name */}
+                    <span className="text-sm font-mono text-foreground truncate">{name}</span>
+
+                    {/* Status */}
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] font-normal rounded-md shrink-0"
+                      style={{ backgroundColor: `${color}10`, color, borderColor: `${color}25` }}
+                    >
+                      {a.status === "running" && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />}
+                      {a.status}
+                    </Badge>
+
+                    {/* Spacer */}
+                    <div className="flex-1" />
+
+                    {/* Right-side metadata */}
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {a.vendor && <span className="text-[10px] font-mono text-muted-foreground/50">{a.vendor}</span>}
+                      {a.model && <span className="text-[10px] font-mono text-purple-400/80">{a.model}</span>}
+                      {a.impl && <span className="text-[10px] font-mono text-emerald-400/80">{a.impl}()</span>}
                       {a.started && (
-                        <span className="text-[10px] font-mono text-muted-foreground/50 tabular-nums">
+                        <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
                           {a.started.split("T")[1]?.slice(0, 8)}
                         </span>
                       )}
-                      <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                      <span className="text-xs font-mono text-muted-foreground tabular-nums font-medium w-10 text-right">
                         {a.dur > 0 ? formatDuration(a.dur) : "\u2014"}
                       </span>
                     </div>
                   </div>
+
+                  {/* Row 2: inline Gantt bar (only when 2+ actions have timing) */}
+                  {showGantt && (
+                    <div className="mt-2 ml-[calc(1.5rem+0.625rem)] mr-[2.5rem]">
+                      <div className="relative h-2 rounded-full bg-secondary overflow-hidden">
+                        {hasGanttData ? (
+                          <div
+                            className="absolute top-0 h-full rounded-full transition-all duration-500"
+                            style={{
+                              left: `${(gantt!.startSec! / ganttMax) * 100}%`,
+                              width: `${Math.max(((gantt!.endSec! - gantt!.startSec!) / ganttMax) * 100, 1)}%`,
+                              backgroundColor: color,
+                              opacity: a.status === "skipped" ? 0.3 : 0.65,
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className="absolute top-0 h-full rounded-full"
+                            style={{ left: 0, width: "100%", backgroundColor: color, opacity: 0.06 }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
         </div>
-      )}
-
-      {actionEntries.length === 0 && (
+      ) : (
         <div className="rounded-xl border border-border bg-card p-5">
-          <p className="text-sm text-muted-foreground text-center py-8">
+          <p className="text-sm text-muted-foreground text-center py-6">
             No action execution data recorded for this run
           </p>
         </div>
       )}
 
-      {/* Run Summary */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-xs font-semibold text-foreground">Run Summary</span>
-          <span className="text-[10px] font-mono text-muted-foreground">JSON</span>
-        </div>
-        <div className="p-5">
-          <pre className="text-xs font-mono text-foreground/80 leading-relaxed">
+      {/* ── Run Summary (collapsed by default) ─────────────────────────── */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <button
+          onClick={() => setJsonOpen(!jsonOpen)}
+          className="flex items-center justify-between w-full px-5 py-3 text-left hover:bg-accent/30 transition-colors"
+        >
+          <span className="text-xs font-medium text-foreground">Run Summary</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-muted-foreground">JSON</span>
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${jsonOpen ? "rotate-180" : ""}`} />
+          </div>
+        </button>
+        {jsonOpen && (
+          <div className="px-5 pb-5 border-t border-border">
+            <pre className="text-xs font-mono text-foreground/80 leading-relaxed mt-4 overflow-x-auto">
 {JSON.stringify({
   run_id: run.id,
   workflow: run.wf,
@@ -358,9 +405,40 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
   actions_total: run.total,
   tokens: run.tokens,
 }, null, 2)}
-          </pre>
-        </div>
+            </pre>
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+/* --- Stats strip cell --- */
+
+function StatCell({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  accent?: "destructive" | "success"
+}) {
+  const accentColor = accent === "destructive"
+    ? "text-[hsl(var(--destructive))]"
+    : accent === "success"
+      ? "text-[hsl(var(--success))]"
+      : "text-foreground"
+
+  return (
+    <div className="bg-card px-4 py-3">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-muted-foreground">{icon}</span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
+      </div>
+      <p className={`text-sm font-mono font-medium tabular-nums ${accentColor}`}>{value}</p>
     </div>
   )
 }
@@ -370,15 +448,12 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
 function ErrorBlock({ error }: { error: string }) {
   const [expanded, setExpanded] = useState(false)
   const lines = error.trimEnd().split("\n")
-  // Heuristic: last non-empty line is typically the root cause in Python tracebacks.
-  // For other error formats this still gives a reasonable one-liner.
   const summary = lines.filter((l) => l.trim()).pop() || error.slice(0, 200)
   const hasTraceback = lines.length > 1
 
   return (
-    <div className="rounded-xl border border-[hsl(var(--destructive))]/20 bg-[hsl(var(--destructive))]/5 p-4">
-      <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--destructive))] font-semibold block mb-2">Error</span>
-      <p className="text-xs font-mono text-[hsl(var(--destructive))] font-medium leading-relaxed">{summary}</p>
+    <div className="rounded-xl border-l-4 border-[hsl(var(--destructive))] bg-[hsl(var(--destructive))]/5 px-5 py-4">
+      <p className="text-sm font-mono text-[hsl(var(--destructive))] font-medium leading-relaxed">{summary}</p>
       {hasTraceback && (
         <>
           <button
@@ -441,11 +516,9 @@ function RunStatusBadge({ status }: { status: RunStatus }) {
   )
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</span>
-      <p className="text-sm font-mono text-foreground mt-1 truncate">{value}</p>
-    </div>
-  )
+function actionStatusColor(status: string): string {
+  if (status === "success") return "hsl(var(--success))"
+  if (status === "failed") return "hsl(var(--destructive))"
+  if (status === "skipped") return "hsl(var(--muted-foreground))"
+  return "hsl(var(--primary))"
 }

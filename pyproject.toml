@@ -1,7 +1,7 @@
 [project]
 name = "agent-actions"
-version = "0.1.3"
-description = "Declarative YAML-based framework for orchestrating LLM workflows with batch processing"
+version = "0.1.5"
+description = "Declarative YAML-based framework for orchestrating agentic workflows"
 authors = [
     {name = "Muizz Kolapo"},
 ]
@@ -74,7 +74,7 @@ dev = [
     "pandas-stubs>=2.0.3,<4",
     "types-requests>=2.31.0,<3",
     "types-beautifulsoup4>=4.12.0,<5",
-    "ipython>=8.0.0,<9",
+    "ipython>=8.0.0,<10",
     "ipdb>=0.13.0,<1",
 ]
 nlp = [
@@ -113,7 +113,7 @@ dev-dependencies = [
     "pandas-stubs>=2.0.3,<4",
     "types-requests>=2.31.0,<3",
     "types-beautifulsoup4>=4.12.0,<5",
-    "ipython>=8.0.0,<9",
+    "ipython>=8.0.0,<10",
     "ipdb>=0.13.0,<1",
     "hypothesis>=6.139.2,<7",
     "pytest-asyncio>=1.2.0,<2",

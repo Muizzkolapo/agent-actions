@@ -2,6 +2,82 @@
 
 Comprehensive troubleshooting for agent-actions workflows.
 
+## Triage Checklist
+
+When investigating `agac run` output, follow this checklist in order. Each step catches a specific category of bug.
+
+### 1. Tally vs Reality
+
+Compare the tally line against what's in the storage backend. Check the workflow config for `storage_backend` type, then query accordingly:
+
+```bash
+# Check .agent_status.json for action states
+cat agent_workflow/<workflow>/agent_io/.agent_status.json | python3 -m json.tool
+
+# Check target data — look at output files per action
+for dir in agent_workflow/<workflow>/agent_io/target/*/; do
+  echo "=== $(basename $dir) ==="
+  cat "$dir"/*.json 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f'  Records: {len(data)}')
+if data:
+    print(f'  Fields: {list(data[0].get(\"content\", data[0]).keys())[:8]}')
+" 2>/dev/null || echo "  No data"
+done
+```
+
+- Action marked OK with 0 records → false positive (InitialStrategy bug)
+- Action missing from target but "completed" in `.agent_status.json` → stale state
+
+### 2. Guard Evaluation
+
+If you see unexpected skips, verify the guard condition against actual upstream data:
+
+```bash
+# Check what field values the upstream action actually produced
+cat agent_workflow/<workflow>/agent_io/target/<upstream>/*.json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for r in data:
+    content = r.get('content', r)
+    print({k: v for k, v in content.items() if not k.startswith('_')})" 2>/dev/null
+```
+
+**Known bug:** `!=` and `>` operators silently evaluate as `==`. Test directly:
+```python
+from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter, FilterItemRequest
+gf = GuardFilter()
+r = gf.filter_item(FilterItemRequest(data={"field": "value"}, condition='field != "x"'))
+print(r.matched)  # False = BUG
+```
+
+### 3. First Action Failures
+
+If the first action's API call fails (401, network error), check whether the failure was caught:
+- `record_count=0` + `failed` dispositions = bug (InitialStrategy missing failure check)
+- The action completes as OK, circuit breaker doesn't fire, downstream runs on empty data
+
+### 4. CLI Status Message
+
+"Workflow paused - batch job(s) submitted" for non-batch workflows means the CLI uses a binary check: `is_workflow_complete()` → SUCCESS, else → "batch submitted". Any failure, skip, or partial completion triggers this misleading message.
+
+### 5. Tool UDF Data Access
+
+If a tool action produces zero/default values:
+- Fields arrive FLAT in content: `content["consensus_score"]`
+- NOT namespaced: `content["aggregate_scores"]["consensus_score"]` → always returns `{}`
+- Check the tool code for `content.get("<action_name>", {})` patterns
+
+### 6. Schema Field Drift
+
+If downstream actions fail with "declared fields not found":
+- The LLM may produce different field names than the schema defines
+- Check DB: `SELECT data FROM target_data WHERE action_name='<action>';`
+- Compare actual keys against schema `id:` values
+
+---
+
 ## Validation Pipeline Overview
 
 LLM outputs pass through three validation layers:
@@ -117,6 +193,11 @@ for i, record in enumerate(data, 1):
 | "X is not of type Y" | Type mismatch | Use correct type or `Any` |
 | "Duplicate UDF function name" | Same name in multiple dirs | Remove duplicate or rename |
 | "Dependency not in context_scope" | Missing reference | Add `action.*` to observe |
+| "declared fields not found" | Schema field name doesn't match LLM output | Rename schema `id:` to match actual output |
+| "None is not of type 'object'" | Guard-filtered upstream, schema expects non-null | Remove from schema or handle None in tool |
+| "Additional properties are not allowed" | Tool returns fields not in schema | Add fields to schema (outside `required`) |
+| "batch job(s) submitted" (no batch) | CLI catch-all for non-complete state | Check actual errors in tally/DB |
+| "Drop directive matched zero fields" | Drop targets unreachable namespace | Remove the drop or ignore the warning |
 
 ## Filtered Pipeline Debugging
 

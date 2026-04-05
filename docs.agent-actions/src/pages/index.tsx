@@ -35,7 +35,7 @@ export default function Home(): ReactNode {
         <section className={styles.hero}>
           <div className={styles.heroInner}>
             <div className={styles.heroBadge}>
-              <span className={styles.dot} /> v1.0 — YAML-native LLM workflow orchestration
+              <span className={styles.dot} /> v1.0 — YAML-native agentic workflow orchestration
             </div>
 
             <div className={styles.heroMark}>

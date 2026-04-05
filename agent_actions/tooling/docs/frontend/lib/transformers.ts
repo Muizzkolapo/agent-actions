@@ -29,7 +29,7 @@ import type {
 // ─── Stats ───────────────────────────────────────────────────────────────────
 
 export function transformStats(catalog: RawCatalogJson): Stats {
-  return { ...catalog.stats }
+  return { ...catalog.stats, runtime_errors: catalog.stats.runtime_errors ?? 0, runtime_warnings: catalog.stats.runtime_warnings ?? 0 }
 }
 
 // ─── Workflows ───────────────────────────────────────────────────────────────
@@ -86,6 +86,13 @@ function buildActionMetrics(raw?: RawAction["metrics"]): ActionMetrics {
     },
     success_count: raw?.success_count ?? 0,
     failed_count: raw?.failed_count ?? 0,
+    filtered_count: raw?.filtered_count ?? 0,
+    skipped_count: raw?.skipped_count ?? 0,
+    exhausted_count: raw?.exhausted_count ?? 0,
+    latency_ms: raw?.latency_ms ?? 0,
+    provider: raw?.provider ?? null,
+    model: raw?.model ?? null,
+    cache_miss_count: raw?.cache_miss_count ?? 0,
   }
 }
 
@@ -398,6 +405,8 @@ export interface CatalogData {
   toolFunctions: ToolFunction[]
   validationErrorGroups: ValidationGroup[]
   validationWarningGroups: ValidationGroup[]
+  runtimeErrorGroups: ValidationGroup[]
+  runtimeWarningGroups: ValidationGroup[]
   workflowData: WorkflowDataSummary[]
   generatedAt: string
   projectName: string | null
@@ -405,6 +414,32 @@ export interface CatalogData {
 
 export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): CatalogData {
   const { errors, warnings } = transformValidationGroups(catalog)
+
+  // Synthesize runtime error entries from failed executions so they appear in the Logs page
+  const execFailureEntries: RawValidationEntry[] = []
+  for (const exec of runs.executions) {
+    const status = exec.status.toUpperCase()
+    if (status === "FAILED") {
+      execFailureEntries.push({
+        target: exec.workflow_name || exec.workflow_id,
+        message: exec.error_message || `Run ${exec.id} failed`,
+        timestamp: exec.ended_at ?? exec.started_at,
+      })
+    }
+    // Surface per-action failures too
+    for (const [actionName, a] of Object.entries(exec.actions ?? {})) {
+      if (a.status?.toUpperCase() === "FAILED") {
+        execFailureEntries.push({
+          target: actionName,
+          message: a.error || `Action ${actionName} failed in run ${exec.id}`,
+          timestamp: a.ended_at ?? exec.started_at,
+        })
+      }
+    }
+  }
+
+  const allRuntimeErrors = [...(catalog.logs?.runtime_errors ?? []), ...execFailureEntries]
+
   return {
     stats: transformStats(catalog),
     workflows: transformWorkflows(catalog),
@@ -415,6 +450,8 @@ export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): Catalo
     toolFunctions: transformToolFunctions(catalog),
     validationErrorGroups: errors,
     validationWarningGroups: warnings,
+    runtimeErrorGroups: groupValidationEntries(allRuntimeErrors),
+    runtimeWarningGroups: groupValidationEntries(catalog.logs?.runtime_warnings ?? []),
     workflowData: transformWorkflowData(catalog),
     generatedAt: catalog.metadata?.generated_at ?? "",
     projectName: catalog.metadata?.project_name ?? null,

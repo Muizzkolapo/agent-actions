@@ -17,7 +17,7 @@ You are a product copywriter who translates technical specifications into clear,
 
 ## Brand Voice Guidelines
 
-{{ seed_data.brand_voice | tojson }}
+{{ seed.brand_voice | tojson }}
 
 ## Task
 
@@ -25,7 +25,7 @@ Using the raw specifications and image descriptions above, create:
 
 1. **Product title**: A marketplace-ready title that includes the brand name and the single most compelling feature. Keep it natural — no keyword stuffing. Max 200 characters.
 
-2. **Short description**: A 50-100 word paragraph that explains what this product does and who it's for. Write in the brand voice ({{ seed_data.brand_voice.tone }}). Start with a benefit, not the product name.
+2. **Short description**: A 50-100 word paragraph that explains what this product does and who it's for. Write in the brand voice ({{ seed.brand_voice.tone }}). Start with a benefit, not the product name.
 
 3. **Key features**: Exactly 5 bullet points. Each translates a raw spec into a benefit the customer cares about. Format: "[Benefit] — [spec detail that proves it]".
 
@@ -36,7 +36,7 @@ Using the raw specifications and image descriptions above, create:
 6. **Specs summary**: A readable 2-3 sentence summary of the most important technical details (dimensions, materials, power, capacity).
 
 Do NOT:
-- Use any prohibited words: {{ seed_data.brand_voice.prohibited_words }}
+- Use any prohibited words: {{ seed.brand_voice.prohibited_words }}
 - Invent specifications not present in the raw data
 - Use superlatives without backing them with a spec ("best" is empty; "35-hour battery" is concrete)
 {end_prompt}
@@ -65,31 +65,31 @@ You are a marketplace listing copywriter. Write compelling product copy that pos
 
 ## Brand Voice
 
-{{ seed_data.brand_voice | tojson }}
+{{ seed.brand_voice | tojson }}
 
 ## Marketplace Rules
 
-{{ seed_data.marketplace_rules | tojson }}
+{{ seed.marketplace_rules | tojson }}
 
 ## Task
 
 Write the final marketplace listing copy:
 
-1. **Listing title** (max {{ seed_data.marketplace_rules.title.max_chars }} chars): Include the brand name and primary product type. Front-load the most searched terms. {{ seed_data.marketplace_rules.title.rules }}
+1. **Listing title** (max {{ seed.marketplace_rules.title.max_chars }} chars): Include the brand name and primary product type. Front-load the most searched terms. {{ seed.marketplace_rules.title.rules }}
 
-2. **Listing description** (max {{ seed_data.marketplace_rules.description.max_chars }} chars): Tell the product's story. Open with the core benefit. Weave in 2-3 features with proof points from the specs. Close with who this product is perfect for. {{ seed_data.marketplace_rules.description.rules }}
+2. **Listing description** (max {{ seed.marketplace_rules.description.max_chars }} chars): Tell the product's story. Open with the core benefit. Weave in 2-3 features with proof points from the specs. Close with who this product is perfect for. {{ seed.marketplace_rules.description.rules }}
 
-3. **Bullet points** (max {{ seed_data.marketplace_rules.bullet_points.max_count }}, each max {{ seed_data.marketplace_rules.bullet_points.max_chars_per_bullet }} chars): {{ seed_data.marketplace_rules.bullet_points.rules }}
+3. **Bullet points** (max {{ seed.marketplace_rules.bullet_points.max_count }}, each max {{ seed.marketplace_rules.bullet_points.max_chars_per_bullet }} chars): {{ seed.marketplace_rules.bullet_points.rules }}
 
-4. **Search keywords** (max {{ seed_data.marketplace_rules.search_keywords.max_count }}): Terms shoppers actually search for. {{ seed_data.marketplace_rules.search_keywords.rules }}
+4. **Search keywords** (max {{ seed.marketplace_rules.search_keywords.max_count }}): Terms shoppers actually search for. {{ seed.marketplace_rules.search_keywords.rules }}
 
 5. **Value proposition**: One sentence that captures why a buyer should choose this product. If we're priced below average, emphasize value. If above, emphasize quality/features that justify the premium.
 
 6. **Competitive angle**: A brief statement on how this product stands out in its category without naming competitors. Reference the pricing context to inform your positioning.
 
-Write in the brand voice: {{ seed_data.brand_voice.tone }}. Use {{ seed_data.brand_voice.voice_guidelines.perspective }} perspective.
+Write in the brand voice: {{ seed.brand_voice.tone }}. Use {{ seed.brand_voice.voice_guidelines.perspective }} perspective.
 
-Do NOT use these words: {{ seed_data.brand_voice.prohibited_words }}
+Do NOT use these words: {{ seed.brand_voice.prohibited_words }}
 {end_prompt}
 
 {prompt Optimize_SEO}

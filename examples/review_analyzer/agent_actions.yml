@@ -1,16 +1,13 @@
-project_name: review_analyzer
 default_agent_config:
   api_key: OPENAI_API_KEY
-  model_name: gpt-4o-mini
   chunk_config:
     overlap: 500
     chunk_size: 4000
-  ephemeral: false
-  prompt_debug: false
-
+  model_name: gpt-4o-mini
+  prompt_debug: False
 schema_path: schema
-tool_path: [tools]
-
+tool_path: ["tools"]
+seed_data_path: seed_data
 output_storage:
   backend: sqlite
   db_path: ./agent_io/outputs.db

@@ -1,291 +1,348 @@
-# Product Review Analyzer
+# Review Analyzer
 
-A context engineering showcase: 6 actions, 3 vendors, parallel consensus scoring, pre-check quality gates, and progressive context disclosure — all declared in YAML.
+Multi-model pipeline that scores product review quality via parallel consensus voting, drafts merchant responses, and extracts product insights -- a context engineering showcase for agac.
 
-This example demonstrates why Agent Actions is a **context engineering framework**, not a workflow automation tool. Every action gets its own model, its own context window, its own schema, and its own pre-check gate.
+<p align="center"><img src="docs/flow.png" width="700"/></p>
 
-## Workflow Diagram
+## What You'll Learn
 
-```
-                    ┌──────────────────────────┐
-                    │     extract_claims        │
-                    │   (Groq — llama-3.3-70b)  │  ← Cheap model for extraction
-                    │                          │     Drops star_rating to avoid bias
-                    └────────────┬─────────────┘
-                                 │
-                    ┌────────────┴─────────────┐
-                    │     score_quality         │
-                    │  (OpenAI — gpt-4o-mini)   │  ← 3 independent parallel scorers
-                    │    [versions: 1, 2, 3]    │     Each sees claims + rubric
-                    │    scorer can't see others │     but NOT each other's scores
-                    └────────────┬─────────────┘
-                                 │
-                    ┌────────────┴─────────────┐
-                    │    aggregate_scores       │
-                    │        (Tool)             │  ← Deterministic weighted consensus
-                    │   version_consumption:    │     No LLM — math doesn't hallucinate
-                    │     pattern: merge        │
-                    └────────────┬─────────────┘
-                                 │
-                    ┌────────────┴─────────────┐
-                    │     guard: score >= 6     │  ← Pre-check gate
-                    │   Low quality? SKIP.      │     LLM never fires for junk reviews
-                    │   No tokens burned.       │     Cost control at the record level
-                    └──────┬───────────┬───────┘
-                           │           │
-              ┌────────────┴──┐  ┌─────┴──────────────┐
-              │  generate_    │  │  extract_product_   │  ← Parallel branches
-              │  response     │  │  insights           │     Independent dependencies
-              │ (Anthropic —  │  │ (OpenAI —           │
-              │  claude-sonnet│  │  gpt-4o-mini)       │
-              │  )            │  │                     │
-              └───────┬───────┘  └─────────┬───────────┘
-                      │                    │
-                    ┌─┴────────────────────┴──┐
-                    │    format_output         │  ← Fan-in from both branches
-                    │       (Tool)             │     Packages final structure
-                    └─────────────────────────┘
-```
+- **Multi-vendor model selection** -- choosing Groq, OpenAI, or Anthropic per action based on the task's cost/quality tradeoff
+- **Parallel consensus voting** -- running 3 independent scorer versions with context isolation so no scorer can anchor on another
+- **Guard-based conditional execution** -- skipping expensive LLM calls for records that fail a quality threshold
+- **Progressive context disclosure** -- using `observe`, `drop`, and `passthrough` to control exactly which fields each action sees
+- **Seed data injection** -- loading a shared evaluation rubric from JSON so scoring criteria live outside prompts
+- **Version consumption with merge pattern** -- fanning out to 3 parallel versions and deterministically merging them back
 
-## What This Example Demonstrates
+## The Problem
 
-Each action showcases a specific Agent Actions capability that you can't replicate in n8n, Make, or Zapier:
+E-commerce platforms receive thousands of product reviews daily. Most are low quality -- vague praise, single-sentence complaints, or suspected fakes. Merchants need a system that (1) objectively scores review quality without being biased by the reviewer's star rating, (2) generates thoughtful merchant responses only for reviews worth responding to, and (3) extracts structured product insights for the product team. This pipeline solves all three with minimal token waste.
 
-| Action | Pattern | What It Shows |
-|---|---|---|
-| `extract_claims` | Multi-vendor, context drop | Groq (cheap) for extraction. Drops `star_rating` so scoring isn't anchored by the user's number. Passthrough carries `review_id` at zero tokens. |
-| `score_quality` | Parallel voting, context isolation | 3 scorers run independently. Each sees claims + rubric but NEVER each other's scores. Two lines of YAML = 3 parallel LLM calls. |
-| `aggregate_scores` | Version merge, deterministic tool | Fan-in merges 3 parallel outputs. No LLM — weighted consensus computed in Python. |
-| `generate_response` | Guard, multi-vendor, progressive disclosure | Guard blocks LLM for score < 6. Uses Anthropic Claude (best reasoning). Sees review + score but NOT individual scorer reasoning. |
-| `extract_product_insights` | Parallel branch, seed data | Runs alongside `generate_response`. Uses rubric categories from seed data to classify feedback. |
-| `format_output` | Fan-in, deterministic tool | Packages both parallel branches into final output. |
+## How It Works
 
-## Context Flow (What Each Step Sees)
+### 1. extract_claims
 
-This is the key insight. In n8n, every node sees everything. In Agent Actions:
+**Model**: Groq (`llama-3.1-8b-instant`) -- fast and cheap, because extraction doesn't need expensive reasoning.
 
-```
-extract_claims sees:
-  ✅ review_text, review_title, product_name, product_category
-  ❌ star_rating (dropped — avoids anchoring bias)
-  ❌ verified_purchase (dropped — irrelevant to extraction)
-  → Passes through: review_id, reviewer_name, review_date (zero tokens)
-
-score_quality sees:
-  ✅ extracted claims, product aspects, sentiment signals, review_text, rubric
-  ❌ star_rating (still excluded)
-  ❌ review_id, reviewer_name (irrelevant to scoring)
-  ❌ other scorers' outputs (context isolation for independent judgment)
-
-generate_response sees:
-  ✅ review_text, review_title, claims, aspects, sentiment, consensus_score
-  ✅ aggregate strengths and weaknesses
-  ❌ individual scorer reasoning (clean context = better output)
-  → Passes through: review_id, reviewer_name, product_name (zero tokens)
-```
-
-Every field excluded is **tokens saved** and **noise removed**. Every passthrough field is **metadata preserved** without LLM cost.
-
-## Data
-
-### Included: Synthetic Reviews (15 records)
-
-The included `staging/reviews.json` contains 15 purpose-built product reviews designed to exercise every pipeline pattern:
-
-| Review | Product | Rating | Why It's Interesting |
-|---|---|---|---|
-| R001 | CloudWalk Running Shoes | 4★ | Detailed, balanced — high quality, passes guard |
-| R002 | BrewMaster Coffee Maker | 1★ | Strong negative with specifics — tests empathetic response |
-| R003 | ZenDesk Standing Desk | 5★ | Rich detail, long usage — should score highest |
-| R004 | AuraSound Earbuds | 3★ | Mixed: good hardware, bad software — tests nuanced analysis |
-| R005 | GreenGrow Herb Garden | 5★ | Specific claims with timeframes — high authenticity |
-| R006 | FitTrack Smartwatch | 2★ | Informal tone, unverified — tests lower scoring |
-| R007 | NovaCool Portable AC | 4★ | Quantitative claims (92F→74F, $30/month) — high specificity |
-| R008 | PageTurn E-Reader | 5★ | Comparison to competitor (Kindle) — tests claim extraction |
-| R009 | ChefPro Instant Pot | 4★ | Identifies design flaw (steam valve) — tests product insights |
-| R010 | LumiGlow Smart Bulbs | 3★ | Reliability issue pattern — tests feedback categorization |
-| R011 | TrailBlazer Backpack | 5★ | Extreme use case (Patagonia trek) — high credibility |
-| R012 | BrewMaster Coffee Maker | 1★ | ALL CAPS, emotional — should score lower on specificity |
-| R013 | ErgoFlex Office Chair | 4★ | Assembly frustration but product praise — tests mixed handling |
-| R014 | SonicClean Robot Vacuum | 3★ | Good hardware, bad software pattern (like R004) |
-| R015 | CloudWalk Running Shoes | 5★ | **Fake review** — generic superlatives, unverified, bot-like name. Should be caught by authenticity scoring and filtered by guard. |
-
-### Alternative: Open-Source Datasets
-
-You can replace the synthetic data with real-world datasets:
-
-**Small (ready to use):**
-- [Product Review Sentiment 40](https://huggingface.co/datasets/elvanalabs/product-review-sentiment-40) — 40 records, JSON, review text + sentiment label. Simple but only 2 fields — you'd need to add product metadata.
-
-**Medium (sample and reshape):**
-- [Amazon Reviews 2023](https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023) — Millions of real reviews with ratings, text, helpfulness votes, and product metadata. Sample 50-100 records from a single category (e.g., Electronics) and reshape to match the staging schema.
-- [Amazon Beauty Reviews](https://huggingface.co/datasets/jhan21/amazon-beauty-reviews-dataset) — ~700K reviews up to 2023 in a single product category.
-
-**Different domains (same workflow patterns):**
-- [Customer Support Tickets](https://huggingface.co/datasets/Tobi-Bueck/customer-support-tickets) — Swap review analysis for ticket triage. Same patterns: extract → score → filter → respond.
-- [Resume Screening Dataset](https://huggingface.co/datasets/AzharAli05/Resume-Screening-Dataset) — Application evaluation with the same parallel voting and guard patterns.
-- [AI Resume Screening 2025](https://www.kaggle.com/datasets/mdtalhask/ai-powered-resume-screening-dataset-2025) — Includes role, skills, experience fields.
-
-To use any of these, reshape records to match the staging schema:
-
-```json
-{
-  "review_id": "...",
-  "product_name": "...",
-  "product_category": "...",
-  "reviewer_name": "...",
-  "review_date": "YYYY-MM-DD",
-  "star_rating": 1-5,
-  "review_title": "...",
-  "review_text": "...",
-  "verified_purchase": true/false
-}
-```
-
-## Running the Workflow
-
-```bash
-# Navigate to the example
-cd examples/review_analyzer
-
-# Set up API keys (uses 3 vendors)
-cp .env.example .env
-# Edit .env with your keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY
-
-# Analyze the workflow schema (no API calls)
-agac schema -a review_analyzer
-
-# Run the workflow
-agac run -a review_analyzer
-
-# Or run in batch mode for 50% cost savings
-agac run -a review_analyzer  # run_mode: batch is already set in defaults
-```
-
-### Single-Vendor Mode
-
-Don't have 3 API keys? Change the workflow to use one vendor:
+Pulls factual claims, product aspects, and sentiment signals from the raw review text. The critical design decision is the `drop` directive on `star_rating`:
 
 ```yaml
-# In agent_config/review_analyzer.yml, remove vendor overrides:
-# - Delete model_vendor/model_name/api_key from extract_claims
-# - Delete model_vendor/model_name/api_key from generate_response
-# The workflow defaults (openai/gpt-4o-mini) will apply everywhere
+context_scope:
+  observe:
+    - source.review_text
+    - source.review_title
+    - source.product_name
+    - source.product_category
+  drop:
+    - source.star_rating          # Excluded: avoid anchoring bias
+    - source.verified_purchase
+  passthrough:
+    - source.review_id            # Flows to output, zero tokens
+    - source.reviewer_name
+    - source.review_date
+    - source.product_name
+    - source.product_category
 ```
 
-## Output
+If the LLM sees a 5-star rating, it unconsciously biases extraction toward positive framing. Dropping `star_rating` forces the model to work from the text alone. `passthrough` fields like `review_id` flow into the output record without ever entering the LLM's context window. Zero tokens, zero cost -- but the data is preserved for downstream actions.
 
-The `format_output` tool produces one record per review:
+### 2. score_quality (x3 parallel)
 
-```json
-{
-  "review_id": "R003",
-  "product_name": "ZenDesk Standing Desk",
-  "product_category": "Office Furniture",
-  "reviewer_name": "Priya K.",
-  "review_date": "2024-10-22",
-  "analysis": {
-    "quality_score": 8.7,
-    "is_split_decision": false,
-    "claims_extracted": 8,
-    "aspects_covered": ["motor noise", "transition speed", "cable management", "assembly", "durability"],
-    "sentiment": "positive",
-    "red_flags": []
-  },
-  "merchant_response": {
-    "response_text": "Priya, hearing that the desk has held up after 3 months of daily use is exactly the feedback we love — especially the detail about the cable management tray. You're right that the preset programming could be more intuitive; we're redesigning the control panel UI for the next revision. Thanks for the thorough review.",
-    "response_tone": "grateful"
-  },
-  "product_insights": {
-    "feedback_items": [
-      {
-        "category": "Ease of Use / Setup",
-        "issue": "Control panel preset programming is unintuitive",
-        "severity": "minor",
-        "verbatim_evidence": "took me a few days to figure out the preset programming"
-      }
-    ],
-    "improvement_priority": "Ease of Use / Setup",
-    "positive_differentiators": ["whisper-quiet motor", "8-second transitions", "bamboo top durability"]
-  }
-}
+**Model**: Ollama (`llama3.2:latest`) -- parallel voting compensates for the weaker model, keeping cost near zero.
+
+Three independent scorers evaluate each review against the same rubric. The entire fan-out is two lines of YAML:
+
+```yaml
+versions:
+  param: scorer_id
+  range: [1, 2, 3]
+  mode: parallel
 ```
 
-Reviews scoring below 6 (like R015, the fake review) produce:
+Each scorer is context-isolated -- it sees the extracted claims and the seed rubric, but never another scorer's output. That prevents herding (scorer 2 anchoring on scorer 1's number). The prompt template uses version metadata to shift each scorer's focus:
 
-```json
-{
-  "review_id": "R015",
-  "product_name": "CloudWalk Pro Running Shoes",
-  "analysis": {
-    "quality_score": 2.1,
-    "is_split_decision": false,
-    "claims_extracted": 0,
-    "aspects_covered": [],
-    "sentiment": "positive",
-    "red_flags": ["Generic superlatives", "No specific claims", "Bot-like reviewer name", "Unverified purchase"]
-  },
-  "merchant_response": null,
-  "product_insights": null
-}
+```
+You are quality scorer {{ i }} of {{ version.length }}...
+
+{% if version.first %}
+**Your focus**: Prioritize HELPFULNESS.
+{% elif version.last %}
+**Your focus**: Prioritize AUTHENTICITY.
+{% else %}
+**Your focus**: Prioritize SPECIFICITY.
+{% endif %}
 ```
 
-The guard prevented `generate_response` and `extract_product_insights` from firing. No tokens burned on a fake review.
+The context scope also continues to drop `star_rating`, keeping the scoring unbiased end to end:
 
-## Seed Data
+```yaml
+context_scope:
+  observe:
+    - extract_claims.factual_claims
+    - extract_claims.product_aspects
+    - extract_claims.sentiment_signals
+    - source.review_text
+    - seed.rubric
+  drop:
+    - source.star_rating          # Still excluded from scoring
+```
 
-`seed_data/evaluation_rubric.json` contains:
+### 3. aggregate_scores
 
-- **Scoring criteria** with weights: helpfulness (0.35), specificity (0.30), authenticity (0.35)
-- **Quality threshold**: 6 (used by guards)
-- **Product feedback categories**: 8 categories for insight classification
+**Kind**: Tool (`aggregate_quality_scores`) -- deterministic math, no LLM needed.
 
-Change the rubric to change what "quality" means — the workflow structure stays the same.
+Merges the three parallel scorer outputs into a single weighted consensus score via the `version_consumption` directive:
 
-## Tools
+```yaml
+kind: tool
+impl: aggregate_quality_scores
+version_consumption:
+  source: score_quality           # Declarative fan-in
+  pattern: merge                  #   from parallel versions
+context_scope:
+  observe:
+    - score_quality_1.*
+    - score_quality_2.*
+    - score_quality_3.*
+  passthrough:
+    - extract_claims.*
+```
 
-| Tool | Purpose | Input | Output |
-|---|---|---|---|
-| `aggregate_quality_scores` | Weighted consensus from 3 parallel scorers | Versioned `score_quality_1/2/3` outputs | Consensus score, spread, strengths, weaknesses, red flags |
-| `format_analysis_output` | Package final output from parallel branches | All upstream outputs | Structured analysis record |
+Weighted averaging is deterministic -- an LLM would add latency, cost, and the possibility of arithmetic hallucination. The `merge` pattern collects all three versioned outputs (`score_quality_1`, `score_quality_2`, `score_quality_3`) into a single context so the tool function can access them all.
 
-## Customization
+### 4. generate_response
 
-| Change | What to Edit |
-|---|---|
-| Quality threshold | `seed_data/evaluation_rubric.json` → `quality_threshold` |
-| Scoring weights | `seed_data/evaluation_rubric.json` → `scoring_criteria.*.weight` |
-| Number of scorers | `agent_config/review_analyzer.yml` → `score_quality.versions.range` |
-| Guard condition | `agent_config/review_analyzer.yml` → `generate_response.guard.condition` |
-| Response style | `prompt_store/review_analyzer.md` → `Generate_Response` prompt |
-| Feedback categories | `seed_data/evaluation_rubric.json` → `product_feedback_categories` |
-| Model for any step | `agent_config/review_analyzer.yml` → action-level `model_vendor`/`model_name` |
-| Switch to single vendor | Remove per-action vendor overrides; workflow defaults apply |
+**Model**: OpenAI (`gpt-4o-mini`) -- needs reasoning for nuanced, empathetic merchant replies.
 
-## File Structure
+Drafts a professional merchant response, but only for reviews that scored high enough. The guard prevents wasting tokens on junk reviews:
+
+```yaml
+guard:
+  condition: 'consensus_score >= 6'
+  on_false: "filter"              # LLM never fires for junk reviews
+```
+
+The context scope is deliberately curated. The response writer sees the original review, extracted claims, and aggregate score -- but NOT the individual scorer reasoning. Clean context, better output:
+
+```yaml
+context_scope:
+  observe:
+    - source.review_text
+    - source.review_title
+    - extract_claims.factual_claims
+    - extract_claims.product_aspects
+    - extract_claims.sentiment_signals
+    - aggregate_scores.consensus_score
+    - aggregate_scores.strengths
+    - aggregate_scores.weaknesses
+  drop:
+    - score_quality.*             # Does NOT see individual scorer reasoning
+```
+
+### 5. extract_product_insights
+
+**Model**: OpenAI (`gpt-4o-mini`) -- needs reasoning for structured extraction against known categories.
+
+Classifies actionable feedback into product improvement categories defined in the seed data. Runs in **parallel** with `generate_response` -- both depend only on `aggregate_scores`:
+
+```yaml
+dependencies: [aggregate_scores]  # Same as generate_response
+guard:
+  condition: 'consensus_score >= 6'
+  on_false: "filter"
+context_scope:
+  observe:
+    - source.review_text
+    - extract_claims.factual_claims
+    - extract_claims.product_aspects
+    - seed.rubric.product_feedback_categories
+```
+
+Notice it reaches into a specific nested field of the seed data (`seed.rubric.product_feedback_categories`) rather than loading the entire rubric. The insights extractor doesn't need scoring weights, so why send them?
+
+### 6. format_output
+
+**Kind**: Tool (`format_analysis_output`) -- deterministic packaging, no LLM needed.
+
+Fans in from both parallel branches (`generate_response` and `extract_product_insights`) and assembles the complete output record:
+
+```yaml
+dependencies: [generate_response, extract_product_insights]
+kind: tool
+impl: format_analysis_output
+context_scope:
+  observe:
+    - generate_response.*
+    - extract_product_insights.*
+    - extract_claims.*
+    - aggregate_scores.*
+    - source.*
+```
+
+## Key Patterns Explained
+
+### Multi-Vendor Model Selection
+
+Each action uses the model best suited to its task. The workflow sets a default vendor and overrides per action:
+
+```yaml
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o-mini
+
+actions:
+  - name: extract_claims
+    model_vendor: groq                # Fast, cheap extraction
+    model_name: llama-3.1-8b-instant
+    api_key: GROQ_API_KEY
+
+  - name: score_quality
+    model_vendor: ollama              # Parallel voting compensates for weaker model
+    model_name: llama3.2:latest
+
+  - name: generate_response           # Uses default (OpenAI) -- needs reasoning
+  - name: extract_product_insights    # Uses default (OpenAI) -- needs reasoning
+```
+
+Not every step needs the same model. Extraction is high-volume, low-complexity -- Groq's small Llama handles it at a fraction of the cost. Scoring runs three parallel voters, so the consensus compensates for a weaker local model -- Ollama's Llama 3.2 keeps that cost at zero. Response generation and product insight extraction need reasoning, so they stay on the OpenAI default. Match the model to the task.
+
+### Parallel Consensus Voting
+
+Three independent scorers produce three opinions. None can see the others:
+
+```yaml
+- name: score_quality
+  versions:
+    param: scorer_id
+    range: [1, 2, 3]
+    mode: parallel
+
+- name: aggregate_scores
+  version_consumption:
+    source: score_quality
+    pattern: merge
+```
+
+The `versions` block creates three parallel instances. `merge` in `aggregate_scores` collects all three into a single context for deterministic aggregation. Think of it as an ensemble method: if two out of three scorers flag a review as low quality, the consensus score reflects that regardless of the third.
+
+### Progressive Context Disclosure
+
+Every action gets a precisely scoped context window using three directives:
+
+| Directive     | Effect                                              | Token cost |
+|---------------|-----------------------------------------------------|------------|
+| `observe`     | Field is included in the LLM context                | Tokens consumed |
+| `drop`        | Field is explicitly excluded, even if it exists      | Zero |
+| `passthrough` | Field flows to the output record, never enters LLM  | Zero |
+
+Example from `extract_claims`:
+
+```yaml
+context_scope:
+  observe:
+    - source.review_text          # LLM sees this
+    - source.product_name         # LLM sees this
+  drop:
+    - source.star_rating          # LLM never sees this
+  passthrough:
+    - source.review_id            # Forwarded to output, zero tokens
+```
+
+Uncontrolled context is the #1 cause of poor LLM output. Drop `star_rating` and you prevent anchoring bias. Pass through `review_id` and you preserve traceability without burning tokens. Each action's context should be a deliberate editorial decision, not a dump of everything available.
+
+### Guard-Based Conditional Execution
+
+Guards prevent expensive actions from running on records that don't meet a threshold:
+
+```yaml
+- name: generate_response
+  guard:
+    condition: 'consensus_score >= 6'
+    on_false: "filter"
+```
+
+When `consensus_score` is below 6, the action is skipped entirely. No prompt assembled, no API call, no tokens consumed. The threshold of 6 comes from the seed data (`evaluation_rubric.json`), so business logic stays outside the YAML config.
+
+Both `generate_response` and `extract_product_insights` share the same guard. They run in parallel for records that pass the gate. Records that don't? Both skipped.
+
+### Retry and Reprompt
+
+All LLM actions inherit retry from defaults -- transient API errors (rate limits, timeouts) are retried up to 2 times with backoff:
+
+```yaml
+defaults:
+  retry:
+    enabled: true
+    max_attempts: 2
+```
+
+`score_quality` also has reprompt validation. If the LLM returns null scores or missing fields, the framework rejects the output and reprompts automatically:
+
+```yaml
+reprompt:
+  validation: check_required_fields    # Rejects any response with null values
+  max_attempts: 2
+  on_exhausted: return_last            # Accept best attempt if retries fail
+```
+
+The `check_required_fields` UDF in `tools/shared/reprompt_validations.py` is generic -- it checks that no field in the response is null, without hardcoding field names.
+
+## Quick Start
+
+Install the CLI:
+
+```bash
+pip install agent-actions-cli
+```
+
+Set your environment variables (or copy `.env.sample` to `.env`):
+
+```bash
+export OPENAI_API_KEY=...
+export GROQ_API_KEY=...
+# Ollama must be running locally (no API key needed)
+```
+
+Run the agent:
+
+```bash
+agac run -a review_analyzer
+```
+
+By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full dataset.
+
+Input reviews go in `agent_workflow/review_analyzer/agent_io/staging/reviews.json`. Results appear in `agent_workflow/review_analyzer/agent_io/target/run_results.json`.
+
+## Project Structure
 
 ```
 review_analyzer/
-├── .env.example                              # API key template (3 vendors)
-├── agent_actions.yml                         # Project config
-├── agent_workflow/review_analyzer/
-│   ├── README.md                             # This file
-│   ├── agent_config/
-│   │   └── review_analyzer.yml               # Workflow definition (6 actions)
-│   ├── agent_io/staging/
-│   │   └── reviews.json                      # 15 synthetic product reviews
-│   └── seed_data/
-│       └── evaluation_rubric.json            # Scoring criteria + feedback categories
+├── README.md
+├── docs/                              # Pipeline diagram
+├── agent_actions.yml                     # Top-level config
+├── agent_workflow/
+│   └── review_analyzer/
+│       ├── agent_config/
+│       │   └── review_analyzer.yml       # Workflow definition (actions, guards, context)
+│       ├── agent_io/
+│       │   ├── staging/
+│       │   │   └── reviews.json          # Input reviews
+│       │   └── target/                   # Output results
+│       └── seed_data/
+│           └── evaluation_rubric.json    # Scoring rubric and feedback categories
 ├── prompt_store/
-│   └── review_analyzer.md                    # 4 LLM prompts
-├── schema/review_analyzer/
-│   ├── extract_claims.yml                    # Step 1 output schema
-│   ├── score_quality.yml                     # Step 2 output schema
-│   ├── aggregate_scores.yml                  # Step 3 output schema
-│   ├── generate_response.yml                 # Step 4 output schema
-│   ├── extract_product_insights.yml          # Step 5 output schema
-│   └── format_output.yml                     # Step 6 output schema
-└── tools/review_analyzer/
-    ├── aggregate_quality_scores.py           # Weighted consensus voting
-    └── format_analysis_output.py             # Final output packaging
+│   └── review_analyzer.md               # All prompt templates
+├── schema/
+│   └── review_analyzer/
+│       ├── extract_claims.yml
+│       ├── score_quality.yml
+│       ├── aggregate_scores.yml
+│       ├── generate_response.yml
+│       ├── extract_product_insights.yml
+│       └── format_output.yml
+└── tools/
+    ├── review_analyzer/
+    │   ├── aggregate_quality_scores.py
+    │   └── format_analysis_output.py
+    └── shared/
+        └── reprompt_validations.py       # check_required_fields UDF
 ```

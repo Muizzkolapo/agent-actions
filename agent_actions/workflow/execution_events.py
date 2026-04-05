@@ -41,7 +41,7 @@ class WorkflowEventLogger:
         time_str = workflow_start.strftime("%H:%M:%S.%f")[:-3]
         corr_id = correlation_id[:8] if correlation_id else "unknown"
         separator = f"====== {time_str} | {corr_id} ======"
-        logger.info(separator)
+        logger.debug(separator)
 
         mode = "async" if is_async else "sequential"
 
@@ -55,7 +55,7 @@ class WorkflowEventLogger:
             )
         )
 
-        logger.info(
+        logger.debug(
             "Workflow started (%s)",
             mode,
             extra={
