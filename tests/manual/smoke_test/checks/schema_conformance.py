@@ -54,9 +54,11 @@ class SchemaConformance(Check):
             cursor = conn.execute("SELECT DISTINCT action_name FROM target_data")
             all_db_actions = {r[0] for r in cursor.fetchall()}
 
-            # Also get skipped actions from dispositions
+            # Get actions that were fully skipped/unprocessed by guards
+            # These have passthrough data from upstream, not LLM output
             cursor = conn.execute(
-                "SELECT DISTINCT action_name FROM record_disposition WHERE disposition = 'skipped'"
+                "SELECT DISTINCT action_name FROM record_disposition "
+                "WHERE disposition IN ('skipped', 'unprocessed')"
             )
             skipped_actions = {r[0] for r in cursor.fetchall()}
 
@@ -96,8 +98,13 @@ class SchemaConformance(Check):
                             )
                             rows.extend(cursor.fetchall())
 
+                # If all records for this action were guard-skipped/unprocessed,
+                # the target_data contains passthrough from upstream, not LLM output.
+                if action_name in skipped_actions:
+                    continue
+
                 if not rows:
-                    if action_name in excused_actions or action_name in skipped_actions:
+                    if action_name in excused_actions:
                         continue
                     results.append(
                         CheckResult(
