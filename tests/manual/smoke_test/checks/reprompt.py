@@ -11,8 +11,8 @@ from tests.manual.smoke_test.context import CheckResult, RunContext
 class RepromptCheck(Check):
     """Verify a reprompt-enabled action triggered retries.
 
-    AgacClient intentionally produces short responses on attempt 1,
-    which should fail validation and trigger reprompt on attempt 2+.
+    Parses events.json (NDJSON) for retry/reprompt evidence. If the action
+    is configured for reprompt, there MUST be retry evidence -- no excuses.
 
     Args:
         action: action name with reprompt configured
@@ -29,93 +29,71 @@ class RepromptCheck(Check):
                 CheckResult(
                     False,
                     f"reprompt({self.action}): pipeline completed",
-                    f"exit code {ctx.exit_code} — cannot verify reprompt",
+                    f"exit code {ctx.exit_code} -- cannot verify reprompt",
                 )
             )
             return results
 
-        combined_output = ctx.stdout + ctx.stderr
-
-        # Look for retry/reprompt evidence in logs
-        retry_keywords = ["reprompt", "retry", "attempt", "validation"]
-        evidence_found = [kw for kw in retry_keywords if kw in combined_output.lower()]
-
-        if evidence_found:
-            results.append(
-                CheckResult(
-                    True,
-                    f"reprompt({self.action}): retry evidence in logs",
-                    f"keywords found: {', '.join(evidence_found)}",
-                )
-            )
-        else:
-            # No log evidence, but the action may have passed on attempt 1
-            # (AgacClient behavior is non-deterministic). That is still valid.
-            results.append(
-                CheckResult(
-                    True,
-                    f"reprompt({self.action}): retry evidence in logs",
-                    "no retry keywords in output — action may have passed on first attempt",
-                )
-            )
-
-        # Check events.json for attempt-related entries
+        # Parse events.json (NDJSON format) for retry evidence
         events_path = ctx.target_dir / "events.json"
-        if events_path.exists():
-            try:
-                events_data = json.loads(events_path.read_text())
-                # Events may be a list of dicts or a single dict
-                events_str = json.dumps(events_data).lower()
-                has_attempt_info = (
-                    "attempt" in events_str
-                    or "retry" in events_str
-                    or "reprompt" in events_str
-                    or self.action in events_str
-                )
-                results.append(
-                    CheckResult(
-                        True,
-                        f"reprompt({self.action}): events recorded",
-                        "action referenced in events"
-                        if has_attempt_info
-                        else "events.json present but no attempt details",
-                    )
-                )
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                results.append(
-                    CheckResult(
-                        True,
-                        f"reprompt({self.action}): events recorded",
-                        "events.json not parseable — checked by OutputStructure",
-                    )
-                )
-        else:
+        if not events_path.exists():
             results.append(
                 CheckResult(
-                    True,
-                    f"reprompt({self.action}): events recorded",
-                    "no events.json — events check deferred to OutputStructure",
+                    False,
+                    f"reprompt({self.action}): events.json exists",
+                    "events.json not found -- cannot verify reprompt",
                 )
             )
+            return results
 
-        # Verify the action ultimately produced output (retries recovered)
-        action_dir = ctx.target_dir / self.action
-        if action_dir.exists() and any(action_dir.glob("*.json")):
+        events: list[dict] = []
+        try:
+            for line in events_path.read_text().splitlines():
+                line = line.strip()
+                if line:
+                    events.append(json.loads(line))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            results.append(
+                CheckResult(
+                    False,
+                    f"reprompt({self.action}): events parseable",
+                    f"failed to parse events.json: {e}",
+                )
+            )
+            return results
+
+        # Look for events related to this action that indicate retries
+        retry_events = []
+        for event in events:
+            event_data = event.get("data", {})
+            event_action = event_data.get("action_name", "")
+            event_type = event.get("event_type", "")
+
+            # Match events for this action
+            if event_action != self.action:
+                continue
+
+            # Check for attempt > 1 or reprompt-related event types
+            attempt = event_data.get("attempt", 0)
+            if attempt > 1:
+                retry_events.append(event)
+            elif "Reprompt" in event_type or "Retry" in event_type:
+                retry_events.append(event)
+
+        if retry_events:
             results.append(
                 CheckResult(
                     True,
-                    f"reprompt({self.action}): action produced output",
-                    "output files present — retries recovered successfully",
+                    f"reprompt({self.action}): retry evidence found",
+                    f"{len(retry_events)} retry-related events",
                 )
             )
         else:
-            # The action may not have its own dir if it is part of a versioned
-            # action or output went to DB. Not a failure of reprompt itself.
             results.append(
                 CheckResult(
-                    True,
-                    f"reprompt({self.action}): action completed",
-                    "no action-level output dir — output may be in DB or versioned",
+                    False,
+                    f"reprompt({self.action}): retry evidence found",
+                    "no retry attempts found in events.json",
                 )
             )
 

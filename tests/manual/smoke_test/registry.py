@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.manual.smoke_test.checks.context_scope import ContextScope
 from tests.manual.smoke_test.checks.guards import GuardCheck
 from tests.manual.smoke_test.checks.output_structure import OutputStructure
 from tests.manual.smoke_test.checks.parallel import ParallelVersions
@@ -60,6 +61,7 @@ EXAMPLES: list[Example] = [
             GuardCheck(action="generate_response", behavior="filter"),
             GuardCheck(action="extract_product_insights", behavior="filter"),
             RepromptCheck(action="score_quality"),
+            ContextScope(action="generate_response", dropped_fields=["source.star_rating"]),
         ],
     ),
     Example(
