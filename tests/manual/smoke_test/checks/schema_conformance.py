@@ -94,7 +94,19 @@ class SchemaConformance(Check):
                         for record in records:
                             if not isinstance(record, dict):
                                 continue
-                            missing = [f for f in required_fields if f not in record]
+                            # Storage wraps LLM output in {source_guid, content, ...}
+                            # The actual schema fields are inside "content"
+                            check_target = record
+                            if "content" in record and isinstance(record["content"], (dict, str)):
+                                content = record["content"]
+                                if isinstance(content, str):
+                                    try:
+                                        content = json.loads(content)
+                                    except (json.JSONDecodeError, ValueError):
+                                        content = record
+                                if isinstance(content, dict):
+                                    check_target = content
+                            missing = [f for f in required_fields if f not in check_target]
                             results.append(
                                 CheckResult(
                                     passed=len(missing) == 0,
