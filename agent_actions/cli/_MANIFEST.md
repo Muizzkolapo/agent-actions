@@ -84,3 +84,42 @@
 | `PreviewCommand` | Class | Implementation of the preview command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the preview command. | - |
 | `preview` | Function | Preview data stored in the SQLite storage backend. | - |
+
+## Project Surface
+
+| Symbol | File | Interaction | Config Key |
+|--------|------|-------------|------------|
+| `main_entrypoint()` | `.env` | Reads | — |
+| `requires_project()` | `agent_actions.yml` | Reads | — |
+| `RunCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
+| `RunCommand.execute()` | `prompt_store/{workflow}.md` | Validates | — |
+| `RunCommand.execute()` | `agent_io/target/{action}/` | Writes | — |
+| `RunCommand.execute()` | `agent_io/target/events.json` | Writes | — |
+| `RunCommand.execute()` | `agent_io/target/run_results.json` | Writes | — |
+| `RunCommand.execute()` | `tools/{workflow}/*.py` | Reads | `user_code` |
+| `RenderCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
+| `RenderCommand.execute()` | `prompt_store/{workflow}.md` | Reads | — |
+| `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
+| `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
+| `SchemaCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema_name` |
+| `StatusCommand.execute()` | `agent_io/staging/` | Reads | — |
+| `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | — |
+| `PreviewCommand.execute()` | `agent_io/target/{action}/` | Reads | — |
+| `BaseInspectCommand._load_workflow()` | `agent_config/{workflow}.yml` | Reads | — |
+| `clean_cli()` | `agent_io/staging/` | Writes | — |
+| `clean_cli()` | `agent_io/target/{action}/` | Writes | — |
+
+## Dependencies
+
+| Package | Direction | Why |
+|---------|-----------|-----|
+| `config` | outbound | Reads project paths, config files, and project root resolution |
+| `workflow` | outbound | Invokes AgentWorkflow for run, inspect, and schema commands |
+| `logging` | outbound | Initializes LoggerFactory and fires structured events |
+| `validation` | outbound | Validates command arguments and project structure |
+| `prompt` | outbound | Renders Jinja2 templates and validates prompt files |
+| `models` | outbound | Uses ActionSchema for inspect and schema display |
+| `errors` | outbound | Catches and formats AgentActionsError for CLI output |
+| `storage` | outbound | Reads SQLite backend for preview command |
+| `llm` | outbound | Invokes Cleaner for clean command and batch CLI |
+| `tooling` | outbound | Generates docs and tracks run results |
