@@ -16,7 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class PromptValidator(BaseValidator):
-    """Validates all prompt files in a given directory."""
+    """Validates prompt files in a given directory.
+
+    When a ``config`` dict with a ``"workflow_name"`` key is passed to
+    :meth:`validate`, only prompt files referenced by that workflow are
+    scanned (i.e. ``{workflow_name}.md``).  Without it the validator
+    falls back to scanning every ``.md`` file in the directory.
+    """
 
     _PROMPT_SECTION_PATTERN = re.compile("^#+\\s+(.+?)$", re.MULTILINE)
     _MAX_PROMPT_SIZE = PromptDefaults.MAX_PROMPT_SIZE_BYTES
@@ -159,8 +165,26 @@ class PromptValidator(BaseValidator):
                 return f"Empty prompt content for ID '{prompt_id}' in file '{file_name}'."
         return None
 
+    @staticmethod
+    def _resolve_prompt_files(prompt_dir: Path, workflow_name: str | None) -> list[Path]:
+        """Return the prompt files that should be validated.
+
+        When *workflow_name* is provided, only the file
+        ``{workflow_name}.md`` is returned (if it exists).  Otherwise
+        every ``.md`` file in *prompt_dir* is returned.
+        """
+        if workflow_name:
+            target = prompt_dir / f"{workflow_name}.md"
+            return [target] if target.exists() else []
+        return sorted(prompt_dir.glob("*.md"))
+
     def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
-        """Validate all prompt files in the directory specified by data (Path)."""
+        """Validate prompt files in the directory specified by *data* (Path).
+
+        If *config* contains a ``"workflow_name"`` key, only the prompt
+        file for that workflow is validated instead of every ``.md``
+        file in the directory.
+        """
         self.clear_errors()
         self.clear_warnings()
         self._validation_target = str(data) if isinstance(data, Path) else self.validator_name
@@ -187,9 +211,11 @@ class PromptValidator(BaseValidator):
         if not self._is_directory(prompt_dir):
             self.add_error(f"Prompt path is not a directory: {prompt_dir}.")
             return self._complete_validation()
+
+        workflow_name = (config or {}).get("workflow_name")
         all_prompt_ids_seen: set[str] = set()
         stats = {"total_files_processed": 0, "files_with_errors": 0, "total_prompts_validated": 0}
-        prompt_files = list(prompt_dir.glob("*.md"))
+        prompt_files = self._resolve_prompt_files(prompt_dir, workflow_name)
         if not prompt_files:
             self.add_warning(f"No .md files found in prompt directory: {prompt_dir}")
             return self._complete_validation()
