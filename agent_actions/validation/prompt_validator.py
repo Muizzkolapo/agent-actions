@@ -169,13 +169,14 @@ class PromptValidator(BaseValidator):
     def _resolve_prompt_files(prompt_dir: Path, workflow_name: str | None) -> list[Path]:
         """Return the prompt files that should be validated.
 
-        When *workflow_name* is provided, only the file
-        ``{workflow_name}.md`` is returned (if it exists).  Otherwise
-        every ``.md`` file in *prompt_dir* is returned.
+        When *workflow_name* is provided, only ``{workflow_name}.md`` is
+        returned.  If the file does not exist the list is empty and the
+        caller emits a specific warning.  Without a workflow name every
+        ``.md`` file in *prompt_dir* is returned.
         """
         if workflow_name:
             target = prompt_dir / f"{workflow_name}.md"
-            return [target] if target.exists() else []
+            return [target] if target.is_file() else []
         return sorted(prompt_dir.glob("*.md"))
 
     def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
@@ -217,7 +218,10 @@ class PromptValidator(BaseValidator):
         stats = {"total_files_processed": 0, "files_with_errors": 0, "total_prompts_validated": 0}
         prompt_files = self._resolve_prompt_files(prompt_dir, workflow_name)
         if not prompt_files:
-            self.add_warning(f"No .md files found in prompt directory: {prompt_dir}")
+            if workflow_name:
+                self.add_warning(f"Prompt file '{workflow_name}.md' not found in {prompt_dir}")
+            else:
+                self.add_warning(f"No .md files found in prompt directory: {prompt_dir}")
             return self._complete_validation()
         for prompt_file in prompt_files:
             stats["total_files_processed"] += 1
