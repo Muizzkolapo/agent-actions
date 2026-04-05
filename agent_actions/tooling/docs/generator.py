@@ -305,9 +305,7 @@ class CatalogGenerator:
                 "action_count": len(enriched_actions),
                 "latest_run": latest_run,
                 "manifest": manifest,
-                "readme": _copy_readme_images(
-                    readmes_data[workflow_id], workflow_id, artefact_dir
-                )
+                "readme": _copy_readme_images(readmes_data[workflow_id], workflow_id, artefact_dir)
                 if readmes_data and workflow_id in readmes_data and artefact_dir
                 else (
                     readmes_data[workflow_id].content

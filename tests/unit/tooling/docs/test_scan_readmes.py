@@ -33,9 +33,7 @@ def test_scan_readmes_finds_readme(project_tree: Path):
     assert "my_workflow" in readmes
     assert isinstance(readmes["my_workflow"], ReadmeData)
     assert readmes["my_workflow"].content == "# My Workflow\nDoes things."
-    assert readmes["my_workflow"].source_dir == (
-        project_tree / "agent_workflow" / "my_workflow"
-    )
+    assert readmes["my_workflow"].source_dir == (project_tree / "agent_workflow" / "my_workflow")
 
 
 def test_scan_readmes_skips_workflow_without_readme(project_tree: Path):
