@@ -175,6 +175,9 @@ class PromptValidator(BaseValidator):
         ``.md`` file in *prompt_dir* is returned.
         """
         if workflow_name:
+            # Guard against path traversal — workflow_name must be a simple name
+            if ".." in workflow_name or "/" in workflow_name or "\\" in workflow_name:
+                return []
             target = prompt_dir / f"{workflow_name}.md"
             return [target] if target.is_file() else []
         return sorted(prompt_dir.glob("*.md"))

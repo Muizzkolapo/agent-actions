@@ -333,4 +333,4 @@ class TestValidateWorkflowScoping:
         (tmp_path / "other.md").write_text("irrelevant")
         result = validator.validate(tmp_path, config={"workflow_name": "nonexistent"})
         assert result is True
-        assert any("no .md files" in w.lower() for w in validator.get_warnings())
+        assert any("nonexistent.md" in w and "not found" in w for w in validator.get_warnings())
