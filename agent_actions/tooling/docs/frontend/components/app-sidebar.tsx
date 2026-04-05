@@ -167,8 +167,10 @@ export function AppSidebar({ activeSection, onNavigate, onSearchClick, projectNa
                     <span>{item.label}</span>
                     {item.badge && (
                       <Badge
-                        variant="destructive"
-                        className="ml-auto h-5 min-w-5 justify-center rounded-md text-[10px] font-normal border-0"
+                        variant={item.badge === "0" ? "secondary" : "destructive"}
+                        className={`ml-auto h-5 min-w-5 justify-center rounded-md text-[10px] font-normal border-0 ${
+                          item.badge === "0" ? "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" : ""
+                        }`}
                       >
                         {item.badge}
                       </Badge>
