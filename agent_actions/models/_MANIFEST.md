@@ -18,3 +18,16 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `optional_inputs` | Method | Optional input field names (for tools). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `uses_fields` | Method | Unique 'agent.field' references from upstream. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert to dictionary for JSON serialization. | - |
+
+## Project Surface
+
+No direct project surface. These are data representations consumed internally by cli (inspect, schema commands), workflow (schema service), and tooling (docs generator).
+
+## Dependencies
+
+| Package | Direction | Why |
+|---------|-----------|-----|
+| `config` | outbound | Imports ActionKind enum from config.schema |
+| `cli` | inbound | Inspect and schema commands use ActionSchema for display |
+| `workflow` | inbound | WorkflowSchemaService builds and resolves ActionSchema instances |
+| `tooling` | inbound | Docs generator reads ActionSchema for catalog output |

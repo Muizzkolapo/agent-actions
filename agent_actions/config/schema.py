@@ -220,7 +220,6 @@ class ActionConfig(BaseModel):
     where_clause: dict[str, Any] | None = Field(
         default=None, description="WHERE clause configuration for filtering"
     )
-    ephemeral: bool | None = Field(default=None, description="Ephemeral action outputs")
     anthropic_version: str | None = Field(
         default=None, description="API version header for Anthropic requests"
     )

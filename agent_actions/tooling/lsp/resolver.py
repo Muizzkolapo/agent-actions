@@ -164,17 +164,20 @@ def resolve_reference(
             return Location(file_path=workflow_path, line=0, column=0)
 
     elif reference.type == ReferenceType.SEED_FILE:
-        # Resolve relative to seed_data directory
-        seed_path = index.root / "seed_data" / reference.value
+        # Resolve relative to seed data directory (configurable via agent_actions.yml)
+        from agent_actions.config.path_config import get_seed_data_path
+
+        seed_dir_name = get_seed_data_path(index.root)
+        seed_path = index.root / seed_dir_name / reference.value
         if seed_path.exists():
             return Location(file_path=seed_path, line=0, column=0)
 
-        # Also check workflow-specific seed_data (only when inside agent_config/ tree)
+        # Also check workflow-specific seed data (only when inside agent_config/ tree)
         if current_file:
             ancestor = current_file.parent
             while ancestor != ancestor.parent:
                 if ancestor.name == "agent_config":
-                    workflow_seed = ancestor.parent / "seed_data" / reference.value
+                    workflow_seed = ancestor.parent / seed_dir_name / reference.value
                     if workflow_seed.exists():
                         return Location(file_path=workflow_seed, line=0, column=0)
                     break

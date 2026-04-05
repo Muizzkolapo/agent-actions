@@ -15,6 +15,8 @@ export interface Stats {
   total_runs: number
   validation_errors: number
   validation_warnings: number
+  runtime_errors: number
+  runtime_warnings: number
 }
 
 export interface WorkflowDefaults {

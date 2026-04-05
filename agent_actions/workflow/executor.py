@@ -342,7 +342,12 @@ class ActionExecutor:
         final_status = self._resolve_completion_status(params.action_name)
 
         if final_status == ActionStatus.SKIPPED:
-            self.deps.state_manager.update_status(params.action_name, ActionStatus.SKIPPED)
+            self.deps.state_manager.update_status(
+                params.action_name,
+                ActionStatus.SKIPPED,
+                execution_time=duration,
+                skip_reason="All records guard-skipped",
+            )
             total_actions = (
                 len(self.deps.action_runner.execution_order)
                 if hasattr(self.deps.action_runner, "execution_order")
@@ -374,7 +379,10 @@ class ActionExecutor:
             )
 
         self.deps.state_manager.update_status(
-            params.action_name, final_status, **self._limit_metadata(params.action_config)
+            params.action_name,
+            final_status,
+            execution_time=duration,
+            **self._limit_metadata(params.action_config),
         )
         tokens = get_last_usage()
 
@@ -469,7 +477,12 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle action run failure."""
         duration = (datetime.now() - params.start_time).total_seconds()
-        self.deps.state_manager.update_status(params.action_name, ActionStatus.FAILED)
+        self.deps.state_manager.update_status(
+            params.action_name,
+            ActionStatus.FAILED,
+            execution_time=duration,
+            error_message=str(error),
+        )
         self._write_failed_disposition(params.action_name, str(error))
 
         if self.run_tracker is not None and self.run_id is not None:
@@ -546,10 +559,11 @@ class ActionExecutor:
             "skipped" if self.deps.state_manager.is_skipped(failed_dependency) else "failed"
         )
         reason = f"Upstream dependency '{failed_dependency}' {dep_status}"
-        self.deps.state_manager.update_status(action_name, ActionStatus.SKIPPED)
-        self._write_skipped_disposition(action_name, reason)
-
         duration = (datetime.now() - start_time).total_seconds()
+        self.deps.state_manager.update_status(
+            action_name, ActionStatus.SKIPPED, skip_reason=reason, execution_time=duration
+        )
+        self._write_skipped_disposition(action_name, reason)
         total_actions = (
             len(self.deps.action_runner.execution_order)
             if hasattr(self.deps.action_runner, "execution_order")

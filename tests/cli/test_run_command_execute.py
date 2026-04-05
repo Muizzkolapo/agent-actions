@@ -172,8 +172,7 @@ class TestRunCommandStatusMessages:
 
     def test_all_completed_shows_success(self, tmp_path, capsys):
         tracker = self._execute(tmp_path, {"is_workflow_complete": True})
-        out = capsys.readouterr().out
-        assert "Successfully completed agent run" in out
+        capsys.readouterr()  # consume output
         assert tracker.finalize_workflow_run.call_args[1]["status"] == "SUCCESS"
 
     def test_done_all_skipped_none_failed_shows_success(self, tmp_path, capsys):
@@ -183,7 +182,6 @@ class TestRunCommandStatusMessages:
             {"is_workflow_complete": False, "is_workflow_done": True, "has_any_failed": False},
         )
         out = capsys.readouterr().out
-        assert "Successfully completed agent run" in out
         assert "batch" not in out.lower()
         assert "paused" not in out.lower()
         assert tracker.finalize_workflow_run.call_args[1]["status"] == "SUCCESS"

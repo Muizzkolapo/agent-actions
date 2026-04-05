@@ -42,7 +42,6 @@ SIMPLE_CONFIG_FIELDS = {
     # Retry configuration (transport-layer failure handling)
     "retry": None,  # Default: None (retry disabled unless configured)
     # Runtime-consumed fields (providers and managers read these from agent dict)
-    "ephemeral": None,
     "anthropic_version": None,
     "enable_prompt_caching": None,
     "max_execution_time": 300,

@@ -196,3 +196,40 @@ def get_schema_path(project_root: Path) -> str:
             context={"project_root": str(project_root), "operation": "get_schema_path"},
         )
     return str(schema_path)
+
+
+def get_seed_data_path(project_root: Path) -> str:
+    """Return the seed data folder name from project config.
+
+    Reads ``seed_data_path`` from ``agent_actions.yml``.  When no config
+    file exists or the key is absent, returns ``"seed_data"`` as the
+    conventional default.
+
+    Args:
+        project_root: Resolved project root directory.
+
+    Returns:
+        Seed data directory name (relative to workflow root).
+    """
+    try:
+        config = load_project_config(project_root)
+    except (OSError, ConfigValidationError) as exc:
+        logger.debug(
+            "Could not load seed_data_path from project config, defaulting to 'seed_data': %s",
+            exc,
+        )
+        return "seed_data"
+
+    raw = config.get("seed_data_path")
+    if raw is None:
+        return "seed_data"
+    name = str(raw)
+    # Reject path traversal patterns — seed_data_path must be a simple directory name
+    if ".." in name or "/" in name or "\\" in name:
+        logger.warning(
+            "seed_data_path %r contains path separators or traversal patterns; "
+            "using default 'seed_data'",
+            name,
+        )
+        return "seed_data"
+    return name
