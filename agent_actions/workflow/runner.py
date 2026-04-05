@@ -255,7 +255,7 @@ class ActionRunner:
 
         # Log resolution
         if len(resolved_dirs) == 1:
-            logger.info("Action '%s': Using '%s' as input source", agent_name, dependencies[0])
+            logger.debug("Action '%s': Using '%s' as input source", agent_name, dependencies[0])
         else:
             logger.info(
                 "Action '%s': Merging %d input sources: %s",
