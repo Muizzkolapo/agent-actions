@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 
 from tests.manual.smoke_test.checks import Check
@@ -10,9 +11,12 @@ from tests.manual.smoke_test.context import CheckResult, RunContext
 class GuardCheck(Check):
     """Verify a guarded action produced correct dispositions.
 
+    Queries the record_disposition table in the SQLite DB for evidence
+    that the guard evaluated correctly.
+
     Args:
         action: action name that has a guard
-        behavior: expected guard behavior — "filter" or "skip"
+        behavior: expected guard behavior -- "filter" or "skip"
     """
 
     action: str
@@ -27,103 +31,84 @@ class GuardCheck(Check):
                 CheckResult(
                     False,
                     f"guard({self.action}): pipeline completed",
-                    f"exit code {ctx.exit_code} — cannot verify guard behavior",
+                    f"exit code {ctx.exit_code} -- cannot verify guard behavior",
                 )
             )
             return results
 
-        action_dir = ctx.target_dir / self.action
-
-        # Look for guard-related evidence in stdout/stderr
-        combined_output = ctx.stdout + ctx.stderr
-        guard_mentioned = "guard" in combined_output.lower() or self.action in combined_output
+        db_path = ctx.db_path
+        if db_path is None:
+            results.append(
+                CheckResult(
+                    False,
+                    f"guard({self.action}): storage DB exists",
+                    "no storage DB found in target dir",
+                )
+            )
+            return results
 
         if self.behavior == "filter":
-            # For "filter" behavior: the action should still run but some records
-            # may get disposition "filtered". At minimum, the pipeline should not
-            # crash and the action directory or DB should exist.
-            if action_dir.exists():
-                results.append(
-                    CheckResult(
-                        True,
-                        f"guard({self.action}): action dir exists",
-                        "guard evaluated — action directory present",
-                    )
-                )
-            else:
-                # Action dir might not exist if all records were filtered,
-                # which is valid guard behavior
-                results.append(
-                    CheckResult(
-                        True,
-                        f"guard({self.action}): all records filtered",
-                        "action directory absent — guard may have filtered all records",
-                    )
-                )
+            with sqlite3.connect(str(db_path)) as conn:
+                dispositions = conn.execute(
+                    "SELECT disposition FROM record_disposition WHERE action_name = ?",
+                    (self.action,),
+                ).fetchall()
 
-            # Check for filter disposition evidence in logs
-            filter_evidence = (
-                "filter" in combined_output.lower()
-                or "disposition" in combined_output.lower()
-                or "guard" in combined_output.lower()
-            )
-            results.append(
-                CheckResult(
-                    True,
-                    f"guard({self.action}): filter behavior configured",
-                    "guard log evidence found"
-                    if filter_evidence
-                    else "no crash — guard did not break pipeline",
-                )
-            )
+                filtered = [d for d in dispositions if d[0] == "filtered"]
+                if filtered:
+                    results.append(
+                        CheckResult(
+                            True,
+                            f"guard({self.action}): filtered records found",
+                            f"{len(filtered)} records with disposition 'filtered'",
+                        )
+                    )
+                else:
+                    results.append(
+                        CheckResult(
+                            False,
+                            f"guard({self.action}): filtered records found",
+                            "no records with disposition 'filtered' in record_disposition",
+                        )
+                    )
 
         elif self.behavior == "skip":
-            # For "skip" behavior: the guard may skip the entire action.
-            # The action directory may or may not exist depending on guard evaluation.
-            skip_evidence = "skip" in combined_output.lower() or "guard" in combined_output.lower()
+            with sqlite3.connect(str(db_path)) as conn:
+                # For skip behavior, the action should have no target_data rows
+                target_count = conn.execute(
+                    "SELECT COUNT(*) FROM target_data WHERE action_name = ?",
+                    (self.action,),
+                ).fetchone()[0]
 
-            if action_dir.exists():
-                results.append(
-                    CheckResult(
-                        True,
-                        f"guard({self.action}): action ran (guard passed)",
-                        "guard condition was true — action executed",
-                    )
-                )
-            else:
-                results.append(
-                    CheckResult(
-                        True,
-                        f"guard({self.action}): action skipped (guard triggered)",
-                        "action directory absent — guard skip behavior applied",
-                    )
-                )
+                # Also check for a skipped disposition
+                skip_dispositions = conn.execute(
+                    "SELECT disposition FROM record_disposition WHERE action_name = ?",
+                    (self.action,),
+                ).fetchall()
+                skipped = [d for d in skip_dispositions if d[0] == "skipped"]
 
-            results.append(
-                CheckResult(
-                    True,
-                    f"guard({self.action}): skip behavior configured",
-                    "guard log evidence found"
-                    if skip_evidence
-                    else "no crash — guard did not break pipeline",
-                )
-            )
+                if target_count == 0:
+                    results.append(
+                        CheckResult(
+                            True,
+                            f"guard({self.action}): action skipped (no output)",
+                            f"0 rows in target_data, {len(skipped)} skip dispositions",
+                        )
+                    )
+                else:
+                    results.append(
+                        CheckResult(
+                            False,
+                            f"guard({self.action}): action skipped (no output)",
+                            f"expected 0 target_data rows but found {target_count}",
+                        )
+                    )
         else:
             results.append(
                 CheckResult(
                     False,
-                    f"guard({self.action}): unknown behavior",
-                    f"unexpected behavior '{self.behavior}' — expected 'filter' or 'skip'",
-                )
-            )
-
-        # Verify the guard didn't cause downstream actions to fail silently
-        if guard_mentioned:
-            results.append(
-                CheckResult(
-                    True,
-                    f"guard({self.action}): pipeline healthy after guard",
-                    "guard evaluation did not crash the pipeline",
+                    f"guard({self.action}): valid behavior",
+                    f"unexpected behavior '{self.behavior}' -- expected 'filter' or 'skip'",
                 )
             )
 

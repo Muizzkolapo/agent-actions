@@ -39,6 +39,12 @@ class RunContext:
     def config_path(self) -> Path:
         return self.workflow_dir / "agent_config" / f"{self.example.workflow}.yml"
 
+    @property
+    def db_path(self) -> Path | None:
+        """Path to the SQLite storage DB, if it exists."""
+        dbs = list(self.target_dir.glob("*.db"))
+        return dbs[0] if dbs else None
+
 
 @dataclass
 class Example:
