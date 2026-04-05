@@ -21,80 +21,63 @@ class RepromptCheck(Check):
     action: str
 
     def verify(self, ctx: RunContext) -> list[CheckResult]:
-        results: list[CheckResult] = []
-
         if ctx.exit_code != 0:
-            results.append(
+            return [
                 CheckResult(
                     False,
                     f"reprompt({self.action}): pipeline completed",
                     f"exit code {ctx.exit_code} — cannot verify reprompt",
                 )
-            )
-            return results
+            ]
 
         events_path = ctx.target_dir / "events.json"
         if not events_path.exists():
-            results.append(
+            return [
                 CheckResult(
                     False,
                     f"reprompt({self.action}): events.json exists",
                     "events.json not found",
                 )
-            )
-            return results
+            ]
 
-        # Parse NDJSON events
-        events: list[dict] = []
+        # Single-pass: stream lines, parse only relevant ones
+        validation_count = 0
         try:
-            for line in events_path.read_text().splitlines():
-                line = line.strip()
-                if line:
-                    events.append(json.loads(line))
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            results.append(
+            with events_path.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # Quick string check before parsing JSON
+                    if self.action not in line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    event_type = event.get("event_type", "")
+                    message = event.get("message", "")
+                    if self.action not in message:
+                        continue
+                    if event_type in ("DataValidationStartedEvent", "DataValidationPassedEvent"):
+                        validation_count += 1
+                    elif "Validation" in message or "attempt" in message:
+                        validation_count += 1
+        except OSError:
+            return [
                 CheckResult(
                     False,
-                    f"reprompt({self.action}): events parseable",
-                    f"failed to parse events.json: {e}",
+                    f"reprompt({self.action}): events readable",
+                    "failed to read events.json",
                 )
+            ]
+
+        return [
+            CheckResult(
+                passed=validation_count > 0,
+                name=f"reprompt({self.action}): validation ran",
+                message=f"{validation_count} validation events found"
+                if validation_count > 0
+                else f"no validation events for '{self.action}' in events.json",
             )
-            return results
-
-        # Look for validation events related to this action.
-        # Evidence comes in two forms:
-        # 1. DataValidationStartedEvent with message containing "RepromptValidation"
-        # 2. LogEvent with message like "[action=classify_genre] Validation passed on attempt 1/2"
-        # The action name may appear in the message field, not in data.action_name
-        validation_events = []
-        for event in events:
-            event_type = event.get("event_type", "")
-            message = event.get("message", "")
-
-            # Match events mentioning this action (including versioned: action_1, action_2)
-            if self.action not in message:
-                continue
-
-            if event_type in ("DataValidationStartedEvent", "DataValidationPassedEvent"):
-                validation_events.append(event)
-            elif "Validation" in message or "attempt" in message:
-                validation_events.append(event)
-
-        if validation_events:
-            results.append(
-                CheckResult(
-                    True,
-                    f"reprompt({self.action}): validation ran",
-                    f"{len(validation_events)} validation events found",
-                )
-            )
-        else:
-            results.append(
-                CheckResult(
-                    False,
-                    f"reprompt({self.action}): validation ran",
-                    f"no validation events for '{self.action}' in events.json",
-                )
-            )
-
-        return results
+        ]
