@@ -3,6 +3,8 @@
 import json
 import logging
 import os
+import re
+import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -18,8 +20,57 @@ from agent_actions.workflow.schema_service import WorkflowSchemaService
 from . import scanner
 from .parser import WorkflowParser
 from .run_tracker import _empty_runs_data
+from .scanner import ReadmeData
 
 logger = logging.getLogger(__name__)
+
+
+def _copy_readme_images(
+    readme_data: ReadmeData,
+    workflow_id: str,
+    artefact_dir: Path,
+) -> str:
+    """Copy images referenced in README to artefact/images/ and rewrite paths."""
+    content = readme_data.content
+    images_dir = artefact_dir / "images" / workflow_id
+
+    # Match both <img src="..."> and ![alt](...)
+    img_patterns = [
+        (r'<img\s+[^>]*src="([^"]+)"', "html"),
+        (r"!\[([^\]]*)\]\(([^)]+)\)", "markdown"),
+    ]
+
+    replacements: list[tuple[str, str]] = []
+
+    for pattern, kind in img_patterns:
+        for match in re.finditer(pattern, content):
+            if kind == "html":
+                rel_path = match.group(1)
+            else:
+                rel_path = match.group(2)
+
+            # Skip URLs (http://, https://, data:)
+            if rel_path.startswith(("http://", "https://", "data:")):
+                continue
+
+            # Resolve relative to README's directory
+            source = (readme_data.source_dir / rel_path).resolve()
+            if not source.exists() or not source.is_file():
+                continue
+
+            # Copy to artefact/images/{workflow_id}/{filename}
+            images_dir.mkdir(parents=True, exist_ok=True)
+            dest = images_dir / source.name
+            shutil.copy2(source, dest)
+
+            # Rewrite path to /artefact/images/{workflow_id}/{filename}
+            new_path = f"/artefact/images/{workflow_id}/{source.name}"
+            replacements.append((rel_path, new_path))
+
+    for old_path, new_path in replacements:
+        content = content.replace(old_path, new_path)
+
+    return content
 
 
 class CatalogGenerator:
@@ -110,8 +161,9 @@ class CatalogGenerator:
         data_loaders_data: dict[str, Any] | None = None,
         processing_states_data: dict[str, Any] | None = None,
         workflow_data: dict[str, Any] | None = None,
-        readmes_data: dict[str, str] | None = None,
+        readmes_data: dict[str, ReadmeData] | None = None,
         executions_data: list[dict[str, Any]] | None = None,
+        artefact_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Generate the complete catalog structure."""
         # Initialize prompts with used_by tracking
@@ -253,7 +305,15 @@ class CatalogGenerator:
                 "action_count": len(enriched_actions),
                 "latest_run": latest_run,
                 "manifest": manifest,
-                "readme": (readmes_data or {}).get(workflow_id),
+                "readme": _copy_readme_images(
+                    readmes_data[workflow_id], workflow_id, artefact_dir
+                )
+                if readmes_data and workflow_id in readmes_data and artefact_dir
+                else (
+                    readmes_data[workflow_id].content
+                    if readmes_data and workflow_id in readmes_data
+                    else None
+                ),
             }
 
             # Update stats
@@ -426,6 +486,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         workflow_data=workflow_data,
         readmes_data=readmes_data,
         executions_data=executions_data,
+        artefact_dir=output_dir,
     )
 
     # Step 3: Write data files

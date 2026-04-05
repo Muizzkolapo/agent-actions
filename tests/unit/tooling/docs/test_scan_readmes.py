@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from agent_actions.config.defaults import DocsDefaults
-from agent_actions.tooling.docs.scanner import scan_readmes
+from agent_actions.tooling.docs.scanner import ReadmeData, scan_readmes
 
 
 @pytest.fixture
@@ -31,7 +31,11 @@ def test_scan_readmes_finds_readme(project_tree: Path):
     readmes = scan_readmes(project_tree)
 
     assert "my_workflow" in readmes
-    assert readmes["my_workflow"] == "# My Workflow\nDoes things."
+    assert isinstance(readmes["my_workflow"], ReadmeData)
+    assert readmes["my_workflow"].content == "# My Workflow\nDoes things."
+    assert readmes["my_workflow"].source_dir == (
+        project_tree / "agent_workflow" / "my_workflow"
+    )
 
 
 def test_scan_readmes_skips_workflow_without_readme(project_tree: Path):
@@ -68,7 +72,7 @@ def test_scan_readmes_last_write_wins(tmp_path: Path):
 
     assert "dup" in readmes
     # Last-write-wins: rglob order is non-deterministic, but exactly one wins
-    assert readmes["dup"] in ("README A", "README B")
+    assert readmes["dup"].content in ("README A", "README B")
 
 
 def test_scan_readmes_multiple_yml_in_same_config(tmp_path: Path):
@@ -81,8 +85,10 @@ def test_scan_readmes_multiple_yml_in_same_config(tmp_path: Path):
 
     readmes = scan_readmes(tmp_path)
 
-    assert readmes.get("alpha") == "# Multi"
-    assert readmes.get("beta") == "# Multi"
+    assert readmes.get("alpha") is not None
+    assert readmes["alpha"].content == "# Multi"
+    assert readmes.get("beta") is not None
+    assert readmes["beta"].content == "# Multi"
 
 
 def test_scan_readmes_empty_project(tmp_path: Path):
@@ -104,8 +110,8 @@ def test_scan_readmes_truncates_large_readme(tmp_path: Path):
     readmes = scan_readmes(tmp_path)
 
     assert "big" in readmes
-    assert len(readmes["big"].encode("utf-8")) < len(large_content.encode("utf-8"))
-    assert readmes["big"].endswith("*README truncated (exceeds 100 KB)*\n")
+    assert len(readmes["big"].content.encode("utf-8")) < len(large_content.encode("utf-8"))
+    assert readmes["big"].content.endswith("*README truncated (exceeds 100 KB)*\n")
 
 
 def test_scan_readmes_truncates_multibyte_by_bytes(tmp_path: Path):
@@ -123,8 +129,20 @@ def test_scan_readmes_truncates_multibyte_by_bytes(tmp_path: Path):
 
     readmes = scan_readmes(tmp_path)
 
-    result = readmes["cjk"]
+    result = readmes["cjk"].content
     # The truncated body (before the marker) must fit within the byte cap
     body = result.split("\n\n---\n")[0]
     assert len(body.encode("utf-8")) <= max_bytes
     assert result.endswith("*README truncated (exceeds 100 KB)*\n")
+
+
+def test_scan_readmes_source_dir_is_readme_parent(tmp_path: Path):
+    """source_dir should be the directory containing the README."""
+    wf_dir = tmp_path / "project" / "agent_config"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "workflow.yml").write_text("name: workflow")
+    (wf_dir.parent / "README.md").write_text("# Test")
+
+    readmes = scan_readmes(tmp_path)
+
+    assert readmes["workflow"].source_dir == wf_dir.parent
