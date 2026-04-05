@@ -5,14 +5,38 @@ import sqlite3
 
 import yaml
 
+from agent_actions.storage.backend import DISPOSITION_SKIPPED, DISPOSITION_UNPROCESSED
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
+
+
+def _unwrap_content(record: dict) -> dict:
+    """Extract the LLM response from a storage-wrapped record.
+
+    Storage wraps LLM output in {source_guid, content, target_id, ...}.
+    The actual schema fields are inside "content". Returns the inner dict,
+    or the original record if no wrapping is detected.
+    """
+    raw = record.get("content")
+    if raw is None:
+        return record
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return record
+        if isinstance(parsed, dict):
+            return parsed
+    return record
 
 
 class SchemaConformance(Check):
     """Verify output JSON fields match the action's schema definition.
 
     Reads from the SQLite DB (target_data table) instead of action directories.
+    Handles versioned action names and skips guard-skipped actions.
     """
 
     def verify(self, ctx: RunContext) -> list[CheckResult]:
@@ -20,45 +44,41 @@ class SchemaConformance(Check):
 
         db_path = ctx.db_path
         if db_path is None:
-            results.append(
+            return [
                 CheckResult(
                     passed=False,
                     name="schema conformance",
                     message="no storage DB found in target dir",
                 )
-            )
-            return results
+            ]
 
-        # Load workflow config to get action -> schema mapping
         config = yaml.safe_load(ctx.config_path.read_text())
         schema_dir = ctx.project_dir / "schema" / ctx.example.workflow
-
         actions = config.get("actions", [])
 
-        # Collect actions that may legitimately produce no output
         excused_actions: set[str] = set()
         for action_cfg in actions:
             if not isinstance(action_cfg, dict):
                 continue
-            # Guarded actions may be filtered/skipped
             if action_cfg.get("guard"):
                 excused_actions.add(action_cfg.get("name", ""))
-            # Tool actions (kind: tool) may not store in target_data
             if action_cfg.get("kind") == "tool":
                 excused_actions.add(action_cfg.get("name", ""))
 
         schema_actions_checked = 0
 
         with sqlite3.connect(str(db_path)) as conn:
-            # Get all action names in target_data for versioned matching
             cursor = conn.execute("SELECT DISTINCT action_name FROM target_data")
             all_db_actions = {r[0] for r in cursor.fetchall()}
 
-            # Also get skipped actions from dispositions
-            cursor = conn.execute(
-                "SELECT DISTINCT action_name FROM record_disposition WHERE disposition = 'skipped'"
-            )
-            skipped_actions = {r[0] for r in cursor.fetchall()}
+            # Actions with skipped/unprocessed disposition have passthrough data, not LLM output
+            skipped_actions = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT DISTINCT action_name FROM record_disposition WHERE disposition IN (?, ?)",
+                    (DISPOSITION_SKIPPED, DISPOSITION_UNPROCESSED),
+                ).fetchall()
+            }
 
             for action_cfg in actions:
                 if not isinstance(action_cfg, dict):
@@ -78,26 +98,29 @@ class SchemaConformance(Check):
                 if not required_fields:
                     continue
 
-                # Query target_data — also check versioned names (action_1, action_2, etc.)
                 cursor = conn.execute(
                     "SELECT data FROM target_data WHERE action_name = ?",
                     (action_name,),
                 )
                 rows = cursor.fetchall()
 
+                # Check versioned action names (e.g., classify_severity_1, _2, _3)
                 if not rows:
-                    # Check for versioned action names (e.g., classify_severity_1, _2, _3)
-                    versioned = [a for a in all_db_actions if a.startswith(f"{action_name}_")]
-                    if versioned:
-                        for v_name in sorted(versioned):
-                            cursor = conn.execute(
+                    for v_name in sorted(
+                        a for a in all_db_actions if a.startswith(f"{action_name}_")
+                    ):
+                        rows.extend(
+                            conn.execute(
                                 "SELECT data FROM target_data WHERE action_name = ?",
                                 (v_name,),
-                            )
-                            rows.extend(cursor.fetchall())
+                            ).fetchall()
+                        )
+
+                if action_name in skipped_actions:
+                    continue
 
                 if not rows:
-                    if action_name in excused_actions or action_name in skipped_actions:
+                    if action_name in excused_actions:
                         continue
                     results.append(
                         CheckResult(
@@ -118,18 +141,7 @@ class SchemaConformance(Check):
                         for record in records:
                             if not isinstance(record, dict):
                                 continue
-                            # Storage wraps LLM output in {source_guid, content, ...}
-                            # The actual schema fields are inside "content"
-                            check_target = record
-                            if "content" in record and isinstance(record["content"], (dict, str)):
-                                content = record["content"]
-                                if isinstance(content, str):
-                                    try:
-                                        content = json.loads(content)
-                                    except (json.JSONDecodeError, ValueError):
-                                        content = record
-                                if isinstance(content, dict):
-                                    check_target = content
+                            check_target = _unwrap_content(record)
                             missing = [f for f in required_fields if f not in check_target]
                             results.append(
                                 CheckResult(

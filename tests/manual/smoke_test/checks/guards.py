@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from typing import Literal
 
+from agent_actions.storage.backend import DISPOSITION_FILTERED, DISPOSITION_SKIPPED
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
 
@@ -16,22 +18,21 @@ class GuardCheck(Check):
 
     Args:
         action: action name that has a guard
-        behavior: expected guard behavior -- "filter" or "skip"
+        behavior: expected guard behavior
     """
 
     action: str
-    behavior: str  # "filter" or "skip"
+    behavior: Literal["filter", "skip"]
 
     def verify(self, ctx: RunContext) -> list[CheckResult]:
         results: list[CheckResult] = []
 
-        # The pipeline must have completed for guard evaluation to be meaningful
         if ctx.exit_code != 0:
             results.append(
                 CheckResult(
                     False,
                     f"guard({self.action}): pipeline completed",
-                    f"exit code {ctx.exit_code} -- cannot verify guard behavior",
+                    f"exit code {ctx.exit_code} — cannot verify guard behavior",
                 )
             )
             return results
@@ -47,72 +48,40 @@ class GuardCheck(Check):
             )
             return results
 
-        if self.behavior == "filter":
-            with sqlite3.connect(str(db_path)) as conn:
-                dispositions = conn.execute(
-                    "SELECT disposition FROM record_disposition WHERE action_name = ?",
-                    (self.action,),
-                ).fetchall()
+        with sqlite3.connect(str(db_path)) as conn:
+            if self.behavior == "filter":
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM record_disposition WHERE action_name = ? AND disposition = ?",
+                    (self.action, DISPOSITION_FILTERED),
+                ).fetchone()[0]
 
-                filtered = [d for d in dispositions if d[0] == "filtered"]
-                if filtered:
-                    results.append(
-                        CheckResult(
-                            True,
-                            f"guard({self.action}): filtered records found",
-                            f"{len(filtered)} records with disposition 'filtered'",
-                        )
+                results.append(
+                    CheckResult(
+                        passed=count > 0,
+                        name=f"guard({self.action}): filtered records found",
+                        message=f"{count} records with disposition '{DISPOSITION_FILTERED}'"
+                        if count > 0
+                        else f"no records with disposition '{DISPOSITION_FILTERED}' in record_disposition",
                     )
-                else:
-                    results.append(
-                        CheckResult(
-                            False,
-                            f"guard({self.action}): filtered records found",
-                            "no records with disposition 'filtered' in record_disposition",
-                        )
-                    )
+                )
 
-        elif self.behavior == "skip":
-            with sqlite3.connect(str(db_path)) as conn:
-                # For skip behavior (on_false: skip), records that fail the guard
-                # get skipped dispositions. Records that pass may still produce output.
-                # Verify that the guard evaluated by checking for skip dispositions
-                # OR that the action has no output (all records skipped).
-                skip_dispositions = conn.execute(
-                    "SELECT disposition FROM record_disposition WHERE action_name = ?",
-                    (self.action,),
-                ).fetchall()
-                skipped = [d for d in skip_dispositions if d[0] == "skipped"]
+            elif self.behavior == "skip":
+                skip_count = conn.execute(
+                    "SELECT COUNT(*) FROM record_disposition WHERE action_name = ? AND disposition = ?",
+                    (self.action, DISPOSITION_SKIPPED),
+                ).fetchone()[0]
 
                 target_count = conn.execute(
                     "SELECT COUNT(*) FROM target_data WHERE action_name = ?",
                     (self.action,),
                 ).fetchone()[0]
 
-                if skipped or target_count == 0:
-                    results.append(
-                        CheckResult(
-                            True,
-                            f"guard({self.action}): skip guard evaluated",
-                            f"{len(skipped)} skip dispositions, {target_count} output rows",
-                        )
+                results.append(
+                    CheckResult(
+                        passed=skip_count > 0 or target_count == 0,
+                        name=f"guard({self.action}): skip guard evaluated",
+                        message=f"{skip_count} skip dispositions, {target_count} output rows",
                     )
-                else:
-                    # Guard configured but no evidence it evaluated
-                    results.append(
-                        CheckResult(
-                            False,
-                            f"guard({self.action}): skip guard evaluated",
-                            f"no skip dispositions and {target_count} output rows — guard may not have run",
-                        )
-                    )
-        else:
-            results.append(
-                CheckResult(
-                    False,
-                    f"guard({self.action}): valid behavior",
-                    f"unexpected behavior '{self.behavior}' -- expected 'filter' or 'skip'",
                 )
-            )
 
         return results
