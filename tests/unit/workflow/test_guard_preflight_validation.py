@@ -1,5 +1,8 @@
 """Tests for preflight guard condition AST validation."""
 
+import pytest
+
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.workflow.coordinator import (
     _check_bare_identifier_rhs,
     _find_comparison_nodes,
@@ -7,34 +10,30 @@ from agent_actions.workflow.coordinator import (
 )
 
 
+@pytest.fixture()
+def parser():
+    return WhereClauseParser()
+
+
 class TestFindComparisonNodes:
     """_find_comparison_nodes() recursively collects ComparisonNode instances."""
 
-    def test_simple_comparison(self):
+    def test_simple_comparison(self, parser):
         """Single comparison returns one node."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         result = parser.parse('status == "active"')
         assert result.success
         nodes = _find_comparison_nodes(result.ast.root)
         assert len(nodes) == 1
 
-    def test_logical_and_with_two_comparisons(self):
+    def test_logical_and_with_two_comparisons(self, parser):
         """AND expression returns both comparisons."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         result = parser.parse('a == "x" AND b >= 5')
         assert result.success
         nodes = _find_comparison_nodes(result.ast.root)
         assert len(nodes) == 2
 
-    def test_bare_truthy_check_returns_empty(self):
+    def test_bare_truthy_check_returns_empty(self, parser):
         """Standalone field (no comparison) returns no ComparisonNodes."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         result = parser.parse("passes_filter")
         assert result.success
         nodes = _find_comparison_nodes(result.ast.root)
@@ -44,50 +43,35 @@ class TestFindComparisonNodes:
 class TestCheckBareIdentifierRhs:
     """_check_bare_identifier_rhs() detects unquoted string literals."""
 
-    def test_bare_identifier_detected(self):
+    def test_bare_identifier_detected(self, parser):
         """'status == approved' should flag 'approved' as bare identifier."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         result = parser.parse("status == approved")
         errors = _check_bare_identifier_rhs(result.ast.root, "status == approved", "test_action")
         assert len(errors) == 1
         assert '"approved"' in errors[0]
         assert "quote it" in errors[0].lower()
 
-    def test_quoted_string_passes(self):
+    def test_quoted_string_passes(self, parser):
         """'status == \"approved\"' should not flag anything."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         clause = 'status == "approved"'
         result = parser.parse(clause)
         errors = _check_bare_identifier_rhs(result.ast.root, clause, "test_action")
         assert errors == []
 
-    def test_number_rhs_passes(self):
+    def test_number_rhs_passes(self, parser):
         """'score >= 6' should not flag anything."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         result = parser.parse("score >= 6")
         errors = _check_bare_identifier_rhs(result.ast.root, "score >= 6", "test_action")
         assert errors == []
 
-    def test_boolean_rhs_passes(self):
+    def test_boolean_rhs_passes(self, parser):
         """'flag == true' should not flag — true is a keyword (LiteralNode)."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         result = parser.parse("flag == true")
         errors = _check_bare_identifier_rhs(result.ast.root, "flag == true", "test_action")
         assert errors == []
 
-    def test_nested_in_logical_expression(self):
+    def test_nested_in_logical_expression(self, parser):
         """Bare identifier nested inside AND/OR is still detected."""
-        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-        parser = WhereClauseParser()
         clause = 'a == "ok" AND b == unquoted'
         result = parser.parse(clause)
         errors = _check_bare_identifier_rhs(result.ast.root, clause, "test_action")

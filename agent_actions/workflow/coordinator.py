@@ -109,7 +109,6 @@ def validate_guard_conditions(action_configs: dict) -> list[str]:
             errors.append(f"Action '{action_name}': invalid guard condition '{clause}': {detail}")
             continue
 
-        # Semantic check: detect bare identifiers on comparison RHS
         if parse_result.ast is not None:
             errors.extend(_check_bare_identifier_rhs(parse_result.ast.root, clause, action_name))
 
