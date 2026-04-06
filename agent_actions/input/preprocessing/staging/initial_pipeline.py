@@ -357,31 +357,9 @@ def _prepare_text_chunks_batch(
 def _prepare_json_batch(
     content: Any, batch_id: str, node_id: str, file_path: str, agent_name: str
 ) -> list[dict[str, Any]]:
-    """Prepare already-parsed JSON content for batch mode.
-
-    Content arrives pre-parsed from FileReader._read_json() (via json.load()),
-    matching the pattern used by XLSX and CSV batch paths.
-    """
+    """Prepare pre-parsed JSON content for batch mode."""
     if isinstance(content, list):
-        result = []
-        for idx, row in enumerate(content):
-            target_id = str(uuid.uuid4())
-            result.append(
-                {
-                    **row,
-                    "batch_id": batch_id,
-                    "batch_uuid": f"{batch_id}_{idx}",
-                    "source_guid": str(
-                        uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))
-                    ),
-                    "target_id": target_id,
-                    # Ancestry Chain: first-stage records are their own root
-                    "parent_target_id": None,
-                    "root_target_id": target_id,
-                    "node_id": node_id,
-                }
-            )
-        return result
+        return _add_batch_metadata(content, batch_id, node_id)
     return [{"content": content, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
 
 
