@@ -145,3 +145,4 @@ SELECT data FROM target_data WHERE action_name = 'extract_facts' LIMIT 1;
 - **[Output Format](./output-format.md)** — Output structure and lineage tracking
 - **[Data Lineage](./data-lineage.md)** — Ancestry chain for parallel merges and Map-Reduce
 - **[Chunking](./chunking.md)** — Split large documents for LLM processing
+- **[Prompt Traces](./prompt-traces.md)** — Inspect compiled prompts and LLM responses per record

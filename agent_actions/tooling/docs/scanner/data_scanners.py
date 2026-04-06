@@ -223,6 +223,50 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
                 "preview": records,
             }
 
+        # Attach prompt traces to preview records (if table exists).
+        # The prompt_trace table was added in v0.1.6; older DBs won't have it.
+        try:
+            for action_name, node_data in nodes.items():
+                guid_map: dict[str, dict] = {}
+                for rec in node_data["preview"]:
+                    sg = rec.get("source_guid")
+                    if sg:
+                        guid_map[sg] = rec
+
+                if not guid_map:
+                    continue
+
+                placeholders = ",".join("?" for _ in guid_map)
+                cursor.execute(
+                    f"SELECT record_id, compiled_prompt, llm_context, "
+                    f"response_text, model_name, model_vendor, run_mode, "
+                    f"prompt_length, response_length, attempt "
+                    f"FROM prompt_trace "
+                    f"WHERE action_name = ? AND record_id IN ({placeholders})"
+                    f" ORDER BY attempt DESC",
+                    [action_name, *guid_map.keys()],
+                )
+                seen: set[str] = set()
+                for trace_row in cursor:
+                    rid = trace_row["record_id"]
+                    if rid in seen:
+                        continue
+                    seen.add(rid)
+                    if rid in guid_map:
+                        guid_map[rid]["_trace"] = {
+                            "compiled_prompt": trace_row["compiled_prompt"],
+                            "llm_context": trace_row["llm_context"],
+                            "response_text": trace_row["response_text"],
+                            "model_name": trace_row["model_name"],
+                            "model_vendor": trace_row["model_vendor"],
+                            "run_mode": trace_row["run_mode"],
+                            "prompt_length": trace_row["prompt_length"],
+                            "response_length": trace_row["response_length"],
+                            "attempt": trace_row["attempt"],
+                        }
+        except sqlite3.OperationalError:
+            logger.debug("No prompt_trace table in %s — skipping trace attachment", db_file)
+
         # Format size
         if db_size < 1024:
             size_human = f"{db_size} B"
