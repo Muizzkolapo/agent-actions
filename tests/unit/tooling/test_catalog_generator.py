@@ -54,7 +54,8 @@ class TestCatalogGeneratorEmptyInput:
     def test_no_exception_on_empty_input(self):
         gen = _make_generator()
         result = gen.generate(**_empty_inputs())
-        assert result is not None
+        assert isinstance(result, dict)
+        assert "metadata" in result
 
 
 class TestCatalogGeneratorHappyPath:
