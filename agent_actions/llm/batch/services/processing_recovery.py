@@ -474,6 +474,7 @@ def finalize_batch_output(
 
     if service._storage_backend and service._action_name:
         write_record_dispositions(service, processed_data, service._action_name)
+        service._update_prompt_trace_responses(processed_data, service._action_name)
 
     output_file = service._determine_output_path(output_directory, file_name, batch_id)
     service._write_batch_output(output_file, processed_data, output_directory, action_name)
