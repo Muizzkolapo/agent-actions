@@ -142,14 +142,14 @@ class TestCircuitBreaker:
         condition = "field == bareword"
         data = {"field": "value"}
 
-        with patch("agent_actions.input.preprocessing.filtering.guard_filter.logger") as mock_logger:
+        with patch(
+            "agent_actions.input.preprocessing.filtering.guard_filter.logger"
+        ) as mock_logger:
             for _ in range(10):
                 gf.filter_item(FilterItemRequest(data=data, condition=condition))
 
         # logger.warning should be called exactly once (first occurrence only)
-        warning_calls = [
-            c for c in mock_logger.warning.call_args_list if "bareword" in str(c)
-        ]
+        warning_calls = [c for c in mock_logger.warning.call_args_list if "bareword" in str(c)]
         assert len(warning_calls) == 1
         gf.shutdown()
 
