@@ -7,6 +7,7 @@ from typing import Any
 
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.input.preprocessing.filtering.guard_filter import (
+    ErrorCategory,
     FilterItemRequest,
     FilterResult,
     GuardFilter,
@@ -54,6 +55,20 @@ class GuardResult:
     ) -> "GuardResult":
         """Create GuardResult from FilterResult."""
         if not filter_result.success:
+            # Semantic errors bypass passthrough_on_error — the condition itself is broken.
+            if filter_result.error_category == ErrorCategory.SEMANTIC:
+                logger.warning(
+                    "Guard: semantic error in condition, applying '%s' behavior: %s",
+                    behavior,
+                    filter_result.error,
+                )
+                if behavior == "warn":
+                    return cls.warned()
+                if behavior == "skip":
+                    return cls.skipped(error=filter_result.error)
+                return cls.filtered(error=filter_result.error)
+
+            # DATA/TIMEOUT errors respect passthrough_on_error (existing behavior)
             if passthrough_on_error:
                 logger.warning(
                     "Guard: condition evaluation failed, proceeding (passthrough_on_error=True): %s",
