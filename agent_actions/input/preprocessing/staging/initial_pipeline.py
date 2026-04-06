@@ -355,28 +355,16 @@ def _prepare_text_chunks_batch(
 
 
 def _prepare_json_batch(
-    content: str, batch_id: str, node_id: str, file_path: str, agent_name: str
+    content: Any, batch_id: str, node_id: str, file_path: str, agent_name: str
 ) -> list[dict[str, Any]]:
-    """Prepare JSON content for batch mode."""
-    try:
-        parsed = json.loads(content)
-    except (ValueError, TypeError, json.JSONDecodeError) as e:
-        logger.warning(
-            "Failed to parse JSON from %s: %s",
-            file_path,
-            str(e),
-            extra={
-                "file_path": file_path,
-                "agent_name": agent_name,
-                "operation": "json_parse",
-                "content_length": len(content) if content else 0,
-            },
-        )
-        parsed = content
+    """Prepare already-parsed JSON content for batch mode.
 
-    if isinstance(parsed, list):
+    Content arrives pre-parsed from FileReader._read_json() (via json.load()),
+    matching the pattern used by XLSX and CSV batch paths.
+    """
+    if isinstance(content, list):
         result = []
-        for idx, row in enumerate(parsed):
+        for idx, row in enumerate(content):
             target_id = str(uuid.uuid4())
             result.append(
                 {
@@ -394,7 +382,7 @@ def _prepare_json_batch(
                 }
             )
         return result
-    return [{"content": parsed, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
+    return [{"content": content, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
 
 
 def _add_batch_metadata(
