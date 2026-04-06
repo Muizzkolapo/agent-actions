@@ -486,7 +486,7 @@ class ProcessingPipeline:
 
         # ── per-action record_limit ──────────────────────────────────────
         record_limit = self.config.action_config.get("record_limit")
-        if record_limit is not None and isinstance(data, list) and len(data) > record_limit:
+        if isinstance(record_limit, int) and isinstance(data, list) and len(data) > record_limit:
             total = len(data)
             data = data[:record_limit]
             logger.info(
