@@ -88,7 +88,6 @@ class GuardFilter:
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="guard_filter")
         self._semantic_error_cache: dict[str, str] = {}
         self._error_counts: dict[str, int] = {}
-        self._logged_conditions: set[str] = set()
         self._circuit_lock = threading.Lock()
 
     def filter_item(self, request: FilterItemRequest) -> FilterResult:
@@ -147,14 +146,14 @@ class GuardFilter:
             execution_time = time.time() - start_time
             error_msg = str(e)
             with self._circuit_lock:
+                first_occurrence = request.condition not in self._semantic_error_cache
                 self._semantic_error_cache[request.condition] = error_msg
                 self._error_counts[request.condition] = 1
-                if request.condition not in self._logged_conditions:
+                if first_occurrence:
                     logger.warning("Guard condition error: %s", error_msg)
                     fire_event(
                         GuardEvaluationErrorEvent(guard_clause=request.condition, error=error_msg)
                     )
-                    self._logged_conditions.add(request.condition)
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)
             return FilterResult(
@@ -269,7 +268,6 @@ class GuardFilter:
         with self._circuit_lock:
             self._semantic_error_cache.clear()
             self._error_counts.clear()
-            self._logged_conditions.clear()
 
     def shutdown(self):
         """Shutdown the filter service."""
