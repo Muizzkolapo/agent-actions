@@ -472,7 +472,7 @@ def finalize_batch_output(
         exhausted_recovery=exhausted_recovery,
     )
 
-    effective_action_name = action_name or service._action_name
+    effective_action_name = action_name if action_name is not None else service._action_name
     if service._storage_backend and effective_action_name:
         write_record_dispositions(service, processed_data, effective_action_name)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
