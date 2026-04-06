@@ -5,6 +5,7 @@ from tests.manual.smoke_test.checks.guards import GuardCheck
 from tests.manual.smoke_test.checks.output_structure import OutputStructure
 from tests.manual.smoke_test.checks.parallel import ParallelVersions
 from tests.manual.smoke_test.checks.pipeline import PipelineCompleted
+from tests.manual.smoke_test.checks.prompt_trace import PromptTraceCheck
 from tests.manual.smoke_test.checks.reprompt import RepromptCheck
 from tests.manual.smoke_test.checks.schema_conformance import SchemaConformance
 from tests.manual.smoke_test.context import Example
@@ -18,6 +19,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            PromptTraceCheck(),
         ],
     ),
     Example(
@@ -28,6 +30,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="generate_executive_summary", behavior="filter"),
             RepromptCheck(action="extract_incident_details"),
@@ -42,6 +45,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="optimize_seo", behavior="skip"),
             RepromptCheck(action="generate_description"),
@@ -56,6 +60,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            PromptTraceCheck(),
             SchemaConformance(),
             ParallelVersions(action="score_quality", versions=3),
             GuardCheck(action="generate_response", behavior="filter"),
@@ -72,6 +77,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            PromptTraceCheck(),
             SchemaConformance(),
             RepromptCheck(action="analyze_clause"),
         ],
@@ -84,6 +90,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="select_for_users", behavior="filter"),
             RepromptCheck(action="classify_genre"),

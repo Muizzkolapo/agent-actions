@@ -472,8 +472,10 @@ def finalize_batch_output(
         exhausted_recovery=exhausted_recovery,
     )
 
-    if service._storage_backend and service._action_name:
-        write_record_dispositions(service, processed_data, service._action_name)
+    effective_action_name = action_name if action_name is not None else service._action_name
+    if service._storage_backend and effective_action_name:
+        write_record_dispositions(service, processed_data, effective_action_name)
+        service._update_prompt_trace_responses(processed_data, effective_action_name)
 
     output_file = service._determine_output_path(output_directory, file_name, batch_id)
     service._write_batch_output(output_file, processed_data, output_directory, action_name)

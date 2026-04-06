@@ -1,5 +1,6 @@
 """Record-level processor: single-item processing pipeline."""
 
+import json
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -189,6 +190,18 @@ class RecordProcessor:
         executed = invocation_result.executed
         passthrough_fields = invocation_result.passthrough_fields
         recovery_metadata = invocation_result.recovery_metadata
+
+        if (
+            context.storage_backend is not None
+            and executed
+            and response is not None
+            and source_guid is not None
+        ):
+            context.storage_backend.update_prompt_trace_response(
+                action_name=context.agent_name,
+                record_id=source_guid,
+                response_text=json.dumps(response, ensure_ascii=False, default=str),
+            )
 
         if invocation_result.deferred:
             return ProcessingResult.deferred(

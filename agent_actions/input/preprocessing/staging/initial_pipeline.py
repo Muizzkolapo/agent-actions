@@ -641,7 +641,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
     local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)
-    task_preparator = BatchTaskPreparator()
+    task_preparator = BatchTaskPreparator(storage_backend=ctx.storage_backend)
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
     registry_manager_factory = create_registry_manager_factory()
