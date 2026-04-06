@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
+from enum import Enum
 from functools import lru_cache
 from typing import Any
 
@@ -16,9 +17,18 @@ from agent_actions.logging.events.validation_events import (
     GuardEvaluationTimeoutEvent,
 )
 
+from ..parsing.ast_nodes import GuardSemanticError
 from ..parsing.parser import ParseResult, WhereClauseParser
 
 logger = logging.getLogger(__name__)
+
+
+class ErrorCategory(Enum):
+    """Classification of guard evaluation errors."""
+
+    SEMANTIC = "semantic"  # Condition itself is broken (unquoted string, etc.)
+    DATA = "data"  # Field missing in this particular record
+    TIMEOUT = "timeout"  # Evaluation exceeded time limit
 
 
 def _get_lru_cache_info(cached_func):
@@ -35,6 +45,7 @@ class FilterResult:
     error: str | None = None
     execution_time: float = 0.0
     cache_hit: bool = False
+    error_category: ErrorCategory | None = None
 
 
 @dataclass
@@ -75,11 +86,27 @@ class GuardFilter:
             self.metrics = FilterMetrics()
 
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="guard_filter")
+        self._semantic_error_cache: dict[str, str] = {}
+        self._error_counts: dict[str, int] = {}
+        self._logged_conditions: set[str] = set()
+        self._circuit_lock = threading.Lock()
 
     def filter_item(self, request: FilterItemRequest) -> FilterResult:
         """Filter a single data item using a guard condition."""
         start_time = time.time()
         timeout = request.timeout or self.default_timeout
+
+        # Circuit breaker: skip eval for conditions that already failed semantically
+        if request.condition in self._semantic_error_cache:
+            with self._circuit_lock:
+                self._error_counts[request.condition] = (
+                    self._error_counts.get(request.condition, 0) + 1
+                )
+            return FilterResult(
+                success=False,
+                error=self._semantic_error_cache[request.condition],
+                error_category=ErrorCategory.SEMANTIC,
+            )
 
         try:
             future = self.executor.submit(
@@ -109,7 +136,33 @@ class GuardFilter:
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)
 
-            return FilterResult(success=False, error=error_msg, execution_time=execution_time)
+            return FilterResult(
+                success=False,
+                error=error_msg,
+                error_category=ErrorCategory.TIMEOUT,
+                execution_time=execution_time,
+            )
+
+        except GuardSemanticError as e:
+            execution_time = time.time() - start_time
+            error_msg = str(e)
+            with self._circuit_lock:
+                self._semantic_error_cache[request.condition] = error_msg
+                self._error_counts[request.condition] = 1
+                if request.condition not in self._logged_conditions:
+                    logger.warning("Guard condition error: %s", error_msg)
+                    fire_event(
+                        GuardEvaluationErrorEvent(guard_clause=request.condition, error=error_msg)
+                    )
+                    self._logged_conditions.add(request.condition)
+            if self.enable_metrics:
+                self._update_metrics(False, execution_time, False)
+            return FilterResult(
+                success=False,
+                error=error_msg,
+                error_category=ErrorCategory.SEMANTIC,
+                execution_time=execution_time,
+            )
 
         except ValueError as e:
             execution_time = time.time() - start_time
@@ -126,7 +179,12 @@ class GuardFilter:
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)
 
-            return FilterResult(success=False, error=error_msg, execution_time=execution_time)
+            return FilterResult(
+                success=False,
+                error=error_msg,
+                error_category=ErrorCategory.DATA,
+                execution_time=execution_time,
+            )
 
     def _parse_condition_cached(self, condition: str) -> ParseResult:
         """Parse guard condition with caching."""
@@ -200,10 +258,18 @@ class GuardFilter:
             },
         }
 
+    def get_error_summary(self) -> dict[str, int]:
+        """Return {condition: count} for semantic errors encountered."""
+        return dict(self._error_counts)
+
     def clear_cache(self):
         """Clear all caches."""
         self.parser.clear_cache()
         self._cached_parse.cache_clear()
+        with self._circuit_lock:
+            self._semantic_error_cache.clear()
+            self._error_counts.clear()
+            self._logged_conditions.clear()
 
     def shutdown(self):
         """Shutdown the filter service."""
