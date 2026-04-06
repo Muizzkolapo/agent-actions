@@ -391,12 +391,14 @@ class TestFlushClose:
     def test_flush_noop(self):
         with patch("agent_actions.logging.core.handlers.context_debug.RICH_AVAILABLE", False):
             h = ContextDebugHandler()
-        h.flush()  # Should not raise
+        h.flush()
+        assert h._event_count == 0  # state unchanged after flush
 
     def test_close_noop(self):
         with patch("agent_actions.logging.core.handlers.context_debug.RICH_AVAILABLE", False):
             h = ContextDebugHandler()
-        h.close()  # Should not raise
+        h.close()
+        assert h._event_count == 0  # state unchanged after close
 
 
 # ---------------------------------------------------------------------------
@@ -670,8 +672,8 @@ class TestDisplayRichSummary:
             h = ContextDebugHandler()
         h._console = None
         h._use_rich = True
-        # Should not raise
-        h.display_summary()
+        result = h.display_summary()
+        assert result is None
 
     def test_dropped_fields_truncated_in_rich(self):
         """When more than 3 dropped fields, the display truncates with '...'."""
