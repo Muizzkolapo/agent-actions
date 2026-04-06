@@ -79,6 +79,7 @@ class SQLiteBackend(StorageBackend):
             response_text TEXT,
             model_name TEXT,
             model_vendor TEXT,
+            run_mode TEXT,
             prompt_length INTEGER,
             context_length INTEGER,
             response_length INTEGER,
@@ -202,6 +203,12 @@ class SQLiteBackend(StorageBackend):
                     logger.debug("Added input_snapshot column to record_disposition")
                 except sqlite3.OperationalError:
                     logger.debug("input_snapshot column already exists in record_disposition")
+                # Migration: add run_mode column for existing prompt_trace tables
+                try:
+                    cursor.execute("ALTER TABLE prompt_trace ADD COLUMN run_mode TEXT")
+                    logger.debug("Added run_mode column to prompt_trace")
+                except sqlite3.OperationalError:
+                    logger.debug("run_mode column already exists in prompt_trace")
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -719,6 +726,7 @@ class SQLiteBackend(StorageBackend):
         response_text: str | None = None,
         model_name: str | None = None,
         model_vendor: str | None = None,
+        run_mode: str | None = None,
         attempt: int = 0,
     ) -> None:
         """Persist the compiled prompt and LLM context for a single record."""
@@ -741,9 +749,9 @@ class SQLiteBackend(StorageBackend):
                     """
                     INSERT OR REPLACE INTO prompt_trace
                     (action_name, record_id, attempt, compiled_prompt, llm_context,
-                     response_text, model_name, model_vendor,
+                     response_text, model_name, model_vendor, run_mode,
                      prompt_length, context_length, response_length, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         action_name,
@@ -754,6 +762,7 @@ class SQLiteBackend(StorageBackend):
                         response_text,
                         model_name,
                         model_vendor,
+                        run_mode,
                         prompt_length,
                         context_length,
                         response_length,
@@ -834,7 +843,7 @@ class SQLiteBackend(StorageBackend):
 
         query = (
             "SELECT action_name, record_id, attempt, compiled_prompt, llm_context,"
-            " response_text, model_name, model_vendor,"
+            " response_text, model_name, model_vendor, run_mode,"
             " prompt_length, context_length, response_length, created_at"
             " FROM prompt_trace WHERE action_name = ?"
         )
@@ -913,7 +922,7 @@ class SQLiteBackend(StorageBackend):
             cursor.execute(
                 """
                 SELECT action_name, record_id, attempt, compiled_prompt, llm_context,
-                       response_text, model_name, model_vendor,
+                       response_text, model_name, model_vendor, run_mode,
                        prompt_length, context_length, response_length, created_at
                 FROM prompt_trace
                 WHERE action_name = ?

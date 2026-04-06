@@ -178,6 +178,7 @@ class StorageBackend(ABC):
         response_text: str | None = None,
         model_name: str | None = None,
         model_vendor: str | None = None,
+        run_mode: str | None = None,
         attempt: int = 0,
     ) -> None:
         """Persist the compiled prompt and LLM context for a single record.

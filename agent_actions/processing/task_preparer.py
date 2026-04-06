@@ -125,6 +125,7 @@ class TaskPreparer:
                     llm_context=json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
                     model_name=context.agent_config.get("model"),
                     model_vendor=context.agent_config.get("model_vendor"),
+                    run_mode=context.mode.value if context.mode else None,
                 )
             else:
                 logger.warning(
