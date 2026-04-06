@@ -1,5 +1,6 @@
 """Record-level processor: single-item processing pipeline."""
 
+import json
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -22,6 +23,7 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.storage.backend import StorageBackend
 
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
@@ -44,6 +46,19 @@ def _is_empty_output(response: Any) -> bool:
     if isinstance(response, dict | list) and len(response) == 0:
         return True
     return False
+
+
+def _safe_update_prompt_trace_response(backend: StorageBackend, **kwargs: Any) -> None:
+    """Update trace with response. Telemetry — must not crash the pipeline."""
+    try:
+        backend.update_prompt_trace_response(**kwargs)
+    except Exception:
+        logger.warning(
+            "Failed to update prompt trace response action=%s record=%s",
+            kwargs.get("action_name"),
+            kwargs.get("record_id"),
+            exc_info=True,
+        )
 
 
 class RecordProcessor:
@@ -189,6 +204,19 @@ class RecordProcessor:
         executed = invocation_result.executed
         passthrough_fields = invocation_result.passthrough_fields
         recovery_metadata = invocation_result.recovery_metadata
+
+        if (
+            context.storage_backend is not None
+            and executed
+            and response is not None
+            and source_guid is not None
+        ):
+            _safe_update_prompt_trace_response(
+                context.storage_backend,
+                action_name=context.agent_name,
+                record_id=source_guid,
+                response_text=json.dumps(response, ensure_ascii=False, default=str),
+            )
 
         if invocation_result.deferred:
             return ProcessingResult.deferred(

@@ -1,9 +1,13 @@
 """Unified task preparation for both batch and online modes."""
 
+import json
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.processing.prepared_task import (
     GuardStatus,
@@ -98,7 +102,7 @@ class TaskPreparer:
 
         prep_result = self._render_prompt(content, context, field_context)
 
-        return PreparedTask(
+        prepared = PreparedTask(
             target_id=target_id,
             source_guid=source_guid,
             formatted_prompt=prep_result.formatted_prompt,
@@ -110,6 +114,25 @@ class TaskPreparer:
             guard_status=GuardStatus.PASSED,
             prompt_context=prep_result.prompt_context,
         )
+
+        if context.storage_backend is not None:
+            if prepared.source_guid is not None:
+                _safe_write_prompt_trace(
+                    context.storage_backend,
+                    action_name=context.agent_name,
+                    record_id=prepared.source_guid,
+                    compiled_prompt=prepared.formatted_prompt,
+                    llm_context=json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
+                    model_name=context.agent_config.get("model"),
+                    model_vendor=context.agent_config.get("model_vendor"),
+                )
+            else:
+                logger.warning(
+                    "Skipping prompt trace: source_guid is None for action=%s",
+                    context.agent_name,
+                )
+
+        return prepared
 
     def _normalize_input(
         self, item: Any, context: PreparationContext
@@ -281,6 +304,19 @@ class TaskPreparer:
         from agent_actions.utils.id_generation import IDGenerator
 
         return IDGenerator.generate_target_id()
+
+
+def _safe_write_prompt_trace(backend: "StorageBackend", **kwargs: Any) -> None:
+    """Write a prompt trace. Telemetry — must not crash the pipeline."""
+    try:
+        backend.write_prompt_trace(**kwargs)
+    except Exception:
+        logger.warning(
+            "Failed to write prompt trace action=%s record=%s",
+            kwargs.get("action_name"),
+            kwargs.get("record_id"),
+            exc_info=True,
+        )
 
 
 # Per-process singleton; assumes one workflow per process.

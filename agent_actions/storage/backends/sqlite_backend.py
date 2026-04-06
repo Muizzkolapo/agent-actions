@@ -68,6 +68,33 @@ class SQLiteBackend(StorageBackend):
         CREATE INDEX IF NOT EXISTS idx_disp_action_record ON record_disposition(action_name, record_id)
     """
 
+    PROMPT_TRACE_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS prompt_trace (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action_name TEXT NOT NULL,
+            record_id TEXT NOT NULL,
+            attempt INTEGER NOT NULL DEFAULT 0,
+            compiled_prompt TEXT NOT NULL,
+            llm_context TEXT,
+            response_text TEXT,
+            model_name TEXT,
+            model_vendor TEXT,
+            prompt_length INTEGER,
+            context_length INTEGER,
+            response_length INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(action_name, record_id, attempt)
+        )
+    """
+    TRACE_INDEX_ACTION_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_trace_action ON prompt_trace(action_name)
+    """
+    TRACE_INDEX_ACTION_RECORD_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_trace_action_record ON prompt_trace(action_name, record_id)
+    """
+
+    _MAX_TRACE_FIELD_SIZE = 1_048_576  # 1MB
+
     _INSERT_SOURCE_IGNORE_SQL = """
         INSERT OR IGNORE INTO source_data
         (relative_path, source_guid, data, created_at)
@@ -166,6 +193,9 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_RECORD_SQL)
+                cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
+                cursor.execute(self.TRACE_INDEX_ACTION_SQL)
+                cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
                 # Migration: add input_snapshot column for existing databases
                 try:
                     cursor.execute("ALTER TABLE record_disposition ADD COLUMN input_snapshot TEXT")
@@ -471,6 +501,17 @@ class SQLiteBackend(StorageBackend):
             cursor.execute("SELECT COUNT(*) as count FROM record_disposition")
             disposition_count = cursor.fetchone()["count"]
 
+            cursor.execute(
+                """
+                SELECT action_name, COUNT(*) as count
+                FROM prompt_trace GROUP BY action_name ORDER BY action_name
+                """
+            )
+            trace_stats = {row["action_name"]: row["count"] for row in cursor.fetchall()}
+
+            cursor.execute("SELECT COUNT(*) as count FROM prompt_trace")
+            trace_count = cursor.fetchone()["count"]
+
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
 
         return {
@@ -481,6 +522,8 @@ class SQLiteBackend(StorageBackend):
             "target_count": target_count,
             "disposition_count": disposition_count,
             "nodes": nodes,
+            "trace_count": trace_count,
+            "trace_stats": trace_stats,
         }
 
     # ------------------------------------------------------------------
@@ -647,6 +690,282 @@ class SQLiteBackend(StorageBackend):
                     extra={
                         "action_name": action_name,
                         "disposition": disposition,
+                        "workflow_name": self.workflow_name,
+                    },
+                )
+                raise
+
+    # ------------------------------------------------------------------
+    # Prompt trace tracking
+    # ------------------------------------------------------------------
+
+    def _cap_trace_field(self, value: str | None) -> str | None:
+        """Truncate a trace field to _MAX_TRACE_FIELD_SIZE with a marker."""
+        if value and len(value) > self._MAX_TRACE_FIELD_SIZE:
+            logger.warning(
+                "Truncating trace field from %d bytes to marker (limit %d)",
+                len(value),
+                self._MAX_TRACE_FIELD_SIZE,
+            )
+            return json.dumps({"__truncated__": True, "original_length": len(value)})
+        return value
+
+    def write_prompt_trace(
+        self,
+        action_name: str,
+        record_id: str,
+        compiled_prompt: str,
+        llm_context: str | None = None,
+        response_text: str | None = None,
+        model_name: str | None = None,
+        model_vendor: str | None = None,
+        attempt: int = 0,
+    ) -> None:
+        """Persist the compiled prompt and LLM context for a single record."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        record_id = self._validate_identifier(record_id, "record_id")
+
+        # Compute lengths from original values before any truncation
+        prompt_length = len(compiled_prompt) if compiled_prompt else 0
+        context_length = len(llm_context) if llm_context else 0
+        response_length = len(response_text) if response_text else 0
+
+        compiled_prompt = self._cap_trace_field(compiled_prompt) or ""
+        llm_context = self._cap_trace_field(llm_context)
+        response_text = self._cap_trace_field(response_text)
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO prompt_trace
+                    (action_name, record_id, attempt, compiled_prompt, llm_context,
+                     response_text, model_name, model_vendor,
+                     prompt_length, context_length, response_length, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        action_name,
+                        record_id,
+                        attempt,
+                        compiled_prompt,
+                        llm_context,
+                        response_text,
+                        model_name,
+                        model_vendor,
+                        prompt_length,
+                        context_length,
+                        response_length,
+                    ),
+                )
+                self.connection.commit()
+                logger.debug(
+                    "Wrote prompt trace: action=%s record=%s attempt=%d",
+                    action_name,
+                    record_id,
+                    attempt,
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Failed to write prompt trace: %s",
+                    e,
+                    extra={
+                        "action_name": action_name,
+                        "record_id": record_id,
+                        "workflow_name": self.workflow_name,
+                    },
+                )
+
+    def update_prompt_trace_response(
+        self,
+        action_name: str,
+        record_id: str,
+        response_text: str,
+        attempt: int = 0,
+    ) -> None:
+        """Update an existing trace with the LLM response."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        record_id = self._validate_identifier(record_id, "record_id")
+
+        response_length = len(response_text) if response_text else 0
+        response_text = self._cap_trace_field(response_text) or ""
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    """
+                    UPDATE prompt_trace
+                    SET response_text = ?, response_length = ?
+                    WHERE action_name = ? AND record_id = ? AND attempt = ?
+                    """,
+                    (response_text, response_length, action_name, record_id, attempt),
+                )
+                self.connection.commit()
+                if cursor.rowcount > 0:
+                    logger.debug(
+                        "Updated prompt trace response: action=%s record=%s",
+                        action_name,
+                        record_id,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Failed to update prompt trace response: %s",
+                    e,
+                    extra={
+                        "action_name": action_name,
+                        "record_id": record_id,
+                        "workflow_name": self.workflow_name,
+                    },
+                )
+
+    def get_prompt_traces(
+        self,
+        action_name: str,
+        record_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve prompt traces for an action, optionally filtered by record."""
+        action_name = self._validate_identifier(action_name, "action_name")
+
+        query = (
+            "SELECT action_name, record_id, attempt, compiled_prompt, llm_context,"
+            " response_text, model_name, model_vendor,"
+            " prompt_length, context_length, response_length, created_at"
+            " FROM prompt_trace WHERE action_name = ?"
+        )
+        params: list[Any] = [action_name]
+
+        if record_id is not None:
+            record_id = self._validate_identifier(record_id, "record_id")
+            query += " AND record_id = ?"
+            params.append(record_id)
+
+        query += " ORDER BY id"
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_prompt_trace_summary(
+        self,
+        action_name: str,
+    ) -> dict[str, Any] | None:
+        """Return a representative trace for an action with aggregate stats."""
+        action_name = self._validate_identifier(action_name, "action_name")
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                """
+                SELECT compiled_prompt, model_name, model_vendor,
+                       COUNT(*) as trace_count,
+                       AVG(prompt_length) as avg_prompt_length,
+                       AVG(context_length) as avg_context_length,
+                       AVG(response_length) as avg_response_length
+                FROM prompt_trace
+                WHERE action_name = ?
+                GROUP BY action_name
+                """,
+                (action_name,),
+            )
+            row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "action_name": action_name,
+            "compiled_prompt": row["compiled_prompt"],
+            "model_name": row["model_name"],
+            "model_vendor": row["model_vendor"],
+            "trace_count": row["trace_count"],
+            "avg_prompt_length": row["avg_prompt_length"],
+            "avg_context_length": row["avg_context_length"],
+            "avg_response_length": row["avg_response_length"],
+        }
+
+    def preview_prompt_traces(
+        self,
+        action_name: str,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Paginated access to per-record traces."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        limit = min(max(1, limit), 1000)
+        offset = max(0, offset)
+
+        with self._lock:
+            cursor = self.connection.cursor()
+
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM prompt_trace WHERE action_name = ?",
+                (action_name,),
+            )
+            total_count = cursor.fetchone()["count"]
+
+            cursor.execute(
+                """
+                SELECT action_name, record_id, attempt, compiled_prompt, llm_context,
+                       response_text, model_name, model_vendor,
+                       prompt_length, context_length, response_length, created_at
+                FROM prompt_trace
+                WHERE action_name = ?
+                ORDER BY id
+                LIMIT ? OFFSET ?
+                """,
+                (action_name, limit, offset),
+            )
+            records = [dict(row) for row in cursor.fetchall()]
+
+        return {
+            "records": records,
+            "total_count": total_count,
+            "action_name": action_name,
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def clear_prompt_traces(
+        self,
+        action_name: str | None = None,
+    ) -> int:
+        """Delete traces for an action, or all if action_name is None."""
+        if action_name is not None:
+            action_name = self._validate_identifier(action_name, "action_name")
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                if action_name is not None:
+                    cursor.execute(
+                        "DELETE FROM prompt_trace WHERE action_name = ?",
+                        (action_name,),
+                    )
+                else:
+                    cursor.execute("DELETE FROM prompt_trace")
+                self.connection.commit()
+                deleted = cursor.rowcount
+                logger.debug(
+                    "Cleared %d prompt traces: action=%s",
+                    deleted,
+                    action_name or "(all)",
+                    extra={"workflow_name": self.workflow_name},
+                )
+                return deleted
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to clear prompt traces: %s",
+                    e,
+                    extra={
+                        "action_name": action_name,
                         "workflow_name": self.workflow_name,
                     },
                 )

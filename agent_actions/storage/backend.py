@@ -165,6 +165,69 @@ class StorageBackend(ABC):
             if d.get("record_id") != NODE_LEVEL_RECORD_ID
         ]
 
+    # ------------------------------------------------------------------
+    # Prompt trace methods (compilation-level observability)
+    # ------------------------------------------------------------------
+
+    def write_prompt_trace(  # noqa: B027
+        self,
+        action_name: str,
+        record_id: str,
+        compiled_prompt: str,
+        llm_context: str | None = None,
+        response_text: str | None = None,
+        model_name: str | None = None,
+        model_vendor: str | None = None,
+        attempt: int = 0,
+    ) -> None:
+        """Persist the compiled prompt and LLM context for a single record.
+
+        This is telemetry. Implementations should not raise on failure.
+        """
+
+    def update_prompt_trace_response(  # noqa: B027
+        self,
+        action_name: str,
+        record_id: str,
+        response_text: str,
+        attempt: int = 0,
+    ) -> None:
+        """Update an existing trace with the LLM response.
+
+        No-op if the trace does not exist. This is telemetry — must not raise.
+        """
+
+    def get_prompt_traces(
+        self,
+        action_name: str,
+        record_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve prompt traces for an action, optionally filtered by record."""
+        return []
+
+    def get_prompt_trace_summary(
+        self,
+        action_name: str,
+    ) -> dict[str, Any] | None:
+        """Return a representative trace for an action with aggregate stats."""
+        return None
+
+    def preview_prompt_traces(
+        self,
+        action_name: str,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Paginated access to per-record traces."""
+        return {"records": [], "total_count": 0, "action_name": action_name}
+
+    def clear_prompt_traces(
+        self,
+        action_name: str | None = None,
+    ) -> int:
+        """Delete traces for an action, or all if action_name is None."""
+        return 0
+
     def delete_target(self, action_name: str) -> int:
         """Delete all target data for an action. Returns count deleted.
 
