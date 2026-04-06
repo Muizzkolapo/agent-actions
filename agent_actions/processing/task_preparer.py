@@ -1,5 +1,6 @@
 """Unified task preparation for both batch and online modes."""
 
+import json
 import logging
 import threading
 from collections.abc import Callable
@@ -98,7 +99,7 @@ class TaskPreparer:
 
         prep_result = self._render_prompt(content, context, field_context)
 
-        return PreparedTask(
+        prepared = PreparedTask(
             target_id=target_id,
             source_guid=source_guid,
             formatted_prompt=prep_result.formatted_prompt,
@@ -110,6 +111,25 @@ class TaskPreparer:
             guard_status=GuardStatus.PASSED,
             prompt_context=prep_result.prompt_context,
         )
+
+        if context.storage_backend is not None:
+            if prepared.source_guid is not None:
+                context.storage_backend.write_prompt_trace(
+                    action_name=context.agent_name,
+                    record_id=prepared.source_guid,
+                    compiled_prompt=prepared.formatted_prompt,
+                    llm_context=json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
+                    model_name=context.agent_config.get("model"),
+                    model_vendor=context.agent_config.get("model_vendor"),
+                    run_mode=context.mode.value if context.mode else None,
+                )
+            else:
+                logger.warning(
+                    "Skipping prompt trace: source_guid is None for action=%s",
+                    context.agent_name,
+                )
+
+        return prepared
 
     def _normalize_input(
         self, item: Any, context: PreparationContext

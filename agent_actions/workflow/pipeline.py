@@ -484,6 +484,19 @@ class ProcessingPipeline:
             )
             # source_data remains 'data' (the fallback)
 
+        # ── per-action record_limit ──────────────────────────────────────
+        record_limit = self.config.action_config.get("record_limit")
+        if isinstance(record_limit, int) and isinstance(data, list) and len(data) > record_limit:
+            total = len(data)
+            data = data[:record_limit]
+            logger.info(
+                "record_limit=%d: processing %d of %d records for %s",
+                record_limit,
+                len(data),
+                total,
+                self.config.action_name,
+            )
+
         # Build shared pipeline context BEFORE the batch/online fork.
         # See _build_pipeline_context() docstring for the architecture invariant.
         agent_indices, dependency_configs, version_context = self._build_pipeline_context(

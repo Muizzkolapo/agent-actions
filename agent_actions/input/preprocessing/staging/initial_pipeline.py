@@ -355,46 +355,12 @@ def _prepare_text_chunks_batch(
 
 
 def _prepare_json_batch(
-    content: str, batch_id: str, node_id: str, file_path: str, agent_name: str
+    content: Any, batch_id: str, node_id: str, file_path: str, agent_name: str
 ) -> list[dict[str, Any]]:
-    """Prepare JSON content for batch mode."""
-    try:
-        parsed = json.loads(content)
-    except (ValueError, TypeError, json.JSONDecodeError) as e:
-        logger.warning(
-            "Failed to parse JSON from %s: %s",
-            file_path,
-            str(e),
-            extra={
-                "file_path": file_path,
-                "agent_name": agent_name,
-                "operation": "json_parse",
-                "content_length": len(content) if content else 0,
-            },
-        )
-        parsed = content
-
-    if isinstance(parsed, list):
-        result = []
-        for idx, row in enumerate(parsed):
-            target_id = str(uuid.uuid4())
-            result.append(
-                {
-                    **row,
-                    "batch_id": batch_id,
-                    "batch_uuid": f"{batch_id}_{idx}",
-                    "source_guid": str(
-                        uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))
-                    ),
-                    "target_id": target_id,
-                    # Ancestry Chain: first-stage records are their own root
-                    "parent_target_id": None,
-                    "root_target_id": target_id,
-                    "node_id": node_id,
-                }
-            )
-        return result
-    return [{"content": parsed, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
+    """Prepare pre-parsed JSON content for batch mode."""
+    if isinstance(content, list):
+        return _add_batch_metadata(content, batch_id, node_id)
+    return [{"content": content, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
 
 
 def _add_batch_metadata(
@@ -641,7 +607,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
     local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)
-    task_preparator = BatchTaskPreparator()
+    task_preparator = BatchTaskPreparator(storage_backend=ctx.storage_backend)
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
     registry_manager_factory = create_registry_manager_factory()

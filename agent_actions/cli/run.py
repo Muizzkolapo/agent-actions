@@ -61,7 +61,7 @@ class RunCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, project_root=project_root
         )
-        PromptValidator().validate(paths.prompt_dir)
+        PromptValidator().validate(paths.prompt_dir, config={"workflow_name": self.agent_name})
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(
             self.agent_name,
