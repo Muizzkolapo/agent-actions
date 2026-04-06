@@ -28,7 +28,8 @@ class TestEnrichmentPipelineUTC:
         context = _make_context()
         # TypeError would be raised here if one datetime is naive and other is aware
         enriched = pipeline.enrich(result, context)
-        assert enriched is not None
+        assert enriched.status == result.status
+        assert enriched.data == result.data
 
     def test_utc_datetimes_are_timezone_aware(self):
         """datetime.now(UTC) must produce an offset-aware datetime."""

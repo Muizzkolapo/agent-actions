@@ -406,8 +406,8 @@ class TestSkipEvaluator:
         """None previous_outputs should be treated as empty dict."""
         evaluator = SkipEvaluator()
         with patch(GUARD_FILTER_PATH, return_value=MagicMock()):
-            # Should not raise — None is handled
-            evaluator.should_skip_action({"agent_type": "a"}, None)
+            result = evaluator.should_skip_action({"agent_type": "a"}, None)
+            assert isinstance(result, bool)
 
     def test_repr(self):
         evaluator = SkipEvaluator()

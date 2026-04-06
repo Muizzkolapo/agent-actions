@@ -65,8 +65,8 @@ class TestEmptyRunsData:
 
     def test_generated_at_is_iso_string(self):
         data = _empty_runs_data()
-        # Should parse without error
-        datetime.fromisoformat(data["metadata"]["generated_at"])
+        parsed = datetime.fromisoformat(data["metadata"]["generated_at"])
+        assert isinstance(parsed, datetime)
 
 
 # ---------------------------------------------------------------------------
@@ -460,15 +460,17 @@ class TestRecordActionStart:
 
     def test_no_match_run_id_is_noop(self, tmp_path):
         tracker = RunTracker(artefact_dir=tmp_path)
-        tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
+        run_id = tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
 
-        # Should not raise
         tracker.record_action_start(
             run_id="run_nonexistent_abc",
             action_name="anything",
             action_type="llm",
             action_config={},
         )
+        data = json.loads(tracker.runs_file.read_text())
+        real_run = next(r for r in data.get("executions", []) if r["id"] == run_id)
+        assert "anything" not in real_run.get("actions", {})
 
     def test_creates_actions_dict_if_missing(self, tmp_path):
         """If a run record somehow lacks the 'actions' key, it is created."""
@@ -598,7 +600,7 @@ class TestRecordActionComplete:
 
     def test_nonexistent_run_id_is_noop(self, tmp_path):
         tracker = RunTracker(artefact_dir=tmp_path)
-        tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
+        run_id = tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
 
         tracker.record_action_complete(
             config=ActionCompleteConfig(
@@ -608,6 +610,9 @@ class TestRecordActionComplete:
                 duration_seconds=0.0,
             )
         )
+        data = json.loads(tracker.runs_file.read_text())
+        real_run = next(r for r in data["executions"] if r["id"] == run_id)
+        assert "whatever" not in real_run.get("actions", {})
 
     def test_no_tokens_field_when_none(self, tmp_path):
         tracker = RunTracker(artefact_dir=tmp_path)
@@ -688,10 +693,12 @@ class TestFinalizeWorkflowRun:
 
     def test_finalize_nonexistent_run_is_noop(self, tmp_path):
         tracker = RunTracker(artefact_dir=tmp_path)
-        tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
+        run_id = tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
 
-        # Should not crash
         tracker.finalize_workflow_run(run_id="run_ghost_abc", status="success")
+        data = json.loads(tracker.runs_file.read_text())
+        real_run = next(r for r in data["executions"] if r["id"] == run_id)
+        assert real_run.get("status") != "success"
 
 
 # ---------------------------------------------------------------------------
