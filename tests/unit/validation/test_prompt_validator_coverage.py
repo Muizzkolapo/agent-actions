@@ -219,6 +219,38 @@ class TestValidateSinglePromptFile:
 # ---------------------------------------------------------------------------
 
 
+class TestResolvePromptFiles:
+    """Test _resolve_prompt_files scoping logic."""
+
+    def test_no_workflow_name_returns_all_md(self, tmp_path):
+        (tmp_path / "a.md").write_text("a")
+        (tmp_path / "b.md").write_text("b")
+        result = PromptValidator._resolve_prompt_files(tmp_path, None)
+        assert len(result) == 2
+
+    def test_workflow_name_returns_only_matching_file(self, tmp_path):
+        (tmp_path / "my_workflow.md").write_text("wf")
+        (tmp_path / "other.md").write_text("other")
+        result = PromptValidator._resolve_prompt_files(tmp_path, "my_workflow")
+        assert len(result) == 1
+        assert result[0].name == "my_workflow.md"
+
+    def test_workflow_name_missing_file_returns_empty(self, tmp_path):
+        (tmp_path / "other.md").write_text("other")
+        result = PromptValidator._resolve_prompt_files(tmp_path, "missing_workflow")
+        assert result == []
+
+    def test_empty_string_workflow_name_returns_all(self, tmp_path):
+        (tmp_path / "a.md").write_text("a")
+        result = PromptValidator._resolve_prompt_files(tmp_path, "")
+        assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# validate()
+# ---------------------------------------------------------------------------
+
+
 class TestValidateMethod:
     """Test the public validate() entry point."""
 
@@ -256,3 +288,49 @@ class TestValidateMethod:
         result = validator.validate(tmp_path)
         assert result is False
         assert any("duplicate" in e.lower() for e in validator.get_errors())
+
+
+# ---------------------------------------------------------------------------
+# validate() with workflow_name scoping (issue #179)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateWorkflowScoping:
+    """Test that workflow_name config scopes which files are validated."""
+
+    def test_scoped_to_workflow_skips_other_files(self, validator, tmp_path):
+        """Files belonging to other workflows must not be scanned."""
+        (tmp_path / "my_workflow.md").write_text(
+            "# My Workflow\n{prompt analyze}\nDo analysis\n{end_prompt}"
+        )
+        # This file belongs to another workflow and has no prompt sections,
+        # which would normally trigger a warning if scanned.
+        (tmp_path / "other_workflow.md").write_text("Just plain text, no prompts.")
+        result = validator.validate(tmp_path, config={"workflow_name": "my_workflow"})
+        assert result is True
+        assert not validator.has_errors()
+        # The warning about "no prompt sections" should NOT appear because
+        # other_workflow.md was never scanned.
+        assert not any("other_workflow" in w for w in validator.get_warnings())
+
+    def test_scoped_validation_still_catches_errors(self, validator, tmp_path):
+        """Malformed prompts in the current workflow file must still be caught."""
+        (tmp_path / "bad_workflow.md").write_text("{prompt analyze}\nContent without closing")
+        result = validator.validate(tmp_path, config={"workflow_name": "bad_workflow"})
+        assert result is False
+        assert any("unclosed" in e.lower() for e in validator.get_errors())
+
+    def test_no_config_falls_back_to_all_files(self, validator, tmp_path):
+        """Without config, all .md files are scanned (backward compat)."""
+        (tmp_path / "a.md").write_text("# A\n{prompt first}\nContent\n{end_prompt}")
+        (tmp_path / "b.md").write_text("# B\n{prompt second}\nContent\n{end_prompt}")
+        result = validator.validate(tmp_path)
+        assert result is True
+        assert not validator.has_errors()
+
+    def test_workflow_file_missing_warns(self, validator, tmp_path):
+        """When the workflow's prompt file does not exist, emit a warning."""
+        (tmp_path / "other.md").write_text("irrelevant")
+        result = validator.validate(tmp_path, config={"workflow_name": "nonexistent"})
+        assert result is True
+        assert any("nonexistent.md" in w and "not found" in w for w in validator.get_warnings())
