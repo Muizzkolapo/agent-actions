@@ -1,9 +1,12 @@
 """Agent workflow orchestration."""
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from rich.console import Console
@@ -11,6 +14,12 @@ from rich.console import Console
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+
+if TYPE_CHECKING:
+    from agent_actions.input.preprocessing.parsing.ast_nodes import (
+        ASTNode,
+        ComparisonNode,
+    )
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
@@ -35,19 +44,52 @@ from agent_actions.workflow.service_init import initialize_services, initialize_
 logger = logging.getLogger(__name__)
 
 
+def _find_comparison_nodes(node: ASTNode) -> list[ComparisonNode]:
+    """Recursively collect all ComparisonNode instances from an AST."""
+    from agent_actions.input.preprocessing.parsing.ast_nodes import (
+        ComparisonNode,
+        LogicalNode,
+    )
+
+    results: list[ComparisonNode] = []
+    if isinstance(node, ComparisonNode):
+        results.append(node)
+    elif isinstance(node, LogicalNode):
+        results.extend(_find_comparison_nodes(node.left))
+        if node.right is not None:
+            results.extend(_find_comparison_nodes(node.right))
+    return results
+
+
+def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str) -> list[str]:
+    """Flag ComparisonNode instances where the RHS is a bare FieldNode (likely unquoted string)."""
+    from agent_actions.input.preprocessing.parsing.ast_nodes import (
+        FieldNode,
+    )
+
+    errors: list[str] = []
+    for comparison in _find_comparison_nodes(ast_root):
+        if comparison.right is not None and isinstance(comparison.right, FieldNode):
+            field = comparison.right.field_path
+            left_repr = (
+                comparison.left.field_path if isinstance(comparison.left, FieldNode) else "..."
+            )
+            op = comparison.operator.value
+            errors.append(
+                f"Action '{action_name}': guard condition '{clause}' compares field "
+                f"'{left_repr}' to bare identifier '{field}'. "
+                f"If '{field}' is a string value, quote it: "
+                f'{left_repr} {op} "{field}"'
+            )
+    return errors
+
+
 def validate_guard_conditions(action_configs: dict) -> list[str]:
     """Parse all guard conditions and return error messages for any that are invalid.
 
     Runs after config expansion, so guard dicts already use 'clause' (not 'condition').
-    Catches syntax errors (e.g. unbalanced parens, unknown operators) before any LLM
-    calls are made.
-
-    Args:
-        action_configs: Mapping of action name → expanded agent config dict.
-
-    Returns:
-        List of human-readable error strings, one per invalid guard clause.
-        Empty list means all guards are syntactically valid.
+    Catches syntax errors and semantic issues (e.g., unquoted string literals on RHS)
+    before any LLM calls are made.
     """
     errors: list[str] = []
     parser = WhereClauseParser()
@@ -65,6 +107,11 @@ def validate_guard_conditions(action_configs: dict) -> list[str]:
             error = parse_result.error
             detail = error.message if error else "parse failed"
             errors.append(f"Action '{action_name}': invalid guard condition '{clause}': {detail}")
+            continue
+
+        # Semantic check: detect bare identifiers on comparison RHS
+        if parse_result.ast is not None:
+            errors.extend(_check_bare_identifier_rhs(parse_result.ast.root, clause, action_name))
 
     return errors
 
@@ -135,7 +182,7 @@ class AgentWorkflow:
         if guard_errors:
             raise PreFlightValidationError(
                 "\n".join(guard_errors),
-                hint="Fix the guard condition syntax errors above before running the workflow.",
+                hint="Fix the guard condition errors above before running the workflow.",
             )
 
         # Resolution checks: API keys, seed files, vendor batch compatibility
@@ -312,7 +359,7 @@ class AgentWorkflow:
         use_tools: bool,
         run_upstream: bool,
         run_downstream: bool,
-    ) -> "AgentWorkflow":
+    ) -> AgentWorkflow:
         """Factory method to create child workflow instances."""
         return self.__class__(
             WorkflowRuntimeConfig(
