@@ -14,6 +14,7 @@ import {
   formatValue,
   type ClassifiedField,
 } from "@/lib/data-card-utils"
+import type { PromptTrace } from "@/lib/catalog-client"
 
 // ── Shared value renderer (used by both DataCard and table CellValue) ──────
 
@@ -171,6 +172,62 @@ function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
   )
 }
 
+// ── Prompt Trace drawer ──────────────────────────────────────────────────
+
+function PromptTraceDrawer({ trace }: { trace: PromptTrace }) {
+  const [open, setOpen] = useState(false)
+
+  const modelLabel = trace.model_name || "unknown"
+  const modeLabel = trace.run_mode || "online"
+  const isBatch = modeLabel === "batch"
+
+  return (
+    <div className="trace-section">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`trace-trigger ${open ? "open" : ""}`}
+      >
+        <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
+        <span className="trace-label">Prompt Trace</span>
+        <div className="trace-badges">
+          <span className="trace-badge trace-badge-model">{modelLabel}</span>
+          <span className={`trace-badge trace-badge-mode ${isBatch ? "batch" : ""}`}>{modeLabel}</span>
+        </div>
+      </button>
+      <div className="data-card-drawer" data-open={open}>
+        <div>
+          <div className="trace-content">
+            <div className="trace-panels">
+              <div className="trace-panel trace-panel-prompt">
+                <div className="trace-panel-header">
+                  <span>Compiled Prompt</span>
+                  {trace.prompt_length != null && (
+                    <span className="trace-panel-size">{trace.prompt_length.toLocaleString()} chars</span>
+                  )}
+                </div>
+                <div className="trace-panel-body">
+                  {trace.compiled_prompt}
+                </div>
+              </div>
+              <div className="trace-panel trace-panel-response">
+                <div className="trace-panel-header">
+                  <span>LLM Response</span>
+                  {trace.response_length != null && (
+                    <span className="trace-panel-size">{trace.response_length.toLocaleString()} chars</span>
+                  )}
+                </div>
+                <div className="trace-panel-body">
+                  {trace.response_text || <span className="text-muted-foreground/50 italic text-[10px]">Response pending</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── DataCard ──────────────────────────────────────────────────────────────
 
 export interface DataCardProps {
@@ -251,6 +308,9 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
       )}
 
       <MetadataDrawer fields={metadata} />
+      {record._trace && typeof record._trace === "object" && "compiled_prompt" in record._trace && (
+        <PromptTraceDrawer trace={record._trace as PromptTrace} />
+      )}
     </div>
   )
 }

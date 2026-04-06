@@ -258,6 +258,40 @@ reprompt:
   on_exhausted: return_last
 ```
 
+## Debugging with Prompt Traces
+
+When an LLM action produces unexpected output, the fastest path to understanding "why" is inspecting the compiled prompt and raw response. Agent Actions captures both automatically.
+
+### Using the Data Explorer
+
+1. Run `agac docs` to generate the documentation catalog
+2. Open the Data Explorer in your browser
+3. Navigate to the action's output in the Data tab
+4. Find the record with unexpected output
+5. Click the **Prompt Trace** accordion below the record — it shows:
+   - **Compiled Prompt**: The exact text the LLM received (with all template variables resolved)
+   - **LLM Response**: The raw text the LLM returned (before parsing)
+
+### What to Look For
+
+- **Missing context**: Template variables resolved to empty strings or wrong values — check your `context_scope` and dependency chain
+- **Ambiguous instructions**: The prompt doesn't clearly constrain the output format — tighten the prompt template
+- **Schema mismatch**: The LLM response doesn't match the expected JSON structure — consider enabling reprompting
+- **Model badge**: Check if the model name matches what you expected — a misconfigured provider can route to the wrong model
+
+### Querying Traces Directly
+
+For bulk analysis across many records:
+
+```bash
+sqlite3 my_workflow/agent_io/outputs.db \
+  "SELECT record_id, response_text FROM prompt_trace WHERE action_name = 'classify_issue' LIMIT 10"
+```
+
+See [Prompt Traces reference](../reference/data-io/prompt-traces.md) for the full table schema and query examples.
+
+---
+
 ## Debugging Agentic Workflows
 
 When an error occurs, resist the urge to start changing code immediately. Follow this systematic approach to understand what went wrong before fixing it.

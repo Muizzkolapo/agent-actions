@@ -138,12 +138,26 @@ export interface RawValidationEntry {
   [key: string]: unknown
 }
 
+// --- Prompt Trace ---
+
+export interface PromptTrace {
+  compiled_prompt: string
+  llm_context?: string | null
+  response_text?: string | null
+  model_name?: string | null
+  model_vendor?: string | null
+  run_mode?: string | null
+  prompt_length?: number | null
+  response_length?: number | null
+  attempt: number
+}
+
 // --- workflow_data ---
 
 export interface RawWorkflowDataNode {
   record_count: number
   files: string[]
-  preview: Record<string, unknown>[]
+  preview: (Record<string, unknown> & { _trace?: PromptTrace })[]
 }
 
 export interface RawWorkflowData {

@@ -184,7 +184,7 @@ export class QueryResultsPanel implements vscode.Disposable {
         const METADATA_KEYS = new Set([
             'source_guid','lineage','node_id','metadata','target_id',
             'parent_target_id','root_target_id','chunk_info',
-            '_recovery','_unprocessed','_file'
+            '_recovery','_unprocessed','_file','_trace'
         ]);
         const IDENTITY_KEYS = new Set(['source_guid','target_id']);
         const LONG_FORM_HINTS = new Set([
@@ -326,10 +326,44 @@ export class QueryResultsPanel implements vscode.Disposable {
                     + '</div>';
             }
 
+            // Prompt Trace drawer
+            var traceDrawer = '';
+            var trace = record._trace;
+            if (trace && typeof trace === 'object' && !Array.isArray(trace)) {
+                var modelLabel = esc(String(trace.model_name || 'unknown'));
+                var modeLabel = esc(String(trace.run_mode || 'online'));
+                var batchClass = modeLabel === 'batch' ? ' batch' : '';
+                var promptLen = typeof trace.prompt_length === 'number' ? trace.prompt_length.toLocaleString() + ' chars' : '';
+                var responseLen = typeof trace.response_length === 'number' ? trace.response_length.toLocaleString() + ' chars' : '';
+                var promptText = esc(String(trace.compiled_prompt || ''));
+                var responseText = trace.response_text ? esc(String(trace.response_text)) : '<span class="val-null">Response pending</span>';
+
+                traceDrawer = '<div class="card-trace">'
+                    + '<button class="trace-toggle">'
+                    + '&#9656; Prompt Trace'
+                    + ' <span class="trace-badges">'
+                    + '<span class="trace-badge trace-model">' + modelLabel + '</span>'
+                    + '<span class="trace-badge trace-mode' + batchClass + '">' + modeLabel + '</span>'
+                    + '</span>'
+                    + '</button>'
+                    + '<div class="trace-panels-wrap" hidden>'
+                    + '<div class="trace-panel prompt">'
+                    + '<div class="trace-panel-hdr"><span>Compiled Prompt</span>' + (promptLen ? '<span class="trace-size">' + promptLen + '</span>' : '') + '</div>'
+                    + '<pre class="trace-panel-body">' + promptText + '</pre>'
+                    + '</div>'
+                    + '<div class="trace-panel response">'
+                    + '<div class="trace-panel-hdr"><span>LLM Response</span>' + (responseLen ? '<span class="trace-size">' + responseLen + '</span>' : '') + '</div>'
+                    + '<pre class="trace-panel-body response-body">' + responseText + '</pre>'
+                    + '</div>'
+                    + '</div>'
+                    + '</div>';
+            }
+
             return '<div class="card">'
                 + '<div class="card-header">' + header + '</div>'
                 + '<div class="card-body">' + body + '</div>'
                 + drawer
+                + traceDrawer
                 + '</div>';
         }
 
@@ -351,6 +385,19 @@ export class QueryResultsPanel implements vscode.Disposable {
                 if (prose && prose.classList.contains('prose')) {
                     prose.classList.toggle('clamped');
                     target.textContent = prose.classList.contains('clamped') ? 'Show more' : 'Show less';
+                }
+                return;
+            }
+
+            // Trace drawer toggle
+            if (target.classList && target.classList.contains('trace-toggle')) {
+                var panels = target.nextElementSibling;
+                if (panels) {
+                    var wasHidden = panels.hasAttribute('hidden');
+                    if (wasHidden) panels.removeAttribute('hidden');
+                    else panels.setAttribute('hidden', '');
+                    var badgesHtml = target.querySelector('.trace-badges');
+                    target.innerHTML = (wasHidden ? '&#9662;' : '&#9656;') + ' Prompt Trace ' + (badgesHtml ? badgesHtml.outerHTML : '');
                 }
                 return;
             }
@@ -878,6 +925,106 @@ function allStyles(): string {
             color: var(--vscode-descriptionForeground);
             word-break: break-all;
             min-width: 0;
+        }
+
+        /* ── Prompt Trace drawer ── */
+        .card-trace {
+            border-top: 1px solid color-mix(in srgb, #7F77DD 30%, var(--vscode-panel-border));
+        }
+        .trace-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            width: 100%;
+            padding: 6px 12px;
+            background: none;
+            border: none;
+            color: #AFA9EC;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+        }
+        .trace-toggle:hover { color: var(--vscode-foreground); }
+        .trace-badges { display: inline-flex; gap: 4px; margin-left: auto; }
+        .trace-badge {
+            font-size: 9px;
+            font-family: var(--vscode-editor-font-family);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .trace-model {
+            background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+            color: var(--vscode-descriptionForeground);
+            border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+        }
+        .trace-mode {
+            background: color-mix(in srgb, #2dd4bf 12%, transparent);
+            color: #2dd4bf;
+            border: 1px solid color-mix(in srgb, #2dd4bf 20%, transparent);
+        }
+        .trace-mode.batch {
+            background: color-mix(in srgb, #f59e0b 12%, transparent);
+            color: #f59e0b;
+            border: 1px solid color-mix(in srgb, #f59e0b 20%, transparent);
+        }
+        .trace-panels-wrap {
+            padding: 0 12px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .trace-panels-wrap[hidden] { display: none; }
+        .trace-panel {
+            border-radius: 4px;
+            border: 1px solid var(--vscode-panel-border);
+            overflow: hidden;
+        }
+        .trace-panel-hdr {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 10px;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
+        }
+        .trace-size {
+            font-family: var(--vscode-editor-font-family);
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+            opacity: 0.5;
+        }
+        .trace-panel.prompt .trace-panel-hdr {
+            background: color-mix(in srgb, #7F77DD 10%, var(--vscode-editor-background));
+            color: #AFA9EC;
+        }
+        .trace-panel.response .trace-panel-hdr {
+            background: color-mix(in srgb, #2dd4bf 8%, var(--vscode-editor-background));
+            color: #2dd4bf;
+        }
+        .trace-panel-body {
+            padding: 8px 10px;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 11px;
+            line-height: 1.6;
+            color: var(--vscode-editor-foreground);
+            opacity: 0.82;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 240px;
+            overflow-y: auto;
+            margin: 0;
+            background: var(--vscode-textCodeBlock-background);
+            border: none;
+            border-radius: 0;
+        }
+        .trace-panel-body.response-body {
+            font-size: 12px;
+            max-height: 120px;
         }
 
         /* ── Table ── */
