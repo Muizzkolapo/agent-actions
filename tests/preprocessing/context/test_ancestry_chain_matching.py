@@ -369,6 +369,60 @@ class TestDeterministicRecordMatcher:
         )
         assert result is None
 
+    def test_non_dict_records_skipped(self):
+        """Non-dict items in data are skipped without crashing."""
+        records = [
+            "not a dict",
+            42,
+            {"node_id": "extract_abc", "content": {"field": "correct"}},
+            None,
+        ]
+        result = HistoricalNodeDataLoader._find_record_by_identifiers(
+            data=records,  # type: ignore[arg-type]
+            target_node_id="extract_abc",
+            action_name="extract",
+        )
+        assert result is not None
+        assert result["content"]["field"] == "correct"
+
+    def test_record_content_not_a_dict_returns_empty(self):
+        """When record.content is not a dict, load_historical_node_data returns {}."""
+        # This tests load_historical_node_data's line: record.get("content", {})
+        # If content is a string, the .keys() call on it would differ
+        records = [
+            {"node_id": "extract_abc", "content": "not a dict"},
+        ]
+        result = HistoricalNodeDataLoader._find_record_by_identifiers(
+            data=records,
+            target_node_id="extract_abc",
+            action_name="extract",
+        )
+        assert result is not None
+        assert result["content"] == "not a dict"
+
+
+class TestFindTargetNodeIdEdgeCases:
+    """Edge cases for _find_target_node_id that close coverage gaps."""
+
+    def test_empty_lineage_sources_treated_as_falsy(self):
+        """lineage_sources=[] should behave same as None — skip Mode 2."""
+        result = HistoricalNodeDataLoader._find_target_node_id(
+            action_name="branch_b",
+            lineage=["source_abc", "branch_a_def"],
+            lineage_sources=[],
+            agent_indices={"source": 0, "branch_a": 1, "branch_b": 2},
+        )
+        assert result is None
+
+    def test_non_string_lineage_entries_skipped(self):
+        """Non-string entries in lineage are skipped without crashing."""
+        result = HistoricalNodeDataLoader._find_target_node_id(
+            action_name="extract",
+            lineage=[42, None, "extract_abc123", {"bad": "entry"}],  # type: ignore[list-item]
+            agent_indices={"extract": 0},
+        )
+        assert result == "extract_abc123"
+
 
 class TestMapReducePattern:
     """Tests for Map-Reduce pattern where split records aggregate."""

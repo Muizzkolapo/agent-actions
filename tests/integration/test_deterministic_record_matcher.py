@@ -410,11 +410,11 @@ class TestPrefixDisambiguation:
 # ---------------------------------------------------------------------------
 
 
-class TestNoFallbacks:
-    """source_guid, parent_target_id, root_target_id must NEVER be used for matching."""
+class TestNodeIdResolutionRejectsNonAncestors:
+    """When target action is not in lineage, loader returns None regardless of other fields."""
 
-    def test_source_guid_match_alone_returns_none(self):
-        """source_guid is for logging only — a match on it alone must not return a record."""
+    def test_action_not_in_lineage_returns_none_despite_source_guid(self):
+        """No extract node in lineage → None, even though source_guid matches a record."""
         storage = MockStorageBackend(
             {
                 "extract": [
@@ -430,7 +430,7 @@ class TestNoFallbacks:
         request = HistoricalDataRequest(
             action_name="extract",
             lineage=["source_uuid_000", "transform_uuid_xxx"],  # No extract node
-            source_guid="src-001",  # Matches record's source_guid
+            source_guid="src-001",
             file_path="/mock/test.json",
             agent_indices={"source": 0, "extract": 1, "transform": 2},
             storage_backend=storage,
@@ -439,8 +439,8 @@ class TestNoFallbacks:
 
         assert content is None
 
-    def test_parent_target_id_match_alone_returns_none(self):
-        """parent_target_id is metadata — must not be used for matching."""
+    def test_action_not_in_lineage_returns_none_despite_parent_target_id(self):
+        """No extract node in lineage → None, even though parent_target_id matches."""
         storage = MockStorageBackend(
             {
                 "extract": [
@@ -460,15 +460,15 @@ class TestNoFallbacks:
             source_guid="src-001",
             file_path="/mock/test.json",
             agent_indices={"source": 0, "extract": 1, "transform": 2},
-            parent_target_id="parent-match",  # Matches record
+            parent_target_id="parent-match",
             storage_backend=storage,
         )
         content = HistoricalNodeDataLoader.load_historical_node_data(request)
 
         assert content is None
 
-    def test_root_target_id_match_alone_returns_none(self):
-        """root_target_id is metadata — must not be used for matching."""
+    def test_action_not_in_lineage_returns_none_despite_root_target_id(self):
+        """No extract node in lineage → None, even though root_target_id matches."""
         storage = MockStorageBackend(
             {
                 "extract": [
@@ -488,7 +488,33 @@ class TestNoFallbacks:
             source_guid="src-001",
             file_path="/mock/test.json",
             agent_indices={"source": 0, "extract": 1, "transform": 2},
-            root_target_id="root-match",  # Matches record
+            root_target_id="root-match",
+            storage_backend=storage,
+        )
+        content = HistoricalNodeDataLoader.load_historical_node_data(request)
+
+        assert content is None
+
+    def test_node_in_lineage_but_absent_from_storage_returns_none(self):
+        """node_id found in lineage but no matching record in storage → None."""
+        storage = MockStorageBackend(
+            {
+                "extract": [
+                    {
+                        "source_guid": "src-001",
+                        "node_id": "extract_uuid_OTHER",
+                        "content": {"field": "different record"},
+                    }
+                ]
+            }
+        )
+
+        request = HistoricalDataRequest(
+            action_name="extract",
+            lineage=["source_uuid_000", "extract_uuid_MISSING", "transform_uuid_xxx"],
+            source_guid="src-001",
+            file_path="/mock/test.json",
+            agent_indices={"source": 0, "extract": 1, "transform": 2},
             storage_backend=storage,
         )
         content = HistoricalNodeDataLoader.load_historical_node_data(request)
