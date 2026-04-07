@@ -2,13 +2,13 @@
 Integration tests for context scope with split records.
 
 These tests verify that the context scope system (observe, drop, passthrough)
-works correctly when historical node data comes from split records that share
-the same source_guid and node_id but have different lineages.
+works correctly with the deterministic node_id key-join matcher.
 
 Tests the full integration:
     build_field_context_with_history()
-        -> HistoricalNodeDataLoader.load_historical_node_data()
-            -> _find_record_by_identifiers() with lineage matching
+        -> _load_historical_node()
+            -> HistoricalNodeDataLoader.load_historical_node_data()
+                -> _find_target_node_id() + _find_record_by_identifiers()
 """
 
 import json
@@ -143,7 +143,8 @@ class TestContextScopeSplitRecordsEdgeCases:
         """
         Test handling when current_item has no lineage.
 
-        Should gracefully handle and avoid falling back to source_guid.
+        Without lineage, _find_target_node_id cannot extract a node_id,
+        so the loader returns None. No fallback to source_guid.
         """
         # Current item WITHOUT lineage
         current_item = {
@@ -185,7 +186,7 @@ class TestContextScopeSplitRecordsEdgeCases:
             or field_context.get("split_operation") == {}
         ), "Should not load split_operation without lineage or ancestry matching"
 
-    def test_wrong_source_guid_returns_none(
+    def test_no_storage_backend_returns_none(
         self,
         split_record_temp_dir,
         caller_records_data,
@@ -193,15 +194,17 @@ class TestContextScopeSplitRecordsEdgeCases:
         dependency_configs_split,
     ):
         """
-        Test that wrong source_guid returns None for historical data.
+        Test that without a storage backend, historical data cannot be loaded.
+
+        The deterministic matcher finds the target node_id in lineage, but
+        without a storage backend to query, the loader returns None.
+        source_guid is not used for matching — only for logging/diagnostics.
         """
-        # Caller with WRONG source_guid
         caller = caller_records_data[0].copy()
-        caller["source_guid"] = "wrong-guid-999"
 
         agent_config = {
             "idx": 23,
-            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
+            "dependencies": [],
             "context_scope": {
                 "observe": [
                     "split_operation.status",
@@ -215,6 +218,7 @@ class TestContextScopeSplitRecordsEdgeCases:
             split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
+        # No storage_backend provided — loader will return None
         field_context = build_field_context_with_history(
             agent_name="downstream",
             agent_config=agent_config,
@@ -224,9 +228,8 @@ class TestContextScopeSplitRecordsEdgeCases:
             context_scope=agent_config["context_scope"],
         )
 
-        # Should NOT have loaded split_operation (source_guid mismatch)
         assert (
             "split_operation" not in field_context
             or field_context.get("split_operation") is None
             or field_context.get("split_operation") == {}
-        ), "Should not load data when source_guid doesn't match"
+        ), "Should not load split_operation without storage backend"

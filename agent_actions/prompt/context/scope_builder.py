@@ -242,6 +242,7 @@ def build_field_context_with_history(
                                 root_target_id=current_item.get("root_target_id"),
                                 output_directory=output_directory,
                                 storage_backend=storage_backend,
+                                lineage_sources=current_item.get("lineage_sources"),
                             )
                         except (ValueError, TypeError, KeyError):
                             logger.warning(
@@ -336,9 +337,11 @@ def build_field_context_with_history(
                     )
                     continue
 
-                # Parallel Branch Check
+                # Parallel Branch Check (uses same disambiguation as the matcher)
                 is_ancestor = (
-                    HistoricalNodeDataLoader._find_node_in_lineage(dep_name, lineage, agent_indices)
+                    HistoricalNodeDataLoader._find_target_node_id(
+                        dep_name, lineage, agent_indices=agent_indices
+                    )
                     is not None
                 )
 
@@ -366,6 +369,7 @@ def build_field_context_with_history(
                         root_target_id=current_item.get("root_target_id"),
                         output_directory=output_directory,
                         storage_backend=storage_backend,
+                        lineage_sources=current_item.get("lineage_sources"),
                     )
                 except (ValueError, TypeError, KeyError):
                     logger.warning(
