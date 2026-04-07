@@ -241,7 +241,7 @@ def apply_context_scope(
             allowed[ns_name] = set()
         if field_name == "*":
             allowed[ns_name] = "*"
-        elif allowed[ns_name] != "*":
+        elif isinstance(allowed[ns_name], set):
             allowed[ns_name].add(field_name)
 
     filtered: dict = {}
