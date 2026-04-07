@@ -318,18 +318,12 @@ def _extract_allowed_fields_per_dependency(
     all_field_refs.extend(context_scope.get("observe", []))
     all_field_refs.extend(context_scope.get("passthrough", []))
 
-    # Track which dependencies are declared in context_scope
-    # Also track field prefix patterns (for loop consumption)
     declared_deps = set()
-    field_prefix_patterns = set()  # Base names with field prefix patterns (e.g., 'extract_raw_qa')
 
     for field_ref in all_field_refs:
         try:
             ref_action, ref_field = parse_field_reference(field_ref)
             declared_deps.add(ref_action)
-            # Track field prefix patterns (indicated by '_' field marker)
-            if ref_field == "_":
-                field_prefix_patterns.add(ref_action)
         except ValueError as e:
             fire_event(
                 ContextFieldSkippedEvent(
@@ -349,25 +343,13 @@ def _extract_allowed_fields_per_dependency(
             try:
                 ref_action, ref_field = parse_field_reference(field_ref)
 
-                # Check for exact match or field prefix pattern match
                 if ref_action != dep_name:
-                    # Check if this is a field prefix pattern that covers the dependency
-                    if ref_field == "_" and dep_name.startswith(f"{ref_action}_"):
-                        # Field prefix pattern covers all loop iterations
-                        wildcard_found = True
-                        break
-                    continue  # Not for this dependency
+                    continue
 
                 if ref_field == "*":
-                    # Wildcard: dep_name.*
-                    wildcard_found = True
-                    break
-                elif ref_field == "_":
-                    # Field prefix pattern: dep_name_
                     wildcard_found = True
                     break
                 else:
-                    # Specific field: dep_name.field_name
                     specific_fields.append(ref_field)
 
             except ValueError as e:

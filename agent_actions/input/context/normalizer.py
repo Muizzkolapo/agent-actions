@@ -52,12 +52,12 @@ def _expand_list_directive(
     field_refs: list[str],
     version_base_map: dict[str, list[str]],
 ) -> list[str]:
-    """Expand version base name references in a list of field references.
+    """Expand version base name references to concrete versioned references.
 
-    Converts wildcard references like "extract_raw_qa.*" to field prefix
-    patterns like "extract_raw_qa_" which match all version iteration fields.
-    A trailing underscore WITHOUT a dot indicates a field prefix pattern,
-    detected by context_scope_processor using ``field_ref.endswith("_") and "." not in field_ref``.
+    Any reference targeting a version base name gets expanded to one reference
+    per version variant. Both wildcards and specific fields are expanded:
+      "action.*"     → ["action_1.*", "action_2.*", "action_3.*"]
+      "action.score" → ["action_1.score", "action_2.score", "action_3.score"]
     """
     expanded_refs = []
 
@@ -74,10 +74,8 @@ def _expand_list_directive(
         action_name, field_name = parts
 
         if action_name in version_base_map:
-            if field_name == "*":
-                expanded_refs.append(f"{action_name}_")
-            else:
-                expanded_refs.append(field_ref)
+            for variant in version_base_map[action_name]:
+                expanded_refs.append(f"{variant}.{field_name}")
         else:
             expanded_refs.append(field_ref)
 
@@ -86,19 +84,16 @@ def _expand_list_directive(
 
 def normalize_all_agent_configs(
     agent_configs: dict[str, dict[str, Any]],
-    execution_order: list[str],
 ) -> None:
     """Normalize context_scope for all agents in-place.
 
     MUTATION CONTRACT: mutates agent_configs IN PLACE by replacing each agent's
-    'context_scope' with its normalized form (version references expanded to
-    field prefix patterns). No separate 'context_scope_expanded' key exists;
-    every downstream consumer reads 'context_scope' and gets the expanded form.
+    'context_scope' with its normalized form (version base name references
+    expanded to concrete versioned references).
     """
-    version_base_map = _build_version_base_name_map(agent_configs, execution_order)
+    version_base_map = _build_version_base_name_map(agent_configs)
 
-    for agent_name in execution_order:
-        config = agent_configs.get(agent_name, {})
+    for agent_name, config in agent_configs.items():
         context_scope = config.get("context_scope")
 
         if context_scope:
@@ -114,13 +109,11 @@ def normalize_all_agent_configs(
 
 def _build_version_base_name_map(
     agent_configs: dict[str, dict[str, Any]],
-    execution_order: list[str],
 ) -> dict[str, list[str]]:
     """Build mapping from version base names to their expanded agent names."""
     version_base_map: dict[str, list[str]] = {}
 
-    for agent_name in execution_order:
-        config = agent_configs.get(agent_name, {})
+    for agent_name, config in agent_configs.items():
         if config.get("is_versioned_agent"):
             base_name = config.get("version_base_name")
             if base_name:

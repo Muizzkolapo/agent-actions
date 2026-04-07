@@ -19,33 +19,18 @@ __all__ = [
 def parse_field_reference(field_ref: str) -> tuple[str, str]:
     """
     Parse field reference in 'action.field' format, returning (action_name, field_name).
-
-    Also handles loop field prefix patterns (e.g., 'extract_raw_qa_') which indicate
-    fields from all loop iterations. For these patterns, returns (base_name, '_')
-    where '_' signals a field prefix pattern.
     """
     if not field_ref or not isinstance(field_ref, str):
         raise ValueError(
             f"Invalid field reference: {field_ref!r}. "
-            f"Expected non-empty string in format 'action.field' or field prefix pattern ending with '_'"
+            f"Expected non-empty string in format 'action.field'"
         )
-
-    # Check if this is a field prefix pattern (ends with _ but no dot)
-    # e.g., "extract_raw_qa_" for loop consumption
-    if field_ref.endswith("_") and "." not in field_ref:
-        # Field prefix pattern - return base name and '_' marker
-        base_name = field_ref[:-1]  # Remove trailing underscore
-        if not base_name:
-            raise ValueError(
-                f"Invalid field prefix pattern: '{field_ref}'. Base name cannot be empty"
-            )
-        return (base_name, "_")
 
     parts = field_ref.split(".", 1)
     if len(parts) != 2:
         raise ValueError(
             f"Invalid field reference: '{field_ref}'. "
-            f"Expected format: 'action.field' (with exactly one dot) or field prefix pattern ending with '_'"
+            f"Expected format: 'action.field' (with exactly one dot)"
         )
 
     action_name, field_name = parts

@@ -21,7 +21,7 @@ from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestra
 class TestContextScopeExpansion:
     """Test context_scope expansion for version references."""
 
-    def test_wildcard_version_reference_expands_to_field_prefix_pattern(self):
+    def test_wildcard_version_reference_expands_to_concrete_refs(self):
         """Test that wildcard references to version base names become field prefix patterns.
 
         context_scope expansion happens via normalize_all_agent_configs() at config
@@ -61,17 +61,16 @@ class TestContextScopeExpansion:
         }
 
         # First, apply normalization (as ConfigManager would do)
-        normalize_all_agent_configs(agent_configs, execution_order)
+        normalize_all_agent_configs(agent_configs)
 
         orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
 
         # Act: Compute execution levels (triggers dependency expansion only)
         levels = orchestrator.compute_execution_levels()
 
-        # Assert: context_scope should be normalized in-place with field prefix pattern
-        # (normalization happens before orchestrator runs, so this is unaffected)
+        # Assert: context_scope should be normalized in-place with concrete refs
         assert agent_configs["flatten_questions"]["context_scope"] == {
-            "observe": ["extract_raw_qa_"]  # Field prefix pattern
+            "observe": ["extract_raw_qa_1.*", "extract_raw_qa_2.*", "extract_raw_qa_3.*"]
         }
 
         # Assert: the original agent_configs dict is NOT mutated (C-6 deepcopy regression check)
@@ -85,10 +84,8 @@ class TestContextScopeExpansion:
         assert set(levels[0]) == {"extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"}
         assert levels[1] == ["flatten_questions"]
 
-    def test_specific_field_version_reference_not_expanded(self):
-        """Test that specific field references to version base names are kept as-is."""
-        execution_order = ["loop_action_1", "loop_action_2", "consumer"]
-
+    def test_specific_field_version_reference_expanded(self):
+        """Test that specific field references to version base names are expanded."""
         agent_configs = {
             "loop_action_1": {
                 "is_versioned_agent": True,
@@ -102,18 +99,15 @@ class TestContextScopeExpansion:
             },
             "consumer": {
                 "dependencies": ["loop_action"],
-                "context_scope": {
-                    "observe": ["loop_action.specific_field"]  # Specific field, not wildcard
-                },
+                "context_scope": {"observe": ["loop_action.specific_field"]},
             },
         }
 
-        orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
-        orchestrator.compute_execution_levels()
+        normalize_all_agent_configs(agent_configs)
 
-        # Specific field references should be kept as-is (not expanded to field prefix)
+        # Specific field references to version base names are now expanded too
         assert agent_configs["consumer"]["context_scope"] == {
-            "observe": ["loop_action.specific_field"]
+            "observe": ["loop_action_1.specific_field", "loop_action_2.specific_field"]
         }
 
     def test_non_version_references_unchanged(self):
@@ -172,14 +166,14 @@ class TestContextScopeExpansion:
         }
 
         # Apply normalization (as ConfigManager would do)
-        normalize_all_agent_configs(agent_configs, execution_order)
+        normalize_all_agent_configs(agent_configs)
 
         orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
         orchestrator.compute_execution_levels()
 
-        # context_scope should be normalized in-place
+        # context_scope should be normalized in-place with concrete refs
         assert agent_configs["consumer"]["context_scope"] == {
-            "observe": ["loop_action_", "regular_action.field1"],
+            "observe": ["loop_action_1.*", "loop_action_2.*", "regular_action.field1"],
             "passthrough": ["regular_action.field2"],
         }
 
