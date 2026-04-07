@@ -58,9 +58,8 @@ class TestContextScopeProcessor:
         assert "api_key" not in llm_context.get("source", {})
         assert "api_key" not in passthrough_fields
 
-        # Validate PASSTHROUGH directive
-        assert "document_id" in passthrough_fields
-        assert passthrough_fields["document_id"] == "doc-123"
+        # Validate PASSTHROUGH directive — namespaced under action name
+        assert passthrough_fields["fact_extractor"]["document_id"] == "doc-123"
         assert (
             prompt_context.get("fact_extractor", {}).get("document_id") == "doc-123"
         )  # Passthrough fields available in prompt_context
@@ -220,12 +219,12 @@ class TestContextScopeProcessor:
             field_context, context_scope
         )
 
-        # All fields from action_a should be in passthrough_fields
-        assert passthrough_fields["field1"] == "value1"
-        assert passthrough_fields["field2"] == "value2"
+        # All fields from action_a should be in passthrough_fields under namespace
+        assert passthrough_fields["action_a"]["field1"] == "value1"
+        assert passthrough_fields["action_a"]["field2"] == "value2"
 
         # Fields from action_b should NOT be in passthrough_fields
-        assert "other_field" not in passthrough_fields
+        assert "action_b" not in passthrough_fields
 
         # llm_context should be empty
         assert llm_context == {}
@@ -250,8 +249,8 @@ class TestContextScopeProcessor:
         assert llm_context["action_a"]["field2"] == "value2"
 
         # Only field3 from action_b should be in passthrough_fields (specific)
-        assert passthrough_fields["field3"] == "value3"
-        assert "field4" not in passthrough_fields
+        assert passthrough_fields["action_b"]["field3"] == "value3"
+        assert "field4" not in passthrough_fields.get("action_b", {})
 
     def test_apply_context_scope_wildcard_nonexistent_action(self):
         """Test wildcard on non-existent action returns empty."""
@@ -465,7 +464,7 @@ class TestNestedDictFieldResolution:
             field_context, context_scope
         )
 
-        assert passthrough_fields["nested.deep_value"] == 42
+        assert passthrough_fields["action_a"]["nested.deep_value"] == 42
         assert llm_context == {}
 
     def test_nested_field_does_not_leak_siblings(self):

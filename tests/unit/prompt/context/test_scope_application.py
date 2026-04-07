@@ -157,8 +157,7 @@ class TestFalsyFieldPassthrough:
             context_scope={"passthrough": ["dep.count"]},
             action_name="test_action",
         )
-        assert "count" in passthrough
-        assert passthrough["count"] == 0
+        assert passthrough["dep"]["count"] == 0
 
     def test_passthrough_includes_false_value(self):
         """passthrough: field with value False must appear in passthrough_fields."""
@@ -168,8 +167,7 @@ class TestFalsyFieldPassthrough:
             context_scope={"passthrough": ["dep.enabled"]},
             action_name="test_action",
         )
-        assert "enabled" in passthrough
-        assert passthrough["enabled"] is False
+        assert passthrough["dep"]["enabled"] is False
 
     def test_missing_field_raises_error(self):
         """Fields truly absent from context must raise ConfigurationError."""

@@ -43,7 +43,7 @@ class TestLLMContextGating:
 
         assert llm_context["source"]["text"] == "hello"
         assert "id" not in llm_context.get("source", {})
-        assert passthrough["id"] == "rec-1"
+        assert passthrough["source"]["id"] == "rec-1"
 
     def test_empty_observe_produces_empty_llm_context(self):
         """Empty observe list should produce empty llm_context (not an error)."""

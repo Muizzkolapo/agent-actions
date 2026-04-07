@@ -184,8 +184,7 @@ def apply_context_scope(
             )
             continue
 
-    # Process PASSTHROUGH: Extract to passthrough_fields (flat — merged into output rows).
-    # NOTE: If multiple actions passthrough same-named fields, last-write-wins applies.
+    # Process PASSTHROUGH: Extract to passthrough_fields (namespaced like llm_context).
     passthrough_refs = context_scope.get("passthrough", [])
     for field_ref in passthrough_refs:
         try:
@@ -194,9 +193,8 @@ def apply_context_scope(
             if field_name == "*":
                 action_fields = extract_action_fields(field_context, ns_name)
                 if action_fields:
-                    passthrough_fields.update(action_fields)
+                    passthrough_fields.setdefault(ns_name, {}).update(action_fields)
             else:
-                # Extract value from original field_context
                 value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
 
                 if value is _MISSING:
@@ -212,8 +210,7 @@ def apply_context_scope(
                         },
                     )
 
-                # Add to passthrough_fields (flat dict with field names as keys)
-                passthrough_fields[field_name] = value
+                passthrough_fields.setdefault(ns_name, {})[field_name] = value
 
         except ValueError as e:
             fire_event(
