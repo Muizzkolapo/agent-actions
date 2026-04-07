@@ -59,7 +59,7 @@ class WorkspaceIndex:
             with open(config_file, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
 
-            if config is None:
+            if not isinstance(config, dict):
                 self.dependency_graph[workflow_name] = []
                 return
 
