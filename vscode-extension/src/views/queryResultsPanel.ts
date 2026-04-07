@@ -285,7 +285,7 @@ export class QueryResultsPanel implements vscode.Disposable {
                     html += renderObjectArrayItem(items[i], key, i, items.length);
                 }
                 if (items.length > showCount) {
-                    html += '<div class="subcard-hidden" data-field="' + esc(key) + '">';
+                    html += '<div class="subcard-hidden" hidden data-field="' + esc(key) + '">';
                     for (let i = showCount; i < items.length; i++) {
                         html += renderObjectArrayItem(items[i], key, i, items.length);
                     }

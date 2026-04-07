@@ -327,7 +327,7 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
 
   // Split into scalar (simple) vs structured (complex) fields
   const scalarFields = displayFields.filter(
-    (f) => !isArrayOfObjects(f.value) && getValueType(f.value) !== "object",
+    (f) => !isArrayOfObjects(f.value) && (getValueType(f.value) !== "object" || isInlineArray(f.value)),
   )
   const structuredFields = displayFields.filter(
     (f) => isArrayOfObjects(f.value) || (getValueType(f.value) === "object" && !isInlineArray(f.value)),
