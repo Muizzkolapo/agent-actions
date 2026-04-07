@@ -136,7 +136,7 @@ class TestTemplateErrorFormatter:
         assert "Available namespaces:" in result.details
 
     def test_hint_for_missing_namespace(self):
-        """Test that hint suggests adding namespace to dependencies."""
+        """Test that hint suggests adding namespace to context_scope.observe."""
         formatter = TemplateErrorFormatter()
 
         exc = TemplateVariableError(
@@ -157,7 +157,8 @@ class TestTemplateErrorFormatter:
 
         result = formatter.format(exc, exc, str(exc), context)
 
-        assert "Add 'missing_action' to dependencies" in result.fix
+        assert "context_scope.observe" in result.fix
+        assert "missing_action" in result.fix
 
     def test_hint_for_existing_namespace_missing_field(self):
         """Test that hint suggests checking field production."""

@@ -37,6 +37,14 @@ class ReferenceValidator:
 
         declared_deps = set(agent_config.get("dependencies", []))
 
+        # Also include namespaces from context_scope (auto-inferred dependencies)
+        context_scope = agent_config.get("context_scope", {})
+        if isinstance(context_scope, dict):
+            for directive in ("observe", "passthrough"):
+                for field_ref in context_scope.get(directive, []):
+                    if isinstance(field_ref, str) and "." in field_ref:
+                        declared_deps.add(field_ref.split(".", 1)[0])
+
         for ref in references:
             if isinstance(ref, str):
                 try:
@@ -72,10 +80,9 @@ class ReferenceValidator:
                 continue
 
             if self.strict_dependencies and action_name not in declared_deps:
-                suggested_deps = list(declared_deps) + [action_name]
                 errors.append(
-                    f"Action '{action_name}' referenced in guard but not in dependencies. "
-                    f"Add it to dependencies: {sorted(suggested_deps)}"
+                    f"Action '{action_name}' referenced in guard but not in context_scope. "
+                    f"Add '{action_name}.*' to context_scope.observe."
                 )
 
         return errors
