@@ -37,6 +37,14 @@ class ReferenceValidator:
 
         declared_deps = set(agent_config.get("dependencies", []))
 
+        # Also include namespaces from context_scope (auto-inferred dependencies)
+        context_scope = agent_config.get("context_scope", {})
+        if isinstance(context_scope, dict):
+            for directive in ("observe", "passthrough"):
+                for field_ref in context_scope.get(directive, []):
+                    if isinstance(field_ref, str) and "." in field_ref:
+                        declared_deps.add(field_ref.split(".", 1)[0])
+
         for ref in references:
             if isinstance(ref, str):
                 try:

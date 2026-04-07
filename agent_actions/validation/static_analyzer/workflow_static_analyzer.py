@@ -364,8 +364,13 @@ class WorkflowStaticAnalyzer:
             # Get template text
             try:
                 template = PromptFormatter.get_raw_prompt(action)
-            except Exception:
-                continue  # Can't load template, skip
+            except Exception as exc:
+                logger.debug(
+                    "Cannot load prompt for action '%s', skipping template scope check: %s",
+                    name,
+                    exc,
+                )
+                continue
 
             if not template:
                 continue
