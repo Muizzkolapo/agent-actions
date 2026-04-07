@@ -99,6 +99,23 @@ class WorkflowParser:
             click.echo(f"  Warning: Error reading file {yaml_path} - {e}")
             return None
 
+        if data is None:
+            logger.warning("Workflow file %s is empty or contains only comments", yaml_path)
+            click.echo(f"  Warning: Workflow file {yaml_path} is empty or contains only comments")
+            return None
+
+        if not isinstance(data, dict):
+            logger.warning(
+                "Workflow file %s top-level value is a %s, expected a mapping",
+                yaml_path,
+                type(data).__name__,
+            )
+            click.echo(
+                f"  Warning: Workflow file {yaml_path} top-level value is a "
+                f"{type(data).__name__}, expected a mapping"
+            )
+            return None
+
         # Extract workflow defaults
         defaults = data.get("defaults", {})
 
