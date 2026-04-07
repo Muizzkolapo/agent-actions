@@ -177,7 +177,7 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         const cardScript = `
         const vscode = acquireVsCodeApi();
-        const records = ${recordsJson};
+        const records = JSON.parse(${JSON.stringify(recordsJson)});
         const offset = ${offset};
 
         // ── Field classification (ported from data-card-utils.ts) ──
