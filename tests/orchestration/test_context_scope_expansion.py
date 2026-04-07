@@ -86,8 +86,6 @@ class TestContextScopeExpansion:
 
     def test_specific_field_version_reference_expanded(self):
         """Test that specific field references to version base names are expanded."""
-        execution_order = ["loop_action_1", "loop_action_2", "consumer"]
-
         agent_configs = {
             "loop_action_1": {
                 "is_versioned_agent": True,
