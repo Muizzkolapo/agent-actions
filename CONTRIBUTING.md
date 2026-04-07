@@ -2,6 +2,17 @@
 
 Thank you for contributing to Agent Actions! This guide covers coding standards and development workflow.
 
+## Contributor License Agreement (CLA)
+
+Before your first contribution, you must sign our
+[Contributor License Agreement](CLA.md). When you open a pull request,
+the CLA Assistant bot will automatically ask you to sign if you haven't
+already. This is a one-time process.
+
+If you cannot sign the CLA, we are unable to merge your pull request.
+You are still welcome to open issues, participate in discussions, and
+comment on existing issues.
+
 ## Development Setup
 
 ```bash
