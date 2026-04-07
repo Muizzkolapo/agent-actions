@@ -32,7 +32,7 @@ def _resolve_observe_refs(
     Returns list of ``(namespace, field_name, output_key)`` triples.
 
     * *namespace* -- the action/source prefix (left of the dot).
-    * *field_name* -- the bare field name (right of the dot), ``*`` or ``_``.
+    * *field_name* -- the bare field name (right of the dot) or ``*``.
     * *output_key* -- the key to use in the filtered output dict.  Bare by
       default; qualified (``namespace.field``) when collisions are detected.
     """
@@ -211,11 +211,8 @@ def apply_observe_for_file_mode(
     if not resolved:
         return data
 
-    # Wildcard ("*") or prefix-passthrough ("_") pattern -> return all data
-    # unfiltered.  "_" is the sentinel produced by _resolve_observe_refs for
-    # the "namespace._" syntax which passes through all fields whose keys
-    # start with the namespace prefix.
-    if any(field in ("*", "_") for _, field, _ in resolved):
+    # Wildcard -> return all data unfiltered.
+    if any(field == "*" for _, field, _ in resolved):
         return data
 
     # Determine which namespaces are "input sources" (data in each record).
@@ -276,7 +273,7 @@ def apply_observe_for_file_mode(
     # loads whose stale results would shadow live record data.
     needed_ns: set = set()
     for ns, field, _ in resolved:
-        if field in ("*", "_"):
+        if field == "*":
             continue
         if ns == "source":
             needed_ns.add(ns)

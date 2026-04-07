@@ -21,7 +21,7 @@ from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestra
 class TestContextScopeExpansion:
     """Test context_scope expansion for version references."""
 
-    def test_wildcard_version_reference_expands_to_field_prefix_pattern(self):
+    def test_wildcard_version_reference_expands_to_concrete_refs(self):
         """Test that wildcard references to version base names become field prefix patterns.
 
         context_scope expansion happens via normalize_all_agent_configs() at config

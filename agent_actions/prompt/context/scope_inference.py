@@ -287,9 +287,6 @@ def infer_dependencies(
 
     # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
     # Also include fan-in context sources (non-primary dependencies from fan-in pattern)
-    # NOTE: Do NOT exclude field prefix base names here. They are expanded later into
-    # version variants so the caller can request all available branches. We will
-    # de-duplicate against input_sources after expansion to avoid overwriting.
     potential_context_sources = (
         referenced_actions - set(input_sources) - set(fan_in_context_sources)
     )
