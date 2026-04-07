@@ -149,11 +149,11 @@ def apply_context_scope(
 
             if field_name == "*":
                 # Wildcard: best-effort — namespace may be empty or absent.
-                # This is intentionally lenient: explicit field refs (dep.field)
-                # fail-fast, but wildcards (dep.*) are "give me what you have".
                 action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
-                    llm_context.update(action_fields)
+                    if ns_name not in llm_context:
+                        llm_context[ns_name] = {}
+                    llm_context[ns_name].update(action_fields)
             else:
                 # Explicit field ref: fail-fast if not found
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
@@ -171,8 +171,9 @@ def apply_context_scope(
                         },
                     )
 
-                # Add to llm_context (flat dict with field names as keys)
-                llm_context[field_name] = value
+                if ns_name not in llm_context:
+                    llm_context[ns_name] = {}
+                llm_context[ns_name][field_name] = value
 
                 # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
@@ -282,16 +283,24 @@ def apply_context_scope(
 
 
 def format_llm_context(llm_context: dict) -> str:
-    """Format llm_context dict as readable text for LLM message injection."""
+    """Format llm_context dict as readable text for LLM message injection.
+
+    llm_context is namespaced: {action_name: {field: value, ...}, ...}.
+    Each namespace is rendered as a labeled section.
+    """
     if not llm_context:
         return ""
 
     lines = ["Additional context:"]
 
-    for key, value in llm_context.items():
-        # Format value as pretty JSON for readability
-        value_str = json.dumps(value, indent=2, ensure_ascii=False)
-        lines.append(f"{key}: {value_str}")
+    for ns_name, ns_data in llm_context.items():
+        if isinstance(ns_data, dict):
+            for field, value in ns_data.items():
+                value_str = json.dumps(value, indent=2, ensure_ascii=False)
+                lines.append(f"{ns_name}.{field}: {value_str}")
+        else:
+            value_str = json.dumps(ns_data, indent=2, ensure_ascii=False)
+            lines.append(f"{ns_name}: {value_str}")
 
     return "\n".join(lines)
 

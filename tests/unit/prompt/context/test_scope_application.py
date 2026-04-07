@@ -121,9 +121,9 @@ class TestDropWildcard:
             context_scope=context_scope,
             action_name="test_action",
         )
-        assert "api_key" not in llm_context
-        assert "name" in llm_context
-        assert "value" in llm_context
+        assert "api_key" not in llm_context.get("dep", {})
+        assert "name" in llm_context["dep"]
+        assert "value" in llm_context["dep"]
 
 
 class TestFalsyFieldPassthrough:
@@ -137,8 +137,7 @@ class TestFalsyFieldPassthrough:
             context_scope={"observe": ["dep.score"]},
             action_name="test_action",
         )
-        assert "score" in llm_context
-        assert llm_context["score"] == 0
+        assert llm_context["dep"]["score"] == 0
 
     def test_observe_includes_empty_string(self):
         """observe: field with value "" must appear in llm_context."""
@@ -148,8 +147,7 @@ class TestFalsyFieldPassthrough:
             context_scope={"observe": ["dep.label"]},
             action_name="test_action",
         )
-        assert "label" in llm_context
-        assert llm_context["label"] == ""
+        assert llm_context["dep"]["label"] == ""
 
     def test_passthrough_includes_zero_value(self):
         """passthrough: field with value 0 must appear in passthrough_fields."""
@@ -192,8 +190,7 @@ class TestFalsyFieldPassthrough:
             context_scope={"observe": ["dep.nullable_field"]},
             action_name="test_action",
         )
-        assert "nullable_field" in llm_context
-        assert llm_context["nullable_field"] is None
+        assert llm_context["dep"]["nullable_field"] is None
 
     def test_passthrough_nested_path_missing_field_raises(self):
         """G-2 nested-path: a truly missing nested field must raise ConfigurationError."""
@@ -252,8 +249,10 @@ class TestVersionedActionObserve:
             context_scope={"observe": ["action_1.*", "action_2.*", "action_3.*"]},
             action_name="consumer",
         )
-        assert "questions" in llm_context
-        assert "answers" in llm_context
+        # Each version is a separate namespace in llm_context — no data loss
+        assert "questions" in llm_context["action_1"]
+        assert "questions" in llm_context["action_2"]
+        assert "questions" in llm_context["action_3"]
         assert "action_1" in prompt_context
         assert "action_2" in prompt_context
         assert "action_3" in prompt_context
@@ -269,7 +268,11 @@ class TestVersionedActionObserve:
             context_scope={"observe": ["version_1.*", "version_2.*", "regular_dep.*"]},
             action_name="consumer",
         )
-        assert llm_context == {"a": 1, "b": 2, "c": 3}
+        assert llm_context == {
+            "version_1": {"a": 1},
+            "version_2": {"b": 2},
+            "regular_dep": {"c": 3},
+        }
         assert "version_1" in prompt_context
         assert "version_2" in prompt_context
         assert "regular_dep" in prompt_context

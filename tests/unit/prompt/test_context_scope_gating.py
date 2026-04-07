@@ -29,7 +29,7 @@ class TestLLMContextGating:
 
         _, llm_context, _ = apply_context_scope(field_context, context_scope)
 
-        assert llm_context == {"text": "hello", "score": 0.9}
+        assert llm_context == {"source": {"text": "hello"}, "dep": {"score": 0.9}}
 
     def test_passthrough_fields_not_in_llm_context(self):
         """Passthrough fields must NOT appear in llm_context."""
@@ -41,8 +41,8 @@ class TestLLMContextGating:
 
         _, llm_context, passthrough = apply_context_scope(field_context, context_scope)
 
-        assert "text" in llm_context
-        assert "id" not in llm_context
+        assert llm_context["source"]["text"] == "hello"
+        assert "id" not in llm_context.get("source", {})
         assert passthrough["id"] == "rec-1"
 
     def test_empty_observe_produces_empty_llm_context(self):
@@ -61,7 +61,7 @@ class TestLLMContextGating:
 
         _, llm_context, _ = apply_context_scope(field_context, context_scope)
 
-        assert llm_context == {"field1": "a", "field2": "b", "field3": "c"}
+        assert llm_context == {"dep": {"field1": "a", "field2": "b", "field3": "c"}}
 
 
 class TestPromptContextGating:
@@ -126,7 +126,7 @@ class TestPromptContextGating:
         prompt_context, llm_context, _ = apply_context_scope(field_context, context_scope)
 
         assert "secret" not in prompt_context.get("dep", {})
-        assert "secret" not in llm_context
+        assert "secret" not in llm_context.get("dep", {})
         assert prompt_context["dep"]["public"] == "ok"
 
 
@@ -186,7 +186,7 @@ class TestFrameworkNamespaces:
 
         assert "version" not in llm_context
         assert "workflow" not in llm_context
-        assert llm_context == {"text": "hello"}
+        assert llm_context == {"source": {"text": "hello"}}
 
     def test_framework_namespaces_constant_matches_expected(self):
         """FRAMEWORK_NAMESPACES should contain exactly the expected namespaces."""
