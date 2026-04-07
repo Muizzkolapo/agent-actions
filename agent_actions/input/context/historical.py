@@ -247,11 +247,11 @@ class HistoricalNodeDataLoader:
         Returns exact match or None.
         """
         if not isinstance(data, list):
-            return None
+            return None  # type: ignore[unreachable]
 
         for record in data:
             if not isinstance(record, dict):
-                continue
+                continue  # type: ignore[unreachable]
             if record.get("node_id") == target_node_id:
                 return record
 
