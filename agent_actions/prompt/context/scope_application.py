@@ -87,7 +87,7 @@ def apply_context_scope(
                 # Must be checked before namespace existence (ns_name is the
                 # base name which won't exist — only versioned names do).
                 matched = False
-                for ctx_ns in list(prompt_context.keys()):
+                for ctx_ns in prompt_context:
                     if ctx_ns.startswith(f"{ns_name}_") and isinstance(
                         prompt_context[ctx_ns], dict
                     ):
@@ -279,8 +279,6 @@ def apply_context_scope(
                 if ctx_ns.startswith(f"{ns_name}_"):
                     allowed[ctx_ns] = "*"
         elif field_name == "*":
-            if ns_name not in allowed:
-                allowed[ns_name] = set()
             allowed[ns_name] = "*"
         else:
             if ns_name not in allowed:
