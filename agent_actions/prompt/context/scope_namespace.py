@@ -116,7 +116,6 @@ def _load_historical_node(
         source_guid=source_guid,
         file_path=file_path,
         agent_indices=agent_indices,
-        caller_lineage=lineage,
         lineage_sources=lineage_sources,
         parent_target_id=parent_target_id,
         root_target_id=root_target_id,

@@ -23,7 +23,6 @@ class HistoricalDataRequest:
     source_guid: str  # Kept for logging/diagnostics, NOT for matching
     file_path: str
     agent_indices: dict[str, int]
-    caller_lineage: list[str] | None = None  # Deprecated — use lineage
     lineage_sources: list[str] | None = None  # For merge-parent mode
     # Ancestry Chain fields — metadata only, not used for matching
     parent_target_id: str | None = None
@@ -52,7 +51,6 @@ class HistoricalNodeDataLoader:
             },
         )
 
-        # Step 1: Extract the target node_id from lineage metadata
         target_node_id = HistoricalNodeDataLoader._find_target_node_id(
             action_name=request.action_name,
             lineage=request.lineage,
@@ -75,7 +73,6 @@ class HistoricalNodeDataLoader:
             request.action_name,
         )
 
-        # Step 2: Load all records for the action from storage
         if request.storage_backend is None:
             logger.warning(
                 "[HISTORICAL] No storage backend provided for action '%s'",
@@ -97,7 +94,6 @@ class HistoricalNodeDataLoader:
 
         logger.debug("[HISTORICAL] Loaded %d records for %s", len(data), request.action_name)
 
-        # Step 3: Exact node_id match — no fallbacks
         record = HistoricalNodeDataLoader._find_record_by_identifiers(
             data,
             target_node_id,
@@ -114,22 +110,6 @@ class HistoricalNodeDataLoader:
                 content_keys,
             )
             return content
-
-        return None
-
-    @staticmethod
-    def _find_node_in_lineage(
-        action_name: str, lineage: list[str], agent_indices: dict[str, int]
-    ) -> str | None:
-        """Find the node_id in lineage that corresponds to the given action."""
-        if not lineage:
-            return None
-
-        node_prefix = f"{action_name}_"
-
-        for node_id in lineage:
-            if isinstance(node_id, str) and node_id.startswith(node_prefix):
-                return node_id
 
         return None
 

@@ -16,8 +16,6 @@ These tests validate mission-critical matching behavior:
 - HITL gate dedup (the production bug that motivated this change)
 """
 
-from typing import Any
-
 import pytest
 
 from agent_actions.input.context.historical import (
@@ -25,34 +23,7 @@ from agent_actions.input.context.historical import (
     HistoricalNodeDataLoader,
 )
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
-
-
-class MockStorageBackend:
-    """In-memory storage backend for integration testing."""
-
-    def __init__(self, data: dict[str, list[dict[str, Any]]]):
-        self._data = data
-
-    def read_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
-        if action_name not in self._data:
-            raise FileNotFoundError(f"No data for {action_name}")
-        return self._data[action_name]
-
-    def list_target_files(self, action_name: str) -> list[str]:
-        if action_name in self._data:
-            return ["mock_file.json"]
-        return []
-
-    def initialize(self):
-        pass
-
-    def close(self):
-        pass
-
-    @property
-    def backend_type(self):
-        return "mock"
-
+from tests.integration.conftest import MockStorageBackend
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -226,7 +197,6 @@ class TestFanOut:
 
         assert content is not None
         assert content["answer"] == "Answer #4"
-        assert content["answer"] != "Answer #0", "Must not fall back to first record"
 
     def test_each_branch_resolves_its_own_record(self, fanout_storage):
         """Each downstream branch must resolve to its own ancestor."""

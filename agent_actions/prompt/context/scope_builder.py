@@ -337,9 +337,11 @@ def build_field_context_with_history(
                     )
                     continue
 
-                # Parallel Branch Check
+                # Parallel Branch Check (uses same disambiguation as the matcher)
                 is_ancestor = (
-                    HistoricalNodeDataLoader._find_node_in_lineage(dep_name, lineage, agent_indices)
+                    HistoricalNodeDataLoader._find_target_node_id(
+                        dep_name, lineage, agent_indices=agent_indices
+                    )
                     is not None
                 )
 

@@ -19,8 +19,6 @@ Anti-theatre guarantees:
 - Context scope filtering is validated (observe includes, drop excludes)
 """
 
-from typing import Any
-
 import pytest
 
 from agent_actions.input.context.historical import (
@@ -28,34 +26,7 @@ from agent_actions.input.context.historical import (
     HistoricalNodeDataLoader,
 )
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
-
-
-class MockStorageBackend:
-    """In-memory storage backend for integration testing."""
-
-    def __init__(self, data: dict[str, list[dict[str, Any]]]):
-        self._data = data
-
-    def read_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
-        if action_name not in self._data:
-            raise FileNotFoundError(f"No data for {action_name}")
-        return self._data[action_name]
-
-    def list_target_files(self, action_name: str) -> list[str]:
-        if action_name in self._data:
-            return ["batch_001.json"]
-        return []
-
-    def initialize(self):
-        pass
-
-    def close(self):
-        pass
-
-    @property
-    def backend_type(self):
-        return "mock"
-
+from tests.integration.conftest import MockStorageBackend
 
 # =====================================================================
 # Pattern 1: Contract Reviewer — Fan-Out → Analyze → Fan-In
@@ -251,8 +222,6 @@ class TestContractReviewerPattern:
         assert content is not None
         assert content["clause_number"] == 1, f"Expected clause 1, got {content['clause_number']}"
         assert content["risk_level"] == "high"
-        assert content["risk_level"] != "low", "Must not return clause 2 data"
-        assert content["risk_level"] != "medium", "Must not return clause 3 data"
 
 
 # =====================================================================
@@ -389,9 +358,6 @@ class TestProductListingPattern:
         assert (
             field_context["generate_description"]["product_description"]
             == "Premium organic coffee beans"
-        )
-        assert (
-            field_context["generate_description"]["product_description"] != "Budget instant coffee"
         )
 
         assert "validate_compliance" in field_context
