@@ -14,6 +14,7 @@ def test_record_mode_hitl_processes_each_record_independently():
                 "kind": "hitl",
                 "granularity": "record",
                 "model_vendor": "hitl",
+                "context_scope": {"observe": ["source.*"]},
                 "hitl": {
                     "port": 3099,
                     "instructions": "Review each record",

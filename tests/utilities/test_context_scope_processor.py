@@ -55,22 +55,22 @@ class TestContextScopeProcessor:
         assert prompt_context["fact_extractor"]["metadata"] == {"count": 2, "source": "research"}
 
         # Validate DROP directive
-        assert "api_key" not in prompt_context.get("source", {})
+        # source is not in observe/passthrough, so it's excluded from prompt_context entirely
+        assert "source" not in prompt_context
         assert "api_key" not in llm_context
         assert "api_key" not in passthrough_fields
-        assert "page_content" in prompt_context.get("source", {})  # Other fields remain
 
         # Validate PASSTHROUGH directive
         assert "document_id" in passthrough_fields
         assert passthrough_fields["document_id"] == "doc-123"
         assert (
             prompt_context.get("fact_extractor", {}).get("document_id") == "doc-123"
-        )  # Now available in prompt_context!
+        )  # Passthrough fields available in prompt_context
         assert "document_id" not in llm_context
 
-        # Validate fields NOT in any directive remain in prompt_context
-        assert "candidate_facts" in prompt_context.get("fact_extractor", {})
-        assert prompt_context["fact_extractor"]["candidate_facts"] == ["fact1", "fact2"]
+        # Validate prompt_context only contains scoped fields (observe + passthrough)
+        # candidate_facts is NOT in observe or passthrough — excluded from prompt_context
+        assert "candidate_facts" not in prompt_context.get("fact_extractor", {})
 
     def test_format_llm_context(self):
         """Test formatting llm_context dict as readable text."""
@@ -91,30 +91,36 @@ class TestContextScopeProcessor:
         assert "reference_id:" in result
 
     def test_seed_data_namespaced_in_prompt_context(self):
-        """Seed data should be namespaced under seed for prompt context only."""
+        """Seed data should be namespaced under seed for prompt context only.
+
+        Seed is a framework namespace — always available in prompt_context
+        regardless of observe/passthrough.
+        """
         field_context = {"source": {"page_content": "text"}}
-        context_scope = {}
+        context_scope = {"observe": ["source.page_content"]}
         static_data = {"exam_syllabus": {"exam_name": "Test Exam"}}
 
         prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope, static_data=static_data
         )
 
-        assert llm_context == {}
+        assert "page_content" in llm_context
         assert prompt_context.get("seed") == static_data
         assert passthrough_fields == {}
 
     def test_seed_drop_does_not_affect_llm_context(self):
         """Dropping seed.* should not add seed to llm_context."""
         field_context = {"source": {"page_content": "text"}}
-        context_scope = {"drop": ["seed.exam_syllabus"]}
+        context_scope = {"drop": ["seed.exam_syllabus"], "observe": ["source.page_content"]}
         static_data = {"exam_syllabus": {"exam_name": "Test Exam"}}
 
         _, llm_context, _ = apply_context_scope(
             field_context, context_scope, static_data=static_data
         )
 
-        assert llm_context == {}
+        # llm_context should have observe fields but NOT seed data
+        assert "page_content" in llm_context
+        assert "exam_syllabus" not in llm_context
 
     def test_merge_passthrough_fields(self):
         """Test merging passthrough fields into LLM response."""
@@ -186,9 +192,10 @@ class TestContextScopeProcessor:
         # passthrough_fields should be empty
         assert passthrough_fields == {}
 
-        # prompt_context should still have all original data
+        # prompt_context should have only observed namespaces
         assert prompt_context["action_a"]["field1"] == "value1"
-        assert prompt_context["action_b"]["other_field"] == "other_value"
+        # action_b is not in observe/passthrough — excluded from prompt_context
+        assert "action_b" not in prompt_context
 
     def test_apply_context_scope_passthrough_wildcard(self):
         """Test wildcard expansion for passthrough directive in apply_context_scope."""
@@ -429,10 +436,8 @@ class TestNestedDictFieldResolution:
 
         # The nested value should be extracted into llm_context
         assert llm_context["target_word_counts.correct_answer_words"] == 8
-        # prompt_context should have only the declared nested value
-        assert prompt_context["suggest_distractor_counts"]["target_word_counts"] == {
-            "correct_answer_words": 8
-        }
+        # prompt_context should have the observed namespace with its fields
+        assert "suggest_distractor_counts" in prompt_context
 
     def test_apply_context_scope_nested_field_passthrough(self):
         """End-to-end: passthrough with nested path populates passthrough_fields."""

@@ -115,6 +115,10 @@ class WorkflowStaticAnalyzer:
         for error in self._check_reserved_action_names():
             result.add_error(error)
 
+        # Step 3c: Validate context_scope is defined on every action
+        for error in self._check_context_scope_required():
+            result.add_error(error)
+
         # Step 2c: Validate context_scope field references
         for error in self._check_context_scope_fields():
             result.add_error(error)
@@ -288,6 +292,41 @@ class WorkflowStaticAnalyzer:
                         referenced_agent=name,
                         referenced_field="",
                         hint="Rename the action to avoid reserved namespaces.",
+                    )
+                )
+        return errors
+
+    def _check_context_scope_required(self) -> list[StaticTypeError]:
+        """Return errors for actions missing context_scope.
+
+        Every action must declare its data dependencies via context_scope.
+        Actions without context_scope have no data access — this is enforced
+        at static analysis time so users get feedback before execution.
+        """
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "unknown")
+            context_scope = action.get("context_scope")
+            if not context_scope or not isinstance(context_scope, dict):
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"Action '{name}' has no context_scope. "
+                            "All actions must declare data dependencies via context_scope."
+                        ),
+                        location=FieldLocation(
+                            agent_name=name,
+                            config_field="context_scope",
+                        ),
+                        referenced_agent=name,
+                        referenced_field="",
+                        hint=(
+                            "Add context_scope with observe, passthrough, or drop directives. "
+                            "Example: context_scope: { observe: [source.*] }"
+                        ),
                     )
                 )
         return errors

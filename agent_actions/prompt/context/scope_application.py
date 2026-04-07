@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 # Sentinel distinguishing "field not found" from a field whose value is falsy (0, "", False, None).
 _MISSING = object()
 
+# Framework-injected namespaces that are always available for template rendering
+# regardless of context_scope.observe/passthrough. These are not user data —
+# they are iteration context, static reference data, and workflow metadata.
+# Source: build_field_context_with_history() in scope_builder.py
+FRAMEWORK_NAMESPACES = frozenset({"version", "seed", "workflow", "loop"})
+
 __all__ = [
     "apply_context_scope",
     "format_llm_context",
@@ -221,6 +227,43 @@ def apply_context_scope(
                 )
             )
             continue
+
+    # Gate prompt_context to scoped fields only.
+    # Only fields declared in observe or passthrough (plus framework namespaces)
+    # are accessible for Jinja2 template rendering.
+    allowed: dict[str, set[str] | str] = {}
+    for field_ref in observe_refs + passthrough_refs:
+        try:
+            ns_name, field_name = parse_field_reference(field_ref)
+        except ValueError:
+            continue
+        if ns_name not in allowed:
+            allowed[ns_name] = set()
+        if field_name == "*":
+            allowed[ns_name] = "*"
+        else:
+            current = allowed[ns_name]
+            if isinstance(current, set):
+                current.add(field_name)
+
+    filtered: dict = {}
+    for ns, data in prompt_context.items():
+        if ns in FRAMEWORK_NAMESPACES:
+            filtered[ns] = data
+        elif ns in allowed:
+            if allowed[ns] == "*" or not isinstance(data, dict):
+                filtered[ns] = data
+            else:
+                filtered[ns] = {k: v for k, v in data.items() if k in allowed[ns]}
+
+    excluded = set(prompt_context.keys()) - set(filtered.keys())
+    if excluded:
+        logger.debug(
+            "[CONTEXT_GATE] Action '%s': excluded namespaces from prompt_context: %s",
+            action_name,
+            sorted(excluded),
+        )
+    prompt_context = filtered
 
     # Fire event for scope application
     fire_event(

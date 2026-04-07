@@ -10,24 +10,29 @@ from agent_actions.prompt.context.scope_application import apply_context_scope
 
 class TestDropWildcard:
     def test_wildcard_clears_entire_namespace(self):
-        """drop: ['dep.*'] removes ALL fields from the dep namespace."""
+        """drop: ['dep.*'] removes ALL fields from the dep namespace.
+
+        When combined with observe (required for prompt_context access), the
+        dropped fields must not appear.
+        """
         field_context = {"dep": {"api_key": "secret", "name": "test", "value": "data"}}
         prompt_context, _, _ = apply_context_scope(
             field_context=field_context,
-            context_scope={"drop": ["dep.*"]},
+            context_scope={"drop": ["dep.*"], "observe": ["dep.*"]},
             action_name="test_action",
         )
-        assert prompt_context["dep"] == {}
+        # dep namespace exists but all fields were dropped before observe
+        assert prompt_context.get("dep", {}) == {}
 
     def test_exact_field_drop_removes_only_that_field(self):
         """drop: ['dep.api_key'] removes only api_key from dep namespace."""
         field_context = {"dep": {"api_key": "secret", "name": "test"}}
         prompt_context, _, _ = apply_context_scope(
             field_context=field_context,
-            context_scope={"drop": ["dep.api_key"]},
+            context_scope={"drop": ["dep.api_key"], "observe": ["dep.*"]},
             action_name="test_action",
         )
-        assert "api_key" not in prompt_context["dep"]
+        assert "api_key" not in prompt_context.get("dep", {})
         assert prompt_context["dep"]["name"] == "test"
 
     def test_wildcard_on_empty_namespace_warns(self):
@@ -88,7 +93,7 @@ class TestDropWildcard:
         # "noperiod" has no dot — parse_field_reference raises ValueError
         prompt_context, _, _ = apply_context_scope(
             field_context=field_context,
-            context_scope={"drop": ["noperiod"]},
+            context_scope={"drop": ["noperiod"], "observe": ["dep.*"]},
             action_name="test_action",
         )
         # Field must NOT be removed (drop failed to parse — safe failure)
