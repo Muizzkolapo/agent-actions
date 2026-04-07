@@ -82,26 +82,7 @@ def apply_context_scope(
             ns_name, field_name = parse_field_reference(field_ref)
 
             # Remove from prompt_context
-            if field_name == "_":
-                # Field prefix pattern from version_consumption normalization.
-                # Must be checked before namespace existence (ns_name is the
-                # base name which won't exist — only versioned names do).
-                matched = False
-                for ctx_ns in prompt_context:
-                    if ctx_ns.startswith(f"{ns_name}_") and isinstance(
-                        prompt_context[ctx_ns], dict
-                    ):
-                        prompt_context[ctx_ns].clear()
-                        matched = True
-                if not matched:
-                    logger.warning(
-                        "Drop directive '%s' in action '%s' matched zero fields — "
-                        "no namespaces matching prefix '%s_' found in context.",
-                        field_ref,
-                        action_name,
-                        ns_name,
-                    )
-            elif ns_name not in prompt_context:
+            if ns_name not in prompt_context:
                 logger.warning(
                     "Drop directive '%s' in action '%s' matched zero fields — "
                     "namespace '%s' not found in context.",
@@ -173,15 +154,6 @@ def apply_context_scope(
                 action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
                     llm_context.update(action_fields)
-            elif field_name == "_":
-                # Field prefix pattern from version_consumption normalization.
-                # Extract all fields from namespaces matching "{ns_name}_" prefix.
-                # Best-effort like wildcard — no error if no match.
-                for ctx_ns in prompt_context:
-                    if ctx_ns.startswith(f"{ns_name}_"):
-                        action_fields = extract_action_fields(prompt_context, ctx_ns)
-                        if action_fields:
-                            llm_context.update(action_fields)
             else:
                 # Explicit field ref: fail-fast if not found
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
@@ -225,14 +197,6 @@ def apply_context_scope(
                 action_fields = extract_action_fields(field_context, ns_name)
                 if action_fields:
                     passthrough_fields.update(action_fields)
-            elif field_name == "_":
-                # Field prefix pattern: pass through all fields from matching
-                # version namespaces.
-                for ctx_ns in field_context:
-                    if ctx_ns.startswith(f"{ns_name}_"):
-                        action_fields = extract_action_fields(field_context, ctx_ns)
-                        if action_fields:
-                            passthrough_fields.update(action_fields)
             else:
                 # Extract value from original field_context
                 value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
@@ -273,12 +237,7 @@ def apply_context_scope(
             ns_name, field_name = parse_field_reference(field_ref)
         except ValueError:
             continue
-        if field_name == "_":
-            # Field prefix pattern: allow all matching version namespaces
-            for ctx_ns in prompt_context:
-                if ctx_ns.startswith(f"{ns_name}_"):
-                    allowed[ctx_ns] = "*"
-        elif field_name == "*":
+        if field_name == "*":
             allowed[ns_name] = "*"
         else:
             if ns_name not in allowed:

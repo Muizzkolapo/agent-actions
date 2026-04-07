@@ -230,108 +230,35 @@ class TestAbsentNamespace:
             )
 
 
-class TestFieldPrefixPattern:
-    """Tests for field prefix pattern ('_') handling in apply_context_scope.
+class TestVersionedActionObserve:
+    """Tests for versioned actions after early expansion.
 
-    When version_consumption with merge pattern is used, the normalizer converts
-    'extract_raw_qa.*' to 'extract_raw_qa_' (field prefix pattern). This pattern
-    must match all version namespaces like extract_raw_qa_1, _2, _3.
+    After normalization, observe: [action.*] becomes
+    observe: [action_1.*, action_2.*, action_3.*].
+    These are standard wildcard refs — no special handling needed.
 
     Regression: github.com/Muizzkolapo/agent-actions/issues/193
     """
 
-    def test_observe_field_prefix_extracts_all_version_namespaces(self):
-        """observe: ['extract_raw_qa_'] extracts fields from _1, _2, _3."""
+    def test_observe_concrete_versioned_wildcards(self):
+        """observe: ['action_1.*', 'action_2.*', 'action_3.*'] works like regular wildcards."""
         field_context = {
-            "extract_raw_qa_1": {"questions": ["q1"], "answers": ["a1"]},
-            "extract_raw_qa_2": {"questions": ["q2"], "answers": ["a2"]},
-            "extract_raw_qa_3": {"questions": ["q3"], "answers": ["a3"]},
+            "action_1": {"questions": ["q1"], "answers": ["a1"]},
+            "action_2": {"questions": ["q2"], "answers": ["a2"]},
+            "action_3": {"questions": ["q3"], "answers": ["a3"]},
         }
         prompt_context, llm_context, _ = apply_context_scope(
             field_context=field_context,
-            context_scope={"observe": ["extract_raw_qa_"]},
-            action_name="canonicalize_qa",
+            context_scope={"observe": ["action_1.*", "action_2.*", "action_3.*"]},
+            action_name="consumer",
         )
-        # All fields from all matching namespaces in llm_context
         assert "questions" in llm_context
         assert "answers" in llm_context
-        # All version namespaces allowed through gating
-        assert "extract_raw_qa_1" in prompt_context
-        assert "extract_raw_qa_2" in prompt_context
-        assert "extract_raw_qa_3" in prompt_context
-
-    def test_observe_field_prefix_no_match_is_lenient(self):
-        """observe: ['missing_action_'] with no matching namespaces does not raise."""
-        field_context = {"other": {"field": "value"}}
-        prompt_context, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"observe": ["missing_action_", "other.*"]},
-            action_name="test_action",
-        )
-        assert llm_context == {"field": "value"}
-
-    def test_passthrough_field_prefix_extracts_all_version_namespaces(self):
-        """passthrough: ['action_'] extracts fields from matching version namespaces."""
-        field_context = {
-            "action_1": {"id": "1", "result": "r1"},
-            "action_2": {"id": "2", "result": "r2"},
-        }
-        _, _, passthrough = apply_context_scope(
-            field_context=field_context,
-            context_scope={"passthrough": ["action_"]},
-            action_name="consumer",
-        )
-        assert "id" in passthrough
-        assert "result" in passthrough
-
-    def test_drop_field_prefix_clears_matching_namespaces(self):
-        """drop: ['action_'] clears all fields from matching version namespaces."""
-        field_context = {
-            "action_1": {"secret": "s1", "name": "n1"},
-            "action_2": {"secret": "s2", "name": "n2"},
-        }
-        prompt_context, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={
-                "drop": ["action_"],
-                "observe": ["action_"],
-            },
-            action_name="test",
-        )
-        # After drop + observe, llm_context is empty (fields cleared before observe)
-        assert llm_context == {}
-
-    def test_drop_field_prefix_no_match_warns(self):
-        """drop: ['ghost_'] with no matching namespaces logs a warning."""
-        field_context = {"dep": {"key": "value"}}
-        with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
-            apply_context_scope(
-                field_context=field_context,
-                context_scope={"drop": ["ghost_"]},
-                action_name="test_action",
-            )
-        mock_logger.warning.assert_called()
-        args = mock_logger.warning.call_args[0]
-        assert "matched zero fields" in args[0]
-
-    def test_prompt_context_gating_includes_version_namespaces(self):
-        """Gating includes all matching version namespaces, excludes unrelated."""
-        field_context = {
-            "action_1": {"f1": "v1"},
-            "action_2": {"f2": "v2"},
-            "unrelated": {"x": "y"},
-        }
-        prompt_context, _, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"observe": ["action_"]},
-            action_name="consumer",
-        )
         assert "action_1" in prompt_context
         assert "action_2" in prompt_context
-        assert "unrelated" not in prompt_context
+        assert "action_3" in prompt_context
 
-    def test_mixed_field_prefix_and_regular_observe(self):
-        """Mix of field prefix pattern and regular wildcard references."""
+    def test_mixed_versioned_and_regular_observe(self):
         field_context = {
             "version_1": {"a": 1},
             "version_2": {"b": 2},
@@ -339,10 +266,40 @@ class TestFieldPrefixPattern:
         }
         prompt_context, llm_context, _ = apply_context_scope(
             field_context=field_context,
-            context_scope={"observe": ["version_", "regular_dep.*"]},
+            context_scope={"observe": ["version_1.*", "version_2.*", "regular_dep.*"]},
             action_name="consumer",
         )
         assert llm_context == {"a": 1, "b": 2, "c": 3}
         assert "version_1" in prompt_context
         assert "version_2" in prompt_context
         assert "regular_dep" in prompt_context
+
+    def test_drop_then_observe_versioned(self):
+        field_context = {
+            "action_1": {"secret": "s1", "name": "n1"},
+            "action_2": {"secret": "s2", "name": "n2"},
+        }
+        prompt_context, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={
+                "drop": ["action_1.*", "action_2.*"],
+                "observe": ["action_1.*", "action_2.*"],
+            },
+            action_name="test",
+        )
+        assert llm_context == {}
+
+    def test_gating_includes_versioned_excludes_unrelated(self):
+        field_context = {
+            "action_1": {"f1": "v1"},
+            "action_2": {"f2": "v2"},
+            "unrelated": {"x": "y"},
+        }
+        prompt_context, _, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"observe": ["action_1.*", "action_2.*"]},
+            action_name="consumer",
+        )
+        assert "action_1" in prompt_context
+        assert "action_2" in prompt_context
+        assert "unrelated" not in prompt_context
