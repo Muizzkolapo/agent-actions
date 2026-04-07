@@ -87,6 +87,20 @@ class TestContextScopeProcessor:
         assert "fact_extractor.metadata:" in result
         assert "fact_extractor.reference_id:" in result
 
+    def test_format_llm_context_empty(self):
+        """Empty llm_context returns empty string."""
+        assert format_llm_context({}) == ""
+
+    def test_format_llm_context_multiple_namespaces(self):
+        """Multiple namespaces rendered with qualified field names."""
+        llm_context = {
+            "voter_1": {"score": 8},
+            "voter_2": {"score": 7},
+        }
+        result = format_llm_context(llm_context)
+        assert "voter_1.score:" in result
+        assert "voter_2.score:" in result
+
     def test_seed_data_namespaced_in_prompt_context(self):
         """Seed data should be namespaced under seed for prompt context only.
 

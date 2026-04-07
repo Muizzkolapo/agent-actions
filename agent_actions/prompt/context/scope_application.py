@@ -184,7 +184,8 @@ def apply_context_scope(
             )
             continue
 
-    # Process PASSTHROUGH: Extract to passthrough_fields, remove from prompt_context
+    # Process PASSTHROUGH: Extract to passthrough_fields (flat — merged into output rows).
+    # NOTE: If multiple actions passthrough same-named fields, last-write-wins applies.
     passthrough_refs = context_scope.get("passthrough", [])
     for field_ref in passthrough_refs:
         try:

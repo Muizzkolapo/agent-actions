@@ -306,3 +306,22 @@ class TestVersionedActionObserve:
         assert "action_1" in prompt_context
         assert "action_2" in prompt_context
         assert "unrelated" not in prompt_context
+
+    def test_versioned_same_field_names_no_data_loss(self):
+        """Core regression: versioned actions with identical field names must all be preserved."""
+        field_context = {
+            "voter_1": {"score": 8, "reasoning": "good"},
+            "voter_2": {"score": 7, "reasoning": "decent"},
+            "voter_3": {"score": 9, "reasoning": "great"},
+        }
+        _, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"observe": ["voter_1.*", "voter_2.*", "voter_3.*"]},
+            action_name="aggregate",
+        )
+        assert llm_context["voter_1"]["score"] == 8
+        assert llm_context["voter_2"]["score"] == 7
+        assert llm_context["voter_3"]["score"] == 9
+        assert llm_context["voter_1"]["reasoning"] == "good"
+        assert llm_context["voter_2"]["reasoning"] == "decent"
+        assert llm_context["voter_3"]["reasoning"] == "great"
