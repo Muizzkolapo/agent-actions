@@ -231,7 +231,39 @@ export class QueryResultsPanel implements vscode.Disposable {
             return max > 0 && s.length > max ? s.slice(0, max) + '\\u2026' : s;
         }
 
+        // ── Helpers ──
+        function isArrayOfObjects(value) {
+            if (!Array.isArray(value) || value.length === 0) return false;
+            return value.every(v => typeof v === 'object' && v !== null && !Array.isArray(v));
+        }
+        function isScalar(value) {
+            if (value === null || value === undefined) return true;
+            return typeof value !== 'object';
+        }
+
         // ── Render cards ──
+        function renderObjectArrayItem(item, fieldKey, idx, total) {
+            let html = '<div class="subcard">'
+                + '<span class="subcard-index">' + esc(humanize(fieldKey)) + ' [' + (idx + 1) + '/' + total + ']</span>';
+            for (const [k, v] of Object.entries(item)) {
+                const valStr = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : String(v ?? '');
+                const isLongVal = valStr.length > 100;
+                if (isLongVal) {
+                    html += '<div class="field-row field-block">'
+                        + '<span class="field-label">' + esc(humanize(k)) + '</span>'
+                        + '<div class="field-value"><span class="prose-inline">' + esc(valStr) + '</span></div>'
+                        + '</div>';
+                } else {
+                    html += '<div class="field-row field-inline">'
+                        + '<span class="field-label">' + esc(humanize(k)) + '</span>'
+                        + '<div class="field-value"><span class="val-string">' + esc(valStr) + '</span></div>'
+                        + '</div>';
+                }
+            }
+            html += '</div>';
+            return html;
+        }
+
         function renderValue(key, value) {
             if (value === null || value === undefined) {
                 return '<span class="val-null">null</span>';
@@ -244,6 +276,24 @@ export class QueryResultsPanel implements vscode.Disposable {
             }
             if (isInlineArray(value)) {
                 return value.map(v => '<span class="pill">' + esc(String(v)) + '</span>').join(' ');
+            }
+            if (isArrayOfObjects(value)) {
+                const items = value;
+                const showCount = 2;
+                let html = '<div class="subcard-list">';
+                for (let i = 0; i < Math.min(items.length, showCount); i++) {
+                    html += renderObjectArrayItem(items[i], key, i, items.length);
+                }
+                if (items.length > showCount) {
+                    html += '<div class="subcard-hidden" hidden data-field="' + esc(key) + '">';
+                    for (let i = showCount; i < items.length; i++) {
+                        html += renderObjectArrayItem(items[i], key, i, items.length);
+                    }
+                    html += '</div>';
+                    html += '<button class="expand-btn subcard-expand" data-field="' + esc(key) + '">Show ' + (items.length - showCount) + ' more</button>';
+                }
+                html += '</div>';
+                return html;
             }
             if (typeof value === 'object') {
                 return '<pre class="code-block">' + esc(JSON.stringify(value, null, 2)) + '</pre>';
@@ -282,54 +332,22 @@ export class QueryResultsPanel implements vscode.Disposable {
                 }
             }
 
-            // Header
+            // Split content into scalar vs structured
+            const scalarFields = content.filter(f => isScalar(f.value) || isInlineArray(f.value));
+            const structuredFields = content.filter(f => !isScalar(f.value) && !isInlineArray(f.value));
+
+            // 1. Header
             let header = '<span class="card-index">#' + (index + 1) + '</span>';
             for (const f of identity) {
                 const truncated = fmt(f.value, 24);
                 header += ' <span class="card-id" title="' + esc(fmt(f.value, 0)) + '">' + esc(truncated) + '</span>';
             }
 
-            // Body
-            let body = '';
-            if (content.length === 0) {
-                body = '<div class="card-empty">No content fields</div>';
-            } else {
-                for (const f of content) {
-                    const short = isShort(f.value) && !isLongForm(f.key);
-                    if (short) {
-                        body += '<div class="field-row field-inline">'
-                            + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
-                            + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
-                            + '</div>';
-                    } else {
-                        body += '<div class="field-row field-block">'
-                            + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
-                            + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
-                            + '</div>';
-                    }
-                }
-            }
-
-            // Metadata drawer
-            let drawer = '';
-            if (meta.length > 0) {
-                let metaRows = '';
-                for (const f of meta) {
-                    metaRows += '<div class="meta-row">'
-                        + '<span class="meta-key">' + esc(humanize(f.key)) + '</span>'
-                        + '<span class="meta-val">' + esc(fmt(f.value, 120)) + '</span>'
-                        + '</div>';
-                }
-                drawer = '<div class="card-meta">'
-                    + '<button class="meta-toggle">&#9656; Metadata (' + meta.length + ' fields)</button>'
-                    + '<div class="meta-content" hidden>' + metaRows + '</div>'
-                    + '</div>';
-            }
-
-            // Prompt Trace drawer
+            // 2. Prompt Trace (input — moved before output)
             var traceDrawer = '';
             var trace = record._trace;
-            if (trace && typeof trace === 'object' && !Array.isArray(trace)) {
+            var hasTrace = trace && typeof trace === 'object' && !Array.isArray(trace);
+            if (hasTrace) {
                 var modelLabel = esc(String(trace.model_name || 'unknown'));
                 var modeLabel = esc(String(trace.run_mode || 'online'));
                 var batchClass = modeLabel === 'batch' ? ' batch' : '';
@@ -359,11 +377,58 @@ export class QueryResultsPanel implements vscode.Disposable {
                     + '</div>';
             }
 
+            // 3. Action Output — scalar fields first, then structured
+            let body = '';
+            if (content.length === 0) {
+                body = '<div class="card-empty">No content fields</div>';
+            } else {
+                if (hasTrace) {
+                    body += '<div class="output-label">Output</div>';
+                }
+                for (const f of scalarFields) {
+                    const short = isShort(f.value) && !isLongForm(f.key);
+                    if (short) {
+                        body += '<div class="field-row field-inline">'
+                            + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
+                            + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
+                            + '</div>';
+                    } else {
+                        body += '<div class="field-row field-block">'
+                            + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
+                            + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
+                            + '</div>';
+                    }
+                }
+                for (const f of structuredFields) {
+                    body += '<div class="field-row field-block">'
+                        + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
+                        + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
+                        + '</div>';
+                }
+            }
+
+            // 4. Metadata (last)
+            let drawer = '';
+            if (meta.length > 0) {
+                let metaRows = '';
+                for (const f of meta) {
+                    metaRows += '<div class="meta-row">'
+                        + '<span class="meta-key">' + esc(humanize(f.key)) + '</span>'
+                        + '<span class="meta-val">' + esc(fmt(f.value, 120)) + '</span>'
+                        + '</div>';
+                }
+                drawer = '<div class="card-meta">'
+                    + '<button class="meta-toggle">&#9656; Metadata (' + meta.length + ' fields)</button>'
+                    + '<div class="meta-content" hidden>' + metaRows + '</div>'
+                    + '</div>';
+            }
+
+            // Card order: header -> trace -> output -> metadata
             return '<div class="card">'
                 + '<div class="card-header">' + header + '</div>'
+                + traceDrawer
                 + '<div class="card-body">' + body + '</div>'
                 + drawer
-                + traceDrawer
                 + '</div>';
         }
 
@@ -379,8 +444,25 @@ export class QueryResultsPanel implements vscode.Disposable {
         document.addEventListener('click', function(e) {
             const target = e.target;
 
-            // Expand/collapse prose
+            // Expand/collapse prose or subcard list
             if (target.classList && target.classList.contains('expand-btn')) {
+                // Subcard expand (array of objects)
+                if (target.classList.contains('subcard-expand')) {
+                    var hidden = target.previousElementSibling;
+                    if (hidden && hidden.classList.contains('subcard-hidden')) {
+                        var wasHidden = hidden.hasAttribute('hidden');
+                        if (wasHidden) {
+                            hidden.removeAttribute('hidden');
+                            target.textContent = 'Show less';
+                        } else {
+                            hidden.setAttribute('hidden', '');
+                            var count = hidden.querySelectorAll('.subcard').length;
+                            target.textContent = 'Show ' + count + ' more';
+                        }
+                    }
+                    return;
+                }
+                // Prose expand
                 const prose = target.previousElementSibling;
                 if (prose && prose.classList.contains('prose')) {
                     prose.classList.toggle('clamped');
@@ -1025,6 +1107,48 @@ function allStyles(): string {
         .trace-panel-body.response-body {
             font-size: 12px;
             max-height: 120px;
+        }
+
+        /* ── Sub-cards (array of objects) ── */
+        .subcard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .subcard {
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            padding: 8px 10px;
+            background: color-mix(in srgb, var(--vscode-editor-background) 95%, var(--vscode-foreground));
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .subcard-index {
+            font-size: 9px;
+            font-family: var(--vscode-editor-font-family);
+            color: var(--vscode-descriptionForeground);
+            opacity: 0.4;
+        }
+        .subcard-hidden[hidden] { display: none; }
+        .subcard-hidden { display: contents; }
+        .subcard-expand {
+            align-self: flex-start;
+        }
+        .prose-inline {
+            line-height: 1.5;
+            font-family: var(--vscode-font-family);
+            font-size: 0.92em;
+            opacity: 0.8;
+        }
+        .output-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+            opacity: 0.5;
+            padding-top: 2px;
         }
 
         /* ── Table ── */
