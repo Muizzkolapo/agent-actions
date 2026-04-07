@@ -519,6 +519,7 @@ class TestComplexWorkflows:
             "actions": [
                 {
                     "name": "source_agent",
+                    "context_scope": {"observe": ["source.*"]},
                     "schema": {
                         "type": "object",
                         "properties": {"data": {"type": "string"}},
@@ -527,6 +528,7 @@ class TestComplexWorkflows:
                 {
                     "name": "branch_a",
                     "depends_on": ["source_agent"],
+                    "context_scope": {"observe": ["source_agent.*"]},
                     "prompt": "{{ action.source_agent.data }}",
                     "schema": {
                         "type": "object",
@@ -536,6 +538,7 @@ class TestComplexWorkflows:
                 {
                     "name": "branch_b",
                     "depends_on": ["source_agent"],
+                    "context_scope": {"observe": ["source_agent.*"]},
                     "prompt": "{{ action.source_agent.data }}",
                     "schema": {
                         "type": "object",
@@ -545,6 +548,7 @@ class TestComplexWorkflows:
                 {
                     "name": "merger",
                     "depends_on": ["branch_a", "branch_b"],
+                    "context_scope": {"observe": ["branch_a.*", "branch_b.*"]},
                     "prompt": "Merge: {{ action.branch_a.result_a }} and {{ action.branch_b.result_b }}",
                     "schema": {
                         "type": "object",
@@ -564,6 +568,9 @@ class TestComplexWorkflows:
                 {
                     "name": f"agent_{i}",
                     "depends_on": [f"agent_{i - 1}"] if i > 0 else [],
+                    "context_scope": {"observe": [f"agent_{i - 1}.*"]}
+                    if i > 0
+                    else {"observe": ["source.*"]},
                     "prompt": f"{{{{ action.agent_{i - 1}.output }}}}" if i > 0 else "Start",
                     "schema": {
                         "type": "object",
@@ -583,6 +590,7 @@ class TestComplexWorkflows:
             "actions": [
                 {
                     "name": "data_provider",
+                    "context_scope": {"observe": ["source.*"]},
                     "schema": {
                         "type": "object",
                         "properties": {
@@ -595,6 +603,7 @@ class TestComplexWorkflows:
                 {
                     "name": "consumer",
                     "depends_on": ["data_provider"],
+                    "context_scope": {"observe": ["data_provider.*"]},
                     "prompt": """
                         Field1: {{ action.data_provider.field1 }}
                         Field2: {{ action.data_provider.field2 }}
@@ -617,6 +626,7 @@ class TestContextScopeValidation:
             "actions": [
                 {
                     "name": "extractor",
+                    "context_scope": {"observe": ["source.*"]},
                     "schema": {
                         "type": "object",
                         "properties": {
@@ -755,6 +765,7 @@ class TestContextScopeValidation:
             "actions": [
                 {
                     "name": "extractor",
+                    "context_scope": {"observe": ["source.*"]},
                     "schema": {
                         "type": "object",
                         "properties": {"facts": {"type": "array"}},
@@ -930,22 +941,26 @@ class TestPrimaryDependencyValidation:
                 {
                     "name": "dep_A",
                     "prompt": "test",
+                    "context_scope": {"observe": ["source.*"]},
                     "schema": {"type": "object", "properties": {"field1": {"type": "string"}}},
                 },
                 {
                     "name": "dep_B",
                     "prompt": "test",
+                    "context_scope": {"observe": ["source.*"]},
                     "schema": {"type": "object", "properties": {"field2": {"type": "string"}}},
                 },
                 {
                     "name": "dep_C",
                     "prompt": "test",
+                    "context_scope": {"observe": ["source.*"]},
                     "schema": {"type": "object", "properties": {"field3": {"type": "string"}}},
                 },
                 {
                     "name": "action_with_primary",
                     "dependencies": ["dep_A", "dep_B", "dep_C"],
                     "primary_dependency": "dep_B",
+                    "context_scope": {"observe": ["dep_A.*", "dep_B.*", "dep_C.*"]},
                     "prompt": "Process: {{ action.dep_A.field1 }} {{ action.dep_B.field2 }} {{ action.dep_C.field3 }}",
                     "schema": {"type": "object", "properties": {"result": {"type": "string"}}},
                 },

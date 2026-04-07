@@ -182,27 +182,27 @@ class TestPromptPreparationParityWithContextScope:
         "context_scope_config,description",
         [
             (
-                {"observe": ["source.metadata"]},
+                {"observe": ["source.text", "source.metadata"]},
                 "observe only",
             ),
             (
-                {"drop": ["source.internal_id"]},
+                {"observe": ["source.text"], "drop": ["source.internal_id"]},
                 "drop only",
             ),
             (
-                {"passthrough": ["source.record_id"]},
+                {"observe": ["source.text"], "passthrough": ["source.record_id"]},
                 "passthrough only",
             ),
             (
                 {
-                    "observe": ["source.metadata"],
+                    "observe": ["source.text", "source.metadata"],
                     "drop": ["source.internal_id"],
                 },
                 "observe and drop",
             ),
             (
                 {
-                    "observe": ["source.metadata"],
+                    "observe": ["source.text", "source.metadata"],
                     "drop": ["source.internal_id"],
                     "passthrough": ["source.record_id"],
                 },
@@ -364,12 +364,17 @@ class TestEdgeCases:
         parity_agent_config_no_context_scope,
         parity_contents,
     ):
-        """Both modes should handle None optional params identically."""
+        """Both modes should handle None optional params identically.
+
+        source_content is required so the observed source.text field exists
+        at runtime. Other optional params remain None.
+        """
         common_args = {
             "agent_config": parity_agent_config_no_context_scope,
             "agent_name": "parity_test_agent_simple",
             "contents": parity_contents,
-            # All optional params default to None
+            "source_content": parity_contents,
+            # Other optional params default to None
         }
 
         batch_result = PromptPreparationService.prepare_prompt_with_context(
@@ -381,14 +386,16 @@ class TestEdgeCases:
 
         assert batch_result.formatted_prompt == online_result.formatted_prompt
 
-    def test_no_context_scope_parity(
+    def test_no_context_scope_raises_error(
         self,
         parity_contents,
         parity_current_item,
         parity_agent_indices,
         parity_dependency_configs,
     ):
-        """Both modes should work identically when no context_scope is defined."""
+        """Missing context_scope must raise ConfigurationError in both modes."""
+        from agent_actions.errors import ConfigurationError
+
         agent_config = {
             "name": "no_scope_agent",
             "agent_type": "llm_agent",
@@ -409,13 +416,8 @@ class TestEdgeCases:
             "current_item": parity_current_item,
         }
 
-        batch_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="batch", **common_args
-        )
-        online_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="online", **common_args
-        )
+        with pytest.raises(ConfigurationError, match="context_scope is required"):
+            PromptPreparationService.prepare_prompt_with_context(mode="batch", **common_args)
 
-        assert batch_result.formatted_prompt == online_result.formatted_prompt
-        assert batch_result.prompt_context == online_result.prompt_context
-        assert batch_result.passthrough_fields == online_result.passthrough_fields
+        with pytest.raises(ConfigurationError, match="context_scope is required"):
+            PromptPreparationService.prepare_prompt_with_context(mode="online", **common_args)
