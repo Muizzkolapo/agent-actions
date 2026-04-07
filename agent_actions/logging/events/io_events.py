@@ -329,10 +329,17 @@ class ContextFieldNotFoundEvent(BaseEvent):
         available_str = ", ".join(self.available_fields[:5])
         if len(self.available_fields) > 5:
             available_str += f"... (+{len(self.available_fields) - 5} more)"
-        self.message = (
-            f"[{self.action_name}] Field '{self.field_ref}' not found in '{self.namespace}'. "
-            f"Available: {available_str}"
-        )
+        if not self.namespace:
+            self.message = (
+                f"[{self.action_name}] Namespace '{self.field_ref}' not found in context. "
+                f"Available namespaces: {available_str}. "
+                f"Add to context_scope.observe."
+            )
+        else:
+            self.message = (
+                f"[{self.action_name}] Field '{self.field_ref}' not found in '{self.namespace}'. "
+                f"Available: {available_str}"
+            )
         self.data = {
             "action_name": self.action_name,
             "field_ref": self.field_ref,
