@@ -151,9 +151,7 @@ def apply_context_scope(
                 # Wildcard: best-effort — namespace may be empty or absent.
                 action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
-                    if ns_name not in llm_context:
-                        llm_context[ns_name] = {}
-                    llm_context[ns_name].update(action_fields)
+                    llm_context.setdefault(ns_name, {}).update(action_fields)
             else:
                 # Explicit field ref: fail-fast if not found
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
@@ -171,9 +169,7 @@ def apply_context_scope(
                         },
                     )
 
-                if ns_name not in llm_context:
-                    llm_context[ns_name] = {}
-                llm_context[ns_name][field_name] = value
+                llm_context.setdefault(ns_name, {})[field_name] = value
 
                 # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
@@ -294,13 +290,9 @@ def format_llm_context(llm_context: dict) -> str:
     lines = ["Additional context:"]
 
     for ns_name, ns_data in llm_context.items():
-        if isinstance(ns_data, dict):
-            for field, value in ns_data.items():
-                value_str = json.dumps(value, indent=2, ensure_ascii=False)
-                lines.append(f"{ns_name}.{field}: {value_str}")
-        else:
-            value_str = json.dumps(ns_data, indent=2, ensure_ascii=False)
-            lines.append(f"{ns_name}: {value_str}")
+        for field, value in ns_data.items():
+            value_str = json.dumps(value, indent=2, ensure_ascii=False)
+            lines.append(f"{ns_name}.{field}: {value_str}")
 
     return "\n".join(lines)
 
