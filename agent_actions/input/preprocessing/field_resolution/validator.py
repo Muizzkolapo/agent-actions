@@ -72,10 +72,9 @@ class ReferenceValidator:
                 continue
 
             if self.strict_dependencies and action_name not in declared_deps:
-                suggested_deps = list(declared_deps) + [action_name]
                 errors.append(
-                    f"Action '{action_name}' referenced in guard but not in dependencies. "
-                    f"Add it to dependencies: {sorted(suggested_deps)}"
+                    f"Action '{action_name}' referenced in guard but not in context_scope. "
+                    f"Add '{action_name}.*' to context_scope.observe."
                 )
 
         return errors

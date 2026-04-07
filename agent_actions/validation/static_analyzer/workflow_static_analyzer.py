@@ -119,6 +119,10 @@ class WorkflowStaticAnalyzer:
         for error in self._check_context_scope_required():
             result.add_error(error)
 
+        # Step 3d: Validate template namespaces are covered by context_scope
+        for error in self._check_template_scope_coverage():
+            result.add_error(error)
+
         # Step 2c: Validate context_scope field references
         for error in self._check_context_scope_fields():
             result.add_error(error)
@@ -331,6 +335,76 @@ class WorkflowStaticAnalyzer:
                 )
         return errors
 
+    def _check_template_scope_coverage(self) -> list[StaticTypeError]:
+        """Check that template namespace references are declared in context_scope.
+
+        For each action, extracts namespace references from the prompt template
+        and verifies they appear in context_scope.observe or passthrough.
+        Framework namespaces (version, seed, workflow, loop) and source are
+        always available and not checked.
+        """
+        from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
+        from agent_actions.prompt.context.scope_parsing import (
+            extract_action_names_from_template,
+        )
+        from agent_actions.prompt.formatter import PromptFormatter
+
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            name = action.get("name", "unknown")
+            context_scope = action.get("context_scope")
+            if not context_scope or not isinstance(context_scope, dict):
+                continue  # Already caught by _check_context_scope_required
+
+            # Get template text
+            try:
+                template = PromptFormatter.get_raw_prompt(action)
+            except Exception:
+                continue  # Can't load template, skip
+
+            if not template:
+                continue
+
+            # Extract non-special namespace references from template
+            # (source, version, seed, workflow, loop are already filtered)
+            template_namespaces = extract_action_names_from_template(template)
+
+            # Also filter FRAMEWORK_NAMESPACES for safety
+            template_namespaces -= FRAMEWORK_NAMESPACES
+
+            # Extract namespaces declared in context_scope observe/passthrough
+            scoped_namespaces: set[str] = set()
+            for directive in ("observe", "passthrough"):
+                for ref in context_scope.get(directive, []):
+                    if isinstance(ref, str) and "." in ref:
+                        scoped_namespaces.add(ref.split(".", 1)[0])
+
+            # Flag uncovered namespaces
+            uncovered = template_namespaces - scoped_namespaces
+            for ns in sorted(uncovered):
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"Action '{name}': template references namespace '{ns}' "
+                            f"which is not declared in context_scope.observe or passthrough."
+                        ),
+                        location=FieldLocation(
+                            agent_name=name,
+                            config_field="context_scope",
+                        ),
+                        referenced_agent=ns,
+                        referenced_field="",
+                        hint=(f"Add '{ns}.*' to context_scope.observe."),
+                    )
+                )
+
+        return errors
+
     def _check_context_scope_fields(self) -> list[StaticTypeError]:
         """Validate context_scope field references against dependency schemas.
 
@@ -403,7 +477,7 @@ class WorkflowStaticAnalyzer:
                                 ),
                                 referenced_agent=dep_name,
                                 referenced_field=field_name,
-                                hint=f"Add '{dep_name}' to dependencies or remove this reference.",
+                                hint=f"Add '{dep_name}.*' to context_scope.observe, or remove this reference.",
                             )
                         )
                         continue
@@ -613,7 +687,7 @@ class WorkflowStaticAnalyzer:
                                     f"'{dep_name}' is not a dependency of "
                                     f"'{action_name}' — its fields will never "
                                     f"appear in context. Remove this drop or "
-                                    f"add '{dep_name}' to dependencies."
+                                    f"add '{dep_name}.*' to context_scope.observe."
                                 ),
                             )
                         )
