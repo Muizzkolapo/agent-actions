@@ -23,5 +23,5 @@ jobs:
         with:
           path-to-signatures: "signatures/version1/cla.json"
           path-to-document: "https://github.com/Muizzkolapo/agent-actions/blob/main/CLA.md"
-          branch: "main"
+          branch: "cla-signatures"
           allowlist: Muizzkolapo,dependabot[bot],github-actions[bot]
