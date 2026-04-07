@@ -3,7 +3,7 @@
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-text-dark.svg">
       <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-text-light.svg">
-      <img alt="Agent Actions" src=".github/images/logo-text-light.svg" height="80">
+      <img alt="Agent Actions" src="https://raw.githubusercontent.com/Muizzkolapo/agent-actions/main/.github/images/logo-text-light.svg" height="80">
     </picture>
   </a>
 </p>
@@ -24,7 +24,7 @@ Declarative LLM orchestration. Define workflows in YAML — each action gets its
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/images/lifecycle-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset=".github/images/lifecycle-light.svg">
-    <img alt="Agent Actions lifecycle: Define → Validate → Execute" src=".github/images/lifecycle-light.svg" width="680">
+    <img alt="Agent Actions lifecycle: Define → Validate → Execute" src="https://raw.githubusercontent.com/Muizzkolapo/agent-actions/main/.github/images/lifecycle-light.svg" width="680">
   </picture>
 </p>
 

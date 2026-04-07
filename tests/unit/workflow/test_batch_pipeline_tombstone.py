@@ -185,8 +185,8 @@ class TestDiscoverWorkflowUDFsManagerNone:
             manager=None,
         )
         console = MagicMock()
-        # Should not raise AttributeError
-        discover_workflow_udfs(config, console)
+        result = discover_workflow_udfs(config, console)
+        assert result is None
 
     def test_user_code_path_takes_priority_over_manager(self, tmp_path):
         """When user_code_path is set, manager is not accessed at all."""

@@ -12,7 +12,7 @@ import { ActionInfo } from '../model/types';
 import { WorkflowModel } from '../model/workflowModel';
 import { DagWebview } from '../views/dagWebview';
 import { QueryResultsPanel } from '../views/queryResultsPanel';
-import { createStorageReader, isPreviewError } from '../utils/storageReader';
+import { createStorageReader, isPreviewError, StorageReader, type PreviewResult } from '../utils/storageReader';
 
 interface CommandContext {
     context: vscode.ExtensionContext;
@@ -189,7 +189,33 @@ async function navigatePreviewPage(
         return;
     }
 
+    await attachTracesToRecords(reader, actionName, result);
     panel.showResults(result, actionName, workflowPath, workflowName, limit, newOffset);
+}
+
+/**
+ * Attach prompt traces to preview records by source_guid.
+ * Fetches traces from the storage backend and merges them in-place.
+ */
+async function attachTracesToRecords(
+    reader: StorageReader,
+    actionName: string,
+    result: PreviewResult
+): Promise<void> {
+    try {
+        const traceMap = await reader.previewTraces(actionName);
+        if (traceMap.size === 0) return;
+
+        for (const record of result.records) {
+            const rec = record as Record<string, unknown>;
+            const guid = rec.source_guid;
+            if (typeof guid === 'string' && traceMap.has(guid)) {
+                rec._trace = traceMap.get(guid);
+            }
+        }
+    } catch {
+        // Traces are optional — don't fail the preview if trace fetch fails
+    }
 }
 
 /**
@@ -242,5 +268,6 @@ async function previewData(
         return;
     }
 
+    await attachTracesToRecords(reader, action.name, result);
     panel.showResults(result, action.name, workflow.rootPath, workflow.name, limit, offset);
 }

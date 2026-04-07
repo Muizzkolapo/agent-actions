@@ -63,3 +63,21 @@ class TestWorkflowParserMalformedInput:
     def test_nonexistent_file_returns_none(self, tmp_path):
         result = WorkflowParser.parse_workflow(str(tmp_path / "nonexistent.yml"))
         assert result is None
+
+    def test_empty_file_returns_none(self, tmp_path):
+        yml = tmp_path / "empty.yml"
+        yml.write_text("")
+        result = WorkflowParser.parse_workflow(str(yml))
+        assert result is None
+
+    def test_whitespace_only_file_returns_none(self, tmp_path):
+        yml = tmp_path / "blank.yml"
+        yml.write_text("   \n\n  \n")
+        result = WorkflowParser.parse_workflow(str(yml))
+        assert result is None
+
+    def test_non_mapping_file_returns_none(self, tmp_path):
+        yml = tmp_path / "list.yml"
+        yml.write_text("- item1\n- item2\n")
+        result = WorkflowParser.parse_workflow(str(yml))
+        assert result is None

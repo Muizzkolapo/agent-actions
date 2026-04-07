@@ -1,5 +1,6 @@
 """Batch processing service for converting batch results to workflow output."""
 
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -156,6 +157,7 @@ class BatchProcessingService:
 
             if self._storage_backend and self._action_name:
                 self._write_record_dispositions(processed_data, self._action_name)
+                self._update_prompt_trace_responses(processed_data, self._action_name)
 
             if self._source_handler:
                 self._source_handler.save_task_source(
@@ -603,6 +605,31 @@ class BatchProcessingService:
         Delegates to processing_recovery.write_record_dispositions.
         """
         _write_record_dispositions_impl(self, items, action_name)
+
+    def _update_prompt_trace_responses(self, items: list[dict[str, Any]], action_name: str) -> None:
+        """Update prompt traces with batch responses. Telemetry — non-fatal."""
+        if not self._storage_backend:
+            return
+        try:
+            for item in items:
+                source_guid = item.get("source_guid")
+                if not source_guid:
+                    continue
+                content = item.get("content")
+                if content is None:
+                    continue
+                response_text = json.dumps(content, ensure_ascii=False, default=str)
+                self._storage_backend.update_prompt_trace_response(
+                    action_name=action_name,
+                    record_id=source_guid,
+                    response_text=response_text,
+                )
+        except Exception:
+            logger.warning(
+                "Failed to update prompt trace responses for batch action=%s",
+                action_name,
+                exc_info=True,
+            )
 
     # =========================================================================
     # HELPERS (kept in this module)

@@ -26,7 +26,7 @@ def _empty_inputs():
         data_loaders_data=[],
         processing_states_data=[],
         workflow_data={},
-        readmes_data=[],
+        readmes_data={},
     )
 
 
@@ -54,7 +54,8 @@ class TestCatalogGeneratorEmptyInput:
     def test_no_exception_on_empty_input(self):
         gen = _make_generator()
         result = gen.generate(**_empty_inputs())
-        assert result is not None
+        assert isinstance(result, dict)
+        assert "metadata" in result
 
 
 class TestCatalogGeneratorHappyPath:

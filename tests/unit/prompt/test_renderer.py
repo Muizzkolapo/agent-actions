@@ -375,8 +375,8 @@ class TestRunConfigValidator:
         mock_cv.validate.return_value = True
 
         svc = ConfigRenderingService()
-        # Should not raise
         svc._run_config_validator([], "agent1", Path("/proj"))
+        mock_cv.validate.assert_called_once()
 
     @patch("agent_actions.prompt.renderer.ConfigValidator")
     def test_raises_when_validation_fails_with_errors(self, mock_cv_cls):
@@ -396,8 +396,9 @@ class TestRunConfigValidator:
         mock_cv.get_errors.return_value = []
 
         svc = ConfigRenderingService()
-        # Should not raise -- the code only raises if errors list is truthy
-        svc._run_config_validator([], "agent1", Path("/proj"))
+        result = svc._run_config_validator([], "agent1", Path("/proj"))
+        assert result is None
+        mock_cv.validate.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

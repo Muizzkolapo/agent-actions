@@ -41,8 +41,8 @@ class TestExecutorRunTrackerInit:
 
     def test_run_tracker_and_run_id_are_attributes(self, executor):
         """Attributes must exist — no AttributeError on access."""
-        _ = executor.run_tracker
-        _ = executor.run_id
+        assert executor.run_tracker is None
+        assert executor.run_id is None
 
     def test_track_action_start_noop_when_tracker_is_none(self, executor):
         """_track_action_start must be a no-op when run_tracker is None."""
@@ -53,8 +53,9 @@ class TestExecutorRunTrackerInit:
             is_last_action=False,
             start_time=datetime.now(),
         )
-        # Should not raise
-        executor._track_action_start(params)
+        assert executor.run_tracker is None
+        result = executor._track_action_start(params)
+        assert result is None
 
     def test_track_action_start_invokes_record_when_tracker_set(self, executor):
         """Setting run_tracker/run_id and calling _track_action_start must invoke record_action_start."""

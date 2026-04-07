@@ -60,3 +60,23 @@
 | `PromptValidationError` | Class | Raised when prompt validation fails. | - |
 | `DataValidationError` | Class | Raised when data validation fails. | - |
 | `SchemaValidationError` | Class | Raised when schema validation fails. | - |
+
+## Project Surface
+
+No direct project surface. Consumed internally by config, validation, workflow, processing, llm, prompt, input, output, cli, logging.
+
+## Dependencies
+
+| Package | Direction | Why |
+|---------|-----------|-----|
+| `agent_actions/config` | inbound | Config module raises `ConfigurationError`, `ConfigValidationError`, `FileSystemError`. |
+| `agent_actions/validation` | inbound | Validators raise `SchemaValidationError`, `ValidationError`, and preflight errors. |
+| `agent_actions/workflow` | inbound | Workflow execution raises `WorkflowError`, `AgentExecutionError`, `ProcessingError`. |
+| `agent_actions/llm` | inbound | LLM providers raise `VendorAPIError`, `AnthropicError`, `RateLimitError`, `NetworkError`. |
+| `agent_actions/prompt` | inbound | Prompt rendering raises `TemplateRenderingError`, `TemplateVariableError`. |
+| `agent_actions/input` | inbound | Loaders raise `FileLoadError`, `UDFLoadError`, `DuplicateFunctionError`. |
+| `agent_actions/output` | inbound | Output processing raises `SerializationError`, `TransformationError`, `EmptyOutputError`. |
+| `agent_actions/cli` | inbound | CLI catches and formats all error types. |
+| `agent_actions/logging` | inbound | Error translator and formatters consume error hierarchy. |
+| `agent_actions/storage` | inbound | Storage backends raise `FileSystemError` subclasses. |
+| `agent_actions/utils` | outbound | `AgentActionsError.detailed_str` uses `safe_format.format_exception_context`. |

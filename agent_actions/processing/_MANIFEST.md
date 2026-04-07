@@ -26,3 +26,30 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `prepared_task.py` | Module | `GuardStatus` enum (PASSED, SKIPPED, FILTERED, UPSTREAM_UNPROCESSED), `PreparedTask` dataclass, and `PreparationContext` (carries `mode: RunMode` directly). | `typing` |
 | `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. Short-circuits upstream-unprocessed records before context loading. | `input`, `prompt` |
 | `types.py` | Module | `ProcessingStatus` enum (SUCCESS, SKIPPED, FILTERED, FAILED, EXHAUSTED, DEFERRED, UNPROCESSED), `ProcessingResult` factories, and `ProcessingContext` (uses `RunMode` for mode). | `typing` |
+
+## Project Surface
+
+| Symbol | File | Interaction | Config Key |
+|--------|------|-------------|------------|
+| `RecordProcessor.process()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].granularity`, `actions[].kind` |
+| `TaskPreparer.prepare()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].conditional_clause` |
+| `ResultCollector.collect()` | `agent_io/target/{action}/` | Writes | — |
+| `EnrichmentPipeline.enrich()` | `agent_io/target/{action}/` | Transforms | — |
+| `BatchContextAdapter.to_processing_context()` | `agent_io/staging/` | Reads | — |
+| `ExhaustedRecordBuilder.build_empty_content()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
+| `ProcessorErrorHandlerMixin.load_file()` | `agent_io/staging/` | Reads | — |
+
+**Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `RepromptMetadata`, `RecoveryMetadata`, `CollectionStats`, `BatchProcessor` -- no direct project surface.
+
+## Dependencies
+
+| Package | Direction | Why |
+|---------|-----------|-----|
+| `llm` | inbound | Batch and online runners delegate to RecordProcessor and BatchProcessor |
+| `prompt` | inbound | DataGenerator creates RecordProcessor for subsequent-stage processing |
+| `workflow` | inbound | Pipeline orchestrator calls processing for each action stage |
+| `prompt` | outbound | TaskPreparer uses PromptPreparationService for context and prompt rendering |
+| `input` | outbound | Uses guard evaluators and field resolution from preprocessing |
+| `output` | outbound | Uses ResponseSchemaCompiler for schema validation during reprompt |
+| `storage` | outbound | ResultCollector writes dispositions to StorageBackend |
+| `config` | outbound | Reads action configuration types and run mode from config |

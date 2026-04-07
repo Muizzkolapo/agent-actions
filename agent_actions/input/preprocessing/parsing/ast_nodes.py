@@ -19,6 +19,18 @@ class MissingFieldError(ValueError):
     pass
 
 
+class GuardSemanticError(ValueError):
+    """Raised when a guard condition has a structural problem.
+
+    Examples: unquoted string literal on comparison RHS, type mismatch
+    in comparison operands. Distinct from MissingFieldError (data-level)
+    because semantic errors are deterministic — they fail for every record,
+    not just records missing a field.
+    """
+
+    pass
+
+
 def _field_exists(data: Any, field_path: str) -> bool:
     """Check if a field path exists in the data (distinguishes None value from missing)."""
     keys = field_path.split(".")
@@ -214,7 +226,18 @@ def evaluate_node(
         elif node.right is None:
             raise ValueError(f"Binary operator {node.operator} requires a right operand")
         else:
-            right_value = evaluate_node(node.right, data, functions)
+            try:
+                right_value = evaluate_node(node.right, data, functions)
+            except MissingFieldError as e:
+                if isinstance(node.right, FieldNode):
+                    field_name = node.right.field_path
+                    left_repr = node.left.field_path if isinstance(node.left, FieldNode) else "..."
+                    raise GuardSemanticError(
+                        f"'{field_name}' is not a known field. "
+                        f"Did you mean to compare against a string value? "
+                        f'Use quotes: {left_repr} {node.operator.value} "{field_name}"'
+                    ) from e
+                raise
 
         try:
             return op_fn(left_value, right_value)

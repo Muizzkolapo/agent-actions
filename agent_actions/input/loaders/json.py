@@ -18,6 +18,8 @@ class JsonLoader(BaseLoader[dict[str, Any] | list[dict[str, Any]]]):
         self, content: Any, file_path: str | None = None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Load and return raw JSON content from a file or memory."""
+        if isinstance(content, (dict, list)):
+            return content
         try:
             if file_path:
                 content_str = self.load_file(file_path)

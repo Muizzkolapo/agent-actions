@@ -211,6 +211,140 @@
     overflow: hidden;
   }
 
+  /* ─── Prompt Trace drawer ─── */
+  .trace-section {
+    @apply border-t mt-0;
+    border-color: hsl(250 25% 85%);
+    background: linear-gradient(180deg, hsl(250 30% 96%), transparent 100%);
+  }
+  .dark .trace-section {
+    border-color: hsl(250 25% 20%);
+    background: linear-gradient(180deg, hsl(250 30% 12%), transparent 100%);
+  }
+
+  .trace-trigger {
+    @apply flex items-center gap-1.5 py-2 px-4 w-full text-left transition-colors cursor-pointer;
+    font-size: 10px;
+    color: hsl(250 40% 50%);
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  .dark .trace-trigger {
+    color: hsl(250 45% 72%);
+  }
+  .trace-trigger:hover {
+    @apply text-foreground;
+  }
+
+  .trace-label {
+    @apply uppercase tracking-wider font-semibold;
+  }
+  .trace-badges {
+    @apply flex gap-1.5 ml-auto;
+  }
+  .trace-badge {
+    @apply font-mono rounded;
+    font-size: 9px;
+    padding: 1px 6px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  .trace-badge-model {
+    background: hsl(225 20% 92%);
+    color: hsl(225 15% 40%);
+    border: 1px solid hsl(225 16% 86%);
+  }
+  .dark .trace-badge-model {
+    background: hsl(225 20% 14%);
+    color: hsl(210 15% 55%);
+    border: 1px solid hsl(225 16% 18%);
+  }
+  .trace-badge-mode {
+    background: hsl(174 30% 92%);
+    color: hsl(174 50% 35%);
+    border: 1px solid hsl(174 30% 85%);
+  }
+  .dark .trace-badge-mode {
+    background: hsl(174 30% 12%);
+    color: hsl(174 50% 60%);
+    border: 1px solid hsl(174 30% 18%);
+  }
+  .trace-badge-mode.batch {
+    background: hsl(38 30% 92%);
+    color: hsl(38 60% 38%);
+    border: 1px solid hsl(38 30% 85%);
+  }
+  .dark .trace-badge-mode.batch {
+    background: hsl(38 30% 12%);
+    color: hsl(38 60% 60%);
+    border: 1px solid hsl(38 30% 18%);
+  }
+
+  .trace-content {
+    @apply px-4 pb-3.5;
+  }
+  .trace-panels {
+    @apply flex flex-col gap-2.5;
+  }
+  .trace-panel {
+    @apply rounded-md border overflow-hidden;
+    border-color: hsl(225 16% 86%);
+  }
+  .dark .trace-panel {
+    border-color: hsl(225 16% 14%);
+  }
+  .trace-panel-header {
+    @apply flex items-center justify-between px-3 py-1.5 uppercase tracking-wider font-semibold;
+    font-size: 9px;
+  }
+  .trace-panel-size {
+    @apply font-mono font-normal normal-case tracking-normal;
+    opacity: 0.5;
+  }
+  .trace-panel-prompt .trace-panel-header {
+    background: hsl(250 30% 96%);
+    color: hsl(250 40% 50%);
+    border-bottom: 1px solid hsl(250 20% 90%);
+  }
+  .dark .trace-panel-prompt .trace-panel-header {
+    background: hsl(225 20% 7%);
+    color: hsl(250 45% 72%);
+    border-bottom: 1px solid hsl(250 20% 15%);
+  }
+  .trace-panel-response .trace-panel-header {
+    background: hsl(170 30% 96%);
+    color: hsl(174 50% 35%);
+    border-bottom: 1px solid hsl(174 20% 88%);
+  }
+  .dark .trace-panel-response .trace-panel-header {
+    background: hsl(170 20% 7%);
+    color: hsl(174 50% 65%);
+    border-bottom: 1px solid hsl(174 20% 13%);
+  }
+  .trace-panel-body {
+    @apply font-mono leading-relaxed;
+    padding: 10px 12px;
+    font-size: 11px;
+    color: hsl(var(--foreground));
+    opacity: 0.82;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 240px;
+    overflow-y: auto;
+    background: hsl(225 10% 97%);
+  }
+  .dark .trace-panel-body {
+    background: hsl(225 24% 7%);
+  }
+  .trace-panel-response .trace-panel-body {
+    font-size: 12px;
+    max-height: 120px;
+  }
+  .dark .trace-panel-response .trace-panel-body {
+    color: hsl(174 30% 75%);
+  }
+
   /* Typography control pill (font/width stepper) */
   .typo-pill {
     @apply flex items-center gap-0 rounded-lg border border-border bg-card;

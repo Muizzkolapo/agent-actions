@@ -1,6 +1,6 @@
 [project]
 name = "agent-actions"
-version = "0.1.5"
+version = "0.1.7"
 description = "Declarative YAML-based framework for orchestrating agentic workflows"
 authors = [
     {name = "Muizz Kolapo"},

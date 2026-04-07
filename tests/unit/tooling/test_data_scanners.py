@@ -1,14 +1,19 @@
-"""Regression tests for I-5: scan_logs() and extract_action_metrics() 100k-line cap."""
+"""Regression tests for I-5: scan_logs() and extract_action_metrics() 100k-line cap.
+
+Also covers scan_sqlite_readonly prompt trace attachment (spec 015).
+"""
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from agent_actions.tooling.docs.scanner.data_scanners import (
     extract_action_metrics,
     extract_runtime_warnings,
     scan_logs,
+    scan_sqlite_readonly,
 )
 
 # ---------------------------------------------------------------------------
@@ -338,3 +343,169 @@ class TestExtractActionMetricsEnrichment:
         assert m["provider"] is None
         assert m["model"] is None
         assert m["cache_miss_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# scan_sqlite_readonly — prompt trace attachment
+# ---------------------------------------------------------------------------
+
+
+def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
+    """Create a minimal SQLite DB with source/target data and optionally prompt_trace."""
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
+    conn.execute(
+        "CREATE TABLE target_data "
+        "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
+    )
+    # Insert one target record with a known source_guid
+    record = json.dumps([{"source_guid": "guid-001", "issue_type": "bug", "lineage": []}])
+    conn.execute(
+        "INSERT INTO target_data VALUES (?, ?, ?, ?)",
+        ("classify", "issues.json", record, 1),
+    )
+    # Insert a source row for count
+    conn.execute(
+        "INSERT INTO source_data VALUES (?, ?, ?)",
+        ("guid-001", "issues.json", "{}"),
+    )
+
+    if with_traces:
+        conn.execute(
+            "CREATE TABLE prompt_trace ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  action_name TEXT NOT NULL,"
+            "  record_id TEXT NOT NULL,"
+            "  attempt INTEGER NOT NULL DEFAULT 0,"
+            "  compiled_prompt TEXT NOT NULL,"
+            "  llm_context TEXT,"
+            "  response_text TEXT,"
+            "  model_name TEXT,"
+            "  model_vendor TEXT,"
+            "  run_mode TEXT,"
+            "  prompt_length INTEGER,"
+            "  context_length INTEGER,"
+            "  response_length INTEGER,"
+            "  created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
+            "  UNIQUE(action_name, record_id, attempt)"
+            ")"
+        )
+        conn.execute(
+            "INSERT INTO prompt_trace "
+            "(action_name, record_id, attempt, compiled_prompt, response_text, "
+            " model_name, model_vendor, run_mode, prompt_length, response_length) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "classify",
+                "guid-001",
+                0,
+                "You are a classifier...",
+                '[{"issue_type":"bug"}]',
+                "llama3.2:latest",
+                "ollama",
+                "batch",
+                200,
+                25,
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+
+class TestScanSqliteReadonlyTraceAttachment:
+    """Verify scan_sqlite_readonly joins prompt_trace to preview records."""
+
+    def test_trace_attached_when_table_exists(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        _create_test_db(db_path, with_traces=True)
+
+        result = scan_sqlite_readonly(db_path, "test_workflow")
+        assert result is not None
+        records = result["nodes"]["classify"]["preview"]
+        assert len(records) == 1
+
+        trace = records[0].get("_trace")
+        assert trace is not None
+        assert trace["compiled_prompt"] == "You are a classifier..."
+        assert trace["response_text"] == '[{"issue_type":"bug"}]'
+        assert trace["model_name"] == "llama3.2:latest"
+        assert trace["run_mode"] == "batch"
+        assert trace["attempt"] == 0
+
+    def test_no_trace_when_table_missing(self, tmp_path):
+        """Old DBs without prompt_trace table should not crash."""
+        db_path = tmp_path / "test.db"
+        _create_test_db(db_path, with_traces=False)
+
+        result = scan_sqlite_readonly(db_path, "test_workflow")
+        assert result is not None
+        records = result["nodes"]["classify"]["preview"]
+        assert len(records) == 1
+        assert "_trace" not in records[0]
+
+    def test_no_trace_when_no_matching_guid(self, tmp_path):
+        """Records without source_guid should not get traces."""
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
+        conn.execute(
+            "CREATE TABLE target_data "
+            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
+        )
+        # Record without source_guid
+        record = json.dumps([{"value": "hello"}])
+        conn.execute(
+            "INSERT INTO target_data VALUES (?, ?, ?, ?)",
+            ("act", "f.json", record, 1),
+        )
+        conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("x", "f.json", "{}"))
+        conn.execute(
+            "CREATE TABLE prompt_trace ("
+            "  id INTEGER PRIMARY KEY, action_name TEXT, record_id TEXT,"
+            "  attempt INTEGER DEFAULT 0, compiled_prompt TEXT,"
+            "  llm_context TEXT, response_text TEXT, model_name TEXT,"
+            "  model_vendor TEXT, run_mode TEXT, prompt_length INTEGER,"
+            "  context_length INTEGER, response_length INTEGER,"
+            "  created_at TEXT, UNIQUE(action_name, record_id, attempt))"
+        )
+        conn.commit()
+        conn.close()
+
+        result = scan_sqlite_readonly(db_path, "test_wf")
+        assert result is not None
+        records = result["nodes"]["act"]["preview"]
+        assert len(records) == 1
+        assert "_trace" not in records[0]
+
+    def test_latest_attempt_wins(self, tmp_path):
+        """When multiple attempts exist, only the latest is attached."""
+        db_path = tmp_path / "test.db"
+        _create_test_db(db_path, with_traces=True)
+
+        # Add a second attempt with different response
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO prompt_trace "
+            "(action_name, record_id, attempt, compiled_prompt, response_text, "
+            " model_name, run_mode, prompt_length, response_length) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "classify",
+                "guid-001",
+                1,
+                "You are a classifier (retry)...",
+                '[{"issue_type":"feature_request"}]',
+                "llama3.2:latest",
+                "batch",
+                250,
+                35,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        result = scan_sqlite_readonly(db_path, "test_workflow")
+        records = result["nodes"]["classify"]["preview"]
+        trace = records[0]["_trace"]
+        assert trace["attempt"] == 1
+        assert "retry" in trace["compiled_prompt"]

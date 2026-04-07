@@ -141,6 +141,34 @@ export class StorageReader {
         return new Map();
     }
 
+    /**
+     * Preview prompt traces for an action.
+     * Returns a map of record_id -> trace data.
+     */
+    async previewTraces(actionName: string): Promise<Map<string, Record<string, unknown>>> {
+        const result = await this.runStorageCommand('preview_traces', {
+            action_name: actionName,
+        });
+
+        if (!result.ok || !result.output) {
+            return new Map();
+        }
+
+        try {
+            const parsed = JSON.parse(result.output);
+            const records = Array.isArray(parsed.records) ? parsed.records : (Array.isArray(parsed) ? parsed : []);
+            const map = new Map<string, Record<string, unknown>>();
+            for (const trace of records) {
+                if (trace && typeof trace === 'object' && typeof trace.record_id === 'string') {
+                    map.set(trace.record_id, trace);
+                }
+            }
+            return map;
+        } catch {
+            return new Map();
+        }
+    }
+
     /** Get storage statistics. */
     async getStats(): Promise<StorageStats | null> {
         const result = await this.runStorageCommand('stats');
@@ -282,6 +310,17 @@ try:
     elif command == 'list_actions':
         stats = backend.get_storage_stats()
         print(json.dumps(stats.get('nodes', {})))
+
+    elif command == 'preview_traces':
+        import sqlite3 as _sqlite3
+        try:
+            result = backend.preview_prompt_traces(
+                action_name=args['action_name'],
+                limit=100,
+            )
+            print(json.dumps(result.get('records', []), ensure_ascii=False, default=str))
+        except (_sqlite3.OperationalError, AttributeError):
+            print(json.dumps([]))
 
     elif command == 'stats':
         stats = backend.get_storage_stats()

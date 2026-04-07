@@ -177,14 +177,14 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         const cardScript = `
         const vscode = acquireVsCodeApi();
-        const records = ${recordsJson};
+        const records = JSON.parse(${JSON.stringify(recordsJson)});
         const offset = ${offset};
 
         // ── Field classification (ported from data-card-utils.ts) ──
         const METADATA_KEYS = new Set([
             'source_guid','lineage','node_id','metadata','target_id',
             'parent_target_id','root_target_id','chunk_info',
-            '_recovery','_unprocessed','_file'
+            '_recovery','_unprocessed','_file','_trace'
         ]);
         const IDENTITY_KEYS = new Set(['source_guid','target_id']);
         const LONG_FORM_HINTS = new Set([
@@ -231,7 +231,39 @@ export class QueryResultsPanel implements vscode.Disposable {
             return max > 0 && s.length > max ? s.slice(0, max) + '\\u2026' : s;
         }
 
+        // ── Helpers ──
+        function isArrayOfObjects(value) {
+            if (!Array.isArray(value) || value.length === 0) return false;
+            return value.every(v => typeof v === 'object' && v !== null && !Array.isArray(v));
+        }
+        function isScalar(value) {
+            if (value === null || value === undefined) return true;
+            return typeof value !== 'object';
+        }
+
         // ── Render cards ──
+        function renderObjectArrayItem(item, fieldKey, idx, total) {
+            let html = '<div class="subcard">'
+                + '<span class="subcard-index">' + esc(humanize(fieldKey)) + ' [' + (idx + 1) + '/' + total + ']</span>';
+            for (const [k, v] of Object.entries(item)) {
+                const valStr = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : String(v ?? '');
+                const isLongVal = valStr.length > 100;
+                if (isLongVal) {
+                    html += '<div class="field-row field-block">'
+                        + '<span class="field-label">' + esc(humanize(k)) + '</span>'
+                        + '<div class="field-value"><span class="prose-inline">' + esc(valStr) + '</span></div>'
+                        + '</div>';
+                } else {
+                    html += '<div class="field-row field-inline">'
+                        + '<span class="field-label">' + esc(humanize(k)) + '</span>'
+                        + '<div class="field-value"><span class="val-string">' + esc(valStr) + '</span></div>'
+                        + '</div>';
+                }
+            }
+            html += '</div>';
+            return html;
+        }
+
         function renderValue(key, value) {
             if (value === null || value === undefined) {
                 return '<span class="val-null">null</span>';
@@ -244,6 +276,24 @@ export class QueryResultsPanel implements vscode.Disposable {
             }
             if (isInlineArray(value)) {
                 return value.map(v => '<span class="pill">' + esc(String(v)) + '</span>').join(' ');
+            }
+            if (isArrayOfObjects(value)) {
+                const items = value;
+                const showCount = 2;
+                let html = '<div class="subcard-list">';
+                for (let i = 0; i < Math.min(items.length, showCount); i++) {
+                    html += renderObjectArrayItem(items[i], key, i, items.length);
+                }
+                if (items.length > showCount) {
+                    html += '<div class="subcard-hidden" hidden data-field="' + esc(key) + '">';
+                    for (let i = showCount; i < items.length; i++) {
+                        html += renderObjectArrayItem(items[i], key, i, items.length);
+                    }
+                    html += '</div>';
+                    html += '<button class="expand-btn subcard-expand" data-field="' + esc(key) + '">Show ' + (items.length - showCount) + ' more</button>';
+                }
+                html += '</div>';
+                return html;
             }
             if (typeof value === 'object') {
                 return '<pre class="code-block">' + esc(JSON.stringify(value, null, 2)) + '</pre>';
@@ -282,19 +332,60 @@ export class QueryResultsPanel implements vscode.Disposable {
                 }
             }
 
-            // Header
+            // Split content into scalar vs structured
+            const scalarFields = content.filter(f => isScalar(f.value) || isInlineArray(f.value));
+            const structuredFields = content.filter(f => !isScalar(f.value) && !isInlineArray(f.value));
+
+            // 1. Header
             let header = '<span class="card-index">#' + (index + 1) + '</span>';
             for (const f of identity) {
                 const truncated = fmt(f.value, 24);
                 header += ' <span class="card-id" title="' + esc(fmt(f.value, 0)) + '">' + esc(truncated) + '</span>';
             }
 
-            // Body
+            // 2. Prompt Trace (input — moved before output)
+            var traceDrawer = '';
+            var trace = record._trace;
+            var hasTrace = trace && typeof trace === 'object' && !Array.isArray(trace);
+            if (hasTrace) {
+                var modelLabel = esc(String(trace.model_name || 'unknown'));
+                var modeLabel = esc(String(trace.run_mode || 'online'));
+                var batchClass = modeLabel === 'batch' ? ' batch' : '';
+                var promptLen = typeof trace.prompt_length === 'number' ? trace.prompt_length.toLocaleString() + ' chars' : '';
+                var responseLen = typeof trace.response_length === 'number' ? trace.response_length.toLocaleString() + ' chars' : '';
+                var promptText = esc(String(trace.compiled_prompt || ''));
+                var responseText = trace.response_text ? esc(String(trace.response_text)) : '<span class="val-null">Response pending</span>';
+
+                traceDrawer = '<div class="card-trace">'
+                    + '<button class="trace-toggle">'
+                    + '&#9656; Prompt Trace'
+                    + ' <span class="trace-badges">'
+                    + '<span class="trace-badge trace-model">' + modelLabel + '</span>'
+                    + '<span class="trace-badge trace-mode' + batchClass + '">' + modeLabel + '</span>'
+                    + '</span>'
+                    + '</button>'
+                    + '<div class="trace-panels-wrap" hidden>'
+                    + '<div class="trace-panel prompt">'
+                    + '<div class="trace-panel-hdr"><span>Compiled Prompt</span>' + (promptLen ? '<span class="trace-size">' + promptLen + '</span>' : '') + '</div>'
+                    + '<pre class="trace-panel-body">' + promptText + '</pre>'
+                    + '</div>'
+                    + '<div class="trace-panel response">'
+                    + '<div class="trace-panel-hdr"><span>LLM Response</span>' + (responseLen ? '<span class="trace-size">' + responseLen + '</span>' : '') + '</div>'
+                    + '<pre class="trace-panel-body response-body">' + responseText + '</pre>'
+                    + '</div>'
+                    + '</div>'
+                    + '</div>';
+            }
+
+            // 3. Action Output — scalar fields first, then structured
             let body = '';
             if (content.length === 0) {
                 body = '<div class="card-empty">No content fields</div>';
             } else {
-                for (const f of content) {
+                if (hasTrace) {
+                    body += '<div class="output-label">Output</div>';
+                }
+                for (const f of scalarFields) {
                     const short = isShort(f.value) && !isLongForm(f.key);
                     if (short) {
                         body += '<div class="field-row field-inline">'
@@ -308,9 +399,15 @@ export class QueryResultsPanel implements vscode.Disposable {
                             + '</div>';
                     }
                 }
+                for (const f of structuredFields) {
+                    body += '<div class="field-row field-block">'
+                        + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
+                        + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
+                        + '</div>';
+                }
             }
 
-            // Metadata drawer
+            // 4. Metadata (last)
             let drawer = '';
             if (meta.length > 0) {
                 let metaRows = '';
@@ -326,8 +423,10 @@ export class QueryResultsPanel implements vscode.Disposable {
                     + '</div>';
             }
 
+            // Card order: header -> trace -> output -> metadata
             return '<div class="card">'
                 + '<div class="card-header">' + header + '</div>'
+                + traceDrawer
                 + '<div class="card-body">' + body + '</div>'
                 + drawer
                 + '</div>';
@@ -345,12 +444,42 @@ export class QueryResultsPanel implements vscode.Disposable {
         document.addEventListener('click', function(e) {
             const target = e.target;
 
-            // Expand/collapse prose
+            // Expand/collapse prose or subcard list
             if (target.classList && target.classList.contains('expand-btn')) {
+                // Subcard expand (array of objects)
+                if (target.classList.contains('subcard-expand')) {
+                    var hidden = target.previousElementSibling;
+                    if (hidden && hidden.classList.contains('subcard-hidden')) {
+                        var wasHidden = hidden.hasAttribute('hidden');
+                        if (wasHidden) {
+                            hidden.removeAttribute('hidden');
+                            target.textContent = 'Show less';
+                        } else {
+                            hidden.setAttribute('hidden', '');
+                            var count = hidden.querySelectorAll('.subcard').length;
+                            target.textContent = 'Show ' + count + ' more';
+                        }
+                    }
+                    return;
+                }
+                // Prose expand
                 const prose = target.previousElementSibling;
                 if (prose && prose.classList.contains('prose')) {
                     prose.classList.toggle('clamped');
                     target.textContent = prose.classList.contains('clamped') ? 'Show more' : 'Show less';
+                }
+                return;
+            }
+
+            // Trace drawer toggle
+            if (target.classList && target.classList.contains('trace-toggle')) {
+                var panels = target.nextElementSibling;
+                if (panels) {
+                    var wasHidden = panels.hasAttribute('hidden');
+                    if (wasHidden) panels.removeAttribute('hidden');
+                    else panels.setAttribute('hidden', '');
+                    var badgesHtml = target.querySelector('.trace-badges');
+                    target.innerHTML = (wasHidden ? '&#9662;' : '&#9656;') + ' Prompt Trace ' + (badgesHtml ? badgesHtml.outerHTML : '');
                 }
                 return;
             }
@@ -878,6 +1007,148 @@ function allStyles(): string {
             color: var(--vscode-descriptionForeground);
             word-break: break-all;
             min-width: 0;
+        }
+
+        /* ── Prompt Trace drawer ── */
+        .card-trace {
+            border-top: 1px solid color-mix(in srgb, #7F77DD 30%, var(--vscode-panel-border));
+        }
+        .trace-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            width: 100%;
+            padding: 6px 12px;
+            background: none;
+            border: none;
+            color: #AFA9EC;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+        }
+        .trace-toggle:hover { color: var(--vscode-foreground); }
+        .trace-badges { display: inline-flex; gap: 4px; margin-left: auto; }
+        .trace-badge {
+            font-size: 9px;
+            font-family: var(--vscode-editor-font-family);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .trace-model {
+            background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+            color: var(--vscode-descriptionForeground);
+            border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+        }
+        .trace-mode {
+            background: color-mix(in srgb, #2dd4bf 12%, transparent);
+            color: #2dd4bf;
+            border: 1px solid color-mix(in srgb, #2dd4bf 20%, transparent);
+        }
+        .trace-mode.batch {
+            background: color-mix(in srgb, #f59e0b 12%, transparent);
+            color: #f59e0b;
+            border: 1px solid color-mix(in srgb, #f59e0b 20%, transparent);
+        }
+        .trace-panels-wrap {
+            padding: 0 12px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .trace-panels-wrap[hidden] { display: none; }
+        .trace-panel {
+            border-radius: 4px;
+            border: 1px solid var(--vscode-panel-border);
+            overflow: hidden;
+        }
+        .trace-panel-hdr {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 10px;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
+        }
+        .trace-size {
+            font-family: var(--vscode-editor-font-family);
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+            opacity: 0.5;
+        }
+        .trace-panel.prompt .trace-panel-hdr {
+            background: color-mix(in srgb, #7F77DD 10%, var(--vscode-editor-background));
+            color: #AFA9EC;
+        }
+        .trace-panel.response .trace-panel-hdr {
+            background: color-mix(in srgb, #2dd4bf 8%, var(--vscode-editor-background));
+            color: #2dd4bf;
+        }
+        .trace-panel-body {
+            padding: 8px 10px;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 11px;
+            line-height: 1.6;
+            color: var(--vscode-editor-foreground);
+            opacity: 0.82;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 240px;
+            overflow-y: auto;
+            margin: 0;
+            background: var(--vscode-textCodeBlock-background);
+            border: none;
+            border-radius: 0;
+        }
+        .trace-panel-body.response-body {
+            font-size: 12px;
+            max-height: 120px;
+        }
+
+        /* ── Sub-cards (array of objects) ── */
+        .subcard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .subcard {
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            padding: 8px 10px;
+            background: color-mix(in srgb, var(--vscode-editor-background) 95%, var(--vscode-foreground));
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .subcard-index {
+            font-size: 9px;
+            font-family: var(--vscode-editor-font-family);
+            color: var(--vscode-descriptionForeground);
+            opacity: 0.4;
+        }
+        .subcard-hidden[hidden] { display: none; }
+        .subcard-hidden { display: contents; }
+        .subcard-expand {
+            align-self: flex-start;
+        }
+        .prose-inline {
+            line-height: 1.5;
+            font-family: var(--vscode-font-family);
+            font-size: 0.92em;
+            opacity: 0.8;
+        }
+        .output-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+            opacity: 0.5;
+            padding-top: 2px;
         }
 
         /* ── Table ── */

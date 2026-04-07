@@ -22,6 +22,7 @@ export const METADATA_KEYS = new Set([
   "_recovery",
   "_unprocessed",
   "_file",
+  "_trace",
 ])
 
 // Keys surfaced in the card header — the record's identity
