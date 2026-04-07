@@ -349,14 +349,12 @@ def _extract_allowed_fields_per_dependency(
             try:
                 ref_action, ref_field = parse_field_reference(field_ref)
 
-                # Check for exact match or field prefix pattern match
                 if ref_action != dep_name:
-                    # Check if this is a field prefix pattern that covers the dependency
-                    if ref_field == "_" and dep_name.startswith(f"{ref_action}_"):
-                        # Field prefix pattern covers all loop iterations
+                    # Version base name covers expanded deps (e.g., action.* → action_1)
+                    if ref_field in ("_", "*") and dep_name.startswith(f"{ref_action}_"):
                         wildcard_found = True
                         break
-                    continue  # Not for this dependency
+                    continue
 
                 if ref_field == "*":
                     # Wildcard: dep_name.*

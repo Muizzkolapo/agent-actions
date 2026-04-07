@@ -83,9 +83,8 @@ def apply_context_scope(
 
             # Remove from prompt_context
             if field_name == "_":
-                # Field prefix pattern from version_consumption normalization.
-                # Must be checked before namespace existence (ns_name is the
-                # base name which won't exist — only versioned names do).
+                # Version prefix pattern — checked before ns existence since
+                # the base name won't exist, only versioned names do.
                 matched = False
                 for ctx_ns in prompt_context:
                     if ctx_ns.startswith(f"{ns_name}_") and isinstance(
@@ -174,9 +173,7 @@ def apply_context_scope(
                 if action_fields:
                     llm_context.update(action_fields)
             elif field_name == "_":
-                # Field prefix pattern from version_consumption normalization.
-                # Extract all fields from namespaces matching "{ns_name}_" prefix.
-                # Best-effort like wildcard — no error if no match.
+                # Version prefix pattern — best-effort like wildcard.
                 for ctx_ns in prompt_context:
                     if ctx_ns.startswith(f"{ns_name}_"):
                         action_fields = extract_action_fields(prompt_context, ctx_ns)
@@ -226,8 +223,6 @@ def apply_context_scope(
                 if action_fields:
                     passthrough_fields.update(action_fields)
             elif field_name == "_":
-                # Field prefix pattern: pass through all fields from matching
-                # version namespaces.
                 for ctx_ns in field_context:
                     if ctx_ns.startswith(f"{ns_name}_"):
                         action_fields = extract_action_fields(field_context, ctx_ns)

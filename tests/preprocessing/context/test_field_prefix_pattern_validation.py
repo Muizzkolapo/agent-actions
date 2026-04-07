@@ -170,6 +170,28 @@ class TestFieldPrefixPatternInInferDependencies:
         assert allowed["validate_answer_from_source_2"] is None
         assert allowed["validate_answer_from_source_3"] is None
 
+    def test_wildcard_on_base_name_covers_versioned_deps(self):
+        """Pre-normalization wildcard (action.*) must cover expanded version deps.
+
+        Regression: user writes observe: [filter_learning_quality.*] with
+        version_consumption. Dependencies expand to _1, _2, _3 before
+        normalization converts .* to the _ prefix pattern.
+        """
+        dependencies = [
+            "filter_learning_quality_1",
+            "filter_learning_quality_2",
+            "filter_learning_quality_3",
+        ]
+        context_scope = {"observe": ["filter_learning_quality.*"]}
+
+        allowed = _extract_allowed_fields_per_dependency(
+            dependencies, context_scope, action_name="aggregate_votes"
+        )
+
+        assert allowed["filter_learning_quality_1"] is None
+        assert allowed["filter_learning_quality_2"] is None
+        assert allowed["filter_learning_quality_3"] is None
+
     def test_infer_dependencies_with_mixed_patterns(self):
         """Test dependency inference with both field prefix and regular patterns."""
         action_config = {
