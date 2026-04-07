@@ -85,6 +85,7 @@ def _load_historical_node(
     root_target_id: str | None = None,
     output_directory: str | None = None,
     storage_backend: Optional["StorageBackend"] = None,
+    lineage_sources: list[str] | None = None,
 ) -> dict | None:
     """
     Load historical node data from saved files or storage backend.
@@ -95,13 +96,14 @@ def _load_historical_node(
     Args:
         action_name: Name of the action to load historical data for
         lineage: Lineage chain of the current record
-        source_guid: Source GUID to match
+        source_guid: Source GUID for logging/diagnostics (not used for matching)
         file_path: Path to the current file being processed
         agent_indices: Mapping of action names to their indices
-        parent_target_id: Optional parent target ID for ancestry matching
-        root_target_id: Optional root target ID for Map-Reduce matching
+        parent_target_id: Optional parent target ID (metadata only)
+        root_target_id: Optional root target ID (metadata only)
         output_directory: Optional output directory (legacy, unused)
         storage_backend: Optional storage backend for SQLite/TinyDB queries
+        lineage_sources: Optional list of merge-parent node_ids for merge-parent mode
     """
     from agent_actions.input.context.historical import (
         HistoricalDataRequest,
@@ -115,6 +117,7 @@ def _load_historical_node(
         file_path=file_path,
         agent_indices=agent_indices,
         caller_lineage=lineage,
+        lineage_sources=lineage_sources,
         parent_target_id=parent_target_id,
         root_target_id=root_target_id,
         output_directory=output_directory,

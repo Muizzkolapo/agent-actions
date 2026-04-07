@@ -242,6 +242,7 @@ def build_field_context_with_history(
                                 root_target_id=current_item.get("root_target_id"),
                                 output_directory=output_directory,
                                 storage_backend=storage_backend,
+                                lineage_sources=current_item.get("lineage_sources"),
                             )
                         except (ValueError, TypeError, KeyError):
                             logger.warning(
@@ -366,6 +367,7 @@ def build_field_context_with_history(
                         root_target_id=current_item.get("root_target_id"),
                         output_directory=output_directory,
                         storage_backend=storage_backend,
+                        lineage_sources=current_item.get("lineage_sources"),
                     )
                 except (ValueError, TypeError, KeyError):
                     logger.warning(
