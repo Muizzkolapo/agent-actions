@@ -142,6 +142,12 @@ def _validate_llm_output_schema(
 
         if not report.is_compliant:
             if strict_mode:
+                hint = (
+                    "Enable strict_schema: false to allow schema mismatches, "
+                    "or update the prompt to match expected schema"
+                )
+                if report.namespace_hint:
+                    hint = f"{hint}. {report.namespace_hint}"
                 raise SchemaValidationError(
                     f"LLM output does not match expected schema for action '{agent_name}'",
                     schema_name=report.schema_name,
@@ -152,7 +158,7 @@ def _validate_llm_output_schema(
                     missing_fields=report.missing_required,
                     extra_fields=report.extra_fields,
                     type_errors=report.type_errors,
-                    hint="Enable strict_schema: false to allow schema mismatches, or update the prompt to match expected schema",
+                    hint=hint,
                 )
             else:
                 # Log warning but don't fail

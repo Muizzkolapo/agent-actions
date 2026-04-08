@@ -33,6 +33,7 @@ class SchemaValidationReport:
 
     # Validation details
     validation_errors: list[str] = field(default_factory=list)
+    namespace_hint: str | None = None
 
     def format_report(self) -> str:
         """Format a human-readable validation report."""
@@ -144,6 +145,20 @@ def validate_output_against_schema(
             f"Extra fields not allowed in strict mode: {', '.join(extra_fields)}"
         )
 
+    # Detect action-namespaced output: extra keys whose values are dicts
+    # suggest the UDF is passing through namespaced input instead of
+    # unwrapping it via content.get("action_name", {}).get("field").
+    namespace_hint: str | None = None
+    if missing_required and extra_fields:
+        namespaced_keys = _detect_namespaced_keys(llm_output, extra_fields)
+        if namespaced_keys:
+            namespace_hint = (
+                f"Hint: extra keys {namespaced_keys} look like action namespaces. "
+                f"Tool UDFs receive observed fields namespaced by action name — "
+                f'access them via content.get("{namespaced_keys[0]}", {{}}).get("field").'
+            )
+            validation_errors.append(namespace_hint)
+
     return SchemaValidationReport(
         action_name=action_name,
         schema_name=schema_name,
@@ -155,7 +170,28 @@ def validate_output_against_schema(
         extra_fields=extra_fields,
         type_errors=type_errors,
         validation_errors=validation_errors,
+        namespace_hint=namespace_hint,
     )
+
+
+def _detect_namespaced_keys(llm_output: Any, extra_fields: list[str]) -> list[str]:
+    """Return extra field names whose values are dicts (likely action namespaces).
+
+    When a tool UDF passes through namespaced input without unwrapping,
+    the output contains keys like "canonicalize_qa" with dict values
+    instead of the expected flat fields.
+    """
+    if isinstance(llm_output, list):
+        # Check all items, consistent with _extract_output_fields
+        for item in llm_output:
+            if isinstance(item, dict):
+                found = [k for k in extra_fields if isinstance(item.get(k), dict)]
+                if found:
+                    return found
+        return []
+    if not isinstance(llm_output, dict):
+        return []
+    return [k for k in extra_fields if isinstance(llm_output.get(k), dict)]
 
 
 def _check_properties_type(schema: dict[str, Any]) -> list[str]:
@@ -303,6 +339,9 @@ def validate_and_raise_if_invalid(
     report = validate_output_against_schema(llm_output, schema, action_name, strict_mode)
 
     if not report.is_compliant:
+        hint = "Check that the LLM prompt clearly specifies the expected output format"
+        if report.namespace_hint:
+            hint = f"{hint}. {report.namespace_hint}"
         raise SchemaValidationError(
             f"LLM output does not match expected schema for action '{action_name}'",
             schema_name=report.schema_name,
@@ -313,7 +352,7 @@ def validate_and_raise_if_invalid(
             missing_fields=report.missing_required,
             extra_fields=report.extra_fields,
             type_errors=report.type_errors,
-            hint="Check that the LLM prompt clearly specifies the expected output format",
+            hint=hint,
         )
 
     return report
