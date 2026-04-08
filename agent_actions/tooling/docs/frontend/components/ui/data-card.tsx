@@ -1,7 +1,9 @@
 "use client"
 
-import React, { useState } from "react"
-import { ChevronRight } from "lucide-react"
+import React, { useState, useCallback, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { ChevronRight, Copy, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   classifyField,
@@ -10,6 +12,7 @@ import {
   isInlineArray,
   isLongFormField,
   isShortValue,
+  isSourceQuoteField,
   getValueType,
   formatValue,
   type ClassifiedField,
@@ -42,16 +45,201 @@ export function CellValue({ value }: { value: unknown }) {
   if (typeof value === "object") {
     const str = JSON.stringify(value)
     return (
-      <span className="font-mono text-muted-foreground truncate block max-w-[300px]" title={str}>
-        {str.length > 80 ? str.slice(0, 80) + "\u2026" : str}
-      </span>
+      <span className="font-mono text-muted-foreground break-all">{str}</span>
     )
   }
   const str = String(value)
   return (
-    <span className="font-mono text-foreground truncate block max-w-[300px]" title={str}>
-      {str.length > 120 ? str.slice(0, 120) + "\u2026" : str}
-    </span>
+    <span className="font-mono text-foreground break-all">{str}</span>
+  )
+}
+
+// ── Copy button ────────────────────────────────────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+    },
+    [text],
+  )
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`dc-copy-btn ${copied ? "copied" : ""}`}
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  )
+}
+
+// ── Markdown prose renderer ────────────────────────────────────────────────
+
+function MarkdownProse({ text }: { text: string }) {
+  return (
+    <article className="dc-prose">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+    </article>
+  )
+}
+
+// ── JSON syntax highlighter ────────────────────────────────────────────────
+
+function highlightJsonLine(line: string): React.ReactNode[] {
+  const tokens: React.ReactNode[] = []
+  let i = 0
+
+  while (i < line.length) {
+    // Whitespace
+    if (/\s/.test(line[i])) {
+      let ws = ""
+      while (i < line.length && /\s/.test(line[i])) ws += line[i++]
+      tokens.push(ws)
+      continue
+    }
+    // Braces / brackets / colon / comma
+    if ("{[}]:,".includes(line[i])) {
+      tokens.push(
+        <span key={`b${i}`} className="dc-json-brace">
+          {line[i]}
+        </span>,
+      )
+      i++
+      continue
+    }
+    // String
+    if (line[i] === '"') {
+      let str = '"'
+      i++
+      while (i < line.length && line[i] !== '"') {
+        if (line[i] === "\\") {
+          str += line[i++]
+        }
+        if (i < line.length) str += line[i++]
+      }
+      if (i < line.length) str += line[i++]
+
+      // Determine if this is a key (followed by :) or a value
+      let j = i
+      while (j < line.length && /\s/.test(line[j])) j++
+      const isKey = j < line.length && line[j] === ":"
+      tokens.push(
+        <span key={`s${i}`} className={isKey ? "dc-json-key" : "dc-json-string"}>
+          {str}
+        </span>,
+      )
+      continue
+    }
+    // Number / boolean / null
+    const rest = line.slice(i)
+    const numMatch = rest.match(/^-?\d+(\.\d+)?([eE][+-]?\d+)?/)
+    if (numMatch) {
+      tokens.push(
+        <span key={`n${i}`} className="dc-json-number">
+          {numMatch[0]}
+        </span>,
+      )
+      i += numMatch[0].length
+      continue
+    }
+    const kwMatch = rest.match(/^(true|false)/)
+    if (kwMatch) {
+      tokens.push(
+        <span key={`k${i}`} className="dc-json-bool">
+          {kwMatch[0]}
+        </span>,
+      )
+      i += kwMatch[0].length
+      continue
+    }
+    const nullMatch = rest.match(/^null/)
+    if (nullMatch) {
+      tokens.push(
+        <span key={`x${i}`} className="dc-json-null">
+          null
+        </span>,
+      )
+      i += 4
+      continue
+    }
+    // Fallback
+    tokens.push(line[i])
+    i++
+  }
+  return tokens
+}
+
+function JsonHighlighter({ text }: { text: string }) {
+  let formatted: string
+  try {
+    formatted = JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    // Not valid JSON — render as plain monospace
+    return (
+      <pre className="dc-json px-3 py-2 whitespace-pre-wrap break-all">
+        {text}
+      </pre>
+    )
+  }
+
+  const lines = formatted.split("\n")
+
+  return (
+    <div className="dc-json">
+      {lines.map((line, i) => (
+        <div key={i} className="dc-json-line">
+          <span className="dc-json-gutter">{i + 1}</span>
+          <span className="dc-json-code">{highlightJsonLine(line)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Collapsible section ────────────────────────────────────────────────────
+
+function CollapsibleSection({
+  label,
+  accentClass,
+  badge,
+  hint,
+  open,
+  onToggle,
+  copyText,
+  children,
+}: {
+  label: string
+  accentClass: string
+  badge?: React.ReactNode
+  hint?: string
+  open: boolean
+  onToggle: () => void
+  copyText?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={accentClass}>
+      <button onClick={onToggle} className="dc-section-header">
+        <ChevronRight
+          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+        <span className="text-[0.85em] font-semibold text-foreground/90">{label}</span>
+        {badge}
+        {hint && <span className="text-[0.75em] text-muted-foreground/50 ml-auto">{hint}</span>}
+        {copyText && <CopyButton text={copyText} />}
+      </button>
+      <div className="data-card-drawer" data-open={open}>
+        <div>{children}</div>
+      </div>
+    </div>
   )
 }
 
@@ -61,7 +249,9 @@ function InlinePills({ items }: { items: (string | number)[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((item, i) => (
-        <span key={i} className="data-card-pill">{String(item)}</span>
+        <span key={i} className="data-card-pill">
+          {String(item)}
+        </span>
       ))}
     </div>
   )
@@ -75,51 +265,6 @@ function CodeBlock({ value }: { value: unknown }) {
   )
 }
 
-/** Render an array of objects as structured sub-cards instead of raw JSON. */
-function ObjectArrayBlock({ items, fieldKey }: { items: Record<string, unknown>[]; fieldKey: string }) {
-  const [expanded, setExpanded] = useState(false)
-  const visibleCount = expanded ? items.length : 2
-  const hasMore = items.length > 2
-
-  return (
-    <div className="flex flex-col gap-2">
-      {items.slice(0, visibleCount).map((item, i) => (
-        <div
-          key={i}
-          className="rounded-md border border-border/40 bg-secondary/20 px-3 py-2.5 flex flex-col gap-1.5"
-        >
-          <span className="text-[9px] font-mono text-muted-foreground/40 tabular-nums">
-            {humanizeKey(fieldKey)} [{i + 1}/{items.length}]
-          </span>
-          {Object.entries(item).map(([k, v]) => {
-            const valStr = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "")
-            const isLong = valStr.length > 100
-            return (
-              <div key={k} className={isLong ? "flex flex-col gap-0.5" : "flex items-baseline gap-2 min-w-0"}>
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/70 shrink-0">
-                  {humanizeKey(k)}
-                </span>
-                <span className={`text-[0.9em] ${isLong ? "data-card-prose" : "font-mono text-foreground/80"}`}>
-                  {valStr}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      ))}
-      {hasMore && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-[10px] text-[hsl(var(--primary))] hover:underline self-start"
-        >
-          {expanded ? "Show less" : `Show ${items.length - 2} more`}
-        </button>
-      )}
-    </div>
-  )
-}
-
-/** True when value is an array of plain objects (not nested arrays). */
 function isArrayOfObjects(value: unknown): value is Record<string, unknown>[] {
   if (!Array.isArray(value) || value.length === 0) return false
   return value.every((v) => typeof v === "object" && v !== null && !Array.isArray(v))
@@ -129,91 +274,74 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
   if (isInlineArray(value)) {
     return <InlinePills items={value as (string | number)[]} />
   }
-  if (isArrayOfObjects(value)) {
-    return <ObjectArrayBlock items={value} fieldKey={fieldKey} />
-  }
-  if (getValueType(value) === "object") {
+  if (getValueType(value) === "object" && !isArrayOfObjects(value)) {
     return <CodeBlock value={value} />
   }
-  if (typeof value === "string" && (isLongFormField(fieldKey) ? value.length > 80 : value.length > 120)) {
-    return <ProseBlock text={value} />
+  // Source quote — blockquote treatment
+  if (isSourceQuoteField(fieldKey) && typeof value === "string") {
+    return <div className="dc-source-quote">{value}</div>
+  }
+  // Long text — Notion prose block
+  if (typeof value === "string" && value.length > 80) {
+    return <div className="dc-tree-prose">{value}</div>
   }
   return <CellValue value={value} />
 }
 
-function ProseBlock({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false)
-  const needsClamp = text.length > 200
+// ── Tree components ────────────────────────────────────────────────────────
+
+function TreeField({ fieldKey, value, defaultOpen = true }: { fieldKey: string; value: unknown; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const valStr = typeof value === "string" ? value : typeof value === "object" ? JSON.stringify(value) : String(value ?? "")
+  const preview = valStr.length > 60 ? valStr.slice(0, 60) + "\u2026" : valStr
 
   return (
-    <div>
-      <p className={`data-card-prose ${needsClamp && !expanded ? "clamped" : ""}`}>
-        {text}
-      </p>
-      {needsClamp && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-[10px] text-[hsl(var(--primary))] hover:underline mt-1"
-        >
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ── Field row ─────────────────────────────────────────────────────────────
-
-function FieldRow({ fieldKey, value }: { fieldKey: string; value: unknown }) {
-  const short = isShortValue(value) && !isLongFormField(fieldKey)
-
-  if (short) {
-    return (
-      <div className="flex items-baseline gap-3 min-w-0">
-        <span className="data-card-label shrink-0 min-w-[80px]">{humanizeKey(fieldKey)}</span>
-        <div className="min-w-0 flex-1 text-[1em] text-foreground">
+    <div className="py-0.5 pl-4">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 min-w-0 w-full text-left hover:bg-accent/10 rounded-sm py-0.5 px-2 transition-colors"
+      >
+        <ChevronRight
+          className={`h-2.5 w-2.5 shrink-0 text-muted-foreground/40 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+        <span className="text-[0.85em] font-mono text-[#7dd3fc] shrink-0">{fieldKey}</span>
+        {!open && (
+          <span className="text-[0.8em] font-mono text-muted-foreground/40 truncate">{preview}</span>
+        )}
+      </button>
+      <div className="data-card-drawer" data-open={open}>
+        <div className="pl-7 pr-2 pb-1">
           <FieldValue fieldKey={fieldKey} value={value} />
         </div>
       </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="data-card-label">{humanizeKey(fieldKey)}</span>
-      <div className="text-[1em] text-foreground">
-        <FieldValue fieldKey={fieldKey} value={value} />
-      </div>
     </div>
   )
 }
 
-// ── Collapsible section (shared by structured fields, metadata, trace) ───
-
-function CollapsibleSection({
+function TreeNode({
   label,
-  badgeText,
-  children,
+  badge,
   defaultOpen = false,
-  className = "",
+  children,
 }: {
   label: string
-  badgeText?: string
-  children: React.ReactNode
+  badge?: string
   defaultOpen?: boolean
-  className?: string
+  children: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className={`border-t border-border/50 mt-1 ${className}`}>
+    <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 py-2 px-4 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full"
+        className="flex items-center gap-1.5 py-1.5 px-4 w-full text-left hover:bg-accent/20 transition-colors rounded-sm"
       >
-        <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
-        <span className="uppercase tracking-wider font-semibold">{label}</span>
-        {badgeText && <span className="text-muted-foreground/50 ml-1">{badgeText}</span>}
+        <ChevronRight
+          className={`h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+        <span className="text-[0.9em] font-mono font-semibold text-[#c084fc]">{label}</span>
+        {badge && <span className="text-[0.75em] font-mono text-[#6ee7b7]">{badge}</span>}
       </button>
       <div className="data-card-drawer" data-open={open}>
         <div>{children}</div>
@@ -222,83 +350,89 @@ function CollapsibleSection({
   )
 }
 
-// ── Metadata drawer ───────────────────────────────────────────────────────
+function ArrayItemNode({
+  item,
+  index,
+  defaultOpen = false,
+}: {
+  item: Record<string, unknown>
+  index: number
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
 
-function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
-  if (fields.length === 0) return null
-
-  return (
-    <CollapsibleSection label="Metadata" badgeText={`${fields.length} fields`}>
-      <div className="px-4 pb-3 flex flex-col gap-1.5">
-        {fields.map((f) => (
-          <div key={f.key} className="flex items-baseline gap-2 min-w-0">
-            <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-medium shrink-0 min-w-[60px]">
-              {humanizeKey(f.key)}
-            </span>
-            <span className="text-[11px] font-mono text-muted-foreground break-all">
-              {formatValue(f.value, 120)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </CollapsibleSection>
+  const previewField = Object.entries(item).find(
+    ([, v]) => typeof v === "string" && (v as string).length > 10,
   )
-}
-
-// ── Prompt Trace drawer ──────────────────────────────────────────────────
-
-function PromptTraceDrawer({ trace }: { trace: PromptTrace }) {
-  const [open, setOpen] = useState(false)
-
-  const modelLabel = trace.model_name || "unknown"
-  const modeLabel = trace.run_mode || "online"
-  const isBatch = modeLabel === "batch"
+  const preview = previewField
+    ? (previewField[1] as string).slice(0, 80) +
+      ((previewField[1] as string).length > 80 ? "\u2026" : "")
+    : `${Object.keys(item).length} fields`
 
   return (
-    <div className="trace-section">
+    <div>
       <button
         onClick={() => setOpen(!open)}
-        className={`trace-trigger ${open ? "open" : ""}`}
+        className="flex items-center gap-1.5 py-1 px-4 pl-8 w-full text-left hover:bg-accent/20 transition-colors rounded-sm"
       >
-        <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
-        <span className="trace-label">Prompt Trace</span>
-        <div className="trace-badges">
-          <span className="trace-badge trace-badge-model">{modelLabel}</span>
-          <span className={`trace-badge trace-badge-mode ${isBatch ? "batch" : ""}`}>{modeLabel}</span>
-        </div>
+        <ChevronRight
+          className={`h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+        <span className="text-[0.85em] font-mono text-[#7dd3fc]">[{index}]</span>
+        <span className="text-[0.75em] font-mono text-[#6ee7b7]">object</span>
+        {!open && (
+          <span className="text-[0.8em] text-muted-foreground/50 truncate ml-1 italic">
+            {preview}
+          </span>
+        )}
       </button>
       <div className="data-card-drawer" data-open={open}>
-        <div>
-          <div className="trace-content">
-            <div className="trace-panels">
-              <div className="trace-panel trace-panel-prompt">
-                <div className="trace-panel-header">
-                  <span>Compiled Prompt</span>
-                  {trace.prompt_length != null && (
-                    <span className="trace-panel-size">{trace.prompt_length.toLocaleString()} chars</span>
-                  )}
-                </div>
-                <div className="trace-panel-body">
-                  {trace.compiled_prompt}
-                </div>
-              </div>
-              <div className="trace-panel trace-panel-response">
-                <div className="trace-panel-header">
-                  <span>LLM Response</span>
-                  {trace.response_length != null && (
-                    <span className="trace-panel-size">{trace.response_length.toLocaleString()} chars</span>
-                  )}
-                </div>
-                <div className="trace-panel-body">
-                  {trace.response_text || <span className="text-muted-foreground/50 italic text-[10px]">Response pending</span>}
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="pl-4">
+          {Object.entries(item).map(([k, v]) => (
+            <TreeField key={k} fieldKey={k} value={v} />
+          ))}
         </div>
       </div>
     </div>
   )
+}
+
+// ── Section state persistence ──────────────────────────────────────────────
+
+const DEFAULT_SECTION_STATE = {
+  promptTrace: false,
+  inputData: false,
+  rawResponse: false,
+  actionOutput: true,
+  metadata: false,
+}
+
+let _cachedNodeKey: string | null = null
+let _cachedState: typeof DEFAULT_SECTION_STATE | null = null
+
+function useSectionState(nodeKey: string) {
+  const [state, setState] = useState(() => {
+    if (_cachedNodeKey === nodeKey && _cachedState) return _cachedState
+    return { ...DEFAULT_SECTION_STATE }
+  })
+
+  useEffect(() => {
+    if (_cachedNodeKey !== nodeKey) {
+      _cachedNodeKey = nodeKey
+      _cachedState = { ...DEFAULT_SECTION_STATE }
+      setState({ ...DEFAULT_SECTION_STATE })
+    }
+  }, [nodeKey])
+
+  const toggle = useCallback((key: keyof typeof DEFAULT_SECTION_STATE) => {
+    setState((prev) => {
+      const next = { ...prev, [key]: !prev[key] }
+      _cachedState = next
+      return next
+    })
+  }, [])
+
+  return { state, toggle }
 }
 
 // ── DataCard ──────────────────────────────────────────────────────────────
@@ -307,6 +441,7 @@ export interface DataCardProps {
   record: Record<string, unknown>
   index?: number
   fontSize?: number
+  defaultOpen?: boolean
 }
 
 function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
@@ -317,85 +452,240 @@ function getDisplayFields(record: Record<string, unknown>): Record<string, unkno
   return record
 }
 
-export function DataCard({ record, index, fontSize }: DataCardProps) {
+export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCardProps) {
+  const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record)
   const { identity, metadata } = classifyRecord(record)
 
-  const displayFields = Object.entries(displayRecord)
+  const outputFields = Object.entries(displayRecord)
     .filter(([key]) => classifyField(key) === "content")
-    .map(([key, value]) => ({ key, value, role: "content" as const }))
+    .map(([key, value]) => ({ key, value }))
 
-  // Split into scalar (simple) vs structured (complex) fields
-  const scalarFields = displayFields.filter(
-    (f) => !isArrayOfObjects(f.value) && (getValueType(f.value) !== "object" || isInlineArray(f.value)),
-  )
-  const structuredFields = displayFields.filter(
-    (f) => isArrayOfObjects(f.value) || (getValueType(f.value) === "object" && !isInlineArray(f.value)),
-  )
+  const trace =
+    record._trace && typeof record._trace === "object" && "compiled_prompt" in record._trace
+      ? (record._trace as PromptTrace)
+      : null
 
-  const hasTrace = record._trace && typeof record._trace === "object" && "compiled_prompt" in record._trace
+  // Parse input data from trace's llm_context (JSON string → namespaced object)
+  let inputData: Record<string, unknown> | null = null
+  if (trace?.llm_context) {
+    try {
+      const parsed = JSON.parse(trace.llm_context)
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        inputData = parsed as Record<string, unknown>
+      }
+    } catch {
+      // Not valid JSON — skip input data section
+    }
+  }
+
+  // Derive a stable node key for section state persistence
+  const nodeKey =
+    typeof record._file === "string"
+      ? record._file
+      : typeof record.node_id === "string"
+        ? record.node_id
+        : "default"
+
+  const { state: sec, toggle } = useSectionState(nodeKey)
+
+  // Prepare copy text for output section
+  const outputJson = JSON.stringify(displayRecord, null, 2)
 
   return (
-    <div
-      className="data-card"
-      style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
-    >
-      {/* 1. Identity header */}
-      <div className="px-4 pt-3 pb-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          {typeof index === "number" && (
-            <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
-              #{index}
-            </span>
-          )}
-          {identity.map((f) => (
-            <span
-              key={f.key}
-              className="text-[10px] font-mono text-muted-foreground/60 truncate"
-              title={`${f.key}: ${formatValue(f.value, 0)}`}
-            >
-              {formatValue(f.value, 32)}
-            </span>
-          ))}
-          {typeof record._file === "string" && (
-            <span className="text-[10px] font-mono text-muted-foreground/50 truncate" title={record._file}>
-              {record._file}
-            </span>
-          )}
-        </div>
-      </div>
+    <div className="data-card" style={fontSize ? { fontSize: `${fontSize}px` } : undefined}>
+      {/* Identity header — click to expand/collapse record */}
+      <button
+        onClick={() => setRecordOpen(!recordOpen)}
+        className="flex items-center gap-2 flex-wrap px-4 pt-3 pb-1 w-full text-left hover:bg-accent/5 transition-colors"
+      >
+        <ChevronRight
+          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform ${recordOpen ? "rotate-90" : ""}`}
+        />
+        {typeof index === "number" && (
+          <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
+            #{index}
+          </span>
+        )}
+        {identity.map((f) => (
+          <span
+            key={f.key}
+            className="text-[10px] font-mono text-muted-foreground/60 truncate"
+            title={`${f.key}: ${formatValue(f.value, 0)}`}
+          >
+            {formatValue(f.value, 32)}
+          </span>
+        ))}
+        {typeof record._file === "string" && (
+          <span
+            className="text-[10px] font-mono text-muted-foreground/50 truncate"
+            title={record._file}
+          >
+            {record._file}
+          </span>
+        )}
+        {!recordOpen && (
+          <span className="text-[10px] text-muted-foreground/40 ml-auto">
+            {trace ? "trace + " : ""}{outputFields.length} fields
+          </span>
+        )}
+      </button>
 
-      {/* 2. Prompt Trace (input data — what was sent to the LLM) */}
-      {hasTrace && (
-        <PromptTraceDrawer trace={record._trace as PromptTrace} />
+      <div className="data-card-drawer" data-open={recordOpen}><div>
+
+      {/* Section 1: Prompt Trace */}
+      {trace?.compiled_prompt && (
+        <CollapsibleSection
+          label="Prompt Trace"
+          accentClass="dc-section"
+          badge={
+            <div className="flex gap-1.5">
+              {trace.model_name && (
+                <span className="dc-badge dc-badge-model">{trace.model_name}</span>
+              )}
+              {trace.run_mode && (
+                <span className="dc-badge dc-badge-mode">{trace.run_mode}</span>
+              )}
+            </div>
+          }
+          hint={trace.prompt_length ? `${trace.prompt_length.toLocaleString()} chars` : undefined}
+          open={sec.promptTrace}
+          onToggle={() => toggle("promptTrace")}
+          copyText={trace.compiled_prompt}
+        >
+          <div className="px-2 pb-3">
+            <MarkdownProse text={trace.compiled_prompt} />
+          </div>
+        </CollapsibleSection>
       )}
 
-      {/* 3. Action Output — scalar fields inline, then structured fields */}
-      {(scalarFields.length > 0 || structuredFields.length > 0) && (
-        <div className="px-4 pb-3 pt-1 flex flex-col gap-2.5">
-          {/* Section label */}
-          {hasTrace && (
-            <span className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/50 pt-1">
-              Output
-            </span>
+      {/* Section 2: Input Data */}
+      {inputData && Object.keys(inputData).length > 0 && (
+        <CollapsibleSection
+          label="Input Data"
+          accentClass="dc-section"
+          hint={`${Object.keys(inputData).length} namespaces`}
+          open={sec.inputData}
+          onToggle={() => toggle("inputData")}
+          copyText={JSON.stringify(inputData, null, 2)}
+        >
+          <div className="pb-2">
+            {Object.entries(inputData).map(([nsName, nsData]) => {
+              if (typeof nsData !== "object" || nsData === null) {
+                return (
+                  <TreeField key={nsName} fieldKey={nsName} value={nsData} />
+                )
+              }
+              const fields = nsData as Record<string, unknown>
+              return (
+                <TreeNode
+                  key={nsName}
+                  label={nsName}
+                  badge={`${Object.keys(fields).length} fields`}
+                  defaultOpen={false}
+                >
+                  {Object.entries(fields).map(([k, v]) => (
+                    <TreeField key={k} fieldKey={k} value={v} />
+                  ))}
+                </TreeNode>
+              )
+            })}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Section 3: Raw Response */}
+      {trace?.response_text && (
+        <CollapsibleSection
+          label="Raw Response"
+          accentClass="dc-section"
+          hint={
+            trace.response_length
+              ? `${trace.response_length.toLocaleString()} chars`
+              : undefined
+          }
+          open={sec.rawResponse}
+          onToggle={() => toggle("rawResponse")}
+          copyText={trace.response_text}
+        >
+          <div className="px-4 pb-3">
+            <JsonHighlighter text={trace.response_text} />
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Section 3: Action Output */}
+      {outputFields.length > 0 && (
+        <CollapsibleSection
+          label="Action Output"
+          accentClass="dc-section"
+          hint={`${outputFields.length} fields`}
+          open={sec.actionOutput}
+          onToggle={() => toggle("actionOutput")}
+          copyText={outputJson}
+        >
+          <div className="pb-2">
+            {outputFields.map((f) => {
+              if (isArrayOfObjects(f.value)) {
+                const items = f.value as Record<string, unknown>[]
+                return (
+                  <TreeNode
+                    key={f.key}
+                    label={f.key}
+                    badge={`array[${items.length}]`}
+                    defaultOpen={true}
+                  >
+                    {items.map((item, i) => (
+                      <ArrayItemNode
+                        key={i}
+                        item={item}
+                        index={i}
+                        defaultOpen={i === 0}
+                      />
+                    ))}
+                  </TreeNode>
+                )
+              }
+              return <TreeField key={f.key} fieldKey={f.key} value={f.value} />
+            })}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {outputFields.length === 0 && (
+        <div className="px-4 pb-3 text-xs text-muted-foreground italic">No content fields</div>
+      )}
+
+      {/* Section 4: Metadata */}
+      {metadata.length > 0 && (
+        <CollapsibleSection
+          label="Metadata"
+          accentClass="dc-section"
+          hint={`${metadata.length} fields`}
+          open={sec.metadata}
+          onToggle={() => toggle("metadata")}
+          copyText={JSON.stringify(
+            Object.fromEntries(metadata.map((f) => [f.key, f.value])),
+            null,
+            2,
           )}
-          {scalarFields.map((f) => (
-            <FieldRow key={f.key} fieldKey={f.key} value={f.value} />
-          ))}
-          {structuredFields.map((f) => (
-            <FieldRow key={f.key} fieldKey={f.key} value={f.value} />
-          ))}
-        </div>
+        >
+          <div className="px-4 pb-3 flex flex-col gap-1">
+            {metadata.map((f) => (
+              <div key={f.key} className="flex items-baseline gap-2 min-w-0 py-0.5">
+                <span className="text-[0.8em] font-mono text-muted-foreground/50 shrink-0 min-w-[80px]">
+                  {f.key}
+                </span>
+                <span className="text-[0.8em] font-mono text-muted-foreground/70 break-all">
+                  {formatValue(f.value, 120)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
       )}
 
-      {scalarFields.length === 0 && structuredFields.length === 0 && (
-        <div className="px-4 pb-3 text-xs text-muted-foreground italic">
-          No content fields
-        </div>
-      )}
-
-      {/* 4. Metadata (last — collapsible) */}
-      <MetadataDrawer fields={metadata} />
+      </div></div>{/* close record drawer */}
     </div>
   )
 }
