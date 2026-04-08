@@ -92,7 +92,7 @@ class TestNormalizeContextScope:
 
     def test_handles_none_context_scope(self):
         result = normalize_context_scope(None, {})
-        assert result is None
+        assert result == {}
 
     def test_handles_empty_context_scope(self):
         result = normalize_context_scope({}, {})
@@ -208,13 +208,13 @@ class TestNormalizeAllAgentConfigs:
         }
         assert "context_scope_expanded" not in agent_configs["consumer"]
 
-    def test_skips_agents_without_context_scope(self):
+    def test_normalizes_agents_without_context_scope_to_empty_dict(self):
         agent_configs = {"action_a": {}, "action_b": {"dependencies": ["action_a"]}}
 
         normalize_all_agent_configs(agent_configs)
 
-        assert "context_scope" not in agent_configs["action_a"]
-        assert "context_scope" not in agent_configs["action_b"]
+        assert agent_configs["action_a"]["context_scope"] == {}
+        assert agent_configs["action_b"]["context_scope"] == {}
 
     def test_does_not_mutate_original_list(self):
         original_observe = ["loop.*"]
