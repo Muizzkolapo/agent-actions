@@ -2,16 +2,17 @@
 
 import React from "react"
 
-import { Play, AlertTriangle, Clock, ArrowRight, CheckCircle2, Circle, GitBranch, Boxes, Activity, ShieldCheck } from "lucide-react"
+import { Play, AlertTriangle, Clock, ArrowRight, CheckCircle2, Circle, GitBranch, Boxes, Activity, ShieldCheck, RefreshCw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useCatalogData } from "@/lib/catalog-context"
+import type { CatalogChanges, ResourceChanges } from "@/lib/transformers"
 
 interface HomeScreenProps {
   onNavigate: (section: string) => void
 }
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { stats, workflows, runs, validationErrorGroups, validationWarningGroups } = useCatalogData()
+  const { stats, workflows, runs, validationErrorGroups, validationWarningGroups, changes } = useCatalogData()
   const successRuns = runs.filter((r) => r.status === "SUCCESS").length
   const failedRuns = runs.filter((r) => r.status === "FAILED").length
   const runningWfs = workflows.filter((w) => w.manifestStatus === "running").length
@@ -62,6 +63,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           delay={180}
         />
       </div>
+
+      {/* ── Changes (only when there are real changes, not first run) ──── */}
+      {changes && !changes.isFirstRun && changes.totalChanges > 0 && (
+        <ChangesSummaryPanel changes={changes} />
+      )}
 
       {/* ── Workflows (full width) ─────────────────────────────────────── */}
       <div
@@ -399,5 +405,65 @@ function StatusBadge({ status }: { status: string }) {
     <Badge variant="outline" className={`text-[10px] font-normal rounded-md ${styles[status] || ""}`}>
       {status.toLowerCase()}
     </Badge>
+  )
+}
+
+function ChangesSummaryPanel({ changes }: { changes: CatalogChanges }) {
+  const categories: { label: string; data: ResourceChanges }[] = [
+    { label: "Workflows", data: changes.workflows },
+    { label: "Prompts", data: changes.prompts },
+    { label: "Schemas", data: changes.schemas },
+    { label: "Tools", data: changes.tools },
+  ].filter((c) => c.data.added.length + c.data.modified.length + c.data.removed.length > 0)
+
+  return (
+    <div
+      className="rounded-lg border border-border/60 bg-card overflow-hidden animate-fade-in-up"
+      style={{ animationDelay: "190ms" }}
+    >
+      <div className="flex items-center justify-between px-5 py-3">
+        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+          Changes
+          <span className="text-muted-foreground font-normal">{changes.totalChanges}</span>
+        </span>
+        {changes.previousGeneratedAt && (
+          <span className="text-[10px] font-mono text-muted-foreground">
+            since {changes.previousGeneratedAt.split("T")[0]}
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-border">
+        {categories.map(({ label, data }) => (
+          <div key={label} className="px-5 py-2.5">
+            <span className="text-xs font-medium text-foreground">{label}</span>
+            <div className="flex gap-3 mt-1.5">
+              {data.added.length > 0 && <ChangeBadge type="added" items={data.added} />}
+              {data.modified.length > 0 && <ChangeBadge type="modified" items={data.modified} />}
+              {data.removed.length > 0 && <ChangeBadge type="removed" items={data.removed} />}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ChangeBadge({ type, items }: { type: "added" | "modified" | "removed"; items: string[] }) {
+  const styles = {
+    added: "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]",
+    modified: "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]",
+    removed: "bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))]",
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`rounded px-1.5 py-0 text-[10px] font-mono font-semibold ${styles[type]} leading-relaxed`}>
+        {items.length}
+      </span>
+      <span className="text-[10px] text-muted-foreground">{type}</span>
+      {items.length <= 3 && (
+        <span className="text-[10px] font-mono text-muted-foreground/60">{items.join(", ")}</span>
+      )}
+    </div>
   )
 }

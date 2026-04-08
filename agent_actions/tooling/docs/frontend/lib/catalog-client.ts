@@ -37,6 +37,15 @@ export interface RawCatalogJson {
     runtime_errors?: number
     runtime_warnings?: number
   }
+  changes?: {
+    previous_generated_at: string | null
+    is_first_run: boolean
+    summary: { total_added: number; total_modified: number; total_removed: number }
+    workflows: { added: string[]; modified: string[]; removed: string[] }
+    prompts: { added: string[]; modified: string[]; removed: string[] }
+    schemas: { added: string[]; modified: string[]; removed: string[] }
+    tools: { added: string[]; modified: string[]; removed: string[] }
+  }
 }
 
 export interface RawWorkflow {

@@ -393,6 +393,40 @@ export function transformWorkflowData(catalog: RawCatalogJson): WorkflowDataSumm
   )
 }
 
+// ─── Changes ─────────────────────────────────────────────────────────────────
+
+export interface ResourceChanges {
+  added: string[]
+  modified: string[]
+  removed: string[]
+}
+
+export interface CatalogChanges {
+  previousGeneratedAt: string | null
+  isFirstRun: boolean
+  totalChanges: number
+  workflows: ResourceChanges
+  prompts: ResourceChanges
+  schemas: ResourceChanges
+  tools: ResourceChanges
+}
+
+function transformChanges(catalog: RawCatalogJson): CatalogChanges | null {
+  const raw = catalog.changes
+  if (!raw) return null
+
+  const { total_added, total_modified, total_removed } = raw.summary
+  return {
+    previousGeneratedAt: raw.previous_generated_at ?? null,
+    isFirstRun: raw.is_first_run ?? false,
+    totalChanges: total_added + total_modified + total_removed,
+    workflows: raw.workflows,
+    prompts: raw.prompts,
+    schemas: raw.schemas,
+    tools: raw.tools,
+  }
+}
+
 // ─── All-in-one ──────────────────────────────────────────────────────────────
 
 export interface CatalogData {
@@ -410,6 +444,7 @@ export interface CatalogData {
   workflowData: WorkflowDataSummary[]
   generatedAt: string
   projectName: string | null
+  changes: CatalogChanges | null
 }
 
 export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): CatalogData {
@@ -455,5 +490,6 @@ export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): Catalo
     workflowData: transformWorkflowData(catalog),
     generatedAt: catalog.metadata?.generated_at ?? "",
     projectName: catalog.metadata?.project_name ?? null,
+    changes: transformChanges(catalog),
   }
 }

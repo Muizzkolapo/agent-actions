@@ -18,6 +18,7 @@ from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 from . import scanner
+from .change_tracker import collect_resource_mtimes, compute_changes, load_previous_mtimes
 from .parser import WorkflowParser
 from .run_tracker import _empty_runs_data
 from .scanner import ReadmeData
@@ -487,12 +488,22 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         artefact_dir=output_dir,
     )
 
+    # Step 2b: Change tracking — diff current scan against previous catalog
+    catalog_path = output_dir / "catalog.json"
+    current_mtimes = collect_resource_mtimes(
+        workflows_data, prompts_data, schemas_data, tool_functions_data,
+        project_root=project_root,
+    )
+    previous_mtimes, previous_generated_at = load_previous_mtimes(catalog_path)
+    changes = compute_changes(current_mtimes, previous_mtimes, previous_generated_at)
+    catalog["changes"] = changes
+    catalog["resource_mtimes"] = current_mtimes
+
     # Step 3: Write data files
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Write catalog.json (atomic write to prevent corruption on crash)
-    catalog_path = output_dir / "catalog.json"
     dir_path = str(output_dir)
     fd, tmp = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
     try:
@@ -582,6 +593,21 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         click.echo(
             f"  Exported {total_data_nodes} data node{'s' if total_data_nodes != 1 else ''} with previews"
         )
+    # Show change summary (skip on first run — everything is "added")
+    if not changes["is_first_run"]:
+        added = changes["summary"]["total_added"]
+        modified = changes["summary"]["total_modified"]
+        removed = changes["summary"]["total_removed"]
+        if added or modified or removed:
+            parts = []
+            if added:
+                parts.append(f"{added} added")
+            if modified:
+                parts.append(f"{modified} modified")
+            if removed:
+                parts.append(f"{removed} removed")
+            click.echo(f"  Changes: {', '.join(parts)}")
+
     logger.info(
         "Documentation catalog generated: %d workflows, %d actions",
         total_workflows,
