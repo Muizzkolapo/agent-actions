@@ -143,10 +143,9 @@ context_scope:
   observe:
     - extract.facts
     - source.title
-
-# Avoid: Including everything when only some matter
-# (no context_scope)
 ```
+
+> **Note:** `context_scope` is **required** on every action. Omitting it raises a `ConfigurationError` at validation time. Every action must declare its data dependencies explicitly.
 
 ### Use Drop for Noise Reduction
 
