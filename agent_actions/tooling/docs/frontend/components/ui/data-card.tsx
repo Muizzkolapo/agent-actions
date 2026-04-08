@@ -217,7 +217,6 @@ function CollapsibleSection({
   children,
 }: {
   label: string
-  accentClass: string
   badge?: React.ReactNode
   hint?: string
   open: boolean
@@ -226,7 +225,7 @@ function CollapsibleSection({
   children: React.ReactNode
 }) {
   return (
-    <div className={accentClass}>
+    <div>
       <button onClick={onToggle} className="dc-section-header">
         <ChevronRight
           className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform ${open ? "rotate-90" : ""}`}
@@ -531,13 +530,14 @@ export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCa
         )}
       </button>
 
-      <div className="data-card-drawer" data-open={recordOpen}><div>
+      <div className="data-card-drawer" data-open={recordOpen}>
+        <div>
 
       {/* Section 1: Prompt Trace */}
       {trace?.compiled_prompt && (
         <CollapsibleSection
           label="Prompt Trace"
-          accentClass="dc-section"
+
           badge={
             <div className="flex gap-1.5">
               {trace.model_name && (
@@ -563,7 +563,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCa
       {inputData && Object.keys(inputData).length > 0 && (
         <CollapsibleSection
           label="Input Data"
-          accentClass="dc-section"
+
           hint={`${Object.keys(inputData).length} namespaces`}
           open={sec.inputData}
           onToggle={() => toggle("inputData")}
@@ -598,7 +598,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCa
       {trace?.response_text && (
         <CollapsibleSection
           label="Raw Response"
-          accentClass="dc-section"
+
           hint={
             trace.response_length
               ? `${trace.response_length.toLocaleString()} chars`
@@ -618,7 +618,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCa
       {outputFields.length > 0 && (
         <CollapsibleSection
           label="Action Output"
-          accentClass="dc-section"
+
           hint={`${outputFields.length} fields`}
           open={sec.actionOutput}
           onToggle={() => toggle("actionOutput")}
@@ -660,7 +660,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCa
       {metadata.length > 0 && (
         <CollapsibleSection
           label="Metadata"
-          accentClass="dc-section"
+
           hint={`${metadata.length} fields`}
           open={sec.metadata}
           onToggle={() => toggle("metadata")}
@@ -685,7 +685,8 @@ export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCa
         </CollapsibleSection>
       )}
 
-      </div></div>{/* close record drawer */}
+        </div>
+      </div>
     </div>
   )
 }

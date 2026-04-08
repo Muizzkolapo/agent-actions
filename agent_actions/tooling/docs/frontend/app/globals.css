@@ -209,9 +209,6 @@
     overflow: hidden;
   }
 
-  /* ─── Section styling ─── */
-  .dc-section { border-left: none; }
-
   .dc-section-header {
     @apply flex items-center gap-2 w-full text-left transition-colors cursor-pointer;
     padding: 0.625rem 1rem;
