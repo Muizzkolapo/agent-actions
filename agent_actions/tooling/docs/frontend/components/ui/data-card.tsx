@@ -45,16 +45,12 @@ export function CellValue({ value }: { value: unknown }) {
   if (typeof value === "object") {
     const str = JSON.stringify(value)
     return (
-      <span className="font-mono text-muted-foreground truncate block max-w-[300px]" title={str}>
-        {str.length > 80 ? str.slice(0, 80) + "\u2026" : str}
-      </span>
+      <span className="font-mono text-muted-foreground break-all">{str}</span>
     )
   }
   const str = String(value)
   return (
-    <span className="font-mono text-foreground truncate block max-w-[300px]" title={str}>
-      {str.length > 120 ? str.slice(0, 120) + "\u2026" : str}
-    </span>
+    <span className="font-mono text-foreground break-all">{str}</span>
   )
 }
 
@@ -294,25 +290,29 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
 
 // ── Tree components ────────────────────────────────────────────────────────
 
-function TreeField({ fieldKey, value }: { fieldKey: string; value: unknown }) {
-  const short = isShortValue(value) && !isLongFormField(fieldKey) && !isSourceQuoteField(fieldKey)
-
-  if (short) {
-    return (
-      <div className="flex items-baseline gap-3 min-w-0 py-0.5 pl-6">
-        <span className="text-[0.85em] font-mono text-[#7dd3fc] shrink-0">{fieldKey}</span>
-        <div className="min-w-0 flex-1 text-[0.9em]">
-          <FieldValue fieldKey={fieldKey} value={value} />
-        </div>
-      </div>
-    )
-  }
+function TreeField({ fieldKey, value, defaultOpen = true }: { fieldKey: string; value: unknown; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const valStr = typeof value === "string" ? value : typeof value === "object" ? JSON.stringify(value) : String(value ?? "")
+  const preview = valStr.length > 60 ? valStr.slice(0, 60) + "\u2026" : valStr
 
   return (
-    <div className="flex flex-col gap-1 py-0.5 pl-6">
-      <span className="text-[0.85em] font-mono text-[#7dd3fc]">{fieldKey}</span>
-      <div className="text-[0.9em]">
-        <FieldValue fieldKey={fieldKey} value={value} />
+    <div className="py-0.5 pl-4">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 min-w-0 w-full text-left hover:bg-accent/10 rounded-sm py-0.5 px-2 transition-colors"
+      >
+        <ChevronRight
+          className={`h-2.5 w-2.5 shrink-0 text-muted-foreground/40 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+        <span className="text-[0.85em] font-mono text-[#7dd3fc] shrink-0">{fieldKey}</span>
+        {!open && (
+          <span className="text-[0.8em] font-mono text-muted-foreground/40 truncate">{preview}</span>
+        )}
+      </button>
+      <div className="data-card-drawer" data-open={open}>
+        <div className="pl-7 pr-2 pb-1">
+          <FieldValue fieldKey={fieldKey} value={value} />
+        </div>
       </div>
     </div>
   )
@@ -401,6 +401,7 @@ function ArrayItemNode({
 
 const DEFAULT_SECTION_STATE = {
   promptTrace: false,
+  inputData: false,
   rawResponse: false,
   actionOutput: true,
   metadata: false,
@@ -440,6 +441,7 @@ export interface DataCardProps {
   record: Record<string, unknown>
   index?: number
   fontSize?: number
+  defaultOpen?: boolean
 }
 
 function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
@@ -450,7 +452,8 @@ function getDisplayFields(record: Record<string, unknown>): Record<string, unkno
   return record
 }
 
-export function DataCard({ record, index, fontSize }: DataCardProps) {
+export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCardProps) {
+  const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record)
   const { identity, metadata } = classifyRecord(record)
 
@@ -462,6 +465,19 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
     record._trace && typeof record._trace === "object" && "compiled_prompt" in record._trace
       ? (record._trace as PromptTrace)
       : null
+
+  // Parse input data from trace's llm_context (JSON string → namespaced object)
+  let inputData: Record<string, unknown> | null = null
+  if (trace?.llm_context) {
+    try {
+      const parsed = JSON.parse(trace.llm_context)
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        inputData = parsed as Record<string, unknown>
+      }
+    } catch {
+      // Not valid JSON — skip input data section
+    }
+  }
 
   // Derive a stable node key for section state persistence
   const nodeKey =
@@ -478,39 +494,50 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
 
   return (
     <div className="data-card" style={fontSize ? { fontSize: `${fontSize}px` } : undefined}>
-      {/* Identity header */}
-      <div className="px-4 pt-3 pb-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          {typeof index === "number" && (
-            <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
-              #{index}
-            </span>
-          )}
-          {identity.map((f) => (
-            <span
-              key={f.key}
-              className="text-[10px] font-mono text-muted-foreground/60 truncate"
-              title={`${f.key}: ${formatValue(f.value, 0)}`}
-            >
-              {formatValue(f.value, 32)}
-            </span>
-          ))}
-          {typeof record._file === "string" && (
-            <span
-              className="text-[10px] font-mono text-muted-foreground/50 truncate"
-              title={record._file}
-            >
-              {record._file}
-            </span>
-          )}
-        </div>
-      </div>
+      {/* Identity header — click to expand/collapse record */}
+      <button
+        onClick={() => setRecordOpen(!recordOpen)}
+        className="flex items-center gap-2 flex-wrap px-4 pt-3 pb-1 w-full text-left hover:bg-accent/5 transition-colors"
+      >
+        <ChevronRight
+          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform ${recordOpen ? "rotate-90" : ""}`}
+        />
+        {typeof index === "number" && (
+          <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
+            #{index}
+          </span>
+        )}
+        {identity.map((f) => (
+          <span
+            key={f.key}
+            className="text-[10px] font-mono text-muted-foreground/60 truncate"
+            title={`${f.key}: ${formatValue(f.value, 0)}`}
+          >
+            {formatValue(f.value, 32)}
+          </span>
+        ))}
+        {typeof record._file === "string" && (
+          <span
+            className="text-[10px] font-mono text-muted-foreground/50 truncate"
+            title={record._file}
+          >
+            {record._file}
+          </span>
+        )}
+        {!recordOpen && (
+          <span className="text-[10px] text-muted-foreground/40 ml-auto">
+            {trace ? "trace + " : ""}{outputFields.length} fields
+          </span>
+        )}
+      </button>
+
+      <div className="data-card-drawer" data-open={recordOpen}><div>
 
       {/* Section 1: Prompt Trace */}
       {trace?.compiled_prompt && (
         <CollapsibleSection
           label="Prompt Trace"
-          accentClass="dc-section-purple"
+          accentClass="dc-section"
           badge={
             <div className="flex gap-1.5">
               {trace.model_name && (
@@ -532,11 +559,46 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
         </CollapsibleSection>
       )}
 
-      {/* Section 2: Raw Response */}
+      {/* Section 2: Input Data */}
+      {inputData && Object.keys(inputData).length > 0 && (
+        <CollapsibleSection
+          label="Input Data"
+          accentClass="dc-section"
+          hint={`${Object.keys(inputData).length} namespaces`}
+          open={sec.inputData}
+          onToggle={() => toggle("inputData")}
+          copyText={JSON.stringify(inputData, null, 2)}
+        >
+          <div className="pb-2">
+            {Object.entries(inputData).map(([nsName, nsData]) => {
+              if (typeof nsData !== "object" || nsData === null) {
+                return (
+                  <TreeField key={nsName} fieldKey={nsName} value={nsData} />
+                )
+              }
+              const fields = nsData as Record<string, unknown>
+              return (
+                <TreeNode
+                  key={nsName}
+                  label={nsName}
+                  badge={`${Object.keys(fields).length} fields`}
+                  defaultOpen={false}
+                >
+                  {Object.entries(fields).map(([k, v]) => (
+                    <TreeField key={k} fieldKey={k} value={v} />
+                  ))}
+                </TreeNode>
+              )
+            })}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Section 3: Raw Response */}
       {trace?.response_text && (
         <CollapsibleSection
           label="Raw Response"
-          accentClass="dc-section-blue"
+          accentClass="dc-section"
           hint={
             trace.response_length
               ? `${trace.response_length.toLocaleString()} chars`
@@ -556,7 +618,7 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
       {outputFields.length > 0 && (
         <CollapsibleSection
           label="Action Output"
-          accentClass="dc-section-pink"
+          accentClass="dc-section"
           hint={`${outputFields.length} fields`}
           open={sec.actionOutput}
           onToggle={() => toggle("actionOutput")}
@@ -598,7 +660,7 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
       {metadata.length > 0 && (
         <CollapsibleSection
           label="Metadata"
-          accentClass="dc-section-gray"
+          accentClass="dc-section"
           hint={`${metadata.length} fields`}
           open={sec.metadata}
           onToggle={() => toggle("metadata")}
@@ -622,6 +684,8 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
           </div>
         </CollapsibleSection>
       )}
+
+      </div></div>{/* close record drawer */}
     </div>
   )
 }

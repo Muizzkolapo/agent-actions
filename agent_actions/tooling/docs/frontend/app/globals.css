@@ -209,11 +209,8 @@
     overflow: hidden;
   }
 
-  /* ─── Section accent bars ─── */
-  .dc-section-purple { border-left: 3px solid #c084fc; }
-  .dc-section-blue   { border-left: 3px solid #7dd3fc; }
-  .dc-section-pink   { border-left: 3px solid #f9a8d4; }
-  .dc-section-gray   { border-left: 3px solid #71717a; }
+  /* ─── Section styling ─── */
+  .dc-section { border-left: none; }
 
   .dc-section-header {
     @apply flex items-center gap-2 w-full text-left transition-colors cursor-pointer;
