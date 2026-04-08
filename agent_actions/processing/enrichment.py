@@ -40,7 +40,6 @@ class LineageEnricher(Enricher):
         base_node_id = IDGenerator.generate_node_id(context.action_name)
 
         use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
-        has_source_mapping = result.source_mapping is not None and context.source_data is not None
 
         parent_item = None
         if not use_per_item_parent_lookup:
@@ -51,7 +50,11 @@ class LineageEnricher(Enricher):
         for i, item in enumerate(result.data):
             node_id = f"{base_node_id}_{i}" if len(result.data) > 1 else base_node_id
 
-            if has_source_mapping and i in result.source_mapping:
+            if (
+                result.source_mapping is not None
+                and context.source_data is not None
+                and i in result.source_mapping
+            ):
                 # Index-based lookup — resolve parent by source_mapping
                 source_idx = result.source_mapping[i]
                 if isinstance(source_idx, list):
