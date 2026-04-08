@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { CellValue, DataCard } from "@/components/ui/data-card"
+import { CellValue, DataCard, type ActionInfo } from "@/components/ui/data-card"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { DataNode, WorkflowDataSummary } from "@/lib/mock-data"
 
@@ -419,9 +419,22 @@ function NodeDetail({
   workflow: WorkflowDataSummary
   onBack: () => void
 }) {
+  const { actions } = useCatalogData()
   const [page, setPage] = useState(0)
   const [viewMode, setViewMode] = useState<ViewMode>("card")
   const typo = useTypographyPrefs()
+
+  // Look up action config for the card info section
+  const actionConfig = actions[node.node] || actions[`${node.workflow}__${node.node}`]
+  const actionInfo: ActionInfo | undefined = actionConfig
+    ? {
+        name: node.node,
+        kind: actionConfig.type || "unknown",
+        impl: actionConfig.impl || undefined,
+        intent: actionConfig.intent || undefined,
+        dependencies: actionConfig.deps || [],
+      }
+    : undefined
 
   const columns = useMemo(() => {
     if (node.preview.length === 0) return []
@@ -568,6 +581,7 @@ function NodeDetail({
                   index={idx + 1}
                   fontSize={typo.fontSize}
                   defaultOpen={i === 0}
+                  actionInfo={actionInfo}
                 />
               )
             })}
