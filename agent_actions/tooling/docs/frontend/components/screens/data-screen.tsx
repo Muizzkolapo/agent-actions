@@ -567,6 +567,7 @@ function NodeDetail({
                   record={row}
                   index={idx + 1}
                   fontSize={typo.fontSize}
+                  defaultOpen={i === 0}
                 />
               )
             })}
