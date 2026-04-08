@@ -529,9 +529,7 @@ class PromptPreparationService:
         raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'online'.")
 
     @staticmethod
-    def _raise_missing_context_scope(
-        agent_config: dict[str, Any], agent_name: str
-    ) -> None:
+    def _raise_missing_context_scope(agent_config: dict[str, Any], agent_name: str) -> None:
         """Raise ConfigurationError for missing/null context_scope with an actionable hint."""
         context_scope = agent_config.get("context_scope")
         if context_scope is None and "context_scope" in agent_config:

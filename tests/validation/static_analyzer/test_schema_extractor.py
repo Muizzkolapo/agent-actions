@@ -412,9 +412,7 @@ class TestNullContextScopeNormalization:
         """Null list directives (passthrough: null) become []."""
         from agent_actions.input.context.normalizer import normalize_context_scope
 
-        result = normalize_context_scope(
-            {"observe": ["dep.*"], "passthrough": None}, {}
-        )
+        result = normalize_context_scope({"observe": ["dep.*"], "passthrough": None}, {})
         assert result["observe"] == ["dep.*"]
         assert result["passthrough"] == []
 
