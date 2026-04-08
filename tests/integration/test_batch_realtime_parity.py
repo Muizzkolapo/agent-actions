@@ -316,17 +316,15 @@ class TestLLMContextDifferences:
         assert online_result.llm_context is not None
 
         # Both should have dropped 'internal_id' (from context_scope.drop)
-        # The field should be absent from llm_context in both modes
-        batch_has_internal_id = "internal_id" in batch_result.llm_context
-        online_has_internal_id = "internal_id" in online_result.llm_context
+        batch_source = batch_result.llm_context.get("source", {})
+        online_source = online_result.llm_context.get("source", {})
 
-        # Assert: Both modes should have dropped the field
-        assert not batch_has_internal_id, "Batch should have dropped 'internal_id'"
-        assert not online_has_internal_id, "Online should have dropped 'internal_id'"
+        assert "internal_id" not in batch_source, "Batch should have dropped 'internal_id'"
+        assert "internal_id" not in online_source, "Online should have dropped 'internal_id'"
 
         # Both should have observed 'metadata' (from context_scope.observe)
-        assert "metadata" in batch_result.llm_context, "Batch should have observed 'metadata'"
-        assert "metadata" in online_result.llm_context, "Online should have observed 'metadata'"
+        assert "metadata" in batch_source, "Batch should have observed 'metadata'"
+        assert "metadata" in online_source, "Online should have observed 'metadata'"
 
 
 class TestEdgeCases:

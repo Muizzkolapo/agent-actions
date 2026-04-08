@@ -43,11 +43,9 @@ class TestContextScopeProcessor:
             field_context, context_scope
         )
 
-        # Validate OBSERVE directive
-        assert "extracted_entities" in llm_context
-        assert llm_context["extracted_entities"] == ["entity1", "entity2"]
-        assert "metadata" in llm_context
-        assert llm_context["metadata"] == {"count": 2, "source": "research"}
+        # Validate OBSERVE directive — namespaced under action name
+        assert llm_context["fact_extractor"]["extracted_entities"] == ["entity1", "entity2"]
+        assert llm_context["fact_extractor"]["metadata"] == {"count": 2, "source": "research"}
         # Observed fields should REMAIN in prompt_context for template rendering
         assert "extracted_entities" in prompt_context.get("fact_extractor", {})
         assert prompt_context["fact_extractor"]["extracted_entities"] == ["entity1", "entity2"]
@@ -57,38 +55,50 @@ class TestContextScopeProcessor:
         # Validate DROP directive
         # source is not in observe/passthrough, so it's excluded from prompt_context entirely
         assert "source" not in prompt_context
-        assert "api_key" not in llm_context
+        assert "api_key" not in llm_context.get("source", {})
         assert "api_key" not in passthrough_fields
 
-        # Validate PASSTHROUGH directive
-        assert "document_id" in passthrough_fields
-        assert passthrough_fields["document_id"] == "doc-123"
+        # Validate PASSTHROUGH directive — namespaced under action name
+        assert passthrough_fields["fact_extractor"]["document_id"] == "doc-123"
         assert (
             prompt_context.get("fact_extractor", {}).get("document_id") == "doc-123"
         )  # Passthrough fields available in prompt_context
-        assert "document_id" not in llm_context
+        assert "document_id" not in llm_context.get("fact_extractor", {})
 
         # Validate prompt_context only contains scoped fields (observe + passthrough)
         # candidate_facts is NOT in observe or passthrough — excluded from prompt_context
         assert "candidate_facts" not in prompt_context.get("fact_extractor", {})
 
     def test_format_llm_context(self):
-        """Test formatting llm_context dict as readable text."""
-        # Setup
+        """Test formatting namespaced llm_context dict as readable text."""
         llm_context = {
-            "extracted_entities": ["entity1", "entity2", "entity3"],
-            "metadata": {"source": "research_paper", "date": "2024-01-15", "count": 3},
-            "reference_id": "ref-456",
+            "fact_extractor": {
+                "extracted_entities": ["entity1", "entity2", "entity3"],
+                "metadata": {"source": "research_paper", "date": "2024-01-15", "count": 3},
+                "reference_id": "ref-456",
+            },
         }
 
-        # Execute
         result = format_llm_context(llm_context)
 
-        # Validate
         assert result.startswith("Additional context:")
-        assert "extracted_entities:" in result
-        assert "metadata:" in result
-        assert "reference_id:" in result
+        assert "fact_extractor.extracted_entities:" in result
+        assert "fact_extractor.metadata:" in result
+        assert "fact_extractor.reference_id:" in result
+
+    def test_format_llm_context_empty(self):
+        """Empty llm_context returns empty string."""
+        assert format_llm_context({}) == ""
+
+    def test_format_llm_context_multiple_namespaces(self):
+        """Multiple namespaces rendered with qualified field names."""
+        llm_context = {
+            "voter_1": {"score": 8},
+            "voter_2": {"score": 7},
+        }
+        result = format_llm_context(llm_context)
+        assert "voter_1.score:" in result
+        assert "voter_2.score:" in result
 
     def test_seed_data_namespaced_in_prompt_context(self):
         """Seed data should be namespaced under seed for prompt context only.
@@ -104,7 +114,7 @@ class TestContextScopeProcessor:
             field_context, context_scope, static_data=static_data
         )
 
-        assert "page_content" in llm_context
+        assert llm_context["source"]["page_content"] == "text"
         assert prompt_context.get("seed") == static_data
         assert passthrough_fields == {}
 
@@ -119,8 +129,8 @@ class TestContextScopeProcessor:
         )
 
         # llm_context should have observe fields but NOT seed data
-        assert "page_content" in llm_context
-        assert "exam_syllabus" not in llm_context
+        assert llm_context["source"]["page_content"] == "text"
+        assert "exam_syllabus" not in llm_context.get("seed", {})
 
     def test_merge_passthrough_fields(self):
         """Test merging passthrough fields into LLM response."""
@@ -181,13 +191,13 @@ class TestContextScopeProcessor:
             field_context, context_scope
         )
 
-        # All fields from action_a should be in llm_context
-        assert llm_context["field1"] == "value1"
-        assert llm_context["field2"] == "value2"
-        assert llm_context["field3"] == "value3"
+        # All fields from action_a should be in llm_context under namespace
+        assert llm_context["action_a"]["field1"] == "value1"
+        assert llm_context["action_a"]["field2"] == "value2"
+        assert llm_context["action_a"]["field3"] == "value3"
 
         # Fields from action_b should NOT be in llm_context
-        assert "other_field" not in llm_context
+        assert "action_b" not in llm_context
 
         # passthrough_fields should be empty
         assert passthrough_fields == {}
@@ -209,12 +219,12 @@ class TestContextScopeProcessor:
             field_context, context_scope
         )
 
-        # All fields from action_a should be in passthrough_fields
-        assert passthrough_fields["field1"] == "value1"
-        assert passthrough_fields["field2"] == "value2"
+        # All fields from action_a should be in passthrough_fields under namespace
+        assert passthrough_fields["action_a"]["field1"] == "value1"
+        assert passthrough_fields["action_a"]["field2"] == "value2"
 
         # Fields from action_b should NOT be in passthrough_fields
-        assert "other_field" not in passthrough_fields
+        assert "action_b" not in passthrough_fields
 
         # llm_context should be empty
         assert llm_context == {}
@@ -234,13 +244,13 @@ class TestContextScopeProcessor:
             field_context, context_scope
         )
 
-        # action_a fields should be in llm_context (wildcard)
-        assert llm_context["field1"] == "value1"
-        assert llm_context["field2"] == "value2"
+        # action_a fields should be in llm_context under namespace (wildcard)
+        assert llm_context["action_a"]["field1"] == "value1"
+        assert llm_context["action_a"]["field2"] == "value2"
 
         # Only field3 from action_b should be in passthrough_fields (specific)
-        assert passthrough_fields["field3"] == "value3"
-        assert "field4" not in passthrough_fields
+        assert passthrough_fields["action_b"]["field3"] == "value3"
+        assert "field4" not in passthrough_fields.get("action_b", {})
 
     def test_apply_context_scope_wildcard_nonexistent_action(self):
         """Test wildcard on non-existent action returns empty."""
@@ -434,8 +444,10 @@ class TestNestedDictFieldResolution:
             field_context, context_scope
         )
 
-        # The nested value should be extracted into llm_context
-        assert llm_context["target_word_counts.correct_answer_words"] == 8
+        # The nested value should be extracted into llm_context under namespace
+        assert (
+            llm_context["suggest_distractor_counts"]["target_word_counts.correct_answer_words"] == 8
+        )
         # prompt_context should have the observed namespace with its fields
         assert "suggest_distractor_counts" in prompt_context
 
@@ -452,7 +464,7 @@ class TestNestedDictFieldResolution:
             field_context, context_scope
         )
 
-        assert passthrough_fields["nested.deep_value"] == 42
+        assert passthrough_fields["action_a"]["nested.deep_value"] == 42
         assert llm_context == {}
 
     def test_nested_field_does_not_leak_siblings(self):

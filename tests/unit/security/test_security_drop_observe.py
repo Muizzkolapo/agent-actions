@@ -32,12 +32,12 @@ class TestDropObserveNoLeak:
         )
 
         # api_key must NOT be in llm_context
-        assert "api_key" not in llm_context, (
+        assert "api_key" not in llm_context.get("dep", {}), (
             "Dropped field 'api_key' leaked into llm_context via observe wildcard"
         )
-        # Other fields should be present
-        assert "name" in llm_context
-        assert "value" in llm_context
+        # Other fields should be present under namespace
+        assert "name" in llm_context["dep"]
+        assert "value" in llm_context["dep"]
 
     def test_drop_then_observe_single_field_raises(self):
         """Explicitly observing a dropped field must raise — not silently skip."""

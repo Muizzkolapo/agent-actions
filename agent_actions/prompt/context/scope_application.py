@@ -3,6 +3,7 @@
 import json
 import logging
 from copy import deepcopy
+from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
@@ -57,8 +58,8 @@ def apply_context_scope(
     """
     # Deep copy to avoid mutating original field_context
     prompt_context = deepcopy(field_context)
-    llm_context = {}
-    passthrough_fields = {}
+    llm_context: dict[str, dict[str, Any]] = {}
+    passthrough_fields: dict[str, dict[str, Any]] = {}
 
     # Process STATIC_DATA: Add SEED namespace (namespace #3)
     if static_data:
@@ -149,11 +150,9 @@ def apply_context_scope(
 
             if field_name == "*":
                 # Wildcard: best-effort — namespace may be empty or absent.
-                # This is intentionally lenient: explicit field refs (dep.field)
-                # fail-fast, but wildcards (dep.*) are "give me what you have".
                 action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
-                    llm_context.update(action_fields)
+                    llm_context.setdefault(ns_name, {}).update(action_fields)
             else:
                 # Explicit field ref: fail-fast if not found
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
@@ -171,8 +170,7 @@ def apply_context_scope(
                         },
                     )
 
-                # Add to llm_context (flat dict with field names as keys)
-                llm_context[field_name] = value
+                llm_context.setdefault(ns_name, {})[field_name] = value
 
                 # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
@@ -187,7 +185,7 @@ def apply_context_scope(
             )
             continue
 
-    # Process PASSTHROUGH: Extract to passthrough_fields, remove from prompt_context
+    # Process PASSTHROUGH: Extract to passthrough_fields (namespaced like llm_context).
     passthrough_refs = context_scope.get("passthrough", [])
     for field_ref in passthrough_refs:
         try:
@@ -196,9 +194,8 @@ def apply_context_scope(
             if field_name == "*":
                 action_fields = extract_action_fields(field_context, ns_name)
                 if action_fields:
-                    passthrough_fields.update(action_fields)
+                    passthrough_fields.setdefault(ns_name, {}).update(action_fields)
             else:
-                # Extract value from original field_context
                 value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
 
                 if value is _MISSING:
@@ -214,8 +211,7 @@ def apply_context_scope(
                         },
                     )
 
-                # Add to passthrough_fields (flat dict with field names as keys)
-                passthrough_fields[field_name] = value
+                passthrough_fields.setdefault(ns_name, {})[field_name] = value
 
         except ValueError as e:
             fire_event(
@@ -282,16 +278,20 @@ def apply_context_scope(
 
 
 def format_llm_context(llm_context: dict) -> str:
-    """Format llm_context dict as readable text for LLM message injection."""
+    """Format llm_context dict as readable text for LLM message injection.
+
+    llm_context is namespaced: {action_name: {field: value, ...}, ...}.
+    Each namespace is rendered as a labeled section.
+    """
     if not llm_context:
         return ""
 
     lines = ["Additional context:"]
 
-    for key, value in llm_context.items():
-        # Format value as pretty JSON for readability
-        value_str = json.dumps(value, indent=2, ensure_ascii=False)
-        lines.append(f"{key}: {value_str}")
+    for ns_name, ns_data in llm_context.items():
+        for field, value in ns_data.items():
+            value_str = json.dumps(value, indent=2, ensure_ascii=False)
+            lines.append(f"{ns_name}.{field}: {value_str}")
 
     return "\n".join(lines)
 
