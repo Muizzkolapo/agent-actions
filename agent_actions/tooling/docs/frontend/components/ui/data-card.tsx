@@ -436,11 +436,20 @@ function useSectionState(nodeKey: string) {
 
 // ── DataCard ──────────────────────────────────────────────────────────────
 
+export interface ActionInfo {
+  name: string
+  kind: string
+  impl?: string
+  intent?: string
+  dependencies: string[]
+}
+
 export interface DataCardProps {
   record: Record<string, unknown>
   index?: number
   fontSize?: number
   defaultOpen?: boolean
+  actionInfo?: ActionInfo
 }
 
 function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
@@ -451,7 +460,7 @@ function getDisplayFields(record: Record<string, unknown>): Record<string, unkno
   return record
 }
 
-export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCardProps) {
+export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record)
   const { identity, metadata } = classifyRecord(record)
@@ -532,6 +541,30 @@ export function DataCard({ record, index, fontSize, defaultOpen = true }: DataCa
 
       <div className="data-card-drawer" data-open={recordOpen}>
         <div>
+
+      {/* Action info bar */}
+      {actionInfo && (
+        <div className="px-4 py-2 flex items-center gap-2 flex-wrap border-t border-border/30">
+          <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-secondary text-foreground/70">
+            {actionInfo.kind}
+          </span>
+          {actionInfo.impl && (
+            <span className="text-[10px] font-mono text-muted-foreground/60">
+              fn: {actionInfo.impl}
+            </span>
+          )}
+          {actionInfo.dependencies.length > 0 && (
+            <span className="text-[10px] font-mono text-muted-foreground/50">
+              deps: {actionInfo.dependencies.join(", ")}
+            </span>
+          )}
+          {actionInfo.intent && (
+            <span className="text-[10px] text-muted-foreground/50 truncate" title={actionInfo.intent}>
+              {actionInfo.intent}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Section 1: Prompt Trace */}
       {trace?.compiled_prompt && (
