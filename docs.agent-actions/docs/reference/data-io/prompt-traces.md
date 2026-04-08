@@ -29,10 +29,19 @@ Run `agac docs` to generate the documentation catalog, then open the Data Explor
 
 ### Card View
 
-Each output record with a trace shows a **Prompt Trace** accordion below the Metadata drawer. The collapsed state displays the model name and run mode as badges. Click to expand and see two panels:
+Cards display record sections in this order:
+
+1. **Identity header** — record number, source GUID, file path
+2. **Prompt Trace** — collapsible, shows the input sent to the LLM
+3. **Action Output** — scalar fields first, then structured fields (arrays of objects rendered as sub-cards)
+4. **Metadata** — collapsible, shown last
+
+The Prompt Trace accordion displays the model name and run mode as badges. Click to expand and see two panels:
 
 - **Compiled Prompt** (indigo header) — The exact prompt the LLM received, scrollable for long prompts
 - **LLM Response** (teal header) — The raw text the LLM returned
+
+Arrays of objects in the output section are rendered as **structured sub-cards** with labeled fields per item, rather than raw JSON. Long arrays show a "Show more" toggle.
 
 ### JSON View
 

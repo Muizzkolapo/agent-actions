@@ -170,7 +170,17 @@ When an upstream action fails for some records (e.g., batch API errors), those r
 
 ## Error Handling
 
-By default, if a guard condition fails to evaluate (missing field, parse error), the record is passed through rather than rejected. Set `passthrough_on_error: false` to apply the configured `on_false` behavior instead:
+Guard evaluation errors are classified into three categories, each with different handling:
+
+| Category | Example | `passthrough_on_error` respected? | Behavior |
+|----------|---------|-----------------------------------|----------|
+| **Semantic** | Unquoted string (`status == approved`) | No — always uses `on_false` | Condition itself is broken; cached after first occurrence |
+| **Data** | Missing field, type mismatch | Yes | Field absent for this specific record |
+| **Timeout** | Evaluation exceeded time limit | Yes | Transient failure |
+
+**Semantic errors** bypass `passthrough_on_error` because the condition is fundamentally broken — passing records through would give wrong results for every record, not just one. These errors are logged once (circuit breaker), not per-record.
+
+**Data and timeout errors** respect `passthrough_on_error` (default: `true`). Set to `false` to apply the configured `on_false` behavior instead:
 
 ```yaml
 guard:
