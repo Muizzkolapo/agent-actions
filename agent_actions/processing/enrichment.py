@@ -40,6 +40,7 @@ class LineageEnricher(Enricher):
         base_node_id = IDGenerator.generate_node_id(context.action_name)
 
         use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
+        has_source_mapping = result.source_mapping is not None and context.source_data is not None
 
         parent_item = None
         if not use_per_item_parent_lookup:
@@ -48,13 +49,45 @@ class LineageEnricher(Enricher):
         for i, item in enumerate(result.data):
             node_id = f"{base_node_id}_{i}" if len(result.data) > 1 else base_node_id
 
-            if use_per_item_parent_lookup:
+            if has_source_mapping and i in result.source_mapping:
+                # Index-based lookup — resolve parent by source_mapping
+                source_idx = result.source_mapping[i]
+                if isinstance(source_idx, list):
+                    # Many-to-one: multiple input records merged into one output
+                    source_items = [
+                        context.source_data[idx]
+                        for idx in source_idx
+                        if idx < len(context.source_data)
+                    ]
+                    enriched = LineageBuilder.add_lineage_tracking_from_sources(
+                        obj=item,
+                        source_items=source_items,
+                        node_id=node_id,
+                    )
+                else:
+                    # One-to-one: single input record
+                    if source_idx < len(context.source_data):
+                        parent_item = context.source_data[source_idx]
+                    enriched = LineageBuilder.add_unified_lineage(
+                        obj=item,
+                        node_id=node_id,
+                        parent_item=parent_item,
+                    )
+            elif use_per_item_parent_lookup:
                 item_source_guid = item.get("source_guid")
                 parent_item = self._get_parent_item(item_source_guid, context)
+                enriched = LineageBuilder.add_unified_lineage(
+                    obj=item,
+                    node_id=node_id,
+                    parent_item=parent_item,
+                )
+            else:
+                enriched = LineageBuilder.add_unified_lineage(
+                    obj=item,
+                    node_id=node_id,
+                    parent_item=parent_item,
+                )
 
-            enriched = LineageBuilder.add_unified_lineage(
-                obj=item, node_id=node_id, parent_item=parent_item
-            )
             result.data[i] = enriched
 
         result.node_id = base_node_id

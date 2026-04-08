@@ -111,6 +111,7 @@ class ProcessingResult:
     recovery_metadata: RecoveryMetadata | None = None
     raw_response: Any | None = None
     pre_extracted_metadata: dict[str, Any] | None = None
+    source_mapping: dict[int, int | list[int]] | None = None
 
     @classmethod
     def success(

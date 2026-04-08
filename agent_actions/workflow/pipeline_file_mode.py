@@ -77,7 +77,9 @@ def process_file_mode_tool(
         # validation is skipped (validate_output=False or no json_output_schema).
         from agent_actions.utils.udf_management.registry import FileUDFResult
 
+        source_mapping = None
         if isinstance(raw_response, FileUDFResult):
+            source_mapping = raw_response.source_mapping
             raw_response = raw_response.outputs
 
         # Tool should return array
@@ -134,6 +136,7 @@ def process_file_mode_tool(
             source_guid=None,  # FILE mode has no single source
             raw_response=raw_response,
             executed=executed,
+            source_mapping=source_mapping,
         )
 
         # Run enrichment on ALL items in result
