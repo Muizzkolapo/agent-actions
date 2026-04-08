@@ -187,9 +187,13 @@ Write workflows that consume from multiple different upstream workflows by detec
 ```python
 @udf_tool()
 def format_options(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Format options differently based on input type."""
+    """Format options differently based on input type.
+
+    Observed fields arrive namespaced by action name.
+    """
     content = data.get('content', data)
-    options = content.get('options', [])
+    upstream = content.get('generate_scenarios', {})
+    options = upstream.get('options', [])
     formatted = []
 
     for option in options:
@@ -200,8 +204,7 @@ def format_options(data: dict[str, Any]) -> list[dict[str, Any]]:
             # Apply standard formatting for plain text
             formatted.append(format_plain_option(option))
 
-    result = content.copy()
-    result['options'] = formatted
+    result = {'options': formatted}
     return [result]
 ```
 

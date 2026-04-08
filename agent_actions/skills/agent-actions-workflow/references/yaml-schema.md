@@ -72,7 +72,7 @@ actions:
 | `json_mode` | boolean | Enable structured JSON output |
 | `run_mode` | string | `online` or `batch` |
 | `granularity` | string | `record` or `file` |
-| `context_scope` | object | Data flow control |
+| `context_scope` | object | Data flow control (**required**) |
 | `guard` | object | Conditional execution |
 | `prompt_debug` | boolean | Log rendered prompts |
 | `reprompt` | false/object | Validation retry (requires explicit config) |
@@ -83,7 +83,7 @@ actions:
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_execution_time` | integer | Timeout in seconds (default: 300) |
 | `enable_caching` | boolean | Enable response caching (default: true) |
-| `record_limit` | integer | Max records to process per file at start nodes (default: unlimited) |
+| `record_limit` | integer | Max records to process per file (default: unlimited) |
 | `file_limit` | integer | Max files to walk per action (default: unlimited) |
 
 ## LLM Action Example
@@ -280,16 +280,20 @@ defaults:
 
 actions:
   - name: extract
-    record_limit: 10      # Process 10 records per file (start nodes only)
+    record_limit: 10      # Process 10 records per file
+
+  - name: expensive_llm_action
+    dependencies: [extract]
+    record_limit: 2        # Test prompt on 2 records before full API spend
 ```
 
-- `record_limit` applies only at **start nodes** (initial data ingestion). Intermediate actions process whatever upstream produced.
+- `record_limit` applies at **any action** — start nodes, mid-pipeline, or leaf actions. Useful for testing a single downstream action without re-running the full pipeline.
 - `file_limit` applies at **all stages** — directory walks, merged files, and storage backend reads.
 - Both must be positive integers (`>= 1`). Omit or set to `null` for unlimited.
 - Limits are stored in the status file. If you change limits between runs, the action automatically re-executes instead of being skipped.
 
 **Typical testing workflow:**
-1. Set `record_limit: 10` in your action config
+1. Set `record_limit: 2` on the action you are iterating on
 2. Run and validate output
 3. Remove `record_limit` and re-run for full processing
 

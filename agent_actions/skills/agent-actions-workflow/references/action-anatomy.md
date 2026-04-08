@@ -297,26 +297,27 @@ flowchart LR
 2. `parent_target_id` = input's `target_id` (links to immediate parent)
 3. `root_target_id` = input's `root_target_id` (preserves original ancestor)
 
-## Matching Priority
+## Record Matching
 
-When loading historical data, Agent Actions uses this priority:
+When loading historical data, Agent Actions uses **deterministic node_id matching** with two modes:
 
 ```mermaid
 flowchart TD
-    Start["Load dependency data"] --> L{"Lineage<br/>match?"}
-    L -->|Yes| Done["Return data"]
-    L -->|No| P{"Parent<br/>match?"}
-    P -->|Yes| Done
-    P -->|No| R{"Root<br/>match?"}
-    R -->|Yes| Done
-    R -->|No| S["Source GUID<br/>fallback"]
-    S --> Done
+    Start["Load dependency data"] --> M{"Mode?"}
+    M -->|Linear pipeline| A["Ancestor mode:<br/>Find dependency node_id<br/>in record lineage"]
+    M -->|Fan-in / merge| B["Merge-parent mode:<br/>Match via lineage_sources"]
+    A --> F{"Found?"}
+    B --> F
+    F -->|Yes| Done["Return data"]
+    F -->|No| None["Return None<br/>(logged warning)"]
 
     style Done fill:#90EE90
+    style None fill:#ffcccc
 ```
 
-| Match Type | Purpose | Use Case |
-|------------|---------|----------|
-| **Lineage** | Dependency's node_id in lineage | Sequential chain |
-| **Parent** | Same `parent_target_id` | Parallel siblings (Diamond) |
-| **Root** | Same `root_target_id` | Map-Reduce descendants |
+| Mode | Purpose | Use Case |
+|------|---------|----------|
+| **Ancestor** | Exact node_id match in lineage chain | Sequential pipelines |
+| **Merge-parent** | Match via `lineage_sources` (merge-parent node_ids) | Fan-in / aggregate patterns |
+
+There are no fallback tiers. If the exact node_id is not found, the record returns `None` and a warning is logged. This prevents silent data corruption from fuzzy matching.

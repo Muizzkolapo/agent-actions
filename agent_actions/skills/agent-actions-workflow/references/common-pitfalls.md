@@ -322,12 +322,16 @@ agac run -a <workflow>
 
 **Cause:** Processing all records and files when you only need a few to validate.
 
-**Fix:** Use `record_limit` and `file_limit` to cap processing:
+**Fix:** Use `record_limit` and `file_limit` to cap processing. `record_limit` works on **any action** — not just start nodes — so you can test a single downstream action without re-running the full pipeline:
 ```yaml
 actions:
   - name: extract
     record_limit: 10   # Process only 10 records per file
     file_limit: 2       # Walk only 2 files
+
+  - name: expensive_llm_action
+    dependencies: [extract]
+    record_limit: 2     # Test prompt on 2 records before full API spend
 ```
 
 Remove limits when ready for production. Changing limits between runs automatically invalidates the action's completion status so it re-executes.
@@ -405,21 +409,21 @@ context_scope:
     - upstream_action.field_i_want      # selective, not wildcard
 ```
 
-## 23. Tool UDF Accesses Fields via Namespaced Keys (Silent Default)
+## 23. Tool UDF Accesses Fields via Flat Keys (Silent Default)
 
 **Symptom:** Tool action produces zero/default values for all records despite upstream actions completing successfully.
 
-**Cause:** UDFs access upstream fields via `content.get("action_name", {}).get("field", 0)` but the framework delivers fields FLAT — `content["field"]`, not `content["action_name"]["field"]`.
+**Cause:** UDFs access upstream fields via flat `content.get("field")` but the framework delivers fields **namespaced by action name** — `content["action_name"]["field"]`, not `content["field"]`.
 
 **Wrong:**
 ```python
-aggregate = content.get("aggregate_scores", {})
-score = aggregate.get("consensus_score", 0)  # Always 0!
+score = content.get("consensus_score", 0)  # None — field is namespaced
 ```
 
 **Correct:**
 ```python
-score = content.get("consensus_score", 0)  # Fields are flat
+aggregate = content.get("aggregate_scores", {})
+score = aggregate.get("consensus_score", 0)  # Namespaced access
 ```
 
 ## 24. Schema Field Name Doesn't Match LLM Output
