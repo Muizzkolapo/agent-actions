@@ -183,6 +183,22 @@ guard:
 When a guard silently lets records through unexpectedly, check `target/errors.json` for `G002` events — these indicate evaluation failures that were swallowed by `passthrough_on_error: true`.
 :::
 
+## Common Mistakes
+
+### Unquoted String Literals
+
+String values on the right-hand side of comparisons **must be quoted**. Unquoted strings are treated as field references and produce a preflight validation error:
+
+```yaml
+# WRONG — "approved" is interpreted as a field name
+guard:
+  condition: 'hitl_status == approved'
+
+# CORRECT — quote string literals
+guard:
+  condition: 'hitl_status == "approved"'
+```
+
 ## Limitations
 
 - **No external calls** - Guards can't make API requests

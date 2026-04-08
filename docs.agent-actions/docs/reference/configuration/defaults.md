@@ -52,7 +52,7 @@ actions:
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | Stop sequence(s) to end generation |
-| `record_limit` | integer | Max records per file at start nodes (default: unlimited) |
+| `record_limit` | integer | Max records per file (default: unlimited) |
 | `file_limit` | integer | Max files to walk per action (default: unlimited) |
 
 :::note Schema vs Runtime
@@ -329,7 +329,7 @@ defaults:
   # record_limit and file_limit omitted = unlimited
 ```
 
-`record_limit` applies at start nodes only (initial data ingestion). `file_limit` applies at all stages. If you change limits between runs, actions automatically re-execute instead of being skipped.
+`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. If you change limits between runs, actions automatically re-execute instead of being skipped.
 
 ### 7. Environment-Specific Defaults
 
