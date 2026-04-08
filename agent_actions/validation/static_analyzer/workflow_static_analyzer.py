@@ -8,7 +8,11 @@ import logging
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.input.context.normalizer import SEED_CONFIG_KEYS
+from agent_actions.input.context.normalizer import (
+    SEED_CONFIG_KEYS,
+    detect_orphaned_directives,
+    normalize_context_scope,
+)
 from agent_actions.utils.constants import (
     DEFAULT_ACTION_KIND,
     RESERVED_AGENT_NAMES,
@@ -98,6 +102,20 @@ class WorkflowStaticAnalyzer:
         Returns:
             StaticValidationResult with errors and warnings
         """
+        # Step 0: Validate context_scope BEFORE normalization so diagnostic
+        # hints can inspect the raw YAML values (null, wrong type, orphaned
+        # directives). Normalization in Step 0b converts null → {} which would
+        # destroy the diagnostic signal.
+        context_scope_errors = self._check_context_scope_required()
+
+        # Step 0b: Normalize context_scope using the same function the runtime
+        # pipeline uses. Guarantees all downstream extractors see a dict.
+        for action in self.workflow_config.get("actions", []):
+            if isinstance(action, dict):
+                action["context_scope"] = normalize_context_scope(
+                    action.get("context_scope"), version_base_map={}
+                )
+
         # Step 1: Build data flow graph
         self._build_graph()
 
@@ -113,6 +131,14 @@ class WorkflowStaticAnalyzer:
 
         # Step 3b: Reserved action name validation
         for error in self._check_reserved_action_names():
+            result.add_error(error)
+
+        # Step 3c: context_scope validation (already ran in Step 0 before normalization)
+        for error in context_scope_errors:
+            result.add_error(error)
+
+        # Step 3d: Validate template namespaces are covered by context_scope
+        for error in self._check_template_scope_coverage():
             result.add_error(error)
 
         # Step 2c: Validate context_scope field references
@@ -292,6 +318,139 @@ class WorkflowStaticAnalyzer:
                 )
         return errors
 
+    def _check_context_scope_required(self) -> list[StaticTypeError]:
+        """Return errors for actions missing context_scope.
+
+        Every action must declare its data dependencies via context_scope.
+        Actions without context_scope have no data access — this is enforced
+        at static analysis time so users get feedback before execution.
+        """
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "unknown")
+            context_scope = action.get("context_scope")
+            if not context_scope or not isinstance(context_scope, dict):
+                if context_scope is None and "context_scope" in action:
+                    orphaned = detect_orphaned_directives(action)
+                    if orphaned:
+                        hint = (
+                            f"{', '.join(orphaned)} are siblings of context_scope "
+                            "instead of children. This is usually a YAML indentation error — "
+                            "indent them under context_scope:\n"
+                            "  context_scope:\n"
+                            "    observe:\n"
+                            "      - source.*"
+                        )
+                    else:
+                        hint = (
+                            "context_scope is null. Check YAML indentation — "
+                            "observe/passthrough/drop must be indented under context_scope."
+                        )
+                elif context_scope is not None and not isinstance(context_scope, dict):
+                    hint = (
+                        f"context_scope must be a mapping, got {type(context_scope).__name__}. "
+                        "Example: context_scope: {{ observe: [source.*] }}"
+                    )
+                else:
+                    hint = (
+                        "Add context_scope with observe, passthrough, or drop directives. "
+                        "Example: context_scope: { observe: [source.*] }"
+                    )
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"Action '{name}' has no context_scope. "
+                            "All actions must declare data dependencies via context_scope."
+                        ),
+                        location=FieldLocation(
+                            agent_name=name,
+                            config_field="context_scope",
+                        ),
+                        referenced_agent=name,
+                        referenced_field="",
+                        hint=hint,
+                    )
+                )
+        return errors
+
+    def _check_template_scope_coverage(self) -> list[StaticTypeError]:
+        """Check that template namespace references are declared in context_scope.
+
+        For each action, extracts namespace references from the prompt template
+        and verifies they appear in context_scope.observe or passthrough.
+        Framework namespaces (version, seed, workflow, loop) and source are
+        always available and not checked.
+        """
+        from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
+        from agent_actions.prompt.context.scope_parsing import (
+            extract_action_names_from_template,
+        )
+        from agent_actions.prompt.formatter import PromptFormatter
+
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            name = action.get("name", "unknown")
+            context_scope = action.get("context_scope")
+            if not context_scope or not isinstance(context_scope, dict):
+                continue  # Already caught by _check_context_scope_required
+
+            # Get template text
+            try:
+                template = PromptFormatter.get_raw_prompt(action)
+            except Exception as exc:
+                logger.debug(
+                    "Cannot load prompt for action '%s', skipping template scope check: %s",
+                    name,
+                    exc,
+                )
+                continue
+
+            if not template:
+                continue
+
+            # Extract non-special namespace references from template
+            # (source, version, seed, workflow, loop are already filtered)
+            template_namespaces = extract_action_names_from_template(template)
+
+            # Also filter FRAMEWORK_NAMESPACES for safety
+            template_namespaces -= FRAMEWORK_NAMESPACES
+
+            # Extract namespaces declared in context_scope observe/passthrough
+            scoped_namespaces: set[str] = set()
+            for directive in ("observe", "passthrough"):
+                for ref in context_scope.get(directive, []):
+                    if isinstance(ref, str) and "." in ref:
+                        scoped_namespaces.add(ref.split(".", 1)[0])
+
+            # Flag uncovered namespaces
+            uncovered = template_namespaces - scoped_namespaces
+            for ns in sorted(uncovered):
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"Action '{name}': template references namespace '{ns}' "
+                            f"which is not declared in context_scope.observe or passthrough."
+                        ),
+                        location=FieldLocation(
+                            agent_name=name,
+                            config_field="context_scope",
+                        ),
+                        referenced_agent=ns,
+                        referenced_field="",
+                        hint=(f"Add '{ns}.*' to context_scope.observe."),
+                    )
+                )
+
+        return errors
+
     def _check_context_scope_fields(self) -> list[StaticTypeError]:
         """Validate context_scope field references against dependency schemas.
 
@@ -364,7 +523,7 @@ class WorkflowStaticAnalyzer:
                                 ),
                                 referenced_agent=dep_name,
                                 referenced_field=field_name,
-                                hint=f"Add '{dep_name}' to dependencies or remove this reference.",
+                                hint=f"Add '{dep_name}.*' to context_scope.observe, or remove this reference.",
                             )
                         )
                         continue
@@ -574,7 +733,7 @@ class WorkflowStaticAnalyzer:
                                     f"'{dep_name}' is not a dependency of "
                                     f"'{action_name}' — its fields will never "
                                     f"appear in context. Remove this drop or "
-                                    f"add '{dep_name}' to dependencies."
+                                    f"add '{dep_name}.*' to context_scope.observe."
                                 ),
                             )
                         )

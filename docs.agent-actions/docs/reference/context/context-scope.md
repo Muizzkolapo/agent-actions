@@ -7,6 +7,10 @@ sidebar_position: 3
 
 Context Scope controls data visibility and flow between actions—what the LLM sees, what passes through to output, and what gets excluded.
 
+:::warning Required
+`context_scope` is **required** on every action. Omitting it raises a `ConfigurationError`. Every action must declare its data dependencies explicitly via `observe`, `passthrough`, or `drop`.
+:::
+
 ## Directives
 
 | Directive | Purpose | In LLM Context | In Output |

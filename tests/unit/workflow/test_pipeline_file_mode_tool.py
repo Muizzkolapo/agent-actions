@@ -359,7 +359,11 @@ def test_record_tool_list_return_produces_multiple_output_items():
     from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 
     # A RECORD tool config (kind=tool, granularity=record)
-    agent_config = {"kind": "tool", "granularity": "record"}
+    agent_config = {
+        "kind": "tool",
+        "granularity": "record",
+        "context_scope": {"observe": ["source.*"]},
+    }
     agent_name = "flatten_tool"
 
     # Mock strategy that returns a list (1-to-many expansion)

@@ -101,44 +101,58 @@ def run_dedup(data: list[dict]) -> FileUDFResult:
 
 ## How Observed Fields Arrive in UDFs
 
-Four access modes depending on how upstream data was produced:
+Observed fields arrive **namespaced by action name**. Access them as `content.get("action_name", {}).get("field")`.
 
-### 1. Standard observed fields (FLAT)
+### 1. Standard observed fields (NAMESPACED)
 
-Observed fields are flattened directly into `content`. They are NOT nested under the action name.
+Observed fields are nested under the action name that produced them. This preserves data integrity when multiple upstream actions share field names.
 
 ```python
-# CORRECT — flat access
-title = content.get("listing_title", "")
+# CORRECT — namespaced access
+title = content.get("write_marketing_copy", {}).get("listing_title", "")
 
-# WRONG — returns empty dict, all downstream defaults
-copy = content.get("write_marketing_copy", {})
-title = copy.get("listing_title", "")  # always ""
+# WRONG — flat access returns None (fields are namespaced)
+title = content.get("listing_title", "")  # None — field is under action namespace
 ```
 
-### 2. `output_field` values (under the FIELD NAME, not the action name)
+When observing from a single upstream action, you can unwrap the namespace upfront:
 
-With `json_mode: false` and `output_field`, the raw text is stored under the `output_field` name (default: `raw_response`). After observe flattening, access by field name.
+```python
+upstream = content.get("write_marketing_copy", {})
+title = upstream.get("listing_title", "")
+description = upstream.get("listing_description", "")
+```
+
+### 2. `output_field` values (under the ACTION namespace)
+
+With `json_mode: false` and `output_field`, the raw text is stored under the `output_field` name within the action namespace.
 
 ```python
 # Config: output_field: severity  (on action "assess_severity")
 
-# CORRECT — use the output_field name
-severity = content.get("severity", "")
+# CORRECT — action namespace, then field name
+severity = content.get("assess_severity", {}).get("severity", "")
 
-# WRONG — action name doesn't work here
-severity = content.get("assess_severity", "")  # returns default
+# WRONG — flat access
+severity = content.get("severity", "")  # None
 ```
 
-**Note:** The default `output_field` is `raw_response`. If you don't set `output_field:` in the YAML, access via `content.get("raw_response", "")`.
+**Note:** The default `output_field` is `raw_response`. Access via `content.get("action_name", {}).get("raw_response", "")`.
 
-### 3. Version consumption merge (NESTED — the one exception)
+### 3. Version consumption merge (NAMESPACED under expanded names)
 
-Versioned data IS nested under expanded action names. This is the only case where nested access is correct.
+Versioned data is nested under expanded action names. Each version's data is preserved independently — no data loss from field name collisions.
 
 ```python
 scorer_1 = content.get("score_quality_1", {}).get("overall_score")
 scorer_2 = content.get("score_quality_2", {}).get("overall_score")
+scorer_3 = content.get("score_quality_3", {}).get("overall_score")
+
+# Iterate all versions dynamically
+scores = []
+for key, data in content.items():
+    if key.startswith("score_quality_") and isinstance(data, dict):
+        scores.append(data.get("overall_score", 0))
 ```
 
 ### 4. Seed data (under `seed` namespace)
@@ -160,11 +174,11 @@ def bad_udf(data):
 def bad_udf(data):
     return {'result': 'value'}  # Must be [{'result': 'value'}]
 
-# WRONG: Nested access for observed fields (use flat access)
+# WRONG: Flat access for observed fields (fields are namespaced)
 def bad_udf(data):
     content = data.get("content", data)
-    result = content.get("upstream_action", {}).get("field")  # always None
-    # CORRECT: result = content.get("field")
+    result = content.get("field")  # None — field is under action namespace
+    # CORRECT: result = content.get("upstream_action", {}).get("field")
 
 # WRONG: Default doesn't match schema type
 def bad_udf(data):

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import TemplateVariableError
+from agent_actions.errors import ConfigurationError, TemplateVariableError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
@@ -134,17 +134,15 @@ class PromptPreparationService:
             agent_config, context_scope, agent_name
         )
 
-        if context_scope:
-            prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
-                field_context,
-                context_scope,
-                static_data=static_data,
-                action_name=agent_name,
-            )
-        else:
-            prompt_context = field_context
-            llm_additional_context = {}
-            passthrough_fields = {}
+        if not context_scope:
+            PromptPreparationService._raise_missing_context_scope(agent_config, agent_name)
+
+        prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
+            field_context,
+            context_scope,
+            static_data=static_data,
+            action_name=agent_name,
+        )
 
         llm_context = PromptPreparationService._build_llm_context(
             mode=mode,
@@ -230,28 +228,27 @@ class PromptPreparationService:
             request.agent_config, context_scope, request.agent_name
         )
 
-        if context_scope:
-            prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
-                field_context,
-                context_scope,
-                static_data=static_data,
-                action_name=request.agent_name,
+        if not context_scope:
+            PromptPreparationService._raise_missing_context_scope(
+                request.agent_config, request.agent_name
             )
-            logger.debug(
-                "Applied context_scope: observe=%d, passthrough=%d, static_data=%d",
-                len(llm_additional_context),
-                len(passthrough_fields),
-                len(static_data),
-            )
-            logger.debug(
-                "prompt_context namespaces after apply_context_scope: %s",
-                list(prompt_context.keys()),
-            )
-        else:
-            prompt_context = field_context
-            llm_additional_context = {}
-            passthrough_fields = {}
-            logger.debug("No context_scope configured, using field_context as-is")
+
+        prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
+            field_context,
+            context_scope,
+            static_data=static_data,
+            action_name=request.agent_name,
+        )
+        logger.debug(
+            "Applied context_scope: observe=%d, passthrough=%d, static_data=%d",
+            len(llm_additional_context),
+            len(passthrough_fields),
+            len(static_data),
+        )
+        logger.debug(
+            "prompt_context namespaces after apply_context_scope: %s",
+            list(prompt_context.keys()),
+        )
 
         llm_context = PromptPreparationService._build_llm_context(
             mode=request.mode,
@@ -497,25 +494,55 @@ class PromptPreparationService:
         """
         Build the complete LLM context by delegating to the mode-specific builder.
 
+        When context_scope is defined, only observe fields form the LLM context.
+        Raw contents never bypass the context_scope gate.
+
         Raises:
+            ConfigurationError: If context_scope is not defined.
             ValueError: If mode is not RunMode.BATCH or RunMode.ONLINE.
         """
-        safe_contents = contents if isinstance(contents, dict) else {}
+        if not context_scope:
+            raise ConfigurationError(
+                "context_scope is required. Every action must declare data dependencies.",
+                context={
+                    "hint": "Add context_scope with observe, passthrough, or drop directives."
+                },
+            )
+
+        # Observe fields (in llm_additional_context) are the sole source of LLM context.
+        # Raw contents are never used as the base — context_scope is the gate.
+        base: dict[str, Any] = {}
 
         if mode == RunMode.BATCH:
             return LLMContextBuilder.build_llm_context_for_batch(
-                row_content=safe_contents,
+                row_content=base,
                 llm_context=llm_additional_context,
                 context_scope=context_scope,
             )
         if mode == RunMode.ONLINE:
             result = LLMContextBuilder.build_llm_context_for_online(
-                processed_context=safe_contents,
+                processed_context=base,
                 llm_additional_context=llm_additional_context,
                 context_scope=context_scope,
             )
             return result if isinstance(result, dict) else {}
         raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'online'.")
+
+    @staticmethod
+    def _raise_missing_context_scope(agent_config: dict[str, Any], agent_name: str) -> None:
+        """Raise ConfigurationError for missing/null context_scope with an actionable hint."""
+        context_scope = agent_config.get("context_scope")
+        if context_scope is None and "context_scope" in agent_config:
+            hint = (
+                "context_scope is null — check YAML indentation. "
+                "observe/passthrough/drop must be indented under context_scope."
+            )
+        else:
+            hint = "Add context_scope with observe/passthrough/drop directives."
+        raise ConfigurationError(
+            f"context_scope is required on action '{agent_name}'. {hint}",
+            context={"agent_name": agent_name},
+        )
 
     @staticmethod
     def _determine_static_data_dir(workflow_config_path: str | None) -> Path:

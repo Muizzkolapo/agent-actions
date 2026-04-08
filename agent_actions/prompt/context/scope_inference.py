@@ -264,9 +264,7 @@ def infer_dependencies(
             exc_info=True,
         )
 
-    # 2b. Identify field prefix patterns and wildcards from context_scope
-    # Collect all field references once to avoid duplication
-    field_prefix_base_names = set()
+    # 2b. Identify wildcard actions from context_scope
     wildcard_actions = set()
     all_field_refs = []
     all_field_refs.extend(context_scope.get("observe", []))
@@ -274,9 +272,7 @@ def infer_dependencies(
     for field_ref in all_field_refs:
         try:
             ref_action, ref_field = parse_field_reference(field_ref)
-            if ref_field == "_":  # Field prefix pattern
-                field_prefix_base_names.add(ref_action)
-            elif ref_field == "*":  # Wildcard pattern
+            if ref_field == "*":
                 wildcard_actions.add(ref_action)
         except ValueError as e:
             fire_event(
@@ -291,9 +287,6 @@ def infer_dependencies(
 
     # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
     # Also include fan-in context sources (non-primary dependencies from fan-in pattern)
-    # NOTE: Do NOT exclude field prefix base names here. They are expanded later into
-    # version variants so the caller can request all available branches. We will
-    # de-duplicate against input_sources after expansion to avoid overwriting.
     potential_context_sources = (
         referenced_actions - set(input_sources) - set(fan_in_context_sources)
     )
@@ -309,16 +302,6 @@ def infer_dependencies(
         """Expand version base names to their actual variants in the workflow."""
         expanded = []
         for action in action_list:
-            # Skip validation for version field prefix patterns (ending with _)
-            # These are field prefix patterns from version_consumption merge, not action names
-            # Example: "extract_raw_qa_" matches fields like "extract_raw_qa_1_questions"
-            if action.endswith("_"):
-                expanded.append(action)
-                logger.debug(
-                    f"[VERSION_FIELD_PREFIX] Keeping '{action}' as field prefix pattern (not an action)"
-                )
-                continue
-
             if action in workflow_actions:
                 # Action exists as-is
                 expanded.append(action)
@@ -352,14 +335,8 @@ def infer_dependencies(
         ]
 
     # 5. Validate all referenced actions exist in workflow
-    # Skip validation for field prefix patterns (ending with _) and special namespaces
     all_referenced = set(input_sources_expanded) | set(context_sources_expanded)
     for dep_action in all_referenced:
-        # Skip validation for loop field prefix patterns
-        if dep_action.endswith("_"):
-            continue
-
-        # Skip validation for special reserved namespaces (source, version, workflow, etc.)
         if dep_action in SPECIAL_NAMESPACES:
             continue
 

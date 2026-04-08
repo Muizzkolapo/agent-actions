@@ -62,7 +62,7 @@ def parity_agent_config() -> dict[str, Any]:
         "json_mode": True,
         "prompt": "Process the following: {{ source.text }}",
         "context_scope": {
-            "observe": ["source.metadata"],
+            "observe": ["source.text", "source.metadata"],
             "drop": ["source.internal_id"],
             "passthrough": ["source.record_id"],
         },
@@ -72,7 +72,10 @@ def parity_agent_config() -> dict[str, Any]:
 @pytest.fixture
 def parity_agent_config_no_context_scope() -> dict[str, Any]:
     """
-    Agent configuration without context_scope for baseline parity testing.
+    Agent configuration with minimal context_scope for baseline parity testing.
+
+    context_scope is required — this uses a minimal observe to access source.text
+    which the prompt template references.
     """
     return {
         "name": "parity_test_agent_simple",
@@ -81,6 +84,9 @@ def parity_agent_config_no_context_scope() -> dict[str, Any]:
         "model_name": "mock-model",
         "json_mode": True,
         "prompt": "Process: {{ source.text }}",
+        "context_scope": {
+            "observe": ["source.text"],
+        },
     }
 
 

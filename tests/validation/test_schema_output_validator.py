@@ -254,3 +254,49 @@ class TestValidateAndRaiseIfInvalid:
 
         error = exc_info.value
         assert "extra" in error.extra_fields
+
+
+class TestNamespacedKeyHint:
+    """Regression: detect action-namespaced output from tool UDFs."""
+
+    def test_namespaced_output_produces_hint(self):
+        """When output has dict-valued extra keys and missing required fields, hint at namespacing."""
+        schema = {
+            "name": "flatten_schema",
+            "fields": [
+                {"id": "question_text", "type": "string", "required": True},
+                {"id": "answer_text", "type": "string", "required": True},
+            ],
+        }
+        # UDF passed through namespaced input instead of unwrapping
+        output = {"canonicalize_qa": {"question_text": "What?", "answer_text": "Yes"}}
+
+        report = validate_output_against_schema(output, schema, "flatten_questions")
+        assert not report.is_compliant
+        assert "question_text" in report.missing_required
+        assert "canonicalize_qa" in report.extra_fields
+        assert any("action namespaces" in e for e in report.validation_errors)
+
+    def test_no_hint_when_extra_fields_are_not_dicts(self):
+        """Extra scalar fields should NOT trigger the namespace hint."""
+        schema = {
+            "name": "test_schema",
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        output = {"wrong_field": "value"}
+
+        report = validate_output_against_schema(output, schema, "test_action")
+        assert not report.is_compliant
+        assert not any("action namespaces" in e for e in report.validation_errors)
+
+    def test_no_hint_when_no_missing_fields(self):
+        """If all required fields are present, no namespace hint even with extra dict keys."""
+        schema = {
+            "name": "test_schema",
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        output = {"name": "John", "extra_action": {"nested": "data"}}
+
+        report = validate_output_against_schema(output, schema, "test_action")
+        assert report.is_compliant
+        assert not any("action namespaces" in e for e in report.validation_errors)

@@ -16,11 +16,10 @@ class TestParseFieldReference:
         assert action == "my_action"
         assert field == "my_field"
 
-    def test_field_prefix_pattern_returns_sentinel(self):
-        """References ending with '_' (no dot) are field prefix patterns."""
-        action, field = parse_field_reference("extract_qa_")
-        assert action == "extract_qa"
-        assert field == "_"
+    def test_no_dot_raises(self):
+        """References without a dot are invalid."""
+        with pytest.raises(ValueError, match="Expected format"):
+            parse_field_reference("extract_qa_")
 
     def test_invalid_empty_string_raises(self):
         with pytest.raises(ValueError, match="Invalid field reference"):

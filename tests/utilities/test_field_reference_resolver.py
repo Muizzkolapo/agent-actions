@@ -300,7 +300,7 @@ class TestReferenceValidator:
         )
 
         assert len(errors) == 1
-        assert "not in dependencies" in errors[0]
+        assert "not in context_scope" in errors[0]
 
     def test_validate_strict_raises_exception(self, validator, agent_indices):
         """Test validate_strict raises on errors."""

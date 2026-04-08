@@ -33,28 +33,23 @@ class TestBuildLLMContextBasics:
 
 
 class TestBuildLLMContextDropBehavior:
-    """Test context_scope.drop behavior."""
+    """Test context_scope.drop behavior.
 
-    def test_drops_non_seed_field(self):
-        """Non-seed fields should be dropped via DataTransformer."""
-        base = {"keep": "this", "drop_me": "secret"}
-        context_scope = {"drop": ["source.drop_me"]}
+    Non-seed drops are enforced upstream by apply_context_scope (which
+    removes fields from prompt_context before observe). The builder
+    only handles seed drops.
+    """
 
-        result = LLMContextBuilder._build_llm_context(base, None, context_scope)
-
-        assert "keep" in result
-        assert "drop_me" not in result
-
-    def test_drops_multiple_fields(self):
-        """Multiple drop rules should all be applied."""
-        base = {"keep": "this", "drop1": "a", "drop2": "b"}
-        context_scope = {"drop": ["source.drop1", "source.drop2"]}
+    def test_nonseed_drops_are_noop_in_builder(self):
+        """Non-seed drops are handled upstream — builder passes them through."""
+        base = {"keep": "this", "other": "stays"}
+        context_scope = {"drop": ["source.other"]}
 
         result = LLMContextBuilder._build_llm_context(base, None, context_scope)
 
+        # Builder does not drop non-seed fields — that's apply_context_scope's job
         assert "keep" in result
-        assert "drop1" not in result
-        assert "drop2" not in result
+        assert "other" in result
 
 
 class TestBuildLLMContextSeedDrops:
@@ -107,17 +102,18 @@ class TestBuildLLMContextMixedDrops:
     """Test mixed seed and non-seed drops."""
 
     def test_mixed_seed_and_nonseed_drops(self):
-        """Both seed and non-seed drops should be applied correctly."""
+        """Seed drops applied, non-seed drops pass through (handled upstream)."""
         base = {
-            "top_level_drop": "remove",
+            "top_level_keep": "stays",
             "keep": "this",
             "seed": {"seed_drop": "remove", "seed_keep": "this"},
         }
-        context_scope = {"drop": ["source.top_level_drop", "seed.seed_drop"]}
+        context_scope = {"drop": ["source.top_level_keep", "seed.seed_drop"]}
 
         result = LLMContextBuilder._build_llm_context(base, None, context_scope)
 
-        assert "top_level_drop" not in result
+        # Non-seed field stays (upstream responsibility)
+        assert "top_level_keep" in result
         assert result["keep"] == "this"
         assert "seed_drop" not in result["seed"]
         assert result["seed"]["seed_keep"] == "this"

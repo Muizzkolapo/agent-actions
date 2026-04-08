@@ -3,6 +3,7 @@
 import json
 import logging
 from copy import deepcopy
+from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
@@ -20,6 +21,12 @@ logger = logging.getLogger(__name__)
 
 # Sentinel distinguishing "field not found" from a field whose value is falsy (0, "", False, None).
 _MISSING = object()
+
+# Framework-injected namespaces that are always available for template rendering
+# regardless of context_scope.observe/passthrough. These are not user data —
+# they are iteration context, static reference data, and workflow metadata.
+# Source: build_field_context_with_history() in scope_builder.py
+FRAMEWORK_NAMESPACES = frozenset({"version", "seed", "workflow", "loop"})
 
 __all__ = [
     "apply_context_scope",
@@ -51,8 +58,8 @@ def apply_context_scope(
     """
     # Deep copy to avoid mutating original field_context
     prompt_context = deepcopy(field_context)
-    llm_context = {}
-    passthrough_fields = {}
+    llm_context: dict[str, dict[str, Any]] = {}
+    passthrough_fields: dict[str, dict[str, Any]] = {}
 
     # Process STATIC_DATA: Add SEED namespace (namespace #3)
     if static_data:
@@ -143,11 +150,9 @@ def apply_context_scope(
 
             if field_name == "*":
                 # Wildcard: best-effort — namespace may be empty or absent.
-                # This is intentionally lenient: explicit field refs (dep.field)
-                # fail-fast, but wildcards (dep.*) are "give me what you have".
                 action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
-                    llm_context.update(action_fields)
+                    llm_context.setdefault(ns_name, {}).update(action_fields)
             else:
                 # Explicit field ref: fail-fast if not found
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
@@ -165,8 +170,7 @@ def apply_context_scope(
                         },
                     )
 
-                # Add to llm_context (flat dict with field names as keys)
-                llm_context[field_name] = value
+                llm_context.setdefault(ns_name, {})[field_name] = value
 
                 # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
@@ -181,7 +185,7 @@ def apply_context_scope(
             )
             continue
 
-    # Process PASSTHROUGH: Extract to passthrough_fields, remove from prompt_context
+    # Process PASSTHROUGH: Extract to passthrough_fields (namespaced like llm_context).
     passthrough_refs = context_scope.get("passthrough", [])
     for field_ref in passthrough_refs:
         try:
@@ -190,9 +194,8 @@ def apply_context_scope(
             if field_name == "*":
                 action_fields = extract_action_fields(field_context, ns_name)
                 if action_fields:
-                    passthrough_fields.update(action_fields)
+                    passthrough_fields.setdefault(ns_name, {}).update(action_fields)
             else:
-                # Extract value from original field_context
                 value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
 
                 if value is _MISSING:
@@ -208,8 +211,7 @@ def apply_context_scope(
                         },
                     )
 
-                # Add to passthrough_fields (flat dict with field names as keys)
-                passthrough_fields[field_name] = value
+                passthrough_fields.setdefault(ns_name, {})[field_name] = value
 
         except ValueError as e:
             fire_event(
@@ -221,6 +223,43 @@ def apply_context_scope(
                 )
             )
             continue
+
+    # Gate prompt_context to scoped fields only.
+    # Only fields declared in observe or passthrough (plus framework namespaces)
+    # are accessible for Jinja2 template rendering.
+    allowed: dict[str, set[str] | str] = {}
+    for field_ref in observe_refs + passthrough_refs:
+        try:
+            ns_name, field_name = parse_field_reference(field_ref)
+        except ValueError:
+            continue
+        if field_name == "*":
+            allowed[ns_name] = "*"
+        else:
+            if ns_name not in allowed:
+                allowed[ns_name] = set()
+            current = allowed[ns_name]
+            if isinstance(current, set):
+                current.add(field_name)
+
+    filtered: dict = {}
+    for ns, data in prompt_context.items():
+        if ns in FRAMEWORK_NAMESPACES:
+            filtered[ns] = data
+        elif ns in allowed:
+            if allowed[ns] == "*" or not isinstance(data, dict):
+                filtered[ns] = data
+            else:
+                filtered[ns] = {k: v for k, v in data.items() if k in allowed[ns]}
+
+    excluded = set(prompt_context.keys()) - set(filtered.keys())
+    if excluded:
+        logger.debug(
+            "[CONTEXT_GATE] Action '%s': excluded namespaces from prompt_context: %s",
+            action_name,
+            sorted(excluded),
+        )
+    prompt_context = filtered
 
     # Fire event for scope application
     fire_event(
@@ -239,16 +278,20 @@ def apply_context_scope(
 
 
 def format_llm_context(llm_context: dict) -> str:
-    """Format llm_context dict as readable text for LLM message injection."""
+    """Format llm_context dict as readable text for LLM message injection.
+
+    llm_context is namespaced: {action_name: {field: value, ...}, ...}.
+    Each namespace is rendered as a labeled section.
+    """
     if not llm_context:
         return ""
 
     lines = ["Additional context:"]
 
-    for key, value in llm_context.items():
-        # Format value as pretty JSON for readability
-        value_str = json.dumps(value, indent=2, ensure_ascii=False)
-        lines.append(f"{key}: {value_str}")
+    for ns_name, ns_data in llm_context.items():
+        for field, value in ns_data.items():
+            value_str = json.dumps(value, indent=2, ensure_ascii=False)
+            lines.append(f"{ns_name}.{field}: {value_str}")
 
     return "\n".join(lines)
 

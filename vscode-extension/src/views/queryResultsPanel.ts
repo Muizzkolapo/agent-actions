@@ -142,6 +142,8 @@ export class QueryResultsPanel implements vscode.Disposable {
                             ? 'agentActions.nextPage'
                             : 'agentActions.previousPage'
                     );
+                } else if (message.type === 'copy') {
+                    vscode.env.clipboard.writeText(message.text);
                 } else if (message.type === 'toggleView') {
                     if (message.mode === 'card' || message.mode === 'table' || message.mode === 'json') {
                         this.viewMode = message.mode;
@@ -176,342 +178,126 @@ export class QueryResultsPanel implements vscode.Disposable {
         });
 
         const cardScript = `
-        const vscode = acquireVsCodeApi();
-        const records = JSON.parse(${JSON.stringify(recordsJson)});
-        const offset = ${offset};
+        var vscode = acquireVsCodeApi();
+        var records = JSON.parse(${JSON.stringify(recordsJson)});
+        var offset = ${offset};
+        var copyTexts = [];
 
-        // ── Field classification (ported from data-card-utils.ts) ──
-        const METADATA_KEYS = new Set([
-            'source_guid','lineage','node_id','metadata','target_id',
-            'parent_target_id','root_target_id','chunk_info',
-            '_recovery','_unprocessed','_file','_trace'
-        ]);
-        const IDENTITY_KEYS = new Set(['source_guid','target_id']);
-        const LONG_FORM_HINTS = new Set([
-            'reasoning','classification_reasoning','description',
-            'summary','explanation','rationale','comment','notes'
-        ]);
+        var METADATA_KEYS = new Set(['source_guid','lineage','node_id','metadata','target_id','parent_target_id','root_target_id','chunk_info','_recovery','_unprocessed','_file','_trace']);
+        var IDENTITY_KEYS = new Set(['source_guid','target_id']);
+        var LONG_FORM_HINTS = new Set(['reasoning','classification_reasoning','description','summary','explanation','rationale','comment','notes','source_quote']);
 
-        function classifyField(key) {
-            if (IDENTITY_KEYS.has(key)) return 'identity';
-            if (METADATA_KEYS.has(key)) return 'metadata';
-            return 'content';
-        }
-        function isLongForm(key) {
-            const lower = key.toLowerCase();
-            for (const hint of LONG_FORM_HINTS) {
-                if (lower === hint || lower.endsWith('_' + hint)) return true;
-            }
-            return false;
-        }
-        function isShort(value) {
-            if (typeof value !== 'string') return typeof value !== 'object' || value === null;
-            return value.length <= 80;
-        }
-        function isInlineArray(value) {
-            if (!Array.isArray(value)) return false;
-            if (value.length === 0 || value.length > 3) return false;
-            return value.every(v => typeof v === 'string' || typeof v === 'number');
-        }
-        function humanize(key) {
-            return key.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\\b\\w/g, c => c.toUpperCase());
-        }
-        function esc(str) {
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
-        function fmt(value, max) {
-            if (value === null || value === undefined) return 'null';
-            if (typeof value === 'boolean') return String(value);
-            if (typeof value === 'number') return value.toLocaleString();
-            if (typeof value === 'object') {
-                const s = JSON.stringify(value);
-                return max > 0 && s.length > max ? s.slice(0, max) + '\\u2026' : s;
-            }
-            const s = String(value);
-            return max > 0 && s.length > max ? s.slice(0, max) + '\\u2026' : s;
+        function classifyField(key) { if (IDENTITY_KEYS.has(key)) return 'identity'; if (METADATA_KEYS.has(key)) return 'metadata'; return 'content'; }
+        function isLongForm(key) { var l = key.toLowerCase(); for (var h of LONG_FORM_HINTS) { if (l === h || l.endsWith('_' + h)) return true; } return false; }
+        function isInlineArray(v) { if (!Array.isArray(v) || v.length === 0 || v.length > 3) return false; return v.every(function(x) { return typeof x === 'string' || typeof x === 'number'; }); }
+        function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function fmt(v, max) { if (v == null) return 'null'; if (typeof v === 'boolean') return String(v); if (typeof v === 'number') return v.toLocaleString(); if (typeof v === 'object') { var s = JSON.stringify(v); return max > 0 && s.length > max ? s.slice(0, max) + '\u2026' : s; } var s = String(v); return max > 0 && s.length > max ? s.slice(0, max) + '\u2026' : s; }
+        function isArrayOfObjects(v) { if (!Array.isArray(v) || v.length === 0) return false; return v.every(function(x) { return typeof x === 'object' && x !== null && !Array.isArray(x); }); }
+        function isSourceQuote(k) { return k.toLowerCase().indexOf('source_quote') >= 0; }
+
+        function renderFieldValue(key, value) {
+            if (value == null) return '<span class="t-null">null</span>';
+            if (typeof value === 'boolean') return '<span class="badge ' + (value ? 'badge-true' : 'badge-false') + '">' + String(value) + '</span>';
+            if (typeof value === 'number') return '<span class="t-val">' + value.toLocaleString() + '</span>';
+            if (isInlineArray(value)) return value.map(function(x) { return '<span class="pill">' + esc(String(x)) + '</span>'; }).join(' ');
+            if (isArrayOfObjects(value)) return renderArrayOfObjects(key, value);
+            if (typeof value === 'object') return '<pre class="code-block">' + esc(JSON.stringify(value, null, 2)) + '</pre>';
+            var str = String(value);
+            if (isSourceQuote(key)) return '<div class="source-quote">' + esc(str) + '</div>';
+            if (str.length > 80 || isLongForm(key)) return '<div class="tree-prose">' + esc(str) + '</div>';
+            return '<span class="t-val">' + esc(str) + '</span>';
         }
 
-        // ── Helpers ──
-        function isArrayOfObjects(value) {
-            if (!Array.isArray(value) || value.length === 0) return false;
-            return value.every(v => typeof v === 'object' && v !== null && !Array.isArray(v));
-        }
-        function isScalar(value) {
-            if (value === null || value === undefined) return true;
-            return typeof value !== 'object';
-        }
-
-        // ── Render cards ──
-        function renderObjectArrayItem(item, fieldKey, idx, total) {
-            let html = '<div class="subcard">'
-                + '<span class="subcard-index">' + esc(humanize(fieldKey)) + ' [' + (idx + 1) + '/' + total + ']</span>';
-            for (const [k, v] of Object.entries(item)) {
-                const valStr = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : String(v ?? '');
-                const isLongVal = valStr.length > 100;
-                if (isLongVal) {
-                    html += '<div class="field-row field-block">'
-                        + '<span class="field-label">' + esc(humanize(k)) + '</span>'
-                        + '<div class="field-value"><span class="prose-inline">' + esc(valStr) + '</span></div>'
-                        + '</div>';
-                } else {
-                    html += '<div class="field-row field-inline">'
-                        + '<span class="field-label">' + esc(humanize(k)) + '</span>'
-                        + '<div class="field-value"><span class="val-string">' + esc(valStr) + '</span></div>'
-                        + '</div>';
-                }
-            }
-            html += '</div>';
-            return html;
+        function renderTreeField(key, value, defaultOpen) {
+            var valStr = typeof value === 'string' ? value : typeof value === 'object' ? JSON.stringify(value) : String(value != null ? value : '');
+            var preview = valStr.length > 60 ? valStr.slice(0, 60) + '\u2026' : valStr;
+            return '<div class="tree-field"><button class="tree-toggle" data-tree-toggle>'
+                + '<span class="tree-chevron">' + (defaultOpen ? '&#9660;' : '&#9654;') + '</span>'
+                + '<span class="t-key">' + esc(key) + '</span>'
+                + (!defaultOpen ? '<span class="t-preview">' + esc(preview) + '</span>' : '')
+                + '</button><div class="tree-field-value"' + (defaultOpen ? '' : ' hidden') + '>'
+                + renderFieldValue(key, value) + '</div></div>';
         }
 
-        function renderValue(key, value) {
-            if (value === null || value === undefined) {
-                return '<span class="val-null">null</span>';
+        function renderTreeNode(label, badge, defaultOpen, childrenHtml) {
+            return '<div class="tree-node"><button class="tree-toggle" data-tree-toggle>'
+                + '<span class="tree-chevron">' + (defaultOpen ? '&#9660;' : '&#9654;') + '</span>'
+                + '<span class="t-ns">' + esc(label) + '</span>'
+                + (badge ? '<span class="t-type">' + esc(badge) + '</span>' : '')
+                + '</button><div class="tree-children"' + (defaultOpen ? '' : ' hidden') + '>'
+                + childrenHtml + '</div></div>';
+        }
+
+        function renderArrayOfObjects(fieldKey, items) {
+            var ch = '';
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i], itemOpen = (i === 0), pText = Object.keys(item).length + ' fields';
+                for (var ek of Object.keys(item)) { var ev = item[ek]; if (typeof ev === 'string' && ev.length > 10) { pText = ev.length > 80 ? ev.slice(0, 80) + '\u2026' : ev; break; } }
+                var fh = ''; for (var fk of Object.keys(item)) fh += renderTreeField(fk, item[fk], true);
+                ch += '<div class="array-item"><button class="tree-toggle" data-tree-toggle>'
+                    + '<span class="tree-chevron">' + (itemOpen ? '&#9660;' : '&#9654;') + '</span>'
+                    + '<span class="t-idx">[' + i + ']</span><span class="t-type">object</span>'
+                    + (!itemOpen ? '<span class="t-preview">' + esc(pText) + '</span>' : '')
+                    + '</button><div class="tree-children"' + (itemOpen ? '' : ' hidden') + '>' + fh + '</div></div>';
             }
-            if (typeof value === 'boolean') {
-                return '<span class="badge ' + (value ? 'badge-true' : 'badge-false') + '">' + String(value) + '</span>';
-            }
-            if (typeof value === 'number') {
-                return '<span class="val-number">' + value.toLocaleString() + '</span>';
-            }
-            if (isInlineArray(value)) {
-                return value.map(v => '<span class="pill">' + esc(String(v)) + '</span>').join(' ');
-            }
-            if (isArrayOfObjects(value)) {
-                const items = value;
-                const showCount = 2;
-                let html = '<div class="subcard-list">';
-                for (let i = 0; i < Math.min(items.length, showCount); i++) {
-                    html += renderObjectArrayItem(items[i], key, i, items.length);
-                }
-                if (items.length > showCount) {
-                    html += '<div class="subcard-hidden" hidden data-field="' + esc(key) + '">';
-                    for (let i = showCount; i < items.length; i++) {
-                        html += renderObjectArrayItem(items[i], key, i, items.length);
-                    }
-                    html += '</div>';
-                    html += '<button class="expand-btn subcard-expand" data-field="' + esc(key) + '">Show ' + (items.length - showCount) + ' more</button>';
-                }
-                html += '</div>';
-                return html;
-            }
-            if (typeof value === 'object') {
-                return '<pre class="code-block">' + esc(JSON.stringify(value, null, 2)) + '</pre>';
-            }
-            const str = String(value);
-            if (isLongForm(key) && str.length > 80) {
-                return '<p class="prose clamped">' + esc(str) + '</p>'
-                    + '<button class="expand-btn">Show more</button>';
-            }
-            if (str.length > 120) {
-                return '<p class="prose clamped">' + esc(str) + '</p>'
-                    + '<button class="expand-btn">Show more</button>';
-            }
-            return '<span class="val-string">' + esc(str) + '</span>';
+            return renderTreeNode(fieldKey, 'array[' + items.length + ']', true, ch);
+        }
+
+        function renderSection(label, hint, copyText, defaultOpen, contentHtml, badgesHtml) {
+            if (!contentHtml) return '';
+            var ci = copyTexts.length; copyTexts.push(copyText || '');
+            return '<div class="card-section"><button class="section-toggle" data-section-toggle>'
+                + '<span class="sec-chevron">' + (defaultOpen ? '&#9660;' : '&#9654;') + '</span>'
+                + '<span class="section-label">' + esc(label) + '</span>'
+                + (badgesHtml || '')
+                + (hint ? '<span class="section-hint">' + esc(hint) + '</span>' : '')
+                + (copyText ? '<span class="copy-btn" data-copy-idx="' + ci + '" title="Copy">&#128203;</span>' : '')
+                + '</button><div class="section-content"' + (defaultOpen ? '' : ' hidden') + '>'
+                + contentHtml + '</div></div>';
         }
 
         function buildCard(record, index) {
-            const identity = [];
-            const content = [];
-            const meta = [];
+            var identity = [], meta = [], outputFields = [];
+            var dr = record; if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) dr = record.content;
+            for (var k of Object.keys(record)) { var r = classifyField(k); if (r === 'identity') identity.push({key:k,value:record[k]}); else if (r === 'metadata') meta.push({key:k,value:record[k]}); }
+            for (var k of Object.keys(dr)) { if (classifyField(k) === 'content') outputFields.push({key:k,value:dr[k]}); }
+            var trace = record._trace && typeof record._trace === 'object' && !Array.isArray(record._trace) ? record._trace : null;
+            var recOpen = (index === offset);
+            var inputData = null;
+            if (trace && trace.llm_context) { try { var p = JSON.parse(trace.llm_context); if (typeof p === 'object' && p && !Array.isArray(p)) inputData = p; } catch(e) {} }
 
-            // Unwrap content wrapper if present
-            let displayRecord = record;
-            if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) {
-                displayRecord = record.content;
-            }
+            var hdr = '<span class="rec-chevron">' + (recOpen ? '&#9660;' : '&#9654;') + '</span><span class="card-index">#' + (index + 1) + '</span>';
+            for (var f of identity) hdr += ' <span class="card-id" title="' + esc(fmt(f.value, 0)) + '">' + esc(fmt(f.value, 24)) + '</span>';
+            if (typeof record._file === 'string') hdr += ' <span class="card-id">' + esc(record._file) + '</span>';
+            if (!recOpen) hdr += '<span class="rec-preview">' + (trace ? 'trace + ' : '') + outputFields.length + ' fields</span>';
 
-            for (const [key, value] of Object.entries(record)) {
-                const role = classifyField(key);
-                if (role === 'identity') identity.push({ key, value });
-                else if (role === 'metadata') meta.push({ key, value });
-            }
-            for (const [key, value] of Object.entries(displayRecord)) {
-                if (classifyField(key) === 'content') {
-                    content.push({ key, value });
-                }
-            }
+            var s1 = ''; if (trace && trace.compiled_prompt) { var b = ''; if (trace.model_name) b += '<span class="trace-badge trace-model">' + esc(String(trace.model_name)) + '</span>'; if (trace.run_mode) b += '<span class="trace-badge trace-mode' + (trace.run_mode === 'batch' ? ' batch' : '') + '">' + esc(String(trace.run_mode)) + '</span>'; s1 = renderSection('Prompt Trace', trace.prompt_length ? trace.prompt_length.toLocaleString() + ' chars' : '', trace.compiled_prompt, false, '<pre class="trace-panel-body">' + esc(String(trace.compiled_prompt)) + '</pre>', '<span class="section-badges">' + b + '</span>'); }
+            var s2 = ''; if (inputData && Object.keys(inputData).length > 0) { var ih = ''; for (var ns of Object.keys(inputData)) { var nd = inputData[ns]; if (typeof nd !== 'object' || nd === null) ih += renderTreeField(ns, nd, true); else { var fh = ''; for (var fk of Object.keys(nd)) fh += renderTreeField(fk, nd[fk], true); ih += renderTreeNode(ns, Object.keys(nd).length + ' fields', false, fh); } } s2 = renderSection('Input Data', Object.keys(inputData).length + ' namespaces', JSON.stringify(inputData, null, 2), false, ih, ''); }
+            var s3 = ''; if (trace && trace.response_text) { s3 = renderSection('Raw Response', trace.response_length ? trace.response_length.toLocaleString() + ' chars' : '', trace.response_text, false, '<pre class="trace-panel-body response-body">' + esc(String(trace.response_text)) + '</pre>', ''); }
+            var s4 = ''; if (outputFields.length > 0) { var oh = ''; for (var f of outputFields) { if (isArrayOfObjects(f.value)) oh += renderArrayOfObjects(f.key, f.value); else oh += renderTreeField(f.key, f.value, true); } s4 = renderSection('Action Output', outputFields.length + ' fields', JSON.stringify(dr, null, 2), true, oh, ''); }
+            var s5 = ''; if (meta.length > 0) { var mh = ''; for (var f of meta) mh += '<div class="meta-row"><span class="meta-key">' + esc(f.key) + '</span><span class="meta-val">' + esc(fmt(f.value, 120)) + '</span></div>'; s5 = renderSection('Metadata', meta.length + ' fields', JSON.stringify(Object.fromEntries(meta.map(function(f){return[f.key,f.value]})), null, 2), false, mh, ''); }
 
-            // Split content into scalar vs structured
-            const scalarFields = content.filter(f => isScalar(f.value) || isInlineArray(f.value));
-            const structuredFields = content.filter(f => !isScalar(f.value) && !isInlineArray(f.value));
-
-            // 1. Header
-            let header = '<span class="card-index">#' + (index + 1) + '</span>';
-            for (const f of identity) {
-                const truncated = fmt(f.value, 24);
-                header += ' <span class="card-id" title="' + esc(fmt(f.value, 0)) + '">' + esc(truncated) + '</span>';
-            }
-
-            // 2. Prompt Trace (input — moved before output)
-            var traceDrawer = '';
-            var trace = record._trace;
-            var hasTrace = trace && typeof trace === 'object' && !Array.isArray(trace);
-            if (hasTrace) {
-                var modelLabel = esc(String(trace.model_name || 'unknown'));
-                var modeLabel = esc(String(trace.run_mode || 'online'));
-                var batchClass = modeLabel === 'batch' ? ' batch' : '';
-                var promptLen = typeof trace.prompt_length === 'number' ? trace.prompt_length.toLocaleString() + ' chars' : '';
-                var responseLen = typeof trace.response_length === 'number' ? trace.response_length.toLocaleString() + ' chars' : '';
-                var promptText = esc(String(trace.compiled_prompt || ''));
-                var responseText = trace.response_text ? esc(String(trace.response_text)) : '<span class="val-null">Response pending</span>';
-
-                traceDrawer = '<div class="card-trace">'
-                    + '<button class="trace-toggle">'
-                    + '&#9656; Prompt Trace'
-                    + ' <span class="trace-badges">'
-                    + '<span class="trace-badge trace-model">' + modelLabel + '</span>'
-                    + '<span class="trace-badge trace-mode' + batchClass + '">' + modeLabel + '</span>'
-                    + '</span>'
-                    + '</button>'
-                    + '<div class="trace-panels-wrap" hidden>'
-                    + '<div class="trace-panel prompt">'
-                    + '<div class="trace-panel-hdr"><span>Compiled Prompt</span>' + (promptLen ? '<span class="trace-size">' + promptLen + '</span>' : '') + '</div>'
-                    + '<pre class="trace-panel-body">' + promptText + '</pre>'
-                    + '</div>'
-                    + '<div class="trace-panel response">'
-                    + '<div class="trace-panel-hdr"><span>LLM Response</span>' + (responseLen ? '<span class="trace-size">' + responseLen + '</span>' : '') + '</div>'
-                    + '<pre class="trace-panel-body response-body">' + responseText + '</pre>'
-                    + '</div>'
-                    + '</div>'
-                    + '</div>';
-            }
-
-            // 3. Action Output — scalar fields first, then structured
-            let body = '';
-            if (content.length === 0) {
-                body = '<div class="card-empty">No content fields</div>';
-            } else {
-                if (hasTrace) {
-                    body += '<div class="output-label">Output</div>';
-                }
-                for (const f of scalarFields) {
-                    const short = isShort(f.value) && !isLongForm(f.key);
-                    if (short) {
-                        body += '<div class="field-row field-inline">'
-                            + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
-                            + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
-                            + '</div>';
-                    } else {
-                        body += '<div class="field-row field-block">'
-                            + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
-                            + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
-                            + '</div>';
-                    }
-                }
-                for (const f of structuredFields) {
-                    body += '<div class="field-row field-block">'
-                        + '<span class="field-label">' + esc(humanize(f.key)) + '</span>'
-                        + '<div class="field-value">' + renderValue(f.key, f.value) + '</div>'
-                        + '</div>';
-                }
-            }
-
-            // 4. Metadata (last)
-            let drawer = '';
-            if (meta.length > 0) {
-                let metaRows = '';
-                for (const f of meta) {
-                    metaRows += '<div class="meta-row">'
-                        + '<span class="meta-key">' + esc(humanize(f.key)) + '</span>'
-                        + '<span class="meta-val">' + esc(fmt(f.value, 120)) + '</span>'
-                        + '</div>';
-                }
-                drawer = '<div class="card-meta">'
-                    + '<button class="meta-toggle">&#9656; Metadata (' + meta.length + ' fields)</button>'
-                    + '<div class="meta-content" hidden>' + metaRows + '</div>'
-                    + '</div>';
-            }
-
-            // Card order: header -> trace -> output -> metadata
-            return '<div class="card">'
-                + '<div class="card-header">' + header + '</div>'
-                + traceDrawer
-                + '<div class="card-body">' + body + '</div>'
-                + drawer
-                + '</div>';
+            return '<div class="card" data-record-open="' + (recOpen ? 'true' : 'false') + '"><div class="card-header" data-rec-toggle>' + hdr + '</div><div class="card-body-wrap"' + (recOpen ? '' : ' hidden') + '>' + s1 + s2 + s3 + s4 + s5 + (outputFields.length === 0 ? '<div class="card-empty">No content fields</div>' : '') + '</div></div>';
         }
 
-        // Render all cards
-        const container = document.getElementById('cardsContainer');
-        let html = '';
-        for (let i = 0; i < records.length; i++) {
-            html += buildCard(records[i], offset + i);
-        }
+        var container = document.getElementById('cardsContainer');
+        var html = ''; for (var i = 0; i < records.length; i++) html += buildCard(records[i], offset + i);
         container.innerHTML = html;
 
-        // ── Event delegation ──
         document.addEventListener('click', function(e) {
-            const target = e.target;
-
-            // Expand/collapse prose or subcard list
-            if (target.classList && target.classList.contains('expand-btn')) {
-                // Subcard expand (array of objects)
-                if (target.classList.contains('subcard-expand')) {
-                    var hidden = target.previousElementSibling;
-                    if (hidden && hidden.classList.contains('subcard-hidden')) {
-                        var wasHidden = hidden.hasAttribute('hidden');
-                        if (wasHidden) {
-                            hidden.removeAttribute('hidden');
-                            target.textContent = 'Show less';
-                        } else {
-                            hidden.setAttribute('hidden', '');
-                            var count = hidden.querySelectorAll('.subcard').length;
-                            target.textContent = 'Show ' + count + ' more';
-                        }
-                    }
-                    return;
-                }
-                // Prose expand
-                const prose = target.previousElementSibling;
-                if (prose && prose.classList.contains('prose')) {
-                    prose.classList.toggle('clamped');
-                    target.textContent = prose.classList.contains('clamped') ? 'Show more' : 'Show less';
-                }
-                return;
-            }
-
-            // Trace drawer toggle
-            if (target.classList && target.classList.contains('trace-toggle')) {
-                var panels = target.nextElementSibling;
-                if (panels) {
-                    var wasHidden = panels.hasAttribute('hidden');
-                    if (wasHidden) panels.removeAttribute('hidden');
-                    else panels.setAttribute('hidden', '');
-                    var badgesHtml = target.querySelector('.trace-badges');
-                    target.innerHTML = (wasHidden ? '&#9662;' : '&#9656;') + ' Prompt Trace ' + (badgesHtml ? badgesHtml.outerHTML : '');
-                }
-                return;
-            }
-
-            // Metadata drawer toggle
-            if (target.classList && target.classList.contains('meta-toggle')) {
-                const content = target.nextElementSibling;
-                if (content) {
-                    const isHidden = content.hasAttribute('hidden');
-                    if (isHidden) content.removeAttribute('hidden');
-                    else content.setAttribute('hidden', '');
-                    target.innerHTML = (isHidden ? '&#9662;' : '&#9656;') + ' Metadata (' + content.children.length + ' fields)';
-                }
-                return;
-            }
-
-            // Pagination
-            if (target.id === 'prevBtn' || target.closest && target.closest('#prevBtn')) {
-                vscode.postMessage({ type: 'paginate', direction: 'previous' });
-                return;
-            }
-            if (target.id === 'nextBtn' || target.closest && target.closest('#nextBtn')) {
-                vscode.postMessage({ type: 'paginate', direction: 'next' });
-                return;
-            }
-
-            // View toggle
-            const toggleBtn = target.closest ? target.closest('.view-toggle') : null;
-            if (toggleBtn && toggleBtn.dataset.mode) {
-                vscode.postMessage({ type: 'toggleView', mode: toggleBtn.dataset.mode });
-                return;
-            }
+            var target = e.target;
+            var recT = target.closest ? target.closest('[data-rec-toggle]') : null;
+            if (recT) { var card = recT.closest('.card'); if (card) { var w = card.querySelector('.card-body-wrap'); var h = w.hasAttribute('hidden'); if (h) w.removeAttribute('hidden'); else w.setAttribute('hidden',''); var c = recT.querySelector('.rec-chevron'); if (c) c.innerHTML = h ? '&#9660;' : '&#9654;'; var p = recT.querySelector('.rec-preview'); if (p) p.style.display = h ? 'none' : ''; } return; }
+            var cpB = target.closest ? target.closest('.copy-btn') : null;
+            if (cpB) { e.stopPropagation(); var idx = parseInt(cpB.dataset.copyIdx, 10); if (!isNaN(idx) && copyTexts[idx]) { vscode.postMessage({type:'copy',text:copyTexts[idx]}); cpB.innerHTML = '&#10003;'; setTimeout(function() { cpB.innerHTML = '&#128203;'; }, 1500); } return; }
+            var secT = target.closest ? target.closest('[data-section-toggle]') : null;
+            if (secT) { var ct = secT.nextElementSibling; if (ct) { var h = ct.hasAttribute('hidden'); if (h) ct.removeAttribute('hidden'); else ct.setAttribute('hidden',''); var c = secT.querySelector('.sec-chevron'); if (c) c.innerHTML = h ? '&#9660;' : '&#9654;'; } return; }
+            var trT = target.closest ? target.closest('[data-tree-toggle]') : null;
+            if (trT) { var sb = trT.nextElementSibling; if (sb) { var h = sb.hasAttribute('hidden'); if (h) sb.removeAttribute('hidden'); else sb.setAttribute('hidden',''); var c = trT.querySelector('.tree-chevron'); if (c) c.innerHTML = h ? '&#9660;' : '&#9654;'; var p = trT.querySelector('.t-preview'); if (p) p.style.display = h ? 'none' : ''; } return; }
+            if (target.id === 'prevBtn' || (target.closest && target.closest('#prevBtn'))) { vscode.postMessage({type:'paginate',direction:'previous'}); return; }
+            if (target.id === 'nextBtn' || (target.closest && target.closest('#nextBtn'))) { vscode.postMessage({type:'paginate',direction:'next'}); return; }
+            var tB = target.closest ? target.closest('.view-toggle') : null;
+            if (tB && tB.dataset.mode) { vscode.postMessage({type:'toggleView',mode:tB.dataset.mode}); return; }
         });
         `;
 
@@ -812,344 +598,71 @@ function allStyles(): string {
         .nav-btn:disabled { opacity: 0.4; cursor: default; }
 
         /* ── Cards ── */
-        .cards-wrap {
-            flex: 1;
-            overflow: auto;
-            padding: 12px;
-        }
-        .card {
-            border: 1px solid var(--vscode-panel-border);
-            border-left: 4px solid #7F77DD;
-            border-radius: 6px;
-            background: var(--vscode-editor-background);
-            margin-bottom: 10px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
-            transition: transform 150ms ease, box-shadow 150ms ease;
-        }
-        .card:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.35), 0 2px 4px -1px rgb(0 0 0 / 0.25);
-        }
-        .card-header {
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--vscode-panel-border);
-            font-family: var(--vscode-editor-font-family);
-            font-size: 10px;
-            color: var(--vscode-descriptionForeground);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .card-index {
-            font-weight: 600;
-            color: var(--vscode-foreground);
-            opacity: 0.4;
-        }
-        .card-id {
-            opacity: 0.5;
-            max-width: 160px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .card-body {
-            padding: 10px 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .card-empty {
-            font-size: 0.85em;
-            font-style: italic;
-            color: var(--vscode-descriptionForeground);
-            opacity: 0.6;
-        }
-        .field-row { min-width: 0; }
-        .field-inline {
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-        }
-        .field-block {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-        .field-label {
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-            color: #AFA9EC;
-            flex-shrink: 0;
-            min-width: 80px;
-        }
-        .field-value {
-            font-family: var(--vscode-editor-font-family);
-            font-size: 0.92em;
-            color: var(--vscode-editor-foreground);
-            min-width: 0;
-            flex: 1;
-        }
+        .cards-wrap { flex: 1; overflow: auto; padding: 0; }
+        .card { border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); overflow: hidden; }
+        .card-header { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-family: var(--vscode-editor-font-family); font-size: 10px; color: var(--vscode-descriptionForeground); flex-wrap: wrap; cursor: pointer; }
+        .card-header:hover { background: var(--vscode-list-hoverBackground); }
+        .card-index { font-weight: 600; opacity: 0.4; }
+        .card-id { opacity: 0.4; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rec-chevron { color: var(--vscode-descriptionForeground); margin-right: 2px; font-size: 10px; }
+        .rec-preview { font-size: 10px; color: var(--vscode-descriptionForeground); opacity: 0.5; margin-left: auto; }
+        .card-body-wrap[hidden] { display: none; }
+        .card-empty { font-size: 0.85em; font-style: italic; color: var(--vscode-descriptionForeground); opacity: 0.6; padding: 8px 12px; }
 
-        /* Value types */
-        .val-null { font-size: 10px; font-style: italic; opacity: 0.4; }
-        .val-number { font-variant-numeric: tabular-nums; }
-        .val-string { word-break: break-word; }
-        .badge {
-            display: inline-block;
-            padding: 1px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 500;
-        }
-        .badge-true {
-            background: color-mix(in srgb, var(--vscode-testing-iconPassed) 15%, transparent);
-            color: var(--vscode-testing-iconPassed);
-        }
-        .badge-false {
-            background: color-mix(in srgb, var(--vscode-testing-iconFailed) 15%, transparent);
-            color: var(--vscode-testing-iconFailed);
-        }
-        .pill {
-            display: inline-flex;
-            align-items: center;
-            padding: 1px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-family: var(--vscode-editor-font-family);
-            background: #3C3489;
-            color: #CECBF6;
-            border: 1px solid #3C3489;
-            margin-right: 4px;
-        }
-        .prose {
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-break: break-word;
-            font-family: var(--vscode-font-family);
-            font-size: 0.92em;
-        }
-        .prose.clamped {
-            max-height: 4.5em;
-            overflow: hidden;
-        }
-        .expand-btn {
-            background: none;
-            border: none;
-            color: var(--vscode-textLink-foreground);
-            cursor: pointer;
-            font-size: 10px;
-            padding: 0;
-            margin-top: 2px;
-        }
-        .expand-btn:hover { text-decoration: underline; }
-        .code-block {
-            background: var(--vscode-textCodeBlock-background);
-            border-radius: 4px;
-            padding: 8px;
-            font-family: var(--vscode-editor-font-family);
-            font-size: 0.85em;
-            line-height: 1.4;
-            max-height: 300px;
-            overflow: auto;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
+        /* Sections */
+        .card-section { border-top: 1px solid var(--vscode-panel-border); }
+        .section-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 12px; background: none; border: none; color: var(--vscode-foreground); font-size: 11px; cursor: pointer; text-align: left; }
+        .section-toggle:hover { background: var(--vscode-list-hoverBackground); }
+        .sec-chevron { color: var(--vscode-descriptionForeground); font-size: 10px; flex-shrink: 0; }
+        .section-label { font-weight: 600; font-size: 11px; }
+        .section-badges { display: inline-flex; gap: 4px; margin-left: 4px; }
+        .section-hint { font-size: 10px; color: var(--vscode-descriptionForeground); opacity: 0.5; margin-left: auto; }
+        .section-content { padding: 4px 8px 8px; }
+        .section-content[hidden] { display: none; }
+        .copy-btn { background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.3; padding: 2px 4px; color: var(--vscode-foreground); margin-left: 4px; }
+        .copy-btn:hover { opacity: 0.8; }
 
-        /* Metadata drawer */
-        .card-meta {
-            border-top: 1px solid var(--vscode-panel-border);
-        }
-        .meta-toggle {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            width: 100%;
-            padding: 6px 12px;
-            background: none;
-            border: none;
-            color: var(--vscode-descriptionForeground);
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            cursor: pointer;
-        }
-        .meta-toggle:hover { color: var(--vscode-foreground); }
-        .meta-content {
-            padding: 0 12px 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-        .meta-content[hidden] { display: none; }
-        .meta-row {
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-            min-width: 0;
-        }
-        .meta-key {
-            font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 500;
-            color: #AFA9EC;
-            opacity: 0.6;
-            flex-shrink: 0;
-            min-width: 60px;
-        }
-        .meta-val {
-            font-family: var(--vscode-editor-font-family);
-            font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            word-break: break-all;
-            min-width: 0;
-        }
+        /* Tree view */
+        .tree-node, .tree-field, .array-item { min-width: 0; }
+        .tree-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 8px; background: none; border: none; color: var(--vscode-foreground); font-size: 12px; cursor: pointer; text-align: left; }
+        .tree-toggle:hover { background: var(--vscode-list-hoverBackground); border-radius: 3px; }
+        .tree-chevron { font-size: 9px; color: var(--vscode-descriptionForeground); flex-shrink: 0; width: 10px; }
+        .tree-children { padding-left: 16px; }
+        .tree-children[hidden] { display: none; }
+        .tree-field-value { padding: 2px 8px 4px 28px; }
+        .tree-field-value[hidden] { display: none; }
 
-        /* ── Prompt Trace drawer ── */
-        .card-trace {
-            border-top: 1px solid color-mix(in srgb, #7F77DD 30%, var(--vscode-panel-border));
-        }
-        .trace-toggle {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            width: 100%;
-            padding: 6px 12px;
-            background: none;
-            border: none;
-            color: #AFA9EC;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            cursor: pointer;
-        }
-        .trace-toggle:hover { color: var(--vscode-foreground); }
-        .trace-badges { display: inline-flex; gap: 4px; margin-left: auto; }
-        .trace-badge {
-            font-size: 9px;
-            font-family: var(--vscode-editor-font-family);
-            padding: 1px 6px;
-            border-radius: 4px;
-            font-weight: 500;
-        }
-        .trace-model {
-            background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
-            color: var(--vscode-descriptionForeground);
-            border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
-        }
-        .trace-mode {
-            background: color-mix(in srgb, #2dd4bf 12%, transparent);
-            color: #2dd4bf;
-            border: 1px solid color-mix(in srgb, #2dd4bf 20%, transparent);
-        }
-        .trace-mode.batch {
-            background: color-mix(in srgb, #f59e0b 12%, transparent);
-            color: #f59e0b;
-            border: 1px solid color-mix(in srgb, #f59e0b 20%, transparent);
-        }
-        .trace-panels-wrap {
-            padding: 0 12px 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .trace-panels-wrap[hidden] { display: none; }
-        .trace-panel {
-            border-radius: 4px;
-            border: 1px solid var(--vscode-panel-border);
-            overflow: hidden;
-        }
-        .trace-panel-hdr {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 4px 10px;
-            font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-weight: 600;
-        }
-        .trace-size {
-            font-family: var(--vscode-editor-font-family);
-            font-weight: 400;
-            letter-spacing: 0;
-            text-transform: none;
-            opacity: 0.5;
-        }
-        .trace-panel.prompt .trace-panel-hdr {
-            background: color-mix(in srgb, #7F77DD 10%, var(--vscode-editor-background));
-            color: #AFA9EC;
-        }
-        .trace-panel.response .trace-panel-hdr {
-            background: color-mix(in srgb, #2dd4bf 8%, var(--vscode-editor-background));
-            color: #2dd4bf;
-        }
-        .trace-panel-body {
-            padding: 8px 10px;
-            font-family: var(--vscode-editor-font-family);
-            font-size: 11px;
-            line-height: 1.6;
-            color: var(--vscode-editor-foreground);
-            opacity: 0.82;
-            white-space: pre-wrap;
-            word-break: break-word;
-            max-height: 240px;
-            overflow-y: auto;
-            margin: 0;
-            background: var(--vscode-textCodeBlock-background);
-            border: none;
-            border-radius: 0;
-        }
-        .trace-panel-body.response-body {
-            font-size: 12px;
-            max-height: 120px;
-        }
+        /* Token colors */
+        .t-ns { color: #c084fc; font-family: var(--vscode-editor-font-family); font-weight: 600; font-size: 12px; }
+        .t-key { color: #7dd3fc; font-family: var(--vscode-editor-font-family); font-size: 12px; }
+        .t-val { color: #fdba74; font-family: var(--vscode-editor-font-family); font-size: 11px; word-break: break-word; }
+        .t-type { color: #6ee7b7; font-family: var(--vscode-editor-font-family); font-size: 10px; }
+        .t-idx { color: #7dd3fc; font-family: var(--vscode-editor-font-family); font-size: 11px; }
+        .t-preview { color: #52525b; font-family: var(--vscode-editor-font-family); font-size: 11px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+        .t-null { font-size: 10px; font-style: italic; opacity: 0.4; }
 
-        /* ── Sub-cards (array of objects) ── */
-        .subcard-list {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .subcard {
-            border: 1px solid var(--vscode-panel-border);
-            border-radius: 4px;
-            padding: 8px 10px;
-            background: color-mix(in srgb, var(--vscode-editor-background) 95%, var(--vscode-foreground));
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .subcard-index {
-            font-size: 9px;
-            font-family: var(--vscode-editor-font-family);
-            color: var(--vscode-descriptionForeground);
-            opacity: 0.4;
-        }
-        .subcard-hidden[hidden] { display: none; }
-        .subcard-hidden { display: contents; }
-        .subcard-expand {
-            align-self: flex-start;
-        }
-        .prose-inline {
-            line-height: 1.5;
-            font-family: var(--vscode-font-family);
-            font-size: 0.92em;
-            opacity: 0.8;
-        }
-        .output-label {
-            font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-            color: var(--vscode-descriptionForeground);
-            opacity: 0.5;
-            padding-top: 2px;
-        }
+        /* Values */
+        .badge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+        .badge-true { background: color-mix(in srgb, var(--vscode-testing-iconPassed) 15%, transparent); color: var(--vscode-testing-iconPassed); }
+        .badge-false { background: color-mix(in srgb, var(--vscode-testing-iconFailed) 15%, transparent); color: var(--vscode-testing-iconFailed); }
+        .pill { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-family: var(--vscode-editor-font-family); background: color-mix(in srgb, #7dd3fc 10%, transparent); color: #7dd3fc; border: 1px solid color-mix(in srgb, #7dd3fc 20%, transparent); margin-right: 4px; }
+        .code-block { background: var(--vscode-textCodeBlock-background); border-radius: 4px; padding: 8px; font-family: var(--vscode-editor-font-family); font-size: 11px; line-height: 1.4; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all; color: #a1a1aa; }
+        .tree-prose { font-family: var(--vscode-font-family); font-size: 12px; line-height: 1.6; color: var(--vscode-editor-foreground); opacity: 0.85; padding: 6px 10px; border-radius: 4px; background: var(--vscode-textCodeBlock-background); white-space: pre-wrap; word-break: break-word; }
+        .source-quote { font-family: var(--vscode-font-family); font-size: 12px; line-height: 1.5; color: var(--vscode-editor-foreground); opacity: 0.75; padding: 6px 10px; border-left: 3px solid #c084fc; background: color-mix(in srgb, #c084fc 5%, var(--vscode-textCodeBlock-background)); border-radius: 0 4px 4px 0; white-space: pre-wrap; word-break: break-word; }
+
+        /* Metadata */
+        .meta-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 1px 0; }
+        .meta-row:hover { background: var(--vscode-list-hoverBackground); }
+        .meta-key { font-size: 10px; letter-spacing: 0.5px; font-weight: 500; color: #7dd3fc; opacity: 0.6; flex-shrink: 0; min-width: 60px; font-family: var(--vscode-editor-font-family); }
+        .meta-val { font-family: var(--vscode-editor-font-family); font-size: 11px; color: var(--vscode-descriptionForeground); word-break: break-all; min-width: 0; }
+
+        /* Trace badges */
+        .trace-badge { font-size: 9px; font-family: var(--vscode-editor-font-family); padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+        .trace-model { background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent); color: var(--vscode-descriptionForeground); border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent); }
+        .trace-mode { background: color-mix(in srgb, #6ee7b7 10%, transparent); color: #6ee7b7; border: 1px solid color-mix(in srgb, #6ee7b7 18%, transparent); }
+        .trace-mode.batch { background: color-mix(in srgb, #f59e0b 10%, transparent); color: #f59e0b; border: 1px solid color-mix(in srgb, #f59e0b 18%, transparent); }
+        .trace-panel-body { padding: 8px 10px; font-family: var(--vscode-editor-font-family); font-size: 11px; line-height: 1.6; color: #a1a1aa; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; margin: 0; background: var(--vscode-textCodeBlock-background); border: none; border-radius: 4px; }
+        .trace-panel-body.response-body { font-size: 12px; }
 
         /* ── Table ── */
         .table-wrap { flex: 1; overflow: auto; }

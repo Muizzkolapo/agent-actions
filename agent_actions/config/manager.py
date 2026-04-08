@@ -312,6 +312,16 @@ class ConfigManager:
         from agent_actions.prompt.context.scope_inference import infer_dependencies
         from agent_actions.utils.graph_utils import topological_sort
 
+        # Normalize context_scope BEFORE dependency inference so that
+        # infer_dependencies sees concrete versioned refs, not base names.
+        agent_configs_dict = {
+            agent_type: config.model_dump() for agent_type, config in self.agent_configs.items()
+        }
+        normalize_all_agent_configs(agent_configs_dict)
+
+        for agent_type, config_dict in agent_configs_dict.items():
+            self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
+
         workflow_actions = list(self.agent_configs.keys())
 
         dependency_graph = {}
@@ -340,15 +350,6 @@ class ConfigManager:
                 ]
                 dependency_graph[agent_type] = dependencies
         self.execution_order = topological_sort(dependency_graph)
-
-        # Normalize context_scope for all agents (expands version references in-place)
-        agent_configs_dict = {
-            agent_type: config.model_dump() for agent_type, config in self.agent_configs.items()
-        }
-        normalize_all_agent_configs(agent_configs_dict, self.execution_order)
-
-        for agent_type, config_dict in agent_configs_dict.items():
-            self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
 
     def load_environment_config(self) -> EnvironmentConfig:
         """Load and validate environment configuration."""

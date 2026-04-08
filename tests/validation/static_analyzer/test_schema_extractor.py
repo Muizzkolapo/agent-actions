@@ -391,3 +391,50 @@ class TestContextScopeInference:
         assert not input_schema.derived_from_context_scope
         assert "explicit_field" in input_schema.required_fields
         assert "dep.field1" not in input_schema.required_fields
+
+
+class TestNullContextScopeNormalization:
+    """Regression: YAML null context_scope normalized before reaching extractors.
+
+    The normalizer (normalize_context_scope) guarantees a dict return.
+    The static analyzer calls it at Step 0 before graph building.
+    These tests verify the normalizer contract directly.
+    """
+
+    def test_normalize_null_returns_empty_dict(self):
+        """normalize_context_scope returns {} for None input."""
+        from agent_actions.input.context.normalizer import normalize_context_scope
+
+        result = normalize_context_scope(None, {})
+        assert result == {}
+
+    def test_normalize_null_directive_becomes_empty_list(self):
+        """Null list directives (passthrough: null) become []."""
+        from agent_actions.input.context.normalizer import normalize_context_scope
+
+        result = normalize_context_scope({"observe": ["dep.*"], "passthrough": None}, {})
+        assert result["observe"] == ["dep.*"]
+        assert result["passthrough"] == []
+
+    def test_static_analyzer_handles_null_context_scope(self):
+        """Static analyzer normalizes null context_scope before graph building."""
+        from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
+            WorkflowStaticAnalyzer,
+        )
+
+        workflow = {
+            "name": "test",
+            "actions": [
+                {
+                    "name": "broken",
+                    "schema": {"type": "object", "properties": {"f": {"type": "string"}}},
+                    "context_scope": None,
+                }
+            ],
+        }
+        analyzer = WorkflowStaticAnalyzer(workflow)
+        # Should not crash — normalizer converts None to {}
+        result = analyzer.analyze()
+        # Should report missing context_scope as an error
+        errors = [e for e in result.errors if "no context_scope" in e.message]
+        assert len(errors) == 1

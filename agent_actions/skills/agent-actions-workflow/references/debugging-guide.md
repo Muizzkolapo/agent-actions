@@ -65,9 +65,31 @@ If the first action's API call fails (401, network error), check whether the fai
 ### 5. Tool UDF Data Access
 
 If a tool action produces zero/default values:
-- Fields arrive FLAT in content: `content["consensus_score"]`
-- NOT namespaced: `content["aggregate_scores"]["consensus_score"]` → always returns `{}`
-- Check the tool code for `content.get("<action_name>", {})` patterns
+- Fields arrive **namespaced by action name**: `content["aggregate_scores"]["consensus_score"]`
+- NOT flat: `content["consensus_score"]` → returns `None`
+- Check the tool code for flat `content.get("field")` patterns — these should be `content.get("action_name", {}).get("field")`
+
+### 5a. Prompt Trace Inspection
+
+When debugging bad LLM outputs, inspect the compiled prompt and context the LLM actually received:
+
+```bash
+# Query prompt traces from the SQLite backend
+python3 -c "
+import sqlite3, json
+conn = sqlite3.connect('agent_workflow/<workflow>/agent_io/.agent_actions.db')
+for row in conn.execute(
+    'SELECT record_id, compiled_prompt, llm_context FROM prompt_trace WHERE action_name=?',
+    ('<action_name>',)
+).fetchmany(3):
+    print(f'Record: {row[0]}')
+    print(f'Prompt: {row[1][:200]}...')
+    print(f'Context: {row[2][:200]}...')
+    print()
+"
+```
+
+Prompt traces capture the exact prompt sent to the LLM, the context data, and the response — per record, per attempt.
 
 ### 6. Schema Field Drift
 
