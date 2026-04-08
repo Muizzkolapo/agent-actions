@@ -3,6 +3,7 @@
 import json
 import logging
 from copy import deepcopy
+from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
@@ -57,8 +58,8 @@ def apply_context_scope(
     """
     # Deep copy to avoid mutating original field_context
     prompt_context = deepcopy(field_context)
-    llm_context = {}
-    passthrough_fields = {}
+    llm_context: dict[str, dict[str, Any]] = {}
+    passthrough_fields: dict[str, dict[str, Any]] = {}
 
     # Process STATIC_DATA: Add SEED namespace (namespace #3)
     if static_data:
