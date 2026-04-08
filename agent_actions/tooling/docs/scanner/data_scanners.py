@@ -227,11 +227,12 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
         # The prompt_trace table was added in v0.1.6; older DBs won't have it.
         try:
             for action_name, node_data in nodes.items():
-                guid_map: dict[str, dict] = {}
+                # Map source_guid → list of records (multiple records can share a guid)
+                guid_map: dict[str, list[dict]] = {}
                 for rec in node_data["preview"]:
                     sg = rec.get("source_guid")
                     if sg:
-                        guid_map[sg] = rec
+                        guid_map.setdefault(sg, []).append(rec)
 
                 if not guid_map:
                     continue
@@ -252,18 +253,19 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
                     if rid in seen:
                         continue
                     seen.add(rid)
-                    if rid in guid_map:
-                        guid_map[rid]["_trace"] = {
-                            "compiled_prompt": trace_row["compiled_prompt"],
-                            "llm_context": trace_row["llm_context"],
-                            "response_text": trace_row["response_text"],
-                            "model_name": trace_row["model_name"],
-                            "model_vendor": trace_row["model_vendor"],
-                            "run_mode": trace_row["run_mode"],
-                            "prompt_length": trace_row["prompt_length"],
-                            "response_length": trace_row["response_length"],
-                            "attempt": trace_row["attempt"],
-                        }
+                    trace_data = {
+                        "compiled_prompt": trace_row["compiled_prompt"],
+                        "llm_context": trace_row["llm_context"],
+                        "response_text": trace_row["response_text"],
+                        "model_name": trace_row["model_name"],
+                        "model_vendor": trace_row["model_vendor"],
+                        "run_mode": trace_row["run_mode"],
+                        "prompt_length": trace_row["prompt_length"],
+                        "response_length": trace_row["response_length"],
+                        "attempt": trace_row["attempt"],
+                    }
+                    for rec in guid_map.get(rid, []):
+                        rec["_trace"] = trace_data
         except sqlite3.OperationalError:
             logger.debug("No prompt_trace table in %s — skipping trace attachment", db_file)
 

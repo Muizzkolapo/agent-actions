@@ -38,7 +38,13 @@ const LONG_FORM_HINTS = new Set([
   "rationale",
   "comment",
   "notes",
+  "source_quote",
 ])
+
+/** True when a field key represents a source quote (gets blockquote rendering). */
+export function isSourceQuoteField(key: string): boolean {
+  return key.toLowerCase().includes("source_quote")
+}
 
 export type FieldRole = "identity" | "content" | "metadata"
 
