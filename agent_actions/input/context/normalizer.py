@@ -3,6 +3,8 @@
 import logging
 from typing import Any
 
+from agent_actions.errors import ConfigurationError
+
 logger = logging.getLogger(__name__)
 
 # Directive registry: distinguishes how each directive type should be handled
@@ -19,14 +21,31 @@ DIRECTIVE_REGISTRY = {
 # Config keys that users confuse with the runtime 'seed' namespace in references.
 SEED_CONFIG_KEYS = frozenset({"seed_data", "seed_path"})
 
+# Directive names that belong UNDER context_scope, not as sibling keys.
+_CONTEXT_SCOPE_DIRECTIVES = ("observe", "passthrough", "drop")
+
+
+def detect_orphaned_directives(action_config: dict[str, Any]) -> list[str]:
+    """Return names of observe/passthrough/drop that are siblings of context_scope.
+
+    When a YAML indentation error makes context_scope null, these directives
+    end up as top-level action keys instead of children of context_scope.
+    Returns an empty list if no orphaned directives are found.
+    """
+    return [k for k in _CONTEXT_SCOPE_DIRECTIVES if action_config.get(k)]
+
 
 def normalize_context_scope(
     context_scope: dict[str, Any] | None,
     version_base_map: dict[str, list[str]],
-) -> dict[str, Any] | None:
-    """Expand version references in list directives, preserving dict directives as-is."""
-    if not context_scope:
-        return context_scope
+) -> dict[str, Any]:
+    """Normalize and expand version references in context_scope.
+
+    Guarantees a dict return — null or non-dict input becomes {}.
+    Null list directives (observe: null from YAML) become [].
+    """
+    if not context_scope or not isinstance(context_scope, dict):
+        return {}
 
     expanded_scope = {}
 
@@ -41,7 +60,8 @@ def normalize_context_scope(
                     directive_value, version_base_map
                 )
             else:
-                expanded_scope[directive_name] = directive_value
+                # Null or wrong type → normalize to empty list
+                expanded_scope[directive_name] = []
         else:
             expanded_scope[directive_name] = directive_value
 
@@ -94,16 +114,31 @@ def normalize_all_agent_configs(
     version_base_map = _build_version_base_name_map(agent_configs)
 
     for agent_name, config in agent_configs.items():
-        context_scope = config.get("context_scope")
+        raw = config.get("context_scope")
 
-        if context_scope:
-            expanded = normalize_context_scope(context_scope, version_base_map)
-            config["context_scope"] = expanded
+        if raw is None and "context_scope" in config:
+            orphaned = detect_orphaned_directives(config)
+            if orphaned:
+                raise ConfigurationError(
+                    f"Action '{agent_name}': context_scope is null but "
+                    f"{', '.join(orphaned)} exist as sibling keys. "
+                    f"This is a YAML indentation error — indent them under context_scope:\n"
+                    f"  context_scope:\n"
+                    f"    observe:\n"
+                    f"      - source.*",
+                    context={"agent_name": agent_name, "orphaned_directives": orphaned},
+                )
 
+        # Normalize: null → {}, non-dict → {}, expand version refs.
+        # normalize_context_scope guarantees a dict return.
+        expanded = normalize_context_scope(raw, version_base_map)
+        config["context_scope"] = expanded
+
+        if expanded:
             logger.debug(
                 "Normalized context_scope for '%s': %s",
                 agent_name,
-                expanded.keys() if expanded else None,
+                list(expanded.keys()),
             )
 
 

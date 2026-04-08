@@ -86,3 +86,37 @@ class TestContextScopeRequired:
         errors = [e for e in result.errors if "no context_scope" in e.message]
         assert errors[0].hint is not None
         assert "context_scope" in errors[0].hint
+
+    def test_null_context_scope_detected(self):
+        """YAML null context_scope (indentation error) should produce error."""
+        workflow = self._make_workflow(
+            [
+                {"name": "broken", "prompt": "do something", "context_scope": None},
+            ]
+        )
+        analyzer = WorkflowStaticAnalyzer(workflow)
+        result = analyzer.analyze()
+
+        errors = [e for e in result.errors if "no context_scope" in e.message]
+        assert len(errors) == 1
+        assert "broken" in errors[0].message
+
+    def test_null_context_scope_with_orphaned_observe_caught_by_normalizer(self):
+        """When observe is a sibling of null context_scope, the runtime normalizer
+        catches it with an indentation error. The static analyzer normalizes null
+        to {} and reports 'no context_scope' (the indentation hint is in the
+        normalizer's ConfigurationError, not here)."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.input.context.normalizer import normalize_all_agent_configs
+
+        import pytest
+
+        agent_configs = {
+            "misindented": {
+                "name": "misindented",
+                "context_scope": None,
+                "observe": ["source.*"],
+            }
+        }
+        with pytest.raises(ConfigurationError, match="indentation"):
+            normalize_all_agent_configs(agent_configs)

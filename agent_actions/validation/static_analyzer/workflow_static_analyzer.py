@@ -8,7 +8,11 @@ import logging
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.input.context.normalizer import SEED_CONFIG_KEYS
+from agent_actions.input.context.normalizer import (
+    SEED_CONFIG_KEYS,
+    detect_orphaned_directives,
+    normalize_context_scope,
+)
 from agent_actions.utils.constants import (
     DEFAULT_ACTION_KIND,
     RESERVED_AGENT_NAMES,
@@ -98,6 +102,20 @@ class WorkflowStaticAnalyzer:
         Returns:
             StaticValidationResult with errors and warnings
         """
+        # Step 0: Validate context_scope BEFORE normalization so diagnostic
+        # hints can inspect the raw YAML values (null, wrong type, orphaned
+        # directives). Normalization in Step 0b converts null → {} which would
+        # destroy the diagnostic signal.
+        context_scope_errors = self._check_context_scope_required()
+
+        # Step 0b: Normalize context_scope using the same function the runtime
+        # pipeline uses. Guarantees all downstream extractors see a dict.
+        for action in self.workflow_config.get("actions", []):
+            if isinstance(action, dict):
+                action["context_scope"] = normalize_context_scope(
+                    action.get("context_scope"), version_base_map={}
+                )
+
         # Step 1: Build data flow graph
         self._build_graph()
 
@@ -115,8 +133,8 @@ class WorkflowStaticAnalyzer:
         for error in self._check_reserved_action_names():
             result.add_error(error)
 
-        # Step 3c: Validate context_scope is defined on every action
-        for error in self._check_context_scope_required():
+        # Step 3c: context_scope validation (already ran in Step 0 before normalization)
+        for error in context_scope_errors:
             result.add_error(error)
 
         # Step 3d: Validate template namespaces are covered by context_scope
@@ -315,6 +333,32 @@ class WorkflowStaticAnalyzer:
             name = action.get("name", "unknown")
             context_scope = action.get("context_scope")
             if not context_scope or not isinstance(context_scope, dict):
+                if context_scope is None and "context_scope" in action:
+                    orphaned = detect_orphaned_directives(action)
+                    if orphaned:
+                        hint = (
+                            f"{', '.join(orphaned)} are siblings of context_scope "
+                            "instead of children. This is usually a YAML indentation error — "
+                            "indent them under context_scope:\n"
+                            "  context_scope:\n"
+                            "    observe:\n"
+                            "      - source.*"
+                        )
+                    else:
+                        hint = (
+                            "context_scope is null. Check YAML indentation — "
+                            "observe/passthrough/drop must be indented under context_scope."
+                        )
+                elif context_scope is not None and not isinstance(context_scope, dict):
+                    hint = (
+                        f"context_scope must be a mapping, got {type(context_scope).__name__}. "
+                        "Example: context_scope: {{ observe: [source.*] }}"
+                    )
+                else:
+                    hint = (
+                        "Add context_scope with observe, passthrough, or drop directives. "
+                        "Example: context_scope: { observe: [source.*] }"
+                    )
                 errors.append(
                     StaticTypeError(
                         message=(
@@ -327,10 +371,7 @@ class WorkflowStaticAnalyzer:
                         ),
                         referenced_agent=name,
                         referenced_field="",
-                        hint=(
-                            "Add context_scope with observe, passthrough, or drop directives. "
-                            "Example: context_scope: { observe: [source.*] }"
-                        ),
+                        hint=hint,
                     )
                 )
         return errors

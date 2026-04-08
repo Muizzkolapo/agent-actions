@@ -135,10 +135,7 @@ class PromptPreparationService:
         )
 
         if not context_scope:
-            raise ConfigurationError(
-                "context_scope is required. Every action must declare data dependencies.",
-                context={"agent_name": agent_name},
-            )
+            PromptPreparationService._raise_missing_context_scope(agent_config, agent_name)
 
         prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
             field_context,
@@ -232,9 +229,8 @@ class PromptPreparationService:
         )
 
         if not context_scope:
-            raise ConfigurationError(
-                "context_scope is required. Every action must declare data dependencies.",
-                context={"agent_name": request.agent_name},
+            PromptPreparationService._raise_missing_context_scope(
+                request.agent_config, request.agent_name
             )
 
         prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
@@ -531,6 +527,22 @@ class PromptPreparationService:
             )
             return result if isinstance(result, dict) else {}
         raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'online'.")
+
+    @staticmethod
+    def _raise_missing_context_scope(agent_config: dict[str, Any], agent_name: str) -> None:
+        """Raise ConfigurationError for missing/null context_scope with an actionable hint."""
+        context_scope = agent_config.get("context_scope")
+        if context_scope is None and "context_scope" in agent_config:
+            hint = (
+                "context_scope is null — check YAML indentation. "
+                "observe/passthrough/drop must be indented under context_scope."
+            )
+        else:
+            hint = "Add context_scope with observe/passthrough/drop directives."
+        raise ConfigurationError(
+            f"context_scope is required on action '{agent_name}'. {hint}",
+            context={"agent_name": agent_name},
+        )
 
     @staticmethod
     def _determine_static_data_dir(workflow_config_path: str | None) -> Path:
