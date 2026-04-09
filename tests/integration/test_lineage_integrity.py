@@ -926,7 +926,7 @@ class TestLineageEdgeCases:
             action_name="tool_action",
         )
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.enrichment"):
             enriched = LineageEnricher().enrich(result, context)
 
         item = enriched.data[0]
