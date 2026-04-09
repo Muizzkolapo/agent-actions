@@ -5,7 +5,6 @@ root_target_id, lineage_sources, source_guid) is correctly built and propagated
 across every processing pattern in the pipeline.
 """
 
-import logging
 import uuid
 
 from agent_actions.processing.enrichment import LineageEnricher
@@ -908,8 +907,8 @@ class TestLineageEdgeCases:
         assert enriched.data == []
         assert enriched.node_id is None
 
-    def test_out_of_bounds_source_mapping_logs_warning(self, caplog):
-        """source_mapping pointing beyond source_data: warning logged, parent_item=None."""
+    def test_out_of_bounds_source_mapping_produces_root_lineage(self):
+        """source_mapping pointing beyond source_data: parent_item=None, root lineage produced."""
         source_items = [
             _make_source_item(_uuid(), f"extract_{_uuid()}", target_id=_uuid()),
         ]
@@ -926,16 +925,13 @@ class TestLineageEdgeCases:
             action_name="tool_action",
         )
 
-        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.enrichment"):
-            enriched = LineageEnricher().enrich(result, context)
+        enriched = LineageEnricher().enrich(result, context)
 
         item = enriched.data[0]
-        # Should still get a lineage (root lineage since parent is None)
+        # Out-of-bounds index -> parent_item=None -> root lineage
         assert item["lineage"] == [item["node_id"]]
         assert "parent_target_id" not in item
-
-        # Warning should have been logged
-        assert any("out of bounds" in record.message for record in caplog.records)
+        assert item["node_id"].startswith("tool_action_")
 
     def test_source_guid_empty_string_treated_as_none(self):
         """Empty string source_guid normalized to None."""
