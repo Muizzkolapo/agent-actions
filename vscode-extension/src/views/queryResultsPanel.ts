@@ -194,6 +194,39 @@ export class QueryResultsPanel implements vscode.Disposable {
         function fmt(v, max) { if (v == null) return 'null'; if (typeof v === 'boolean') return String(v); if (typeof v === 'number') return v.toLocaleString(); if (typeof v === 'object') { var s = JSON.stringify(v); return max > 0 && s.length > max ? s.slice(0, max) + '\u2026' : s; } var s = String(v); return max > 0 && s.length > max ? s.slice(0, max) + '\u2026' : s; }
         function isArrayOfObjects(v) { if (!Array.isArray(v) || v.length === 0) return false; return v.every(function(x) { return typeof x === 'object' && x !== null && !Array.isArray(x); }); }
         function isSourceQuote(k) { return k.toLowerCase().indexOf('source_quote') >= 0; }
+        function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+        function highlightJson(raw) {
+            var parsed; try { parsed = JSON.parse(raw); } catch(e) { return esc(raw); }
+            var s = esc(JSON.stringify(parsed, null, 2));
+            s = s.replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)\s*:/g, '<span class="json-key">$1</span>:');
+            s = s.replace(/:\s*(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g, ': <span class="json-str">$1</span>');
+            s = s.replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-num">$1</span>');
+            s = s.replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>');
+            s = s.replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+            return s;
+        }
+
+        function renderMarkdown(text) {
+            var lines = esc(text).split('\\n');
+            var html = '', inList = false;
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+                var m;
+                if ((m = line.match(/^###\\s+(.*)/))) { if (inList) { html += '</' + inList + '>'; inList = false; } html += '<h3 class="md-h3">' + m[1] + '</h3>'; continue; }
+                if ((m = line.match(/^##\\s+(.*)/))) { if (inList) { html += '</' + inList + '>'; inList = false; } html += '<h2 class="md-h2">' + m[1] + '</h2>'; continue; }
+                if ((m = line.match(/^#\\s+(.*)/))) { if (inList) { html += '</' + inList + '>'; inList = false; } html += '<h1 class="md-h1">' + m[1] + '</h1>'; continue; }
+                if ((m = line.match(/^\\d+\\.\\s+(.*)/))) { if (!inList) { html += '<ol class="md-ol">'; inList = 'ol'; } html += '<li>' + m[1] + '</li>'; continue; }
+                if ((m = line.match(/^[-]\\s+(.*)/))) { if (!inList) { html += '<ul class="md-ul">'; inList = 'ul'; } html += '<li>' + m[1] + '</li>'; continue; }
+                if (inList) { html += '</' + inList + '>'; inList = false; }
+                if (/^---+$/.test(line.trim())) { html += '<hr class="md-hr">'; continue; }
+                if (line.trim() === '') { html += '<div class="md-spacer"></div>'; continue; }
+                html += '<p class="md-p">' + line + '</p>';
+            }
+            if (inList) html += '</' + inList + '>';
+            html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+            return html;
+        }
 
         function renderFieldValue(key, value) {
             if (value == null) return '<span class="t-null">null</span>';
@@ -231,7 +264,7 @@ export class QueryResultsPanel implements vscode.Disposable {
         function renderArrayOfObjects(fieldKey, items) {
             var ch = '';
             for (var i = 0; i < items.length; i++) {
-                var item = items[i], itemOpen = (i === 0), pText = Object.keys(item).length + ' fields';
+                var item = items[i], itemOpen = (i === 0), pText = plural(Object.keys(item).length, 'field');
                 for (var ek of Object.keys(item)) { var ev = item[ek]; if (typeof ev === 'string' && ev.length > 10) { pText = ev.length > 80 ? ev.slice(0, 80) + '\u2026' : ev; break; } }
                 var fh = ''; for (var fk of Object.keys(item)) fh += renderTreeField(fk, item[fk], true);
                 ch += '<div class="array-item"><button class="tree-toggle" data-tree-toggle>'
@@ -269,13 +302,13 @@ export class QueryResultsPanel implements vscode.Disposable {
             var hdr = '<span class="rec-chevron">' + (recOpen ? '&#9660;' : '&#9654;') + '</span><span class="card-index">#' + (index + 1) + '</span>';
             for (var f of identity) hdr += ' <span class="card-id" title="' + esc(fmt(f.value, 0)) + '">' + esc(fmt(f.value, 24)) + '</span>';
             if (typeof record._file === 'string') hdr += ' <span class="card-id">' + esc(record._file) + '</span>';
-            if (!recOpen) hdr += '<span class="rec-preview">' + (trace ? 'trace + ' : '') + outputFields.length + ' fields</span>';
+            if (!recOpen) hdr += '<span class="rec-preview">' + (trace ? 'trace + ' : '') + plural(outputFields.length, 'field') + '</span>';
 
-            var s1 = ''; if (trace && trace.compiled_prompt) { var b = ''; if (trace.model_name) b += '<span class="trace-badge trace-model">' + esc(String(trace.model_name)) + '</span>'; if (trace.run_mode) b += '<span class="trace-badge trace-mode' + (trace.run_mode === 'batch' ? ' batch' : '') + '">' + esc(String(trace.run_mode)) + '</span>'; s1 = renderSection('Prompt Trace', trace.prompt_length ? trace.prompt_length.toLocaleString() + ' chars' : '', trace.compiled_prompt, false, '<pre class="trace-panel-body">' + esc(String(trace.compiled_prompt)) + '</pre>', '<span class="section-badges">' + b + '</span>'); }
-            var s2 = ''; if (inputData && Object.keys(inputData).length > 0) { var ih = ''; for (var ns of Object.keys(inputData)) { var nd = inputData[ns]; if (typeof nd !== 'object' || nd === null) ih += renderTreeField(ns, nd, true); else { var fh = ''; for (var fk of Object.keys(nd)) fh += renderTreeField(fk, nd[fk], true); ih += renderTreeNode(ns, Object.keys(nd).length + ' fields', false, fh); } } s2 = renderSection('Input Data', Object.keys(inputData).length + ' namespaces', JSON.stringify(inputData, null, 2), false, ih, ''); }
-            var s3 = ''; if (trace && trace.response_text) { s3 = renderSection('Raw Response', trace.response_length ? trace.response_length.toLocaleString() + ' chars' : '', trace.response_text, false, '<pre class="trace-panel-body response-body">' + esc(String(trace.response_text)) + '</pre>', ''); }
-            var s4 = ''; if (outputFields.length > 0) { var oh = ''; for (var f of outputFields) { if (isArrayOfObjects(f.value)) oh += renderArrayOfObjects(f.key, f.value); else oh += renderTreeField(f.key, f.value, true); } s4 = renderSection('Action Output', outputFields.length + ' fields', JSON.stringify(dr, null, 2), true, oh, ''); }
-            var s5 = ''; if (meta.length > 0) { var mh = ''; for (var f of meta) mh += '<div class="meta-row"><span class="meta-key">' + esc(f.key) + '</span><span class="meta-val">' + esc(fmt(f.value, 120)) + '</span></div>'; s5 = renderSection('Metadata', meta.length + ' fields', JSON.stringify(Object.fromEntries(meta.map(function(f){return[f.key,f.value]})), null, 2), false, mh, ''); }
+            var s1 = ''; if (trace && trace.compiled_prompt) { var b = ''; if (trace.model_name) b += '<span class="trace-badge trace-model">' + esc(String(trace.model_name)) + '</span>'; if (trace.run_mode) b += '<span class="trace-badge trace-mode' + (trace.run_mode === 'batch' ? ' batch' : '') + '">' + esc(String(trace.run_mode)) + '</span>'; var ptBody; try { ptBody = renderMarkdown(String(trace.compiled_prompt)); } catch(e) { ptBody = esc(String(trace.compiled_prompt)); } s1 = renderSection('Prompt Trace', trace.prompt_length ? trace.prompt_length.toLocaleString() + ' chars' : '', trace.compiled_prompt, false, '<div class="trace-panel-body md-body">' + ptBody + '</div>', '<span class="section-badges">' + b + '</span>'); }
+            var s2 = ''; if (inputData && Object.keys(inputData).length > 0) { var ih = ''; for (var ns of Object.keys(inputData)) { var nd = inputData[ns]; if (typeof nd !== 'object' || nd === null) ih += renderTreeField(ns, nd, true); else { var fh = ''; for (var fk of Object.keys(nd)) fh += renderTreeField(fk, nd[fk], true); ih += renderTreeNode(ns, plural(Object.keys(nd).length, 'field'), false, fh); } } s2 = renderSection('Input Data', plural(Object.keys(inputData).length, 'namespace'), JSON.stringify(inputData, null, 2), false, ih, ''); }
+            var s3 = ''; if (trace && trace.response_text) { s3 = renderSection('Raw Response', trace.response_length ? trace.response_length.toLocaleString() + ' chars' : '', trace.response_text, false, '<pre class="trace-panel-body response-body">' + highlightJson(String(trace.response_text)) + '</pre>', ''); }
+            var s4 = ''; if (outputFields.length > 0) { var oh = ''; for (var f of outputFields) { if (isArrayOfObjects(f.value)) oh += renderArrayOfObjects(f.key, f.value); else oh += renderTreeField(f.key, f.value, true); } s4 = renderSection('Action Output', plural(outputFields.length, 'field'), JSON.stringify(dr, null, 2), true, oh, ''); }
+            var s5 = ''; if (meta.length > 0) { var mh = ''; for (var f of meta) mh += '<div class="meta-row"><span class="meta-key">' + esc(f.key) + '</span><span class="meta-val">' + esc(fmt(f.value, 120)) + '</span></div>'; s5 = renderSection('Metadata', plural(meta.length, 'field'), JSON.stringify(Object.fromEntries(meta.map(function(f){return[f.key,f.value]})), null, 2), false, mh, ''); }
 
             return '<div class="card" data-record-open="' + (recOpen ? 'true' : 'false') + '"><div class="card-header" data-rec-toggle>' + hdr + '</div><div class="card-body-wrap"' + (recOpen ? '' : ' hidden') + '>' + s1 + s2 + s3 + s4 + s5 + (outputFields.length === 0 ? '<div class="card-empty">No content fields</div>' : '') + '</div></div>';
         }
@@ -606,6 +639,7 @@ function allStyles(): string {
         .card-id { opacity: 0.4; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .rec-chevron { color: var(--vscode-descriptionForeground); margin-right: 2px; font-size: 10px; }
         .rec-preview { font-size: 10px; color: var(--vscode-descriptionForeground); opacity: 0.5; margin-left: auto; }
+        .card-body-wrap { padding-left: 16px; }
         .card-body-wrap[hidden] { display: none; }
         .card-empty { font-size: 0.85em; font-style: italic; color: var(--vscode-descriptionForeground); opacity: 0.6; padding: 8px 12px; }
 
@@ -617,19 +651,19 @@ function allStyles(): string {
         .section-label { font-weight: 600; font-size: 11px; }
         .section-badges { display: inline-flex; gap: 4px; margin-left: 4px; }
         .section-hint { font-size: 10px; color: var(--vscode-descriptionForeground); opacity: 0.5; margin-left: auto; }
-        .section-content { padding: 4px 8px 8px; }
+        .section-content { padding: 4px 4px 8px 16px; }
         .section-content[hidden] { display: none; }
         .copy-btn { background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.3; padding: 2px 4px; color: var(--vscode-foreground); margin-left: 4px; }
         .copy-btn:hover { opacity: 0.8; }
 
-        /* Tree view */
+        /* Tree view — consistent 16px indent per level */
         .tree-node, .tree-field, .array-item { min-width: 0; }
-        .tree-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 8px; background: none; border: none; color: var(--vscode-foreground); font-size: 12px; cursor: pointer; text-align: left; }
+        .tree-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 8px 2px 16px; background: none; border: none; color: var(--vscode-foreground); font-size: 12px; cursor: pointer; text-align: left; }
         .tree-toggle:hover { background: var(--vscode-list-hoverBackground); border-radius: 3px; }
         .tree-chevron { font-size: 9px; color: var(--vscode-descriptionForeground); flex-shrink: 0; width: 10px; }
         .tree-children { padding-left: 16px; }
         .tree-children[hidden] { display: none; }
-        .tree-field-value { padding: 2px 8px 4px 28px; }
+        .tree-field-value { padding: 2px 8px 4px 48px; }
         .tree-field-value[hidden] { display: none; }
 
         /* Token colors */
@@ -663,6 +697,27 @@ function allStyles(): string {
         .trace-mode.batch { background: color-mix(in srgb, #f59e0b 10%, transparent); color: #f59e0b; border: 1px solid color-mix(in srgb, #f59e0b 18%, transparent); }
         .trace-panel-body { padding: 8px 10px; font-family: var(--vscode-editor-font-family); font-size: 11px; line-height: 1.6; color: #a1a1aa; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; margin: 0; background: var(--vscode-textCodeBlock-background); border: none; border-radius: 4px; }
         .trace-panel-body.response-body { font-size: 12px; }
+
+        /* JSON syntax highlighting */
+        .json-key { color: #7dd3fc; }
+        .json-str { color: #ce9178; }
+        .json-num { color: #b5cea8; }
+        .json-bool { color: #569cd6; }
+        .json-null { color: #569cd6; font-style: italic; }
+
+        /* Markdown rendering in prompt trace */
+        .md-body { white-space: normal; }
+        .md-h1 { font-size: 1.3em; font-weight: 700; color: var(--vscode-foreground); margin: 12px 0 6px; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 4px; }
+        .md-h2 { font-size: 1.1em; font-weight: 700; color: var(--vscode-foreground); margin: 10px 0 4px; }
+        .md-h3 { font-size: 1em; font-weight: 600; color: var(--vscode-foreground); margin: 8px 0 4px; }
+        .md-p { margin: 4px 0; line-height: 1.6; }
+        .md-ol, .md-ul { margin: 4px 0 4px 20px; line-height: 1.6; }
+        .md-ol li, .md-ul li { margin: 2px 0; }
+        .md-hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 8px 0; }
+        .md-spacer { height: 6px; }
+        .md-code { background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 0.95em; }
+        .md-body strong { font-weight: 700; color: var(--vscode-foreground); }
+        .md-body em { font-style: italic; }
 
         /* ── Table ── */
         .table-wrap { flex: 1; overflow: auto; }
