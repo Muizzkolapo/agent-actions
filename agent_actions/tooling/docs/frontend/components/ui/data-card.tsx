@@ -19,6 +19,10 @@ import {
 } from "@/lib/data-card-utils"
 import type { PromptTrace } from "@/lib/catalog-client"
 
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`
+}
+
 // ── Shared value renderer (used by both DataCard and table CellValue) ──────
 
 export function CellValue({ value }: { value: unknown }) {
@@ -295,10 +299,10 @@ function TreeField({ fieldKey, value, defaultOpen = true }: { fieldKey: string; 
   const preview = valStr.length > 60 ? valStr.slice(0, 60) + "\u2026" : valStr
 
   return (
-    <div className="py-0.5 pl-4">
+    <div className="py-0.5">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 min-w-0 w-full text-left hover:bg-accent/10 rounded-sm py-0.5 px-2 transition-colors"
+        className="flex items-center gap-2 min-w-0 w-full text-left hover:bg-accent/10 rounded-sm py-0.5 pl-4 pr-2 transition-colors"
       >
         <ChevronRight
           className={`h-2.5 w-2.5 shrink-0 text-muted-foreground/40 transition-transform ${open ? "rotate-90" : ""}`}
@@ -309,7 +313,7 @@ function TreeField({ fieldKey, value, defaultOpen = true }: { fieldKey: string; 
         )}
       </button>
       <div className="data-card-drawer" data-open={open}>
-        <div className="pl-7 pr-2 pb-1">
+        <div className="pl-12 pr-2 pb-1">
           <FieldValue fieldKey={fieldKey} value={value} />
         </div>
       </div>
@@ -343,7 +347,7 @@ function TreeNode({
         {badge && <span className="text-[0.75em] font-mono text-[#6ee7b7]">{badge}</span>}
       </button>
       <div className="data-card-drawer" data-open={open}>
-        <div>{children}</div>
+        <div className="pl-4">{children}</div>
       </div>
     </div>
   )
@@ -366,13 +370,13 @@ function ArrayItemNode({
   const preview = previewField
     ? (previewField[1] as string).slice(0, 80) +
       ((previewField[1] as string).length > 80 ? "\u2026" : "")
-    : `${Object.keys(item).length} fields`
+    : plural(Object.keys(item).length, "field")
 
   return (
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 py-1 px-4 pl-8 w-full text-left hover:bg-accent/20 transition-colors rounded-sm"
+        className="flex items-center gap-1.5 py-1 px-4 w-full text-left hover:bg-accent/20 transition-colors rounded-sm"
       >
         <ChevronRight
           className={`h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform ${open ? "rotate-90" : ""}`}
@@ -508,17 +512,17 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         className="flex items-center gap-2 flex-wrap px-4 pt-3 pb-1 w-full text-left hover:bg-accent/5 transition-colors"
       >
         <ChevronRight
-          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform ${recordOpen ? "rotate-90" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 text-foreground/60 transition-transform ${recordOpen ? "rotate-90" : ""}`}
         />
         {typeof index === "number" && (
-          <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
+          <span className="text-[11px] font-mono font-medium text-foreground/70 tabular-nums">
             #{index}
           </span>
         )}
         {identity.map((f) => (
           <span
             key={f.key}
-            className="text-[10px] font-mono text-muted-foreground/60 truncate"
+            className="text-[10px] font-mono text-foreground/70 truncate"
             title={`${f.key}: ${formatValue(f.value, 0)}`}
           >
             {formatValue(f.value, 32)}
@@ -526,21 +530,21 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         ))}
         {typeof record._file === "string" && (
           <span
-            className="text-[10px] font-mono text-muted-foreground/50 truncate"
+            className="text-[10px] font-mono text-foreground/60 truncate"
             title={record._file}
           >
             {record._file}
           </span>
         )}
         {!recordOpen && (
-          <span className="text-[10px] text-muted-foreground/40 ml-auto">
-            {trace ? "trace + " : ""}{outputFields.length} fields
+          <span className="text-[10px] text-foreground/50 ml-auto">
+            {trace ? "trace + " : ""}{plural(outputFields.length, "field")}
           </span>
         )}
       </button>
 
       <div className="data-card-drawer" data-open={recordOpen}>
-        <div>
+        <div className="pl-4">
 
       {/* Action info bar */}
       {actionInfo && (
@@ -597,12 +601,12 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         <CollapsibleSection
           label="Input Data"
 
-          hint={`${Object.keys(inputData).length} namespaces`}
+          hint={plural(Object.keys(inputData).length, "namespace")}
           open={sec.inputData}
           onToggle={() => toggle("inputData")}
           copyText={JSON.stringify(inputData, null, 2)}
         >
-          <div className="pb-2">
+          <div className="pb-2 pl-4">
             {Object.entries(inputData).map(([nsName, nsData]) => {
               if (typeof nsData !== "object" || nsData === null) {
                 return (
@@ -614,7 +618,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
                 <TreeNode
                   key={nsName}
                   label={nsName}
-                  badge={`${Object.keys(fields).length} fields`}
+                  badge={plural(Object.keys(fields).length, "field")}
                   defaultOpen={false}
                 >
                   {Object.entries(fields).map(([k, v]) => (
@@ -652,12 +656,12 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         <CollapsibleSection
           label="Action Output"
 
-          hint={`${outputFields.length} fields`}
+          hint={plural(outputFields.length, "field")}
           open={sec.actionOutput}
           onToggle={() => toggle("actionOutput")}
           copyText={outputJson}
         >
-          <div className="pb-2">
+          <div className="pb-2 pl-4">
             {outputFields.map((f) => {
               if (isArrayOfObjects(f.value)) {
                 const items = f.value as Record<string, unknown>[]
@@ -694,7 +698,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         <CollapsibleSection
           label="Metadata"
 
-          hint={`${metadata.length} fields`}
+          hint={plural(metadata.length, "field")}
           open={sec.metadata}
           onToggle={() => toggle("metadata")}
           copyText={JSON.stringify(

@@ -11,7 +11,7 @@
 @layer base {
   /* ─── LIGHT MODE ─── */
   :root {
-    --background: 216 20% 95%;
+    --background: 216 18% 93%;
     --foreground: 222 25% 8%;
     --card: 0 0% 100%;
     --card-foreground: 222 25% 8%;
@@ -27,7 +27,7 @@
     --accent-foreground: 222 25% 8%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 216 16% 86%;
+    --border: 216 16% 82%;
     --input: 216 16% 86%;
     --ring: 174 65% 40%;
     --chart-1: 174 65% 40%;
@@ -54,7 +54,7 @@
   .dark {
     --background: 225 28% 6%;
     --foreground: 210 20% 93%;
-    --card: 225 22% 9%;
+    --card: 225 20% 12%;
     --card-foreground: 210 20% 93%;
     --popover: 225 22% 9%;
     --popover-foreground: 210 20% 93%;
@@ -68,8 +68,8 @@
     --accent-foreground: 210 20% 93%;
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 98%;
-    --border: 225 16% 14%;
-    --input: 225 16% 14%;
+    --border: 225 14% 20%;
+    --input: 225 14% 20%;
     --ring: 174 65% 50%;
     --chart-1: 174 65% 50%;
     --chart-2: 250 55% 62%;
