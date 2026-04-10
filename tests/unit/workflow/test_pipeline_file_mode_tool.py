@@ -60,6 +60,65 @@ def test_file_udf_result_unwrapped():
     assert result.data[1]["content"]["name"] == "bob"
 
 
+def test_file_udf_result_source_mapping_preserved():
+    """FileUDFResult.source_mapping should be threaded into ProcessingResult."""
+    pipeline, context = _make_pipeline_and_context()
+
+    udf_result = FileUDFResult(
+        outputs=[{"name": "alice"}, {"name": "bob"}],
+        source_mapping={0: 0, 1: 1},
+        input_count=2,
+    )
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(udf_result, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert results[0].source_mapping == {0: 0, 1: 1}
+
+
+def test_file_tool_plain_list_source_mapping_is_none():
+    """Plain list return should leave source_mapping as None."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"score": 0.9}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert results[0].source_mapping is None
+
+
+def test_file_udf_result_no_mapping_source_mapping_is_none():
+    """FileUDFResult without source_mapping should leave it as None."""
+    pipeline, context = _make_pipeline_and_context()
+
+    udf_result = FileUDFResult(
+        outputs=[{"name": "alice"}],
+        source_mapping=None,
+    )
+
+    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(udf_result, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert results[0].source_mapping is None
+
+
 def test_file_tool_plain_list_still_works():
     """FILE tool returning a plain list should still work (backwards compat)."""
     pipeline, context = _make_pipeline_and_context()
