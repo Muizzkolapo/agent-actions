@@ -1,7 +1,5 @@
 """Field reference parsing and action name extraction utilities."""
 
-import re
-
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
@@ -126,31 +124,13 @@ def extract_action_names_from_context_scope(context_scope: dict | None) -> set:
     return referenced_actions
 
 
-def _extract_action_names_regex(template: str) -> set:
-    """Regex fallback for action name extraction (used when AST parse fails)."""
-    referenced_actions: set[str] = set()
-    _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
-
-    pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[\.\[]"
-    matches = re.findall(pattern, template)
-
-    for namespace in matches:
-        if namespace in SPECIAL_NAMESPACES:
-            continue
-        if namespace in _JINJA_KEYWORDS:
-            continue
-        referenced_actions.add(namespace)
-
-    return referenced_actions
-
-
 def extract_action_names_from_template(template: str | None) -> set:
     """
     Extract unique action names referenced in a Jinja2 template.
 
     Parses template AST to extract namespace names, excluding variables scoped
-    by {% for %}, {% set %}, and {% macro %} constructs. Falls back to regex
-    if the template has syntax errors.
+    by {% for %}, {% set %}, and {% macro %} constructs. Returns empty set
+    if the template has syntax errors (broken templates fail at render time).
 
     Args:
         template: Jinja2 template string
@@ -174,7 +154,7 @@ def extract_action_names_from_template(template: str | None) -> set:
         env = Environment()
         ast = env.parse(template)
     except TemplateSyntaxError:
-        return _extract_action_names_regex(template)
+        return set()
 
     referenced_actions: set[str] = set()
 
