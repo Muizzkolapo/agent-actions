@@ -181,7 +181,7 @@ class ActionConfig(BaseModel):
     )
     idempotency_key: str | None = Field(default=None, description="Idempotency key template")
     prompt: str | None = Field(default=None, description="Prompt template or reference")
-    dependencies: list[str | dict[str, Any]] = Field(
+    dependencies: list[str] = Field(
         default_factory=list, description="List of upstream dependencies"
     )
     primary_dependency: str | None = Field(
@@ -286,8 +286,9 @@ class ActionConfig(BaseModel):
             raise ValueError(f"Tool action '{self.name}' requires 'impl' (implementation path)")
         return self
 
-    @model_validator(mode="after")
-    def strip_cross_workflow_deps(self):
+    @field_validator("dependencies", mode="before")
+    @classmethod
+    def strip_cross_workflow_deps(cls, v: Any) -> Any:
         """Strip cross-workflow dict deps (e.g. {workflow: X, action: Y}).
 
         Cross-workflow deps are for execution ordering between workflows, handled
@@ -295,8 +296,9 @@ class ActionConfig(BaseModel):
         traversal) expects string deps only. Pre-Pydantic callers (docs parser,
         CLI inspect) also filter independently in infer_dependencies().
         """
-        self.dependencies = [d for d in self.dependencies if isinstance(d, str)]
-        return self
+        if isinstance(v, list):
+            return [d for d in v if isinstance(d, str)]
+        return v
 
     @field_validator("guard")
     @classmethod
