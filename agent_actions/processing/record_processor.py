@@ -85,20 +85,19 @@ class RecordProcessor:
                     },
                 )
 
-            # Guards not supported in FILE mode (processes entire array at once)
-            guard_config = agent_config.get("guard")
-            if guard_config:
-                raise ConfigurationError(
-                    "Guards are not supported with FILE granularity. "
-                    "FILE mode processes the entire array at once, so per-record guards cannot be applied. "
-                    "Remove the guard or use RECORD granularity.",
-                    context={
-                        "agent_name": agent_name,
-                        "granularity": granularity,
-                        "kind": action_kind,
-                        "guard": guard_config,
-                    },
-                )
+        # HITL actions require FILE granularity — Record mode launches a
+        # separate approval UI per record, which is broken UX.
+        if action_kind == "hitl" and not is_file_granularity:
+            raise ConfigurationError(
+                "HITL actions require FILE granularity. "
+                "Record granularity launches a separate approval UI per record. "
+                "Set 'granularity: file' or remove the granularity field (HITL defaults to file).",
+                context={
+                    "agent_name": agent_name,
+                    "granularity": granularity,
+                    "kind": action_kind,
+                },
+            )
 
         self.enrichment_pipeline = EnrichmentPipeline()
 

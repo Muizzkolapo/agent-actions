@@ -56,18 +56,17 @@ class TestFileGranularityValidation:
 
         assert "FILE granularity is only supported for tool and hitl actions" in str(exc_info.value)
 
-    def test_file_granularity_with_guard_blocked(self):
-        """FILE granularity with guard is blocked (guards not supported in FILE mode)."""
+    def test_file_granularity_with_guard_allowed(self):
+        """FILE granularity with guard is allowed (guards act as pre-filter)."""
         agent_config = {
             "granularity": "file",
             "kind": "tool",
             "guard": {"clause": "status == 'active'", "behavior": "skip"},
         }
 
-        with pytest.raises(ConfigurationError) as exc_info:
-            RecordProcessor(agent_config=agent_config, agent_name="test_guard")
-
-        assert "Guards are not supported with FILE granularity" in str(exc_info.value)
+        # Should not raise — guards are now handled as a pre-filter in FILE mode
+        processor = RecordProcessor(agent_config=agent_config, agent_name="test_guard")
+        assert processor is not None
 
     def test_record_granularity_with_guard_allowed(self):
         """RECORD granularity with guard is allowed."""
@@ -81,9 +80,9 @@ class TestFileGranularityValidation:
         processor = RecordProcessor(agent_config=agent_config, agent_name="test_guard_record")
         assert processor is not None
 
-    def test_record_granularity_allowed_for_all_kinds(self):
-        """RECORD granularity allowed for any kind."""
-        for kind in ["tool", "hitl", "llm", ""]:
+    def test_record_granularity_allowed_for_non_hitl_kinds(self):
+        """RECORD granularity allowed for tool, llm, and unset kinds (not hitl)."""
+        for kind in ["tool", "llm", ""]:
             agent_config = {
                 "granularity": "record",
                 "kind": kind,
@@ -94,3 +93,15 @@ class TestFileGranularityValidation:
                 agent_config=agent_config, agent_name=f"test_{kind or 'empty'}"
             )
             assert processor is not None
+
+    def test_hitl_record_granularity_blocked(self):
+        """HITL actions with RECORD granularity are blocked."""
+        agent_config = {
+            "granularity": "record",
+            "kind": "hitl",
+        }
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            RecordProcessor(agent_config=agent_config, agent_name="test_hitl_record")
+
+        assert "HITL actions require FILE granularity" in str(exc_info.value)

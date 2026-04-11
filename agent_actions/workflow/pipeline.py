@@ -19,7 +19,7 @@ from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import ProcessingContext
+from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
@@ -549,10 +549,48 @@ class ProcessingPipeline:
                 source_data=source_data,
                 storage_backend=self.config.storage_backend,
             )
-            if self.is_tool_action:
-                results = self._process_file_mode_tool(filtered, data, context)
+
+            # Pre-filter by guard before passing to FILE-mode action
+            from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
+
+            passing, skipped = prefilter_by_guard(
+                filtered,
+                cast(dict[str, Any], self.config.action_config),
+                self.config.action_name,
+            )
+
+            if not passing:
+                # All records filtered or skipped — build skip/empty results
+                results = []
+                if skipped:
+                    for item in skipped:
+                        results.append(
+                            ProcessingResult(
+                                status=ProcessingStatus.UNPROCESSED,
+                                data=[item],
+                                source_guid=item.get("source_guid")
+                                if isinstance(item, dict)
+                                else None,
+                            )
+                        )
             else:
-                results = self._process_file_mode_hitl(filtered, data, context)
+                if self.is_tool_action:
+                    results = self._process_file_mode_tool(passing, data, context)
+                else:
+                    results = self._process_file_mode_hitl(passing, data, context)
+
+                # Merge skipped records back into results as unprocessed
+                if skipped:
+                    for item in skipped:
+                        results.append(
+                            ProcessingResult(
+                                status=ProcessingStatus.UNPROCESSED,
+                                data=[item],
+                                source_guid=item.get("source_guid")
+                                if isinstance(item, dict)
+                                else None,
+                            )
+                        )
         else:
             # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)

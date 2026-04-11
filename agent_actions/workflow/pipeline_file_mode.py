@@ -316,6 +316,63 @@ def process_file_mode_hitl(
         raise
 
 
+def prefilter_by_guard(
+    data: list[dict],
+    agent_config: dict[str, Any],
+    agent_name: str,
+) -> tuple[list[dict], list[dict]]:
+    """Evaluate guard per-record and split into passing and skipped arrays.
+
+    Called before FILE-mode processing to apply per-record guard logic
+    on the full array.  ``on_false: filter`` records are excluded from
+    both returned lists.  ``on_false: skip`` records land in *skipped*
+    so the caller can merge them back into output with original content.
+
+    When no guard is configured, returns ``(data, [])``.
+
+    Returns:
+        (passing, skipped)
+    """
+    guard_config = agent_config.get("guard")
+    if not guard_config:
+        return data, []
+
+    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+
+    evaluator = get_guard_evaluator()
+    on_false = str(guard_config.get("on_false", "filter")).lower()
+
+    passing: list[dict] = []
+    skipped: list[dict] = []
+    for item in data:
+        content = item.get("content", item) if isinstance(item, dict) else item
+        eval_item = content if isinstance(content, dict) else {"_raw": content}
+
+        result = evaluator.evaluate_with_context(
+            item=eval_item,
+            guard_config=guard_config,
+            context={},
+            conditional_clause=None,
+        )
+
+        if result.should_execute:
+            passing.append(item)
+        elif on_false == "skip":
+            skipped.append(item)
+        # on_false == "filter": record excluded from both lists
+
+    logger.info(
+        "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered of %d total",
+        agent_name,
+        len(passing),
+        len(skipped),
+        len(data) - len(passing) - len(skipped),
+        len(data),
+    )
+
+    return passing, skipped
+
+
 def apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:
     """Filter records to context_scope.observe fields in defined order.
 
