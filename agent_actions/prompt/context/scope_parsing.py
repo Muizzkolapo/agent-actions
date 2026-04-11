@@ -126,12 +126,31 @@ def extract_action_names_from_context_scope(context_scope: dict | None) -> set:
     return referenced_actions
 
 
+def _extract_action_names_regex(template: str) -> set:
+    """Regex fallback for action name extraction (used when AST parse fails)."""
+    referenced_actions: set[str] = set()
+    _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
+
+    pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[\.\[]"
+    matches = re.findall(pattern, template)
+
+    for namespace in matches:
+        if namespace in SPECIAL_NAMESPACES:
+            continue
+        if namespace in _JINJA_KEYWORDS:
+            continue
+        referenced_actions.add(namespace)
+
+    return referenced_actions
+
+
 def extract_action_names_from_template(template: str | None) -> set:
     """
     Extract unique action names referenced in a Jinja2 template.
 
-    Parses template for {{ namespace.field }} patterns and extracts namespace names.
-    Filters out special namespaces (source, version, workflow) and common Jinja2 filters.
+    Parses template AST to extract namespace names, excluding variables scoped
+    by {% for %}, {% set %}, and {% macro %} constructs. Falls back to regex
+    if the template has syntax errors.
 
     Args:
         template: Jinja2 template string
@@ -146,21 +165,69 @@ def extract_action_names_from_template(template: str | None) -> set:
     if not template or not isinstance(template, str):
         return set()
 
-    referenced_actions = set()
+    from jinja2 import Environment, nodes
+    from jinja2.exceptions import TemplateSyntaxError
 
-    # Match {{ namespace.field }} or {{ namespace['field'] }} patterns
-    # This regex captures the namespace (first identifier before . or [)
-    pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[\.\[]"
-    matches = re.findall(pattern, template)
+    _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
 
-    for namespace in matches:
-        # Filter out special namespaces and common Jinja2 variables
-        if namespace in SPECIAL_NAMESPACES:
-            continue
-        if namespace in ("loop", "range", "true", "false", "none", "self", "version"):
-            continue
-        referenced_actions.add(namespace)
+    try:
+        env = Environment()
+        ast = env.parse(template)
+    except TemplateSyntaxError:
+        return _extract_action_names_regex(template)
 
+    referenced_actions: set[str] = set()
+
+    def _walk(node: nodes.Node, local_vars: set[str]) -> None:
+        # {% for %} and {% macro %} create child scopes — copy the set
+        if isinstance(node, nodes.For):
+            new_locals = local_vars.copy()
+            if isinstance(node.target, nodes.Name):
+                new_locals.add(node.target.name)
+            elif isinstance(node.target, nodes.Tuple):
+                for item in node.target.items:
+                    if isinstance(item, nodes.Name):
+                        new_locals.add(item.name)
+            for child in node.iter_child_nodes():
+                _walk(child, new_locals)
+            return
+
+        if isinstance(node, nodes.Macro):
+            new_locals = local_vars.copy()
+            for arg in node.args:
+                if isinstance(arg, nodes.Name):
+                    new_locals.add(arg.name)
+            for child in node.iter_child_nodes():
+                _walk(child, new_locals)
+            return
+
+        # {% set %} introduces a name at the current scope level — mutate in place
+        # so subsequent siblings (processed by the parent's loop) see it
+        if isinstance(node, nodes.Assign):
+            if isinstance(node.target, nodes.Name):
+                local_vars.add(node.target.name)
+            for child in node.iter_child_nodes():
+                _walk(child, local_vars)
+            return
+
+        if isinstance(node, nodes.Getattr):
+            current = node
+            while isinstance(current, nodes.Getattr):
+                current = current.node
+            if isinstance(current, nodes.Name):
+                root = current.name
+                if (
+                    root not in local_vars
+                    and root not in SPECIAL_NAMESPACES
+                    and root not in _JINJA_KEYWORDS
+                ):
+                    referenced_actions.add(root)
+            return
+
+        for child in node.iter_child_nodes():
+            _walk(child, local_vars)
+
+    _walk(ast, set())
     return referenced_actions
 
 
