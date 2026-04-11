@@ -211,7 +211,7 @@ def extract_action_names_from_template(template: str | None) -> set:
             return
 
         if isinstance(node, nodes.Getattr):
-            current = node
+            current: nodes.Node = node
             while isinstance(current, nodes.Getattr):
                 current = current.node
             if isinstance(current, nodes.Name):
