@@ -249,7 +249,7 @@ def apply_observe_for_file_mode(
             if isinstance(deps, str):
                 input_source_names = {deps}
             else:
-                input_source_names = set(deps)
+                input_source_names = {d for d in deps if isinstance(d, str)}
             has_reliable_ns = True
         elif data and isinstance(data[0], dict):
             # Best-effort heuristic: treat all top-level keys in record

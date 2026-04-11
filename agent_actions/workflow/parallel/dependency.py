@@ -48,7 +48,6 @@ class WorkflowDependencyOrchestrator:
 
     def resolve_upstream_workflows(
         self,
-        agent_configs: dict,
         user_code_path: str | None,
         default_path: str | None,
         use_tools: bool,
@@ -63,22 +62,20 @@ class WorkflowDependencyOrchestrator:
             self.current_workflow,
             extra={"operation": "resolve_upstream"},
         )
-        processed_upstreams = set()
+        upstream_workflows = self.workspace_index.dependency_graph.get(self.current_workflow, [])
+        processed_upstreams: set[str] = set()
 
-        for config in agent_configs.values():
-            for dep in config.get("dependencies", []):
-                if isinstance(dep, dict) and "workflow" in dep:
-                    upstream_name = dep["workflow"]
-                    if upstream_name in processed_upstreams:
-                        continue
+        for upstream_name in upstream_workflows:
+            if upstream_name in processed_upstreams:
+                continue
 
-                    result = self._execute_upstream_workflow(
-                        upstream_name, user_code_path, default_path, use_tools
-                    )
-                    if result is None:
-                        # Upstream has pending batch jobs, exit gracefully
-                        return False
-                    processed_upstreams.add(upstream_name)
+            result = self._execute_upstream_workflow(
+                upstream_name, user_code_path, default_path, use_tools
+            )
+            if result is None:
+                # Upstream has pending batch jobs, exit gracefully
+                return False
+            processed_upstreams.add(upstream_name)
 
         return True
 

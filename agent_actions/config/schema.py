@@ -286,6 +286,20 @@ class ActionConfig(BaseModel):
             raise ValueError(f"Tool action '{self.name}' requires 'impl' (implementation path)")
         return self
 
+    @field_validator("dependencies", mode="before")
+    @classmethod
+    def strip_cross_workflow_deps(cls, v: Any) -> Any:
+        """Strip cross-workflow dict deps (e.g. {workflow: X, action: Y}).
+
+        Cross-workflow deps are for execution ordering between workflows, handled
+        by WorkspaceIndex at runtime. Intra-workflow code (scope inference, DAG
+        traversal) expects string deps only. Pre-Pydantic callers (docs parser,
+        CLI inspect) also filter independently in infer_dependencies().
+        """
+        if isinstance(v, list):
+            return [d for d in v if isinstance(d, str)]
+        return v
+
     @field_validator("guard")
     @classmethod
     def validate_guard(cls, v):

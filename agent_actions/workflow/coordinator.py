@@ -411,7 +411,6 @@ class AgentWorkflow:
         if not self.config.run_upstream:
             return True
         return self.dependency_orchestrator.resolve_upstream_workflows(
-            agent_configs=self.action_configs,
             user_code_path=self.config.paths.user_code_path,
             default_path=self.config.paths.default_path,
             use_tools=self.config.use_tools,
