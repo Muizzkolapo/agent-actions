@@ -23,6 +23,7 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
 
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
@@ -85,20 +86,17 @@ class RecordProcessor:
                     },
                 )
 
-            # Guards not supported in FILE mode (processes entire array at once)
-            guard_config = agent_config.get("guard")
-            if guard_config:
-                raise ConfigurationError(
-                    "Guards are not supported with FILE granularity. "
-                    "FILE mode processes the entire array at once, so per-record guards cannot be applied. "
-                    "Remove the guard or use RECORD granularity.",
-                    context={
-                        "agent_name": agent_name,
-                        "granularity": granularity,
-                        "kind": action_kind,
-                        "guard": guard_config,
-                    },
-                )
+        # HITL actions require FILE granularity — Record mode launches a
+        # separate approval UI per record, which is broken UX.
+        if action_kind == "hitl" and not is_file_granularity:
+            raise ConfigurationError(
+                HITL_FILE_GRANULARITY_ERROR,
+                context={
+                    "agent_name": agent_name,
+                    "granularity": granularity,
+                    "kind": action_kind,
+                },
+            )
 
         self.enrichment_pipeline = EnrichmentPipeline()
 
