@@ -60,9 +60,11 @@ All records available at once for cross-record operations.
 - Cross-record validation
 
 :::warning Constraints
-**File granularity only works with tool actions** (`kind: tool`). LLM actions must use Record granularity.
+**File granularity only works with tool and HITL actions** (`kind: tool` or `kind: hitl`). LLM actions must use Record granularity.
 
-**Guards are not supported** with File granularity.
+**HITL actions require File granularity** — setting `granularity: record` on a HITL action raises a `ConfigurationError`. HITL defaults to `file` automatically.
+
+**Guards with File granularity** act as a per-record pre-filter. The guard evaluates each record before the array is passed to the action. See [Guards](./guards) for details.
 :::
 
 ## Tool Implementation
