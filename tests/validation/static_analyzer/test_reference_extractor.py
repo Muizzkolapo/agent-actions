@@ -373,3 +373,55 @@ class TestReferenceExtractor:
         assert "resp" not in agent_names
         # Real external references should be present
         assert "extractor" in agent_names
+
+    def test_set_variable_skipped(self):
+        """Test {% set %} variables are not treated as external references."""
+        config = {
+            "name": "agent",
+            "prompt": """
+            {% set summary = source.text %}
+            Result: {{ summary.truncated }}
+            Real ref: {{ action.extractor.data }}
+            """,
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        agent_names = {r.source_agent for r in refs}
+        assert "summary" not in agent_names
+        assert "extractor" in agent_names
+
+    def test_macro_param_skipped(self):
+        """Test {% macro %} parameters are not treated as external references."""
+        config = {
+            "name": "agent",
+            "prompt": """
+            {% macro render_item(item) %}
+            Name: {{ item.name }}
+            Score: {{ item.score }}
+            {% endmacro %}
+            Real ref: {{ action.extractor.data }}
+            """,
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        agent_names = {r.source_agent for r in refs}
+        assert "item" not in agent_names
+        assert "extractor" in agent_names
+
+    def test_tuple_unpacking_in_loop_skipped(self):
+        """Test tuple unpacking in for-loops skips all loop variables."""
+        config = {
+            "name": "agent",
+            "prompt": """
+            {% for key, value in source.items %}
+            {{ key.name }}: {{ value.data }}
+            {% endfor %}
+            Real ref: {{ action.extractor.data }}
+            """,
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        agent_names = {r.source_agent for r in refs}
+        assert "key" not in agent_names
+        assert "value" not in agent_names
+        assert "extractor" in agent_names
