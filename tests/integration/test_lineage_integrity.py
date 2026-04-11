@@ -721,6 +721,122 @@ class TestLineageFileMode:
         assert result.error == "Tool returned empty output"
 
 
+class TestLineageHitlFileMode:
+    """HITL FILE-mode lineage integrity.
+
+    HITL FILE mode is always 1:1 — output[i] comes from original_data[i].
+    The identity source_mapping must cause the enricher to extend lineage
+    from the parent record rather than truncating to [node_id].
+    """
+
+    def test_hitl_file_mode_extends_parent_lineage(self):
+        """HITL output should contain parent lineage + HITL node_id."""
+        guid_a = _uuid()
+        guid_b = _uuid()
+        parent_node_a = f"extract_{_uuid()}"
+        parent_node_b = f"extract_{_uuid()}"
+        # Simulate upstream records with deep lineage chains
+        ancestor_node = f"ingest_{_uuid()}"
+        source_items = [
+            _make_source_item(
+                guid_a,
+                parent_node_a,
+                lineage=[ancestor_node, parent_node_a],
+                target_id=_uuid(),
+            ),
+            _make_source_item(
+                guid_b,
+                parent_node_b,
+                lineage=[ancestor_node, parent_node_b],
+                target_id=_uuid(),
+            ),
+        ]
+
+        # HITL output: 1:1 identity mapping (same as process_file_mode_hitl builds)
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[
+                {"content": {"hitl_status": "approved"}, "source_guid": guid_a},
+                {"content": {"hitl_status": "rejected"}, "source_guid": guid_b},
+            ],
+            source_guid=None,
+            source_mapping={0: 0, 1: 1},
+        )
+        context = _make_context(
+            source_data=source_items,
+            is_first_stage=False,
+            action_name="review_data",
+        )
+
+        enriched = LineageEnricher().enrich(result, context)
+
+        for i in range(2):
+            lineage = enriched.data[i]["lineage"]
+            # Lineage must include ALL ancestors plus the new HITL node_id
+            assert ancestor_node in lineage, "Ancestor node lost from lineage"
+            assert source_items[i]["node_id"] in lineage, "Parent node lost from lineage"
+            assert enriched.data[i]["node_id"] in lineage, "HITL node_id not appended"
+            # Parent ancestry preserved
+            assert enriched.data[i]["parent_target_id"] == source_items[i]["target_id"]
+
+    def test_hitl_file_mode_single_record_no_index_suffix(self):
+        """Single HITL output gets node_id without _0 suffix."""
+        guid = _uuid()
+        parent_node = f"extract_{_uuid()}"
+        source_item = _make_source_item(guid, parent_node, target_id=_uuid())
+
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"content": {"hitl_status": "approved"}, "source_guid": guid}],
+            source_guid=None,
+            source_mapping={0: 0},
+        )
+        context = _make_context(
+            source_data=[source_item],
+            is_first_stage=False,
+            action_name="review_data",
+        )
+
+        enriched = LineageEnricher().enrich(result, context)
+
+        node_id = enriched.data[0]["node_id"]
+        assert node_id.startswith("review_data_")
+        assert not node_id.endswith("_0")
+        assert parent_node in enriched.data[0]["lineage"]
+        assert node_id in enriched.data[0]["lineage"]
+
+    def test_hitl_file_mode_without_source_mapping_truncates(self):
+        """Without source_mapping, HITL lineage falls back to per-item lookup.
+
+        This test documents the bug: when source_mapping is missing and
+        source_guid lookup fails, lineage is truncated to just [node_id].
+        """
+        guid = _uuid()
+        parent_node = f"extract_{_uuid()}"
+        # Source item has a DIFFERENT source_guid than the output — simulates
+        # the case where source_guid gets corrupted or overwritten.
+        source_item = _make_source_item(_uuid(), parent_node, target_id=_uuid())
+
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"content": {"hitl_status": "approved"}, "source_guid": guid}],
+            source_guid=None,
+            # NO source_mapping — this is the bug condition
+        )
+        context = _make_context(
+            source_data=[source_item],
+            is_first_stage=False,
+            action_name="review_data",
+        )
+
+        enriched = LineageEnricher().enrich(result, context)
+
+        # Without source_mapping AND mismatched source_guid, lineage is truncated
+        lineage = enriched.data[0]["lineage"]
+        assert parent_node not in lineage, "Parent should be lost without source_mapping"
+        assert len(lineage) == 1, "Lineage should be truncated to just [node_id]"
+
+
 class TestLineageVersionParallel:
     """Version/parallel actions: same input processed by multiple agents."""
 
