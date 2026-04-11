@@ -15,9 +15,7 @@ class TestInferDependenciesCrossWorkflow:
                 {"workflow": "upstream", "action": "remote"},
             ],
         }
-        input_sources, context_sources = infer_dependencies(
-            config, ["local_action"], "test_action"
-        )
+        input_sources, context_sources = infer_dependencies(config, ["local_action"], "test_action")
         assert input_sources == ["local_action"]
         assert context_sources == []
 
@@ -33,9 +31,7 @@ class TestInferDependenciesCrossWorkflow:
         config = {
             "dependencies": ["action_a"],
         }
-        input_sources, context_sources = infer_dependencies(
-            config, ["action_a"], "test_action"
-        )
+        input_sources, context_sources = infer_dependencies(config, ["action_a"], "test_action")
         assert input_sources == ["action_a"]
 
     def test_no_deps_unchanged(self):
