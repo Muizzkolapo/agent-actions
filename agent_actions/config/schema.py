@@ -291,13 +291,9 @@ class ActionConfig(BaseModel):
         """Strip cross-workflow dict deps (e.g. {workflow: X, action: Y}).
 
         Cross-workflow deps are for execution ordering between workflows, handled
-        by WorkspaceIndex at runtime. They must not reach intra-workflow code
-        (scope inference, DAG traversal, context loading) which expects strings.
-
-        Runs after validate_kind_requirements (which does not inspect dependencies).
-        By stripping here, WorkflowConfig.validate_workflow_invariants sees only
-        intra-workflow string deps — cross-workflow names would otherwise be
-        rejected as dangling dependencies.
+        by WorkspaceIndex at runtime. Intra-workflow code (scope inference, DAG
+        traversal) expects string deps only. Pre-Pydantic callers (docs parser,
+        CLI inspect) also filter independently in infer_dependencies().
         """
         self.dependencies = [d for d in self.dependencies if isinstance(d, str)]
         return self
