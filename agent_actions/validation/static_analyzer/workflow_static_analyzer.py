@@ -142,8 +142,11 @@ class WorkflowStaticAnalyzer:
             result.add_error(error)
 
         # Step 2c: Validate context_scope field references
-        for error in self._check_context_scope_fields():
+        field_errors, field_warnings = self._check_context_scope_fields()
+        for error in field_errors:
             result.add_error(error)
+        for warning in field_warnings:
+            result.add_warning(warning)
 
         # Step 2d: Catch seed_data/seed_path misuse in context_scope references
         for error in self._check_seed_reference_misuse():
@@ -288,7 +291,9 @@ class WorkflowStaticAnalyzer:
                     # Expand into concrete field references.
                     # Empty schemas also resolve to nothing (wildcard on zero
                     # fields = zero refs).
-                    fields = output.schema_fields | output.observe_fields
+                    fields = (
+                        output.schema_fields | output.observe_fields | output.passthrough_fields
+                    )
                     expanded.extend(f"{ns_name}.{f}" for f in sorted(fields))
 
                 context_scope[directive] = expanded
@@ -451,20 +456,24 @@ class WorkflowStaticAnalyzer:
 
         return errors
 
-    def _check_context_scope_fields(self) -> list[StaticTypeError]:
+    def _check_context_scope_fields(
+        self,
+    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning]]:
         """Validate context_scope field references against dependency schemas.
 
         Checks that fields referenced in context_scope.observe and context_scope.passthrough
-        actually exist in the dependency's output schema.
+        actually exist in the dependency's output schema.  For schemaless or dynamic actions
+        where the schema cannot be verified, emits warnings instead of silently skipping.
 
         Returns:
-            List of StaticTypeError for invalid field references
+            (errors, warnings) — errors block execution, warnings are informational.
         """
         from agent_actions.prompt.context.scope_parsing import (
             extract_action_names_from_context_scope,
         )
 
         errors: list[StaticTypeError] = []
+        warnings: list[StaticTypeWarning] = []
         actions = self.workflow_config.get("actions", [])
 
         for action in actions:
@@ -547,6 +556,8 @@ class WorkflowStaticAnalyzer:
                         continue
 
                     output_schema = dep_node.output_schema
+
+                    # Dynamic schema: load failed or runtime-resolved.
                     if output_schema.is_dynamic:
                         if output_schema.load_error:
                             errors.append(
@@ -565,10 +576,68 @@ class WorkflowStaticAnalyzer:
                                     hint="Fix the schema file first, then re-run validation.",
                                 )
                             )
+                        elif field_name != "*":
+                            warnings.append(
+                                StaticTypeWarning(
+                                    message=(
+                                        f"Cannot verify field '{field_name}' on "
+                                        f"'{dep_name}' — action schema is dynamic"
+                                    ),
+                                    location=FieldLocation(
+                                        agent_name=action_name,
+                                        config_field=f"context_scope.{directive}",
+                                        raw_reference=field_ref,
+                                    ),
+                                    referenced_agent=dep_name,
+                                    referenced_field=field_name,
+                                    hint=(
+                                        f"Action '{dep_name}' has a dynamic schema. "
+                                        f"Verify the field name matches the action's "
+                                        f"runtime output."
+                                    ),
+                                )
+                            )
+                        continue
+
+                    # Schemaless: no output schema defined (common for tools).
+                    if output_schema.is_schemaless:
+                        if field_name != "*":
+                            warnings.append(
+                                StaticTypeWarning(
+                                    message=(
+                                        f"Cannot verify field '{field_name}' on "
+                                        f"'{dep_name}' — action has no output schema"
+                                    ),
+                                    location=FieldLocation(
+                                        agent_name=action_name,
+                                        config_field=f"context_scope.{directive}",
+                                        raw_reference=field_ref,
+                                    ),
+                                    referenced_agent=dep_name,
+                                    referenced_field=field_name,
+                                    hint=(
+                                        f"Add an output schema to '{dep_name}' to "
+                                        f"enable field-level validation, or verify "
+                                        f"the field name matches the action's "
+                                        f"runtime output."
+                                    ),
+                                )
+                            )
                         continue
 
                     available_fields = output_schema.available_fields
                     if field_name not in available_fields:
+                        suggestions = self._find_field_in_other_actions(
+                            field_name, exclude={dep_name, action_name}
+                        )
+                        if suggestions:
+                            suggestion_refs = ", ".join(f"'{a}.{field_name}'" for a in suggestions)
+                            hint = f"Did you mean {suggestion_refs}?"
+                        else:
+                            hint = (
+                                f"Available fields in '{dep_name}': "
+                                f"{sorted(available_fields) if available_fields else '(none)'}."
+                            )
                         errors.append(
                             StaticTypeError(
                                 message=f"context_scope.{directive} references non-existent field '{field_name}' in '{dep_name}'",
@@ -580,11 +649,28 @@ class WorkflowStaticAnalyzer:
                                 referenced_agent=dep_name,
                                 referenced_field=field_name,
                                 available_fields=available_fields,
-                                hint=f"Check the output schema of '{dep_name}' for available fields.",
+                                hint=hint,
                             )
                         )
 
-        return errors
+        return errors, warnings
+
+    def _find_field_in_other_actions(self, field_name: str, exclude: set[str]) -> list[str]:
+        """Find which workflow actions produce a given field.
+
+        Searches all actions' ``available_fields`` for *field_name*,
+        excluding actions in *exclude*.  Returns a sorted list of action
+        names that have this field, for use in "did you mean?" hints.
+        """
+        matches = []
+        for node in self.graph.nodes.values():
+            if node.name in exclude:
+                continue
+            if node.name in SPECIAL_NAMESPACES:
+                continue
+            if field_name in node.output_schema.available_fields:
+                matches.append(node.name)
+        return sorted(matches)
 
     def _check_seed_reference_misuse(self) -> list[StaticTypeError]:
         """Catch common misuse of seed_data/seed_path in context_scope references.
