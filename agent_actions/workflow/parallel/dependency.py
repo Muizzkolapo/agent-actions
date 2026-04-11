@@ -48,7 +48,6 @@ class WorkflowDependencyOrchestrator:
 
     def resolve_upstream_workflows(
         self,
-        agent_configs: dict,
         user_code_path: str | None,
         default_path: str | None,
         use_tools: bool,

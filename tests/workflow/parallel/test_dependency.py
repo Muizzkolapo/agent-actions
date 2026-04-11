@@ -152,8 +152,7 @@ class TestResolveUpstreamWorkflows:
 
     def test_no_dependencies(self, orchestrator: WorkflowDependencyOrchestrator):
         with self._mock_upstream_index(orchestrator, []):
-            configs = {"agent1": {"some_key": "val"}}
-            result = orchestrator.resolve_upstream_workflows(configs, None, None, False)
+            result = orchestrator.resolve_upstream_workflows(None, None, False)
             assert result is True
             orchestrator.workflow_factory.assert_not_called()
 
@@ -169,8 +168,7 @@ class TestResolveUpstreamWorkflows:
         mock_factory.return_value = mock_wf
 
         with self._mock_upstream_index(orchestrator, ["upstream_wf"]):
-            configs = {"agent1": {}}
-            result = orchestrator.resolve_upstream_workflows(configs, "/code", "/def", True)
+            result = orchestrator.resolve_upstream_workflows("/code", "/def", True)
 
         assert result is True
         mock_factory.assert_called_once()
@@ -192,8 +190,7 @@ class TestResolveUpstreamWorkflows:
         orchestrator.artifact_linker = MagicMock()
 
         with self._mock_upstream_index(orchestrator, ["upstream_wf"]):
-            configs = {"agent1": {}}
-            orchestrator.resolve_upstream_workflows(configs, None, None, False)
+            orchestrator.resolve_upstream_workflows(None, None, False)
 
         orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once_with(
             "upstream_wf", "current_wf"
@@ -209,8 +206,7 @@ class TestResolveUpstreamWorkflows:
         _create_status_file(workflows_root, "done_wf", {"a": {"status": "completed"}})
 
         with self._mock_upstream_index(orchestrator, ["done_wf"]):
-            configs = {"agent1": {}}
-            result = orchestrator.resolve_upstream_workflows(configs, None, None, False)
+            result = orchestrator.resolve_upstream_workflows(None, None, False)
 
         assert result is True
         # Factory should NOT be called since workflow is already complete
@@ -226,8 +222,7 @@ class TestResolveUpstreamWorkflows:
         orchestrator.artifact_linker = MagicMock()
 
         with self._mock_upstream_index(orchestrator, ["done_wf"]):
-            configs = {"agent1": {}}
-            orchestrator.resolve_upstream_workflows(configs, None, None, False)
+            orchestrator.resolve_upstream_workflows(None, None, False)
 
         orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once_with(
             "done_wf", "current_wf"
@@ -245,8 +240,7 @@ class TestResolveUpstreamWorkflows:
         mock_factory.return_value = mock_wf
 
         with self._mock_upstream_index(orchestrator, ["pending_wf"]):
-            configs = {"agent1": {}}
-            result = orchestrator.resolve_upstream_workflows(configs, None, None, False)
+            result = orchestrator.resolve_upstream_workflows(None, None, False)
 
         assert result is False
 
@@ -255,9 +249,8 @@ class TestResolveUpstreamWorkflows:
         orchestrator: WorkflowDependencyOrchestrator,
     ):
         with self._mock_upstream_index(orchestrator, ["missing_wf"]):
-            configs = {"agent1": {}}
             with pytest.raises(RuntimeError, match="Recursive execution failed"):
-                orchestrator.resolve_upstream_workflows(configs, None, None, False)
+                orchestrator.resolve_upstream_workflows(None, None, False)
 
     def test_duplicate_upstream_processed_once(
         self,
@@ -272,8 +265,7 @@ class TestResolveUpstreamWorkflows:
 
         # workspace_index deduplicates at scan time, but test the runtime guard too
         with self._mock_upstream_index(orchestrator, ["shared_wf", "shared_wf"]):
-            configs = {"agent1": {}}
-            result = orchestrator.resolve_upstream_workflows(configs, None, None, False)
+            result = orchestrator.resolve_upstream_workflows(None, None, False)
 
         assert result is True
         assert mock_factory.call_count == 1
@@ -284,8 +276,7 @@ class TestResolveUpstreamWorkflows:
         mock_factory: MagicMock,
     ):
         with self._mock_upstream_index(orchestrator, []):
-            configs = {"agent1": {}}
-            result = orchestrator.resolve_upstream_workflows(configs, None, None, False)
+            result = orchestrator.resolve_upstream_workflows(None, None, False)
             assert result is True
             mock_factory.assert_not_called()
 
@@ -301,9 +292,8 @@ class TestResolveUpstreamWorkflows:
         mock_factory.return_value = mock_wf
 
         with self._mock_upstream_index(orchestrator, ["fail_wf"]):
-            configs = {"agent1": {}}
             with pytest.raises(RuntimeError, match=r"Recursive execution failed.*ValueError.*boom"):
-                orchestrator.resolve_upstream_workflows(configs, None, None, False)
+                orchestrator.resolve_upstream_workflows(None, None, False)
 
 
 # ===========================================================================
