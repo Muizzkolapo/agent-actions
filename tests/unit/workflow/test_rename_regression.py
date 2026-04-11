@@ -239,7 +239,8 @@ class TestCoordinatorUpstreamKwargs:
 
         call_kwargs = mock_orchestrator.resolve_upstream_workflows.call_args.kwargs
 
-        # Must use agent_configs=, not action_configs=
-        assert "agent_configs" in call_kwargs, "Should pass 'agent_configs=', not 'action_configs='"
-        assert "action_configs" not in call_kwargs, "Should not pass 'action_configs=' (old name)"
-        assert call_kwargs["agent_configs"] == {"action_a": {"model_vendor": "openai"}}
+        # agent_configs was removed — upstream resolution uses workspace_index now
+        assert "agent_configs" not in call_kwargs, "agent_configs parameter was removed"
+        assert "action_configs" not in call_kwargs, "action_configs parameter was removed"
+        assert call_kwargs["user_code_path"] == "/tmp/user_code"
+        assert call_kwargs["use_tools"] is False

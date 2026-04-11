@@ -195,6 +195,8 @@ def infer_dependencies(
         all_deps = [deps]
     else:
         all_deps = list(deps)
+    # Defensive: docs parser and CLI inspect call this with raw YAML that bypasses ActionConfig
+    all_deps = [d for d in all_deps if isinstance(d, str)]
 
     # 1b. Handle fan-in pattern: multiple DIFFERENT dependencies
     # For fan-in, only the primary dependency is an input source
