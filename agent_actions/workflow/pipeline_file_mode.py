@@ -299,12 +299,15 @@ def process_file_mode_hitl(
                             structured_item[field] = item[field]
                 structured_data.append(structured_item)
 
+        # HITL FILE mode is always 1:1 — identity source_mapping ensures the
+        # enricher extends parent lineage rather than truncating to [node_id].
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=structured_data,
             source_guid=None,
             raw_response=raw_response,
             executed=executed,
+            source_mapping={i: i for i in range(len(structured_data))},
         )
 
         result = pipeline.record_processor.enrichment_pipeline.enrich(result, context)
