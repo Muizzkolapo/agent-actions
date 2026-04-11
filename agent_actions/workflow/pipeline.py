@@ -553,19 +553,21 @@ class ProcessingPipeline:
 
             # Guards must run before FILE-mode processing because FILE mode
             # sends the entire array in one batch and cannot filter per-record.
-            passing, skipped = prefilter_by_guard(
+            # Pass raw `data` so original_passing preserves pre-observe fields.
+            passing, skipped, original_passing = prefilter_by_guard(
                 filtered,
                 cast(dict[str, Any], self.config.action_config),
                 self.config.action_name,
+                original_data=data,
             )
 
             if not passing:
                 results = _build_skipped_results(skipped)
             else:
                 if self.is_tool_action:
-                    results = self._process_file_mode_tool(passing, passing, context)
+                    results = self._process_file_mode_tool(passing, original_passing, context)
                 else:
-                    results = self._process_file_mode_hitl(passing, passing, context)
+                    results = self._process_file_mode_hitl(passing, original_passing, context)
 
                 results.extend(_build_skipped_results(skipped))
         else:

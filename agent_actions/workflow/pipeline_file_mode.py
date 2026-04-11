@@ -320,7 +320,8 @@ def prefilter_by_guard(
     data: list[dict],
     agent_config: dict[str, Any],
     agent_name: str,
-) -> tuple[list[dict], list[dict]]:
+    original_data: list[dict] | None = None,
+) -> tuple[list[dict], list[dict], list[dict]]:
     """Evaluate guard per-record and split into passing and skipped arrays.
 
     Called before FILE-mode processing to apply per-record guard logic
@@ -328,14 +329,27 @@ def prefilter_by_guard(
     both returned lists.  ``behavior: skip`` records land in *skipped*
     so the caller can merge them back into output with original content.
 
-    When no guard is configured, returns ``(data, [])``.
+    When ``original_data`` is provided (e.g. pre-observe-filter records),
+    the third return value contains the corresponding original items for
+    each passing record.  This preserves upstream fields that observe
+    filtering may have stripped.
+
+    When no guard is configured, returns ``(data, [], original_data or data)``.
+
+    Note:
+        Guard evaluation uses ``context={}`` because the pre-filter runs
+        before processing context (passthrough fields, source data) is
+        established.  Guard clauses in FILE-mode pre-filter can only
+        reference item-level fields, not workflow context variables.
 
     Returns:
-        (passing, skipped)
+        (passing, skipped, original_passing)
     """
+    originals = original_data if original_data is not None else data
+
     guard_config = agent_config.get("guard")
     if not guard_config:
-        return data, []
+        return data, [], originals
 
     from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
 
@@ -345,10 +359,12 @@ def prefilter_by_guard(
 
     passing: list[dict] = []
     skipped: list[dict] = []
-    for item in data:
+    original_passing: list[dict] = []
+    for idx, item in enumerate(data):
         content = item.get("content", item)
         eval_item = content if isinstance(content, dict) else {"_raw": content}
 
+        # context={} — see Note in docstring.
         result = evaluator.evaluate_with_context(
             item=eval_item,
             guard_config=guard_config,
@@ -358,6 +374,7 @@ def prefilter_by_guard(
 
         if result.should_execute:
             passing.append(item)
+            original_passing.append(originals[idx])
         elif behavior == "skip":
             skipped.append(item)
         # behavior == "filter": record excluded from both lists
@@ -371,7 +388,7 @@ def prefilter_by_guard(
         len(data),
     )
 
-    return passing, skipped
+    return passing, skipped, original_passing
 
 
 def apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:
