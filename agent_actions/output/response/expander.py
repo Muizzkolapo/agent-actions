@@ -17,7 +17,7 @@ from typing import Any
 
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError
-from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_FILE_GRANULARITY_ERROR
 
 from .config_fields import get_default, inherit_simple_fields
 from .expander_action_types import (
@@ -302,11 +302,8 @@ class ActionExpander:
             granularity = action.get("granularity", "file")
             if granularity.lower() == "record":
                 raise ConfigurationError(
-                    "HITL actions require FILE granularity. "
-                    "Record granularity launches a separate approval UI per record. "
-                    "Set 'granularity: file' or remove the granularity field "
-                    "(HITL defaults to file).",
-                    context={"action_name": action.get("name", "?")},
+                    HITL_FILE_GRANULARITY_ERROR,
+                    context={"agent_name": action.get("name", "?")},
                 )
         else:
             granularity = action.get(

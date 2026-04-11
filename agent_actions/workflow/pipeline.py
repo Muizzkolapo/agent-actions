@@ -19,7 +19,7 @@ from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
+from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
@@ -32,6 +32,7 @@ from agent_actions.workflow.pipeline_file_mode import (
     apply_observe_filter as _apply_observe_filter_impl,
 )
 from agent_actions.workflow.pipeline_file_mode import (
+    prefilter_by_guard,
     process_file_mode_hitl,
     process_file_mode_tool,
 )
@@ -550,9 +551,8 @@ class ProcessingPipeline:
                 storage_backend=self.config.storage_backend,
             )
 
-            # Pre-filter by guard before passing to FILE-mode action
-            from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
-
+            # Guards must run before FILE-mode processing because FILE mode
+            # sends the entire array in one batch and cannot filter per-record.
             passing, skipped = prefilter_by_guard(
                 filtered,
                 cast(dict[str, Any], self.config.action_config),
@@ -560,37 +560,14 @@ class ProcessingPipeline:
             )
 
             if not passing:
-                # All records filtered or skipped — build skip/empty results
-                results = []
-                if skipped:
-                    for item in skipped:
-                        results.append(
-                            ProcessingResult(
-                                status=ProcessingStatus.UNPROCESSED,
-                                data=[item],
-                                source_guid=item.get("source_guid")
-                                if isinstance(item, dict)
-                                else None,
-                            )
-                        )
+                results = _build_skipped_results(skipped)
             else:
                 if self.is_tool_action:
-                    results = self._process_file_mode_tool(passing, data, context)
+                    results = self._process_file_mode_tool(passing, passing, context)
                 else:
-                    results = self._process_file_mode_hitl(passing, data, context)
+                    results = self._process_file_mode_hitl(passing, passing, context)
 
-                # Merge skipped records back into results as unprocessed
-                if skipped:
-                    for item in skipped:
-                        results.append(
-                            ProcessingResult(
-                                status=ProcessingStatus.UNPROCESSED,
-                                data=[item],
-                                source_guid=item.get("source_guid")
-                                if isinstance(item, dict)
-                                else None,
-                            )
-                        )
+                results.extend(_build_skipped_results(skipped))
         else:
             # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
@@ -660,6 +637,18 @@ class ProcessingPipeline:
     ) -> list:
         """Delegator stub — see :func:`pipeline_file_mode.process_file_mode_hitl`."""
         return process_file_mode_hitl(self, data, original_data, context)
+
+
+def _build_skipped_results(skipped: list[dict]) -> list[ProcessingResult]:
+    """Convert guard-skipped items into UNPROCESSED ProcessingResults."""
+    return [
+        ProcessingResult.unprocessed(
+            data=[item],
+            reason="guard_prefilter_skip",
+            source_guid=item.get("source_guid"),
+        )
+        for item in skipped
+    ]
 
 
 def create_processing_pipeline(

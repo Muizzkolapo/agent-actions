@@ -33,13 +33,13 @@ class TestPrefilterByGuard:
         assert skipped == []
 
     def test_filter_removes_failing_records(self):
-        """on_false: filter -> failing records excluded from both lists."""
+        """behavior: filter -> failing records excluded from both lists."""
         data = [
             {"content": {"score": 90}},
             {"content": {"score": 40}},
             {"content": {"score": 85}},
         ]
-        config = {"guard": {"clause": "score >= 80", "on_false": "filter"}}
+        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
         with patch(
@@ -54,13 +54,13 @@ class TestPrefilterByGuard:
         assert skipped == []
 
     def test_skip_preserves_failing_records(self):
-        """on_false: skip -> failing records in skipped list."""
+        """behavior: skip -> failing records in skipped list."""
         data = [
             {"content": {"score": 90}},
             {"content": {"score": 40}},
             {"content": {"score": 85}},
         ]
-        config = {"guard": {"clause": "score >= 80", "on_false": "skip"}}
+        config = {"guard": {"clause": "score >= 80", "behavior": "skip"}}
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
         with patch(
@@ -76,7 +76,7 @@ class TestPrefilterByGuard:
     def test_all_pass(self):
         """All records pass guard -> all in passing, none skipped."""
         data = [{"content": {"score": 90}}, {"content": {"score": 95}}]
-        config = {"guard": {"clause": "score >= 80", "on_false": "filter"}}
+        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
         with patch(
@@ -91,7 +91,7 @@ class TestPrefilterByGuard:
     def test_all_filtered(self):
         """All records fail with filter -> both lists empty."""
         data = [{"content": {"score": 10}}, {"content": {"score": 20}}]
-        config = {"guard": {"clause": "score >= 80", "on_false": "filter"}}
+        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
         with patch(
@@ -106,7 +106,7 @@ class TestPrefilterByGuard:
     def test_all_skipped(self):
         """All records fail with skip -> all in skipped."""
         data = [{"content": {"score": 10}}, {"content": {"score": 20}}]
-        config = {"guard": {"clause": "score >= 80", "on_false": "skip"}}
+        config = {"guard": {"clause": "score >= 80", "behavior": "skip"}}
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
         with patch(
@@ -125,7 +125,7 @@ class TestPrefilterByGuard:
             {"content": {"score": 40}},
         ]
         original_len = len(data)
-        config = {"guard": {"clause": "score >= 80", "on_false": "filter"}}
+        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
         with patch(
@@ -136,8 +136,8 @@ class TestPrefilterByGuard:
 
         assert len(data) == original_len
 
-    def test_default_on_false_is_filter(self):
-        """When on_false is not specified, default is filter."""
+    def test_default_behavior_is_filter(self):
+        """When behavior is not specified, default is filter."""
         data = [
             {"content": {"score": 90}},
             {"content": {"score": 40}},

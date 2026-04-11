@@ -324,8 +324,8 @@ def prefilter_by_guard(
     """Evaluate guard per-record and split into passing and skipped arrays.
 
     Called before FILE-mode processing to apply per-record guard logic
-    on the full array.  ``on_false: filter`` records are excluded from
-    both returned lists.  ``on_false: skip`` records land in *skipped*
+    on the full array.  ``behavior: filter`` records are excluded from
+    both returned lists.  ``behavior: skip`` records land in *skipped*
     so the caller can merge them back into output with original content.
 
     When no guard is configured, returns ``(data, [])``.
@@ -340,12 +340,13 @@ def prefilter_by_guard(
     from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
 
     evaluator = get_guard_evaluator()
-    on_false = str(guard_config.get("on_false", "filter")).lower()
+    # The config expander normalizes user-facing "on_false" into "behavior"
+    behavior = str(guard_config.get("behavior", "filter")).lower()
 
     passing: list[dict] = []
     skipped: list[dict] = []
     for item in data:
-        content = item.get("content", item) if isinstance(item, dict) else item
+        content = item.get("content", item)
         eval_item = content if isinstance(content, dict) else {"_raw": content}
 
         result = evaluator.evaluate_with_context(
@@ -357,9 +358,9 @@ def prefilter_by_guard(
 
         if result.should_execute:
             passing.append(item)
-        elif on_false == "skip":
+        elif behavior == "skip":
             skipped.append(item)
-        # on_false == "filter": record excluded from both lists
+        # behavior == "filter": record excluded from both lists
 
     logger.info(
         "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered of %d total",
