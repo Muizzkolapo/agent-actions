@@ -561,6 +561,10 @@ class ProcessingPipeline:
                 original_data=data,
             )
 
+            # Align context.source_data with the guard-passing subset so the
+            # enricher's source_mapping indices resolve to the correct parents.
+            context.source_data = original_passing
+
             if not passing:
                 results = _build_skipped_results(skipped)
             else:
