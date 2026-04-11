@@ -100,6 +100,12 @@ SCHEMA_FILE_GLOBS = tuple(f"*{s}" for s in SCHEMA_SUFFIXES)
 # - Context scope processor
 SPECIAL_NAMESPACES = RESERVED_AGENT_NAMES - {"context_scope"}
 
+HITL_FILE_GRANULARITY_ERROR = (
+    "HITL actions require FILE granularity. "
+    "Record granularity launches a separate approval UI per record. "
+    "Set 'granularity: file' or remove the granularity field (HITL defaults to file)."
+)
+
 # Canonical output schema for HITL actions.
 # Fields match _make_terminal_response() in hitl/server.py.
 # Pre-compiled here (rather than calling compile_unified_schema) to avoid
