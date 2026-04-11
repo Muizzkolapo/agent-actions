@@ -256,10 +256,7 @@ class TestTemplateScopeCoverage:
                 {
                     "name": "processor",
                     "context_scope": {"observe": ["source.*"]},
-                    "prompt": (
-                        "{% set total = source.metadata %}"
-                        "Count: {{ total.count }}"
-                    ),
+                    "prompt": ("{% set total = source.metadata %}Count: {{ total.count }}"),
                 },
             ]
         }
@@ -277,11 +274,7 @@ class TestTemplateScopeCoverage:
                 {
                     "name": "processor",
                     "context_scope": {"observe": ["source.*"]},
-                    "prompt": (
-                        "{% macro render_item(item) %}"
-                        "Name: {{ item.name }}"
-                        "{% endmacro %}"
-                    ),
+                    "prompt": ("{% macro render_item(item) %}Name: {{ item.name }}{% endmacro %}"),
                 },
             ]
         }
@@ -306,9 +299,7 @@ class TestTemplateScopeCoverage:
                     "name": "writer",
                     "context_scope": {"observe": ["source.*"]},
                     "prompt": (
-                        "{% for classify in seed.items %}"
-                        "Item: {{ classify.label }}"
-                        "{% endfor %}"
+                        "{% for classify in seed.items %}Item: {{ classify.label }}{% endfor %}"
                     ),
                 },
             ]
