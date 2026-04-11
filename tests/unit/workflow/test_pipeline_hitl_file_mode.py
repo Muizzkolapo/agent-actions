@@ -263,6 +263,41 @@ def test_file_mode_hitl_preserves_target_id():
     assert result.data[0]["source_guid"] == "sg-1"
 
 
+def test_file_mode_hitl_sets_identity_source_mapping():
+    """HITL result must include identity source_mapping for lineage resolution."""
+    pipeline = ProcessingPipeline(
+        config=PipelineConfig(
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
+            idx=0,
+        ),
+        processor_factory=object(),
+    )
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+    )
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "content": {"id": 3}},
+    ]
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(
+            {"hitl_status": "approved", "user_comment": "", "timestamp": "2026-02-12T10:00:00Z"},
+            True,
+        ),
+    ):
+        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+
+    assert len(results) == 1
+    result = results[0]
+    # source_mapping must be an identity map: output[i] came from input[i]
+    assert result.source_mapping == {0: 0, 1: 1, 2: 2}
+
+
 def test_file_mode_hitl_observe_filters_and_orders_fields():
     """context_scope.observe should filter fields shown to HITL and preserve order."""
     pipeline = ProcessingPipeline(
