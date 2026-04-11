@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "Language support and workflow navigation for Agent Actions projects",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
