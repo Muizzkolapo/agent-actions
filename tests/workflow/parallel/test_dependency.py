@@ -283,13 +283,7 @@ class TestResolveUpstreamWorkflows:
         orchestrator: WorkflowDependencyOrchestrator,
         mock_factory: MagicMock,
     ):
-        # workspace_index has no entry for current_workflow
-        with patch.object(
-            type(orchestrator),
-            "workspace_index",
-            new_callable=PropertyMock,
-            return_value=MagicMock(dependency_graph={}),
-        ):
+        with self._mock_upstream_index(orchestrator, []):
             configs = {"agent1": {}}
             result = orchestrator.resolve_upstream_workflows(configs, None, None, False)
             assert result is True

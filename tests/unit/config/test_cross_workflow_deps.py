@@ -40,7 +40,6 @@ class TestActionConfigCrossWorkflowDeps:
         )
         dumped = cfg.model_dump()
         assert dumped["dependencies"] == ["local"]
-        assert all(isinstance(d, str) for d in dumped["dependencies"])
 
 
 class TestWorkflowConfigCrossWorkflowDeps:
