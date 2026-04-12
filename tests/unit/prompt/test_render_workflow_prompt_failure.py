@@ -52,15 +52,13 @@ class TestResolvePromptFieldsRaises:
 
         assert "Invalid prompt format" in str(exc_info.value.cause)
 
-    def test_literal_ref_never_kept(self, tmp_path):
-        """After failure, the item must NOT contain the literal $ref string."""
+    def test_item_not_mutated_before_raise(self, tmp_path):
+        """The dict is not mutated to the literal $ref before the error is raised."""
         item = {"prompt": "$nonexistent.block"}
         with pytest.raises(ConfigurationError):
             _resolve_prompt_fields(item, project_root=tmp_path)
 
-        # If we get here, the error was raised — the item was never silently updated.
-        # But verify the value wasn't changed to the literal ref before raising.
-        # (The raise happens before any assignment, so original value persists.)
+        assert item["prompt"] == "$nonexistent.block"
 
     def test_nested_ref_failure_raises(self, tmp_path):
         """Prompt ref nested inside action config raises, not silently passes."""
