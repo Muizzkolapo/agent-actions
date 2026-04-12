@@ -676,6 +676,64 @@ class TestComposedValidation:
         assert result.executed is True
         assert inner_call_count == 2  # 1 failure + 1 success
 
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_retry_exhaustion_inside_reprompt(self, _fire):
+        """When retry exhausts inside reprompt, reprompt sees (None, False) and guard-skips."""
+        retry_svc = RetryService(max_attempts=2, base_delay=0.0, max_delay=0.0)
+        validator = _StubValidator([True])  # Would pass if reached
+        reprompt_svc = RepromptService(
+            validator=validator, max_attempts=2, on_exhausted="return_last"
+        )
+
+        def llm_with_retry(prompt):
+            def operation():
+                raise NetworkError("down")
+
+            with patch("agent_actions.processing.recovery.retry.time.sleep"):
+                with patch("agent_actions.processing.recovery.retry.fire_event"):
+                    retry_result = retry_svc.execute(operation)
+
+            if retry_result.exhausted:
+                return None, False
+            return retry_result.response
+
+        result = reprompt_svc.execute(
+            llm_operation=llm_with_retry,
+            original_prompt="test",
+        )
+
+        # Retry exhausted → (None, False) → reprompt sees executed=False → guard-skip
+        assert result.executed is False
+        assert result.attempts == 0
+        assert result.passed is True  # Guard-skip treated as pass
+        assert result.exhausted is False
+
+    def test_guard_skip_during_retry_plus_reprompt(self):
+        """Guard-skip propagates correctly through retry+reprompt combined path."""
+        retry_svc = RetryService(max_attempts=3, base_delay=0.0, max_delay=0.0)
+        validator = _StubValidator([])  # Should never be called
+        reprompt_svc = RepromptService(validator=validator, max_attempts=2)
+
+        def llm_with_retry(prompt):
+            def operation():
+                return ({"passthrough": True}, False)  # Guard skipped
+
+            with patch("agent_actions.processing.recovery.retry.time.sleep"):
+                retry_result = retry_svc.execute(operation)
+
+            if retry_result.exhausted:
+                return None, False
+            return retry_result.response
+
+        result = reprompt_svc.execute(
+            llm_operation=llm_with_retry,
+            original_prompt="test",
+        )
+
+        assert result.executed is False
+        assert result.attempts == 0
+        assert result.passed is True
+
 
 # ---------------------------------------------------------------------------
 # TestEventLogging
@@ -928,6 +986,25 @@ class TestBatchRetry:
         assert deserialized[1].recovery_metadata is None
         assert deserialized[2].recovery_metadata.retry.succeeded is False
 
+    def test_failed_result_error_field_roundtrip(self):
+        """BatchResult with success=False and error message survives serialization."""
+        original = BatchResult(
+            custom_id="err_001",
+            content=None,
+            success=False,
+            error="API timeout after 30s",
+            recovery_metadata=RecoveryMetadata(retry=RetryMetadata(3, 3, False, "timeout")),
+        )
+
+        serialized = serialize_results([original])
+        deserialized = deserialize_results(serialized)
+        r = deserialized[0]
+
+        assert r.success is False
+        assert r.content is None
+        assert r.recovery_metadata.retry.succeeded is False
+        assert r.recovery_metadata.retry.reason == "timeout"
+
 
 # ---------------------------------------------------------------------------
 # TestBuildValidationFeedback
@@ -1015,6 +1092,26 @@ class TestUDFRegistry:
         with patch("agent_actions.logging.core.manager.fire_event"):
             with pytest.raises(TypeError, match="intentional"):
                 bad_udf({})
+
+    def test_udf_exception_fires_failed_event(self):
+        """When a UDF raises, DataValidationFailedEvent fires before the exception propagates."""
+
+        @reprompt_validation("msg")
+        def crashing_udf(response):
+            raise ValueError("bad data")
+
+        events_fired = []
+
+        def capture(event):
+            events_fired.append(type(event).__name__)
+
+        with patch("agent_actions.logging.core.manager.fire_event", side_effect=capture):
+            with pytest.raises(ValueError, match="bad data"):
+                crashing_udf({})
+
+        assert "DataValidationStartedEvent" in events_fired
+        assert "DataValidationFailedEvent" in events_fired
+        assert "DataValidationPassedEvent" not in events_fired
 
     def teardown_method(self):
         _VALIDATION_REGISTRY.clear()
