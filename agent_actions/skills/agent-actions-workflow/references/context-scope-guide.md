@@ -127,6 +127,23 @@ When you need seed data inside a **UDF tool action**, you must explicitly list i
 | `$file:path.json` | Load JSON from seed_data directory |
 | `$file:path.yaml` | Load YAML from seed_data directory |
 
+## Guard Field Visibility
+
+Guard conditions evaluate against the **flattened** field_context built from the action's observed data. Fields from observed namespaces are available by their field names directly.
+
+```yaml
+- name: validate_claims
+  dependencies: [extract_claims]
+  guard:
+    condition: 'len(claims) >= 1 and confidence >= 0.7'  # "claims", not "extract_claims.claims"
+  context_scope:
+    observe: [extract_claims.*]
+```
+
+If you observe `extract_claims.*`, the guard sees `claims` and `confidence` as top-level names. You do **not** need to write `extract_claims.claims` in the guard condition — the namespace is flattened for evaluation.
+
+When observing from multiple upstream actions with overlapping field names, the last-loaded namespace wins. Avoid this by observing specific fields instead of wildcards when field names might collide.
+
 ## Resolution Order
 
 1. **Observe filter** - If specified, start with only those fields

@@ -1,495 +1,334 @@
-# Common Pitfalls Reference
+# Framework Contracts Reference
 
-Frequent mistakes and how to avoid them.
+What each framework feature promises, its current status, and how to work with it. Items marked **Working** describe correct behavior you need to follow. Items marked **Known limitation** or **Partially implemented** describe gaps with workarounds.
 
-## 1. Guards Filtering All Records
+---
 
-**Symptom:** Downstream actions have 0 records (sample.json contains `[]`).
+## Context Scope
 
-**Cause:** Guard condition evaluated to false for ALL records.
+### 1. Guard filtering: guards check INPUT, not OUTPUT
 
-**Example:**
-```
-validate_code_quality: 5 records (all validation_status="FAIL")
-generate_explanation:  0 records (guard filters all)
-```
+**Status:** Working — by design.
 
-**Fix:**
-- Fix upstream prompts to produce passing values
-- Lower threshold: `>= 7` instead of `>= 8`
-- Allow multiple statuses: `'status == "PASS" or status == "NEEDS_REVIEW"'`
+Guards evaluate the **input** to an action (upstream output), not the action's own output. Place the guard on the action that *consumes* the field, not the one that *produces* it.
 
-## 2. Duplicate UDF Function Names
-
-**Symptom:** Error about duplicate function name.
-
-**Cause:** Same `@udf_tool()` function name in multiple directories.
-
-**Fix:**
-- Remove one duplicate
-- Rename to unique names
-- Move shared code to `tools/shared/`
-
-## 3. Forgetting Content Wrapper
-
-**Symptom:** KeyError or wrong output.
-
-**Wrong:**
-```python
-def my_udf(data):
-    return [{'result': data['my_field']}]
-```
-
-**Correct:**
-```python
-def my_udf(data):
-    content = data.get('content', data)
-    return [{'result': content['my_field']}]
-```
-
-## 4. UDF Returning Dict Instead of List
-
-**Wrong:**
-```python
-return {'result': 'value'}
-```
-
-**Correct:**
-```python
-return [{'result': 'value'}]
-```
-
-## 5. Guard on Wrong Action
-
-**Symptom:** Guard doesn't filter as expected.
-
-**Cause:** Guards check INPUT, not OUTPUT.
-
-**Wrong:**
 ```yaml
-- name: validate_data
-  guard:
-    condition: 'validation_status == "PASS"'  # Checks INPUT!
-```
-
-**Correct:**
-```yaml
-- name: validate_data
-  # No guard - produces validation_status
-
+# Guard goes on the consumer, not the producer
+- name: validate_data           # Produces validation_status — no guard
 - name: next_action
   dependencies: [validate_data]
   guard:
-    condition: 'validation_status == "PASS"'  # Checks validate_data OUTPUT
+    condition: 'validation_status == "PASS"'  # Checks validate_data's output
 ```
 
-## 6. Cross-Workflow: impl vs Action Name
+If all records are filtered (0 records downstream), the guard condition was false for every record. Fix: adjust upstream prompts, lower thresholds, or allow multiple statuses.
 
-**Wrong:**
-```yaml
-dependencies:
-  - workflow: upstream
-    action: generate_vscode_mockup  # This is impl name!
-```
+### 2. Dependency not in context_scope
 
-**Correct:**
-```yaml
-dependencies:
-  - workflow: upstream
-    action: format_code_blocks  # This is action name
-```
+**Status:** Working — caught by static analyzer.
 
-## 7. Empty Output Looks Like Success
+Every dependency must appear in `context_scope`. The static analyzer raises `Dependency 'X' declared but not referenced in context_scope`.
 
-**Symptom:** Workflow shows "success" but no useful output.
-
-**Cause:** Guards filtered everything, or missing schema/prompt.
-
-**Always verify:**
-- Check record counts in each sample.json
-- Look for 2-byte files (empty arrays)
-- Check events.json for errors
-
-## 8. Dependency Not in context_scope
-
-**Error:** `Dependency 'X' declared but not referenced in context_scope`
-
-**Wrong:**
 ```yaml
 dependencies: [generate_output]
 context_scope:
   observe:
-    - source.raw_data  # Missing generate_output!
-```
-
-**Correct:**
-```yaml
-dependencies: [generate_output]
-context_scope:
-  observe:
-    - generate_output.*  # REQUIRED
+    - generate_output.*  # Required — must reference the dependency
     - source.raw_data
 ```
 
-## 9. Versioned Actions Context Scope
+### 3. Versioned actions require wildcard observe
 
-**Wrong:**
+**Status:** Working — versions expand action names at runtime.
+
 ```yaml
 context_scope:
   observe:
-    - filter_quality.vote  # Won't work with versions!
+    - filter_quality.*   # Wildcard captures ALL version expansions
 ```
 
-**Correct:**
+Do not reference specific fields (`filter_quality.vote`) — use wildcard to capture all version outputs.
+
+### 4. Drop directives on passthrough fields
+
+**Status:** Known limitation — drop only applies to observed namespaces.
+
+Drop directives only affect schema fields in observed namespaces. Passthrough fields bypass the LLM context entirely and merge after validation — `drop` cannot remove them.
+
 ```yaml
+# If you need to exclude a field, don't passthrough it:
 context_scope:
-  observe:
-    - filter_quality.*  # Wildcard captures ALL versions
+  passthrough:
+    - upstream_action.field_i_want    # Selective, not wildcard
 ```
 
-## 10. Schema Files in Nested Directory / Schema References with Folder Prefix
+### 5. Missing passthrough when injecting content
 
-**Error:** `Schema file not found`
+**Status:** Working — by design.
 
-**Cause:** Framework only looks in `schema/`, not recursively. Schema names are globally unique.
-
-**Wrong file path:** `schema/my_workflow/my_schema.yml`
-
-**Correct file path:** `schema/my_schema.yml`
-
-**Wrong reference in YAML:**
-```yaml
-schema: review_analyzer/extract_claims   # Folder prefix not allowed!
-```
-
-**Correct reference in YAML:**
-```yaml
-schema: extract_claims                   # Name only - globally unique
-```
-
-## 11. Legacy Workflow Format
-
-**Symptom:** Workflow uses `plan:` section.
-
-**Legacy:**
-```yaml
-plan:
-  - action_a
-  - action_b <- action_a
-```
-
-**Current:**
-```yaml
-actions:
-  - name: action_a
-    dependencies: []
-
-  - name: action_b
-    dependencies: [action_a]
-```
-
-## 12. Missing Return Type in UDF
-
-**Always return `list[dict[str, Any]]`:**
-
-```python
-@udf_tool()
-def my_udf(data: dict[str, Any]) -> list[dict[str, Any]]:
-    # ...
-    return [result]  # List!
-```
-
-## 13. dispatch_task() in Prompt Templates
-
-**Symptom:** LLM outputs the literal text `dispatch_task('function_name')` instead of the function result.
-
-**Cause:** `dispatch_task()` in prompt templates is unreliable - it may not be processed before the prompt is sent to the LLM.
-
-**Wrong:**
-```markdown
-{prompt Write_Question}
-Use this opener: dispatch_task('get_opener')
-...
-{end_prompt}
-```
-
-**Correct:** Use a tool action to inject dynamic content:
+Tool actions that inject content must explicitly forward upstream fields via `passthrough`. Without it, downstream actions lose access.
 
 ```yaml
-# Step 1: Tool action injects content
 - name: inject_opener
-  kind: tool
-  impl: inject_random_opener
   context_scope:
+    observe: [upstream.quiz_type]
     passthrough:
-      - upstream.*
-
-# Step 2: LLM action uses injected content
-- name: write_question
-  dependencies: [inject_opener]
-  context_scope:
-    observe:
-      - inject_opener.*
+      - upstream.*                    # Forward ALL upstream fields
 ```
 
-```markdown
-{prompt Write_Question}
-Use this opener: {{ inject_opener.suggested_opener }}
-...
-{end_prompt}
-```
+With passthrough, UDF returns `dict` (not list) with only new fields.
 
-See: **[Dynamic Content Injection](dynamic-content-injection.md)**
+---
 
-## 14. `seed_data.` vs `seed.` Namespace
+## UDF Patterns
 
-**Symptom:** Seed data in prompts/observe resolves to empty or undefined.
+### 6. Content wrapper
 
-**Cause:** The config key is `seed_data:` (or `seed_path:`) but the runtime namespace is `seed.` — not `seed_data.`.
+**Status:** Working — framework provides data in `content` key.
 
-**Wrong:**
-```yaml
-observe:
-  - seed_data.rubric         # ← Wrong namespace
-```
-```
-{{ seed_data.rubric.score_range }}   ← Won't resolve
-```
+Always use the safety wrapper. In record mode, data is usually already unwrapped, but the wrapper handles both cases:
 
-**Correct:**
-```yaml
-observe:
-  - seed.rubric              # ← Correct namespace
-```
-```
-{{ seed.rubric.score_range }}        ← Works
-```
-
-## 15. UDF Defaults Don't Match Schema Types
-
-**Symptom:** Schema validation errors on UDF output despite fields being present.
-
-**Cause:** Default/fallback values in the UDF don't match the schema type.
-
-**Wrong:**
 ```python
-service_tier = None    # schema says type: string → None fails validation
-assigned_teams = None  # schema says type: array → None fails validation
+def my_udf(data):
+    content = data.get('content', data)  # Always use this
+    return [{'result': content['my_field']}]
 ```
 
-**Correct:**
+### 7. Return type: list vs dict
+
+**Status:** Working — return type depends on config.
+
+- Without passthrough: return `list[dict]`
+- With passthrough in YAML: return `dict` with only new fields
+
+### 8. Namespaced field access
+
+**Status:** Working — fields are namespaced by action name, by design.
+
+UDFs receive upstream fields nested under the action name that produced them. Flat access (`content.get("field")`) returns None.
+
+```python
+# CORRECT — namespaced access
+score = content.get("aggregate_scores", {}).get("consensus_score", 0)
+
+# WRONG — flat access returns None
+score = content.get("consensus_score", 0)
+```
+
+### 9. UDF defaults must match schema types
+
+**Status:** Working — JSON Schema validation enforced.
+
+Default/fallback values must match the schema type. `None` fails validation for `type: string` or `type: array`.
+
 ```python
 service_tier = ""      # empty string satisfies type: string
 assigned_teams = []    # empty list satisfies type: array
 ```
 
-## 16. Stale Cache Poisons Re-runs
+### 10. Duplicate UDF function names
 
-**Symptom:** Re-running after a failure completes in 0.03s with empty output. Actions show "completed" from cached empty results.
+**Status:** Working — caught at import time.
 
-**Cause:** Failed runs cache empty results. Next run picks up cached empties instead of re-running.
+`@udf_tool()` function names must be unique across all tool directories. Move shared code to `tools/shared/`.
 
-**Fix:**
+### 11. Missing return type annotation
+
+**Status:** Working — required for correct schema inference.
+
+```python
+@udf_tool()
+def my_udf(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return [result]  # List!
+```
+
+### 12. dispatch_task()
+
+**Status:** Partially implemented — works reliably in schema injection. May fail in prompt templates if the function returns None.
+
+`dispatch_task()` calls a UDF function during prompt/schema rendering and injects the result. In prompt templates, if the function returns None, it raises an error rather than inserting an empty value.
+
+**Workaround:** Use a tool action with passthrough as an alternative for dynamic content:
+
+```yaml
+- name: inject_opener
+  kind: tool
+  impl: inject_random_opener
+  context_scope:
+    passthrough: [upstream.*]
+
+- name: write_question
+  dependencies: [inject_opener]
+  context_scope:
+    observe: [inject_opener.*]
+```
+
+See: **[Dynamic Content Injection](dynamic-content-injection.md)**
+
+---
+
+## Guards
+
+### 13. Guard conditions see flattened field names
+
+**Status:** Working — by design.
+
+Guard conditions evaluate against flattened field_context. If you observe `extract_claims.*`, the guard sees `claims` directly — not `extract_claims.claims`.
+
+```yaml
+guard:
+  condition: 'len(claims) >= 1 and confidence >= 0.7'
+context_scope:
+  observe: [extract_claims.*]
+```
+
+### 14. Guard conditions with output_field values
+
+**Status:** Known limitation — guard cannot resolve `output_field` values.
+
+With `json_mode: false` and `output_field`, the value lives under the output field name in the data namespace, but guard conditions cannot resolve it.
+
+**Workaround:** Use a tool action to post-process instead of a guard.
+
+### 15. Guard-filtered fields cause downstream schema failures
+
+**Status:** Known limitation — filtered records have absent fields.
+
+When `on_false: "filter"` removes records, fields produced by the filtered action are absent for those records. Downstream schemas that require those fields fail.
+
+**Workaround:** Declare the field in the schema but NOT in `required`. In the UDF, omit the key (not set it to None) when the upstream was filtered:
+
+```python
+if content.get("response_text"):
+    result["merchant_response"] = {"response_text": content["response_text"]}
+```
+
+### 16. Guard operators
+
+**Status:** Working — all comparison operators supported.
+
+Guards support `==`, `!=`, `>`, `>=`, `<`, `<=`, `and`, `or`, `not`, `IN`, `NOT IN`, `CONTAINS`, `LIKE`, `BETWEEN`, `IS NULL`, `IS NOT NULL`, and built-in functions (`len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`).
+
+Quote string literals: `status == "approved"` — unquoted strings are treated as field names.
+
+---
+
+## Schemas
+
+### 17. Schema files must be flat
+
+**Status:** Working — framework searches `schema/` non-recursively.
+
+Schema names are globally unique. Place all schema files directly in `schema/`, not in subdirectories.
+
+```yaml
+schema: extract_claims              # Name only — not review_analyzer/extract_claims
+```
+
+### 18. additionalProperties: false blocks unlisted UDF fields
+
+**Status:** Working — standard JSON Schema behavior.
+
+If your schema has `additionalProperties: false`, every field your UDF returns must be listed in the schema. Add computed/derived fields explicitly.
+
+### 19. Schema field name doesn't match LLM output
+
+**Status:** Working — schema enforces exact field names.
+
+If the schema says `id: claims` but the LLM produces `factual_claims` (influenced by prompt wording), the field flows through with the wrong name. Fix: rename the schema field to match what the LLM naturally produces, then update all observe references.
+
+---
+
+## Workflow Configuration
+
+### 20. Cross-workflow: impl vs action name
+
+**Status:** Working — use the `name:` field from the YAML, not the `impl:` function name.
+
+```yaml
+# CORRECT — action name
+dependencies:
+  - workflow: upstream
+    action: format_code_blocks
+
+# WRONG — impl/function name
+dependencies:
+  - workflow: upstream
+    action: generate_vscode_mockup
+```
+
+### 21. Versions range off-by-one
+
+**Status:** Working — range is inclusive on both ends.
+
+`range: [0, 3]` creates versions 0,1,2,3 (4 versions). Use `range: [1, 3]` for 3 versions (1-indexed), matching the observe references.
+
+### 22. seed_data. vs seed. namespace
+
+**Status:** Working — the config key and reference prefix differ, by design.
+
+The config key is `seed_path:` (or `seed_data:`) but the runtime namespace is `seed.` — not `seed_data.`.
+
+```yaml
+observe: [seed.rubric]              # Correct
+# NOT: seed_data.rubric             # Wrong — silently resolves to empty
+```
+
+In prompts: `{{ seed.rubric.score_range }}`. In UDFs: `content.get("seed", {}).get("rubric", {})`.
+
+### 23. Redundant dependencies
+
+**Status:** Working — auto-inference handles context dependencies.
+
+`dependencies` controls execution ordering. Actions referenced in `observe`/`passthrough` but not in `dependencies` are auto-inferred as context dependencies. If an action is already transitively upstream, don't list it again.
+
+### 24. Legacy workflow format
+
+**Status:** Deprecated — use `actions:` list with `dependencies:`.
+
+The `plan:` section format is legacy. Use the current `actions:` format with explicit `dependencies:`.
+
+### 25. Reprompt validation UDF not discovered
+
+**Status:** Working — UDF must be in the tool discovery path.
+
+Put reprompt validation UDFs in `tools/shared/reprompt_validations.py` with a `tools/shared/__init__.py`. The static analyzer validates UDF names exist at `agac validate` time.
+
+---
+
+## Execution
+
+### 26. Empty output looks like success
+
+**Status:** Working — by design (guards filter silently).
+
+Workflows show "success" even when guards filter all records. Always verify:
+- Check record counts in each `sample.json`
+- Look for 2-byte files (empty arrays: `[]`)
+- Check `events.json` for guard/error events
+
+### 27. Stale cache poisons re-runs
+
+**Status:** Known limitation — failed runs cache empty results.
+
+Failed runs cache empty results. Next run picks up cached empties instead of re-running. Changing `record_limit` or `file_limit` between runs automatically invalidates the cache.
+
+**Workaround:**
 ```bash
 rm -rf agent_workflow/<workflow>/agent_io/target/*
 rm -rf agent_workflow/<workflow>/agent_io/source/
 agac run -a <workflow>
 ```
 
-## 17. Redundant Dependencies
+### 28. Running full data during development
 
-**Symptom:** Action declares dependencies it doesn't need.
+**Status:** Working — use record_limit and file_limit.
 
-**Cause:** Confusing execution ordering (`dependencies`) with data access (`context_scope`). If action B is already upstream of action C through the dependency chain, you don't need to declare B as a dependency of D — only declare C.
-
-**Wrong:**
-```yaml
-- name: assign_team
-  dependencies: [classify_issue, assess_severity]  # classify_issue is redundant
-```
-
-**Correct:**
-```yaml
-- name: assign_team
-  dependencies: [assess_severity]  # classify_issue is transitively upstream
-```
-
-`dependencies` controls execution ordering and file flow. If an action is already transitively upstream through the dependency chain, listing it again is redundant.
-
-## 18. Running Full Data During Development
-
-**Symptom:** Workflow takes 30 minutes to run while iterating on prompts.
-
-**Cause:** Processing all records and files when you only need a few to validate.
-
-**Fix:** Use `record_limit` and `file_limit` to cap processing. `record_limit` works on **any action** — not just start nodes — so you can test a single downstream action without re-running the full pipeline:
-```yaml
-actions:
-  - name: extract
-    record_limit: 10   # Process only 10 records per file
-    file_limit: 2       # Walk only 2 files
-
-  - name: expensive_llm_action
-    dependencies: [extract]
-    record_limit: 2     # Test prompt on 2 records before full API spend
-```
-
-Remove limits when ready for production. Changing limits between runs automatically invalidates the action's completion status so it re-executes.
-
-## 19. Missing passthrough When Injecting Content
-
-**Symptom:** Downstream action can't access upstream fields after injection.
-
-**Cause:** Tool action doesn't forward upstream fields.
-
-**Wrong:**
-```yaml
-- name: inject_opener
-  context_scope:
-    observe:
-      - upstream.quiz_type    # Only observes, doesn't forward
-```
-
-**Correct:**
-```yaml
-- name: inject_opener
-  context_scope:
-    observe:
-      - upstream.quiz_type
-    passthrough:
-      - upstream.*            # Forward ALL upstream fields
-```
-
-**Note:** With passthrough, UDF returns `dict` (not list) with ONLY new fields.
-
-## 20. Guard Conditions Can't Reference `output_field` Values
-
-**Symptom:** Guard condition `severity != "low"` doesn't filter as expected.
-
-**Cause:** With `output_field`, the value lives under the output field name in the data namespace, but guard conditions can't resolve it. This is a known framework limitation.
-
-**No working syntax currently.** If you need to filter on non-JSON output, use a tool action to post-process instead of a guard.
-
-## 21. `additionalProperties: false` Blocks Unlisted UDF Fields
-
-**Symptom:** Schema validation error on a field your UDF returns.
-
-**Cause:** Schema has `additionalProperties: false` but UDF returns a field not listed in the schema.
-
-**Fix:** Add every field your UDF returns to the schema, even computed/derived fields.
+Use `record_limit` and `file_limit` to cap processing during development. `record_limit` works on **any action** — not just start nodes:
 
 ```yaml
-# If UDF returns {"title": "...", "parties": [...], "risk_score": 0.8}
-# then schema must list ALL three:
-fields:
-  - id: title
-    type: string
-  - id: parties
-    type: array
-  - id: risk_score
-    type: number
-additionalProperties: false
+- name: expensive_llm_action
+  record_limit: 2     # Test prompt on 2 records before full API spend
 ```
 
-## 22. Drop Directives on Passthrough Fields Match Nothing
-
-**Symptom:** Drop directive produces repeated runtime warnings but doesn't drop anything.
-
-**Cause:** Drop directives only apply to schema fields in observed namespaces. Passthrough fields are not in the schema namespace — they're merged after validation.
-
-```yaml
-# WRONG — passthrough fields can't be dropped
-context_scope:
-  drop:
-    - upstream_action.passthrough_field  # matches nothing, warns
-
-# If you need to exclude passthrough fields, don't passthrough them:
-context_scope:
-  passthrough:
-    - upstream_action.field_i_want      # selective, not wildcard
-```
-
-## 23. Tool UDF Accesses Fields via Flat Keys (Silent Default)
-
-**Symptom:** Tool action produces zero/default values for all records despite upstream actions completing successfully.
-
-**Cause:** UDFs access upstream fields via flat `content.get("field")` but the framework delivers fields **namespaced by action name** — `content["action_name"]["field"]`, not `content["field"]`.
-
-**Wrong:**
-```python
-score = content.get("consensus_score", 0)  # None — field is namespaced
-```
-
-**Correct:**
-```python
-aggregate = content.get("aggregate_scores", {})
-score = aggregate.get("consensus_score", 0)  # Namespaced access
-```
-
-## 24. Schema Field Name Doesn't Match LLM Output
-
-**Symptom:** Downstream action fails with "declared fields not found" even though the upstream action completed OK.
-
-**Cause:** The schema says `id: claims` but the LLM produces `factual_claims` (influenced by the prompt wording). Schema validation may not catch this if the field isn't required, and the wrong name flows into the storage backend.
-
-**Fix:**
-1. Check the storage backend output for the action
-2. Compare actual field names against schema `id:` values
-3. Rename the schema field to match what the LLM naturally produces
-4. Update all observe references and prompt templates
-
-## 25. Guard-Filtered Fields Cause Schema Validation Failures
-
-**Symptom:** `None is not of type 'object'` or `Additional properties are not allowed` on a downstream tool action.
-
-**Cause:** When an upstream action has `on_false: "filter"`, its output fields are absent for filtered records. If the downstream tool's schema declares those fields:
-- As `type: object` (not nullable) → rejects None
-- NOT in the schema at all → rejects as "additional properties" when the guard passes
-
-**Fix:** Declare the field in the schema but NOT in `required`. The tool should omit the key (not set it to None) when the upstream was filtered:
-```python
-if content.get("response_text"):
-    result["merchant_response"] = {"response_text": content["response_text"]}
-```
-
-## 26. Versions Range Off-by-One
-
-**Symptom:** `Dependency 'action_0' declared but not referenced in context_scope`
-
-**Cause:** `range: [0, 3]` creates versions 0,1,2,3 (4 versions) but the aggregate only observes `action_1.*`, `action_2.*`, `action_3.*`.
-
-**Fix:** Use `range: [1, 3]` for 3 versions (1-indexed), matching the observe references.
-
-## 27. Reprompt Validation UDF Not Discovered
-
-**Symptom:** Framework ignores the `reprompt.validation` setting — no reprompting happens.
-
-**Cause:** The UDF file exists but isn't in the tools discovery path.
-
-**Fix:** Put it in `tools/shared/reprompt_validations.py` with a `tools/shared/__init__.py`:
-```
-tools/
-├── my_workflow/
-│   └── my_tool.py
-└── shared/
-    ├── __init__.py
-    └── reprompt_validations.py
-```
-
-## 28. Guard Condition Uses != or > Operators
-
-**Symptom:** Guard skips ALL records even when field values should pass the condition.
-
-**Cause:** Known parser bug — the `WhereClauseParser` silently maps `!=` and `>` to `==`.
-
-**Test directly:**
-```python
-from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter, FilterItemRequest
-gf = GuardFilter()
-r = gf.filter_item(FilterItemRequest(data={"severity": "high"}, condition='severity != "low"'))
-print(r.matched)  # Returns False — BUG
-```
-
-**Workaround:** Avoid `!=` and `>` in guard conditions. Use positive conditions:
-- Instead of `severity != "low"` → use `severity == "medium" or severity == "high"`
-- Instead of `score > 6` → use `score >= 7`
+Remove limits when ready for production.
