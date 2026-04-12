@@ -44,14 +44,23 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
                 errors.append(f"{desc} 'output_field' can only be used when 'json_mode' is false.")
 
         on_mismatch = normalized_entry.get("on_schema_mismatch")
-        if isinstance(on_mismatch, str) and on_mismatch.lower() == "reprompt":
-            reprompt = normalized_entry.get("reprompt")
-            if not reprompt:
+        if isinstance(on_mismatch, str) and on_mismatch.lower() in ("reject", "reprompt"):
+            has_schema = bool(normalized_entry.get("schema") or normalized_entry.get("schema_name"))
+            if not has_schema:
                 errors.append(
-                    f"{desc} 'on_schema_mismatch: reprompt' requires a 'reprompt' "
-                    "configuration block. Add reprompt: {{validation: your_udf_name}} "
-                    "or change on_schema_mismatch to 'warn' or 'reject'."
+                    f"{desc} 'on_schema_mismatch: {on_mismatch.lower()}' requires a schema "
+                    "to validate against. Define 'schema' or 'schema_name', "
+                    "or change on_schema_mismatch to 'warn'."
                 )
+
+            if on_mismatch.lower() == "reprompt":
+                reprompt = normalized_entry.get("reprompt")
+                if not reprompt:
+                    errors.append(
+                        f"{desc} 'on_schema_mismatch: reprompt' requires a 'reprompt' "
+                        "configuration block. Add reprompt: {{validation: your_udf_name}} "
+                        "or change on_schema_mismatch to 'warn' or 'reject'."
+                    )
 
         if errors:
             return ActionEntryValidationResult.with_errors(errors)
