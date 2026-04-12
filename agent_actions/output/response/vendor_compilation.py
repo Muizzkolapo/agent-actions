@@ -75,7 +75,14 @@ def compile_unified_schema(
             }
         ]
     elif target == "gemini":
-        compiled = {"name": unified.get("name", ""), "schema": properties}
+        compiled = {
+            "name": unified.get("name", ""),
+            "schema": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        }
     elif target == "ollama":
         compiled = {
             "title": unified.get("name", ""),
