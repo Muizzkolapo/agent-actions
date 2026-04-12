@@ -344,6 +344,11 @@ class ActionRunner:
             cross_wf_deps = self._extract_cross_workflow_dep_names(action_config)
             if cross_wf_deps:
                 dependencies = cross_wf_deps
+                logger.info(
+                    "Action '%s': injected cross-workflow deps %s from context_scope",
+                    agent_type,
+                    cross_wf_deps,
+                )
 
         if not dependencies and not previous_action_type:
             upstream_data_dirs = self._resolve_start_node_directories(
