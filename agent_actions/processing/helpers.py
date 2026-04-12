@@ -116,6 +116,15 @@ def _validate_llm_output_schema(
     """
     schema = agent_config.get(SCHEMA_KEY)
     if not schema or not isinstance(schema, dict):
+        mismatch_mode = _resolve_schema_mismatch_mode(agent_config)
+        if mismatch_mode in ("reject", "reprompt"):
+            logger.warning(
+                "Action '%s': on_schema_mismatch is '%s' but no schema is defined — "
+                "schema validation will be skipped. Define a schema or set "
+                "on_schema_mismatch to 'warn'.",
+                agent_name,
+                mismatch_mode,
+            )
         return response
 
     mismatch_mode = _resolve_schema_mismatch_mode(agent_config)

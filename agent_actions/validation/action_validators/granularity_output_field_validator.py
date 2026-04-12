@@ -1,7 +1,13 @@
 """Validator for granularity and output_field configuration."""
 
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR, JSON_MODE_KEY
+from agent_actions.utils.constants import (
+    HITL_FILE_GRANULARITY_ERROR,
+    JSON_MODE_KEY,
+    ON_SCHEMA_MISMATCH_KEY,
+    SCHEMA_KEY,
+    SCHEMA_NAME_KEY,
+)
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
@@ -43,15 +49,31 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
             if json_mode:
                 errors.append(f"{desc} 'output_field' can only be used when 'json_mode' is false.")
 
-        on_mismatch = normalized_entry.get("on_schema_mismatch")
-        if isinstance(on_mismatch, str) and on_mismatch.lower() == "reprompt":
-            reprompt = normalized_entry.get("reprompt")
-            if not reprompt:
+        on_mismatch_raw = normalized_entry.get(ON_SCHEMA_MISMATCH_KEY)
+        if isinstance(on_mismatch_raw, str):
+            on_mismatch = on_mismatch_raw.lower()
+        else:
+            on_mismatch = None
+
+        if on_mismatch in ("reject", "reprompt"):
+            has_schema = bool(
+                normalized_entry.get(SCHEMA_KEY) or normalized_entry.get(SCHEMA_NAME_KEY)
+            )
+            if not has_schema:
                 errors.append(
-                    f"{desc} 'on_schema_mismatch: reprompt' requires a 'reprompt' "
-                    "configuration block. Add reprompt: {{validation: your_udf_name}} "
-                    "or change on_schema_mismatch to 'warn' or 'reject'."
+                    f"{desc} 'on_schema_mismatch: {on_mismatch}' requires a schema "
+                    "to validate against. Define 'schema' or 'schema_name', "
+                    "or change on_schema_mismatch to 'warn'."
                 )
+
+            if on_mismatch == "reprompt":
+                reprompt = normalized_entry.get("reprompt")
+                if not reprompt:
+                    errors.append(
+                        f"{desc} 'on_schema_mismatch: reprompt' requires a 'reprompt' "
+                        "configuration block. Add reprompt: {{validation: your_udf_name}} "
+                        "or change on_schema_mismatch to 'warn' or 'reject'."
+                    )
 
         if errors:
             return ActionEntryValidationResult.with_errors(errors)

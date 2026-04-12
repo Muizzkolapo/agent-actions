@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import BaseBatchClient, BatchResult, BatchTask
@@ -122,7 +123,7 @@ class AnthropicBatchClient(BaseBatchClient):
                 params["tools"] = tools
                 params["tool_choice"] = {"type": "tool", "name": tool_name}
         if self.enable_prompt_caching:
-            params["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
+            params["extra_headers"] = PROMPT_CACHING_BETA_HEADER
         return {"custom_id": batch_task.custom_id, "params": params}
 
     def _extract_error_from_response(self, raw_response: Any) -> str | None:

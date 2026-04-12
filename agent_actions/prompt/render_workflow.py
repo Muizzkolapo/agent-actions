@@ -113,12 +113,16 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
                     try:
                         resolved = PromptLoader.load_prompt(prompt_key, project_root=project_root)
                         item[key] = resolved + (" " + extra if extra else "")
-                    except ValueError:
-                        logger.warning(
-                            "Failed to resolve prompt reference '%s'; keeping original value",
-                            value,
-                        )
-                        item[key] = value
+                    except ValueError as e:
+                        raise ConfigurationError(
+                            f"Failed to resolve prompt reference '{value}'",
+                            context={
+                                "prompt_reference": value,
+                                "prompt_key": prompt_key,
+                                "operation": "resolve_prompt_field",
+                            },
+                            cause=e,
+                        ) from e
             elif isinstance(value, dict | list):
                 _resolve_prompt_fields(value, project_root=project_root)
     elif isinstance(item, list):
