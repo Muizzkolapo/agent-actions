@@ -1,7 +1,7 @@
 """Validator for granularity and output_field configuration."""
 
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.utils.constants import JSON_MODE_KEY
+from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR, JSON_MODE_KEY
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
@@ -35,12 +35,7 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
             elif granularity == "record":
                 kind = str(normalized_entry.get("kind", "")).lower()
                 if kind == "hitl":
-                    errors.append(
-                        f"{desc} HITL actions require FILE granularity. "
-                        "Record granularity launches a separate approval UI per record. "
-                        "Set 'granularity: file' or remove the granularity field "
-                        "(HITL defaults to file)."
-                    )
+                    errors.append(f"{desc} {HITL_FILE_GRANULARITY_ERROR}")
 
         if "output_field" in normalized_entry:
             json_mode = normalized_entry.get(JSON_MODE_KEY, True)
@@ -48,7 +43,6 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
             if json_mode:
                 errors.append(f"{desc} 'output_field' can only be used when 'json_mode' is false.")
 
-        # on_schema_mismatch=reprompt requires reprompt config
         on_mismatch = normalized_entry.get("on_schema_mismatch")
         if isinstance(on_mismatch, str) and on_mismatch.lower() == "reprompt":
             reprompt = normalized_entry.get("reprompt")

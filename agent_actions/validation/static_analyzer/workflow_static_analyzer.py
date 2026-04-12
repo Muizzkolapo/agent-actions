@@ -5,7 +5,6 @@ similar to TypeScript's compile-time type checking.
 """
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
@@ -1226,11 +1225,10 @@ class WorkflowStaticAnalyzer:
         # Discover available reprompt validation UDFs by scanning tool files
         # for @reprompt_validation decorators via AST.
         available_udfs = self._scan_reprompt_validation_udfs()
+        if available_udfs is None:
+            return errors
 
         for action_name, udf_name in udf_refs:
-            if available_udfs is None:
-                # Could not scan — emit warning-level skip (no project_root).
-                continue
             if udf_name not in available_udfs:
                 hint_parts = []
                 if available_udfs:
@@ -1269,9 +1267,10 @@ class WorkflowStaticAnalyzer:
         """
         import ast
 
-        from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
+        from agent_actions.config.path_config import get_tool_dirs
+        from agent_actions.utils.path_utils import resolve_relative_to
 
-        project_root = resolve_project_root(self.schema_extractor.project_root)
+        project_root = self.schema_extractor.project_root
         if not project_root or not project_root.exists():
             return None
 
@@ -1279,9 +1278,7 @@ class WorkflowStaticAnalyzer:
         found: set[str] = set()
 
         for tool_dir in tool_dirs:
-            tool_path = (
-                project_root / tool_dir if not Path(tool_dir).is_absolute() else Path(tool_dir)
-            )
+            tool_path = resolve_relative_to(tool_dir, project_root)
             if not tool_path.exists():
                 continue
             for py_file in tool_path.rglob("*.py"):
