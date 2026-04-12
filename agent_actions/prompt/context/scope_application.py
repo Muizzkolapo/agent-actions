@@ -186,17 +186,19 @@ def apply_context_scope(
             continue
 
     # Process PASSTHROUGH: Extract to passthrough_fields (namespaced like llm_context).
+    # Read from prompt_context (post-drop), NOT field_context, so that dropped
+    # fields cannot leak into the output via passthrough.
     passthrough_refs = context_scope.get("passthrough", [])
     for field_ref in passthrough_refs:
         try:
             ns_name, field_name = parse_field_reference(field_ref)
 
             if field_name == "*":
-                action_fields = extract_action_fields(field_context, ns_name)
+                action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
                     passthrough_fields.setdefault(ns_name, {}).update(action_fields)
             else:
-                value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
+                value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
 
                 if value is _MISSING:
                     raise ConfigurationError(
