@@ -14,7 +14,7 @@ import pytest
 from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
-from agent_actions.storage.backend import DISPOSITION_SKIPPED, DISPOSITION_UNPROCESSED
+from agent_actions.storage.backend import DISPOSITION_SKIPPED
 
 
 @pytest.fixture
@@ -23,9 +23,7 @@ def guard_skip_prepared():
     prepared = MagicMock(spec=PreparedTask)
     prepared.guard_status = GuardStatus.SKIPPED
     prepared.guard_behavior = "skip"
-    prepared.content = {"field": "value"}
     prepared.original_content = {"field": "value"}
-    prepared.input_record = {"source_guid": "guid-1", "content": {"field": "value"}}
     prepared.source_guid = "guid-1"
     prepared.source_snapshot = {"field": "value"}
     return prepared
@@ -54,44 +52,36 @@ def record_processor():
     return processor
 
 
+@pytest.fixture
+def guard_skip_result(record_processor, guard_skip_prepared, processing_context):
+    """Run process() with a guard-skipped PreparedTask and return the result."""
+    mock_preparer = MagicMock()
+    mock_preparer.prepare.return_value = guard_skip_prepared
+
+    with patch(
+        "agent_actions.processing.record_processor.get_task_preparer",
+        return_value=mock_preparer,
+    ):
+        return record_processor.process(
+            {"source_guid": "guid-1", "content": {"field": "value"}},
+            processing_context,
+        )
+
+
 class TestGuardSkipProducesSkippedStatus:
     """Guard skip must produce ProcessingStatus.SKIPPED, not UNPROCESSED."""
 
-    def test_guard_skip_result_is_skipped(
-        self, record_processor, guard_skip_prepared, processing_context
-    ):
+    def test_guard_skip_result_is_skipped(self, guard_skip_result):
         """ProcessingResult.status == SKIPPED when guard skips the record."""
-        mock_preparer = MagicMock()
-        mock_preparer.prepare.return_value = guard_skip_prepared
+        assert guard_skip_result.status == ProcessingStatus.SKIPPED
 
-        with patch(
-            "agent_actions.processing.record_processor.get_task_preparer",
-            return_value=mock_preparer,
-        ):
-            result = record_processor.process(
-                {"source_guid": "guid-1", "content": {"field": "value"}},
-                processing_context,
-            )
+    def test_guard_skip_preserves_source_guid(self, guard_skip_result):
+        """source_guid flows through the SKIPPED result from process()."""
+        assert guard_skip_result.source_guid == "guid-1"
 
-        assert result.status == ProcessingStatus.SKIPPED
-
-    def test_guard_skip_result_is_not_unprocessed(
-        self, record_processor, guard_skip_prepared, processing_context
-    ):
-        """Explicitly verify the result is NOT UNPROCESSED — the old broken behavior."""
-        mock_preparer = MagicMock()
-        mock_preparer.prepare.return_value = guard_skip_prepared
-
-        with patch(
-            "agent_actions.processing.record_processor.get_task_preparer",
-            return_value=mock_preparer,
-        ):
-            result = record_processor.process(
-                {"source_guid": "guid-1", "content": {"field": "value"}},
-                processing_context,
-            )
-
-        assert result.status != ProcessingStatus.UNPROCESSED
+    def test_guard_skip_reason_preserved(self, guard_skip_result):
+        """skip_reason carries the guard behavior string."""
+        assert guard_skip_result.skip_reason == "guard_skip"
 
 
 class TestGuardSkipDisposition:
@@ -121,47 +111,9 @@ class TestGuardSkipDisposition:
             reason="guard_skip",
         )
 
-    def test_skipped_result_does_not_get_unprocessed_disposition(self):
-        """Verify DISPOSITION_UNPROCESSED is NOT written for guard-skipped records."""
-        result = ProcessingResult.skipped(
-            passthrough_data={"content": {}, "_unprocessed": True},
-            reason="guard_skip",
-            source_guid="guid-1",
-        )
-        backend = MagicMock()
-
-        ResultCollector.collect_results(
-            [result],
-            {"kind": "llm"},
-            "test_action",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        for call in backend.set_disposition.call_args_list:
-            assert call.args[2] != DISPOSITION_UNPROCESSED
-
 
 class TestGuardSkipPreservesData:
     """Guard-skipped records retain source_guid and tombstone data."""
-
-    def test_guard_skip_preserves_source_guid(
-        self, record_processor, guard_skip_prepared, processing_context
-    ):
-        """source_guid flows through the SKIPPED result from process()."""
-        mock_preparer = MagicMock()
-        mock_preparer.prepare.return_value = guard_skip_prepared
-
-        with patch(
-            "agent_actions.processing.record_processor.get_task_preparer",
-            return_value=mock_preparer,
-        ):
-            result = record_processor.process(
-                {"source_guid": "guid-1", "content": {"field": "value"}},
-                processing_context,
-            )
-
-        assert result.source_guid == "guid-1"
 
     def test_guard_skip_preserves_tombstone_data(self):
         """Tombstone dict is preserved in result.data as a single-element list."""
@@ -177,24 +129,6 @@ class TestGuardSkipPreservesData:
             source_guid="guid-1",
         )
         assert result.data == [tombstone]
-
-    def test_guard_skip_reason_preserved(
-        self, record_processor, guard_skip_prepared, processing_context
-    ):
-        """skip_reason carries the guard behavior string."""
-        mock_preparer = MagicMock()
-        mock_preparer.prepare.return_value = guard_skip_prepared
-
-        with patch(
-            "agent_actions.processing.record_processor.get_task_preparer",
-            return_value=mock_preparer,
-        ):
-            result = record_processor.process(
-                {"source_guid": "guid-1", "content": {"field": "value"}},
-                processing_context,
-            )
-
-        assert result.skip_reason == "guard_skip"
 
     def test_guard_skip_not_executed(self):
         """Guard-skipped results have executed=False."""
@@ -226,8 +160,6 @@ class TestGuardSkipLineageEnrichment:
 
         enriched = enricher.enrich(result, context)
 
-        # FILTERED returns early (no enrichment). SKIPPED should be enriched —
-        # the enricher adds lineage metadata to result.data items.
         assert enriched.status == ProcessingStatus.SKIPPED
         assert enriched.data
         assert "lineage" in enriched.data[0]
