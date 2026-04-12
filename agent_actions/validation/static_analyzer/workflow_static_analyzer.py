@@ -223,7 +223,7 @@ class WorkflowStaticAnalyzer:
             context_scope = action_config.get("context_scope", {})
             if not isinstance(context_scope, dict):
                 continue
-            for directive in ("observe", "passthrough"):
+            for directive in ("observe", "passthrough", "drop"):
                 for ref in context_scope.get(directive, []):
                     if isinstance(ref, str) and "." in ref:
                         ns_name = ref.split(".", 1)[0]
