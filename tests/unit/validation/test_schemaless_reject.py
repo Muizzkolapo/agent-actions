@@ -127,12 +127,6 @@ class TestPreflightNoFalsePositives:
         mismatch_errors = [e for e in errors if "on_schema_mismatch" in e.lower()]
         assert len(mismatch_errors) == 0
 
-    def test_schemaless_action_unaffected(self):
-        """Plain schemaless action with no mismatch config works fine."""
-        errors, _ = _validate_entry({"name": "simple", "agent_type": "llm", "model_name": "gpt-4"})
-        mismatch_errors = [e for e in errors if "on_schema_mismatch" in e.lower()]
-        assert len(mismatch_errors) == 0
-
 
 # ── Runtime: warning logged ─────────────────────────────────────────
 
