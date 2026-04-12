@@ -21,8 +21,23 @@ class ArtifactLinker:
         """Initialize artifact linker."""
         self.workflows_root = workflows_root
 
-    def link_workflow_artifacts(self, source_workflow: str, target_workflow: str) -> None:
-        """Link source workflow's output to target workflow via manifest."""
+    def link_workflow_artifacts(
+        self,
+        source_workflow: str,
+        target_workflow: str,
+        source_action: str | None = None,
+    ) -> None:
+        """Link source workflow's output to target workflow via manifest.
+
+        Args:
+            source_workflow: Name of the upstream workflow.
+            target_workflow: Name of the downstream workflow.
+            source_action: Specific action in the source workflow to link.
+                When provided, links that action's output directory directly
+                instead of guessing via mtime.  This is critical for
+                cross-workflow deps where the downstream declares exactly
+                which upstream action it consumes.
+        """
         source_target = self.workflows_root / source_workflow / "agent_io" / "target"
         target_io = self.workflows_root / target_workflow / "agent_io"
 
@@ -30,7 +45,25 @@ class ArtifactLinker:
             logger.warning("Source target directory does not exist: %s", source_target)
             return
 
-        latest_node = self.find_latest_node_dir(source_target)
+        if source_action:
+            # Link to the specific action's output directory.
+            action_dir = source_target / source_action
+            if action_dir.is_dir():
+                latest_node = action_dir
+            else:
+                # Action output is in SQLite (no filesystem directory).
+                # Create a virtual directory so the manifest path encodes
+                # the action name — the runner uses path.name to look up
+                # data in the storage backend.
+                action_dir.mkdir(parents=True, exist_ok=True)
+                logger.debug(
+                    "Created virtual directory for SQLite-backed action: %s",
+                    action_dir,
+                )
+                latest_node = action_dir
+        else:
+            latest_node = self.find_latest_node_dir(source_target)
+
         if not latest_node:
             logger.warning("No output nodes found in %s", source_target)
             return
@@ -45,13 +78,23 @@ class ArtifactLinker:
         self._write_upstream_manifest(target_io, source_workflow, latest_node)
         logger.info("Wrote manifest linking %s -> %s", source_workflow, target_workflow)
 
-    def link_upstream_artifacts(self, upstream_name: str, current_workflow: str) -> None:
+    def link_upstream_artifacts(
+        self,
+        upstream_name: str,
+        current_workflow: str,
+        source_action: str | None = None,
+    ) -> None:
         """Link upstream workflow's output to current workflow via manifest."""
-        self.link_workflow_artifacts(upstream_name, current_workflow)
+        self.link_workflow_artifacts(upstream_name, current_workflow, source_action=source_action)
 
-    def link_downstream_artifacts(self, current_workflow: str, downstream_name: str) -> None:
+    def link_downstream_artifacts(
+        self,
+        current_workflow: str,
+        downstream_name: str,
+        source_action: str | None = None,
+    ) -> None:
         """Link current workflow's output to downstream workflow via manifest."""
-        self.link_workflow_artifacts(current_workflow, downstream_name)
+        self.link_workflow_artifacts(current_workflow, downstream_name, source_action=source_action)
 
     def _write_upstream_manifest(
         self, target_io: Path, source_workflow: str, source_node: Path

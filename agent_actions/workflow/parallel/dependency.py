@@ -135,7 +135,19 @@ class WorkflowDependencyOrchestrator:
                     self._print_batch_pending_message(upstream_name, is_upstream=True)
                     return None
 
-            self.artifact_linker.link_upstream_artifacts(upstream_name, self.current_workflow)
+            # Extract specific action name from the current workflow's config.
+            current_config_path = (
+                self.workflows_root
+                / self.current_workflow
+                / "agent_config"
+                / f"{self.current_workflow}.yml"
+            )
+            source_action = self._find_cross_workflow_source_action(
+                current_config_path, upstream_name
+            )
+            self.artifact_linker.link_upstream_artifacts(
+                upstream_name, self.current_workflow, source_action=source_action
+            )
 
             self.console.print(
                 f"[bold green]>> Recursive: Ready to use upstream "
@@ -231,7 +243,14 @@ class WorkflowDependencyOrchestrator:
                 f"Downstream workflow config not found at {downstream_config_path}"
             )
 
-        self.artifact_linker.link_downstream_artifacts(self.current_workflow, downstream_name)
+        # Extract the specific upstream action from the downstream's config
+        # so the manifest points to the right output directory.
+        source_action = self._find_cross_workflow_source_action(
+            downstream_config_path, self.current_workflow
+        )
+        self.artifact_linker.link_downstream_artifacts(
+            self.current_workflow, downstream_name, source_action=source_action
+        )
 
         downstream_wf = self.workflow_factory(
             config_path=str(downstream_config_path),
@@ -252,6 +271,41 @@ class WorkflowDependencyOrchestrator:
             f"[bold green]>> Downstream: Workflow '{downstream_name}' completed[/bold green]"
         )
         return True
+
+    @staticmethod
+    def _find_cross_workflow_source_action(
+        downstream_config_path: Path, upstream_workflow: str
+    ) -> str | None:
+        """Extract the specific upstream action name from a downstream config.
+
+        Scans the downstream workflow's YAML for dict dependencies that
+        reference *upstream_workflow* and returns the ``action`` value.
+        Returns ``None`` if no specific action is declared.
+        """
+        import yaml
+
+        try:
+            with open(downstream_config_path, encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+            if not isinstance(config, dict):
+                return None
+
+            for action in config.get("actions", []):
+                if not isinstance(action, dict):
+                    continue
+                deps = action.get("depends_on") or action.get("dependencies", [])
+                if not isinstance(deps, list):
+                    continue
+                for dep in deps:
+                    if (
+                        isinstance(dep, dict)
+                        and dep.get("workflow") == upstream_workflow
+                        and dep.get("action")
+                    ):
+                        return dep["action"]
+        except Exception:
+            pass
+        return None
 
     def _print_batch_pending_message(self, workflow_name: str, is_upstream: bool) -> None:
         """Print message about pending batch jobs."""

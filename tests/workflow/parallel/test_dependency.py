@@ -193,7 +193,7 @@ class TestResolveUpstreamWorkflows:
             orchestrator.resolve_upstream_workflows(None, None, False)
 
         orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once_with(
-            "upstream_wf", "current_wf"
+            "upstream_wf", "current_wf", source_action=None
         )
 
     def test_upstream_already_completed_skips_execution(
@@ -225,7 +225,7 @@ class TestResolveUpstreamWorkflows:
             orchestrator.resolve_upstream_workflows(None, None, False)
 
         orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once_with(
-            "done_wf", "current_wf"
+            "done_wf", "current_wf", source_action=None
         )
 
     def test_upstream_batch_pending_returns_false(
@@ -482,7 +482,7 @@ class TestExecuteDownstreamWorkflow:
         orchestrator._execute_downstream_workflow("ds_wf", None, None, False)
 
         orchestrator.artifact_linker.link_downstream_artifacts.assert_called_once_with(
-            "current_wf", "ds_wf"
+            "current_wf", "ds_wf", source_action=None
         )
 
     def test_batch_pending_returns_none(

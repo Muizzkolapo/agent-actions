@@ -17,9 +17,74 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
     from agent_actions.workflow.runner import ActionRunner, FileProcessParams
 
 logger = logging.getLogger(__name__)
+
+# Cache of cross-workflow SQLite backends opened during a run.
+_cross_workflow_backends: dict[Path, StorageBackend] = {}
+
+
+def _resolve_backend_for_path(runner: ActionRunner, input_path: Path) -> StorageBackend:
+    """Return the correct storage backend for *input_path*.
+
+    When *input_path* points to a different workflow's ``target/`` directory
+    (cross-workflow dependency), open that workflow's SQLite DB read-only.
+    Otherwise, return the runner's own backend.
+    """
+    if runner.storage_backend is None:
+        raise RuntimeError("No storage backend available")
+
+    # Check if this path belongs to the runner's own workflow.
+    own_db_path = Path(runner.storage_backend.db_path)  # type: ignore[attr-defined]
+    own_target_dir = own_db_path.parent  # .../agent_io/target
+
+    # If input_path is under our own target dir, use the runner's backend.
+    try:
+        input_path.resolve().relative_to(own_target_dir.resolve())
+        return runner.storage_backend
+    except ValueError:
+        pass
+
+    # Cross-workflow: find the upstream's DB in the input path's target dir.
+    # input_path is something like:
+    #   .../upstream_wf/agent_io/target/format_quiz_text  OR
+    #   .../upstream_wf/agent_io/target
+    # Walk up to find the target/ dir, then look for the .db file.
+    candidate = input_path
+    while candidate.name != "target" and candidate != candidate.parent:
+        candidate = candidate.parent
+
+    if candidate.name != "target":
+        # Can't determine upstream DB — fall back to runner's backend.
+        return runner.storage_backend
+
+    upstream_target_dir = candidate
+
+    if upstream_target_dir in _cross_workflow_backends:
+        return _cross_workflow_backends[upstream_target_dir]
+
+    # Find the .db file in the upstream's target dir.
+    db_files = list(upstream_target_dir.glob("*.db"))
+    if not db_files:
+        return runner.storage_backend
+
+    upstream_db = db_files[0]
+    logger.info(
+        "Opening cross-workflow storage backend: %s",
+        upstream_db,
+    )
+
+    from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+    upstream_backend = SQLiteBackend(
+        db_path=str(upstream_db),
+        workflow_name=upstream_db.stem,
+    )
+    upstream_backend.initialize()
+    _cross_workflow_backends[upstream_target_dir] = upstream_backend
+    return upstream_backend
 
 
 # ---------------------------------------------------------------------------
@@ -256,8 +321,13 @@ def process_from_storage_backend(
         if "staging" in str(input_path):
             continue
 
+        # Determine which storage backend to query.  When the input dir
+        # points to a *different* workflow's target (cross-workflow dep),
+        # open that workflow's DB instead of the current runner's.
+        backend = _resolve_backend_for_path(runner, input_path)
+
         try:
-            target_files = runner.storage_backend.list_target_files(action_name)
+            target_files = backend.list_target_files(action_name)
         except Exception as e:
             logger.warning(
                 "Could not list target files from backend for %s: %s",
@@ -269,7 +339,7 @@ def process_from_storage_backend(
 
         for relative_path in target_files:
             try:
-                data = runner.storage_backend.read_target(action_name, relative_path)
+                data = backend.read_target(action_name, relative_path)
                 if relative_path not in data_by_path:
                     data_by_path[relative_path] = []
                 data_by_path[relative_path].append((action_name, data))
