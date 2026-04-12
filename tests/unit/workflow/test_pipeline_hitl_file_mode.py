@@ -530,15 +530,18 @@ def test_new_observe_handles_flat_records():
     assert result[0]["answer"] == "A1"
 
 
-def test_new_observe_wildcard_returns_data_as_is():
-    """observe: ['upstream.*'] should return all fields unfiltered."""
+def test_new_observe_wildcard_returns_all_content_fields():
+    """observe: ['upstream.*'] should return all content fields from each record."""
     data = [
         {"content": {"question": "Q1", "answer": "A1", "extra": "keep"}},
         {"content": {"question": "Q2", "answer": "A2", "extra": "also keep"}},
     ]
     config = {"context_scope": {"observe": ["upstream.*"]}}
     result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    assert result is data
+    assert result == [
+        {"question": "Q1", "answer": "A1", "extra": "keep"},
+        {"question": "Q2", "answer": "A2", "extra": "also keep"},
+    ]
 
 
 def test_new_observe_collision_uses_qualified_keys():
