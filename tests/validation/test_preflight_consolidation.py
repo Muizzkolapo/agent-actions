@@ -148,7 +148,7 @@ class TestGuardValidation:
         )
         # The guard references nonexistent_field which isn't in any upstream schema.
         # Static analysis should flag this (bare identifier warning or missing field).
-        assert len(result.errors) >= 0 or len(result.warnings) >= 0
+        assert result.errors or result.warnings
 
 
 # ── TestSchemaValidation ─────────────────────────────────────────────
