@@ -151,10 +151,15 @@ class ArtifactLinker:
             logger.debug("No DB file found in %s — skipping export", target_dir)
             return
 
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+        from agent_actions.storage import get_storage_backend
 
         db_path = db_files[0]
-        backend = SQLiteBackend(db_path=str(db_path), workflow_name=db_path.stem)
+        # Derive workflow_path from target_dir: .../workflow/agent_io/target → .../workflow
+        workflow_path = target_dir.parent.parent
+        backend = get_storage_backend(
+            workflow_path=str(workflow_path),
+            workflow_name=db_path.stem,
+        )
         backend.initialize()
 
         try:

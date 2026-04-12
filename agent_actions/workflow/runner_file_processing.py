@@ -84,10 +84,12 @@ def _resolve_backend_for_path(runner: ActionRunner, input_path: Path) -> Storage
         upstream_db,
     )
 
-    from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+    from agent_actions.storage import get_storage_backend
 
-    upstream_backend = SQLiteBackend(
-        db_path=str(upstream_db),
+    # Derive workflow_path: .../workflow/agent_io/target → .../workflow
+    workflow_path = upstream_target_dir.parent.parent
+    upstream_backend = get_storage_backend(
+        workflow_path=str(workflow_path),
         workflow_name=upstream_db.stem,
     )
     upstream_backend.initialize()
