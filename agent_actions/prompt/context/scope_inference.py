@@ -337,12 +337,21 @@ def infer_dependencies(
         ]
 
     # 5. Validate all referenced actions exist in workflow
+    #    Cross-workflow actions (from dict deps) won't be in workflow_actions.
+    #    When _has_cross_workflow_deps is set, unknown actions are assumed to be
+    #    cross-workflow references and silently excluded instead of raising.
+    has_cross_wf = action_config.get("_has_cross_workflow_deps", False)
+    cross_wf_refs: set[str] = set()
+
     all_referenced = set(input_sources_expanded) | set(context_sources_expanded)
     for dep_action in all_referenced:
         if dep_action in SPECIAL_NAMESPACES:
             continue
 
         if dep_action not in workflow_actions:
+            if has_cross_wf:
+                cross_wf_refs.add(dep_action)
+                continue
             raise ConfigurationError(
                 f"Action '{action_name}': References '{dep_action}' in dependencies/context_scope "
                 f"but '{dep_action}' not found in workflow.\n\n"
@@ -355,6 +364,13 @@ def infer_dependencies(
                     "context_sources": context_sources_expanded,
                 },
             )
+
+    # Remove cross-workflow refs from dependency lists — they're resolved
+    # at runtime via the upstream manifest / storage backend, not via the
+    # intra-workflow context loader.
+    if cross_wf_refs:
+        input_sources_expanded = [s for s in input_sources_expanded if s not in cross_wf_refs]
+        context_sources_expanded = [s for s in context_sources_expanded if s not in cross_wf_refs]
 
     logger.debug(
         f"[INFER_DEPS] Action '{action_name}': "
