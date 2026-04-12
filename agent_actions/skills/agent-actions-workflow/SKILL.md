@@ -7,13 +7,39 @@ description: Build, configure, and debug agent-actions agentic workflows. Use th
 
 ## Understanding the Pipeline First
 
-Every action in a workflow consumes upstream data and produces output for downstream actions. Before changing anything, read the workflow YAML and check what the upstream action actually produces (`cat agent_io/target/<parent>/sample.json`). Most bugs come from mismatched expectations between actions — a downstream action observing fields the upstream doesn't produce, or a guard checking a field with unexpected values.
+agent-actions handles data plumbing implicitly, like Terraform handles state:
+- You don't manage data flow between actions — `context_scope` declares it
+- You don't track record provenance — `lineage` handles it
+- You don't orchestrate execution order — `dependencies` handles it
+- You don't write vendor-specific LLM code — `model_vendor` abstracts it
+
+Your job: define WHAT each action does and WHAT data it needs. The framework handles HOW.
+
+Before changing anything, read the workflow YAML and check what the upstream action actually produces (`cat agent_io/target/<parent>/sample.json`). Most bugs come from mismatched expectations between actions.
 
 ```bash
 agac run -a my_workflow              # Run workflow
 agac render -a my_workflow           # Compiled YAML (schemas inlined, versions expanded)
 agac run -a my_workflow --upstream   # Run with upstream deps
 ```
+
+## How Data Flows
+
+```
+Source record
+  → Framework adds source_guid, node_id, lineage
+    → observe resolves fields via lineage (historical lookup)
+      → LLM/tool receives observed fields (namespaced for tools, Jinja-accessible for prompts)
+        → Tool processes and returns result
+          → passthrough fields merge into output
+            → Output stored with extended lineage
+              → Next action's observe resolves via this lineage
+```
+
+Once you understand this chain, most issues become obvious:
+- UDF gets None for a field? Fields are namespaced — use `content["action_name"]["field"]`
+- Downstream can't see a field? It wasn't in `passthrough` — only `observe` fields reach the LLM, `passthrough` fields reach the output
+- Historical lookup fails? Lineage is broken — check the upstream action's output for correct `lineage` arrays
 
 ## Project Layout
 
@@ -112,6 +138,8 @@ A few things to remember:
 
 Guards filter records based on upstream output. The key insight: guards check **input** to the action, not its own output. So you place the guard on the action that *consumes* the data, not the one that *produces* it.
 
+Guard conditions evaluate against **flattened** field names from the action's observed data. If you observe `extract_claims.*`, the guard sees `claims` and `confidence` directly — not `extract_claims.claims`.
+
 ```yaml
 - name: extract_claims              # Produces claims — no guard here
 
@@ -187,7 +215,9 @@ Read these when you need depth beyond what's covered above:
 
 - **[YAML Schema](references/yaml-schema.md)** — all action fields, config hierarchy
 - **[UDF Patterns](references/udf-patterns.md)** — passthrough, FILE granularity, version merge access
-- **[Common Pitfalls](references/common-pitfalls.md)** — 28 pitfalls with fixes
+- **[Framework Contracts](references/framework-contracts.md)** — 28 contracts: what works, what doesn't, workarounds
 - **[Debugging Guide](references/debugging-guide.md)** — triage checklist, prompt traces, error messages
 - **[Workflow Patterns](references/workflow-patterns.md)** — fan-in, diamond, ensemble patterns
 - **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough details
+- **[Cross-Workflow Patterns](references/cross-workflow-patterns.md)** — manifest linking, downstream runs, known limitations
+- **[HITL Patterns](references/hitl-patterns.md)** — human-in-the-loop with guards, lineage, passthrough
