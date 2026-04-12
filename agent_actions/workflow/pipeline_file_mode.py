@@ -63,10 +63,8 @@ def _infer_source_mapping(
         return {i: 0 for i in range(output_count)}
 
     logger.warning(
-        "FILE tool '%s' changed cardinality (%d → %d) without source_mapping. "
-        "Framework cannot determine which inputs produced which outputs. "
-        "Return FileUDFResult with source_mapping for correct lineage tracking. "
-        "Falling back to: all outputs inherit from first input's source_guid.",
+        "FILE tool '%s' changed cardinality (%d → %d) with mixed source_guids. "
+        "All outputs will inherit source_guid from first input.",
         action_name,
         input_count,
         output_count,
@@ -142,14 +140,11 @@ def process_file_mode_tool(
             tools_path=tools_path,
         )
 
-        # Safety net: unwrap FileUDFResult if it wasn't already unwrapped
-        # during validation in _validate_udf_output. Handles the case where
-        # validation is skipped (validate_output=False or no json_output_schema).
+        # Unwrap FileUDFResult if it wasn't already unwrapped during
+        # validation in _validate_udf_output.
         from agent_actions.utils.udf_management.registry import FileUDFResult
 
-        source_mapping = None
         if isinstance(raw_response, FileUDFResult):
-            source_mapping = raw_response.source_mapping
             raw_response = raw_response.outputs
 
         # Tool should return array
@@ -170,15 +165,13 @@ def process_file_mode_tool(
                 )
             ]
 
-        # Auto-infer source_mapping when tool does not provide one.
-        # This makes source_guid propagation a framework guarantee rather
-        # than depending on how the user writes their tool code.
-        if source_mapping is None and original_data:
-            source_mapping = _infer_source_mapping(
-                output_count=len(raw_response),
-                input_data=original_data,
-                action_name=context.agent_name,
-            )
+        # Framework-managed source_mapping — tools never provide this.
+        # The framework infers the mapping from cardinality and source_guids.
+        source_mapping = _infer_source_mapping(
+            output_count=len(raw_response),
+            input_data=original_data,
+            action_name=context.agent_name,
+        ) if original_data else None
 
         # Reserved framework fields that go at top level, not in content
         RESERVED_FIELDS = {

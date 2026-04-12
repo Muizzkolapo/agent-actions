@@ -37,8 +37,6 @@ def test_file_udf_result_unwrapped():
 
     udf_result = FileUDFResult(
         outputs=[{"name": "alice"}, {"name": "bob"}],
-        source_mapping={0: 0, 1: 1},
-        input_count=2,
     )
 
     input_data = [
@@ -60,14 +58,12 @@ def test_file_udf_result_unwrapped():
     assert result.data[1]["content"]["name"] == "bob"
 
 
-def test_file_udf_result_source_mapping_preserved():
-    """FileUDFResult.source_mapping should be threaded into ProcessingResult."""
+def test_file_udf_result_source_mapping_auto_inferred():
+    """Framework always infers source_mapping — tools never provide it."""
     pipeline, context = _make_pipeline_and_context()
 
     udf_result = FileUDFResult(
         outputs=[{"name": "alice"}, {"name": "bob"}],
-        source_mapping={0: 0, 1: 1},
-        input_count=2,
     )
 
     input_data = [
@@ -81,6 +77,7 @@ def test_file_udf_result_source_mapping_preserved():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
+    # Framework inferred identity mapping (2 in, 2 out)
     assert results[0].source_mapping == {0: 0, 1: 1}
 
 
@@ -100,14 +97,11 @@ def test_file_tool_plain_list_auto_infers_identity_mapping():
     assert results[0].source_mapping == {0: 0}
 
 
-def test_file_udf_result_no_mapping_auto_infers():
-    """FileUDFResult without source_mapping auto-infers from cardinality."""
+def test_file_udf_result_mapping_always_inferred():
+    """FileUDFResult triggers framework-inferred mapping like plain lists."""
     pipeline, context = _make_pipeline_and_context()
 
-    udf_result = FileUDFResult(
-        outputs=[{"name": "alice"}],
-        source_mapping=None,
-    )
+    udf_result = FileUDFResult(outputs=[{"name": "alice"}])
 
     input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
 
@@ -117,7 +111,7 @@ def test_file_udf_result_no_mapping_auto_infers():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Auto-inferred identity mapping (1 in, 1 out)
+    # Framework inferred identity mapping (1 in, 1 out)
     assert results[0].source_mapping == {0: 0}
 
 
@@ -309,8 +303,6 @@ def test_validate_udf_output_handles_list_for_file_granularity():
 
     result = FileUDFResult(
         outputs=[{"name": "alice"}, {"name": "bob"}],
-        source_mapping={0: 0, 1: 1},
-        input_count=2,
     )
 
     # Should not raise — FileUDFResult.outputs unwrapped, each item validated
@@ -576,8 +568,8 @@ def test_file_tool_plain_list_preserves_source_guid():
     assert result.data[1]["source_guid"] == "sg-2"
 
 
-def test_file_tool_explicit_mapping_preserves_source_guid():
-    """FileUDFResult with source_mapping propagates correct source_guid per item."""
+def test_file_tool_filter_fewer_outputs_uses_first_source_guid():
+    """When tool filters N→fewer with mixed source_guids, all outputs get first input's source_guid."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
@@ -586,22 +578,17 @@ def test_file_tool_explicit_mapping_preserves_source_guid():
         {"source_guid": "sg-3", "content": {"id": 3}},
     ]
 
-    # Tool filters: output[0] from input[0], output[1] from input[2] (skip input[1])
-    udf_result = FileUDFResult(
-        outputs=[{"name": "alice"}, {"name": "charlie"}],
-        source_mapping={0: 0, 1: 2},
-        input_count=3,
-    )
-
+    # Tool filters 3→2 (no mapping — framework can't know which were kept)
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=(udf_result, True),
+        return_value=([{"name": "alice"}, {"name": "charlie"}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
+    # All outputs get first input's source_guid (framework fallback)
     assert result.data[0]["source_guid"] == "sg-1"
-    assert result.data[1]["source_guid"] == "sg-3"
+    assert result.data[1]["source_guid"] == "sg-1"
 
 
 def test_file_tool_shared_source_guid_broadcast():
@@ -704,21 +691,12 @@ def test_file_tool_mixed_source_guid_some_set_some_not():
     # Tool sets source_guid on item[1] but not on [0] or [2]
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=[
-            {"val": "a"},
-            {"val": "b", "source_guid": "sg-tool-explicit"},
-            {"val": "c"},
-        ],
+        return_value=(
+            [{"val": "a"}, {"val": "b", "source_guid": "sg-tool-explicit"}, {"val": "c"}],
+            True,
+        ),
     ):
-        # run_dynamic_agent returns (response, executed)
-        with patch(
-            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-            return_value=(
-                [{"val": "a"}, {"val": "b", "source_guid": "sg-tool-explicit"}, {"val": "c"}],
-                True,
-            ),
-        ):
-            results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
     # Item 0: no explicit source_guid → framework reattaches from input[0]
@@ -784,8 +762,8 @@ def test_file_tool_non_dict_output_items():
     assert results[0].data[0]["content"]["value"] == "just a string"
 
 
-def test_file_tool_many_to_one_source_mapping():
-    """FileUDFResult with many-to-one mapping propagates first parent's source_guid."""
+def test_file_tool_merge_reduces_to_fewer_outputs():
+    """N→fewer merge: framework broadcasts first input's source_guid."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
@@ -794,23 +772,17 @@ def test_file_tool_many_to_one_source_mapping():
         {"source_guid": "sg-3", "content": {"q": "C"}},
     ]
 
-    # Tool merges input[0] + input[1] → output[0], input[2] → output[1]
-    udf_result = FileUDFResult(
-        outputs=[{"merged": "AB"}, {"single": "C"}],
-        source_mapping={0: [0, 1], 1: 2},
-        input_count=3,
-    )
-
+    # Tool merges 3→2 (framework can't know which merged)
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=(udf_result, True),
+        return_value=([{"merged": "AB"}, {"single": "C"}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
-    # Many-to-one: first parent's source_guid used
-    assert result.data[0]["source_guid"] == "sg-1"
-    assert result.data[1]["source_guid"] == "sg-3"
+    # All outputs get first input's source_guid (fallback for mixed guids)
+    for item in result.data:
+        assert item["source_guid"] == "sg-1"
 
 
 def test_file_tool_large_cardinality_expansion():
