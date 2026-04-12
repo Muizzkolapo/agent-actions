@@ -260,6 +260,12 @@ class WorkflowDependencyOrchestrator:
             run_downstream=False,
         )
 
+        # Bridge storage backends: copy upstream action data into downstream's
+        # backend so the downstream runner can resolve cross-workflow deps the
+        # same way it resolves local deps (via storage_backend.list_target_files).
+        if upstream_actions:
+            self._bridge_storage_backends(self.current_workflow, downstream_wf, upstream_actions)
+
         result = downstream_wf.run()
 
         if result is None:
@@ -270,6 +276,62 @@ class WorkflowDependencyOrchestrator:
             f"[bold green]>> Downstream: Workflow '{downstream_name}' completed[/bold green]"
         )
         return True
+
+    def _bridge_storage_backends(
+        self,
+        upstream_workflow: str,
+        downstream_wf: Any,
+        upstream_actions: list[str],
+    ) -> None:
+        """Copy upstream action outputs into the downstream's storage backend.
+
+        Opens the upstream workflow's SQLite backend (read-only), reads each
+        action's target data, and writes it into the downstream's backend.
+        This lets the downstream runner resolve cross-workflow deps via its
+        own storage_backend.list_target_files() — no special-casing needed.
+        """
+        from agent_actions.storage import get_storage_backend
+
+        upstream_dir = self.workflows_root / upstream_workflow
+        upstream_db = upstream_dir / "agent_io" / "target" / f"{upstream_workflow}.db"
+
+        if not upstream_db.exists():
+            logger.debug("No upstream storage backend at %s — skipping bridge", upstream_db)
+            return
+
+        downstream_backend = getattr(downstream_wf, "storage_backend", None)
+        if downstream_backend is None:
+            logger.debug("Downstream workflow has no storage backend — skipping bridge")
+            return
+
+        try:
+            upstream_backend = get_storage_backend(
+                workflow_path=str(upstream_dir),
+                workflow_name=upstream_workflow,
+            )
+        except Exception as e:
+            logger.warning("Could not open upstream backend for %s: %s", upstream_workflow, e)
+            return
+
+        for action_name in upstream_actions:
+            try:
+                target_files = upstream_backend.list_target_files(action_name)
+                for rel_path in target_files:
+                    data = upstream_backend.read_target(action_name, rel_path)
+                    downstream_backend.write_target(action_name, rel_path, data)
+                logger.info(
+                    "Bridged %d file(s) from %s/%s into downstream backend",
+                    len(target_files),
+                    upstream_workflow,
+                    action_name,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to bridge upstream action %s/%s: %s",
+                    upstream_workflow,
+                    action_name,
+                    e,
+                )
 
     @staticmethod
     def _extract_upstream_actions(config_path: Path, upstream_workflow: str) -> list[str]:
