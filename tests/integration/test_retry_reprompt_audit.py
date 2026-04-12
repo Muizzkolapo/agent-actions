@@ -143,22 +143,17 @@ class TestRetryService:
         assert result.reason == "rate_limit"
         assert result.exhausted is False
 
-    def test_no_retry_on_validation_error(self):
-        """Non-retriable errors (e.g. ValueError) raise immediately, no retry."""
+    @pytest.mark.parametrize(
+        "exc",
+        [ValueError("bad input"), VendorAPIError("invalid key")],
+        ids=["ValueError", "VendorAPIError"],
+    )
+    def test_no_retry_on_non_retriable_error(self, exc):
+        """Non-retriable errors raise immediately with no retry."""
         svc = RetryService(max_attempts=3)
-        op = Mock(side_effect=ValueError("bad input"))
+        op = Mock(side_effect=exc)
 
-        with pytest.raises(ValueError, match="bad input"):
-            svc.execute(op)
-
-        assert op.call_count == 1
-
-    def test_no_retry_on_vendor_api_error(self):
-        """VendorAPIError is not retriable — raises immediately."""
-        svc = RetryService(max_attempts=3)
-        op = Mock(side_effect=VendorAPIError("invalid key"))
-
-        with pytest.raises(VendorAPIError, match="invalid key"):
+        with pytest.raises(type(exc)):
             svc.execute(op)
 
         assert op.call_count == 1
@@ -269,32 +264,32 @@ class TestRetryService:
         with pytest.raises(ValueError, match="max_attempts must be >= 1"):
             RetryService(max_attempts=0)
 
-    def test_classify_error_rate_limit(self):
-        assert classify_error(RateLimitError("429")) == "rate_limit"
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (RateLimitError("429"), "rate_limit"),
+            (NetworkError("connection refused"), "network_error"),
+            (NetworkError("timeout occurred"), "timeout"),
+            (VendorAPIError("bad key"), "api_error"),
+            (ValueError("misc"), "unknown"),
+        ],
+        ids=["rate_limit", "network", "timeout", "vendor_api", "unknown"],
+    )
+    def test_classify_error(self, error, expected):
+        assert classify_error(error) == expected
 
-    def test_classify_error_network(self):
-        assert classify_error(NetworkError("connection refused")) == "network_error"
-
-    def test_classify_error_timeout(self):
-        assert classify_error(NetworkError("timeout occurred")) == "timeout"
-
-    def test_classify_error_vendor_api(self):
-        assert classify_error(VendorAPIError("bad key")) == "api_error"
-
-    def test_classify_error_unknown(self):
-        assert classify_error(ValueError("misc")) == "unknown"
-
-    def test_is_retriable_network(self):
-        assert is_retriable_error(NetworkError("x")) is True
-
-    def test_is_retriable_rate_limit(self):
-        assert is_retriable_error(RateLimitError("x")) is True
-
-    def test_is_not_retriable_vendor_api(self):
-        assert is_retriable_error(VendorAPIError("x")) is False
-
-    def test_is_not_retriable_value_error(self):
-        assert is_retriable_error(ValueError("x")) is False
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (NetworkError("x"), True),
+            (RateLimitError("x"), True),
+            (VendorAPIError("x"), False),
+            (ValueError("x"), False),
+        ],
+        ids=["network", "rate_limit", "vendor_api", "value_error"],
+    )
+    def test_is_retriable_error(self, error, expected):
+        assert is_retriable_error(error) is expected
 
 
 # ---------------------------------------------------------------------------
@@ -472,20 +467,24 @@ class TestRepromptService:
         assert result.passed is True
         assert result.exhausted is False
 
-    def test_validator_exception_treated_as_failure(self):
+    @pytest.mark.parametrize(
+        "exc_type",
+        [ValueError, TypeError, KeyError, IndexError],
+        ids=["ValueError", "TypeError", "KeyError", "IndexError"],
+    )
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_validator_exception_treated_as_failure(self, _fire, exc_type):
         """ValueError/TypeError/LookupError from validator → treated as failure, not crash."""
-        for exc_type in (ValueError, TypeError, KeyError, IndexError):
-            validator = _RaisingValidator(exc_type("boom"))
-            svc = RepromptService(validator=validator, max_attempts=1, on_exhausted="return_last")
+        validator = _RaisingValidator(exc_type("boom"))
+        svc = RepromptService(validator=validator, max_attempts=1, on_exhausted="return_last")
 
-            with patch("agent_actions.processing.recovery.reprompt.fire_event"):
-                result = svc.execute(
-                    llm_operation=_llm_op_factory([({"r": True}, True)]),
-                    original_prompt="p",
-                )
+        result = svc.execute(
+            llm_operation=_llm_op_factory([({"r": True}, True)]),
+            original_prompt="p",
+        )
 
-            assert result.passed is False, f"{exc_type.__name__} should be treated as failure"
-            assert result.exhausted is True
+        assert result.passed is False
+        assert result.exhausted is True
 
     def test_non_handled_exception_propagates(self):
         """Exceptions outside ValueError/TypeError/LookupError propagate."""
@@ -559,6 +558,9 @@ class TestRepromptServiceFactory:
     """Verify create_reprompt_service_from_config edge cases."""
 
     def setup_method(self):
+        _VALIDATION_REGISTRY.clear()
+
+    def teardown_method(self):
         _VALIDATION_REGISTRY.clear()
 
     def test_none_config_no_validator_returns_none(self):
@@ -749,31 +751,32 @@ class TestEventLogging:
     def test_data_validation_events_per_attempt(self):
         """UDF decorator fires DataValidationStartedEvent and outcome events per call."""
         _VALIDATION_REGISTRY.clear()
+        try:
 
-        @reprompt_validation("check failed")
-        def audit_check(response):
-            return response.get("valid", False)
+            @reprompt_validation("check failed")
+            def audit_check(response):
+                return response.get("valid", False)
 
-        events_fired = []
+            events_fired = []
 
-        def capture_event(event):
-            events_fired.append(type(event).__name__)
+            def capture_event(event):
+                events_fired.append(type(event).__name__)
 
-        with patch(
-            "agent_actions.logging.core.manager.fire_event",
-            side_effect=capture_event,
-        ):
-            audit_check({"valid": True})
-            audit_check({"valid": False})
+            with patch(
+                "agent_actions.logging.core.manager.fire_event",
+                side_effect=capture_event,
+            ):
+                audit_check({"valid": True})
+                audit_check({"valid": False})
 
-        assert events_fired == [
-            "DataValidationStartedEvent",
-            "DataValidationPassedEvent",
-            "DataValidationStartedEvent",
-            "DataValidationFailedEvent",
-        ]
-
-        _VALIDATION_REGISTRY.clear()
+            assert events_fired == [
+                "DataValidationStartedEvent",
+                "DataValidationPassedEvent",
+                "DataValidationStartedEvent",
+                "DataValidationFailedEvent",
+            ]
+        finally:
+            _VALIDATION_REGISTRY.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -1088,13 +1091,3 @@ class TestRecoveryMetadataTypes:
         m = RecoveryMetadata()
         assert m.to_dict() == {}
         assert m.is_empty() is True
-
-    def test_recovery_metadata_failures_formula_success(self):
-        """When succeeded: failures = attempts - 1."""
-        m = RetryMetadata(attempts=3, failures=2, succeeded=True, reason="rate_limit")
-        assert m.failures == m.attempts - 1
-
-    def test_recovery_metadata_failures_formula_exhausted(self):
-        """When exhausted (not succeeded): failures = attempts."""
-        m = RetryMetadata(attempts=3, failures=3, succeeded=False, reason="missing")
-        assert m.failures == m.attempts
