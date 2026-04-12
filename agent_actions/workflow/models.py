@@ -15,9 +15,6 @@ class WorkflowPaths:
     constructor_path: str
     user_code_path: str | None
     default_path: str
-    parent_output: str | None = None
-    parent_source: str | None = None
-    parent_pipeline: str | None = None
 
 
 @dataclass
