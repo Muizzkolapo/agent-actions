@@ -103,33 +103,30 @@ File granularity is exclusively supported for tool actions. LLM actions must use
 
 See [Granularity](../execution/granularity.md) for detailed documentation.
 
-### FileUDFResult for Lineage
+### Metadata is Automatic
 
-Track which input records produced which outputs:
+The framework handles all metadata propagation (`source_guid`, lineage, `node_id`) automatically. Tools just return business data:
 
 ```python
-from agent_actions import udf_tool, FileUDFResult
+from agent_actions import udf_tool
 from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
-def dedup_with_lineage(data: list, **kwargs) -> FileUDFResult:
+def dedup_tool(data: list, **kwargs) -> list:
     seen = {}
     outputs = []
-    source_mapping = {}
 
-    for idx, record in enumerate(data):
-        fact = record['fact']
+    for record in data:
+        content = record.get("content", record)
+        fact = content.get("fact", "")
         if fact not in seen:
-            seen[fact] = len(outputs)
-            outputs.append(record)
-            source_mapping[len(outputs) - 1] = idx
+            seen[fact] = True
+            outputs.append(content)
 
-    return FileUDFResult(
-        outputs=outputs,
-        source_mapping=source_mapping,
-        input_count=len(data)
-    )
+    return outputs
 ```
+
+The framework infers which inputs produced which outputs and propagates `source_guid` and lineage accordingly. Tools never need to handle framework metadata.
 
 ## Tool Discovery
 

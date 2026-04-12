@@ -31,6 +31,92 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Framework fields that live at the top level of structured records, not inside content.
+_TOOL_RESERVED_FIELDS = frozenset(
+    {
+        "source_guid",
+        "target_id",
+        "node_id",
+        "lineage",
+        "metadata",
+        "content",
+        "parent_target_id",
+        "root_target_id",
+        "chunk_info",
+        "_recovery",
+        "_unprocessed",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _infer_source_mapping(
+    output_count: int,
+    input_data: list[dict],
+    action_name: str,
+) -> dict[int, int | list[int]] | None:
+    """Infer source_mapping when the tool does not provide one.
+
+    Priority:
+    1. Identity mapping when output count matches input count (most common).
+    2. Broadcast when all inputs share the same source_guid.
+    3. Fallback broadcast to first input (with warning).
+    """
+    input_count = len(input_data)
+
+    if output_count == input_count:
+        return {i: i for i in range(output_count)}
+
+    # Check if all inputs share the same source_guid
+    source_guids = {
+        item.get("source_guid")
+        for item in input_data
+        if isinstance(item, dict) and item.get("source_guid")
+    }
+    if len(source_guids) == 1:
+        return {i: 0 for i in range(output_count)}
+
+    logger.warning(
+        "FILE tool '%s' changed cardinality (%d → %d) with mixed source_guids. "
+        "All outputs will inherit source_guid from first input.",
+        action_name,
+        input_count,
+        output_count,
+    )
+    return {i: 0 for i in range(output_count)}
+
+
+def _reattach_source_guid(
+    structured_data: list[dict],
+    source_mapping: dict[int, int | list[int]] | None,
+    original_data: list[dict],
+) -> None:
+    """Reattach source_guid from input records to output items using mapping.
+
+    Mutates structured_data in place.  Only sets source_guid when the output
+    item does not already carry a truthy value (explicit tool values win).
+    """
+    if not source_mapping or not original_data:
+        return
+
+    for i, item in enumerate(structured_data):
+        if item.get("source_guid"):
+            continue  # Tool explicitly set it — respect that
+
+        source_idx = source_mapping.get(i, 0)
+        if isinstance(source_idx, list):
+            source_idx = source_idx[0]  # Many-to-one: use first parent
+
+        if isinstance(source_idx, int) and source_idx < len(original_data):
+            parent_guid = original_data[source_idx].get("source_guid")
+            if parent_guid:
+                item["source_guid"] = parent_guid
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -59,37 +145,27 @@ def process_file_mode_tool(
         List with single ProcessingResult containing all outputs.
     """
     try:
-        # Get tools_path from agent config
         tools_path = context.agent_config.get("tools_path")
 
-        # Invoke tool once with full array
-        # For tools, formatted_prompt is not used, so we pass empty string
         raw_response, executed = run_dynamic_agent(
             agent_config=cast(dict[str, Any], context.agent_config),
             agent_name=context.agent_name,
-            context=data,  # Full array of records
-            formatted_prompt="",  # Not used for tools
+            context=data,
+            formatted_prompt="",
             tools_path=tools_path,
         )
 
-        # Safety net: unwrap FileUDFResult if it wasn't already unwrapped
-        # during validation in _validate_udf_output. Handles the case where
-        # validation is skipped (validate_output=False or no json_output_schema).
         from agent_actions.utils.udf_management.registry import FileUDFResult
 
-        source_mapping = None
         if isinstance(raw_response, FileUDFResult):
-            source_mapping = raw_response.source_mapping
             raw_response = raw_response.outputs
 
-        # Tool should return array
         if not isinstance(raw_response, list):
             raise ValueError(
                 f"FILE mode tool must return a list (or FileUDFResult), "
                 f"got {type(raw_response).__name__}"
             )
 
-        # Empty tool output with non-empty input → FAILED (see _MANIFEST.md)
         if not raw_response and data:
             return [
                 ProcessingResult.failed(
@@ -100,35 +176,33 @@ def process_file_mode_tool(
                 )
             ]
 
-        # Reserved framework fields that go at top level, not in content
-        RESERVED_FIELDS = {
-            "source_guid",
-            "target_id",
-            "node_id",
-            "lineage",
-            "metadata",
-            "content",
-        }
+        # Framework-managed: infer which inputs produced which outputs.
+        source_mapping = None
+        if original_data:
+            source_mapping = _infer_source_mapping(
+                output_count=len(raw_response),
+                input_data=original_data,
+                action_name=context.agent_name,
+            )
 
-        # Wrap each tool output in {content: {...}} structure
-        # Preserve source_guid at top level for lineage chaining
+        # Separate business data from framework fields in tool output
         structured_data = []
         for item in raw_response:
             if isinstance(item, dict):
-                # Separate data fields from reserved framework fields
-                data_fields = {k: v for k, v in item.items() if k not in RESERVED_FIELDS}
-
-                # Build structured item with content
+                data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
                 structured_item = {"content": data_fields}
 
-                # Preserve source_guid at top level (needed for lineage chaining)
                 if "source_guid" in item:
                     structured_item["source_guid"] = item["source_guid"]
 
                 structured_data.append(structured_item)
             else:
-                # Handle non-dict outputs
                 structured_data.append({"content": {"value": item}})
+
+        # Reattach source_guid from input records — authoritative for FILE mode.
+        # LineageBuilder._propagate_ancestry_chain and RequiredFieldsEnricher
+        # also set source_guid but are idempotent backstops; this is the primary setter.
+        _reattach_source_guid(structured_data, source_mapping, original_data)
 
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
