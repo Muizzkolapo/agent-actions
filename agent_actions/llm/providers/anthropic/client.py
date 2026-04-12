@@ -15,6 +15,7 @@ from typing import Any, ClassVar
 import anthropic
 
 from agent_actions.errors import VendorAPIError
+from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -60,9 +61,11 @@ class AnthropicClient(BaseClient):
     @staticmethod
     def _build_api_args(
         model_name: str,
-        prompt_dedent: str,
+        messages: list[dict[str, Any]],
         schema: dict[str, Any] | None,
         agent_config: dict[str, Any] | None = None,
+        *,
+        enable_prompt_caching: bool = False,
     ) -> dict[str, Any]:
         """Build API arguments for the Anthropic call."""
         cfg = agent_config or {}
@@ -76,11 +79,13 @@ class AnthropicClient(BaseClient):
 
         api_args: dict[str, Any] = {
             "model": model_name,
-            "messages": [{"role": "user", "content": prompt_dedent}],
+            "messages": messages,
             **params,
         }
         if schema is not None:
             api_args["tools"] = schema
+        if enable_prompt_caching:
+            api_args["extra_headers"] = PROMPT_CACHING_BETA_HEADER
         return api_args
 
     @staticmethod
@@ -125,12 +130,20 @@ class AnthropicClient(BaseClient):
         model_name: str = agent_config[MODEL_NAME_KEY]
         client = anthropic.Anthropic(api_key=api_key)
         json_mode = schema is not None
+        enable_caching = agent_config.get("enable_prompt_caching", False)
         envelope = MessageBuilder.build(
-            "anthropic", prompt_config, context_data, schema=schema, json_mode=json_mode
+            "anthropic",
+            prompt_config,
+            context_data,
+            schema=schema,
+            json_mode=json_mode,
+            enable_prompt_caching=enable_caching,
         )
-        prompt_dedent: str = envelope.messages[0].content
+        messages = envelope.to_dicts()
 
-        api_args = AnthropicClient._build_api_args(model_name, prompt_dedent, schema, agent_config)
+        api_args = AnthropicClient._build_api_args(
+            model_name, messages, schema, agent_config, enable_prompt_caching=enable_caching
+        )
 
         request_id = str(uuid.uuid4())
 
