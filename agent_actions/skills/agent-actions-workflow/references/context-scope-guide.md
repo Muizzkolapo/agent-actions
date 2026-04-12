@@ -120,12 +120,16 @@ When you need seed data inside a **UDF tool action**, you must explicitly list i
       - seed.exam_syllabus    # Required for UDF tools only
 ```
 
-> **Common mistake:** Using `seed_data.` as the reference prefix. The config key is `seed_data:` but the reference prefix is `seed.` -- writing `{{ seed_data.exam_syllabus }}` in a prompt will not resolve.
-
 | Syntax | Description |
 |--------|-------------|
 | `$file:path.json` | Load JSON from seed_data directory |
 | `$file:path.yaml` | Load YAML from seed_data directory |
+
+## Guard Field Visibility
+
+Guard conditions evaluate against flattened field names from observed data (see Guards section in SKILL.md for examples).
+
+**Collision risk:** When observing from multiple upstream actions with overlapping field names, the last-loaded namespace wins. Avoid this by observing specific fields instead of wildcards when field names might collide.
 
 ## Resolution Order
 

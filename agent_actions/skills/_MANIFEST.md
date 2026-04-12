@@ -29,7 +29,7 @@ This is a content-only module (no Python runtime code). The templates and refere
 | `references/prompt-patterns.md` | `prompt_store/{workflow}.md` | Reads | — |
 | `references/udf-decorator.md` | `tools/{workflow}/*.py` | Reads | — |
 
-**Internal only**: reference documents (`action-anatomy.md`, `cli-reference.md`, `common-pitfalls.md`, `context-scope-guide.md`, `data-flow-patterns.md`, `debugging-guide.md`, `dynamic-content-injection.md`, `udf-patterns.md`, `workflow-patterns.md`) — no direct project surface.
+**Internal only**: reference documents (`action-anatomy.md`, `cli-reference.md`, `framework-contracts.md`, `context-scope-guide.md`, `data-flow-patterns.md`, `debugging-guide.md`, `dynamic-content-injection.md`, `udf-patterns.md`, `workflow-patterns.md`) — no direct project surface.
 
 ## Dependencies
 
