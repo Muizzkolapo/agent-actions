@@ -38,18 +38,11 @@ def _base_entry(**overrides) -> dict:
 class TestPreflightRejectWithoutSchema:
     """on_schema_mismatch: reject + no schema → preflight error."""
 
-    def test_reject_no_schema_produces_error(self):
-        """Reject mode without any schema definition is caught."""
-        errors, _ = _validate_entry(_base_entry(on_schema_mismatch="reject"))
-        assert any("on_schema_mismatch" in e.lower() and "schema" in e.lower() for e in errors), (
-            f"Expected schema-related error, got: {errors}"
-        )
-
-    def test_reject_no_schema_error_is_actionable(self):
-        """Error message tells user to add a schema or switch mode."""
+    def test_reject_no_schema_produces_actionable_error(self):
+        """Reject mode without schema is caught with an actionable message."""
         errors, _ = _validate_entry(_base_entry(on_schema_mismatch="reject"))
         mismatch_errors = [e for e in errors if "on_schema_mismatch" in e.lower()]
-        assert len(mismatch_errors) > 0
+        assert len(mismatch_errors) > 0, f"Expected schema-related error, got: {errors}"
         assert any(
             "schema" in e.lower() and ("warn" in e.lower() or "define" in e.lower())
             for e in mismatch_errors
