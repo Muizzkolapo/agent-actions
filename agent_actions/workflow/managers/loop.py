@@ -451,6 +451,8 @@ class VersionOutputCorrelator:
                 source_record = {
                     "source_guid": record.get("source_guid"),
                     "id": record.get("target_id", record.get("source_guid")),
+                    "lineage": record.get("lineage", []),
+                    "node_id": record.get("node_id"),
                 }
                 source_records.append(source_record)
 
