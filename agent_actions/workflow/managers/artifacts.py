@@ -21,8 +21,21 @@ class ArtifactLinker:
         """Initialize artifact linker."""
         self.workflows_root = workflows_root
 
-    def link_workflow_artifacts(self, source_workflow: str, target_workflow: str) -> None:
-        """Link source workflow's output to target workflow via manifest."""
+    def link_workflow_artifacts(
+        self,
+        source_workflow: str,
+        target_workflow: str,
+        upstream_actions: list[str] | None = None,
+    ) -> None:
+        """Link source workflow's output to target workflow via manifest.
+
+        Args:
+            source_workflow: Name of the upstream workflow producing data.
+            target_workflow: Name of the downstream workflow consuming data.
+            upstream_actions: Specific action names to link (from cross-workflow
+                dependency declarations). When provided, links to those exact
+                action directories instead of guessing by mtime.
+        """
         source_target = self.workflows_root / source_workflow / "agent_io" / "target"
         target_io = self.workflows_root / target_workflow / "agent_io"
 
@@ -30,28 +43,62 @@ class ArtifactLinker:
             logger.warning("Source target directory does not exist: %s", source_target)
             return
 
+        if not self.validate_safe_path(source_target, self.workflows_root):
+            logger.warning("Rejecting link: source %s outside workspace", source_target)
+            return
+        if not self.validate_safe_path(target_io, self.workflows_root):
+            logger.warning("Rejecting link: target %s outside workspace", target_io)
+            return
+
+        # Use specific action directories when cross-workflow deps declare them.
+        if upstream_actions:
+            for action_name in upstream_actions:
+                action_dir = source_target / action_name
+                if action_dir.exists():
+                    self._write_upstream_manifest(target_io, source_workflow, action_dir)
+                    logger.info(
+                        "Wrote manifest linking %s/%s -> %s",
+                        source_workflow,
+                        action_name,
+                        target_workflow,
+                    )
+                else:
+                    logger.warning(
+                        "Upstream action directory not found: %s (expected from cross-workflow dep)",
+                        action_dir,
+                    )
+            return
+
+        # Fallback: pick the most recently modified action directory.
         latest_node = self.find_latest_node_dir(source_target)
         if not latest_node:
             logger.warning("No output nodes found in %s", source_target)
             return
 
         if not self.validate_safe_path(latest_node, self.workflows_root):
-            logger.warning("Rejecting link: source %s outside workspace", latest_node)
-            return
-        if not self.validate_safe_path(target_io, self.workflows_root):
-            logger.warning("Rejecting link: target %s outside workspace", target_io)
+            logger.warning("Rejecting link: source node %s outside workspace", latest_node)
             return
 
         self._write_upstream_manifest(target_io, source_workflow, latest_node)
         logger.info("Wrote manifest linking %s -> %s", source_workflow, target_workflow)
 
-    def link_upstream_artifacts(self, upstream_name: str, current_workflow: str) -> None:
+    def link_upstream_artifacts(
+        self,
+        upstream_name: str,
+        current_workflow: str,
+        upstream_actions: list[str] | None = None,
+    ) -> None:
         """Link upstream workflow's output to current workflow via manifest."""
-        self.link_workflow_artifacts(upstream_name, current_workflow)
+        self.link_workflow_artifacts(upstream_name, current_workflow, upstream_actions)
 
-    def link_downstream_artifacts(self, current_workflow: str, downstream_name: str) -> None:
+    def link_downstream_artifacts(
+        self,
+        current_workflow: str,
+        downstream_name: str,
+        upstream_actions: list[str] | None = None,
+    ) -> None:
         """Link current workflow's output to downstream workflow via manifest."""
-        self.link_workflow_artifacts(current_workflow, downstream_name)
+        self.link_workflow_artifacts(current_workflow, downstream_name, upstream_actions)
 
     def _write_upstream_manifest(
         self, target_io: Path, source_workflow: str, source_node: Path

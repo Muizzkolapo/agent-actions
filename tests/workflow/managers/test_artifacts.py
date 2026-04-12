@@ -324,3 +324,94 @@ class TestDelegationMethods:
 
         manifest = json.loads((target_io / ArtifactLinker.MANIFEST_FILENAME).read_text())
         assert manifest["upstream_workflow"] == "current"
+
+
+# ---------------------------------------------------------------------------
+# Cross-workflow: specific upstream action linking
+# ---------------------------------------------------------------------------
+
+
+class TestCrossWorkflowActionLinking:
+    """When upstream_actions is provided, link to specific action dirs, not mtime."""
+
+    def test_links_to_specific_action_dir(self, linker: ArtifactLinker):
+        """upstream_actions=['format_quiz_text'] links to that exact dir."""
+        source_target = linker.workflows_root / "upstream_wf" / "agent_io" / "target"
+        # Create two action dirs — one older, one newer
+        older = source_target / "format_quiz_text"
+        older.mkdir(parents=True)
+        (older / "data.json").write_text('[{"q": "test"}]')
+
+        newer = source_target / "review_answers"
+        newer.mkdir(parents=True)
+        (newer / "data.json").write_text('[{"a": "test"}]')
+
+        target_io = linker.workflows_root / "downstream_wf" / "agent_io"
+        target_io.mkdir(parents=True)
+
+        linker.link_workflow_artifacts(
+            "upstream_wf", "downstream_wf", upstream_actions=["format_quiz_text"]
+        )
+
+        manifest = json.loads((target_io / ArtifactLinker.MANIFEST_FILENAME).read_text())
+        assert manifest["upstream_path"].endswith("format_quiz_text")
+        assert "data.json" in manifest["files"]
+
+    def test_mtime_ignored_when_upstream_actions_provided(self, linker: ArtifactLinker):
+        """Even if a different dir is newer, the specified action is used."""
+        import time
+
+        source_target = linker.workflows_root / "upstream_wf" / "agent_io" / "target"
+
+        # Create the target action dir first (older mtime)
+        target_action = source_target / "target_action"
+        target_action.mkdir(parents=True)
+        (target_action / "output.json").touch()
+
+        time.sleep(0.05)
+
+        # Create a different dir second (newer mtime)
+        decoy = source_target / "decoy_action"
+        decoy.mkdir(parents=True)
+        (decoy / "decoy.json").touch()
+
+        target_io = linker.workflows_root / "downstream_wf" / "agent_io"
+        target_io.mkdir(parents=True)
+
+        linker.link_workflow_artifacts(
+            "upstream_wf", "downstream_wf", upstream_actions=["target_action"]
+        )
+
+        manifest = json.loads((target_io / ArtifactLinker.MANIFEST_FILENAME).read_text())
+        # Must link to target_action, NOT decoy_action (even though decoy is newer)
+        assert manifest["upstream_path"].endswith("target_action")
+
+    def test_missing_action_dir_warns(self, linker: ArtifactLinker):
+        """upstream_actions with nonexistent dir logs warning, no manifest."""
+        source_target = linker.workflows_root / "upstream_wf" / "agent_io" / "target"
+        source_target.mkdir(parents=True)
+
+        target_io = linker.workflows_root / "downstream_wf" / "agent_io"
+        target_io.mkdir(parents=True)
+
+        linker.link_workflow_artifacts(
+            "upstream_wf", "downstream_wf", upstream_actions=["nonexistent_action"]
+        )
+
+        # No manifest written since action dir doesn't exist
+        assert not (target_io / ArtifactLinker.MANIFEST_FILENAME).exists()
+
+    def test_no_upstream_actions_falls_back_to_mtime(self, linker: ArtifactLinker):
+        """Without upstream_actions, mtime-based selection still works."""
+        source_target = linker.workflows_root / "upstream_wf" / "agent_io" / "target"
+        node = source_target / "some_action"
+        node.mkdir(parents=True)
+        (node / "data.json").touch()
+
+        target_io = linker.workflows_root / "downstream_wf" / "agent_io"
+        target_io.mkdir(parents=True)
+
+        linker.link_workflow_artifacts("upstream_wf", "downstream_wf")
+
+        manifest = json.loads((target_io / ArtifactLinker.MANIFEST_FILENAME).read_text())
+        assert manifest["upstream_workflow"] == "upstream_wf"

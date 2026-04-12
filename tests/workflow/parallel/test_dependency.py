@@ -192,9 +192,10 @@ class TestResolveUpstreamWorkflows:
         with self._mock_upstream_index(orchestrator, ["upstream_wf"]):
             orchestrator.resolve_upstream_workflows(None, None, False)
 
-        orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once_with(
-            "upstream_wf", "current_wf"
-        )
+        orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once()
+        call_args = orchestrator.artifact_linker.link_upstream_artifacts.call_args
+        assert call_args[0][0] == "upstream_wf"
+        assert call_args[0][1] == "current_wf"
 
     def test_upstream_already_completed_skips_execution(
         self,
@@ -224,9 +225,10 @@ class TestResolveUpstreamWorkflows:
         with self._mock_upstream_index(orchestrator, ["done_wf"]):
             orchestrator.resolve_upstream_workflows(None, None, False)
 
-        orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once_with(
-            "done_wf", "current_wf"
-        )
+        orchestrator.artifact_linker.link_upstream_artifacts.assert_called_once()
+        call_args = orchestrator.artifact_linker.link_upstream_artifacts.call_args
+        assert call_args[0][0] == "done_wf"
+        assert call_args[0][1] == "current_wf"
 
     def test_upstream_batch_pending_returns_false(
         self,
@@ -481,9 +483,10 @@ class TestExecuteDownstreamWorkflow:
 
         orchestrator._execute_downstream_workflow("ds_wf", None, None, False)
 
-        orchestrator.artifact_linker.link_downstream_artifacts.assert_called_once_with(
-            "current_wf", "ds_wf"
-        )
+        orchestrator.artifact_linker.link_downstream_artifacts.assert_called_once()
+        call_args = orchestrator.artifact_linker.link_downstream_artifacts.call_args
+        assert call_args[0][0] == "current_wf"
+        assert call_args[0][1] == "ds_wf"
 
     def test_batch_pending_returns_none(
         self,

@@ -135,7 +135,20 @@ class WorkflowDependencyOrchestrator:
                     self._print_batch_pending_message(upstream_name, is_upstream=True)
                     return None
 
-            self.artifact_linker.link_upstream_artifacts(upstream_name, self.current_workflow)
+            current_config_path = (
+                self.workflows_root
+                / self.current_workflow
+                / "agent_config"
+                / f"{self.current_workflow}.yml"
+            )
+            upstream_actions = (
+                self._extract_upstream_actions(current_config_path, upstream_name)
+                if current_config_path.exists()
+                else []
+            )
+            self.artifact_linker.link_upstream_artifacts(
+                upstream_name, self.current_workflow, upstream_actions=upstream_actions
+            )
 
             self.console.print(
                 f"[bold green]>> Recursive: Ready to use upstream "
@@ -231,7 +244,12 @@ class WorkflowDependencyOrchestrator:
                 f"Downstream workflow config not found at {downstream_config_path}"
             )
 
-        self.artifact_linker.link_downstream_artifacts(self.current_workflow, downstream_name)
+        upstream_actions = self._extract_upstream_actions(
+            downstream_config_path, self.current_workflow
+        )
+        self.artifact_linker.link_downstream_artifacts(
+            self.current_workflow, downstream_name, upstream_actions=upstream_actions
+        )
 
         downstream_wf = self.workflow_factory(
             config_path=str(downstream_config_path),
@@ -252,6 +270,41 @@ class WorkflowDependencyOrchestrator:
             f"[bold green]>> Downstream: Workflow '{downstream_name}' completed[/bold green]"
         )
         return True
+
+    @staticmethod
+    def _extract_upstream_actions(config_path: Path, upstream_workflow: str) -> list[str]:
+        """Extract upstream action names from a workflow config's cross-workflow deps.
+
+        Loads raw YAML (before Pydantic) to find dict dependencies that target
+        the given upstream workflow and returns the action names.
+        """
+        import yaml
+
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+        except (OSError, yaml.YAMLError) as e:
+            logger.warning("Could not parse config for upstream action extraction: %s", e)
+            return []
+
+        if not isinstance(raw, dict):
+            return []
+
+        actions: list[str] = []
+        for action_config in raw.get("actions", []):
+            if not isinstance(action_config, dict):
+                continue
+            deps = action_config.get("dependencies") or action_config.get("depends_on") or []
+            if not isinstance(deps, list):
+                continue
+            for dep in deps:
+                if (
+                    isinstance(dep, dict)
+                    and dep.get("workflow") == upstream_workflow
+                    and dep.get("action")
+                ):
+                    actions.append(dep["action"])
+        return actions
 
     def _print_batch_pending_message(self, workflow_name: str, is_upstream: bool) -> None:
         """Print message about pending batch jobs."""
