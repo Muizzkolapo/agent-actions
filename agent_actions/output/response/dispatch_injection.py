@@ -7,7 +7,7 @@ Handles recursive dispatch_task() resolution and injection into schema structure
 import logging
 from typing import Any
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import AgentActionsError
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def _inject_functions_into_schema(
                     captured_results=captured_results,
                     preserve_type_on_exact_match=True,
                 )
-            except (ValueError, TypeError, KeyError, ConfigurationError) as e:
+            except (ValueError, TypeError, KeyError, AgentActionsError) as e:
                 logger.warning(
                     "dispatch_task resolution failed in schema — the unresolved string "
                     "will be passed to the LLM vendor as-is, which may cause API errors: %s",
@@ -104,7 +104,7 @@ def _resolve_dispatch_in_schema(
             captured_results=captured_results,
             preserve_type_on_exact_match=True,
         )
-    except (ValueError, TypeError, KeyError, ConfigurationError) as e:
+    except (ValueError, TypeError, KeyError, AgentActionsError) as e:
         logger.warning(
             "dispatch_task resolution failed in schema — the unresolved string "
             "will be passed to the LLM vendor as-is, which may cause API errors: %s",
