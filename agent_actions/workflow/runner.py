@@ -127,9 +127,25 @@ class ActionRunner:
     def get_action_folder(self, action_name: str, project_root: Path | None = None) -> str:
         """Return the action folder path.
 
+        For compiled multi-workflow DAGs each action config carries a
+        ``_source_workflow_dir`` field pointing to the source workflow's
+        directory.  When present, the action's ``agent_io/`` is resolved
+        directly from that directory instead of searching from the project
+        root.
+
         Raises:
             FileSystemError: If the action folder is not found.
         """
+        # Compiled cross-workflow path: use the action's source workflow dir.
+        if self.action_configs:
+            action_config = self.action_configs.get(action_name, {})
+            source_dir = action_config.get("_source_workflow_dir") if action_config else None
+            if source_dir:
+                agent_io = Path(source_dir) / "agent_io"
+                if agent_io.is_dir():
+                    return str(agent_io)
+
+        # Existing single-workflow path.
         search_dir: Path = resolve_project_root(project_root or self.project_root)
         folder_name = self.workflow_name if self.workflow_name else action_name
         action_folder: str | None = FileHandler.find_specific_folder(
@@ -317,8 +333,11 @@ class ActionRunner:
         agent_folder_path = Path(agent_folder)
         agent_type = action_config["agent_type"]
         dependencies = action_config.get("dependencies", [])
+        has_cross_workflow = action_config.get("_has_cross_workflow_deps", False)
 
-        if not dependencies and not previous_action_type:
+        if not dependencies and (not previous_action_type or has_cross_workflow):
+            # Start node OR cross-workflow first action (dict deps stripped by
+            # Pydantic, but upstream manifest may point to the right data).
             upstream_data_dirs = self._resolve_start_node_directories(
                 agent_folder_path, action_config.get("agent_type", "unknown")
             )

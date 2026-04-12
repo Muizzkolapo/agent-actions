@@ -62,6 +62,28 @@ class RuntimeContext:
 
 
 @dataclass
+class CompiledAction:
+    """Metadata for an action in a compiled multi-workflow DAG."""
+
+    name: str  # Qualified: "workflow_name::action_name"
+    local_name: str  # Original action name within source workflow
+    source_workflow: str  # Name of the workflow this action came from
+    source_workflow_dir: Path  # Path to source workflow directory (for agent_io)
+    source_data_source: Any = None  # data_source config from source workflow defaults
+
+
+@dataclass
+class CompilationResult:
+    """Output of WorkflowCompiler.compile()."""
+
+    merged_actions: list[dict[str, Any]]  # Pre-Pydantic, dict deps rewritten to strings
+    action_metadata: dict[str, CompiledAction]  # Keyed by qualified name
+    primary_workflow: str  # The workflow the user invoked
+    involved_workflows: list[str]  # All workflows in the compiled DAG
+    workflow_graph: dict[str, list[str]]  # Workflow-level dep graph
+
+
+@dataclass
 class WorkflowMetadata:
     """Workflow configuration metadata."""
 
@@ -70,6 +92,7 @@ class WorkflowMetadata:
     action_indices: dict[str, int]
     action_configs: dict[str, dict[str, Any]]
     child_pipeline: str | None = None
+    compilation: CompilationResult | None = None
 
 
 @dataclass

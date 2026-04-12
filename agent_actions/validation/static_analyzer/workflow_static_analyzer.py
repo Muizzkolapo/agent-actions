@@ -196,13 +196,23 @@ class WorkflowStaticAnalyzer:
         if self._built:
             return
 
-        # Collect cross-workflow action names from raw configs before
-        # Pydantic strips dict deps.  These actions are resolved at runtime
+        # Collect cross-workflow action names that are resolved at runtime
         # and must be excluded from static "does not exist" checks.
+        #
+        # Two detection paths (both needed for robustness):
+        # 1. Dict deps in raw YAML (pre-Pydantic): {workflow: X, action: Y}
+        # 2. _has_cross_workflow_deps flag (post-Pydantic): config_pipeline
+        #    sets this flag on actions whose dict deps were stripped.
+        #    When present, extract referenced action names from context_scope
+        #    that don't match any local action.
         actions = self.workflow_config.get("actions", [])
+        local_action_names = {
+            a.get("name") for a in actions if isinstance(a, dict) and a.get("name")
+        }
         for action_config in actions:
             if not isinstance(action_config, dict):
                 continue
+            # Path 1: dict deps in raw configs (works before Pydantic).
             deps = action_config.get("depends_on") or action_config.get("dependencies", [])
             if isinstance(deps, list):
                 for dep in deps:
@@ -210,6 +220,20 @@ class WorkflowStaticAnalyzer:
                         action_name = dep.get("action")
                         if action_name:
                             self._cross_workflow_actions.add(action_name)
+            # Path 2: flag from config_pipeline (works after Pydantic stripping).
+            if action_config.get("_has_cross_workflow_deps"):
+                cs = action_config.get("context_scope", {})
+                if isinstance(cs, dict):
+                    for directive in ("observe", "passthrough", "drop", "keep"):
+                        for ref in cs.get(directive, []):
+                            if not isinstance(ref, str) or "." not in ref:
+                                continue
+                            ns_name = ref.split(".", 1)[0]
+                            if (
+                                ns_name not in local_action_names
+                                and ns_name not in SPECIAL_NAMESPACES
+                            ):
+                                self._cross_workflow_actions.add(ns_name)
 
         # Add special source node (always available)
         self._add_source_node()
