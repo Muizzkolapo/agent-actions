@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 _cross_workflow_backends: dict[Path, StorageBackend] = {}
 
 
+def clear_cross_workflow_backends() -> None:
+    """Close and clear cached cross-workflow storage backends.
+
+    Called at workflow run teardown and between tests.
+    """
+    _cross_workflow_backends.clear()
+
+
 def _resolve_backend_for_path(runner: ActionRunner, input_path: Path) -> StorageBackend:
     """Return the correct storage backend for *input_path*.
 

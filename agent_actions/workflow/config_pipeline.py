@@ -184,8 +184,9 @@ def _maybe_compile(config: WorkflowRuntimeConfig) -> CompilationResult | None:
     try:
         with open(primary_path, encoding="utf-8") as f:
             raw_config = yaml.safe_load(f) or {}
-    except Exception:
-        return None  # Let the normal pipeline handle parse errors.
+    except (yaml.YAMLError, OSError) as e:
+        logger.debug("Compilation gate check failed, deferring to normal pipeline: %s", e)
+        return None
 
     if not needs_compilation(raw_config, config.run_upstream, config.run_downstream):
         return None

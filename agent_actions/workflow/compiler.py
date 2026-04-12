@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from agent_actions.errors import ConfigurationError, WorkflowError
+from agent_actions.errors import ConfigurationError
 from agent_actions.workflow.models import CompilationResult, CompiledAction
 
 logger = logging.getLogger(__name__)
@@ -131,10 +131,8 @@ class _WorkflowCompiler:
         if run_downstream:
             self._load_transitive_downstreams(primary_name)
 
-        # Detect cycles in the workflow-level graph.
-        self._check_workflow_cycles()
-
         # Determine which workflows to include and in what order.
+        # (Cycle detection happens inside _topo_sort_workflows via graph_utils.topological_sort.)
         involved = self._resolve_involved_workflows(primary_name, run_upstream, run_downstream)
 
         # Merge and qualify all actions.
@@ -318,40 +316,6 @@ class _WorkflowCompiler:
             except ConfigurationError:
                 self._workflow_graph[wf_name] = []
 
-    # -- Cycle detection ----------------------------------------------------
-
-    def _check_workflow_cycles(self) -> None:
-        """Raise :class:`WorkflowError` if the workflow-level graph has cycles."""
-        all_nodes = set(self._workflow_graph.keys())
-        for deps in self._workflow_graph.values():
-            all_nodes.update(deps)
-
-        in_degree: dict[str, int] = {n: 0 for n in all_nodes}
-        for _node, deps in self._workflow_graph.items():
-            for dep in deps:
-                if dep in in_degree:
-                    in_degree[dep] += 1
-
-        queue = deque(n for n in all_nodes if in_degree[n] == 0)
-        visited = 0
-        while queue:
-            node = queue.popleft()
-            visited += 1
-            for dep in self._workflow_graph.get(node, []):
-                in_degree[dep] -= 1
-                if in_degree[dep] == 0:
-                    queue.append(dep)
-
-        if visited != len(all_nodes):
-            cycle_nodes = {n for n in all_nodes if in_degree[n] > 0}
-            raise WorkflowError(
-                "Cyclic dependency detected between workflows",
-                context={
-                    "cycle_nodes": sorted(cycle_nodes),
-                    "operation": "compile_workflows",
-                },
-            )
-
     # -- Resolve involved workflows -----------------------------------------
 
     def _resolve_involved_workflows(
@@ -366,13 +330,14 @@ class _WorkflowCompiler:
         """
         involved: set[str] = {primary}
 
-        # Add upstreams (transitively).
+        # Always include directly-referenced upstream workflows (dict deps).
+        involved.update(self._workflow_graph.get(primary, []))
+
+        # --upstream: also include their transitive upstreams.
         if run_upstream:
             involved.update(self._collect_transitive(primary, direction="upstream"))
-        # Always include workflows referenced via dict deps (even without --upstream).
-        involved.update(self._collect_transitive(primary, direction="upstream"))
 
-        # Add downstreams (transitively).
+        # --downstream: include transitive downstreams.
         if run_downstream:
             involved.update(self._collect_transitive(primary, direction="downstream"))
 
@@ -427,17 +392,6 @@ class _WorkflowCompiler:
         merged: list[dict[str, Any]] = []
         metadata: dict[str, CompiledAction] = {}
 
-        # Build a set of all qualified action names for validation.
-        all_qualified: set[str] = set()
-        for wf_name in involved:
-            raw = self._raw_configs[wf_name]
-            for action in raw.get("actions", []):
-                if not isinstance(action, dict):
-                    continue
-                aname = action.get("name")
-                if aname:
-                    all_qualified.add(qualify(wf_name, aname))
-
         for wf_name in involved:
             raw = self._raw_configs[wf_name]
             wf_dir = self._workflow_dirs[wf_name]
@@ -459,7 +413,6 @@ class _WorkflowCompiler:
                 action_copy["dependencies"] = self._rewrite_deps(
                     action_copy.get("depends_on") or action_copy.get("dependencies", []),
                     wf_name,
-                    all_qualified,
                 )
                 # Remove legacy depends_on key if present.
                 action_copy.pop("depends_on", None)
@@ -486,7 +439,6 @@ class _WorkflowCompiler:
     def _rewrite_deps(
         deps: Any,
         source_workflow: str,
-        all_qualified: set[str],
     ) -> list[str]:
         """Rewrite a dependency list to qualified string deps.
 

@@ -257,7 +257,7 @@ class TestCompileTopologicalOrder:
         )
 
     def test_transitive_upstream_ordering(self, tmp_path: Path):
-        """A → B → C: C's upstream chain is [A, B]."""
+        """A → B → C with --upstream: C's upstream chain is [A, B, C]."""
         _write_workflow(tmp_path, "wf_a", actions=[{"name": "step_a", "dependencies": []}])
         _write_workflow(
             tmp_path,
@@ -280,9 +280,14 @@ class TestCompileTopologicalOrder:
             ],
         )
 
+        # Without --upstream: only direct dep (wf_b) + primary (wf_c).
         result = compile_workflows(config_path, tmp_path)
-        assert result.involved_workflows == ["wf_a", "wf_b", "wf_c"]
-        assert len(result.merged_actions) == 3
+        assert result.involved_workflows == ["wf_b", "wf_c"]
+
+        # With --upstream: full transitive chain.
+        result_full = compile_workflows(config_path, tmp_path, run_upstream=True)
+        assert result_full.involved_workflows == ["wf_a", "wf_b", "wf_c"]
+        assert len(result_full.merged_actions) == 3
 
 
 # ---------------------------------------------------------------------------

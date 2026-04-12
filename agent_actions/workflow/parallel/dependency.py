@@ -303,8 +303,12 @@ class WorkflowDependencyOrchestrator:
                         and dep.get("action")
                     ):
                         return dep["action"]
-        except Exception:
-            pass
+        except (yaml.YAMLError, OSError) as e:
+            logger.debug(
+                "Could not read %s for cross-workflow action: %s",
+                downstream_config_path,
+                e,
+            )
         return None
 
     def _print_batch_pending_message(self, workflow_name: str, is_upstream: bool) -> None:
