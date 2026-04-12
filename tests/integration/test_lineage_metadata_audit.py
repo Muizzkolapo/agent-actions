@@ -88,21 +88,6 @@ def _enrich_full(result, context):
     return pipeline.enrich(result, context)
 
 
-def _make_first_stage_result(action_name, items, enrich=True):
-    """Simulate a first-stage enrichment producing items with all metadata fields.
-
-    Returns enriched items with target_id, node_id, lineage, source_guid.
-    """
-    result = ProcessingResult.success(data=items, source_guid=items[0].get("source_guid"))
-    context = _make_context(source_data=[], is_first_stage=True, action_name=action_name)
-    enriched = _enrich_full(result, context)
-    # Assign root_target_id = target_id for first-stage (matches initial_pipeline behavior)
-    for item in enriched.data:
-        if "target_id" in item and "root_target_id" not in item:
-            item["root_target_id"] = item["target_id"]
-    return enriched
-
-
 # ---------------------------------------------------------------------------
 # TestLineageChainIntegrity
 # ---------------------------------------------------------------------------
@@ -277,7 +262,6 @@ class TestAncestryFields:
         e2 = _enrich_lineage(r2, ctx2)
         item2 = e2.data[0]
         item2["target_id"] = _uuid()
-        item2["root_target_id"] = item2.get("root_target_id")  # should be root_tid
 
         assert item2["root_target_id"] == root_tid
 
@@ -645,19 +629,18 @@ class TestHITLFileMode:
         """HITL output extends parent lineage: [ancestor, parent, hitl_node]."""
         ancestor_nid = f"ingest_{_uuid()}"
         guids = [_uuid() for _ in range(3)]
-        sources = [
-            _make_source_item(
-                guids[i],
-                f"extract_{_uuid()}",
-                lineage=[ancestor_nid, f"extract_{_uuid()}"],
-                target_id=_uuid(),
-                root_target_id=_uuid(),
+        sources = []
+        for i in range(3):
+            nid = f"extract_{_uuid()}"
+            sources.append(
+                _make_source_item(
+                    guids[i],
+                    nid,
+                    lineage=[ancestor_nid, nid],
+                    target_id=_uuid(),
+                    root_target_id=_uuid(),
+                )
             )
-            for i in range(3)
-        ]
-        # Fix: use each source's own node_id in its lineage
-        for s in sources:
-            s["lineage"] = [ancestor_nid, s["node_id"]]
 
         # HITL identity mapping (same as process_file_mode_hitl builds)
         result = ProcessingResult(
