@@ -95,6 +95,7 @@ class WorkflowStaticAnalyzer:
 
         self.graph = DataFlowGraph()
         self._built = False
+        self._cross_workflow_actions: set[str] = set()
 
     def analyze(self) -> StaticValidationResult:
         """Perform static analysis of the workflow.
@@ -123,7 +124,7 @@ class WorkflowStaticAnalyzer:
         expansion_errors = self._expand_wildcards()
 
         # Step 3: Run type checker
-        checker = StaticTypeChecker(self.graph)
+        checker = StaticTypeChecker(self.graph, self._cross_workflow_actions)
         result = checker.check_all()
 
         for error in expansion_errors:
@@ -187,11 +188,25 @@ class WorkflowStaticAnalyzer:
         if self._built:
             return
 
+        # Collect cross-workflow action names from raw configs before
+        # Pydantic strips dict deps.  These actions are resolved at runtime
+        # and must be excluded from static "does not exist" checks.
+        actions = self.workflow_config.get("actions", [])
+        for action_config in actions:
+            if not isinstance(action_config, dict):
+                continue
+            deps = action_config.get("depends_on") or action_config.get("dependencies", [])
+            if isinstance(deps, list):
+                for dep in deps:
+                    if isinstance(dep, dict):
+                        action_name = dep.get("action")
+                        if action_name:
+                            self._cross_workflow_actions.add(action_name)
+
         # Add special source node (always available)
         self._add_source_node()
 
         # Add action nodes from actions
-        actions = self.workflow_config.get("actions", [])
         for action_config in actions:
             self._add_agent_node(action_config)
 
@@ -251,6 +266,11 @@ class WorkflowStaticAnalyzer:
 
                     # Special namespaces and loop are runtime-provided; skip.
                     if ns_name in SPECIAL_NAMESPACES or ns_name == "loop":
+                        expanded.append(ref)
+                        continue
+
+                    # Cross-workflow deps: can't expand, keep wildcard as-is.
+                    if ns_name in self._cross_workflow_actions:
                         expanded.append(ref)
                         continue
 
@@ -539,6 +559,10 @@ class WorkflowStaticAnalyzer:
                                 hint=f"Add '{dep_name}.*' to context_scope.observe, or remove this reference.",
                             )
                         )
+                        continue
+
+                    # Cross-workflow deps are resolved at runtime — skip field validation.
+                    if dep_name in self._cross_workflow_actions:
                         continue
 
                     # Validate field exists in dependency's output schema
