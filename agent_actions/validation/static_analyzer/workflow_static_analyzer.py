@@ -13,9 +13,13 @@ from agent_actions.input.context.normalizer import (
     detect_orphaned_directives,
     normalize_context_scope,
 )
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import (
     DEFAULT_ACTION_KIND,
+    JSON_MODE_KEY,
     RESERVED_AGENT_NAMES,
+    SCHEMA_KEY,
+    SCHEMA_NAME_KEY,
     SPECIAL_NAMESPACES,
 )
 
@@ -933,12 +937,12 @@ class WorkflowStaticAnalyzer:
             if kind != "llm":
                 continue
 
-            json_mode = action.get("json_mode", True)
+            json_mode = action.get(JSON_MODE_KEY, get_default(JSON_MODE_KEY))
             if json_mode:
                 continue
 
             has_schema = bool(
-                action.get("schema") or action.get("output_schema") or action.get("schema_name")
+                action.get(SCHEMA_KEY) or action.get("output_schema") or action.get(SCHEMA_NAME_KEY)
             )
             if not has_schema:
                 continue
@@ -947,9 +951,9 @@ class WorkflowStaticAnalyzer:
                 StaticTypeWarning(
                     message=(
                         f"Action '{name}' has json_mode=false but defines a schema. "
-                        f"The schema will be compiled but not sent to the LLM. "
-                        f"Set json_mode=true to enable schema enforcement, or "
-                        f"remove the schema if text output is intended."
+                        "The schema will be compiled but not sent to the LLM. "
+                        "Set json_mode=true to enable schema enforcement, or "
+                        "remove the schema if text output is intended."
                     ),
                     location=FieldLocation(
                         agent_name=name,
@@ -959,8 +963,9 @@ class WorkflowStaticAnalyzer:
                     referenced_agent=name,
                     referenced_field="json_mode",
                     hint=(
-                        "json_mode=false routes to call_non_json() which does not "
-                        "forward the schema. The LLM will return free-form text."
+                        "When json_mode is false, the schema is not included in the "
+                        "LLM request. The LLM will return free-form text instead of "
+                        "structured output."
                     ),
                 )
             )
