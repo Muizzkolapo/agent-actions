@@ -379,11 +379,11 @@ class TestApplyObserveForFileMode:
         result = apply_observe_for_file_mode(data=data, agent_config={}, agent_name="test")
         assert result is data
 
-    def test_wildcard_returns_data_as_is(self):
+    def test_wildcard_returns_all_content_fields(self):
         data = [{"content": {"a": 1, "b": 2}}]
         config = {"context_scope": {"observe": ["upstream.*"]}}
         result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-        assert result is data
+        assert result == [{"a": 1, "b": 2}]
 
     def test_non_dict_records_do_not_crash_heuristic(self):
         """Primitive entries (strings, ints) must not crash the content-key heuristic.
