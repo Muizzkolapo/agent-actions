@@ -38,6 +38,16 @@ class PromptFormatter:
                 return "Process the following content: {content}"
             if isinstance(raw_prompt, str) and raw_prompt.startswith("$"):
                 raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
+                if not raw_prompt:
+                    raise PromptValidationError(
+                        f"Prompt file/block resolved to empty content for action "
+                        f"'{agent_config.get('agent_type', 'unknown')}'. "
+                        f"Check the prompt block is not empty.",
+                        context={
+                            "field": "raw_prompt",
+                            "operation": "get_raw_prompt",
+                        },
+                    )
             if not raw_prompt:
                 return "Process the following content: {content}"
             return raw_prompt
