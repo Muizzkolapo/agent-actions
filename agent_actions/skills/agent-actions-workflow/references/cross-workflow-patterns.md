@@ -58,17 +58,7 @@ The action name is the key — not the workflow name. If the upstream action is 
 
 ### Using impl name instead of action name
 
-```yaml
-# WRONG — this is the impl (Python function) name
-dependencies:
-  - workflow: upstream
-    action: generate_vscode_mockup
-
-# CORRECT — this is the action name from the workflow YAML
-dependencies:
-  - workflow: upstream
-    action: format_code_blocks
-```
+Use the `name:` field from the YAML, not the `impl:` function name. See contract #20 in **[Common Pitfalls](common-pitfalls.md)**.
 
 ### Missing context_scope for cross-workflow fields
 

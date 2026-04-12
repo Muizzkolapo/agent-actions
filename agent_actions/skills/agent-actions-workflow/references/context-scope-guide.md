@@ -120,8 +120,6 @@ When you need seed data inside a **UDF tool action**, you must explicitly list i
       - seed.exam_syllabus    # Required for UDF tools only
 ```
 
-> **Common mistake:** Using `seed_data.` as the reference prefix. The config key is `seed_data:` but the reference prefix is `seed.` -- writing `{{ seed_data.exam_syllabus }}` in a prompt will not resolve.
-
 | Syntax | Description |
 |--------|-------------|
 | `$file:path.json` | Load JSON from seed_data directory |
@@ -129,20 +127,9 @@ When you need seed data inside a **UDF tool action**, you must explicitly list i
 
 ## Guard Field Visibility
 
-Guard conditions evaluate against the **flattened** field_context built from the action's observed data. Fields from observed namespaces are available by their field names directly.
+Guard conditions evaluate against flattened field names from observed data (see Guards section in SKILL.md for examples).
 
-```yaml
-- name: validate_claims
-  dependencies: [extract_claims]
-  guard:
-    condition: 'len(claims) >= 1 and confidence >= 0.7'  # "claims", not "extract_claims.claims"
-  context_scope:
-    observe: [extract_claims.*]
-```
-
-If you observe `extract_claims.*`, the guard sees `claims` and `confidence` as top-level names. You do **not** need to write `extract_claims.claims` in the guard condition — the namespace is flattened for evaluation.
-
-When observing from multiple upstream actions with overlapping field names, the last-loaded namespace wins. Avoid this by observing specific fields instead of wildcards when field names might collide.
+**Collision risk:** When observing from multiple upstream actions with overlapping field names, the last-loaded namespace wins. Avoid this by observing specific fields instead of wildcards when field names might collide.
 
 ## Resolution Order
 

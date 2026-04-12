@@ -171,16 +171,7 @@ See: **[Dynamic Content Injection](dynamic-content-injection.md)**
 
 ### 13. Guard conditions see flattened field names
 
-**Status:** Working — by design.
-
-Guard conditions evaluate against flattened field_context. If you observe `extract_claims.*`, the guard sees `claims` directly — not `extract_claims.claims`.
-
-```yaml
-guard:
-  condition: 'len(claims) >= 1 and confidence >= 0.7'
-context_scope:
-  observe: [extract_claims.*]
-```
+**Status:** Working — by design. See Guards section in SKILL.md for examples.
 
 ### 14. Guard conditions with output_field values
 
@@ -207,7 +198,7 @@ if content.get("response_text"):
 
 **Status:** Working — all comparison operators supported.
 
-Guards support `==`, `!=`, `>`, `>=`, `<`, `<=`, `and`, `or`, `not`, `IN`, `NOT IN`, `CONTAINS`, `LIKE`, `BETWEEN`, `IS NULL`, `IS NOT NULL`, and built-in functions (`len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`).
+Guards support `==`, `!=`, `>`, `>=`, `<`, `<=`, `and`, `or`, `not`, `IN`/`NOT IN`, `CONTAINS`/`NOT CONTAINS`, `LIKE`/`NOT LIKE`, `BETWEEN`/`NOT BETWEEN`, `IS NULL`/`IS NOT NULL`, and built-in functions (`len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`).
 
 Quote string literals: `status == "approved"` — unquoted strings are treated as field names.
 

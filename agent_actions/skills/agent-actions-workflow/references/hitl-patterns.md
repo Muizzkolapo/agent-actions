@@ -9,7 +9,7 @@ The simplest pattern: pause for human review, then continue.
 ```yaml
 - name: review_output
   kind: hitl
-  granularity: file              # HITL requires FILE granularity
+  granularity: file              # Default for HITL — can be omitted
   hitl:
     port: 8501                   # Local web UI port
     timeout: 3600                # Seconds to wait (default: 1 hour)
@@ -20,10 +20,7 @@ The simplest pattern: pause for human review, then continue.
 
 The web UI presents all records for review. The human can edit field values, approve, or reject records. When the session completes, the pipeline resumes with the human-modified data.
 
-**Requirements:**
-- `granularity: file` — HITL always operates on the full file, not individual records
-- `kind: hitl` — marks the action as human-in-the-loop
-- `hitl.port` — the local port for the review UI
+HITL defaults to `granularity: file` (operates on the full file). Setting `granularity: record` will error.
 
 ## HITL with Guard Pre-Filter
 
@@ -147,20 +144,6 @@ def merge_review_decisions(data: dict[str, Any]) -> list[dict[str, Any]]:
 ```
 
 ## Common Mistakes
-
-### Forgetting FILE granularity
-
-```yaml
-# WRONG — HITL requires file granularity
-- name: review
-  kind: hitl
-  granularity: record            # Will error
-
-# CORRECT
-- name: review
-  kind: hitl
-  granularity: file
-```
 
 ### Not using passthrough for downstream context
 
