@@ -1091,6 +1091,7 @@ class TestEdgeCases:
         item = enriched.data[0]
 
         assert item["lineage"] == [item["node_id"]]
+        assert "lineage_sources" not in item
 
 
 # ---------------------------------------------------------------------------

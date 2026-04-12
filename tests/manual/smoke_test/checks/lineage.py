@@ -43,7 +43,7 @@ def _compute_action_depths(config_path) -> dict[str, int]:
         name = action.get("name", "")
         deps[name] = action.get("dependencies", []) or []
 
-    # BFS to compute depths
+    # Recursive DFS to compute depths
     depths: dict[str, int] = {}
 
     def _depth(name: str, visited: set[str]) -> int:
@@ -102,14 +102,13 @@ class LineageCheck(Check):
             results.append(CheckResult(False, "lineage: storage DB exists", "no storage DB found"))
             return results
 
-        # Load pipeline depths from workflow config
-        action_depths = _compute_action_depths(ctx.config_path)
-
         try:
+            # Load pipeline depths from workflow config
+            action_depths = _compute_action_depths(ctx.config_path)
+
             with sqlite3.connect(str(db_path)) as conn:
                 conn.row_factory = sqlite3.Row
 
-                conn.execute("SELECT 1 FROM target_data LIMIT 1").fetchone()
                 rows = conn.execute(
                     "SELECT action_name, data FROM target_data ORDER BY action_name"
                 ).fetchall()
@@ -142,9 +141,7 @@ class LineageCheck(Check):
                         if isinstance(tid, str) and tid:
                             all_target_ids.add(tid)
 
-                    if action_name not in action_records:
-                        action_records[action_name] = []
-                    action_records[action_name].extend(indexed)
+                    action_records.setdefault(action_name, []).extend(indexed)
 
                 total_records = sum(len(recs) for recs in action_records.values())
 
