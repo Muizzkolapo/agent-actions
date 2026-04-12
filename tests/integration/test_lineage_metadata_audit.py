@@ -947,6 +947,153 @@ class TestUniformShape:
 
 
 # ---------------------------------------------------------------------------
+# TestEdgeCases — failure modes and broken inputs
+# ---------------------------------------------------------------------------
+
+
+class TestEdgeCases:
+    """Edge cases and failure modes that aren't happy paths."""
+
+    def test_empty_result_data_does_not_crash(self):
+        """Enriching a result with 0 records should not crash."""
+        result = ProcessingResult.success(data=[], source_guid=_uuid())
+        ctx = _make_context(source_data=[], is_first_stage=True, action_name="test")
+        enriched = _enrich_lineage(result, ctx)
+
+        assert enriched.data == []
+        assert enriched.node_id is not None  # base node_id still assigned
+
+    def test_non_first_stage_with_empty_source_data(self):
+        """Non-first-stage with no source_data: parent lookup returns None, lineage = [self]."""
+        guid = _uuid()
+        result = ProcessingResult.success(
+            data=[{"content": {"v": 1}, "source_guid": guid}],
+            source_guid=guid,
+        )
+        # Misconfigured: is_first_stage=False but no source_data
+        ctx = _make_context(source_data=[], is_first_stage=False, action_name="orphan")
+        enriched = _enrich_lineage(result, ctx)
+        item = enriched.data[0]
+
+        # No parent found → lineage is just [self], no ancestry fields
+        assert item["lineage"] == [item["node_id"]]
+        assert "parent_target_id" not in item
+
+    def test_skipped_result_still_gets_lineage(self):
+        """SKIPPED results pass through enrichment — they must get node_id and lineage."""
+        guid = _uuid()
+        parent_nid = f"extract_{_uuid()}"
+        parent = _make_source_item(guid, parent_nid, target_id=_uuid())
+
+        result = ProcessingResult.skipped(
+            passthrough_data={"content": {"original": True}, "source_guid": guid},
+            reason="guard skip",
+            source_guid=guid,
+        )
+        ctx = _make_context(
+            source_data=[parent],
+            is_first_stage=False,
+            action_name="guarded_action",
+            current_item=parent,
+        )
+        enriched = _enrich_lineage(result, ctx)
+
+        assert enriched.status == ProcessingStatus.SKIPPED
+        assert len(enriched.data) == 1
+        item = enriched.data[0]
+        assert "node_id" in item
+        assert "lineage" in item
+        assert parent_nid in item["lineage"]
+
+    def test_parent_item_without_lineage_key(self):
+        """Parent that has target_id but no lineage field: output lineage = [self]."""
+        guid = _uuid()
+        parent_tid = _uuid()
+        # Manually construct parent WITHOUT lineage key
+        parent = {"source_guid": guid, "node_id": f"extract_{_uuid()}", "target_id": parent_tid}
+
+        result = ProcessingResult.success(
+            data=[{"content": {"v": 1}, "source_guid": guid}],
+            source_guid=guid,
+        )
+        ctx = _make_context(source_data=[parent], is_first_stage=False, action_name="transform")
+        enriched = _enrich_lineage(result, ctx)
+        item = enriched.data[0]
+
+        # Parent has no lineage → build_lineage returns [node_id]
+        assert item["lineage"] == [item["node_id"]]
+        # But ancestry chain IS propagated (parent has target_id)
+        assert item["parent_target_id"] == parent_tid
+
+    def test_pre_existing_lineage_fields_overwritten(self):
+        """If output already has node_id/lineage, enrichment overwrites them."""
+        guid = _uuid()
+        parent_nid = f"extract_{_uuid()}"
+        parent = _make_source_item(guid, parent_nid, target_id=_uuid())
+
+        # Output has pre-existing (wrong) lineage fields
+        result = ProcessingResult.success(
+            data=[
+                {
+                    "content": {"v": 1},
+                    "source_guid": guid,
+                    "node_id": "stale_node_abc",
+                    "lineage": ["garbage_xyz"],
+                }
+            ],
+            source_guid=guid,
+        )
+        ctx = _make_context(source_data=[parent], is_first_stage=False, action_name="transform")
+        enriched = _enrich_lineage(result, ctx)
+        item = enriched.data[0]
+
+        # Enrichment must overwrite stale values
+        assert item["node_id"] != "stale_node_abc"
+        assert item["node_id"].startswith("transform_")
+        assert "garbage_xyz" not in item["lineage"]
+        assert parent_nid in item["lineage"]
+
+    def test_many_to_one_with_partial_oob_indices(self):
+        """Many-to-one source_mapping where some indices are valid, some OOB."""
+        sources = [
+            _make_source_item(f"guid_{i}", f"extract_{_uuid()}", target_id=_uuid())
+            for i in range(2)
+        ]
+
+        # source_mapping says merge indices [0, 1, 99] — 99 is OOB
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"content": {"merged": True}}],
+            source_guid=None,
+            source_mapping={0: [0, 1, 99]},
+        )
+        ctx = _make_context(source_data=sources, is_first_stage=False, action_name="merge_tool")
+        enriched = _enrich_lineage(result, ctx)
+        item = enriched.data[0]
+
+        # Should still produce lineage from the valid sources
+        assert "lineage" in item
+        assert "node_id" in item
+        # lineage_sources should have 2 valid entries (index 99 skipped)
+        assert "lineage_sources" in item
+        assert len(item["lineage_sources"]) == 2
+
+    def test_source_mapping_with_empty_source_list(self):
+        """Many-to-one with empty source list: lineage = [self]."""
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"content": {"merged": True}}],
+            source_guid=None,
+            source_mapping={0: []},
+        )
+        ctx = _make_context(source_data=[], is_first_stage=False, action_name="merge_tool")
+        enriched = _enrich_lineage(result, ctx)
+        item = enriched.data[0]
+
+        assert item["lineage"] == [item["node_id"]]
+
+
+# ---------------------------------------------------------------------------
 # TestFilteredResultBypass
 # ---------------------------------------------------------------------------
 
