@@ -154,6 +154,90 @@ Complete processing path as array:
 ]
 ```
 
+## Data Shapes by Pattern
+
+What `content` looks like in each mode. These are the shapes your UDF receives after the framework processes the input.
+
+### Record mode (default)
+
+UDF receives one record at a time. The `content` wrapper is already stripped.
+
+```json
+{
+  "extract_claims": {
+    "claims": ["claim 1", "claim 2"],
+    "confidence": 0.85
+  },
+  "seed": {
+    "rubric": {"min_score": 7}
+  }
+}
+```
+
+Access: `content["extract_claims"]["claims"]`
+
+### FILE mode
+
+UDF receives ALL records as a list. Each item retains the `content` wrapper.
+
+```json
+[
+  {
+    "content": {
+      "extract_claims": {"claims": ["claim 1"], "confidence": 0.9}
+    },
+    "source_guid": "abc-123",
+    "node_id": "node_2_xxx_0",
+    "lineage": ["node_0_yyy", "node_1_zzz", "node_2_xxx_0"]
+  },
+  {
+    "content": {
+      "extract_claims": {"claims": ["claim 2"], "confidence": 0.7}
+    },
+    "source_guid": "abc-123",
+    "node_id": "node_2_xxx_1",
+    "lineage": ["node_0_yyy", "node_1_zzz", "node_2_xxx_1"]
+  }
+]
+```
+
+Access: `record["content"]["extract_claims"]["claims"]` for each record.
+
+### Version merge
+
+After `version_consumption: {pattern: merge}`, all version outputs are namespaced by expanded action name.
+
+```json
+{
+  "score_quality_1": {"score": 8, "reasoning": "Clear structure"},
+  "score_quality_2": {"score": 6, "reasoning": "Needs more detail"},
+  "score_quality_3": {"score": 9, "reasoning": "Excellent coverage"}
+}
+```
+
+Access: `content["score_quality_1"]["score"]` or iterate with `content.get(f"score_quality_{i}", {})`.
+
+### Seed data
+
+Seed data lives under the `seed` namespace, keyed by the name from `seed_path:` in config.
+
+```json
+{
+  "seed": {
+    "rubric": {
+      "min_score": 7,
+      "categories": ["accuracy", "clarity"]
+    },
+    "exam_syllabus": {
+      "exam_name": "AWS Solutions Architect",
+      "topics": ["compute", "storage"]
+    }
+  }
+}
+```
+
+Access: `content["seed"]["rubric"]["min_score"]`
+
 ## Data Transformation Patterns
 
 ### Record Multiplication (Flattening)
