@@ -305,6 +305,25 @@ class ActionRunner:
         logger.warning("Dependency directory not found for %s", dep_name)
         return None
 
+    @staticmethod
+    def _extract_cross_workflow_dep_names(action_config: dict) -> list[str]:
+        """Extract cross-workflow action names from context_scope references.
+
+        When Pydantic strips dict deps, the action names survive in context_scope
+        observe/passthrough refs (e.g., 'format_quiz_text.*'). Extract them.
+        """
+        context_scope = action_config.get("context_scope", {})
+        if not isinstance(context_scope, dict):
+            return []
+        names: list[str] = []
+        for directive in ("observe", "passthrough"):
+            for ref in context_scope.get(directive, []):
+                if isinstance(ref, str) and "." in ref:
+                    ns_name = ref.split(".", 1)[0]
+                    if ns_name not in ("source", "seed", "version", "workflow", "loop"):
+                        names.append(ns_name)
+        return list(dict.fromkeys(names))  # dedupe preserving order
+
     def _resolve_linear_directory(self, agent_folder: Path, previous_action_type: str) -> Path:
         """Resolve upstream directory for linear workflow (default behavior)."""
         # Use simple name without index prefix
@@ -317,6 +336,14 @@ class ActionRunner:
         agent_folder_path = Path(agent_folder)
         agent_type = action_config["agent_type"]
         dependencies = action_config.get("dependencies", [])
+
+        # Cross-workflow deps: Pydantic strips dict deps, leaving dependencies=[].
+        # Use the cross-workflow action names from context_scope as synthetic deps
+        # so _resolve_single_dependency checks the storage backend.
+        if not dependencies and action_config.get("_has_cross_workflow_deps"):
+            cross_wf_deps = self._extract_cross_workflow_dep_names(action_config)
+            if cross_wf_deps:
+                dependencies = cross_wf_deps
 
         if not dependencies and not previous_action_type:
             upstream_data_dirs = self._resolve_start_node_directories(
