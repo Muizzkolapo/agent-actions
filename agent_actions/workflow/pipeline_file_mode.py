@@ -32,6 +32,76 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _infer_source_mapping(
+    output_count: int,
+    input_data: list[dict],
+    action_name: str,
+) -> dict[int, int | list[int]] | None:
+    """Infer source_mapping when the tool does not provide one.
+
+    Priority:
+    1. Identity mapping when output count matches input count (most common).
+    2. Broadcast when all inputs share the same source_guid.
+    3. Fallback broadcast to first input (with warning).
+    """
+    input_count = len(input_data)
+
+    if output_count == input_count:
+        return {i: i for i in range(output_count)}
+
+    # Check if all inputs share the same source_guid
+    source_guids = {
+        item.get("source_guid")
+        for item in input_data
+        if isinstance(item, dict) and item.get("source_guid")
+    }
+    if len(source_guids) == 1:
+        return {i: 0 for i in range(output_count)}
+
+    logger.warning(
+        "FILE tool '%s' changed cardinality (%d → %d) without source_mapping. "
+        "Framework cannot determine which inputs produced which outputs. "
+        "Return FileUDFResult with source_mapping for correct lineage tracking. "
+        "Falling back to: all outputs inherit from first input's source_guid.",
+        action_name,
+        input_count,
+        output_count,
+    )
+    return {i: 0 for i in range(output_count)}
+
+
+def _reattach_source_guid(
+    structured_data: list[dict],
+    source_mapping: dict[int, int | list[int]] | None,
+    original_data: list[dict],
+) -> None:
+    """Reattach source_guid from input records to output items using mapping.
+
+    Mutates structured_data in place.  Only sets source_guid when the output
+    item does not already carry a truthy value (explicit tool values win).
+    """
+    if not source_mapping or not original_data:
+        return
+
+    for i, item in enumerate(structured_data):
+        if item.get("source_guid"):
+            continue  # Tool explicitly set it — respect that
+
+        source_idx = source_mapping.get(i, 0)
+        if isinstance(source_idx, list):
+            source_idx = source_idx[0]  # Many-to-one: use first parent
+
+        if isinstance(source_idx, int) and source_idx < len(original_data):
+            parent_guid = original_data[source_idx].get("source_guid")
+            if parent_guid:
+                item["source_guid"] = parent_guid
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -100,6 +170,16 @@ def process_file_mode_tool(
                 )
             ]
 
+        # Auto-infer source_mapping when tool does not provide one.
+        # This makes source_guid propagation a framework guarantee rather
+        # than depending on how the user writes their tool code.
+        if source_mapping is None and original_data:
+            source_mapping = _infer_source_mapping(
+                output_count=len(raw_response),
+                input_data=original_data,
+                action_name=context.agent_name,
+            )
+
         # Reserved framework fields that go at top level, not in content
         RESERVED_FIELDS = {
             "source_guid",
@@ -129,6 +209,11 @@ def process_file_mode_tool(
             else:
                 # Handle non-dict outputs
                 structured_data.append({"content": {"value": item}})
+
+        # Reattach source_guid from input records to output items.
+        # This is the core of metadata sovereignty: the framework guarantees
+        # source_guid propagation regardless of what the tool returns.
+        _reattach_source_guid(structured_data, source_mapping, original_data)
 
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,

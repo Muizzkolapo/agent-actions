@@ -84,8 +84,8 @@ def test_file_udf_result_source_mapping_preserved():
     assert results[0].source_mapping == {0: 0, 1: 1}
 
 
-def test_file_tool_plain_list_source_mapping_is_none():
-    """Plain list return should leave source_mapping as None."""
+def test_file_tool_plain_list_auto_infers_identity_mapping():
+    """Plain list return with same count auto-infers identity source_mapping."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
@@ -96,11 +96,12 @@ def test_file_tool_plain_list_source_mapping_is_none():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    assert results[0].source_mapping is None
+    # Auto-inferred identity mapping (same input/output count)
+    assert results[0].source_mapping == {0: 0}
 
 
-def test_file_udf_result_no_mapping_source_mapping_is_none():
-    """FileUDFResult without source_mapping should leave it as None."""
+def test_file_udf_result_no_mapping_auto_infers():
+    """FileUDFResult without source_mapping auto-infers from cardinality."""
     pipeline, context = _make_pipeline_and_context()
 
     udf_result = FileUDFResult(
@@ -116,7 +117,8 @@ def test_file_udf_result_no_mapping_source_mapping_is_none():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    assert results[0].source_mapping is None
+    # Auto-inferred identity mapping (1 in, 1 out)
+    assert results[0].source_mapping == {0: 0}
 
 
 def test_file_tool_plain_list_still_works():
@@ -548,3 +550,426 @@ def test_result_collector_does_not_raise_when_all_filtered():
     )
 
     assert output == []
+
+
+# --- FILE-mode source_guid metadata sovereignty ---
+
+
+def test_file_tool_plain_list_preserves_source_guid():
+    """Plain list tool output gets source_guid from input via identity mapping."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+    ]
+
+    # Tool returns plain list — no source_guid, no FileUDFResult
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"score": 0.9}, {"score": 0.8}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    assert result.data[0]["source_guid"] == "sg-1"
+    assert result.data[1]["source_guid"] == "sg-2"
+
+
+def test_file_tool_explicit_mapping_preserves_source_guid():
+    """FileUDFResult with source_mapping propagates correct source_guid per item."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "content": {"id": 3}},
+    ]
+
+    # Tool filters: output[0] from input[0], output[1] from input[2] (skip input[1])
+    udf_result = FileUDFResult(
+        outputs=[{"name": "alice"}, {"name": "charlie"}],
+        source_mapping={0: 0, 1: 2},
+        input_count=3,
+    )
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(udf_result, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    assert result.data[0]["source_guid"] == "sg-1"
+    assert result.data[1]["source_guid"] == "sg-3"
+
+
+def test_file_tool_shared_source_guid_broadcast():
+    """When all inputs share source_guid, all outputs inherit it regardless of cardinality."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-shared", "content": {"q": "A"}},
+        {"source_guid": "sg-shared", "content": {"q": "B"}},
+    ]
+
+    # Tool returns different count — no explicit mapping
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"q": "A1"}, {"q": "A2"}, {"q": "B1"}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    # All outputs inherit the shared source_guid
+    for item in results[0].data:
+        assert item["source_guid"] == "sg-shared"
+
+
+def test_file_tool_cardinality_change_without_mapping_still_sets_source_guid(capsys):
+    """N→M without mapping still sets source_guid on all outputs."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"q": "A"}},
+        {"source_guid": "sg-2", "content": {"q": "B"}},
+    ]
+
+    # Tool returns different count, mixed source_guids, no mapping
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"q": "X"}, {"q": "Y"}, {"q": "Z"}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    # Warning emitted about cardinality change (to stderr via logger)
+    captured = capsys.readouterr()
+    assert "changed cardinality" in captured.err
+
+    # All outputs still have source_guid (not empty, not None)
+    for item in results[0].data:
+        assert item.get("source_guid"), f"source_guid missing or empty: {item}"
+
+
+def test_file_tool_source_guid_never_empty_string():
+    """No output item should ever have source_guid='' after FILE-mode processing."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"result": "ok"}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    for item in results[0].data:
+        assert item.get("source_guid") != "", "source_guid must not be empty string"
+        assert item.get("source_guid") == "sg-1"
+
+
+def test_file_tool_tool_explicit_source_guid_respected():
+    """If tool explicitly returns source_guid, framework respects it."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-input", "content": {"id": 1}},
+    ]
+
+    # Tool explicitly sets source_guid in its output
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"result": "ok", "source_guid": "sg-tool-set"}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    # Tool's explicit value wins over framework reattachment
+    assert results[0].data[0]["source_guid"] == "sg-tool-set"
+
+
+# --- Hardening: edge cases that must never break source_guid ---
+
+
+def test_file_tool_mixed_source_guid_some_set_some_not():
+    """Tool returns mix of items with and without source_guid — framework fills gaps."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "content": {"id": 3}},
+    ]
+
+    # Tool sets source_guid on item[1] but not on [0] or [2]
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=[
+            {"val": "a"},
+            {"val": "b", "source_guid": "sg-tool-explicit"},
+            {"val": "c"},
+        ],
+    ):
+        # run_dynamic_agent returns (response, executed)
+        with patch(
+            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            return_value=(
+                [{"val": "a"}, {"val": "b", "source_guid": "sg-tool-explicit"}, {"val": "c"}],
+                True,
+            ),
+        ):
+            results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    # Item 0: no explicit source_guid → framework reattaches from input[0]
+    assert result.data[0]["source_guid"] == "sg-1"
+    # Item 1: tool explicitly set it → respected
+    assert result.data[1]["source_guid"] == "sg-tool-explicit"
+    # Item 2: no explicit source_guid → framework reattaches from input[2]
+    assert result.data[2]["source_guid"] == "sg-3"
+
+
+def test_file_tool_empty_input_empty_output():
+    """Empty input + empty output → no crash, no source_guid issues."""
+    pipeline, context = _make_pipeline_and_context()
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        results = pipeline._process_file_mode_tool([], [], context)
+
+    assert results[0].status == ProcessingStatus.SUCCESS
+    assert results[0].data == []
+
+
+def test_file_tool_input_without_source_guid():
+    """Input records missing source_guid entirely — no crash, outputs have empty/absent source_guid."""
+    pipeline, context = _make_pipeline_and_context()
+
+    # Input records with no source_guid at all (possible in edge cases)
+    input_data = [
+        {"content": {"id": 1}},
+        {"content": {"id": 2}},
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"score": 0.9}, {"score": 0.8}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    # Should not crash — source_guid just won't be set by reattachment
+    assert results[0].status == ProcessingStatus.SUCCESS
+    assert len(results[0].data) == 2
+
+
+def test_file_tool_non_dict_output_items():
+    """Non-dict items in tool output don't crash source_guid reattachment."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+    ]
+
+    # Tool returns a non-dict item (string)
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(["just a string"], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    # Non-dict wrapped as {"content": {"value": ...}} — source_guid reattached
+    assert results[0].data[0]["source_guid"] == "sg-1"
+    assert results[0].data[0]["content"]["value"] == "just a string"
+
+
+def test_file_tool_many_to_one_source_mapping():
+    """FileUDFResult with many-to-one mapping propagates first parent's source_guid."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"q": "A"}},
+        {"source_guid": "sg-2", "content": {"q": "B"}},
+        {"source_guid": "sg-3", "content": {"q": "C"}},
+    ]
+
+    # Tool merges input[0] + input[1] → output[0], input[2] → output[1]
+    udf_result = FileUDFResult(
+        outputs=[{"merged": "AB"}, {"single": "C"}],
+        source_mapping={0: [0, 1], 1: 2},
+        input_count=3,
+    )
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(udf_result, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    # Many-to-one: first parent's source_guid used
+    assert result.data[0]["source_guid"] == "sg-1"
+    assert result.data[1]["source_guid"] == "sg-3"
+
+
+def test_file_tool_large_cardinality_expansion():
+    """1→N expansion: all outputs inherit the single input's source_guid."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-only", "content": {"nested": [1, 2, 3, 4, 5]}},
+    ]
+
+    # Tool explodes 1 input into 5 outputs
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"val": i} for i in range(5)], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    # All 5 outputs inherit the single input's source_guid (shared-source shortcut)
+    for item in results[0].data:
+        assert item["source_guid"] == "sg-only"
+
+
+# --- Hardening: _infer_source_mapping unit tests ---
+
+
+class TestInferSourceMapping:
+    """Direct unit tests for _infer_source_mapping logic."""
+
+    def test_identity_when_counts_match(self):
+        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+
+        result = _infer_source_mapping(
+            output_count=3,
+            input_data=[{"source_guid": "a"}, {"source_guid": "b"}, {"source_guid": "c"}],
+            action_name="test",
+        )
+        assert result == {0: 0, 1: 1, 2: 2}
+
+    def test_broadcast_when_shared_source_guid(self):
+        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+
+        result = _infer_source_mapping(
+            output_count=5,
+            input_data=[{"source_guid": "sg-shared"}, {"source_guid": "sg-shared"}],
+            action_name="test",
+        )
+        assert result == {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+
+    def test_fallback_when_ambiguous(self):
+        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+
+        result = _infer_source_mapping(
+            output_count=3,
+            input_data=[{"source_guid": "sg-1"}, {"source_guid": "sg-2"}],
+            action_name="test",
+        )
+        # Fallback: all map to first input
+        assert result == {0: 0, 1: 0, 2: 0}
+
+    def test_zero_output_returns_empty_mapping(self):
+        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+
+        result = _infer_source_mapping(
+            output_count=0,
+            input_data=[{"source_guid": "sg-1"}],
+            action_name="test",
+        )
+        assert result == {}
+
+    def test_zero_input_returns_identity_if_zero_output(self):
+        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+
+        result = _infer_source_mapping(
+            output_count=0,
+            input_data=[],
+            action_name="test",
+        )
+        assert result == {}
+
+    def test_input_without_source_guid_falls_to_broadcast(self):
+        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+
+        result = _infer_source_mapping(
+            output_count=3,
+            input_data=[{"content": "no guid"}, {"content": "also none"}],
+            action_name="test",
+        )
+        # No source_guids → empty set → len != 1 → falls to broadcast warning
+        assert result == {0: 0, 1: 0, 2: 0}
+
+
+# --- Hardening: _reattach_source_guid unit tests ---
+
+
+class TestReattachSourceGuid:
+    """Direct unit tests for _reattach_source_guid logic."""
+
+    def test_reattaches_from_mapping(self):
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [{"content": {"val": 1}}, {"content": {"val": 2}}]
+        mapping = {0: 0, 1: 1}
+        original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        assert structured[0]["source_guid"] == "sg-a"
+        assert structured[1]["source_guid"] == "sg-b"
+
+    def test_respects_existing_source_guid(self):
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [
+            {"content": {"val": 1}, "source_guid": "sg-already-set"},
+        ]
+        mapping = {0: 0}
+        original = [{"source_guid": "sg-input"}]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        assert structured[0]["source_guid"] == "sg-already-set"
+
+    def test_no_crash_on_none_mapping(self):
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [{"content": {"val": 1}}]
+        _reattach_source_guid(structured, None, [{"source_guid": "sg-1"}])
+        assert "source_guid" not in structured[0]
+
+    def test_no_crash_on_empty_original(self):
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [{"content": {"val": 1}}]
+        _reattach_source_guid(structured, {0: 0}, [])
+        assert "source_guid" not in structured[0]
+
+    def test_many_to_one_uses_first_parent(self):
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [{"content": {"merged": True}}]
+        mapping = {0: [0, 1, 2]}
+        original = [
+            {"source_guid": "sg-first"},
+            {"source_guid": "sg-second"},
+            {"source_guid": "sg-third"},
+        ]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        assert structured[0]["source_guid"] == "sg-first"
+
+    def test_out_of_bounds_index_skipped(self):
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [{"content": {"val": 1}}]
+        mapping = {0: 99}  # Out of bounds
+        original = [{"source_guid": "sg-only"}]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        # Out of bounds → not set (no crash)
+        assert "source_guid" not in structured[0]

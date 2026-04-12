@@ -202,9 +202,10 @@ class RequiredFieldsEnricher(Enricher):
 
         fm = FieldManager()
         for i, item in enumerate(result.data):
-            result.data[i] = fm.ensure_required_fields(
-                item, result.source_guid or "", context.action_name
-            )
+            # Prefer item-level source_guid (set by metadata reattachment in FILE mode)
+            # over result-level source_guid (which is None for FILE mode).
+            item_source_guid = item.get("source_guid") or result.source_guid or ""
+            result.data[i] = fm.ensure_required_fields(item, item_source_guid, context.action_name)
 
         return result
 
