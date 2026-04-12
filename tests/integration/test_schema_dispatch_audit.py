@@ -63,12 +63,6 @@ SAMPLE_JSON_SCHEMA: dict[str, Any] = {
     "required": ["title", "score"],
 }
 
-SAMPLE_INLINE_DICT: dict[str, Any] = {
-    "title": "string!",
-    "score": "number!",
-    "tags": "array[string]",
-}
-
 
 # ===================================================================
 # 1. Schema Resolution
@@ -85,7 +79,6 @@ class TestSchemaResolution:
         compiled, captured = compiler.compile(config, "openai")
 
         assert compiled is not None
-        # OpenAI format has name + schema wrapper
         assert isinstance(compiled, dict)
         assert "schema" in compiled
         assert compiled["schema"]["properties"]["title"]["type"] == "string"
@@ -125,7 +118,6 @@ class TestSchemaResolution:
         }
         compiled, _ = compiler.compile(config, "openai")
 
-        # Should have fields from inline (title, score, tags)
         assert "title" in compiled["schema"]["properties"]
         assert "score" in compiled["schema"]["properties"]
 
@@ -314,7 +306,6 @@ class TestVendorCompilation:
         vendors = ["openai", "anthropic", "gemini", "ollama", "groq", "mistral", "cohere"]
         for vendor in vendors:
             compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
-            # Each vendor should produce non-None output
             assert compiled is not None, f"{vendor} returned None"
 
     def test_gemini_format_not_just_properties(self):
@@ -461,7 +452,6 @@ class TestJsonModeInteraction:
         compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
         config = {"schema": SAMPLE_UNIFIED_SCHEMA, "name": "test", "json_mode": False}
         compiled, _ = compiler.compile(config, "openai")
-        # Compiler doesn't filter by json_mode
         assert compiled is not None
 
 
