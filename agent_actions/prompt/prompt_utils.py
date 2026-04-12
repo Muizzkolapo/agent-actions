@@ -86,7 +86,10 @@ class PromptUtils:
                 if agent_config and agent_config.get("add_dispatch"):
                     captured_results[function_name] = transformed_text
                 if transformed_text is None:
-                    transformed_text = "Error: No valid return from function."
+                    raise AgentActionsError(
+                        f"dispatch_task('{function_name}') returned None. "
+                        f"The function must return a value."
+                    )
                 text = text[:start] + str(transformed_text) + text[end:]
             except AgentActionsError:
                 # Let known exceptions pass through without wrapping

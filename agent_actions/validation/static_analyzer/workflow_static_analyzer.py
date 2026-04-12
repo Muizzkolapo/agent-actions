@@ -176,6 +176,10 @@ class WorkflowStaticAnalyzer:
         for warning in self._check_lineage_reachability():
             result.add_warning(warning)
 
+        # Step 4: Validate reprompt UDF references exist
+        for error in self._check_reprompt_udf_references():
+            result.add_error(error)
+
         return result
 
     def _build_graph(self) -> None:
@@ -1191,6 +1195,113 @@ class WorkflowStaticAnalyzer:
                         queue.append(dep)
 
         return False
+
+    def _check_reprompt_udf_references(self) -> list[StaticTypeError]:
+        """Validate that reprompt.validation UDF names reference discoverable functions.
+
+        Scans the project's tool directories for ``@reprompt_validation``-decorated
+        functions and checks that every ``reprompt.validation`` reference in the
+        workflow config matches a known function name.
+        """
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+
+        # Collect actions that reference a reprompt validation UDF.
+        udf_refs: list[tuple[str, str]] = []  # (action_name, udf_name)
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "unknown")
+            reprompt = action.get("reprompt")
+            if not isinstance(reprompt, dict):
+                continue
+            validation = reprompt.get("validation")
+            if isinstance(validation, str) and validation:
+                udf_refs.append((name, validation))
+
+        if not udf_refs:
+            return errors
+
+        # Discover available reprompt validation UDFs by scanning tool files
+        # for @reprompt_validation decorators via AST.
+        available_udfs = self._scan_reprompt_validation_udfs()
+        if available_udfs is None:
+            return errors
+
+        for action_name, udf_name in udf_refs:
+            if udf_name not in available_udfs:
+                hint_parts = []
+                if available_udfs:
+                    hint_parts.append(
+                        f"Available reprompt validators: {', '.join(sorted(available_udfs))}"
+                    )
+                hint_parts.append(
+                    "Define a function decorated with @reprompt_validation in your tools directory."
+                )
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"Action '{action_name}': reprompt.validation references "
+                            f"UDF '{udf_name}' which was not found in the project's "
+                            f"tool directories."
+                        ),
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="reprompt.validation",
+                            raw_reference=udf_name,
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="reprompt.validation",
+                        available_fields=available_udfs or set(),
+                        hint=" ".join(hint_parts),
+                    )
+                )
+
+        return errors
+
+    def _scan_reprompt_validation_udfs(self) -> set[str] | None:
+        """Scan tool directories for @reprompt_validation decorated functions.
+
+        Returns set of function names, or None if scanning is not possible
+        (e.g., no project_root configured).
+        """
+        import ast
+
+        from agent_actions.config.path_config import get_tool_dirs
+        from agent_actions.utils.path_utils import resolve_relative_to
+
+        project_root = self.schema_extractor.project_root
+        if not project_root or not project_root.exists():
+            return None
+
+        tool_dirs = get_tool_dirs(project_root)
+        found: set[str] = set()
+
+        for tool_dir in tool_dirs:
+            tool_path = resolve_relative_to(tool_dir, project_root)
+            if not tool_path.exists():
+                continue
+            for py_file in tool_path.rglob("*.py"):
+                try:
+                    tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+                except (SyntaxError, UnicodeDecodeError):
+                    continue
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.FunctionDef):
+                        continue
+                    for decorator in node.decorator_list:
+                        dec_name = ""
+                        if isinstance(decorator, ast.Name):
+                            dec_name = decorator.id
+                        elif isinstance(decorator, ast.Call):
+                            if isinstance(decorator.func, ast.Name):
+                                dec_name = decorator.func.id
+                            elif isinstance(decorator.func, ast.Attribute):
+                                dec_name = decorator.func.attr
+                        if dec_name == "reprompt_validation":
+                            found.add(node.name)
+
+        return found
 
     def _add_source_node(self) -> None:
         """Add the special source node for workflow input."""
