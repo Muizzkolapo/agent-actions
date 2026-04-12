@@ -309,6 +309,7 @@ class WorkflowDependencyOrchestrator:
                 workflow_path=str(upstream_dir),
                 workflow_name=upstream_workflow,
             )
+            upstream_backend.initialize()
         except Exception as e:
             logger.warning("Could not open upstream backend for %s: %s", upstream_workflow, e)
             return
