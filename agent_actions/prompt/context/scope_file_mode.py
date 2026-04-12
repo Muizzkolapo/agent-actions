@@ -211,9 +211,11 @@ def apply_observe_for_file_mode(
     if not resolved:
         return data
 
-    # Wildcard -> return all data unfiltered.
-    if any(field == "*" for _, field, _ in resolved):
-        return data
+    # Track which namespaces use wildcards (expanded per-record below).
+    wildcard_ns: set[str] = {ns for ns, field, _ in resolved if field == "*"}
+    # Qualify wildcard-expanded keys with namespace when multiple
+    # wildcards exist (prevents bare-key collisions across namespaces).
+    qualify_wildcards = len(wildcard_ns) > 1
 
     # Determine which namespaces are "input sources" (data in each record).
     # Use fan-in-aware inference so non-primary deps are loaded historically.
@@ -272,9 +274,7 @@ def apply_observe_for_file_mode(
     # namespace as cross-namespace and trigger spurious historical
     # loads whose stale results would shadow live record data.
     needed_ns: set = set()
-    for ns, field, _ in resolved:
-        if field == "*":
-            continue
+    for ns, _field, _ in resolved:
         if ns == "source":
             needed_ns.add(ns)
         elif has_reliable_ns and ns not in input_source_names:
@@ -327,6 +327,18 @@ def apply_observe_for_file_mode(
 
         ordered: dict[str, Any] = {}
         for ns, field, output_key in resolved:
+            if field == "*":
+                ns_data = None
+                if ns in cross_ns_data:
+                    ns_data = cross_ns_data[ns]
+                elif not has_reliable_ns or ns in input_source_names:
+                    ns_data = content
+                if ns_data:
+                    for f, v in ns_data.items():
+                        key = f"{ns}.{f}" if qualify_wildcards else f
+                        ordered[key] = v
+                continue
+
             # Cross-namespace data takes priority for non-input namespaces.
             if ns in cross_ns_data and field in cross_ns_data[ns]:
                 ordered[output_key] = cross_ns_data[ns][field]
