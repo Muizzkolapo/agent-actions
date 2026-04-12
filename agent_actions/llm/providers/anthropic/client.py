@@ -60,7 +60,7 @@ class AnthropicClient(BaseClient):
     @staticmethod
     def _build_api_args(
         model_name: str,
-        prompt_dedent: str,
+        messages: list[dict[str, Any]],
         schema: dict[str, Any] | None,
         agent_config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -76,11 +76,13 @@ class AnthropicClient(BaseClient):
 
         api_args: dict[str, Any] = {
             "model": model_name,
-            "messages": [{"role": "user", "content": prompt_dedent}],
+            "messages": messages,
             **params,
         }
         if schema is not None:
             api_args["tools"] = schema
+        if cfg.get("enable_prompt_caching", False):
+            api_args["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
         return api_args
 
     @staticmethod
@@ -125,12 +127,18 @@ class AnthropicClient(BaseClient):
         model_name: str = agent_config[MODEL_NAME_KEY]
         client = anthropic.Anthropic(api_key=api_key)
         json_mode = schema is not None
+        enable_caching = agent_config.get("enable_prompt_caching", False)
         envelope = MessageBuilder.build(
-            "anthropic", prompt_config, context_data, schema=schema, json_mode=json_mode
+            "anthropic",
+            prompt_config,
+            context_data,
+            schema=schema,
+            json_mode=json_mode,
+            enable_prompt_caching=enable_caching,
         )
-        prompt_dedent: str = envelope.messages[0].content
+        messages = envelope.to_dicts()
 
-        api_args = AnthropicClient._build_api_args(model_name, prompt_dedent, schema, agent_config)
+        api_args = AnthropicClient._build_api_args(model_name, messages, schema, agent_config)
 
         request_id = str(uuid.uuid4())
 
