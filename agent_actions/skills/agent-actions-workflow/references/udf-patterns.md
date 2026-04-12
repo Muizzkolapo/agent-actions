@@ -74,14 +74,14 @@ def process_merged(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 ## FILE Granularity
 
-Receives ALL records at once as a list. Unlike Record mode, the content wrapper is **preserved** — you must unwrap each item with `.get("content", record)`. Preserve `source_guid` for lineage:
+Receives ALL records at once as a list. Unlike Record mode, the content wrapper is **preserved** — you must unwrap each item with `.get("content", record)`. The framework handles all metadata (`source_guid`, lineage) automatically:
 
 ```python
-from agent_actions import udf_tool, FileUDFResult
+from agent_actions import udf_tool
 from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
-def run_dedup(data: list[dict]) -> FileUDFResult:
+def run_dedup(data: list[dict]) -> list[dict]:
     """FILE mode: each item still has {"content": {...}, "source_guid": "..."}."""
     seen = {}
     outputs = []
@@ -91,13 +91,12 @@ def run_dedup(data: list[dict]) -> FileUDFResult:
         fact = content.get("fact", "")
         if fact not in seen:
             seen[fact] = True
-            outputs.append({
-                **content,
-                "source_guid": record.get("source_guid"),
-            })
+            outputs.append(content)
 
-    return FileUDFResult(outputs=outputs, input_count=len(data))
+    return outputs
 ```
+
+Tools return business data only — never handle `source_guid`, `lineage`, or `node_id`. The framework propagates these automatically based on the input/output cardinality.
 
 ## How Observed Fields Arrive in UDFs
 

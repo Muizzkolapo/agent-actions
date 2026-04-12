@@ -99,41 +99,32 @@ def run_dedup(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 Use FILE for: Aggregation, deduplication, clustering, cross-record analysis.
 
-## FileUDFResult for FILE-Mode Tools
+## FILE-Mode Tools — Metadata is Automatic
 
-`FileUDFResult` wraps FILE-mode output with optional metadata. The runtime
-unwraps it to `.outputs` before structuring records.
-
-**Lineage resolution:** When `source_mapping` is provided, the runtime uses it
-to resolve each output's parent record by array index into the input data.
-This is the recommended approach for FILE-mode tools that filter, dedup, or
-merge records — it correctly handles multiple input records sharing the same
-`source_guid` (e.g. after a flatten step). When `source_mapping` is omitted,
-the runtime falls back to matching by `source_guid`.
+FILE-mode tools return business data only. The framework handles all metadata
+propagation (`source_guid`, lineage, `node_id`) automatically. Tools never
+need to import `FileUDFResult`, handle `source_guid`, or think about lineage.
 
 ```python
-from agent_actions import FileUDFResult
-
 @udf_tool(granularity=Granularity.FILE)
-def dedup_with_lineage(data: list[dict]) -> FileUDFResult:
+def dedup_tool(data: list[dict]) -> list[dict]:
     seen = {}
     outputs = []
 
     for record in data:
-        fact = record.get("content", record).get("fact", "")
+        content = record.get("content", record)
+        fact = content.get("fact", "")
         if fact not in seen:
             seen[fact] = True
-            # Preserve source_guid so the framework can resolve lineage
-            outputs.append({
-                **record.get("content", record),
-                "source_guid": record.get("source_guid"),
-            })
+            outputs.append(content)
 
-    return FileUDFResult(
-        outputs=outputs,
-        input_count=len(data),
-    )
+    return outputs
 ```
+
+The framework infers which inputs produced which outputs based on cardinality
+and `source_guid` matching. For N→M transforms where the count changes, the
+framework logs a warning and falls back to broadcasting the first input's
+metadata to all outputs.
 
 ## Nested TypedDicts for Complex Output
 
