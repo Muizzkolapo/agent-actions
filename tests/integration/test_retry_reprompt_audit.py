@@ -986,8 +986,8 @@ class TestBatchRetry:
         assert deserialized[1].recovery_metadata is None
         assert deserialized[2].recovery_metadata.retry.succeeded is False
 
-    def test_failed_result_error_field_roundtrip(self):
-        """BatchResult with success=False and error message survives serialization."""
+    def test_failed_result_with_recovery_metadata_roundtrip(self):
+        """BatchResult with success=False and exhausted retry metadata round-trips."""
         original = BatchResult(
             custom_id="err_001",
             content=None,
