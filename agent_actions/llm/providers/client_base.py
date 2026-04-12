@@ -5,12 +5,15 @@ Provides common functionality for all LLM clients including API key management,
 data redaction, and invocation dispatch to JSON or non-JSON modes.
 """
 
+import logging
 import os
 import re
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
 from agent_actions.utils.constants import API_KEY_KEY, JSON_MODE_KEY
+
+logger = logging.getLogger(__name__)
 
 
 class BaseClient(ABC):
@@ -178,4 +181,11 @@ class BaseClient(ABC):
         json_mode: bool = agent_config.get(JSON_MODE_KEY, True)
         if json_mode:
             return cls.call_json(api_key, agent_config, prompt_config, context_data, schema)
+        if schema is not None:
+            logger.warning(
+                "json_mode=false but schema was compiled for action '%s'. "
+                "The schema will not be sent to the LLM. "
+                "Set json_mode=true to enable schema enforcement.",
+                agent_config.get("agent_type", "unknown"),
+            )
         return cls.call_non_json(api_key, agent_config, prompt_config, context_data)
