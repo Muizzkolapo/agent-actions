@@ -48,18 +48,13 @@ class ArtifactLinker:
         if source_action:
             # Link to the specific action's output directory.
             action_dir = source_target / source_action
-            if action_dir.is_dir():
+            if action_dir.is_dir() and any(action_dir.iterdir()):
                 latest_node = action_dir
             else:
-                # Action output is in SQLite (no filesystem directory).
-                # Create a virtual directory so the manifest path encodes
-                # the action name — the runner uses path.name to look up
-                # data in the storage backend.
+                # Action output is in SQLite — export it to JSON files so
+                # the downstream reads normal filesystem input.
                 action_dir.mkdir(parents=True, exist_ok=True)
-                logger.debug(
-                    "Created virtual directory for SQLite-backed action: %s",
-                    action_dir,
-                )
+                self._export_from_db(source_target, source_action, action_dir)
                 latest_node = action_dir
         else:
             latest_node = self.find_latest_node_dir(source_target)
@@ -142,6 +137,41 @@ class ArtifactLinker:
             return True
         except (OSError, ValueError):
             return False
+
+    @staticmethod
+    def _export_from_db(target_dir: Path, action_name: str, output_dir: Path) -> None:
+        """Export an action's target data from SQLite to JSON files on disk.
+
+        This allows the downstream workflow to read the upstream action's
+        output as normal filesystem input — no cross-workflow storage
+        backend needed.
+        """
+        db_files = list(target_dir.glob("*.db"))
+        if not db_files:
+            logger.debug("No DB file found in %s — skipping export", target_dir)
+            return
+
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        db_path = db_files[0]
+        backend = SQLiteBackend(db_path=str(db_path), workflow_name=db_path.stem)
+        backend.initialize()
+
+        try:
+            target_files = backend.list_target_files(action_name)
+            if not target_files:
+                logger.debug("No target data for action '%s' in %s", action_name, db_path)
+                return
+
+            for relative_path in target_files:
+                data = backend.read_target(action_name, relative_path)
+                out_file = output_dir / relative_path
+                out_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(out_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                logger.debug("Exported %s/%s → %s", action_name, relative_path, out_file)
+        except Exception as e:
+            logger.warning("Failed to export action '%s' from DB: %s", action_name, e)
 
     @staticmethod
     def read_manifest(agent_io_dir: Path) -> dict[str, Any] | None:
