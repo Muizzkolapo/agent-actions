@@ -174,8 +174,10 @@ class TestBuildApiArgs:
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         messages = [{"role": "user", "content": "test"}]
-        config = _make_agent_config(enable_prompt_caching=True)
-        args = AnthropicClient._build_api_args("claude-sonnet-4-20250514", messages, None, config)
+        config = _make_agent_config()
+        args = AnthropicClient._build_api_args(
+            "claude-sonnet-4-20250514", messages, None, config, enable_prompt_caching=True
+        )
         assert "extra_headers" in args
         assert args["extra_headers"][BETA_HEADER_KEY] == BETA_HEADER_VALUE
 
@@ -183,15 +185,17 @@ class TestBuildApiArgs:
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         messages = [{"role": "user", "content": "test"}]
-        config = _make_agent_config(enable_prompt_caching=False)
-        args = AnthropicClient._build_api_args("claude-sonnet-4-20250514", messages, None, config)
+        config = _make_agent_config()
+        args = AnthropicClient._build_api_args(
+            "claude-sonnet-4-20250514", messages, None, config, enable_prompt_caching=False
+        )
         assert "extra_headers" not in args
 
-    def test_caching_missing_from_config_no_header(self):
+    def test_caching_default_no_header(self):
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         messages = [{"role": "user", "content": "test"}]
-        config = {"model_name": "claude-sonnet-4-20250514"}
+        config = _make_agent_config()
         args = AnthropicClient._build_api_args("claude-sonnet-4-20250514", messages, None, config)
         assert "extra_headers" not in args
 
@@ -207,16 +211,20 @@ class TestBuildApiArgs:
                 ],
             }
         ]
-        config = _make_agent_config(enable_prompt_caching=True)
-        args = AnthropicClient._build_api_args("claude-sonnet-4-20250514", structured, None, config)
+        config = _make_agent_config()
+        args = AnthropicClient._build_api_args(
+            "claude-sonnet-4-20250514", structured, None, config, enable_prompt_caching=True
+        )
         assert args["messages"] == structured
 
     def test_schema_still_added_as_tools(self):
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         messages = [{"role": "user", "content": "test"}]
-        config = _make_agent_config(enable_prompt_caching=True)
-        args = AnthropicClient._build_api_args("claude-sonnet-4-20250514", messages, SCHEMA, config)
+        config = _make_agent_config()
+        args = AnthropicClient._build_api_args(
+            "claude-sonnet-4-20250514", messages, SCHEMA, config, enable_prompt_caching=True
+        )
         assert args["tools"] == SCHEMA
         assert "extra_headers" in args
 

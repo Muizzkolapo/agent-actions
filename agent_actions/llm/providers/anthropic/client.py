@@ -27,6 +27,8 @@ from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
+_PROMPT_CACHING_BETA_HEADER = {"anthropic-beta": "prompt-caching-2024-07-31"}
+
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="anthropic",
     rate_limit_types=(anthropic.RateLimitError,),
@@ -63,6 +65,8 @@ class AnthropicClient(BaseClient):
         messages: list[dict[str, Any]],
         schema: dict[str, Any] | None,
         agent_config: dict[str, Any] | None = None,
+        *,
+        enable_prompt_caching: bool = False,
     ) -> dict[str, Any]:
         """Build API arguments for the Anthropic call."""
         cfg = agent_config or {}
@@ -81,8 +85,8 @@ class AnthropicClient(BaseClient):
         }
         if schema is not None:
             api_args["tools"] = schema
-        if cfg.get("enable_prompt_caching", False):
-            api_args["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
+        if enable_prompt_caching:
+            api_args["extra_headers"] = _PROMPT_CACHING_BETA_HEADER
         return api_args
 
     @staticmethod
@@ -138,7 +142,9 @@ class AnthropicClient(BaseClient):
         )
         messages = envelope.to_dicts()
 
-        api_args = AnthropicClient._build_api_args(model_name, messages, schema, agent_config)
+        api_args = AnthropicClient._build_api_args(
+            model_name, messages, schema, agent_config, enable_prompt_caching=enable_caching
+        )
 
         request_id = str(uuid.uuid4())
 
