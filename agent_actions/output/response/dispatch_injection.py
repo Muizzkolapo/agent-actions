@@ -47,18 +47,25 @@ def _inject_functions_into_schema(
             for item in schema
         ]
     if isinstance(schema, str):
-        # Only process strings containing dispatch_task
         if "dispatch_task(" in schema:
-            from agent_actions.prompt.prompt_utils import PromptUtils
+            try:
+                from agent_actions.prompt.prompt_utils import PromptUtils
 
-            return PromptUtils.process_dispatch_in_text(
-                schema,
-                tools_path=tools_path or "",
-                context_data_str=context_data_str or "",
-                agent_config=agent_config,
-                captured_results=captured_results,
-                preserve_type_on_exact_match=True,
-            )
+                return PromptUtils.process_dispatch_in_text(
+                    schema,
+                    tools_path=tools_path or "",
+                    context_data_str=context_data_str or "",
+                    agent_config=agent_config,
+                    captured_results=captured_results,
+                    preserve_type_on_exact_match=True,
+                )
+            except (ValueError, TypeError, KeyError, ConfigurationError) as e:
+                logger.warning(
+                    "dispatch_task resolution failed in schema — the unresolved string "
+                    "will be passed to the LLM vendor as-is, which may cause API errors: %s",
+                    e,
+                )
+                return schema
         return schema
     return schema
 

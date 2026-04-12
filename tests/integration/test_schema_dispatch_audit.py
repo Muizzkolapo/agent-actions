@@ -317,6 +317,63 @@ class TestVendorCompilation:
         assert "required" in inner, "Gemini schema.schema must include 'required'"
         assert inner["type"] == "object"
 
+    def test_gemini_empty_schema(self):
+        """Gemini with zero fields produces valid structure with empty properties."""
+        schema = {"name": "empty", "fields": []}
+        compiled = compile_unified_schema(schema, "gemini")
+        inner = compiled["schema"]
+        assert inner["type"] == "object"
+        assert inner["properties"] == {}
+        assert inner["required"] == []
+
+    def test_gemini_no_required_fields(self):
+        """Gemini with all optional fields has empty required list, not missing key."""
+        schema = {
+            "name": "all_optional",
+            "fields": [
+                {"id": "note", "type": "string", "required": False},
+                {"id": "tag", "type": "string", "required": False},
+            ],
+        }
+        compiled = compile_unified_schema(schema, "gemini")
+        inner = compiled["schema"]
+        assert inner["required"] == []
+        assert "note" in inner["properties"]
+        assert "tag" in inner["properties"]
+
+    def test_gemini_array_schema(self):
+        """Gemini compiles array-type schema correctly."""
+        array_schema = {
+            "name": "facts",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
+        }
+        compiled = compile_unified_schema(array_schema, "gemini")
+        inner = compiled["schema"]
+        assert inner["type"] == "object"
+        assert "facts" in inner["properties"]
+
+    def test_gemini_regression_old_format_rejected(self):
+        """Regression guard: Gemini schema.schema must NOT be just the properties dict.
+
+        Old broken format: {"name": "...", "schema": {"title": {"type": "string"}}}
+        Fixed format:      {"name": "...", "schema": {"type": "object", "properties": {...}, "required": [...]}}
+        """
+        compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "gemini")
+        inner = compiled["schema"]
+        # The old format would have field names as direct keys of schema
+        # (e.g., inner["title"] == {"type": "string"})
+        # The fixed format wraps them under "properties"
+        assert "title" not in inner, (
+            "Gemini schema has raw field as top-level key (old broken format)"
+        )
+        assert "properties" in inner, "Gemini schema missing 'properties' wrapper"
+        assert "type" in inner, "Gemini schema missing 'type' key"
+
     def test_array_schema_conversion_then_compilation(self):
         """Array-type JSON Schema is converted to unified format before compilation."""
         array_schema = {
@@ -508,6 +565,106 @@ class TestDispatchInSchema:
         result = _inject_functions_into_schema(schema, None, None, None, {})
         assert result["type"] == "string"
         assert result["description"] == "A text field"
+
+    @patch("agent_actions.output.response.dispatch_injection.logger")
+    def test_unresolved_dispatch_passes_through_to_vendor(self, mock_logger):
+        """Unresolved dispatch_task string flows through compilation without crash.
+
+        This is the critical unhappy path: dispatch_task fails → string passes
+        through → vendor compiler receives it. The compiled output should contain
+        the literal string, not crash.
+        """
+        schema_with_dispatch = {
+            "name": "test",
+            "fields": [
+                {"id": "static_field", "type": "string", "required": True},
+                {"id": "dynamic_field", "type": 'dispatch_task("missing_fn")', "required": True},
+            ],
+        }
+        # _inject_functions_into_schema processes the dispatch_task string
+        # and returns it as-is when resolution fails
+        processed = _inject_functions_into_schema(schema_with_dispatch, None, None, None, {})
+        # The literal string survives into the schema
+        assert processed["fields"][1]["type"] == 'dispatch_task("missing_fn")'
+
+        # Vendor compilation still succeeds — it doesn't validate type values
+        compiled = compile_unified_schema(processed, "openai")
+        assert compiled is not None
+        props = compiled["schema"]["properties"]
+        assert props["dynamic_field"]["type"] == 'dispatch_task("missing_fn")'
+
+    @patch("agent_actions.output.response.dispatch_injection.logger")
+    def test_multiple_dispatch_failures_all_warned(self, mock_logger):
+        """Multiple failing dispatch_task calls each log a WARNING."""
+        schema = {
+            "field_a": 'dispatch_task("missing_a")',
+            "field_b": 'dispatch_task("missing_b")',
+            "field_c": "regular_string",
+        }
+        result = _inject_functions_into_schema(schema, None, None, None, {})
+        # Both dispatch strings survive (unresolved)
+        assert 'dispatch_task("missing_a")' in result["field_a"]
+        assert 'dispatch_task("missing_b")' in result["field_b"]
+        # Regular strings untouched
+        assert result["field_c"] == "regular_string"
+
+    @patch("agent_actions.output.response.dispatch_injection.logger")
+    def test_dispatch_task_in_nested_positions(self, mock_logger):
+        """dispatch_task in nested dict/list positions is recursively processed."""
+        schema = {
+            "outer": {
+                "inner": 'dispatch_task("nested_fn")',
+                "list_field": ['dispatch_task("list_fn")', "normal"],
+            }
+        }
+        result = _inject_functions_into_schema(schema, None, None, None, {})
+        # Nested dispatch_task strings survive (unresolved but caught)
+        assert 'dispatch_task("nested_fn")' in result["outer"]["inner"]
+        assert 'dispatch_task("list_fn")' in result["outer"]["list_field"][0]
+        assert result["outer"]["list_field"][1] == "normal"
+
+    @patch("agent_actions.output.response.dispatch_injection.logger")
+    def test_dispatch_failure_full_pipeline(self, mock_logger):
+        """Full path: dispatch fails → WARNING → compiler produces output → all vendors handle it."""
+        schema = {
+            "name": "with_dispatch",
+            "fields": [
+                {"id": "resolved", "type": "string", "required": True},
+                {"id": "broken", "type": 'dispatch_task("no_such_fn")', "required": False},
+            ],
+        }
+        compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
+        config = {"schema": schema, "name": "test_action"}
+
+        for vendor in ["openai", "anthropic", "gemini", "ollama", "groq", "mistral", "cohere"]:
+            compiled, _ = compiler.compile(config, vendor)
+            assert compiled is not None, (
+                f"{vendor} failed to compile schema with unresolved dispatch_task"
+            )
+
+
+# ===================================================================
+# 5b. Dispatch Unhappy Path — Hardening
+# ===================================================================
+
+
+class TestDispatchWarningContent:
+    """Verify WARNING messages contain actionable information."""
+
+    @patch("agent_actions.output.response.dispatch_injection.logger")
+    def test_warning_contains_function_name(self, mock_logger):
+        """WARNING message includes the failed function name for debugging."""
+        _resolve_dispatch_in_schema('dispatch_task("calculate_score")', None, "{}", {}, {})
+        mock_logger.warning.assert_called_once()
+        msg = str(mock_logger.warning.call_args)
+        assert "calculate_score" in msg or "dispatch_task" in msg
+
+    @patch("agent_actions.output.response.dispatch_injection.logger")
+    def test_warning_mentions_vendor_consequence(self, mock_logger):
+        """WARNING message explains the consequence (passed to vendor as-is)."""
+        _resolve_dispatch_in_schema('dispatch_task("missing")', None, "{}", {}, {})
+        msg = str(mock_logger.warning.call_args)
+        assert "vendor" in msg.lower() or "as-is" in msg.lower()
 
 
 # ===================================================================
@@ -893,3 +1050,21 @@ class TestFullPipelineIntegration:
         report = validate_output_against_schema(bad_output, schema, "test")
         assert not report.is_compliant
         assert "text" in report.type_errors
+
+    def test_malformed_schema_field_missing_type_raises(self):
+        """Schema field missing 'type' key raises during compilation."""
+        schema = {
+            "name": "bad",
+            "fields": [{"id": "x"}],  # no 'type' key
+        }
+        with pytest.raises(KeyError):
+            compile_unified_schema(schema, "openai")
+
+    def test_schema_field_missing_id_raises(self):
+        """Schema field missing both 'id' and 'name' raises during compilation."""
+        schema = {
+            "name": "bad",
+            "fields": [{"type": "string"}],  # no 'id' or 'name'
+        }
+        with pytest.raises(KeyError):
+            compile_unified_schema(schema, "openai")
