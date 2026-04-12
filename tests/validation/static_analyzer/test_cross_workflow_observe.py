@@ -243,6 +243,132 @@ class TestCrossWorkflowObserve:
         )
 
 
+class TestCrossWorkflowFromPydanticPath:
+    """Cross-workflow detection when config comes from Pydantic (dict deps stripped).
+
+    When the coordinator runs a downstream workflow, it passes action_configs
+    through build_workflow_config(). Pydantic strips dict deps but injects
+    _has_cross_workflow_deps=True. The analyzer must detect cross-workflow
+    actions from context_scope refs on flagged actions.
+    """
+
+    def test_flag_based_detection_observe(self):
+        """_has_cross_workflow_deps flag + observe ref → cross-workflow detected."""
+        config = {
+            "name": "downstream_wf",
+            "actions": [
+                {
+                    "name": "first_action",
+                    "kind": "tool",
+                    "_has_cross_workflow_deps": True,
+                    "dependencies": [],
+                    "context_scope": {"observe": ["upstream_action.*"]},
+                },
+            ],
+        }
+        result = analyze_workflow(config)
+        errors = [e for e in result.errors if "upstream_action" in e.message]
+        assert len(errors) == 0, (
+            f"Flag-based cross-workflow ref raised errors: {[e.message for e in errors]}"
+        )
+
+    def test_flag_based_detection_passthrough(self):
+        """_has_cross_workflow_deps flag + passthrough ref → cross-workflow detected."""
+        config = {
+            "name": "downstream_wf",
+            "actions": [
+                {
+                    "name": "first_action",
+                    "kind": "tool",
+                    "_has_cross_workflow_deps": True,
+                    "dependencies": [],
+                    "context_scope": {
+                        "observe": ["source.*"],
+                        "passthrough": ["upstream_action.field_x"],
+                    },
+                },
+            ],
+        }
+        result = analyze_workflow(config)
+        errors = [e for e in result.errors if "upstream_action" in e.message]
+        assert len(errors) == 0
+
+    def test_flag_not_set_still_rejects_unknown(self):
+        """Without flag, unknown action in observe is still rejected."""
+        config = {
+            "name": "downstream_wf",
+            "actions": [
+                {
+                    "name": "first_action",
+                    "kind": "tool",
+                    "dependencies": [],
+                    "context_scope": {"observe": ["unknown_action.*"]},
+                },
+            ],
+        }
+        result = analyze_workflow(config)
+        errors = [e for e in result.errors if "unknown_action" in e.message]
+        assert len(errors) >= 1, "Unknown action without flag should be rejected"
+
+    def test_flag_does_not_skip_local_action_refs(self):
+        """Flag-based detection only adds non-local actions to cross-workflow set."""
+        config = {
+            "name": "downstream_wf",
+            "actions": [
+                {
+                    "name": "local_step",
+                    "kind": "tool",
+                    "context_scope": {"observe": ["source.*"]},
+                    "schema": {
+                        "type": "object",
+                        "properties": {"val": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "consumer",
+                    "kind": "tool",
+                    "_has_cross_workflow_deps": True,
+                    "dependencies": ["local_step"],
+                    "context_scope": {
+                        "observe": ["local_step.val", "remote_action.*"],
+                    },
+                },
+            ],
+        }
+        result = analyze_workflow(config)
+        # remote_action should be skipped (cross-workflow)
+        remote_errors = [e for e in result.errors if "remote_action" in e.message]
+        assert len(remote_errors) == 0
+        # local_step.val should be validated normally (not skipped)
+        # (no error expected since local_step has val in schema)
+
+    def test_mixed_raw_and_flag_paths(self):
+        """Config with both raw dict deps AND flag — both paths contribute."""
+        config = {
+            "name": "downstream_wf",
+            "actions": [
+                {
+                    "name": "action_with_raw_dep",
+                    "dependencies": [
+                        {"workflow": "wf_a", "action": "raw_remote"},
+                    ],
+                    "context_scope": {"observe": ["raw_remote.*"]},
+                },
+                {
+                    "name": "action_with_flag",
+                    "_has_cross_workflow_deps": True,
+                    "dependencies": [],
+                    "context_scope": {"observe": ["flag_remote.*"]},
+                },
+            ],
+        }
+        result = analyze_workflow(config)
+        raw_errors = [e for e in result.errors if "raw_remote" in e.message]
+        flag_errors = [e for e in result.errors if "flag_remote" in e.message]
+        assert len(raw_errors) == 0, "Raw dict dep path failed"
+        assert len(flag_errors) == 0, "Flag-based path failed"
+
+
 class TestTypeCheckerCrossWorkflow:
     """Direct type checker tests with cross_workflow_actions set."""
 

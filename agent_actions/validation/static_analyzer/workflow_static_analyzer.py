@@ -196,10 +196,11 @@ class WorkflowStaticAnalyzer:
         if self._built:
             return
 
-        # Collect cross-workflow action names from raw configs before
-        # Pydantic strips dict deps.  These actions are resolved at runtime
+        # Collect cross-workflow action names.  These are resolved at runtime
         # and must be excluded from static "does not exist" checks.
         actions = self.workflow_config.get("actions", [])
+
+        # Pass 1: scan raw dict deps (works when config comes from YAML directly).
         for action_config in actions:
             if not isinstance(action_config, dict):
                 continue
@@ -210,6 +211,24 @@ class WorkflowStaticAnalyzer:
                         action_name = dep.get("action")
                         if action_name:
                             self._cross_workflow_actions.add(action_name)
+
+        # Pass 2: detect from _has_cross_workflow_deps flag (works when config
+        # comes from Pydantic-parsed action_configs where dict deps are stripped).
+        all_action_names = {a.get("name") for a in actions if isinstance(a, dict) and a.get("name")}
+        for action_config in actions:
+            if not isinstance(action_config, dict):
+                continue
+            if not action_config.get("_has_cross_workflow_deps"):
+                continue
+            context_scope = action_config.get("context_scope", {})
+            if not isinstance(context_scope, dict):
+                continue
+            for directive in ("observe", "passthrough"):
+                for ref in context_scope.get(directive, []):
+                    if isinstance(ref, str) and "." in ref:
+                        ns_name = ref.split(".", 1)[0]
+                        if ns_name not in all_action_names and ns_name not in SPECIAL_NAMESPACES:
+                            self._cross_workflow_actions.add(ns_name)
 
         # Add special source node (always available)
         self._add_source_node()
