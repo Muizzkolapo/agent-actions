@@ -7,6 +7,8 @@ Handles recursive dispatch_task() resolution and injection into schema structure
 import logging
 from typing import Any
 
+from agent_actions.errors import AgentActionsError
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,18 +47,25 @@ def _inject_functions_into_schema(
             for item in schema
         ]
     if isinstance(schema, str):
-        # Only process strings containing dispatch_task
         if "dispatch_task(" in schema:
-            from agent_actions.prompt.prompt_utils import PromptUtils
+            try:
+                from agent_actions.prompt.prompt_utils import PromptUtils
 
-            return PromptUtils.process_dispatch_in_text(
-                schema,
-                tools_path=tools_path or "",
-                context_data_str=context_data_str or "",
-                agent_config=agent_config,
-                captured_results=captured_results,
-                preserve_type_on_exact_match=True,
-            )
+                return PromptUtils.process_dispatch_in_text(
+                    schema,
+                    tools_path=tools_path or "",
+                    context_data_str=context_data_str or "",
+                    agent_config=agent_config,
+                    captured_results=captured_results,
+                    preserve_type_on_exact_match=True,
+                )
+            except (ValueError, TypeError, KeyError, AgentActionsError) as e:
+                logger.warning(
+                    "dispatch_task resolution failed in schema — the unresolved string "
+                    "will be passed to the LLM vendor as-is, which may cause API errors: %s",
+                    e,
+                )
+                return schema
         return schema
     return schema
 
@@ -95,6 +104,10 @@ def _resolve_dispatch_in_schema(
             captured_results=captured_results,
             preserve_type_on_exact_match=True,
         )
-    except (ValueError, TypeError, KeyError) as e:
-        logger.debug("dispatch_task resolution failed, deferring to downstream: %s", e)
+    except (ValueError, TypeError, KeyError, AgentActionsError) as e:
+        logger.warning(
+            "dispatch_task resolution failed in schema — the unresolved string "
+            "will be passed to the LLM vendor as-is, which may cause API errors: %s",
+            e,
+        )
         return schema
