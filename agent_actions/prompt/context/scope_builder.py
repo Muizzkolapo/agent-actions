@@ -170,6 +170,22 @@ def build_field_context_with_history(
 
         # 2a. INPUT SOURCES - Data is already in current_item (the file being processed)
         # Put it under the action name so prompts can reference {{ action_name.field }}
+        #
+        # Cross-workflow first actions: input_sources is empty (cross-workflow refs
+        # removed by scope_inference) but current_item has the upstream data from
+        # the exported JSON. Expose all content fields at the top level so tool
+        # functions receive them directly.
+        has_cross_wf = bool(agent_config and agent_config.get("_has_cross_workflow_deps"))
+        if not input_sources and has_cross_wf and current_item:
+            input_data = _extract_content_data(current_item)
+            if input_data:
+                field_context.update(input_data)
+                logger.debug(
+                    "[CROSS-WORKFLOW] Action '%s': injected %d fields from upstream input",
+                    agent_name,
+                    len(input_data),
+                )
+
         if input_sources and current_item:
             input_data = _extract_content_data(current_item)
 
