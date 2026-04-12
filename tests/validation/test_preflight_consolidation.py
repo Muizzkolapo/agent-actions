@@ -342,7 +342,7 @@ class TestRecoveryValidation:
         assert any("reprompt" in e.lower() and "on_schema_mismatch" in e.lower() for e in errors)
 
     def test_on_schema_mismatch_reprompt_with_reprompt_config_passes(self):
-        """on_schema_mismatch: reprompt with reprompt block passes validation."""
+        """on_schema_mismatch: reprompt with reprompt block and schema passes validation."""
         errors, _ = _validate_entry(
             {
                 "name": "test",
@@ -350,6 +350,7 @@ class TestRecoveryValidation:
                 "model_name": "gpt-4",
                 "on_schema_mismatch": "reprompt",
                 "reprompt": {"validation": "my_validator"},
+                "schema": {"summary": "string"},
             }
         )
         mismatch_errors = [
