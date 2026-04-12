@@ -454,7 +454,8 @@ class ActionRunner:
     ) -> str:
         """Run an action with the appropriate strategy based on its position in the workflow."""
         dependencies = action_config.get("dependencies", [])
-        if not dependencies:
+        has_cross_workflow = action_config.get("_has_cross_workflow_deps", False)
+        if not dependencies and not has_cross_workflow:
             strategy_name = "initial"
         else:
             strategy_name = "intermediate"

@@ -77,6 +77,19 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
     action_configs = manager.get_all_agent_configs_as_dicts()
     action_indices = {action: i for i, action in enumerate(execution_order)}
 
+    # Detect which actions had cross-workflow dependencies (dict deps that
+    # Pydantic strips).  The runner needs this flag to select the correct
+    # strategy — cross-workflow first actions are intermediate, not initial.
+    _cross_wf_actions: set[str] = set()
+    for raw_action in (manager.user_config or {}).get("actions", []):
+        if not isinstance(raw_action, dict):
+            continue
+        deps = raw_action.get("depends_on") or raw_action.get("dependencies", [])
+        if isinstance(deps, list) and any(isinstance(d, dict) for d in deps):
+            name = raw_action.get("name")
+            if name:
+                _cross_wf_actions.add(name)
+
     # Add idx and workflow_config_path fields to each action config
     for action_name, action_config in action_configs.items():
         # Skip None configs (defensive check for malformed dictionaries)
@@ -88,6 +101,8 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         action_config["workflow_config_path"] = config.paths.constructor_path
         if config.project_root:
             action_config["_project_root"] = str(config.project_root)
+        if action_name in _cross_wf_actions:
+            action_config["_has_cross_workflow_deps"] = True
 
     return WorkflowMetadata(
         agent_name=manager.agent_name,
