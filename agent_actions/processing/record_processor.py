@@ -173,12 +173,10 @@ class RecordProcessor:
                 f"guard_{prepared.guard_behavior}",
                 input_record,
             )
-            result = ProcessingResult.unprocessed(
-                data=[tombstone],
+            result = ProcessingResult.skipped(
+                passthrough_data=tombstone,
                 reason=f"guard_{prepared.guard_behavior}",
                 source_guid=source_guid,
-                source_snapshot=source_snapshot,
-                input_record=input_record,
             )
             return self._finalize_result(result, context, source_guid)
 
