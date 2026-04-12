@@ -215,7 +215,7 @@ Read these when you need depth beyond what's covered above:
 
 - **[YAML Schema](references/yaml-schema.md)** — all action fields, config hierarchy
 - **[UDF Patterns](references/udf-patterns.md)** — passthrough, FILE granularity, version merge access
-- **[Common Pitfalls](references/common-pitfalls.md)** — 28 contracts: what works, what doesn't, workarounds
+- **[Framework Contracts](references/framework-contracts.md)** — 28 contracts: what works, what doesn't, workarounds
 - **[Debugging Guide](references/debugging-guide.md)** — triage checklist, prompt traces, error messages
 - **[Workflow Patterns](references/workflow-patterns.md)** — fan-in, diamond, ensemble patterns
 - **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough details

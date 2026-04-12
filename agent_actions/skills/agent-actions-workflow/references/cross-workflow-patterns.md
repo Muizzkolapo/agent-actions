@@ -58,7 +58,7 @@ The action name is the key — not the workflow name. If the upstream action is 
 
 ### Using impl name instead of action name
 
-Use the `name:` field from the YAML, not the `impl:` function name. See contract #20 in **[Common Pitfalls](common-pitfalls.md)**.
+Use the `name:` field from the YAML, not the `impl:` function name. See contract #20 in **[Framework Contracts](framework-contracts.md)**.
 
 ### Missing context_scope for cross-workflow fields
 
