@@ -440,11 +440,34 @@ def process_from_storage_backend(
     return (files_found, files_processed)
 
 
+def _is_cross_workflow_input(runner: ActionRunner, upstream_dirs: list[str]) -> bool:
+    """Return True if any upstream dir belongs to a different workflow's target."""
+    if not runner.storage_backend:
+        return False
+    db_path = getattr(runner.storage_backend, "db_path", None)
+    if not isinstance(db_path, (str, Path)):
+        return False
+    try:
+        own_target = Path(db_path).parent.resolve()
+    except (TypeError, OSError):
+        return False
+    for d in upstream_dirs:
+        try:
+            Path(d).resolve().relative_to(own_target)
+        except ValueError:
+            if is_target_directory(d):
+                return True
+    return False
+
+
 def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
     """Walk upstream data directories and process each file with the given strategy."""
     if runner.storage_backend is not None:
+        # Skip storage backend for cross-workflow inputs — their data was
+        # exported to JSON files by the artifact linker.
         all_targets = all(is_target_directory(d) for d in params.upstream_data_dirs)
-        if all_targets:
+        cross_wf = _is_cross_workflow_input(runner, params.upstream_data_dirs)
+        if all_targets and not cross_wf:
             files_found, files_processed = process_from_storage_backend(runner, params)
             if files_processed > 0:
                 return
