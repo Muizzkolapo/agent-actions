@@ -213,6 +213,9 @@ def apply_observe_for_file_mode(
 
     # Track which namespaces use wildcards (expanded per-record below).
     wildcard_ns: set[str] = {ns for ns, field, _ in resolved if field == "*"}
+    # Qualify wildcard-expanded keys with namespace when multiple
+    # wildcards exist (prevents bare-key collisions across namespaces).
+    qualify_wildcards = len(wildcard_ns) > 1
 
     # Determine which namespaces are "input sources" (data in each record).
     # Use fan-in-aware inference so non-primary deps are loaded historically.
@@ -322,15 +325,10 @@ def apply_observe_for_file_mode(
         else:
             cross_ns_data = {}
 
-        # Qualify wildcard-expanded keys with namespace when multiple
-        # wildcards exist (prevents bare-key collisions across namespaces).
-        qualify_wildcards = len(wildcard_ns) > 1
-
         ordered: dict[str, Any] = {}
         for ns, field, output_key in resolved:
             if field == "*":
-                # Wildcard: include all fields from this namespace.
-                ns_data: dict | None = None
+                ns_data = None
                 if ns in cross_ns_data:
                     ns_data = cross_ns_data[ns]
                 elif not has_reliable_ns or ns in input_source_names:
