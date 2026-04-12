@@ -66,18 +66,6 @@ class TestDependencyValidation:
                 ],
             )
 
-    def test_cross_workflow_dep_not_false_positive(self):
-        """Cross-workflow deps (dict format) are stripped, not rejected."""
-        # Should not raise — dict deps are silently stripped
-        config = ActionConfig(
-            name="a",
-            intent="do",
-            kind="llm",
-            dependencies=[{"workflow": "other", "action": "x"}, "local_dep"],
-        )
-        # Only string deps survive
-        assert config.dependencies == ["local_dep"]
-
     def test_primary_dependency_references_valid_action(self):
         """primary_dependency referencing non-existent action is caught."""
         with pytest.raises(ValueError, match="primary_dependency.*ghost|not defined"):

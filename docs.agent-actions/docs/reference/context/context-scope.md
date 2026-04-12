@@ -135,8 +135,6 @@ This is especially useful for **fan-in patterns** where multiple upstream action
       - action_C.*   # Context dependency (lineage-matched)
 ```
 
-See [Workflow Dependencies](../execution/workflow-dependencies) for details on fan-in, parallel, and aggregation patterns.
-
 ## Resolution Order
 
 1. **Observe filter** - If `observe` is specified, start with only those fields
@@ -178,4 +176,3 @@ Enable `prompt_debug` to see the rendered context:
 - [Version Actions](../execution/versions) - Loop configuration and consumption patterns
 - [Field References](./field-references) - Field reference syntax and validation
 - [Seed Data](./seed-data) - Loading static reference data
-- [Workflow Dependencies](../execution/workflow-dependencies) - Dependency patterns

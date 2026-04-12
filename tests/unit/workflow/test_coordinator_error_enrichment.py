@@ -36,7 +36,6 @@ def _build_workflow(execution_order=None):
     wf.metadata = metadata
 
     wf.config = MagicMock(spec=WorkflowRuntimeConfig)
-    wf.config.run_downstream = False
 
     runtime = MagicMock()
     runtime.state = WorkflowState()

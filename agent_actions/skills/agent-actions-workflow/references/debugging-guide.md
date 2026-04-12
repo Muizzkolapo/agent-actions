@@ -260,8 +260,8 @@ agac render -a my_workflow
 # Run with debug output
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
-# Execute with upstream dependencies
-agac run -a my_workflow --upstream
+# Execute workflow
+agac run -a my_workflow
 ```
 
 ### Debugging Schema Issues

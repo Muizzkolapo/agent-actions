@@ -33,12 +33,6 @@ agac run -a <agent-name> [options]
 # Run a workflow
 agac run -a my_agent
 
-# Run with upstream dependencies first
-agac run -a my_agent --upstream
-
-# Trigger downstream workflows after
-agac run -a my_agent --downstream
-
 # Force parallel execution
 agac run -a my_agent --execution-mode parallel
 ```
@@ -52,8 +46,6 @@ agac run -a my_agent --execution-mode parallel
 | `--use-tools` | Enable tool usage |
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent agents (1-50, default: 5) |
-| `--upstream` | Execute upstream workflows first |
-| `--downstream` | Execute downstream workflows after |
 
 ## Parallel Execution
 
@@ -71,19 +63,6 @@ agac run -a my_workflow --execution-mode sequential
 
 # Limit concurrency
 agac run -a my_workflow --concurrency-limit 3
-```
-
-## Cross-Workflow Execution
-
-```bash
-# Run upstream dependencies first
-agac run -a downstream_workflow --upstream
-
-# Trigger downstream after completion
-agac run -a upstream_workflow --downstream
-
-# Full chain
-agac run -a middle_workflow --upstream --downstream
 ```
 
 ## render
@@ -181,5 +160,5 @@ export AGENT_ACTIONS_LOG_LEVEL="DEBUG"
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
 # Production: full pipeline
-agac run -a final_workflow --upstream
+agac run -a final_workflow
 ```

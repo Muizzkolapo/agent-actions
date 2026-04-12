@@ -226,8 +226,6 @@ actions:
 | Syntax | Description |
 |--------|-------------|
 | `action_name` | Single input source |
-| `[{workflow: name}]` | Cross-workflow (all outputs) |
-| `[{workflow: name, action: act}]` | Specific action from another workflow |
 
 **Note:** Context dependencies (actions referenced in `context_scope` but not in `dependencies`) are auto-inferred via lineage matching.
 

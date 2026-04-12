@@ -24,8 +24,6 @@ class WorkflowStartEvent(BaseEvent):
     workflow_name: str = ""
     action_count: int = 0
     execution_mode: str = "sequential"
-    run_upstream: bool = False
-    run_downstream: bool = False
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -35,8 +33,6 @@ class WorkflowStartEvent(BaseEvent):
             "workflow_name": self.workflow_name,
             "action_count": self.action_count,
             "execution_mode": self.execution_mode,
-            "run_upstream": self.run_upstream,
-            "run_downstream": self.run_downstream,
         }
 
     @property

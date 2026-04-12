@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -28,16 +27,13 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
-from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
     RuntimeContext,
-    WorkflowPaths,
     WorkflowRuntimeConfig,
     WorkflowState,
 )
-from agent_actions.workflow.parallel.dependency import WorkflowDependencyOrchestrator
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 from agent_actions.workflow.service_init import initialize_services, initialize_storage_backend
 
@@ -145,8 +141,7 @@ class AgentWorkflow:
         else:
             self._reset_retryable_actions()
 
-        # Dependency orchestration + session
-        self._init_dependency_orchestrator()
+        # Session
         self.workflow_session_id = self._generate_workflow_session_id()
         self._inject_workflow_session_id()
 
@@ -337,56 +332,6 @@ class AgentWorkflow:
         """Return child pipeline from metadata."""
         return self.metadata.child_pipeline
 
-    # ── Dependency orchestration ────────────────────────────────────────
-
-    def _init_dependency_orchestrator(self) -> None:
-        """Initialize the workflow dependency orchestrator."""
-        workflows_root = self._get_workflows_root()
-        self.dependency_orchestrator = WorkflowDependencyOrchestrator(
-            workflows_root=workflows_root,
-            current_workflow=self.agent_name,
-            console=self.console,
-            workflow_factory=self._create_child_workflow,
-        )
-        self.artifact_linker = ArtifactLinker(workflows_root)
-
-    def _create_child_workflow(
-        self,
-        config_path: str,
-        user_code_path: str | None,
-        default_path: str | None,
-        use_tools: bool,
-        run_upstream: bool,
-        run_downstream: bool,
-    ) -> AgentWorkflow:
-        """Factory method to create child workflow instances."""
-        return self.__class__(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=config_path,
-                    user_code_path=user_code_path,
-                    default_path=default_path or "",
-                ),
-                use_tools=use_tools,
-                run_upstream=run_upstream,
-                run_downstream=run_downstream,
-                verify_keys=self.config.verify_keys,
-                project_root=self.config.project_root,
-            )
-        )
-
-    def _get_workflows_root(self) -> Path:
-        """Get the root directory containing all workflows."""
-        current_config_path = Path(self.config.paths.constructor_path)
-        # Expects: .../workflows/CURRENT/agent_config/current.yml
-        # parents[2] navigates to the workflows root.
-        if len(current_config_path.parents) < 3:
-            raise ValueError(
-                f"Config path too shallow to derive workflows root: {current_config_path} "
-                f"(expected .../workflows/WORKFLOW/agent_config/file.yml)"
-            )
-        return current_config_path.parents[2]
-
     # ── Session management ──────────────────────────────────────────────
 
     def _generate_workflow_session_id(self) -> str:
@@ -404,48 +349,15 @@ class AgentWorkflow:
         for action_config in self.action_configs.values():
             action_config["workflow_session_id"] = self.workflow_session_id
 
-    # ── Upstream / downstream resolution ────────────────────────────────
-
-    def _resolve_upstream_workflows(self) -> bool:
-        """Recursively resolve and execute upstream dependencies."""
-        if not self.config.run_upstream:
-            return True
-        return self.dependency_orchestrator.resolve_upstream_workflows(
-            user_code_path=self.config.paths.user_code_path,
-            default_path=self.config.paths.default_path,
-            use_tools=self.config.use_tools,
-        )
-
-    def _resolve_downstream_workflows(self) -> bool:
-        """Execute all downstream workflows after current workflow completes."""
-        if not self.config.run_downstream:
-            return True
-        return self.dependency_orchestrator.resolve_downstream_workflows(
-            user_code_path=self.config.paths.user_code_path,
-            default_path=self.config.paths.default_path,
-            use_tools=self.config.use_tools,
-        )
-
-    def _resolve_upstream_and_initialize(self) -> bool | None:
-        """Initialize event context and resolve upstream dependencies.
-
-        Returns:
-            True to continue, False if upstream has pending batches.
-        """
+    def _initialize_event_context(self) -> None:
+        """Initialize event context for workflow execution."""
         get_manager().set_context(workflow_name=self.agent_name, correlation_id=str(uuid4())[:8])
-
-        should_continue = self._resolve_upstream_workflows()
-        if not should_continue:
-            return False
-        return True
 
     # ── Execution ───────────────────────────────────────────────────────
 
     async def async_run(self, concurrency_limit: int = 5):
         """Execute workflow level-by-level with parallelism within each level."""
-        should_continue = self._resolve_upstream_and_initialize()
-        if should_continue is False:
-            return None
+        self._initialize_event_context()
 
         workflow_start = datetime.now()
         self.event_logger.log_workflow_start(workflow_start, is_async=True)
@@ -488,9 +400,6 @@ class AgentWorkflow:
 
                 if state_mgr.is_workflow_complete():
                     self.event_logger.finalize_workflow(elapsed_time=duration)
-                    downstream_success = self._resolve_downstream_workflows()
-                    if not downstream_success:
-                        return None
                     return ("success", {})
 
                 if state_mgr.is_workflow_done():
@@ -519,9 +428,7 @@ class AgentWorkflow:
 
     def run(self):
         """Execute workflow sequentially."""
-        should_continue = self._resolve_upstream_and_initialize()
-        if should_continue is False:
-            return None
+        self._initialize_event_context()
 
         workflow_start = datetime.now()
         self.event_logger.log_workflow_start(workflow_start, is_async=False)
@@ -548,11 +455,6 @@ class AgentWorkflow:
 
                 if state_mgr.is_workflow_complete():
                     self.event_logger.finalize_workflow(elapsed_time=duration)
-
-                    downstream_success = self._resolve_downstream_workflows()
-                    if not downstream_success:
-                        return None
-
                     return ("success", {})
 
                 if state_mgr.is_workflow_done():

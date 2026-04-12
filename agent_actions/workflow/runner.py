@@ -16,7 +16,6 @@ from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.utils.file_handler import FileHandler
-from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.runner_file_processing import (
     collect_files_from_upstream as _collect_files_from_upstream,
 )
@@ -147,28 +146,8 @@ class ActionRunner:
             )
         return action_folder
 
-    def _resolve_upstream_from_manifest(self, agent_folder: Path) -> list[Path] | None:
-        """Resolve upstream directories from manifest file, or None."""
-        agent_io_dir = (
-            agent_folder / "agent_io" if "agent_io" not in str(agent_folder) else agent_folder
-        )
-        manifest = ArtifactLinker.read_manifest(agent_io_dir)
-        if manifest is None:
-            return None
-
-        upstream_path = Path(manifest["upstream_path"])
-        if not upstream_path.exists():
-            logger.warning("Manifest upstream path doesn't exist: %s", upstream_path)
-            return None
-
-        logger.debug("Resolved upstream from manifest: %s", upstream_path)
-        return [upstream_path]
-
     def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> list[Path]:
         """Resolve upstream directories for a start node (no dependencies)."""
-        manifest_dirs = self._resolve_upstream_from_manifest(agent_folder)
-        if manifest_dirs:
-            return manifest_dirs
         result = resolve_start_node_data_source(agent_folder, self.data_source_config, agent_name)
         return result.directories
 
@@ -421,16 +400,14 @@ class ActionRunner:
             agent_folder, params.action_config, params.previous_action_type, params.idx
         )
 
-        # Resolve file_type_filter for start nodes — only when the data source
-        # resolver is used (not when inputs come from an upstream manifest)
+        # Resolve file_type_filter for start nodes
         file_type_filter = None
         if not params.action_config.get("dependencies") and not params.previous_action_type:
             agent_folder_path = Path(agent_folder)
-            if not self._resolve_upstream_from_manifest(agent_folder_path):
-                result = resolve_start_node_data_source(
-                    agent_folder_path, self.data_source_config, params.action_name
-                )
-                file_type_filter = result.file_type_filter
+            result = resolve_start_node_data_source(
+                agent_folder_path, self.data_source_config, params.action_name
+            )
+            file_type_filter = result.file_type_filter
 
         self.process_files(
             FileProcessParams(
@@ -454,8 +431,7 @@ class ActionRunner:
     ) -> str:
         """Run an action with the appropriate strategy based on its position in the workflow."""
         dependencies = action_config.get("dependencies", [])
-        has_cross_workflow = action_config.get("_has_cross_workflow_deps", False)
-        if not dependencies and not has_cross_workflow:
+        if not dependencies:
             strategy_name = "initial"
         else:
             strategy_name = "intermediate"

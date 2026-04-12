@@ -20,7 +20,6 @@ Before changing anything, read the workflow YAML and check what the upstream act
 ```bash
 agac run -a my_workflow              # Run workflow
 agac render -a my_workflow           # Compiled YAML (schemas inlined, versions expanded)
-agac run -a my_workflow --upstream   # Run with upstream deps
 ```
 
 ## How Data Flows
@@ -219,5 +218,4 @@ Read these when you need depth beyond what's covered above:
 - **[Debugging Guide](references/debugging-guide.md)** — triage checklist, prompt traces, error messages
 - **[Workflow Patterns](references/workflow-patterns.md)** — fan-in, diamond, ensemble patterns
 - **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough details
-- **[Cross-Workflow Patterns](references/cross-workflow-patterns.md)** — manifest linking, downstream runs, known limitations
 - **[HITL Patterns](references/hitl-patterns.md)** — human-in-the-loop with guards, lineage, passthrough

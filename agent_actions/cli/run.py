@@ -15,7 +15,8 @@ from agent_actions.logging.factory import LoggerFactory
 from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowPaths, WorkflowRuntimeConfig
+from agent_actions.workflow.coordinator import AgentWorkflow
+from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
 from agent_actions.validation.run_validator import RunCommandArgs
@@ -85,8 +86,6 @@ class RunCommand:
                     default_path=str(paths.default_config_path),
                 ),
                 use_tools=self.args.use_tools,
-                run_upstream=self.args.upstream,
-                run_downstream=self.args.downstream,
                 fresh=self.args.fresh,
                 verify_keys=self.args.verify_keys,
                 project_root=project_root,
@@ -228,12 +227,6 @@ class RunCommand:
     default=5,
     help="Maximum number of actions to run concurrently (default: 5, range: 1-50)",
 )
-@click.option("--upstream", is_flag=True, help="Recursively execute upstream dependent workflows")
-@click.option(
-    "--downstream",
-    is_flag=True,
-    help="Execute all downstream workflows that depend on this workflow",
-)
 @click.option(
     "--fresh",
     is_flag=True,
@@ -254,8 +247,6 @@ def run(
     use_tools: bool,
     execution_mode: str = "auto",
     concurrency_limit: int = 5,
-    upstream: bool = False,
-    downstream: bool = False,
     fresh: bool = False,
     verify_keys: bool = False,
     project_root: Path | None = None,
@@ -269,8 +260,6 @@ def run(
 
     Examples:
         agac run -a my_agent
-        agac run -a my_agent --upstream
-        agac run -a my_agent --downstream
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
     """
@@ -280,8 +269,6 @@ def run(
         use_tools=use_tools,
         execution_mode=cast(Literal["auto", "parallel", "sequential"], execution_mode),
         concurrency_limit=concurrency_limit,
-        upstream=upstream,
-        downstream=downstream,
         fresh=fresh,
         verify_keys=verify_keys,
     )

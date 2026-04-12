@@ -32,8 +32,6 @@ class WorkflowRuntimeConfig:
 
     paths: WorkflowPaths
     use_tools: bool
-    run_upstream: bool = False
-    run_downstream: bool = False
     fresh: bool = False
     verify_keys: bool = False
     manager: Any = None  # ConfigManager instance
