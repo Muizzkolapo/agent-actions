@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.config.di.container import ProcessorFactory
+from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.runner import ActionRunner
 
 
@@ -20,6 +21,28 @@ from agent_actions.workflow.runner import ActionRunner
 def runner():
     factory = MagicMock(spec=ProcessorFactory)
     return ActionRunner(use_tools=True, processor_factory=factory)
+
+
+def _run_config_pipeline(raw_actions, parsed_configs):
+    """Build mocked config pipeline and run load_workflow_configs.
+
+    Args:
+        raw_actions: List of raw YAML action dicts (pre-Pydantic).
+        parsed_configs: Dict of action_name → parsed config dict (post-Pydantic).
+    """
+    manager = MagicMock()
+    manager.agent_name = "test_wf"
+    manager.execution_order = list(parsed_configs.keys())
+    manager.child_pipeline = None
+    manager.user_config = {"actions": raw_actions}
+    manager.get_all_agent_configs_as_dicts.return_value = parsed_configs
+
+    config = MagicMock()
+    config.manager = manager
+    config.paths.constructor_path = "/fake/path.yml"
+    config.project_root = None
+
+    return load_workflow_configs(config, MagicMock())
 
 
 class TestCrossWorkflowStrategySelection:
@@ -62,7 +85,7 @@ class TestCrossWorkflowStrategySelection:
 
     @patch.object(ActionRunner, "process_and_generate_for_action")
     def test_no_flag_empty_deps_uses_initial(self, mock_pga, runner):
-        """Without _has_cross_workflow_deps flag, empty deps → initial (backward compat)."""
+        """Without _has_cross_workflow_deps flag, empty deps -> initial (backward compat)."""
         mock_pga.return_value = "/output"
         config = {"agent_type": "action", "dependencies": []}
         runner.run_action(config, "action", None, 0)
@@ -71,7 +94,7 @@ class TestCrossWorkflowStrategySelection:
 
     @patch.object(ActionRunner, "process_and_generate_for_action")
     def test_flag_false_empty_deps_uses_initial(self, mock_pga, runner):
-        """Explicit _has_cross_workflow_deps=False with empty deps → initial."""
+        """Explicit _has_cross_workflow_deps=False with empty deps -> initial."""
         mock_pga.return_value = "/output"
         config = {
             "agent_type": "action",
@@ -88,113 +111,41 @@ class TestConfigPipelineCrossWorkflowFlag:
 
     def test_dict_dep_sets_flag(self):
         """Action with dict dep in raw YAML gets _has_cross_workflow_deps=True."""
-        from unittest.mock import MagicMock
-
-        from agent_actions.workflow.config_pipeline import load_workflow_configs
-
-        manager = MagicMock()
-        manager.agent_name = "test_wf"
-        manager.execution_order = ["consumer"]
-        manager.child_pipeline = None
-        manager.user_config = {
-            "actions": [
+        result = _run_config_pipeline(
+            raw_actions=[
                 {
                     "name": "consumer",
                     "dependencies": [
                         {"workflow": "upstream_wf", "action": "producer"},
                     ],
                 },
-            ]
-        }
-        manager.get_all_agent_configs_as_dicts.return_value = {
-            "consumer": {
-                "name": "consumer",
-                "dependencies": [],
-            }
-        }
-
-        config = MagicMock()
-        config.manager = manager
-        config.paths.constructor_path = "/fake/path.yml"
-        config.project_root = None
-
-        result = load_workflow_configs(config, MagicMock())
+            ],
+            parsed_configs={"consumer": {"name": "consumer", "dependencies": []}},
+        )
         assert result.action_configs["consumer"].get("_has_cross_workflow_deps") is True
 
     def test_string_only_deps_no_flag(self):
         """Action with only string deps does NOT get the flag."""
-        from unittest.mock import MagicMock
-
-        from agent_actions.workflow.config_pipeline import load_workflow_configs
-
-        manager = MagicMock()
-        manager.agent_name = "test_wf"
-        manager.execution_order = ["processor"]
-        manager.child_pipeline = None
-        manager.user_config = {
-            "actions": [
-                {
-                    "name": "processor",
-                    "dependencies": ["extractor"],
-                },
-            ]
-        }
-        manager.get_all_agent_configs_as_dicts.return_value = {
-            "processor": {
-                "name": "processor",
-                "dependencies": ["extractor"],
-            }
-        }
-
-        config = MagicMock()
-        config.manager = manager
-        config.paths.constructor_path = "/fake/path.yml"
-        config.project_root = None
-
-        result = load_workflow_configs(config, MagicMock())
+        result = _run_config_pipeline(
+            raw_actions=[
+                {"name": "processor", "dependencies": ["extractor"]},
+            ],
+            parsed_configs={"processor": {"name": "processor", "dependencies": ["extractor"]}},
+        )
         assert "_has_cross_workflow_deps" not in result.action_configs["processor"]
 
     def test_no_deps_no_flag(self):
         """Action with no dependencies does NOT get the flag."""
-        from unittest.mock import MagicMock
-
-        from agent_actions.workflow.config_pipeline import load_workflow_configs
-
-        manager = MagicMock()
-        manager.agent_name = "test_wf"
-        manager.execution_order = ["starter"]
-        manager.child_pipeline = None
-        manager.user_config = {
-            "actions": [
-                {"name": "starter"},
-            ]
-        }
-        manager.get_all_agent_configs_as_dicts.return_value = {
-            "starter": {
-                "name": "starter",
-            }
-        }
-
-        config = MagicMock()
-        config.manager = manager
-        config.paths.constructor_path = "/fake/path.yml"
-        config.project_root = None
-
-        result = load_workflow_configs(config, MagicMock())
+        result = _run_config_pipeline(
+            raw_actions=[{"name": "starter"}],
+            parsed_configs={"starter": {"name": "starter"}},
+        )
         assert "_has_cross_workflow_deps" not in result.action_configs["starter"]
 
     def test_mixed_deps_sets_flag(self):
         """Action with both string and dict deps gets _has_cross_workflow_deps=True."""
-        from unittest.mock import MagicMock
-
-        from agent_actions.workflow.config_pipeline import load_workflow_configs
-
-        manager = MagicMock()
-        manager.agent_name = "test_wf"
-        manager.execution_order = ["consumer"]
-        manager.child_pipeline = None
-        manager.user_config = {
-            "actions": [
+        result = _run_config_pipeline(
+            raw_actions=[
                 {
                     "name": "consumer",
                     "dependencies": [
@@ -202,19 +153,7 @@ class TestConfigPipelineCrossWorkflowFlag:
                         {"workflow": "other_wf", "action": "remote"},
                     ],
                 },
-            ]
-        }
-        manager.get_all_agent_configs_as_dicts.return_value = {
-            "consumer": {
-                "name": "consumer",
-                "dependencies": ["local_action"],
-            }
-        }
-
-        config = MagicMock()
-        config.manager = manager
-        config.paths.constructor_path = "/fake/path.yml"
-        config.project_root = None
-
-        result = load_workflow_configs(config, MagicMock())
+            ],
+            parsed_configs={"consumer": {"name": "consumer", "dependencies": ["local_action"]}},
+        )
         assert result.action_configs["consumer"].get("_has_cross_workflow_deps") is True
