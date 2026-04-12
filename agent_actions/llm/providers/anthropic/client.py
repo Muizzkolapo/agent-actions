@@ -15,6 +15,7 @@ from typing import Any, ClassVar
 import anthropic
 
 from agent_actions.errors import VendorAPIError
+from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -26,8 +27,6 @@ from agent_actions.logging.events import (
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
-
-_PROMPT_CACHING_BETA_HEADER = {"anthropic-beta": "prompt-caching-2024-07-31"}
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="anthropic",
@@ -86,7 +85,7 @@ class AnthropicClient(BaseClient):
         if schema is not None:
             api_args["tools"] = schema
         if enable_prompt_caching:
-            api_args["extra_headers"] = _PROMPT_CACHING_BETA_HEADER
+            api_args["extra_headers"] = PROMPT_CACHING_BETA_HEADER
         return api_args
 
     @staticmethod
