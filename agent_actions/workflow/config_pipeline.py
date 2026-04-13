@@ -70,8 +70,9 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
     user_agents = _run_config_stage(manager.get_user_agents, "get_user_agents", manager)
     _run_config_stage(manager.merge_agent_configs, "merge_agent_configs", manager, user_agents)
 
-    # Inject virtual actions from upstream workflow declarations
-    virtual_actions = _inject_upstream_virtual_actions(manager)
+    virtual_actions = _run_config_stage(
+        _inject_upstream_virtual_actions, "inject_upstream_virtual_actions", manager, manager
+    )
 
     _run_config_stage(manager.determine_execution_order, "determine_execution_order", manager)
 
