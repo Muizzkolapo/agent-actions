@@ -451,39 +451,35 @@ class ProcessingPipeline:
         Select and apply the appropriate processing strategy based on
         configuration. Uses RecordProcessor for unified processing.
         """
-        # Initialize source_data with the input data as a fallback
+        # Initialize source_data with the input data.
+        # For cross-workflow records (source_relative_path is None), the input
+        # data IS the source — there's no staging data in this workflow for them.
         source_data = data
 
-        try:
-            from agent_actions.input.loaders.source_data import SourceDataLoader
+        if self.config.source_relative_path and self.config.storage_backend is not None:
+            try:
+                from agent_actions.input.loaders.source_data import SourceDataLoader
 
-            source_loader = SourceDataLoader(
-                agent_name=self.config.action_name,
-                storage_backend=self.config.storage_backend,  # type: ignore[arg-type]
-            )
+                source_loader = SourceDataLoader(
+                    agent_name=self.config.action_name,
+                    storage_backend=self.config.storage_backend,  # type: ignore[arg-type]
+                )
 
-            # Load the source data using the explicit source_relative_path
-            loaded_source = source_loader.load_source_data(self.config.source_relative_path or "")
+                loaded_source = source_loader.load_source_data(self.config.source_relative_path)
 
-            if isinstance(loaded_source, list):
-                source_data = loaded_source
-            else:
-                # Should be a list, but handle single dict if returned
-                source_data = [loaded_source] if loaded_source else []  # type: ignore[unreachable]
+                if isinstance(loaded_source, list):
+                    source_data = loaded_source
+                else:
+                    source_data = [loaded_source] if loaded_source else []  # type: ignore[unreachable]
 
-            logger.debug("Loaded source data via SourceDataLoader for %s", file_path)
+                logger.debug("Loaded source data via SourceDataLoader for %s", file_path)
 
-        except Exception as e:
-            logger.error(
-                "SourceDataLoader failed to resolve source for '%s': %s. "
-                "Agent: %s. "
-                "Falling back to using input data as source context. "
-                "This will likely cause 'undefined variable' errors if templates expect source fields.",
-                file_path,
-                e,
-                self.config.action_name,
-            )
-            # source_data remains 'data' (the fallback)
+            except (FileNotFoundError, ValueError):
+                # FileNotFoundError: no source data for this path (normal for
+                # cross-workflow workflows that have no staging data).
+                # ValueError: empty/invalid path from storage backend validation.
+                # In both cases, input data is the correct source context.
+                pass
 
         # ── per-action record_limit ──────────────────────────────────────
         record_limit = self.config.action_config.get("record_limit")
