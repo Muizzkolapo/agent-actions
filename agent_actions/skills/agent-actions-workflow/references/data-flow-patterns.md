@@ -377,17 +377,39 @@ cat agent_io/target/node_2_*/data.json | jq '.[0]'
 
 ## Cross-Workflow Data Flow
 
-When workflows chain:
+Chain workflows by declaring `upstream` at the workflow level. Upstream actions are injected as virtual completed actions — their outputs in `agent_io/target/` become available to the downstream workflow.
 
 ```yaml
-# downstream_workflow.yml
-- name: first_action
-  dependencies:
-    - workflow: upstream_workflow
-      action: final_action
+# agent_config/enrich.yml
+name: enrich
+upstream:
+  - workflow: ingest
+    actions: [extract, classify]
+
+actions:
+  - name: enrich_text
+    dependencies: [extract]
+    context_scope:
+      observe:
+        - extract.*
+        - classify.category
 ```
 
-Data from `upstream_workflow.final_action` becomes input.
+**How it works:**
+1. The engine sees `upstream` and validates that `ingest` exists with actions `extract` and `classify`
+2. Those actions are injected into `enrich`'s namespace as virtual completed actions
+3. `enrich_text` references them in `dependencies` and `context_scope` using the same syntax as local actions
+4. I/O resolution reads from `ingest`'s `agent_io/target/extract/` directory
+
+**Running chained workflows:**
+```bash
+agac run -a ingest                  # Run ingest only
+agac run -a enrich                  # Run enrich (ingest must have run already)
+agac run -a ingest --downstream     # Run ingest, then enrich, then anything after
+agac run -a enrich --upstream       # Run ingest first, then enrich
+```
+
+**Data stays in place** — the downstream workflow reads directly from the upstream workflow's output directories. No data copying or staging needed.
 
 ## Grounded Retrieval Pattern
 

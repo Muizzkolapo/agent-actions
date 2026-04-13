@@ -27,6 +27,7 @@ Detailed patterns for common parallel and merge scenarios.
 | **Conditional Merge** | parallel with guards → merge available | Only merge branches that ran |
 | **Map-Reduce** | split → parallel process → aggregate | Document chunking |
 | **Tool + LLM Hybrid** | Python ↔ LLM ↔ Python | API integration |
+| **Cross-Workflow Chain** | workflow A → workflow B → workflow C | Multi-stage pipelines |
 
 ## Sequential Pipeline
 
@@ -400,3 +401,85 @@ flowchart TD
 **Key distinction:**
 - `skip` → Record continues, action just doesn't run
 - `filter` → Record removed entirely, no downstream processing
+
+## Cross-Workflow Chaining
+
+Link separate workflows into a multi-stage pipeline. Each workflow is a self-contained unit that can run independently, but declares which upstream workflows it depends on.
+
+```mermaid
+flowchart LR
+    subgraph ingest
+        extract --> classify
+    end
+    subgraph enrich
+        enrich_text --> validate
+    end
+    subgraph analyze
+        summarize --> report
+    end
+    classify --> enrich_text
+    validate --> summarize
+```
+
+```yaml
+# agent_config/ingest.yml
+name: ingest
+description: "Extract and classify raw data"
+actions:
+  - name: extract
+    intent: "Extract structured data"
+  - name: classify
+    dependencies: [extract]
+    intent: "Classify extracted items"
+
+# agent_config/enrich.yml
+name: enrich
+description: "Enrich classified data"
+upstream:
+  - workflow: ingest
+    actions: [extract, classify]
+actions:
+  - name: enrich_text
+    dependencies: [extract]
+    intent: "Add contextual enrichment"
+    context_scope:
+      observe: [extract.*, classify.category]
+  - name: validate
+    dependencies: [enrich_text]
+    intent: "Validate enriched output"
+
+# agent_config/analyze.yml
+name: analyze
+description: "Analyze enriched data"
+upstream:
+  - workflow: enrich
+    actions: [validate]
+actions:
+  - name: summarize
+    dependencies: [validate]
+    intent: "Summarize validated data"
+    context_scope:
+      observe: [validate.*]
+  - name: report
+    dependencies: [summarize]
+    intent: "Generate final report"
+```
+
+**Running the chain:**
+
+```bash
+# Run one workflow at a time
+agac run -a ingest
+agac run -a enrich       # reads ingest's outputs
+agac run -a analyze      # reads enrich's outputs
+
+# Or chain automatically
+agac run -a ingest --downstream     # ingest → enrich → analyze
+agac run -a analyze --upstream      # ingest → enrich → analyze
+```
+
+**Key rules:**
+- Upstream action names must not collide with local action names
+- Upstream actions appear in the namespace using the same syntax as local actions
+- Each workflow maintains its own state — completed actions are skipped on re-run
+- If an upstream workflow hasn't run, you get a clear error directing you to run it or use `--upstream`
