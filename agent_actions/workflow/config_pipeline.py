@@ -74,7 +74,13 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         _inject_upstream_virtual_actions, "inject_upstream_virtual_actions", manager, manager
     )
 
-    _run_config_stage(manager.determine_execution_order, "determine_execution_order", manager)
+    virtual_action_names = set(virtual_actions.keys()) if virtual_actions else set()
+    _run_config_stage(
+        manager.determine_execution_order,
+        "determine_execution_order",
+        manager,
+        virtual_action_names,
+    )
 
     execution_order = manager.execution_order
     action_configs = manager.get_all_agent_configs_as_dicts()
@@ -91,8 +97,6 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         action_config["workflow_config_path"] = config.paths.constructor_path
         if config.project_root:
             action_config["_project_root"] = str(config.project_root)
-        if virtual_actions:
-            action_config["_virtual_action_names"] = list(virtual_actions.keys())
 
     return WorkflowMetadata(
         agent_name=manager.agent_name,
@@ -106,11 +110,7 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
 def _inject_upstream_virtual_actions(
     manager: ConfigManager,
 ) -> dict[str, VirtualAction]:
-    """Parse ``upstream`` declarations and register virtual actions.
-
-    Virtual actions are added to ``manager.virtual_action_names`` so that
-    ``determine_execution_order()`` and ``infer_dependencies()`` accept
-    them as valid dependency targets without adding them to the DAG.
+    """Parse ``upstream`` declarations and build virtual action map.
 
     Returns:
         Dict mapping action name to ``VirtualAction``.
@@ -142,7 +142,6 @@ def _inject_upstream_virtual_actions(
                 action_name=action_name,
             )
 
-    manager.virtual_action_names = set(virtual_actions.keys())
     return virtual_actions
 
 

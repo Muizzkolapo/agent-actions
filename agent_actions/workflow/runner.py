@@ -361,10 +361,12 @@ class ActionRunner:
         if upstream_workflow not in self._upstream_backends:
             from agent_actions.storage import get_storage_backend
 
+            # Use the same backend type as the current workflow
+            current_type = self.storage_backend.backend_type if self.storage_backend else "sqlite"
             backend = get_storage_backend(
                 workflow_path=str(Path(upstream_folder).parent),
                 workflow_name=upstream_workflow,
-                backend_type="sqlite",
+                backend_type=current_type,
             )
             backend.initialize()
             self._upstream_backends[upstream_workflow] = backend

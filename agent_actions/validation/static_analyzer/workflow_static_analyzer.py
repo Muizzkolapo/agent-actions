@@ -1428,7 +1428,7 @@ class WorkflowStaticAnalyzer:
 
         workflow_actions = [
             a.get("name") for a in self.workflow_config.get("actions", []) if a.get("name")
-        ]
+        ] + list(self.external_action_names)
 
         try:
             input_sources, context_sources = infer_dependencies(

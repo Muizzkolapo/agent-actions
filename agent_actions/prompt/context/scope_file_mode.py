@@ -228,7 +228,7 @@ def apply_observe_for_file_mode(
     if agent_indices:
         try:
             input_sources, _ = infer_dependencies(
-                agent_config, list(agent_indices.keys()), agent_name
+                agent_config, list(agent_indices.keys()), agent_name, validate=False
             )
             input_source_names = set(input_sources)
             has_reliable_ns = bool(input_source_names)
