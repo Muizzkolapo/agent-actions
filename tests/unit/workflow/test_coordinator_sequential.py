@@ -53,6 +53,8 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     core = MagicMock(spec=CoreServices)
     core.state_manager = MagicMock()
     core.action_executor = MagicMock()
+    core.action_level_orchestrator = MagicMock()
+    core.action_level_orchestrator.compute_execution_levels.return_value = [["agent_a"]]
     support = MagicMock(spec=SupportServices)
     support.manifest_manager = MagicMock()
     wf.services = WorkflowServices(core=core, support=support)
