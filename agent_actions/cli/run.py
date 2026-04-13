@@ -76,21 +76,12 @@ class RunCommand:
 
         for workflow_name in plan:
             click.echo(f"\n--- Running workflow: {workflow_name} ---")
-            chain_args = RunCommandArgs(
-                agent=workflow_name,
-                user_code=self.args.user_code,
-                use_tools=self.args.use_tools,
-                execution_mode=self.args.execution_mode,
-                concurrency_limit=self.args.concurrency_limit,
-                fresh=self.args.fresh,
-                verify_keys=self.args.verify_keys,
-                downstream=False,
-                upstream=False,
+            chain_args = self.args.model_copy(
+                update={"agent": workflow_name, "downstream": False, "upstream": False}
             )
             RunCommand(chain_args)._execute_single(project_root=project_root)
 
     def _execute_single(self, project_root: Path | None = None) -> None:
-        """Execute a single workflow."""
         click.echo(f"Starting agent run for: {self.args.agent}")
 
         if project_root is not None:

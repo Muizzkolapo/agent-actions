@@ -8,6 +8,7 @@ or ``--upstream`` CLI flags.
 import logging
 from collections import deque
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -126,7 +127,9 @@ class WorkflowOrchestrator:
 
         return workflow_name, upstream_workflows
 
-    def resolve_execution_plan(self, target: str, direction: str) -> list[str]:
+    def resolve_execution_plan(
+        self, target: str, direction: Literal["downstream", "upstream", "full"]
+    ) -> list[str]:
         """Resolve the ordered list of workflows to execute.
 
         Args:
