@@ -190,7 +190,7 @@ def process_file_mode_tool(
             ]
 
         # Framework-managed: resolve which input produced each output by node_id.
-        source_mapping: dict[int, int] | None = None
+        source_mapping: dict[int, int | list[int]] | None = None
         if original_data:
             source_mapping = _resolve_source_mapping(
                 raw_outputs=raw_response,
