@@ -51,6 +51,38 @@ class RunCommand:
             workflow.run()
 
     def execute(self, project_root: Path | None = None) -> None:
+        if self.args.downstream or self.args.upstream:
+            self._execute_chain(project_root)
+            return
+
+        self._execute_single(project_root)
+
+    def _execute_chain(self, project_root: Path | None = None) -> None:
+        """Execute a chain of workflows based on --downstream/--upstream flags."""
+        from agent_actions.workflow.orchestrator import WorkflowOrchestrator
+
+        effective_root = project_root or Path.cwd()
+        orchestrator = WorkflowOrchestrator(effective_root)
+
+        direction: Literal["downstream", "upstream", "full"]
+        if self.args.upstream and self.args.downstream:
+            direction = "full"
+        elif self.args.downstream:
+            direction = "downstream"
+        else:
+            direction = "upstream"
+
+        plan = orchestrator.resolve_execution_plan(self.agent_name, direction)
+        click.echo(f"Execution plan ({direction}): {' -> '.join(plan)}")
+
+        for workflow_name in plan:
+            click.echo(f"\n--- Running workflow: {workflow_name} ---")
+            chain_args = self.args.model_copy(
+                update={"agent": workflow_name, "downstream": False, "upstream": False}
+            )
+            RunCommand(chain_args)._execute_single(project_root=project_root)
+
+    def _execute_single(self, project_root: Path | None = None) -> None:
         click.echo(f"Starting agent run for: {self.args.agent}")
 
         if project_root is not None:
@@ -239,6 +271,18 @@ class RunCommand:
     default=False,
     help="Verify API keys are valid by probing vendor endpoints before execution",
 )
+@click.option(
+    "--downstream",
+    is_flag=True,
+    default=False,
+    help="Also run all workflows that depend on this one",
+)
+@click.option(
+    "--upstream",
+    is_flag=True,
+    default=False,
+    help="Run all upstream workflow dependencies before this one",
+)
 @handles_user_errors("run")
 @requires_project
 def run(
@@ -249,6 +293,8 @@ def run(
     concurrency_limit: int = 5,
     fresh: bool = False,
     verify_keys: bool = False,
+    downstream: bool = False,
+    upstream: bool = False,
     project_root: Path | None = None,
 ) -> None:
     """
@@ -262,6 +308,8 @@ def run(
         agac run -a my_agent
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
+        agac run -a my_agent --downstream
+        agac run -a my_agent --upstream
     """
     args = RunCommandArgs(
         agent=agent,
@@ -271,6 +319,8 @@ def run(
         concurrency_limit=concurrency_limit,
         fresh=fresh,
         verify_keys=verify_keys,
+        downstream=downstream,
+        upstream=upstream,
     )
     command = RunCommand(args)
     command.execute(project_root=project_root)
