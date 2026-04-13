@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Cross-workflow chaining: --upstream and --downstream CLI flags, virtual action injection, and orchestrator support for multi-workflow pipelines"
+time: 2026-04-13T08:00:00.000000Z
