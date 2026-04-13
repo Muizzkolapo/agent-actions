@@ -64,6 +64,7 @@ class RunCommand:
         effective_root = project_root or Path.cwd()
         orchestrator = WorkflowOrchestrator(effective_root)
 
+        direction: Literal["downstream", "upstream", "full"]
         if self.args.upstream and self.args.downstream:
             direction = "full"
         elif self.args.downstream:
