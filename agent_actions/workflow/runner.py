@@ -301,8 +301,8 @@ class ActionRunner:
         because ``get_action_folder`` always resolves to ``self.workflow_name``, which
         is the *current* workflow — not the upstream.
 
-        Checks both filesystem and the upstream workflow's SQLite storage backend,
-        since SQLite-backed workflows may not write output directories to disk.
+        If the upstream stores data in SQLite (no filesystem directory), exports it
+        to the target directory so the downstream workflow can read it normally.
         """
         virtual = self.virtual_actions[dep_name]
         upstream_workflow = virtual.source_workflow
@@ -319,7 +319,8 @@ class ActionRunner:
         if upstream_target.exists():
             return upstream_target
 
-        # Check upstream workflow's SQLite DB for data
+        # SQLite-backed workflows don't write target directories to disk.
+        # Export the data so the downstream workflow can read it.
         try:
             from agent_actions.storage import get_storage_backend
 
@@ -331,15 +332,23 @@ class ActionRunner:
             upstream_backend.initialize()
             target_files = upstream_backend.list_target_files(dep_name)
             if target_files:
-                logger.debug(
-                    "Upstream action '%s' found in %s's storage backend (%d files)",
-                    dep_name,
-                    upstream_workflow,
+                import json
+
+                upstream_target.mkdir(parents=True, exist_ok=True)
+                for file_name in target_files:
+                    data = upstream_backend.read_target_file(dep_name, file_name)
+                    out_path = upstream_target / file_name
+                    out_path.write_text(json.dumps(data, indent=2, default=str))
+                logger.info(
+                    "Exported %d file(s) from upstream '%s.%s' to %s",
                     len(target_files),
+                    upstream_workflow,
+                    dep_name,
+                    upstream_target,
                 )
                 return upstream_target
         except Exception as e:
-            logger.debug("Upstream storage backend check failed for '%s': %s", dep_name, e)
+            logger.debug("Upstream storage backend export failed for '%s': %s", dep_name, e)
 
         logger.warning(
             "Upstream action '%s' from workflow '%s' has no outputs at %s",
