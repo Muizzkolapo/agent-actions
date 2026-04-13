@@ -11,19 +11,20 @@ from agent_actions.utils.udf_management.registry import FileUDFResult
 from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
 
-def _make_pipeline_and_context():
+def _make_pipeline_and_context(action_name="my_file_tool", *, idx=0, is_first_stage=True):
     """Create a minimal pipeline and context for FILE-mode tool tests."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
             action_config={"kind": "tool", "granularity": "file"},
-            action_name="my_file_tool",
-            idx=0,
+            action_name=action_name,
+            idx=idx,
         ),
         processor_factory=object(),
     )
     context = ProcessingContext(
         agent_config={"kind": "tool", "granularity": "file"},
-        agent_name="my_file_tool",
+        agent_name=action_name,
+        is_first_stage=is_first_stage,
     )
     return pipeline, context
 
@@ -809,38 +810,11 @@ def test_file_tool_large_cardinality_expansion():
 
 
 class TestInferSourceMapping:
-    """Direct unit tests for _infer_source_mapping logic."""
+    """Edge-case unit tests for _infer_source_mapping.
 
-    def test_identity_when_counts_match(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
-
-        result = _infer_source_mapping(
-            output_count=3,
-            input_data=[{"source_guid": "a"}, {"source_guid": "b"}, {"source_guid": "c"}],
-            action_name="test",
-        )
-        assert result == {0: 0, 1: 1, 2: 2}
-
-    def test_broadcast_when_shared_source_guid(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
-
-        result = _infer_source_mapping(
-            output_count=5,
-            input_data=[{"source_guid": "sg-shared"}, {"source_guid": "sg-shared"}],
-            action_name="test",
-        )
-        assert result == {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
-
-    def test_fallback_when_ambiguous(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
-
-        result = _infer_source_mapping(
-            output_count=3,
-            input_data=[{"source_guid": "sg-1"}, {"source_guid": "sg-2"}],
-            action_name="test",
-        )
-        # Fallback: all map to first input
-        assert result == {0: 0, 1: 0, 2: 0}
+    Core tier coverage (identity, node-id, content, heuristic) lives in
+    tests/unit/workflow/test_file_mode_source_mapping.py.
+    """
 
     def test_zero_output_returns_empty_mapping(self):
         from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
@@ -961,23 +935,6 @@ class TestDedupSharedGuidLineage:
     all outputs inherited input[0]'s lineage.
     """
 
-    @staticmethod
-    def _make_dedup_pipeline_and_context(action_name="dedup_tool"):
-        pipeline = ProcessingPipeline(
-            config=PipelineConfig(
-                action_config={"kind": "tool", "granularity": "file"},
-                action_name=action_name,
-                idx=1,
-            ),
-            processor_factory=object(),
-        )
-        context = ProcessingContext(
-            agent_config={"kind": "tool", "granularity": "file"},
-            agent_name=action_name,
-            is_first_stage=False,
-        )
-        return pipeline, context
-
     def test_dedup_shared_guid_distinct_lineage_via_content_match(self):
         """7 inputs (shared guid) → 6 outputs via dedup → each output gets
         its own parent's lineage, not all from input[0].
@@ -985,7 +942,7 @@ class TestDedupSharedGuidLineage:
         This reproduces the exact bug from the report: observe-filtered data
         (no node_id), content fingerprint matching resolves the correct parent.
         """
-        pipeline, context = self._make_dedup_pipeline_and_context()
+        pipeline, context = _make_pipeline_and_context("dedup_tool", idx=1, is_first_stage=False)
 
         # 7 input records from the same source page — all share source_guid.
         # Each has a distinct lineage from a prior flatten step.
@@ -1041,7 +998,7 @@ class TestDedupSharedGuidLineage:
         """Same scenario but tool receives full records (no observe filter)
         and passes them through with node_id intact → node_id matching fires.
         """
-        pipeline, context = self._make_dedup_pipeline_and_context()
+        pipeline, context = _make_pipeline_and_context("dedup_tool", idx=1, is_first_stage=False)
 
         # Full records with framework metadata.
         original_data = [
@@ -1093,7 +1050,7 @@ class TestDedupSharedGuidLineage:
 
     def test_dedup_reorder_shared_guid_content_match(self):
         """Dedup reorders output — content matching correctly maps non-sequential."""
-        pipeline, context = self._make_dedup_pipeline_and_context()
+        pipeline, context = _make_pipeline_and_context("dedup_tool", idx=1, is_first_stage=False)
 
         original_data = [
             {
@@ -1142,7 +1099,7 @@ class TestDedupSharedGuidLineage:
         inference falls to broadcast (last resort). Verify it doesn't crash
         and produces valid (if imprecise) lineage.
         """
-        pipeline, context = self._make_dedup_pipeline_and_context()
+        pipeline, context = _make_pipeline_and_context("dedup_tool", idx=1, is_first_stage=False)
 
         original_data = [
             {

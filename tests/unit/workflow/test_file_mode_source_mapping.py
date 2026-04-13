@@ -189,18 +189,21 @@ class TestContentMatching:
 class TestContentFingerprint:
     """Unit tests for _content_fingerprint."""
 
-    def test_flat_dict(self):
+    def test_flat_dict_returns_hex_digest(self):
         fp = _content_fingerprint({"b": 2, "a": 1})
-        assert fp == '{"a": 1, "b": 2}'
+        assert len(fp) == 64  # sha256 hex digest
+        assert all(c in "0123456789abcdef" for c in fp)
 
-    def test_wrapped_dict(self):
-        """When item has a content dict, fingerprint the content."""
-        fp = _content_fingerprint({"content": {"b": 2, "a": 1}, "node_id": "n0"})
-        assert fp == '{"a": 1, "b": 2}'
+    def test_wrapped_dict_fingerprints_content(self):
+        """When item has a content dict, fingerprint the content — not the wrapper."""
+        fp_wrapped = _content_fingerprint({"content": {"b": 2, "a": 1}, "node_id": "n0"})
+        fp_flat = _content_fingerprint({"b": 2, "a": 1})
+        assert fp_wrapped == fp_flat
 
     def test_strips_reserved_fields(self):
-        fp = _content_fingerprint({"question": "Q1", "source_guid": "sg", "node_id": "n0"})
-        assert fp == '{"question": "Q1"}'
+        fp_with = _content_fingerprint({"question": "Q1", "source_guid": "sg", "node_id": "n0"})
+        fp_without = _content_fingerprint({"question": "Q1"})
+        assert fp_with == fp_without
 
     def test_deterministic(self):
         """Same content, different insertion order → same fingerprint."""
@@ -210,7 +213,7 @@ class TestContentFingerprint:
 
     def test_empty_dict(self):
         fp = _content_fingerprint({})
-        assert fp == "{}"
+        assert len(fp) == 64  # valid hash even for empty content
 
 
 # ===================================================================

@@ -94,9 +94,11 @@ def _match_by_node_id(
 def _content_fingerprint(d: dict) -> str:
     """Deterministic fingerprint of a dict's business content.
 
-    Handles two record shapes:
-    - Flat dict (observe-filtered): fingerprint the whole dict minus reserved fields.
-    - Wrapped dict (no observe): fingerprint ``item["content"]`` if it's a dict.
+    Returns a fixed-length hex digest so dict keys stay small regardless of
+    record size.  Handles two record shapes:
+
+    - Flat dict (observe-filtered): hash the whole dict minus reserved fields.
+    - Wrapped dict (no observe): hash ``item["content"]`` if it's a dict.
     """
     if isinstance(d.get("content"), dict):
         target = d["content"]
@@ -104,9 +106,10 @@ def _content_fingerprint(d: dict) -> str:
         target = d
     clean = {k: v for k, v in target.items() if k not in _TOOL_RESERVED_FIELDS}
     try:
-        return json.dumps(clean, sort_keys=True, default=str)
+        raw = json.dumps(clean, sort_keys=True, default=str)
     except (TypeError, ValueError):
         return ""
+    return sha256(raw.encode()).hexdigest()
 
 
 def _match_by_content(
@@ -116,13 +119,16 @@ def _match_by_content(
     """Match outputs to inputs by content fingerprint.
 
     Compares output dicts to the observe-filtered input dicts the tool
-    received.  Uses :func:`json.dumps` with ``sort_keys=True`` for
-    deterministic fingerprinting.  Each input is consumed at most once to
-    handle duplicate-content inputs correctly.
+    received.  Each input is consumed at most once to handle
+    duplicate-content inputs correctly.
 
     Returns a complete mapping when **every** output matches exactly one
     unclaimed input.  Returns ``None`` otherwise.
     """
+    # More outputs than inputs → at least one output can't be matched.
+    if len(raw_outputs) > len(tool_inputs):
+        return None
+
     # Build fingerprint → [indices] for inputs (preserves insertion order).
     fp_to_indices: dict[str, list[int]] = {}
     for i, item in enumerate(tool_inputs):
@@ -145,15 +151,12 @@ def _match_by_content(
         if not fp or fp not in fp_to_indices:
             return None  # Content was transformed — can't match.
 
-        matched = False
         for idx in fp_to_indices[fp]:
             if idx not in claimed:
                 mapping[i] = idx
                 claimed.add(idx)
-                matched = True
                 break
-
-        if not matched:
+        else:
             return None  # All matching inputs already claimed.
 
     return mapping
