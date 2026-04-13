@@ -6,6 +6,7 @@ or ``--upstream`` CLI flags.
 """
 
 import logging
+from collections import deque
 from pathlib import Path
 
 import yaml
@@ -58,7 +59,8 @@ class WorkflowOrchestrator:
         graph: dict[str, list[str]] = {}
         reverse: dict[str, list[str]] = {}
 
-        for config_path in sorted(config_dir.glob("*.yml")):
+        yml_files = list(config_dir.glob("*.yml")) + list(config_dir.glob("*.yaml"))
+        for config_path in sorted(yml_files):
             workflow_name, upstream_workflows = self._parse_upstream_from_config(config_path)
             if workflow_name is None:
                 continue
@@ -101,8 +103,8 @@ class WorkflowOrchestrator:
         """
         try:
             raw = yaml.safe_load(config_path.read_text())
-        except Exception:
-            logger.debug("Skipping non-YAML file: %s", config_path)
+        except (yaml.YAMLError, OSError):
+            logger.debug("Skipping unreadable config file: %s", config_path)
             return None, []
 
         if not isinstance(raw, dict):
@@ -177,9 +179,9 @@ class WorkflowOrchestrator:
     def _collect_descendants(self, target: str) -> set[str]:
         """BFS forward from target to find all downstream workflows."""
         visited: set[str] = {target}
-        queue = [target]
+        queue: deque[str] = deque([target])
         while queue:
-            current = queue.pop(0)
+            current = queue.popleft()
             for downstream in self.reverse_graph.get(current, []):
                 if downstream not in visited:
                     visited.add(downstream)
@@ -189,9 +191,9 @@ class WorkflowOrchestrator:
     def _collect_ancestors(self, target: str) -> set[str]:
         """BFS backward from target to find all upstream workflows."""
         visited: set[str] = {target}
-        queue = [target]
+        queue: deque[str] = deque([target])
         while queue:
-            current = queue.pop(0)
+            current = queue.popleft()
             for upstream in self.graph.get(current, []):
                 if upstream not in visited:
                     visited.add(upstream)
@@ -229,6 +231,8 @@ class WorkflowOrchestrator:
 
             # Check upstream workflow config exists
             upstream_path = config_dir / f"{upstream_workflow}.yml"
+            if not upstream_path.exists():
+                upstream_path = config_dir / f"{upstream_workflow}.yaml"
             if not upstream_path.exists():
                 raise ConfigurationError(
                     f"Upstream workflow '{upstream_workflow}' referenced by "

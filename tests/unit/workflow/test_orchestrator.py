@@ -10,7 +10,7 @@ Covers:
 
 import pytest
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, WorkflowError
 from agent_actions.workflow.orchestrator import WorkflowOrchestrator
 
 
@@ -170,6 +170,17 @@ class TestExecutionPlanResolution:
         assert plan[0] == "a"
         assert plan[-1] == "d"
         assert set(plan) == {"a", "b", "c", "d"}
+
+    def test_circular_dependency_raises(self, tmp_path):
+        """Cycle: a -> b -> c -> a."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "a", upstream=[{"workflow": "c"}])
+        _write_workflow(config_dir, "b", upstream=[{"workflow": "a"}])
+        _write_workflow(config_dir, "c", upstream=[{"workflow": "b"}])
+
+        orch = WorkflowOrchestrator(tmp_path)
+        with pytest.raises(WorkflowError, match="Circular dependency"):
+            orch.resolve_execution_plan("a", "downstream")
 
     def test_invalid_direction_raises(self, tmp_path):
         orch = self._setup_chain(tmp_path)
