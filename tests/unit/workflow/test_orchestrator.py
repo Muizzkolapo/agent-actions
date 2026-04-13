@@ -101,6 +101,22 @@ class TestWorkflowDAGDiscovery:
         assert len(orch.graph) == 1
 
 
+    def test_per_workflow_layout(self, tmp_path):
+        """Discovers configs from agent_workflow/*/agent_config/ layout."""
+        wf_root = tmp_path / "agent_workflow"
+        _write_workflow(wf_root / "ingest" / "agent_config", "ingest")
+        _write_workflow(
+            wf_root / "enrich" / "agent_config",
+            "enrich",
+            upstream=[{"workflow": "ingest"}],
+        )
+
+        orch = WorkflowOrchestrator(tmp_path)
+        assert "ingest" in orch.graph
+        assert "enrich" in orch.graph
+        assert orch.graph["enrich"] == ["ingest"]
+
+
 class TestExecutionPlanResolution:
     """Test resolve_execution_plan for various directions."""
 
@@ -226,7 +242,7 @@ class TestUpstreamRefValidation:
 
     def test_no_config_dir_raises(self, tmp_path):
         orch = WorkflowOrchestrator(tmp_path)
-        with pytest.raises(ConfigurationError, match="agent_config.*not found"):
+        with pytest.raises(ConfigurationError, match="not found"):
             orch.validate_upstream_refs(
                 "enrich",
                 [{"workflow": "ingest", "actions": ["extract"]}],
