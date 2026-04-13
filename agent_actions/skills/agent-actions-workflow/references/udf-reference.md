@@ -97,7 +97,7 @@ def my_function(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 ## File Mode
 
-UDF receives ALL records at once as a list. Unlike Record mode, the `content` wrapper is preserved — you must unwrap each item.
+UDF receives ALL records at once as a list. Each record is a full framework record with `content`, `node_id`, `source_guid`, and `lineage`. Read business data from `record["content"]`. Return records to preserve lineage.
 
 ```python
 from agent_actions import udf_tool
@@ -105,38 +105,57 @@ from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def run_dedup(data: list[dict]) -> list[dict]:
-    """FILE mode: each item has {"content": {...}, "source_guid": "..."}."""
+    """FILE mode: filter/dedup — pass through full records to preserve lineage."""
     seen = {}
     outputs = []
 
     for record in data:
-        content = record.get("content", record)  # Required — wrapper preserved
+        content = record.get("content", record)
         fact = content.get("fact", "")
         if fact not in seen:
             seen[fact] = True
-            outputs.append(content)
+            outputs.append(record)  # return the full record, not just content
 
     return outputs
 ```
 
-**What each item looks like:**
+**What each record looks like:**
 
 ```json
 {
-  "content": {
-    "extract_claims": {"claims": ["claim 1"], "confidence": 0.9}
-  },
+  "node_id": "flatten_claims_abc123_0",
   "source_guid": "abc-123",
-  "node_id": "node_2_xxx_0",
-  "lineage": ["node_0_yyy", "node_1_zzz", "node_2_xxx_0"]
+  "lineage": ["extract_abc", "flatten_claims_abc123_0"],
+  "content": {
+    "fact": "The sky is blue",
+    "confidence": 0.9,
+    "source_quote": "..."
+  }
 }
 ```
 
 | Input | Output |
 |-------|--------|
-| `list[dict]` — each item retains `content` wrapper | `list[dict]` — business data only |
+| `list[dict]` — full records with `content`, `node_id`, `lineage` | `list[dict]` — return full records for passthrough; new dicts for aggregation |
 
-**Metadata is automatic.** FILE-mode tools return business data only — never handle `source_guid`, lineage, or `node_id`. The framework propagates metadata automatically based on input/output cardinality.
+**Two rules for FILE tools:**
+
+1. **Read business data from `record["content"]["field"]`** — not `record["field"]`.
+2. **Return the original record dict for passthrough operations** (filter, dedup, sort, transform). This preserves `node_id` and lineage automatically. For aggregation/synthesis (creating new data not from a single input), return a new dict without `node_id` — the framework treats it as a new record.
+
+```python
+# Passthrough (dedup, filter, sort) — return the record:
+outputs.append(record)  # node_id survives, lineage tracked
+
+# Transform (modify fields) — mutate content, return the record:
+record["content"]["score"] = normalized_score
+outputs.append(record)  # node_id survives, lineage tracked
+
+# Aggregation (create new data) — return a new dict:
+outputs.append({"summary": "merged result", "count": len(data)})  # no node_id = new record
+```
+
+**Lineage is automatic.** The framework matches each output to its input by `node_id`. You never set, copy, or manage `node_id` — just return the record and the framework handles the rest. Inspired by Apache NiFi's FlowFile model: tools handle business logic, the framework handles identity.
 
 **Use FILE for:** Aggregation, deduplication, clustering, cross-record analysis.
 
