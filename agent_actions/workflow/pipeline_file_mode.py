@@ -54,40 +54,50 @@ _TOOL_RESERVED_FIELDS = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def _infer_source_mapping(
-    output_count: int,
+def _resolve_source_mapping(
+    raw_outputs: list[dict],
     input_data: list[dict],
     action_name: str,
-) -> dict[int, int | list[int]] | None:
-    """Infer source_mapping when the tool does not provide one.
+) -> dict[int, int]:
+    """Resolve which input produced each output by ``node_id``.
 
-    Priority:
-    1. Identity mapping when output count matches input count (most common).
-    2. Broadcast when all inputs share the same source_guid.
-    3. Fallback broadcast to first input (with warning).
+    NiFi-inspired: every record carries identity (``node_id``) through the
+    pipeline.  The framework preserves it through the observe filter; tools
+    receive full records and pass them through.  The framework matches each
+    output to its input by ``node_id`` — no heuristics, no guessing.
+
+    Returns a mapping of ``output_index -> input_index`` for outputs that
+    carry a ``node_id`` matching an input.  Outputs without a matching
+    ``node_id`` are omitted — they are new records (e.g. aggregation
+    results) and will receive fresh lineage with no parent.
     """
-    input_count = len(input_data)
+    # Build lookup: node_id -> input index
+    nid_to_idx: dict[str, int] = {}
+    for i, item in enumerate(input_data):
+        if isinstance(item, dict):
+            nid = item.get("node_id")
+            if isinstance(nid, str):
+                nid_to_idx[nid] = i
 
-    if output_count == input_count:
-        return {i: i for i in range(output_count)}
+    mapping: dict[int, int] = {}
+    for i, item in enumerate(raw_outputs):
+        if not isinstance(item, dict):
+            continue
+        nid = item.get("node_id")
+        if not isinstance(nid, str):
+            continue  # New record — no parent.  Gets fresh lineage.
+        if nid not in nid_to_idx:
+            logger.warning(
+                "FILE tool '%s': output[%d] has node_id '%s' not found in inputs. "
+                "Treating as new record.",
+                action_name,
+                i,
+                nid,
+            )
+            continue
+        mapping[i] = nid_to_idx[nid]
 
-    # Check if all inputs share the same source_guid
-    source_guids = {
-        item.get("source_guid")
-        for item in input_data
-        if isinstance(item, dict) and item.get("source_guid")
-    }
-    if len(source_guids) == 1:
-        return {i: 0 for i in range(output_count)}
-
-    logger.warning(
-        "FILE tool '%s' changed cardinality (%d → %d) with mixed source_guids. "
-        "All outputs will inherit source_guid from first input.",
-        action_name,
-        input_count,
-        output_count,
-    )
-    return {i: 0 for i in range(output_count)}
+    return mapping
 
 
 def _reattach_source_guid(
@@ -176,11 +186,11 @@ def process_file_mode_tool(
                 )
             ]
 
-        # Framework-managed: infer which inputs produced which outputs.
-        source_mapping = None
+        # Framework-managed: resolve which input produced each output by node_id.
+        source_mapping: dict[int, int | list[int]] | None = None
         if original_data:
-            source_mapping = _infer_source_mapping(
-                output_count=len(raw_response),
+            source_mapping = _resolve_source_mapping(
+                raw_outputs=raw_response,
                 input_data=original_data,
                 action_name=context.agent_name,
             )

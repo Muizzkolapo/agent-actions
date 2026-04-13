@@ -59,16 +59,16 @@ def test_file_udf_result_unwrapped():
 
 
 def test_file_udf_result_source_mapping_auto_inferred():
-    """Framework always infers source_mapping — tools never provide it."""
+    """Framework resolves source_mapping by node_id — tools never provide it."""
     pipeline, context = _make_pipeline_and_context()
 
     udf_result = FileUDFResult(
-        outputs=[{"name": "alice"}, {"name": "bob"}],
+        outputs=[{"name": "alice", "node_id": "n1"}, {"name": "bob", "node_id": "n2"}],
     )
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
     ]
 
     with patch(
@@ -77,33 +77,33 @@ def test_file_udf_result_source_mapping_auto_inferred():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Framework inferred identity mapping (2 in, 2 out)
+    # Framework resolved mapping via node_id
     assert results[0].source_mapping == {0: 0, 1: 1}
 
 
 def test_file_tool_plain_list_auto_infers_identity_mapping():
-    """Plain list return with same count auto-infers identity source_mapping."""
+    """Plain list return with node_id resolves source_mapping via node_id match."""
     pipeline, context = _make_pipeline_and_context()
 
-    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
+    input_data = [{"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}}]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"score": 0.9}], True),
+        return_value=([{"score": 0.9, "node_id": "n1"}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Auto-inferred identity mapping (same input/output count)
+    # Resolved mapping via node_id
     assert results[0].source_mapping == {0: 0}
 
 
 def test_file_udf_result_mapping_always_inferred():
-    """FileUDFResult triggers framework-inferred mapping like plain lists."""
+    """FileUDFResult resolves mapping via node_id like plain lists."""
     pipeline, context = _make_pipeline_and_context()
 
-    udf_result = FileUDFResult(outputs=[{"name": "alice"}])
+    udf_result = FileUDFResult(outputs=[{"name": "alice", "node_id": "n1"}])
 
-    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
+    input_data = [{"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}}]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
@@ -111,7 +111,7 @@ def test_file_udf_result_mapping_always_inferred():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Framework inferred identity mapping (1 in, 1 out)
+    # Framework resolved mapping via node_id
     assert results[0].source_mapping == {0: 0}
 
 
@@ -548,18 +548,18 @@ def test_result_collector_does_not_raise_when_all_filtered():
 
 
 def test_file_tool_plain_list_preserves_source_guid():
-    """Plain list tool output gets source_guid from input via identity mapping."""
+    """Plain list tool output gets source_guid from input via node_id mapping."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
     ]
 
-    # Tool returns plain list — no source_guid, no FileUDFResult
+    # Tool returns plain list with node_id — no source_guid, no FileUDFResult
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"score": 0.9}, {"score": 0.8}], True),
+        return_value=([{"score": 0.9, "node_id": "n1"}, {"score": 0.8, "node_id": "n2"}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -568,73 +568,73 @@ def test_file_tool_plain_list_preserves_source_guid():
     assert result.data[1]["source_guid"] == "sg-2"
 
 
-def test_file_tool_filter_fewer_outputs_uses_first_source_guid():
-    """When tool filters N→fewer with mixed source_guids, all outputs get first input's source_guid."""
+def test_file_tool_filter_fewer_outputs_with_node_id():
+    """When tool filters N→fewer, outputs with node_id get correct source_guid."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
-        {"source_guid": "sg-3", "content": {"id": 3}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "node_id": "n3", "content": {"id": 3}},
     ]
 
-    # Tool filters 3→2 (no mapping — framework can't know which were kept)
+    # Tool filters 3→2, passes through node_id for matched records
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"name": "alice"}, {"name": "charlie"}], True),
+        return_value=(
+            [{"name": "alice", "node_id": "n1"}, {"name": "charlie", "node_id": "n3"}],
+            True,
+        ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
-    # All outputs get first input's source_guid (framework fallback)
+    # node_id-based mapping resolves correct source_guids
     assert result.data[0]["source_guid"] == "sg-1"
-    assert result.data[1]["source_guid"] == "sg-1"
+    assert result.data[1]["source_guid"] == "sg-3"
 
 
-def test_file_tool_shared_source_guid_broadcast():
-    """When all inputs share source_guid, all outputs inherit it regardless of cardinality."""
+def test_file_tool_new_records_without_node_id_get_no_source_guid():
+    """Tool outputs without node_id are new records — no source_guid reattached."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-shared", "content": {"q": "A"}},
-        {"source_guid": "sg-shared", "content": {"q": "B"}},
+        {"source_guid": "sg-shared", "node_id": "n1", "content": {"q": "A"}},
+        {"source_guid": "sg-shared", "node_id": "n2", "content": {"q": "B"}},
     ]
 
-    # Tool returns different count — no explicit mapping
+    # Tool returns new records (no node_id) — these are new, not passthrough
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([{"q": "A1"}, {"q": "A2"}, {"q": "B1"}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # All outputs inherit the shared source_guid
+    # No node_id in outputs → empty mapping (new records, no parent)
+    assert results[0].source_mapping == {}
+    # Enrichment pipeline sets source_guid="" on new records (no parent to inherit from)
     for item in results[0].data:
-        assert item["source_guid"] == "sg-shared"
+        assert item.get("source_guid") == ""
 
 
-def test_file_tool_cardinality_change_without_mapping_still_sets_source_guid(capsys):
-    """N→M without mapping still sets source_guid on all outputs."""
+def test_file_tool_cardinality_change_new_records_get_empty_mapping():
+    """N→M with new records (no node_id) produces empty source_mapping."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"q": "A"}},
-        {"source_guid": "sg-2", "content": {"q": "B"}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"q": "A"}},
+        {"source_guid": "sg-2", "node_id": "n2", "content": {"q": "B"}},
     ]
 
-    # Tool returns different count, mixed source_guids, no mapping
+    # Tool returns different count, no node_id → all new records
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([{"q": "X"}, {"q": "Y"}, {"q": "Z"}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Warning emitted about cardinality change (to stderr via logger)
-    captured = capsys.readouterr()
-    assert "changed cardinality" in captured.err
-
-    # All outputs still have source_guid (not empty, not None)
-    for item in results[0].data:
-        assert item.get("source_guid"), f"source_guid missing or empty: {item}"
+    # No node_id → empty mapping (new records, no parent)
+    assert results[0].source_mapping == {}
 
 
 def test_file_tool_source_guid_never_empty_string():
@@ -642,12 +642,12 @@ def test_file_tool_source_guid_never_empty_string():
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
     ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"result": "ok"}], True),
+        return_value=([{"result": "ok", "node_id": "n1"}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -679,31 +679,35 @@ def test_file_tool_tool_explicit_source_guid_respected():
 
 
 def test_file_tool_mixed_source_guid_some_set_some_not():
-    """Tool returns mix of items with and without source_guid — framework fills gaps."""
+    """Tool returns mix of items with and without source_guid — framework fills gaps via node_id."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
-        {"source_guid": "sg-3", "content": {"id": 3}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "node_id": "n3", "content": {"id": 3}},
     ]
 
-    # Tool sets source_guid on item[1] but not on [0] or [2]
+    # Tool sets source_guid on item[1] but not on [0] or [2]; node_id on [0] and [2]
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
-            [{"val": "a"}, {"val": "b", "source_guid": "sg-tool-explicit"}, {"val": "c"}],
+            [
+                {"val": "a", "node_id": "n1"},
+                {"val": "b", "source_guid": "sg-tool-explicit"},
+                {"val": "c", "node_id": "n3"},
+            ],
             True,
         ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
-    # Item 0: no explicit source_guid → framework reattaches from input[0]
+    # Item 0: no explicit source_guid, node_id matched → framework reattaches from input[0]
     assert result.data[0]["source_guid"] == "sg-1"
-    # Item 1: tool explicitly set it → respected
+    # Item 1: tool explicitly set it → respected (no node_id, so not in mapping)
     assert result.data[1]["source_guid"] == "sg-tool-explicit"
-    # Item 2: no explicit source_guid → framework reattaches from input[2]
+    # Item 2: no explicit source_guid, node_id matched → framework reattaches from input[2]
     assert result.data[2]["source_guid"] == "sg-3"
 
 
@@ -747,32 +751,33 @@ def test_file_tool_non_dict_output_items():
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
     ]
 
-    # Tool returns a non-dict item (string)
+    # Tool returns a non-dict item (string) — no node_id possible, treated as new record
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(["just a string"], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Non-dict wrapped as {"content": {"value": ...}} — source_guid reattached
-    assert results[0].data[0]["source_guid"] == "sg-1"
+    # Non-dict wrapped as {"content": {"value": ...}} — no node_id, so no mapping
     assert results[0].data[0]["content"]["value"] == "just a string"
+    # New record — enrichment pipeline sets source_guid="" (no parent to inherit from)
+    assert results[0].data[0].get("source_guid") == ""
 
 
 def test_file_tool_merge_reduces_to_fewer_outputs():
-    """N→fewer merge: framework broadcasts first input's source_guid."""
+    """N→fewer merge: new records (no node_id) get empty mapping."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"q": "A"}},
-        {"source_guid": "sg-2", "content": {"q": "B"}},
-        {"source_guid": "sg-3", "content": {"q": "C"}},
+        {"source_guid": "sg-1", "node_id": "n1", "content": {"q": "A"}},
+        {"source_guid": "sg-2", "node_id": "n2", "content": {"q": "B"}},
+        {"source_guid": "sg-3", "node_id": "n3", "content": {"q": "C"}},
     ]
 
-    # Tool merges 3→2 (framework can't know which merged)
+    # Tool merges 3→2 — new records with no node_id (aggregation results)
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([{"merged": "AB"}, {"single": "C"}], True),
@@ -780,98 +785,97 @@ def test_file_tool_merge_reduces_to_fewer_outputs():
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
-    # All outputs get first input's source_guid (fallback for mixed guids)
-    for item in result.data:
-        assert item["source_guid"] == "sg-1"
+    # New records — no node_id → empty mapping, no source_guid reattached
+    assert result.source_mapping == {}
 
 
 def test_file_tool_large_cardinality_expansion():
-    """1→N expansion: all outputs inherit the single input's source_guid."""
+    """1→N expansion: outputs with node_id inherit source_guid, others are new."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-only", "content": {"nested": [1, 2, 3, 4, 5]}},
+        {"source_guid": "sg-only", "node_id": "n1", "content": {"nested": [1, 2, 3, 4, 5]}},
     ]
 
-    # Tool explodes 1 input into 5 outputs
+    # Tool explodes 1 input into 5 new outputs (no node_id — aggregation/expansion)
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([{"val": i} for i in range(5)], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # All 5 outputs inherit the single input's source_guid (shared-source shortcut)
-    for item in results[0].data:
-        assert item["source_guid"] == "sg-only"
+    # No node_id on outputs → empty mapping (new records)
+    assert results[0].source_mapping == {}
+    assert len(results[0].data) == 5
 
 
-# --- Hardening: _infer_source_mapping unit tests ---
+# --- Hardening: _resolve_source_mapping unit tests ---
 
 
-class TestInferSourceMapping:
-    """Direct unit tests for _infer_source_mapping logic."""
+class TestResolveSourceMapping:
+    """Direct unit tests for _resolve_source_mapping logic."""
 
-    def test_identity_when_counts_match(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+    def test_matches_by_node_id(self):
+        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
 
-        result = _infer_source_mapping(
-            output_count=3,
-            input_data=[{"source_guid": "a"}, {"source_guid": "b"}, {"source_guid": "c"}],
+        result = _resolve_source_mapping(
+            raw_outputs=[{"node_id": "a"}, {"node_id": "b"}, {"node_id": "c"}],
+            input_data=[{"node_id": "a"}, {"node_id": "b"}, {"node_id": "c"}],
             action_name="test",
         )
         assert result == {0: 0, 1: 1, 2: 2}
 
-    def test_broadcast_when_shared_source_guid(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+    def test_reordered_outputs_match_correctly(self):
+        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
 
-        result = _infer_source_mapping(
-            output_count=5,
-            input_data=[{"source_guid": "sg-shared"}, {"source_guid": "sg-shared"}],
+        result = _resolve_source_mapping(
+            raw_outputs=[{"node_id": "c"}, {"node_id": "a"}],
+            input_data=[{"node_id": "a"}, {"node_id": "b"}, {"node_id": "c"}],
             action_name="test",
         )
-        assert result == {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+        assert result == {0: 2, 1: 0}
 
-    def test_fallback_when_ambiguous(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+    def test_no_node_id_in_outputs_returns_empty(self):
+        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
 
-        result = _infer_source_mapping(
-            output_count=3,
-            input_data=[{"source_guid": "sg-1"}, {"source_guid": "sg-2"}],
+        result = _resolve_source_mapping(
+            raw_outputs=[{"val": "x"}, {"val": "y"}, {"val": "z"}],
+            input_data=[{"node_id": "a"}, {"node_id": "b"}],
             action_name="test",
         )
-        # Fallback: all map to first input
-        assert result == {0: 0, 1: 0, 2: 0}
+        # No node_id on outputs → all new records → empty mapping
+        assert result == {}
 
-    def test_zero_output_returns_empty_mapping(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+    def test_zero_outputs_returns_empty_mapping(self):
+        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
 
-        result = _infer_source_mapping(
-            output_count=0,
-            input_data=[{"source_guid": "sg-1"}],
+        result = _resolve_source_mapping(
+            raw_outputs=[],
+            input_data=[{"node_id": "a"}],
             action_name="test",
         )
         assert result == {}
 
-    def test_zero_input_returns_identity_if_zero_output(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+    def test_zero_inputs_returns_empty_mapping(self):
+        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
 
-        result = _infer_source_mapping(
-            output_count=0,
+        result = _resolve_source_mapping(
+            raw_outputs=[],
             input_data=[],
             action_name="test",
         )
         assert result == {}
 
-    def test_input_without_source_guid_falls_to_broadcast(self):
-        from agent_actions.workflow.pipeline_file_mode import _infer_source_mapping
+    def test_input_without_node_id_not_matchable(self):
+        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
 
-        result = _infer_source_mapping(
-            output_count=3,
-            input_data=[{"content": "no guid"}, {"content": "also none"}],
+        result = _resolve_source_mapping(
+            raw_outputs=[{"node_id": "a"}, {"node_id": "b"}],
+            input_data=[{"content": "no nid"}, {"content": "also none"}],
             action_name="test",
         )
-        # No source_guids → empty set → len != 1 → falls to broadcast warning
-        assert result == {0: 0, 1: 0, 2: 0}
+        # No node_id on inputs → nothing to match → empty mapping
+        assert result == {}
 
 
 # --- Hardening: _reattach_source_guid unit tests ---

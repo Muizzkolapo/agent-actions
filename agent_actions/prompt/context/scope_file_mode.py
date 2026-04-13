@@ -2,7 +2,7 @@
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -325,33 +325,29 @@ def apply_observe_for_file_mode(
         else:
             cross_ns_data = {}
 
-        ordered: dict[str, Any] = {}
+        # NiFi-inspired: enrich the record in-place rather than stripping
+        # to a flat dict.  The tool receives the full record (framework
+        # fields + content) with cross-namespace data injected into content.
+        # Identity (node_id) naturally survives because nothing strips it.
+        enriched = dict(item)  # shallow copy — don't mutate caller's data
+        enriched_content = dict(content)  # shallow copy of content
+
         for ns, field, output_key in resolved:
             if field == "*":
-                ns_data = None
+                # Wildcard: inject all fields from cross-namespace source.
                 if ns in cross_ns_data:
-                    ns_data = cross_ns_data[ns]
-                elif not has_reliable_ns or ns in input_source_names:
-                    ns_data = content
-                if ns_data:
-                    for f, v in ns_data.items():
+                    for f, v in cross_ns_data[ns].items():
                         key = f"{ns}.{f}" if qualify_wildcards else f
-                        ordered[key] = v
+                        enriched_content[key] = v
+                # Input-source wildcard: content already has all fields.
                 continue
 
-            # Cross-namespace data takes priority for non-input namespaces.
+            # Cross-namespace data: inject into content.
             if ns in cross_ns_data and field in cross_ns_data[ns]:
-                ordered[output_key] = cross_ns_data[ns][field]
-            # Input source (per-record content) -- only when ns is actually
-            # an input source.  Without this guard, an unresolved non-input
-            # namespace (e.g. dep_b) would silently grab a same-named field
-            # from the primary record, producing incorrect context.
-            # When has_reliable_ns is False (content-key heuristic), we
-            # allow the fallback for all refs since we can't distinguish
-            # input namespaces from others.
+                enriched_content[output_key] = cross_ns_data[ns][field]
+            # Input source: field is already in content — no injection needed.
             elif (not has_reliable_ns or ns in input_source_names) and field in content:
-                ordered[output_key] = content[field]
-            # Field not found anywhere -- skip silently (logged at debug).
+                pass  # already present in enriched_content
             else:
                 logger.debug(
                     "[FILE OBSERVE] Field '%s' (ns='%s') not found for action '%s'. "
@@ -363,6 +359,7 @@ def apply_observe_for_file_mode(
                     list(cross_ns_data.get(ns, {}).keys()),
                 )
 
-        filtered.append(ordered)
+        enriched["content"] = enriched_content
+        filtered.append(enriched)
 
     return filtered
