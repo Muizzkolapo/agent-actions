@@ -437,6 +437,10 @@ class AgentWorkflow:
         with manager.context():
             try:
                 total_actions = len(self.execution_order)
+                levels = self.services.core.action_level_orchestrator.compute_execution_levels()
+                self.services.core.action_level_orchestrator.log_execution_levels(
+                    levels, self.action_indices
+                )
                 self.console.print(f"Found {total_actions} actions to run.")
 
                 for idx, action_name in enumerate(self.execution_order):
