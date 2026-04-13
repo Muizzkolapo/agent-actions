@@ -848,7 +848,7 @@ class TestFileModeObserve:
     """FILE-mode specific observe behavior."""
 
     def test_file_mode_observe_filters_fields_per_record(self):
-        """FILE-mode observe returns only declared fields for each record in array."""
+        """FILE-mode observe returns full records with all content preserved (NiFi enrichment)."""
         data = [
             {
                 "content": {"title": "Record 1", "body": "Text 1", "secret": "hidden1"},
@@ -879,9 +879,11 @@ class TestFileModeObserve:
 
         assert len(result) == 3
         for i, record in enumerate(result, 1):
-            assert record["title"] == f"Record {i}"
-            assert record["body"] == f"Text {i}"
-            assert "secret" not in record
+            assert record["content"]["title"] == f"Record {i}"
+            assert record["content"]["body"] == f"Text {i}"
+            # NiFi enrichment preserves all original content fields
+            assert record["content"]["secret"] == f"hidden{i}"
+            assert record["source_guid"] == f"sg{i}"
 
     def test_file_mode_observe_preserves_record_order(self):
         """Output array order matches input array order."""
@@ -914,9 +916,9 @@ class TestFileModeObserve:
         )
 
         assert len(result) == 3
-        assert result[0]["name"] == "Charlie"
-        assert result[1]["name"] == "Alice"
-        assert result[2]["name"] == "Bob"
+        assert result[0]["content"]["name"] == "Charlie"
+        assert result[1]["content"]["name"] == "Alice"
+        assert result[2]["content"]["name"] == "Bob"
 
     def test_file_mode_cross_namespace_loading(self):
         """FILE-mode loads ancestor data per-record using ancestry cache."""
@@ -961,15 +963,17 @@ class TestFileModeObserve:
 
         assert len(result) == 1
         # Input source field from record content
-        assert result[0]["text"] == "Biology paper"
-        # Cross-namespace field from historical lookup
-        assert result[0]["category"] == "science"
-        # Excluded fields absent
-        assert "length" not in result[0]
-        assert "score" not in result[0]
+        assert result[0]["content"]["text"] == "Biology paper"
+        # Cross-namespace field injected into content from historical lookup
+        assert result[0]["content"]["category"] == "science"
+        # NiFi enrichment: all original content fields preserved
+        assert result[0]["content"]["length"] == 500
+        # Framework fields preserved at top level
+        assert result[0]["source_guid"] == "sg1"
 
     def test_file_mode_missing_field_warns(self):
-        """FILE-mode: observe references field not in record -> field absent from output."""
+        """FILE-mode: observe references field not in record -> field absent from output,
+        but all original content fields are preserved (NiFi enrichment)."""
         data = [
             {
                 "content": {"title": "Exists", "body": "Also exists", "extra": "here too"},
@@ -989,12 +993,12 @@ class TestFileModeObserve:
         )
 
         assert len(result) == 1
-        assert result[0]["title"] == "Exists"
-        # nonexistent_field is simply absent (not an error in file mode)
-        assert "nonexistent_field" not in result[0]
-        # Other undeclared fields are excluded
-        assert "body" not in result[0]
-        assert "extra" not in result[0]
+        assert result[0]["content"]["title"] == "Exists"
+        # nonexistent_field is simply absent (not injected)
+        assert "nonexistent_field" not in result[0]["content"]
+        # NiFi enrichment: all original content fields are preserved
+        assert result[0]["content"]["body"] == "Also exists"
+        assert result[0]["content"]["extra"] == "here too"
 
 
 # ---------------------------------------------------------------------------

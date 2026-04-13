@@ -179,6 +179,37 @@ actions:
     {% if slow_path %}Slow result: {{ slow_path.result }}{% endif %}
 ```
 
+## FILE-Mode Lineage
+
+FILE-mode tools receive all records at once. The framework tracks each record's identity through the tool using `node_id` — inspired by [Apache NiFi's FlowFile model](https://nifi.apache.org/docs/nifi-docs/html/nifi-in-depth.html) where every record carries an immutable UUID through every processor.
+
+**How it works:**
+
+1. Each input record carries a `node_id` from the previous action
+2. The tool receives full records and returns them
+3. The framework matches each output to its input by `node_id`
+4. Matched outputs extend the parent's lineage chain
+5. Outputs without `node_id` (aggregation results) get fresh lineage
+
+```
+Input records:                        Tool output:                     After enrichment:
+┌──────────────────────┐              ┌──────────────────────┐         ┌──────────────────────┐
+│ node_id: flatten_q0  │──── kept ───▶│ node_id: flatten_q0  │────────▶│ lineage: [...,       │
+│ content: {q: "Q0"}   │              │ content: {q: "Q0"}   │         │   flatten_q0,        │
+└──────────────────────┘              └──────────────────────┘         │   dedup_tool_0]      │
+┌──────────────────────┐                                               └──────────────────────┘
+│ node_id: flatten_q1  │──── dropped (not in output)
+│ content: {q: "Q1"}   │
+└──────────────────────┘
+┌──────────────────────┐              ┌──────────────────────┐         ┌──────────────────────┐
+│ node_id: flatten_q2  │──── kept ───▶│ node_id: flatten_q2  │────────▶│ lineage: [...,       │
+│ content: {q: "Q2"}   │              │ content: {q: "Q2"}   │         │   flatten_q2,        │
+└──────────────────────┘              └──────────────────────┘         │   dedup_tool_1]      │
+                                                                       └──────────────────────┘
+```
+
+Downstream actions can use `context_scope.observe` to load data from any ancestor in the lineage chain — because each record traces back to the correct parent, not a shared fallback.
+
 ## Matching Priority
 
 When loading historical data, Agent Actions uses this priority:
