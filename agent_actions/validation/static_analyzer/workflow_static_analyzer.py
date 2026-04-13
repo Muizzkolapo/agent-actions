@@ -537,7 +537,11 @@ class WorkflowStaticAnalyzer:
 
                     # Skip special namespaces and loop (runtime namespace
                     # not in SPECIAL_NAMESPACES but valid in context_scope)
-                    if dep_name in SPECIAL_NAMESPACES or dep_name == "loop":
+                    if (
+                        dep_name in SPECIAL_NAMESPACES
+                        or dep_name == "loop"
+                        or dep_name in self.external_action_names
+                    ):
                         continue
 
                     # Check if dependency is declared
