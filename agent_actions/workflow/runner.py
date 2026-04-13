@@ -327,7 +327,11 @@ class ActionRunner:
             target_files = upstream_backend.list_target_files(dep_name)
             if target_files:
                 import json
+                import shutil
 
+                # Clean stale exports before writing fresh data
+                if upstream_target.exists():
+                    shutil.rmtree(upstream_target)
                 upstream_target.mkdir(parents=True, exist_ok=True)
                 for file_name in target_files:
                     data = upstream_backend.read_target(dep_name, file_name)
