@@ -38,7 +38,6 @@ class ConfigManager:
         self.agent_name: str | None = None
         self.agent_configs: dict[str, AgentConfig] = {}
         self.execution_order: list[str] = []
-        self.child_pipeline: str | None = None
         self.tool_path: list[str] | None = None
         self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
@@ -164,34 +163,6 @@ class ConfigManager:
                     "operation": "validate_agent_name",
                 },
             )
-
-    def check_child_pipeline(self) -> None:
-        if self.user_config is None:
-            raise RuntimeError(
-                "user_config is None: load_configs() must be called before check_child_pipeline()"
-            )
-        if "name" in self.user_config and "actions" in self.user_config:
-            actions = self.user_config.get("actions", [])
-            for action in actions:
-                if isinstance(action, dict) and "child" in action:
-                    if not action["child"]:
-                        continue
-                    self.child_pipeline = action["child"][0]
-                    return
-        else:
-            if self.agent_name is None:
-                raise RuntimeError(
-                    "agent_name is None: validate_agent_name() must be called "
-                    "before check_child_pipeline()"
-                )
-            agent_list = self.user_config.get(self.agent_name, [])
-            for item in agent_list:
-                if isinstance(item, dict) and "child" in item:
-                    if not item["child"]:
-                        continue
-                    self.child_pipeline = item["child"][0]
-                    return
-        self.child_pipeline = None
 
     def get_user_agents(self) -> list[dict[str, Any]]:
         from agent_actions.output.response.expander import ActionExpander

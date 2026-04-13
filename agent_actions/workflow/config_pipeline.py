@@ -64,8 +64,6 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
     manager = config.manager
     _run_config_stage(manager.load_configs, "load_configs", manager)
     _run_config_stage(manager.validate_agent_name, "validate_agent_name", manager)
-    _run_config_stage(manager.check_child_pipeline, "check_child_pipeline", manager)
-
     # Discover UDFs BEFORE expanding actions (which needs UDF metadata)
     discover_workflow_udfs(config, console)
 
@@ -94,7 +92,6 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         execution_order=execution_order,
         action_indices=action_indices,
         action_configs=action_configs,
-        child_pipeline=manager.child_pipeline,
     )
 
 

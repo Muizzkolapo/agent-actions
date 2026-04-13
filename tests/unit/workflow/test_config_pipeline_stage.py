@@ -94,11 +94,11 @@ class TestRunConfigStage:
             raise err
 
         with pytest.raises(RuntimeError) as exc_info:
-            _run_config_stage(fail, "check_child_pipeline", manager)
+            _run_config_stage(fail, "determine_execution_order", manager)
 
         ctx = exc_info.value.context
         assert isinstance(ctx, dict)
-        assert ctx["pipeline_stage"] == "check_child_pipeline"
+        assert ctx["pipeline_stage"] == "determine_execution_order"
 
     def test_passes_args_to_function(self):
         """Extra args are forwarded to the wrapped function."""

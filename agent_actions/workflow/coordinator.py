@@ -327,11 +327,6 @@ class AgentWorkflow:
         """Return action configs from metadata."""
         return self.metadata.action_configs
 
-    @property
-    def child_pipeline(self) -> str | None:
-        """Return child pipeline from metadata."""
-        return self.metadata.child_pipeline
-
     # ── Session management ──────────────────────────────────────────────
 
     def _generate_workflow_session_id(self) -> str:
