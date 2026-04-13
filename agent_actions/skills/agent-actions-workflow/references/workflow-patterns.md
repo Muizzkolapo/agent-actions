@@ -2,6 +2,20 @@
 
 Detailed patterns for common parallel and merge scenarios.
 
+## Table of Contents
+
+- [Pattern Overview](#pattern-overview)
+- [Sequential Pipeline](#sequential-pipeline)
+- [Diamond/Fan-in Pattern](#diamondfan-in-pattern)
+- [Multi-enrichment Pattern](#multi-enrichment-pattern)
+- [Ensemble/Voting Pattern](#ensemblevoting-pattern)
+- [Conditional Merge Pattern](#conditional-merge-pattern)
+- [Conditional Downstream Processing Pattern](#conditional-downstream-processing-pattern)
+- [Versioned Parallel Actions](#versioned-parallel-actions)
+- [Map-Reduce Pattern](#map-reduce-pattern)
+- [Tool + LLM Hybrid Pattern](#tool--llm-hybrid-pattern)
+- [Guard Decision Flow](#guard-decision-flow)
+
 ## Pattern Overview
 
 | Pattern | Structure | Use Case |

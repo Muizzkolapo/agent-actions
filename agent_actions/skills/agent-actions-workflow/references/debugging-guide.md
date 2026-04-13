@@ -2,6 +2,18 @@
 
 Comprehensive troubleshooting for agent-actions workflows.
 
+## Table of Contents
+
+- [Triage Checklist](#triage-checklist)
+- [Caching Behavior](#caching-behavior)
+- [Validation Pipeline Overview](#validation-pipeline-overview)
+- [Pre-Run Verification](#pre-run-verification)
+- [Quick Diagnostics](#quick-diagnostics)
+- [Common Error Messages](#common-error-messages)
+- [Filtered Pipeline Debugging](#filtered-pipeline-debugging)
+- [Reprompt vs Guard Decision](#reprompt-vs-guard-decision)
+- [Granularity Visualization](#granularity-visualization)
+
 ## Triage Checklist
 
 When investigating `agac run` output, follow this checklist in order. Each step catches a specific category of bug.
@@ -44,12 +56,12 @@ for r in data:
     print({k: v for k, v in content.items() if not k.startswith('_')})" 2>/dev/null
 ```
 
-**Known bug:** `!=` and `>` operators silently evaluate as `==`. Test directly:
+All comparison operators (`==`, `!=`, `>`, `>=`, `<`, `<=`) are supported. If guard results seem wrong, test the condition directly:
 ```python
 from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter, FilterItemRequest
 gf = GuardFilter()
 r = gf.filter_item(FilterItemRequest(data={"field": "value"}, condition='field != "x"'))
-print(r.matched)  # False = BUG
+print(r.matched)  # True — field "value" != "x"
 ```
 
 ### 3. First Action Failures
@@ -147,7 +159,49 @@ rm -rf agent_workflow/<workflow>/agent_io/target/*
 rm -rf agent_workflow/<workflow>/agent_io/source/
 ```
 
-## Stale Cache Diagnosis
+## Caching Behavior
+
+Actions cache their results in `.agent_status.json` (stored at `agent_workflow/<workflow>/agent_io/.agent_status.json`). Understanding caching prevents both stale data bugs and unnecessary re-runs.
+
+### How skip-vs-rerun decisions work
+
+When you run `agac run`, the framework checks each action:
+
+1. Is the action's status `completed` in `.agent_status.json`?
+2. Does the action have actual output files in the storage backend?
+3. Does the action have a `FAILED` or `SKIPPED` disposition flag?
+
+Only if (1) is yes AND (2) is yes AND (3) is no does the framework skip re-execution.
+
+### What invalidates the cache
+
+| Change | Cache invalidated? |
+|--------|-------------------|
+| Modify `record_limit` or `file_limit` | Yes — automatically detected |
+| Change prompt text | No — must clear manually |
+| Change schema | No — must clear manually |
+| Change model/vendor | No — must clear manually |
+| Upstream action re-runs | No — must clear manually |
+
+The framework stores `record_limit` and `file_limit` values as metadata when an action completes. If these values differ on the next run, the action resets to PENDING automatically.
+
+For all other config changes, clear the cache manually:
+
+```bash
+rm -rf agent_workflow/<workflow>/agent_io/target/<action_name>
+agac run -a <workflow>
+```
+
+### enable_caching flag
+
+`enable_caching: true` is the default. Setting `enable_caching: false` on an action disables result caching — the action re-runs every time.
+
+```yaml
+- name: volatile_action
+  enable_caching: false                # Always re-run
+```
+
+### Stale Cache Diagnosis
 
 **Symptom:** Re-running after a failure completes in 0.03s. Actions show "completed" with empty output.
 
