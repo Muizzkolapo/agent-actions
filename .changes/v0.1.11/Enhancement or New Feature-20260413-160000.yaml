@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "FILE-mode record identity: tools receive full records with node_id, framework matches outputs to inputs by identity instead of heuristics (breaking change for FILE tools — use record[\"content\"][\"field\"] instead of record[\"field\"])"
+time: 2026-04-13T16:00:00.000000Z
