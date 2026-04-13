@@ -39,6 +39,7 @@ class ConfigManager:
         self.agent_configs: dict[str, AgentConfig] = {}
         self.execution_order: list[str] = []
         self.tool_path: list[str] | None = None
+        self.virtual_action_names: set[str] = set()
         self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
         self.workflow_config: Any = None
@@ -294,13 +295,16 @@ class ConfigManager:
             self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
 
         workflow_actions = list(self.agent_configs.keys())
+        # Include virtual actions (from upstream workflows) as valid
+        # reference targets for dependency inference and validation.
+        all_known_actions = workflow_actions + list(self.virtual_action_names)
 
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
                 try:
                     input_sources, context_sources = infer_dependencies(
-                        config.model_dump(), workflow_actions, agent_type
+                        config.model_dump(), all_known_actions, agent_type
                     )
                     all_deps: list[Any] = input_sources + context_sources
                 except Exception as e:
@@ -312,6 +316,9 @@ class ConfigManager:
                     )
                     all_deps = list(config.dependencies)
 
+                # Filter to local operational actions only — virtual actions
+                # (from upstream workflows) are valid references but are NOT
+                # added to the dependency graph since they're pre-completed.
                 dependencies = [
                     dep
                     for dep in all_deps
