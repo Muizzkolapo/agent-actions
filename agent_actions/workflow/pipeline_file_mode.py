@@ -198,11 +198,17 @@ def process_file_mode_tool(
                 action_name=context.agent_name,
             )
 
-        # Separate business data from framework fields in tool output
+        # Separate business data from framework fields in tool output.
+        # Tools may return full records (with content wrapper) or flat dicts.
         structured_data = []
         for item in raw_response:
             if isinstance(item, dict):
-                data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
+                if isinstance(item.get("content"), dict):
+                    # Tool returned a full record — use content directly.
+                    data_fields = item["content"]
+                else:
+                    # Tool returned a flat dict — strip reserved fields.
+                    data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
                 structured_item = {"content": data_fields}
 
                 if "source_guid" in item:
