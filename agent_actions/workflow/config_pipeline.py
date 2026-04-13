@@ -91,6 +91,8 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         action_config["workflow_config_path"] = config.paths.constructor_path
         if config.project_root:
             action_config["_project_root"] = str(config.project_root)
+        if virtual_actions:
+            action_config["_virtual_action_names"] = list(virtual_actions.keys())
 
     return WorkflowMetadata(
         agent_name=manager.agent_name,

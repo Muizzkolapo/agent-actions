@@ -30,6 +30,7 @@ class WorkflowOrchestrator:
         self.project_root = project_root
         self._graph: dict[str, list[str]] | None = None
         self._reverse_graph: dict[str, list[str]] | None = None
+        self._config_files_cache: list[Path] | None = None
 
     @property
     def graph(self) -> dict[str, list[str]]:
@@ -46,22 +47,25 @@ class WorkflowOrchestrator:
         return self._reverse_graph
 
     def _discover_workflow_graph(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-        """Scan ``agent_config/*.yml`` and build the workflow dependency graph.
+        """Scan workflow config files and build the workflow dependency graph.
+
+        Supports two project layouts:
+        - Flat: ``agent_config/*.yml`` (all configs in one directory)
+        - Per-workflow: ``agent_workflow/*/agent_config/*.yml`` (each workflow in its own directory)
 
         Returns:
             Tuple of (forward_graph, reverse_graph) where:
             - forward_graph: ``{workflow: [upstream_workflows]}``
             - reverse_graph: ``{workflow: [downstream_workflows]}``
         """
-        config_dir = self._find_config_dir()
-        if config_dir is None:
+        config_files = self._find_all_config_files()
+        if not config_files:
             return {}, {}
 
         graph: dict[str, list[str]] = {}
         reverse: dict[str, list[str]] = {}
 
-        yml_files = list(config_dir.glob("*.yml")) + list(config_dir.glob("*.yaml"))
-        for config_path in sorted(yml_files):
+        for config_path in sorted(config_files):
             workflow_name, upstream_workflows = self._parse_upstream_from_config(config_path)
             if workflow_name is None:
                 continue
@@ -77,20 +81,36 @@ class WorkflowOrchestrator:
 
         return graph, reverse
 
-    def _find_config_dir(self) -> Path | None:
-        """Locate the ``agent_config/`` directory under the project root."""
-        config_dir = self.project_root / "agent_config"
-        if config_dir.is_dir():
-            return config_dir
+    def _find_all_config_files(self) -> list[Path]:
+        """Collect all workflow config files from supported project layouts.
 
-        # Check one level up (project may be nested under workflow name)
-        for child in self.project_root.iterdir():
-            if child.is_dir():
-                candidate = child / "agent_config"
-                if candidate.is_dir():
-                    return candidate
+        Supports flat (``agent_config/*.yml``) and per-workflow
+        (``agent_workflow/*/agent_config/*.yml``) layouts.
+        """
+        if self._config_files_cache is not None:
+            return self._config_files_cache
 
-        return None
+        config_files: list[Path] = []
+
+        flat_dir = self.project_root / "agent_config"
+        if flat_dir.is_dir():
+            config_files.extend(self._glob_yaml(flat_dir))
+
+        agent_workflow_dir = self.project_root / "agent_workflow"
+        if agent_workflow_dir.is_dir():
+            for workflow_dir in agent_workflow_dir.iterdir():
+                if workflow_dir.is_dir():
+                    nested_config = workflow_dir / "agent_config"
+                    if nested_config.is_dir():
+                        config_files.extend(self._glob_yaml(nested_config))
+
+        self._config_files_cache = config_files
+        return config_files
+
+    @staticmethod
+    def _glob_yaml(directory: Path) -> list[Path]:
+        """Glob for .yml and .yaml files in a directory."""
+        return list(directory.glob("*.yml")) + list(directory.glob("*.yaml"))
 
     def _parse_upstream_from_config(self, config_path: Path) -> tuple[str | None, list[str]]:
         """Extract workflow name and upstream workflow names from a config file.
@@ -203,13 +223,20 @@ class WorkflowOrchestrator:
                     queue.append(upstream)
         return visited
 
+    def _find_workflow_config(self, workflow_name: str) -> Path | None:
+        """Find the config file for a specific workflow across all config locations."""
+        config_files = self._find_all_config_files()
+        for config_path in config_files:
+            if config_path.stem == workflow_name:
+                return config_path
+        return None
+
     def validate_upstream_refs(self, workflow_name: str, upstream_refs: list[dict]) -> None:
         """Validate that upstream workflow references are resolvable.
 
         Checks:
-        - Referenced workflow configs exist in ``agent_config/``
+        - Referenced workflow configs exist
         - Referenced actions exist in the upstream workflow
-        - No circular dependencies in the workflow DAG
 
         Args:
             workflow_name: Name of the workflow declaring the upstream refs.
@@ -218,13 +245,6 @@ class WorkflowOrchestrator:
         Raises:
             ConfigurationError: If validation fails.
         """
-        config_dir = self._find_config_dir()
-        if config_dir is None:
-            raise ConfigurationError(
-                "Cannot validate upstream refs: agent_config/ directory not found",
-                context={"operation": "validate_upstream_refs", "workflow": workflow_name},
-            )
-
         for ref in upstream_refs:
             upstream_workflow = ref.get("workflow")
             upstream_actions = ref.get("actions", [])
@@ -233,13 +253,11 @@ class WorkflowOrchestrator:
                 continue
 
             # Check upstream workflow config exists
-            upstream_path = config_dir / f"{upstream_workflow}.yml"
-            if not upstream_path.exists():
-                upstream_path = config_dir / f"{upstream_workflow}.yaml"
-            if not upstream_path.exists():
+            upstream_path = self._find_workflow_config(upstream_workflow)
+            if upstream_path is None:
                 raise ConfigurationError(
                     f"Upstream workflow '{upstream_workflow}' referenced by "
-                    f"'{workflow_name}' not found at {upstream_path}",
+                    f"'{workflow_name}' not found in project",
                     context={
                         "operation": "validate_upstream_refs",
                         "workflow": workflow_name,
