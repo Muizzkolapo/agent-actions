@@ -100,7 +100,6 @@ class TestWorkflowDAGDiscovery:
         assert "valid" in orch.graph
         assert len(orch.graph) == 1
 
-
     def test_per_workflow_layout(self, tmp_path):
         """Discovers configs from agent_workflow/*/agent_config/ layout."""
         wf_root = tmp_path / "agent_workflow"
