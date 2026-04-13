@@ -523,14 +523,14 @@ def test_new_observe_no_observe_returns_data_as_is():
 
 
 def test_new_observe_handles_flat_records():
-    """Records without content wrapper: NiFi enrichment preserves all fields."""
+    """Records without content wrapper: no cross-ns refs → fast path returns as-is."""
     data = [{"question": "Q1", "answer": "A1", "extra": "keep"}]
     config = {"context_scope": {"observe": ["upstream.answer", "upstream.question"]}}
     result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    # Flat records get content added; all original fields preserved
-    assert result[0]["content"]["answer"] == "A1"
-    assert result[0]["content"]["question"] == "Q1"
-    assert result[0]["content"]["extra"] == "keep"
+    # No cross-namespace refs → fast path returns data unmodified
+    assert result[0]["answer"] == "A1"
+    assert result[0]["question"] == "Q1"
+    assert result[0]["extra"] == "keep"
 
 
 def test_new_observe_wildcard_returns_all_content_fields():

@@ -418,7 +418,9 @@ class TestApplyObserveForFileMode:
         assert result == ["just a string", "another string"]
 
     def test_hitl_merge_back_unaffected(self):
-        """Filtered output is a shallow copy; original_data is unmodified."""
+        """No cross-namespace refs → fast path returns data as-is.
+        Original is unmodified because nothing was injected.
+        """
         original = [
             {"source_guid": "sg-1", "content": {"question": "Q?", "secret": "hidden"}},
         ]
@@ -426,12 +428,10 @@ class TestApplyObserveForFileMode:
         filtered = apply_observe_for_file_mode(
             data=original, agent_config=config, agent_name="test"
         )
-        # NiFi enrichment: content is preserved (no stripping)
         assert filtered[0]["content"]["question"] == "Q?"
         assert filtered[0]["content"]["secret"] == "hidden"
-        # Filtered is a shallow copy, not the same object
-        assert filtered[0] is not original[0]
-        # Original should be unmodified
+        # No cross-namespace refs → fast path returns data directly
+        assert filtered is original
         assert original[0]["content"]["secret"] == "hidden"
 
     def test_source_data_flat_format(self):

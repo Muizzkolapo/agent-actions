@@ -292,6 +292,11 @@ def apply_observe_for_file_mode(
     # Historical lookups depend on source_guid + lineage + parent/root target IDs,
     # so the cache key must include all discriminators to avoid returning stale
     # data when records share a source_guid but diverge in ancestry.
+    # Fast path: no cross-namespace refs to resolve — return data unmodified.
+    # Copies and per-record loops are only needed when injecting cross-ns data.
+    if not needed_ns:
+        return data
+
     cross_ns_cache: dict[tuple, dict[str, dict]] = {}
     filtered: list[dict] = []
     for item in data:
@@ -302,50 +307,42 @@ def apply_observe_for_file_mode(
         content = item.get("content", item) if isinstance(item.get("content"), dict) else item
 
         # Resolve cross-namespace data (cached by ancestry key).
-        if needed_ns:
-            sguid = item.get("source_guid")
-            cache_key = (
-                sguid,
-                tuple(item.get("lineage", [])),
-                item.get("parent_target_id"),
-                item.get("root_target_id"),
+        sguid = item.get("source_guid")
+        cache_key = (
+            sguid,
+            tuple(item.get("lineage", [])),
+            item.get("parent_target_id"),
+            item.get("root_target_id"),
+        )
+        if cache_key not in cross_ns_cache:
+            matched_source = source_index.get(sguid, source_data[0] if source_data else None)
+            cross_ns_cache[cache_key] = _load_file_mode_cross_namespace_data(
+                needed_ns=needed_ns,
+                record=item,
+                agent_name=agent_name,
+                agent_indices=agent_indices,
+                file_path=file_path,
+                source_record=matched_source,
+                storage_backend=storage_backend,
             )
-            if cache_key not in cross_ns_cache:
-                matched_source = source_index.get(sguid, source_data[0] if source_data else None)
-                cross_ns_cache[cache_key] = _load_file_mode_cross_namespace_data(
-                    needed_ns=needed_ns,
-                    record=item,
-                    agent_name=agent_name,
-                    agent_indices=agent_indices,
-                    file_path=file_path,
-                    source_record=matched_source,
-                    storage_backend=storage_backend,
-                )
-            cross_ns_data = cross_ns_cache[cache_key]
-        else:
-            cross_ns_data = {}
+        cross_ns_data = cross_ns_cache[cache_key]
 
-        # NiFi-inspired: enrich the record in-place rather than stripping
-        # to a flat dict.  The tool receives the full record (framework
-        # fields + content) with cross-namespace data injected into content.
-        # Identity (node_id) naturally survives because nothing strips it.
-        enriched = dict(item)  # shallow copy — don't mutate caller's data
-        enriched_content = dict(content)  # shallow copy of content
+        # NiFi-inspired: enrich the record rather than stripping to a flat
+        # dict.  Shallow-copy record + content to avoid mutating caller's
+        # data when injecting cross-namespace fields.
+        enriched = dict(item)
+        enriched_content = dict(content)
 
         for ns, field, output_key in resolved:
             if field == "*":
-                # Wildcard: inject all fields from cross-namespace source.
                 if ns in cross_ns_data:
                     for f, v in cross_ns_data[ns].items():
                         key = f"{ns}.{f}" if qualify_wildcards else f
                         enriched_content[key] = v
-                # Input-source wildcard: content already has all fields.
                 continue
 
-            # Cross-namespace data: inject into content.
             if ns in cross_ns_data and field in cross_ns_data[ns]:
                 enriched_content[output_key] = cross_ns_data[ns][field]
-            # Input source: field is already in content — no injection needed.
             elif (not has_reliable_ns or ns in input_source_names) and field in content:
                 pass  # already present in enriched_content
             else:
