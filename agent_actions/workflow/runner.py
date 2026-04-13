@@ -300,6 +300,9 @@ class ActionRunner:
         Uses ``FileHandler.find_specific_folder`` directly (not ``get_action_folder``)
         because ``get_action_folder`` always resolves to ``self.workflow_name``, which
         is the *current* workflow — not the upstream.
+
+        Checks both filesystem and the upstream workflow's SQLite storage backend,
+        since SQLite-backed workflows may not write output directories to disk.
         """
         virtual = self.virtual_actions[dep_name]
         upstream_workflow = virtual.source_workflow
@@ -315,6 +318,28 @@ class ActionRunner:
         upstream_target = Path(upstream_folder) / "target" / dep_name
         if upstream_target.exists():
             return upstream_target
+
+        # Check upstream workflow's SQLite DB for data
+        try:
+            from agent_actions.storage import get_storage_backend
+
+            upstream_backend = get_storage_backend(
+                workflow_path=str(Path(upstream_folder).parent),
+                workflow_name=upstream_workflow,
+                backend_type="sqlite",
+            )
+            upstream_backend.initialize()
+            target_files = upstream_backend.list_target_files(dep_name)
+            if target_files:
+                logger.debug(
+                    "Upstream action '%s' found in %s's storage backend (%d files)",
+                    dep_name,
+                    upstream_workflow,
+                    len(target_files),
+                )
+                return upstream_target
+        except Exception as e:
+            logger.debug("Upstream storage backend check failed for '%s': %s", dep_name, e)
 
         logger.warning(
             "Upstream action '%s' from workflow '%s' has no outputs at %s",
