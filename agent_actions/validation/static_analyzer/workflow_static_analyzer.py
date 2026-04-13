@@ -75,6 +75,7 @@ class WorkflowStaticAnalyzer:
         project_root: Any | None = None,
         workflow_name: str | None = None,
         tool_schemas: dict[str, Any] | None = None,
+        external_action_names: set[str] | None = None,
     ) -> None:
         """Initialize the analyzer.
 
@@ -96,6 +97,7 @@ class WorkflowStaticAnalyzer:
         self.reference_extractor = ReferenceExtractor()
         self.schema_loader = schema_loader
         self.source_schema = source_schema
+        self.external_action_names = external_action_names or set()
 
         self.graph = DataFlowGraph()
         self._built = False
@@ -127,7 +129,7 @@ class WorkflowStaticAnalyzer:
         expansion_errors = self._expand_wildcards()
 
         # Step 3: Run type checker
-        checker = StaticTypeChecker(self.graph)
+        checker = StaticTypeChecker(self.graph, self.external_action_names)
         result = checker.check_all()
 
         for error in expansion_errors:
@@ -258,8 +260,13 @@ class WorkflowStaticAnalyzer:
 
                     # ── Wildcard reference: namespace.* ──
 
-                    # Special namespaces and loop are runtime-provided; skip.
-                    if ns_name in SPECIAL_NAMESPACES or ns_name == "loop":
+                    # Special namespaces, loop vars, and virtual actions are
+                    # runtime-provided; skip static validation.
+                    if (
+                        ns_name in SPECIAL_NAMESPACES
+                        or ns_name == "loop"
+                        or ns_name in self.external_action_names
+                    ):
                         expanded.append(ref)
                         continue
 

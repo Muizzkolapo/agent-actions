@@ -163,6 +163,7 @@ class AgentWorkflow:
             self.action_configs,
             project_root=self.config.resolve_project_root(),
             with_udf_registry=True,
+            external_action_names=set(self.metadata.virtual_actions.keys()),
         )
 
         result = self.schema_service.validate()
