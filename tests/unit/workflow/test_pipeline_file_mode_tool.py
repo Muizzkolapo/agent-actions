@@ -945,3 +945,233 @@ class TestReattachSourceGuid:
 
         # Out of bounds → not set (no crash)
         assert "source_guid" not in structured[0]
+
+
+# ---------------------------------------------------------------------------
+# Integration: dedup with shared source_guid through full pipeline
+# ---------------------------------------------------------------------------
+
+
+class TestDedupSharedGuidLineage:
+    """Deterministic integration tests proving each output record gets distinct
+    lineage after a dedup tool reduces cardinality on shared-source_guid data.
+
+    These tests exercise the full path: process_file_mode_tool → inference →
+    enrichment → lineage assignment. They verify the fix for the bug where
+    all outputs inherited input[0]'s lineage.
+    """
+
+    @staticmethod
+    def _make_dedup_pipeline_and_context(action_name="dedup_tool"):
+        pipeline = ProcessingPipeline(
+            config=PipelineConfig(
+                action_config={"kind": "tool", "granularity": "file"},
+                action_name=action_name,
+                idx=1,
+            ),
+            processor_factory=object(),
+        )
+        context = ProcessingContext(
+            agent_config={"kind": "tool", "granularity": "file"},
+            agent_name=action_name,
+            is_first_stage=False,
+        )
+        return pipeline, context
+
+    def test_dedup_shared_guid_distinct_lineage_via_content_match(self):
+        """7 inputs (shared guid) → 6 outputs via dedup → each output gets
+        its own parent's lineage, not all from input[0].
+
+        This reproduces the exact bug from the report: observe-filtered data
+        (no node_id), content fingerprint matching resolves the correct parent.
+        """
+        pipeline, context = self._make_dedup_pipeline_and_context()
+
+        # 7 input records from the same source page — all share source_guid.
+        # Each has a distinct lineage from a prior flatten step.
+        original_data = [
+            {
+                "source_guid": "sg-page1",
+                "node_id": f"flatten_q{i}",
+                "lineage": [f"flatten_q{i}"],
+                "target_id": f"tid-{i}",
+                "content": {"question": f"Q{i}", "idx": i},
+            }
+            for i in range(7)
+        ]
+        # Observe-filtered data the tool receives (flat dicts, no framework fields).
+        observe_filtered = [{"question": f"Q{i}", "idx": i} for i in range(7)]
+
+        # Dedup tool drops record 6 (duplicate). Returns 6 records.
+        dedup_output = [{"question": f"Q{i}", "idx": i} for i in range(6)]
+
+        context.source_data = original_data
+
+        with patch(
+            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            return_value=(dedup_output, True),
+        ):
+            results = pipeline._process_file_mode_tool(observe_filtered, original_data, context)
+
+        result = results[0]
+        assert result.status == ProcessingStatus.SUCCESS
+        assert len(result.data) == 6
+
+        # CRITICAL ASSERTION: each output traces to its CORRECT parent.
+        # Before fix: all outputs had lineage from input[0] (flatten_q0).
+        # After fix: output[i] has lineage from input[i] (flatten_q{i}).
+        for i, item in enumerate(result.data):
+            lineage = item.get("lineage", [])
+            # Lineage must contain the parent's node_id (flatten_q{i}).
+            assert f"flatten_q{i}" in lineage, (
+                f"output[{i}] lineage {lineage} missing expected parent flatten_q{i}"
+            )
+            # Must also contain this action's own node_id.
+            assert any(nid.startswith("dedup_tool_") for nid in lineage), (
+                f"output[{i}] lineage {lineage} missing own node_id"
+            )
+
+        # Verify ALL outputs have distinct lineage (no two share the same chain).
+        lineage_tuples = [tuple(item["lineage"]) for item in result.data]
+        assert len(set(lineage_tuples)) == 6, (
+            f"Expected 6 distinct lineage chains, got {len(set(lineage_tuples))}"
+        )
+
+    def test_dedup_shared_guid_distinct_lineage_via_node_id_match(self):
+        """Same scenario but tool receives full records (no observe filter)
+        and passes them through with node_id intact → node_id matching fires.
+        """
+        pipeline, context = self._make_dedup_pipeline_and_context()
+
+        # Full records with framework metadata.
+        original_data = [
+            {
+                "source_guid": "sg-page1",
+                "node_id": f"flatten_q{i}",
+                "lineage": [f"flatten_q{i}"],
+                "target_id": f"tid-{i}",
+                "content": {"question": f"Q{i}", "idx": i},
+            }
+            for i in range(7)
+        ]
+
+        # Tool receives full records and returns a subset (drops record 3).
+        # Since no observe filter, output carries node_id.
+        dedup_output = [
+            {
+                "node_id": f"flatten_q{i}",
+                "source_guid": "sg-page1",
+                "question": f"Q{i}",
+                "idx": i,
+            }
+            for i in range(7)
+            if i != 3
+        ]
+
+        context.source_data = original_data
+
+        with patch(
+            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            return_value=(dedup_output, True),
+        ):
+            results = pipeline._process_file_mode_tool(original_data, original_data, context)
+
+        result = results[0]
+        assert result.status == ProcessingStatus.SUCCESS
+        assert len(result.data) == 6
+
+        # Verify mapping jumped over input[3] correctly.
+        assert result.source_mapping == {0: 0, 1: 1, 2: 2, 3: 4, 4: 5, 5: 6}
+
+        # Each output traces to the correct parent — output[3] → input[4].
+        expected_parents = [0, 1, 2, 4, 5, 6]
+        for out_idx, in_idx in enumerate(expected_parents):
+            lineage = result.data[out_idx].get("lineage", [])
+            assert f"flatten_q{in_idx}" in lineage, (
+                f"output[{out_idx}] lineage {lineage} missing expected parent flatten_q{in_idx}"
+            )
+
+    def test_dedup_reorder_shared_guid_content_match(self):
+        """Dedup reorders output — content matching correctly maps non-sequential."""
+        pipeline, context = self._make_dedup_pipeline_and_context()
+
+        original_data = [
+            {
+                "source_guid": "sg-A",
+                "node_id": f"flatten_{i}",
+                "lineage": [f"flatten_{i}"],
+                "target_id": f"tid-{i}",
+                "content": {"q": f"Q{i}", "score": i * 10},
+            }
+            for i in range(5)
+        ]
+        observe_filtered = [{"q": f"Q{i}", "score": i * 10} for i in range(5)]
+
+        # Tool returns records [4, 1, 0] in that order (dropped 2 and 3).
+        dedup_output = [
+            {"q": "Q4", "score": 40},
+            {"q": "Q1", "score": 10},
+            {"q": "Q0", "score": 0},
+        ]
+
+        context.source_data = original_data
+
+        with patch(
+            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            return_value=(dedup_output, True),
+        ):
+            results = pipeline._process_file_mode_tool(observe_filtered, original_data, context)
+
+        result = results[0]
+        assert len(result.data) == 3
+
+        # output[0] ("Q4") → input[4], output[1] ("Q1") → input[1], etc.
+        assert result.source_mapping == {0: 4, 1: 1, 2: 0}
+
+        # Verify lineage reflects the reorder.
+        assert "flatten_4" in result.data[0]["lineage"]
+        assert "flatten_1" in result.data[1]["lineage"]
+        assert "flatten_0" in result.data[2]["lineage"]
+
+        # All lineage chains are distinct.
+        chains = [tuple(item["lineage"]) for item in result.data]
+        assert len(set(chains)) == 3
+
+    def test_mixed_guid_dedup_falls_to_broadcast(self):
+        """When inputs have mixed source_guids and content is transformed,
+        inference falls to broadcast (last resort). Verify it doesn't crash
+        and produces valid (if imprecise) lineage.
+        """
+        pipeline, context = self._make_dedup_pipeline_and_context()
+
+        original_data = [
+            {
+                "source_guid": f"sg-{i}",
+                "node_id": f"flatten_{i}",
+                "lineage": [f"flatten_{i}"],
+                "target_id": f"tid-{i}",
+                "content": {"q": f"Q{i}"},
+            }
+            for i in range(4)
+        ]
+        observe_filtered = [{"q": f"Q{i}"} for i in range(4)]
+
+        # Tool transforms AND reduces — no node_id, no content match.
+        dedup_output = [{"summary": "merged_A"}, {"summary": "merged_B"}]
+
+        context.source_data = original_data
+
+        with patch(
+            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            return_value=(dedup_output, True),
+        ):
+            results = pipeline._process_file_mode_tool(observe_filtered, original_data, context)
+
+        result = results[0]
+        assert result.status == ProcessingStatus.SUCCESS
+        assert len(result.data) == 2
+
+        # Both outputs should have valid lineage (non-empty).
+        for item in result.data:
+            assert "lineage" in item
+            assert len(item["lineage"]) > 0

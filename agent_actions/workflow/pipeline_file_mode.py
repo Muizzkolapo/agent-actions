@@ -7,6 +7,7 @@ looping per-record.
 
 from __future__ import annotations
 
+import json
 import logging
 import warnings
 from hashlib import sha256
@@ -54,30 +55,175 @@ _TOOL_RESERVED_FIELDS = frozenset(
 # ---------------------------------------------------------------------------
 
 
+def _match_by_node_id(
+    raw_outputs: list[dict],
+    input_data: list[dict],
+) -> dict[int, int] | None:
+    """Match outputs to inputs by ``node_id``.
+
+    Works when the tool received full records (no observe filtering) and
+    passed them through with ``node_id`` intact — typical for dedup, filter,
+    and sort tools that don't strip framework fields.
+
+    Returns a complete mapping only when **every** output carries a
+    ``node_id`` that corresponds to exactly one input.  Returns ``None``
+    otherwise so callers fall through to the next strategy.
+    """
+    nid_to_idx: dict[str, int] = {}
+    for i, item in enumerate(input_data):
+        if isinstance(item, dict):
+            nid = item.get("node_id")
+            if isinstance(nid, str):
+                nid_to_idx[nid] = i
+
+    if not nid_to_idx:
+        return None
+
+    mapping: dict[int, int] = {}
+    for i, item in enumerate(raw_outputs):
+        if not isinstance(item, dict):
+            return None
+        nid = item.get("node_id")
+        if not isinstance(nid, str) or nid not in nid_to_idx:
+            return None
+        mapping[i] = nid_to_idx[nid]
+
+    return mapping
+
+
+def _content_fingerprint(d: dict) -> str:
+    """Deterministic fingerprint of a dict's business content.
+
+    Handles two record shapes:
+    - Flat dict (observe-filtered): fingerprint the whole dict minus reserved fields.
+    - Wrapped dict (no observe): fingerprint ``item["content"]`` if it's a dict.
+    """
+    if isinstance(d.get("content"), dict):
+        target = d["content"]
+    else:
+        target = d
+    clean = {k: v for k, v in target.items() if k not in _TOOL_RESERVED_FIELDS}
+    try:
+        return json.dumps(clean, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return ""
+
+
+def _match_by_content(
+    raw_outputs: list[dict],
+    tool_inputs: list[dict],
+) -> dict[int, int] | None:
+    """Match outputs to inputs by content fingerprint.
+
+    Compares output dicts to the observe-filtered input dicts the tool
+    received.  Uses :func:`json.dumps` with ``sort_keys=True`` for
+    deterministic fingerprinting.  Each input is consumed at most once to
+    handle duplicate-content inputs correctly.
+
+    Returns a complete mapping when **every** output matches exactly one
+    unclaimed input.  Returns ``None`` otherwise.
+    """
+    # Build fingerprint → [indices] for inputs (preserves insertion order).
+    fp_to_indices: dict[str, list[int]] = {}
+    for i, item in enumerate(tool_inputs):
+        if not isinstance(item, dict):
+            continue
+        fp = _content_fingerprint(item)
+        if fp:
+            fp_to_indices.setdefault(fp, []).append(i)
+
+    if not fp_to_indices:
+        return None
+
+    mapping: dict[int, int] = {}
+    claimed: set[int] = set()
+
+    for i, item in enumerate(raw_outputs):
+        if not isinstance(item, dict):
+            return None
+        fp = _content_fingerprint(item)
+        if not fp or fp not in fp_to_indices:
+            return None  # Content was transformed — can't match.
+
+        matched = False
+        for idx in fp_to_indices[fp]:
+            if idx not in claimed:
+                mapping[i] = idx
+                claimed.add(idx)
+                matched = True
+                break
+
+        if not matched:
+            return None  # All matching inputs already claimed.
+
+    return mapping
+
+
 def _infer_source_mapping(
     output_count: int,
     input_data: list[dict],
     action_name: str,
+    raw_outputs: list[dict] | None = None,
+    tool_inputs: list[dict] | None = None,
 ) -> dict[int, int | list[int]] | None:
     """Infer source_mapping when the tool does not provide one.
 
-    Priority:
-    1. Identity mapping when output count matches input count (most common).
-    2. Broadcast when all inputs share the same source_guid.
-    3. Fallback broadcast to first input (with warning).
+    Uses a 4-tier cascade — the first tier to produce a complete mapping wins:
+
+    1. **Identity** — output count matches input count → ``{i: i}``.
+    2. **Node-ID matching** — outputs carry ``node_id`` from their inputs
+       (works when observe filtering is inactive).
+    3. **Content fingerprint matching** — output content matches
+       observe-filtered input content (works when observe is active).
+    4. **Heuristic fallback** — positional for reduction with shared
+       ``source_guid``, broadcast-to-first for expansion or mixed guids.
     """
     input_count = len(input_data)
 
+    # 1. Identity (most common — each output[i] from input[i]).
     if output_count == input_count:
         return {i: i for i in range(output_count)}
 
-    # Check if all inputs share the same source_guid
+    # 2. Node-ID matching (dedup/filter tools that pass through records).
+    if raw_outputs:
+        mapping = _match_by_node_id(raw_outputs, input_data)
+        if mapping is not None:
+            logger.debug(
+                "FILE tool '%s': matched %d outputs to inputs by node_id.",
+                action_name,
+                len(mapping),
+            )
+            return mapping
+
+    # 3. Content fingerprint matching (observe-active tools).
+    if raw_outputs and tool_inputs:
+        mapping = _match_by_content(raw_outputs, tool_inputs)
+        if mapping is not None:
+            logger.debug(
+                "FILE tool '%s': matched %d outputs to inputs by content fingerprint.",
+                action_name,
+                len(mapping),
+            )
+            return mapping
+
+    # 4. Heuristic fallback.
     source_guids = {
         item.get("source_guid")
         for item in input_data
         if isinstance(item, dict) and item.get("source_guid")
     }
-    if len(source_guids) == 1:
+    if len(source_guids) <= 1:
+        if output_count < input_count:
+            # Reduction: positional is the best remaining heuristic.
+            logger.debug(
+                "FILE tool '%s': cardinality reduced (%d → %d) with shared source_guid. "
+                "Using positional mapping.",
+                action_name,
+                input_count,
+                output_count,
+            )
+            return {i: i for i in range(output_count)}
+        # Expansion: broadcast from first (can't determine which input spawned extras).
         return {i: 0 for i in range(output_count)}
 
     logger.warning(
@@ -183,6 +329,8 @@ def process_file_mode_tool(
                 output_count=len(raw_response),
                 input_data=original_data,
                 action_name=context.agent_name,
+                raw_outputs=raw_response,
+                tool_inputs=data,
             )
 
         # Separate business data from framework fields in tool output
