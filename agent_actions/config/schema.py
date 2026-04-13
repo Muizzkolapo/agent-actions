@@ -440,13 +440,13 @@ class WorkflowConfig(BaseModel):
             # Check for collisions across upstream workflows
             seen_upstream: dict[str, str] = {}
             for ref in self.upstream:
-                for action in ref.actions:
-                    if action in seen_upstream:
+                for action_name in ref.actions:
+                    if action_name in seen_upstream:
                         raise ValueError(
-                            f"Action '{action}' imported from both upstream workflow "
-                            f"'{seen_upstream[action]}' and '{ref.workflow}'"
+                            f"Action '{action_name}' imported from both upstream workflow "
+                            f"'{seen_upstream[action_name]}' and '{ref.workflow}'"
                         )
-                    seen_upstream[action] = ref.workflow
+                    seen_upstream[action_name] = ref.workflow
 
         # Version base names (e.g. "score_quality") are valid dependency targets
         # even though only their expanded variants exist as concrete actions.

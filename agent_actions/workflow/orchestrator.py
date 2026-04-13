@@ -259,8 +259,8 @@ class WorkflowOrchestrator:
                     ) from e
 
                 if isinstance(raw, dict) and "actions" in raw:
-                    available_actions = {
-                        a.get("name") for a in raw["actions"] if isinstance(a, dict) and "name" in a
+                    available_actions: set[str] = {
+                        a["name"] for a in raw["actions"] if isinstance(a, dict) and "name" in a
                     }
                     missing = set(upstream_actions) - available_actions
                     if missing:
