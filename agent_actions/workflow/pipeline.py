@@ -474,15 +474,12 @@ class ProcessingPipeline:
 
                 logger.debug("Loaded source data via SourceDataLoader for %s", file_path)
 
-            except Exception as e:
-                logger.debug(
-                    "Source data not available for '%s' (agent: %s): %s",
-                    self.config.source_relative_path,
-                    self.config.action_name,
-                    e,
-                )
-                # source_data remains 'data' — expected for cross-workflow
-                # actions where the downstream has no staging data.
+            except (FileNotFoundError, ValueError):
+                # FileNotFoundError: no source data for this path (normal for
+                # cross-workflow workflows that have no staging data).
+                # ValueError: empty/invalid path from storage backend validation.
+                # In both cases, input data is the correct source context.
+                pass
 
         # ── per-action record_limit ──────────────────────────────────────
         record_limit = self.config.action_config.get("record_limit")
