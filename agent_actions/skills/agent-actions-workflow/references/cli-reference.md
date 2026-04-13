@@ -35,6 +35,15 @@ agac run -a my_agent
 
 # Force parallel execution
 agac run -a my_agent --execution-mode parallel
+
+# Run workflow and all downstream dependents
+agac run -a ingest --downstream
+
+# Run all upstream dependencies first
+agac run -a analyze --upstream
+
+# Run full lineage (upstream + target + downstream)
+agac run -a enrich --upstream --downstream
 ```
 
 **Options:**
@@ -46,6 +55,10 @@ agac run -a my_agent --execution-mode parallel
 | `--use-tools` | Enable tool usage |
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent agents (1-50, default: 5) |
+| `--downstream` | Also run all workflows that depend on this one |
+| `--upstream` | Run all upstream workflow dependencies before this one |
+| `--fresh` | Clear stored results and status before execution |
+| `--verify-keys` | Verify API keys before execution |
 
 ## Parallel Execution
 
