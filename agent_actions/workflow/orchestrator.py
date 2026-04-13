@@ -30,6 +30,7 @@ class WorkflowOrchestrator:
         self.project_root = project_root
         self._graph: dict[str, list[str]] | None = None
         self._reverse_graph: dict[str, list[str]] | None = None
+        self._config_files_cache: list[Path] | None = None
 
     @property
     def graph(self) -> dict[str, list[str]]:
@@ -81,26 +82,35 @@ class WorkflowOrchestrator:
         return graph, reverse
 
     def _find_all_config_files(self) -> list[Path]:
-        """Collect all workflow config files from supported project layouts."""
+        """Collect all workflow config files from supported project layouts.
+
+        Supports flat (``agent_config/*.yml``) and per-workflow
+        (``agent_workflow/*/agent_config/*.yml``) layouts.
+        """
+        if self._config_files_cache is not None:
+            return self._config_files_cache
+
         config_files: list[Path] = []
 
-        # Layout 1: flat — agent_config/*.yml
         flat_dir = self.project_root / "agent_config"
         if flat_dir.is_dir():
-            config_files.extend(flat_dir.glob("*.yml"))
-            config_files.extend(flat_dir.glob("*.yaml"))
+            config_files.extend(self._glob_yaml(flat_dir))
 
-        # Layout 2: per-workflow — agent_workflow/*/agent_config/*.yml
         agent_workflow_dir = self.project_root / "agent_workflow"
         if agent_workflow_dir.is_dir():
             for workflow_dir in agent_workflow_dir.iterdir():
                 if workflow_dir.is_dir():
                     nested_config = workflow_dir / "agent_config"
                     if nested_config.is_dir():
-                        config_files.extend(nested_config.glob("*.yml"))
-                        config_files.extend(nested_config.glob("*.yaml"))
+                        config_files.extend(self._glob_yaml(nested_config))
 
+        self._config_files_cache = config_files
         return config_files
+
+    @staticmethod
+    def _glob_yaml(directory: Path) -> list[Path]:
+        """Glob for .yml and .yaml files in a directory."""
+        return list(directory.glob("*.yml")) + list(directory.glob("*.yaml"))
 
     def _parse_upstream_from_config(self, config_path: Path) -> tuple[str | None, list[str]]:
         """Extract workflow name and upstream workflow names from a config file.
