@@ -113,7 +113,7 @@ class ActionRunner:
         self.action_configs: dict[str, dict] | None = None
         self.execution_order: list[str] = []  # Set by service_init.initialize_services
         self.action_indices: dict[str, int] = {}  # Set by service_init.initialize_services
-        self.virtual_actions: dict = {}  # Set by service_init from WorkflowMetadata
+        self.virtual_actions: dict[str, Any] = {}  # Set by service_init from WorkflowMetadata
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
@@ -295,33 +295,26 @@ class ActionRunner:
         return None
 
     def _resolve_virtual_action_directory(self, dep_name: str) -> Path | None:
-        """Resolve the output directory for a virtual action from an upstream workflow."""
+        """Resolve the output directory for a virtual action from an upstream workflow.
+
+        Uses ``FileHandler.find_specific_folder`` directly (not ``get_action_folder``)
+        because ``get_action_folder`` always resolves to ``self.workflow_name``, which
+        is the *current* workflow — not the upstream.
+        """
         virtual = self.virtual_actions[dep_name]
         upstream_workflow = virtual.source_workflow
 
-        # Find the upstream workflow's agent_io directory
-        try:
-            upstream_folder = self.get_action_folder(
-                upstream_workflow, project_root=self.project_root
-            )
-        except Exception:
-            logger.warning(
-                "Could not find agent_io for upstream workflow '%s'", upstream_workflow
-            )
+        search_dir = resolve_project_root(self.project_root)
+        upstream_folder = FileHandler.find_specific_folder(
+            str(search_dir), upstream_workflow, "agent_io"
+        )
+        if upstream_folder is None:
+            logger.warning("Could not find agent_io for upstream workflow '%s'", upstream_workflow)
             return None
 
         upstream_target = Path(upstream_folder) / "target" / dep_name
         if upstream_target.exists():
             return upstream_target
-
-        # Also check storage backend for upstream data
-        if self.storage_backend is not None:
-            try:
-                target_files = self.storage_backend.list_target_files(dep_name)
-                if target_files:
-                    return upstream_target
-            except Exception:
-                pass
 
         logger.warning(
             "Upstream action '%s' from workflow '%s' has no outputs at %s",

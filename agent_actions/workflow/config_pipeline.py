@@ -119,21 +119,19 @@ def _inject_upstream_virtual_actions(
     if not upstream_refs or not isinstance(upstream_refs, list):
         return {}
 
-    from agent_actions.workflow.orchestrator import WorkflowOrchestrator
+    # Filter to well-formed refs once, reuse for validation and building
+    parsed_refs = [ref for ref in upstream_refs if isinstance(ref, dict) and "workflow" in ref]
+    if not parsed_refs:
+        return {}
 
-    project_root = manager.project_root
-    if project_root:
-        orchestrator = WorkflowOrchestrator(project_root)
-        raw_refs = [
-            ref for ref in upstream_refs if isinstance(ref, dict) and "workflow" in ref
-        ]
-        if raw_refs:
-            orchestrator.validate_upstream_refs(manager.agent_name or "unknown", raw_refs)
+    if manager.project_root:
+        from agent_actions.workflow.orchestrator import WorkflowOrchestrator
+
+        orchestrator = WorkflowOrchestrator(manager.project_root)
+        orchestrator.validate_upstream_refs(manager.agent_name or "unknown", parsed_refs)
 
     virtual_actions: dict[str, VirtualAction] = {}
-    for ref in upstream_refs:
-        if not isinstance(ref, dict) or "workflow" not in ref:
-            continue
+    for ref in parsed_refs:
         workflow_name = ref["workflow"]
         for action_name in ref.get("actions", []):
             virtual_actions[action_name] = VirtualAction(
@@ -141,9 +139,7 @@ def _inject_upstream_virtual_actions(
                 action_name=action_name,
             )
 
-    # Register with ConfigManager so dependency resolution accepts these names
     manager.virtual_action_names = set(virtual_actions.keys())
-
     return virtual_actions
 
 

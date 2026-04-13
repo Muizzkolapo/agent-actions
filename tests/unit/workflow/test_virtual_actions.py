@@ -7,8 +7,6 @@ Covers:
 - Missing upstream outputs error handling
 """
 
-from unittest.mock import patch
-
 from agent_actions.workflow.models import VirtualAction, WorkflowMetadata
 
 
@@ -132,8 +130,8 @@ class TestRunnerVirtualActionResolution:
         """Virtual action resolves to the upstream workflow's target directory."""
         from agent_actions.workflow.runner import ActionRunner
 
-        # Set up upstream workflow's output directory
-        upstream_io = tmp_path / "agent_io"
+        # Create upstream workflow directory structure that FileHandler can find
+        upstream_io = tmp_path / "ingest" / "agent_io"
         (upstream_io / "target" / "extract").mkdir(parents=True)
 
         runner = ActionRunner.__new__(ActionRunner)
@@ -142,11 +140,8 @@ class TestRunnerVirtualActionResolution:
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
-        runner.storage_backend = None
 
-        with patch.object(runner, "get_action_folder", return_value=str(upstream_io)):
-            result = runner._resolve_virtual_action_directory("extract")
-
+        result = runner._resolve_virtual_action_directory("extract")
         assert result is not None
         assert result == upstream_io / "target" / "extract"
 
@@ -155,7 +150,7 @@ class TestRunnerVirtualActionResolution:
         from agent_actions.workflow.runner import ActionRunner
 
         # Upstream workflow exists but has no outputs for "extract"
-        upstream_io = tmp_path / "agent_io"
+        upstream_io = tmp_path / "ingest" / "agent_io"
         (upstream_io / "target").mkdir(parents=True)
 
         runner = ActionRunner.__new__(ActionRunner)
@@ -164,11 +159,22 @@ class TestRunnerVirtualActionResolution:
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
-        runner.storage_backend = None
 
-        with patch.object(runner, "get_action_folder", return_value=str(upstream_io)):
-            result = runner._resolve_virtual_action_directory("extract")
+        result = runner._resolve_virtual_action_directory("extract")
+        assert result is None
 
+    def test_virtual_action_upstream_not_found_returns_none(self, tmp_path):
+        """When upstream workflow has no agent_io directory, returns None."""
+        from agent_actions.workflow.runner import ActionRunner
+
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.project_root = tmp_path
+        runner.workflow_name = "enrich"
+        runner.virtual_actions = {
+            "extract": VirtualAction(source_workflow="nonexistent", action_name="extract"),
+        }
+
+        result = runner._resolve_virtual_action_directory("extract")
         assert result is None
 
     def test_virtual_action_in_dependency_resolution(self, tmp_path):
@@ -176,11 +182,11 @@ class TestRunnerVirtualActionResolution:
         from agent_actions.workflow.runner import ActionRunner
 
         # Set up local workflow agent_io
-        local_io = tmp_path / "enrich_io"
+        local_io = tmp_path / "enrich" / "agent_io"
         (local_io / "target").mkdir(parents=True)
 
-        # Set up upstream workflow output
-        upstream_io = tmp_path / "ingest_io"
+        # Set up upstream workflow directory structure
+        upstream_io = tmp_path / "ingest" / "agent_io"
         (upstream_io / "target" / "extract").mkdir(parents=True)
 
         runner = ActionRunner.__new__(ActionRunner)
@@ -193,44 +199,12 @@ class TestRunnerVirtualActionResolution:
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
 
-        with patch.object(runner, "get_action_folder", return_value=str(upstream_io)):
-            result = runner._resolve_dependency_directories(
-                local_io,
-                ["extract"],
-                {"dependencies": ["extract"]},
-                "enrich_text",
-            )
+        result = runner._resolve_dependency_directories(
+            local_io,
+            ["extract"],
+            {"dependencies": ["extract"]},
+            "enrich_text",
+        )
 
         assert len(result) == 1
         assert result[0] == upstream_io / "target" / "extract"
-
-    def test_virtual_action_as_single_dependency(self, tmp_path):
-        """A single virtual action dependency resolves correctly."""
-        from agent_actions.workflow.runner import ActionRunner
-
-        local_io = tmp_path / "enrich_io"
-        (local_io / "target").mkdir(parents=True)
-
-        upstream_io = tmp_path / "ingest_io"
-        (upstream_io / "target" / "classify").mkdir(parents=True)
-
-        runner = ActionRunner.__new__(ActionRunner)
-        runner.project_root = tmp_path
-        runner.workflow_name = "enrich"
-        runner.action_indices = {"final_action": 0}
-        runner.manifest_manager = None
-        runner.storage_backend = None
-        runner.virtual_actions = {
-            "classify": VirtualAction(source_workflow="ingest", action_name="classify"),
-        }
-
-        with patch.object(runner, "get_action_folder", return_value=str(upstream_io)):
-            result = runner._resolve_dependency_directories(
-                local_io,
-                ["classify"],
-                {"dependencies": ["classify"]},
-                "final_action",
-            )
-
-        assert len(result) == 1
-        assert result[0] == upstream_io / "target" / "classify"
