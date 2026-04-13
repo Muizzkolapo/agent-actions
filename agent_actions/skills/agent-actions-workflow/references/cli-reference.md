@@ -96,6 +96,56 @@ agac render -a my_workflow -t ./custom_templates
 | `-a, --agent TEXT` | Workflow name (required) |
 | `-t, --template-dir TEXT` | Templates directory (default: `./templates`) |
 
+## validate-udfs
+
+Validate that all UDF references in workflow config point to real registered functions.
+
+```bash
+agac validate-udfs -a <workflow-name> -u <tools_path>
+```
+
+**What it checks:**
+- All `impl:` references in the workflow config resolve to `@udf_tool` decorated functions
+- No duplicate function names across tool files
+- No Python syntax/import errors in UDF modules
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-a, --agent TEXT` | Workflow name (required) |
+| `-u, --user-code DIRECTORY` | Path to UDF directory (required) |
+
+**Example output (success):**
+```
+All UDF references valid
+No duplicate function names
+Summary:
+  - 12 Tools referenced in config
+  - 15 Tools discovered and registered
+  - All functions found
+```
+
+**Example output (failure):**
+```
+UDF Validation Errors:
+  - not_found: Function 'process_data' referenced in config but not registered
+  - duplicate: Function 'flatten_records' defined in both tools/shared/utils.py and tools/workflow/transform.py
+  - load_error: Failed to import tools/broken_module.py: SyntaxError line 15
+```
+
+Run this before `agac run` to catch UDF issues early, especially after renaming functions or reorganizing tool directories.
+
+## batch
+
+Check status of batch jobs:
+
+```bash
+agac batch status --batch-id <id>
+```
+
+Returns the current status of a batch job: `completed`, `in_progress`, or `failed`.
+
 ## list-udfs
 
 List all registered UDF tools:
@@ -153,6 +203,40 @@ export OPENAI_API_KEY="sk-..."
 export AGENT_ACTIONS_LOG_LEVEL="DEBUG"
 ```
 
+## Batch Mode
+
+Run actions asynchronously via vendor batch APIs for up to 50% cost savings:
+
+```yaml
+- name: expensive_classification
+  run_mode: batch                      # Default is "online"
+  model_vendor: openai
+  model_name: gpt-4o-mini
+```
+
+**Supported vendors:** OpenAI, Anthropic, Google (Gemini), Groq, Mistral, Ollama
+
+**How it works:**
+1. Framework submits all records as a batch job to the vendor
+2. Workflow reports "paused - batch job(s) submitted"
+3. Re-run `agac run` later — framework polls for completion
+4. When batch completes, results are integrated and downstream actions execute
+
+**Mixing batch + online:** Some actions can be batch while others are online. Tool and HITL actions always run synchronously regardless of `run_mode`.
+
+```yaml
+actions:
+  - name: cheap_extraction
+    run_mode: online                   # Fast, immediate
+  - name: expensive_scoring
+    run_mode: batch                    # Cheaper, 24-hour window
+  - name: format_results
+    kind: tool                         # Always synchronous
+    dependencies: [expensive_scoring]
+```
+
+**Batch + reprompt:** Batch mode supports reprompt validation — failed records are resubmitted as a new batch with feedback appended. This adds latency but maintains quality.
+
 ## Common Workflows
 
 ```bash
@@ -161,4 +245,10 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
 # Production: full pipeline
 agac run -a final_workflow
+
+# Validate UDFs before running
+agac validate-udfs -a my_workflow -u tools
+
+# Check batch job status
+agac batch status --batch-id <id>
 ```

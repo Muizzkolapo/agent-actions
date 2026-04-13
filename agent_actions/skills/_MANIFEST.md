@@ -27,9 +27,9 @@ This is a content-only module (no Python runtime code). The templates and refere
 | `SKILL.md` (project structure) | `seed_data/*.json` | Reads | — |
 | `references/yaml-schema.md` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].context_scope`, `actions[].versions` |
 | `references/prompt-patterns.md` | `prompt_store/{workflow}.md` | Reads | — |
-| `references/udf-decorator.md` | `tools/{workflow}/*.py` | Reads | — |
+| `references/udf-reference.md` | `tools/{workflow}/*.py` | Reads | — |
 
-**Internal only**: reference documents (`action-anatomy.md`, `cli-reference.md`, `framework-contracts.md`, `context-scope-guide.md`, `data-flow-patterns.md`, `debugging-guide.md`, `dynamic-content-injection.md`, `udf-patterns.md`, `workflow-patterns.md`) — no direct project surface.
+**Internal only**: reference documents (`action-anatomy.md`, `cli-reference.md`, `framework-contracts.md`, `context-scope-guide.md`, `data-flow-patterns.md`, `debugging-guide.md`, `dynamic-content-injection.md`, `udf-reference.md`, `workflow-patterns.md`, `reprompt-patterns.md`, `schema-design-guide.md`, `aggregation-patterns.md`, `hitl-patterns.md`, `cross-workflow-patterns.md`) — no direct project surface.
 
 ## Dependencies
 

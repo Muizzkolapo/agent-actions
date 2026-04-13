@@ -2,6 +2,20 @@
 
 How data flows through agent-actions workflow nodes.
 
+## Table of Contents
+
+- [Source Data Format](#source-data-format-critical)
+- [Directory Structure](#directory-structure)
+- [Metadata Fields](#metadata-fields)
+- [Data Shapes by Pattern](#data-shapes-by-pattern)
+- [Data Transformation Patterns](#data-transformation-patterns)
+- [Workflow Stages](#workflow-stages)
+- [Tracing Data Issues](#tracing-data-issues)
+- [Cross-Workflow Data Flow](#cross-workflow-data-flow)
+- [Grounded Retrieval Pattern](#grounded-retrieval-pattern)
+- [Context Passthrough for Merging Branches](#context-passthrough-for-merging-branches)
+- [Best Practices](#best-practices)
+
 ## Source Data Format (Critical)
 
 **Source data must be a flat array of records**, not a wrapper object.

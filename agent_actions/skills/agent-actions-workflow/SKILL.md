@@ -1,6 +1,6 @@
 ---
 name: agent-actions-workflow
-description: Build, configure, and debug agent-actions agentic workflows. Use this skill whenever the user works with workflow YAML configs, writes UDF tool functions, configures context_scope (observe/passthrough/drop), sets up guards, versions, schemas, seed data, or prompt templates. Also trigger when debugging pipeline output — empty records, guard filtering issues, schema mismatches, or unexpected action results. Even if the user just says "add an action" or "why is my output empty", this skill applies.
+description: Build, configure, and debug agent-actions agentic workflows. Use this skill whenever the user works with workflow YAML configs, writes UDF tool functions, configures context_scope (observe/passthrough/drop), sets up guards, versions, schemas, seed data, prompt templates, reprompt validation, batch mode, HITL actions, or reduce_key aggregation. Also trigger when debugging pipeline output — empty records, guard filtering issues, schema mismatches, unexpected action results, caching problems, or stale re-runs. Trigger on CLI questions about agac run, agac render, agac validate-udfs, or agac batch. Even if the user just says "add an action", "why is my output empty", "my UDF returns None", or "records are being filtered", this skill applies.
 ---
 
 # Agent Actions Workflow Builder
@@ -212,10 +212,25 @@ Use `record_limit: 2` on any action to test with minimal API spend. Check `event
 
 Read these when you need depth beyond what's covered above:
 
-- **[YAML Schema](references/yaml-schema.md)** — all action fields, config hierarchy
-- **[UDF Patterns](references/udf-patterns.md)** — passthrough, FILE granularity, version merge access
-- **[Framework Contracts](references/framework-contracts.md)** — 28 contracts: what works, what doesn't, workarounds
-- **[Debugging Guide](references/debugging-guide.md)** — triage checklist, prompt traces, error messages
-- **[Workflow Patterns](references/workflow-patterns.md)** — fan-in, diamond, ensemble patterns
-- **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough details
+### Configuration
+- **[YAML Schema](references/yaml-schema.md)** — all action fields, config hierarchy, dependency patterns, vendors
+- **[Schema Design Guide](references/schema-design-guide.md)** — inline vs file, required/optional, TypedDict mapping, field name alignment
+- **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough, output_field, seed data details
+
+### Building
+- **[UDF Reference](references/udf-reference.md)** — @udf_tool decorator, record/file mode, namespaced access, passthrough, version merge
+- **[Action Anatomy](references/action-anatomy.md)** — action structure, pre-creation checklist, data lineage, record matching
+- **[Prompt Patterns](references/prompt-patterns.md)** — Jinja2 templates, variable access, max_tokens/temperature, anti-patterns
+- **[Dynamic Content Injection](references/dynamic-content-injection.md)** — tool action injection pattern for randomized/computed prompt content
+
+### Patterns
+- **[Workflow Patterns](references/workflow-patterns.md)** — fan-in, diamond, ensemble, conditional merge, map-reduce
+- **[Data Flow Patterns](references/data-flow-patterns.md)** — source format, metadata, data shapes, grounded retrieval
+- **[Aggregation Patterns](references/aggregation-patterns.md)** — reduce_key, fan-in matching, merging parallel branches
 - **[HITL Patterns](references/hitl-patterns.md)** — human-in-the-loop with guards, lineage, passthrough
+
+### Quality & Debugging
+- **[Reprompt Patterns](references/reprompt-patterns.md)** — validation UDFs, retry configuration, schema-based reprompt
+- **[Framework Contracts](references/framework-contracts.md)** — 28 contracts: what works, what doesn't, workarounds
+- **[Debugging Guide](references/debugging-guide.md)** — triage checklist, caching behavior, prompt traces, error messages
+- **[CLI Reference](references/cli-reference.md)** — run, render, validate-udfs, batch mode, debug commands
