@@ -91,6 +91,7 @@ def initialize_services(
     action_runner.execution_order = metadata.execution_order
     action_runner.action_indices = metadata.action_indices
     action_runner.action_configs = metadata.action_configs
+    action_runner.virtual_actions = metadata.virtual_actions
     action_runner.workflow_name = metadata.agent_name
     action_runner.project_root = config.project_root
 

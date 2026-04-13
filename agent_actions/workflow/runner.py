@@ -113,6 +113,7 @@ class ActionRunner:
         self.action_configs: dict[str, dict] | None = None
         self.execution_order: list[str] = []  # Set by service_init.initialize_services
         self.action_indices: dict[str, int] = {}  # Set by service_init.initialize_services
+        self.virtual_actions: dict[str, Any] = {}  # Set by service_init from WorkflowMetadata
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
@@ -213,6 +214,15 @@ class ActionRunner:
         missing_dirs = []
 
         for dep_name in dependencies:
+            # Check if this is a virtual action from an upstream workflow
+            if dep_name in self.virtual_actions:
+                virtual_dir = self._resolve_virtual_action_directory(dep_name)
+                if virtual_dir:
+                    resolved_dirs.append(virtual_dir)
+                else:
+                    missing_dirs.append((dep_name, f"upstream:{dep_name}"))
+                continue
+
             dep_path = self._resolve_single_dependency(target_dir, dep_name)
             if dep_path:
                 resolved_dirs.append(dep_path)
@@ -282,6 +292,36 @@ class ActionRunner:
             return simple_path
 
         logger.warning("Dependency directory not found for %s", dep_name)
+        return None
+
+    def _resolve_virtual_action_directory(self, dep_name: str) -> Path | None:
+        """Resolve the output directory for a virtual action from an upstream workflow.
+
+        Uses ``FileHandler.find_specific_folder`` directly (not ``get_action_folder``)
+        because ``get_action_folder`` always resolves to ``self.workflow_name``, which
+        is the *current* workflow — not the upstream.
+        """
+        virtual = self.virtual_actions[dep_name]
+        upstream_workflow = virtual.source_workflow
+
+        search_dir = resolve_project_root(self.project_root)
+        upstream_folder = FileHandler.find_specific_folder(
+            str(search_dir), upstream_workflow, "agent_io"
+        )
+        if upstream_folder is None:
+            logger.warning("Could not find agent_io for upstream workflow '%s'", upstream_workflow)
+            return None
+
+        upstream_target = Path(upstream_folder) / "target" / dep_name
+        if upstream_target.exists():
+            return upstream_target
+
+        logger.warning(
+            "Upstream action '%s' from workflow '%s' has no outputs at %s",
+            dep_name,
+            upstream_workflow,
+            upstream_target,
+        )
         return None
 
     def _resolve_linear_directory(self, agent_folder: Path, previous_action_type: str) -> Path:
