@@ -64,7 +64,6 @@ class WorkflowMetadata:
     execution_order: list[str]
     action_indices: dict[str, int]
     action_configs: dict[str, dict[str, Any]]
-    child_pipeline: str | None = None
 
 
 @dataclass

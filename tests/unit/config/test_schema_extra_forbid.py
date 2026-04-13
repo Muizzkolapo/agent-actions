@@ -74,7 +74,6 @@ class TestActionConfigForbidsUnknownKeys:
             "chunk_overlap": 10,
             "context_scope": {"input": "seed_data"},
             "version_mode": "parallel",
-            "child": ["child_pipeline"],
             # Internal
             "_version_context": {"v1": "ctx"},
         }
