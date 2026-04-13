@@ -49,14 +49,18 @@ Records with the same key are deep-merged:
 
 Three parallel validators produce:
 
+From `validate_text`:
 ```json
-// From validate_text (content_id: "abc")
 {"content": {"validate_text": {"text_score": 8}}, "source_guid": "abc"}
+```
 
-// From validate_image (content_id: "abc")
+From `validate_image`:
+```json
 {"content": {"validate_image": {"image_score": 7}}, "source_guid": "abc"}
+```
 
-// From validate_audio (content_id: "abc")
+From `validate_audio`:
+```json
 {"content": {"validate_audio": {"audio_score": 9}}, "source_guid": "abc"}
 ```
 

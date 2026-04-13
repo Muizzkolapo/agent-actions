@@ -2,6 +2,18 @@
 
 Complete guide to understanding and creating workflow actions.
 
+## Table of Contents
+
+- [Action Structure Diagram](#action-structure-diagram)
+- [LLM Action Anatomy](#llm-action-anatomy)
+- [Tool Action (UDF) Anatomy](#tool-action-udf-anatomy)
+- [Component Deep Dive](#component-deep-dive)
+- [Pre-Creation Checklist](#pre-creation-checklist)
+- [Data Flow Verification](#data-flow-verification)
+- [Common Patterns](#common-patterns)
+- [Data Lineage](#data-lineage)
+- [Record Matching](#record-matching)
+
 ## Action Structure Diagram
 
 ```mermaid
