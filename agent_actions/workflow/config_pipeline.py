@@ -117,11 +117,6 @@ def _inject_upstream_virtual_actions(
 ) -> dict[str, VirtualAction]:
     """Parse ``upstream`` declarations and build virtual action map.
 
-    The returned dict is passed to ``determine_execution_order()`` (as
-    ``virtual_action_names``) and injected into action configs (as
-    ``_virtual_action_names``) so that dependency inference accepts
-    cross-workflow references without adding them to the execution DAG.
-
     Returns:
         Dict mapping action name to ``VirtualAction``.
     """
