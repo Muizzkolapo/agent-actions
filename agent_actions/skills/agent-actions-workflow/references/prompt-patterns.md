@@ -262,6 +262,49 @@ fields:
 additionalProperties: false
 ```
 
+## Model Parameters
+
+### max_tokens
+
+Controls the maximum length of the LLM response. Set this when the default is too short for your output.
+
+```yaml
+- name: generate_long_explanation
+  max_tokens: 4096                     # Default varies by model
+```
+
+| Use case | Suggested range |
+|----------|----------------|
+| Classification (one word/phrase) | 100-256 |
+| Short structured output (3-5 fields) | 512-1024 |
+| Long-form generation (paragraphs) | 2048-4096 |
+| Complex nested output (arrays of objects) | 2048-4096 |
+
+**Symptom of too-low max_tokens:** Truncated JSON, missing closing braces, incomplete arrays. The response cuts off mid-output, causing JSON parse failures and reprompt loops.
+
+### temperature
+
+Controls randomness. Lower = more deterministic, higher = more creative.
+
+```yaml
+- name: classify_issue
+  temperature: 0.1                     # Deterministic classification
+
+- name: write_creative_content
+  temperature: 0.8                     # Creative variation
+```
+
+| Use case | Suggested value |
+|----------|----------------|
+| Classification, extraction, scoring | 0.0-0.2 |
+| Structured analysis, summarization | 0.3-0.5 |
+| Content generation, creative writing | 0.6-0.9 |
+| Brainstorming, diverse options | 0.9-1.2 |
+
+**Interaction with reprompt:** High temperature + reprompt can help — if the first attempt fails validation, the retry may produce a different (valid) response. Low temperature + reprompt is less effective since retries produce similar output.
+
+**Interaction with versions:** When using `versions` for consensus/voting, moderate temperature (0.4-0.7) ensures each version produces meaningfully different output while staying coherent.
+
 ## Best Practices
 
 1. **Start with role & authority** - Establish who the LLM is
@@ -272,3 +315,5 @@ additionalProperties: false
 6. **Quality gates** - Include tests like "Could this create a question?"
 7. **Minimize compound concepts** - Keep scenarios to ONE concept per prompt
 8. **Use markdown structure** - Headings, bold, bullets for scannability
+9. **Set max_tokens for long output** - Prevent truncation on complex schemas
+10. **Match temperature to task** - Low for classification, higher for generation

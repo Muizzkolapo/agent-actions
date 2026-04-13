@@ -2,6 +2,24 @@
 
 Complete reference for agent-actions workflow configuration.
 
+## Table of Contents
+
+- [Configuration Hierarchy](#configuration-hierarchy)
+- [Project Configuration](#project-configuration)
+- [Workflow Configuration](#workflow-configuration)
+- [Action Fields Reference](#action-fields-reference)
+- [LLM Action Example](#llm-action-example)
+- [Tool Action Example](#tool-action-example)
+- [Versions Configuration](#versions-configuration)
+- [Dependency Patterns](#dependency-patterns)
+- [Cross-Workflow Dependencies](#cross-workflow-dependencies)
+- [Guards](#guards)
+- [Supported Vendors](#supported-vendors)
+- [Limiting Records and Files](#limiting-records-and-files-test-runs)
+- [Run Modes](#run-modes)
+- [Environment Variables](#environment-variables)
+- [Schema Types](#schema-types)
+
 ## Configuration Hierarchy
 
 ```
