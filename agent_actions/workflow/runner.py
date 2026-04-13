@@ -316,7 +316,7 @@ class ActionRunner:
             return None
 
         upstream_target = Path(upstream_folder) / "target" / dep_name
-        if upstream_target.exists():
+        if upstream_target.exists() and any(upstream_target.iterdir()):
             return upstream_target
 
         # SQLite-backed workflows don't write target directories to disk.

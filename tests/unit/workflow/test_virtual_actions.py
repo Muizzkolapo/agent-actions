@@ -130,9 +130,11 @@ class TestRunnerVirtualActionResolution:
         """Virtual action resolves to the upstream workflow's target directory."""
         from agent_actions.workflow.runner import ActionRunner
 
-        # Create upstream workflow directory structure that FileHandler can find
+        # Create upstream workflow directory structure with output file
         upstream_io = tmp_path / "ingest" / "agent_io"
-        (upstream_io / "target" / "extract").mkdir(parents=True)
+        extract_dir = upstream_io / "target" / "extract"
+        extract_dir.mkdir(parents=True)
+        (extract_dir / "data.json").write_text('[{"id": 1}]')
 
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
@@ -185,9 +187,11 @@ class TestRunnerVirtualActionResolution:
         local_io = tmp_path / "enrich" / "agent_io"
         (local_io / "target").mkdir(parents=True)
 
-        # Set up upstream workflow directory structure
+        # Set up upstream workflow directory structure with output file
         upstream_io = tmp_path / "ingest" / "agent_io"
-        (upstream_io / "target" / "extract").mkdir(parents=True)
+        extract_dir = upstream_io / "target" / "extract"
+        extract_dir.mkdir(parents=True)
+        (extract_dir / "data.json").write_text('[{"id": 1}]')
 
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
