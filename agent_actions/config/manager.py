@@ -39,7 +39,6 @@ class ConfigManager:
         self.agent_configs: dict[str, AgentConfig] = {}
         self.execution_order: list[str] = []
         self.tool_path: list[str] | None = None
-        self.virtual_action_names: set[str] = set()
         self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
         self.workflow_config: Any = None
@@ -273,11 +272,15 @@ class ConfigManager:
             merged_agent_config = AgentConfig.model_validate(merged_dict)
             self.agent_configs[agent_type] = merged_agent_config
 
-    def determine_execution_order(self) -> None:
+    def determine_execution_order(self, virtual_action_names: set[str] | None = None) -> None:
         """Determine execution order of agents based on their dependencies.
 
         Uses auto-inferred dependencies from context_scope to build the execution graph.
         Only considers is_operational agents.
+
+        Args:
+            virtual_action_names: Action names from upstream workflows that are valid
+                dependency targets but should not appear in the execution order.
         """
         from agent_actions.input.context.normalizer import normalize_all_agent_configs
         from agent_actions.output.response.config_schema import AgentConfig
@@ -295,7 +298,7 @@ class ConfigManager:
             self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
 
         workflow_actions = list(self.agent_configs.keys())
-        all_known_actions = workflow_actions + list(self.virtual_action_names)
+        all_known_actions = workflow_actions + list(virtual_action_names or set())
 
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():

@@ -81,11 +81,8 @@ class TestConfigManagerVirtualActions:
         user_agents = mgr.get_user_agents()
         mgr.merge_agent_configs(user_agents)
 
-        # Register "extract" as a virtual action
-        mgr.virtual_action_names = {"extract"}
-
         # This should NOT raise — "extract" is a valid virtual action target
-        mgr.determine_execution_order()
+        mgr.determine_execution_order(virtual_action_names={"extract"})
 
         # "enrich" should be in execution order, "extract" should not
         assert "enrich" in mgr.execution_order

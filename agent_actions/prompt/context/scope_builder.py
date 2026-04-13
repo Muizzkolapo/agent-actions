@@ -150,7 +150,9 @@ def build_field_context_with_history(
 
         # BATCH MODE - Use auto-inferred context dependencies
         workflow_actions = list(agent_indices.keys())
-        # Include virtual actions (from upstream workflows) as valid references
+        # Virtual action names from upstream workflows are injected into
+        # action_config by config_pipeline.load_workflow_configs(). Include
+        # them so infer_dependencies() accepts cross-workflow references.
         virtual_names = agent_config.get("_virtual_action_names", [])
         if virtual_names:
             workflow_actions = workflow_actions + virtual_names
