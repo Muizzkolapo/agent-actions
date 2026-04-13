@@ -97,11 +97,6 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         action_config["workflow_config_path"] = config.paths.constructor_path
         if config.project_root:
             action_config["_project_root"] = str(config.project_root)
-        # Injected so scope_builder.build_field_context_with_history() can
-        # include upstream workflow actions in infer_dependencies() validation.
-        # Read by: agent_actions/prompt/context/scope_builder.py
-        if virtual_actions:
-            action_config["_virtual_action_names"] = list(virtual_actions.keys())
 
     return WorkflowMetadata(
         agent_name=manager.agent_name,
