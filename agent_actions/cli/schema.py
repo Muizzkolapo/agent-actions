@@ -14,7 +14,8 @@ from agent_actions.errors import DependencyError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.workflow import WorkflowSchemaService
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowPaths, WorkflowRuntimeConfig
+from agent_actions.workflow.coordinator import AgentWorkflow
+from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 
 
 class SchemaCommand:

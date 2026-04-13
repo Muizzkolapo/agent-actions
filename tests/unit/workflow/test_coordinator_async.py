@@ -20,7 +20,7 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     """Build an AgentWorkflow instance bypassing __init__.
 
     Uses object.__new__ to skip AgentWorkflow.__init__ which has 7+ side effects
-    (config loading, storage init, dependency orchestration, etc.).  This lets us
+    (config loading, storage init, etc.).  This lets us
     test async_run in isolation by injecting mock collaborators directly.
     """
     wf = object.__new__(AgentWorkflow)
@@ -40,8 +40,6 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
 
     # Config
     wf.config = MagicMock(spec=WorkflowRuntimeConfig)
-    wf.config.run_upstream = False
-    wf.config.run_downstream = False
 
     # Runtime state
     runtime = MagicMock()
@@ -61,9 +59,6 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     # Event logger
     wf.event_logger = MagicMock()
 
-    # Dependency orchestrator (needed for _resolve_downstream_workflows)
-    wf.dependency_orchestrator = MagicMock()
-
     return wf
 
 
@@ -73,41 +68,6 @@ def _mock_manager():
     mgr.context.return_value.__enter__ = MagicMock()
     mgr.context.return_value.__exit__ = MagicMock(return_value=False)
     return mgr
-
-
-# ── async_run: upstream resolution ─────────────────────────────────────
-
-
-class TestAsyncRunUpstreamResolution:
-    """Tests for the upstream dependency resolution phase of async_run."""
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_upstream_not_ready(self):
-        """async_run should return None when upstream resolution returns False."""
-        wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=False)
-
-        result = await wf.async_run()
-
-        assert result is None
-        wf.event_logger.log_workflow_start.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_continues_when_upstream_succeeds(self):
-        """async_run should proceed past upstream check when it returns True."""
-        wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-
-        mgr = _mock_manager()
-        orchestrator = wf.services.core.action_level_orchestrator
-        orchestrator.compute_execution_levels.return_value = []
-
-        with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            result = await wf.async_run()
-
-        # With no levels, finalize should be called and result is success
-        assert result == ("success", {})
-        wf.event_logger.log_workflow_start.assert_called_once()
 
 
 # ── async_run: level execution ─────────────────────────────────────────
@@ -120,8 +80,6 @@ class TestAsyncRunLevelExecution:
     async def test_executes_each_level(self):
         """async_run should call execute_level_async for each level."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [
@@ -141,8 +99,6 @@ class TestAsyncRunLevelExecution:
     async def test_level_execution_params_passed_correctly(self):
         """The LevelExecutionParams should include correct fields."""
         wf = _build_workflow(execution_order=["agent_a"])
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [["agent_a"]]
@@ -162,7 +118,6 @@ class TestAsyncRunLevelExecution:
     async def test_stops_when_level_incomplete(self):
         """async_run should return early when a level returns False (incomplete)."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [
@@ -185,8 +140,6 @@ class TestAsyncRunLevelExecution:
     async def test_sets_manager_context_for_known_actions(self):
         """async_run should call manager.set_context for actions in action_indices."""
         wf = _build_workflow(execution_order=["agent_a", "agent_b"])
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [["agent_a", "agent_b"]]
@@ -206,8 +159,6 @@ class TestAsyncRunLevelExecution:
     async def test_concurrency_limit_default(self):
         """Default concurrency_limit should be 5."""
         wf = _build_workflow(execution_order=["agent_a"])
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [["agent_a"]]
@@ -221,18 +172,16 @@ class TestAsyncRunLevelExecution:
         assert call_args.concurrency_limit == 5
 
 
-# ── async_run: completion and downstream ───────────────────────────────
+# ── async_run: completion ──────────────────────────────────────────────
 
 
 class TestAsyncRunCompletion:
-    """Tests for workflow completion and downstream resolution in async_run."""
+    """Tests for workflow completion in async_run."""
 
     @pytest.mark.asyncio
     async def test_success_returns_tuple(self):
         """Successful async_run should return ('success', {})."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [["agent_a"]]
@@ -246,29 +195,9 @@ class TestAsyncRunCompletion:
         wf.event_logger.finalize_workflow.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_downstream_failure_returns_none(self):
-        """When downstream resolution fails, should return None."""
-        wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=False)
-
-        orchestrator = wf.services.core.action_level_orchestrator
-        orchestrator.compute_execution_levels.return_value = [["agent_a"]]
-        orchestrator.execute_level_async = AsyncMock(return_value=True)
-
-        mgr = _mock_manager()
-        with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            result = await wf.async_run()
-
-        assert result is None
-        wf._resolve_downstream_workflows.assert_called_once()
-
-    @pytest.mark.asyncio
     async def test_finalize_receives_elapsed_time(self):
         """finalize_workflow should receive a positive elapsed_time."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = []
@@ -286,8 +215,6 @@ class TestAsyncRunCompletion:
     async def test_workflow_start_logged_as_async(self):
         """log_workflow_start should be called with is_async=True."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = []
@@ -310,7 +237,6 @@ class TestAsyncRunErrorHandling:
     async def test_exception_sets_state_failed(self):
         """An exception during level execution should set state.failed = True."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.side_effect = RuntimeError("boom")
@@ -328,7 +254,6 @@ class TestAsyncRunErrorHandling:
     async def test_exception_calls_handle_workflow_error(self):
         """handle_workflow_error should be called with the exception."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
 
         error = ValueError("bad config")
         orchestrator = wf.services.core.action_level_orchestrator
@@ -350,7 +275,6 @@ class TestAsyncRunErrorHandling:
     async def test_exception_reraises(self):
         """The original exception should be re-raised after error handling."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.side_effect = TypeError("type error")
@@ -366,7 +290,6 @@ class TestAsyncRunErrorHandling:
     async def test_exception_during_execute_level_async(self):
         """An exception from execute_level_async should be caught and reraised."""
         wf = _build_workflow()
-        wf._resolve_upstream_and_initialize = MagicMock(return_value=True)
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [["agent_a"]]
@@ -383,39 +306,18 @@ class TestAsyncRunErrorHandling:
         wf.event_logger.handle_workflow_error.assert_called_once()
 
 
-# ── _resolve_upstream_and_initialize ───────────────────────────────────
+# ── _initialize_event_context ──────────────────────────────────────────
 
 
-class TestResolveUpstreamAndInitialize:
-    """Tests for the upstream resolution helper method."""
-
-    def test_returns_true_when_upstream_succeeds(self):
-        wf = _build_workflow()
-        wf._resolve_upstream_workflows = MagicMock(return_value=True)
-
-        mgr = _mock_manager()
-        with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            result = wf._resolve_upstream_and_initialize()
-
-        assert result is True
-
-    def test_returns_false_when_upstream_pending(self):
-        wf = _build_workflow()
-        wf._resolve_upstream_workflows = MagicMock(return_value=False)
-
-        mgr = _mock_manager()
-        with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            result = wf._resolve_upstream_and_initialize()
-
-        assert result is False
+class TestInitializeEventContext:
+    """Tests for the event context initialization."""
 
     def test_sets_manager_context(self):
         wf = _build_workflow()
-        wf._resolve_upstream_workflows = MagicMock(return_value=True)
 
         mgr = _mock_manager()
         with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            wf._resolve_upstream_and_initialize()
+            wf._initialize_event_context()
 
         mgr.set_context.assert_called_once()
         call_kwargs = mgr.set_context.call_args[1]

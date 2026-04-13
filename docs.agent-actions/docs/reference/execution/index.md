@@ -45,5 +45,4 @@ Shows input/output schemas for each action and helps catch field reference error
 - [Guards](./guards.md) — Conditional action execution
 - [Retry](./retry.md) — Automatic error handling
 - [Version Actions](./versions.md) — Parallel processing with iterations
-- [Workflow Dependencies](./workflow-dependencies.md) — Cross-workflow orchestration
 - [Context Handling](./context-handling.md) — Data flow between actions

@@ -120,60 +120,13 @@ class TestGetAgentFolder:
 
 
 # ---------------------------------------------------------------------------
-# _resolve_upstream_from_manifest
-# ---------------------------------------------------------------------------
-
-
-class TestResolveUpstreamFromManifest:
-    @patch("agent_actions.workflow.runner.ArtifactLinker.read_manifest")
-    def test_no_manifest_returns_none(self, mock_read, runner):
-        mock_read.return_value = None
-        result = runner._resolve_upstream_from_manifest(Path("/agent/agent_io"))
-        assert result is None
-
-    @patch("agent_actions.workflow.runner.ArtifactLinker.read_manifest")
-    def test_manifest_with_existing_path(self, mock_read, runner, tmp_path):
-        upstream = tmp_path / "upstream"
-        upstream.mkdir()
-        mock_read.return_value = {"upstream_path": str(upstream)}
-        result = runner._resolve_upstream_from_manifest(tmp_path / "agent_io")
-        assert result == [upstream]
-
-    @patch("agent_actions.workflow.runner.ArtifactLinker.read_manifest")
-    def test_manifest_upstream_missing(self, mock_read, runner, tmp_path):
-        mock_read.return_value = {"upstream_path": str(tmp_path / "nonexistent")}
-        result = runner._resolve_upstream_from_manifest(tmp_path / "agent_io")
-        assert result is None
-
-    @patch("agent_actions.workflow.runner.ArtifactLinker.read_manifest")
-    def test_no_double_agent_io_nesting(self, mock_read, runner, tmp_path):
-        """When 'agent_io' is already in the folder path, don't nest it again."""
-        agent_io_path = tmp_path / "agent_io"
-        agent_io_path.mkdir()
-        mock_read.return_value = None
-        runner._resolve_upstream_from_manifest(agent_io_path)
-        # Should call read_manifest with the same path, not agent_io/agent_io
-        mock_read.assert_called_once_with(agent_io_path)
-
-
-# ---------------------------------------------------------------------------
 # _resolve_start_node_directories
 # ---------------------------------------------------------------------------
 
 
 class TestResolveStartNodeDirectories:
-    @patch("agent_actions.workflow.runner.ArtifactLinker.read_manifest")
-    def test_manifest_resolves_first(self, mock_read, runner, tmp_path):
-        upstream = tmp_path / "upstream"
-        upstream.mkdir()
-        mock_read.return_value = {"upstream_path": str(upstream)}
-        result = runner._resolve_start_node_directories(tmp_path / "agent_io", "agent")
-        assert result == [upstream]
-
     @patch("agent_actions.workflow.runner.resolve_start_node_data_source")
-    @patch("agent_actions.workflow.runner.ArtifactLinker.read_manifest")
-    def test_falls_back_to_data_source(self, mock_read, mock_resolve, runner, tmp_path):
-        mock_read.return_value = None
+    def test_falls_back_to_data_source(self, mock_resolve, runner, tmp_path):
         staging = tmp_path / "staging"
         staging.mkdir()
         mock_result = MagicMock()
@@ -946,13 +899,11 @@ class TestProcessAndGenerateForAgent:
     @patch.object(ActionRunner, "process_files")
     @patch.object(ActionRunner, "setup_directories")
     @patch.object(ActionRunner, "get_action_folder")
-    @patch.object(ActionRunner, "_resolve_upstream_from_manifest")
     def test_resolves_file_type_filter_for_start_node(
-        self, mock_manifest, mock_folder, mock_setup, mock_process, mock_resolve, runner
+        self, mock_folder, mock_setup, mock_process, mock_resolve, runner
     ):
         mock_folder.return_value = "/agent_io"
         mock_setup.return_value = (["/input"], "/output")
-        mock_manifest.return_value = None
         mock_result = MagicMock()
         mock_result.file_type_filter = {"pdf", "docx"}
         mock_resolve.return_value = mock_result

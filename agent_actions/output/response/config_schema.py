@@ -191,7 +191,7 @@ class AgentConfig(BaseModel):
     )
     api_key: SecretStr | None = None
     code_path: str | None = None
-    dependencies: list[str | dict[str, Any]] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
     prompt: str | None = None
     schema_name: str | None = None
     chunk_config: dict[str, Any] = Field(default_factory=dict)

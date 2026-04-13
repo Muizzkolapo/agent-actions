@@ -16,8 +16,6 @@ def _make_args(**overrides) -> RunCommandArgs:
         "use_tools": False,
         "execution_mode": "auto",
         "concurrency_limit": 5,
-        "upstream": False,
-        "downstream": False,
         "fresh": False,
     }
     defaults.update(overrides)

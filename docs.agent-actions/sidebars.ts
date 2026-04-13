@@ -149,7 +149,6 @@ const sidebars: SidebarsConfig = {
             'reference/execution/context-handling',
             'reference/execution/run-modes',
             'reference/execution/granularity',
-            'reference/execution/workflow-dependencies',
             'reference/execution/retry',
             'reference/execution/versions',
           ],

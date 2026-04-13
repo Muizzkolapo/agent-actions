@@ -29,7 +29,6 @@ Agent Actions.
 | `schema_service.py` | Module | `WorkflowSchemaService` that exposes input/output schema mapping. `from_action_configs` classmethod encapsulates construction + optional UDF registry and pre-scanned `tool_schemas`. | `schema`, `output` |
 | `service_init.py` | Module | Service assembly and storage backend initialization extracted from coordinator. | `config`, `workflow` |
 | `strategies.py` | Module | Pluggable strategies for action execution (loop/parallel). | `workflow`, `validation` |
-| `workspace_index.py` | Module | `WorkspaceIndex`: scans workflow dirs to build dependency graphs. Config file glob uses `sorted()` for deterministic selection. | `tooling`, `file_io` |
 
 ## Design Notes
 
@@ -58,12 +57,9 @@ actions would produce garbage. `_check_exhausted_raise` in `ResultCollector` han
 | `discover_workflow_udfs()` | `tools/{workflow}/*.py` | Reads | — |
 | `WorkflowSchemaService.from_action_configs()` | `schema/{workflow}/{action}.yml` | Validates | `actions[].schema` |
 | `WorkflowSchemaService.validate()` | `agent_config/{workflow}.yml` | Validates | `actions[].context_scope`, `actions[].schema` |
-| `WorkspaceIndex.scan_workspace()` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies` |
 | `ActionRunner.run_action()` | `agent_io/staging/` | Reads | — |
 | `ActionRunner.run_action()` | `agent_io/target/{action}/` | Writes | — |
 | `ProcessingPipeline` | `agent_io/target/{action}/` | Writes | `actions[].run_mode` |
-| `WorkflowDependencyOrchestrator` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies` |
-| `ArtifactLinker` | `agent_io/target/{action}/` | Reads | — |
 | `WorkflowEventLogger` | `agent_io/target/{action}/` | Reads | — |
 
 **Internal only**: `WorkflowRuntimeConfig`, `WorkflowPaths`, `WorkflowState`, `WorkflowMetadata`, `RuntimeContext`, `CoreServices`, `SupportServices`, `WorkflowServices`, `ActionLogParams`, `ActionExecutionResult`, `ExecutionMetrics`, `ActionRunParams`, `ExecutorDependencies`, `PipelineConfig`, `StrategyExecutionParams`, `FileProcessParams`, `ActionStrategy`, `InitialStrategy`, `StandardStrategy`, `ActionStateManager`, `ActionStatus`, `SkipEvaluator`, `BatchLifecycleManager`, `VersionOutputCorrelator`, `ActionOutputManager`, `ManifestManager`, `ActionLevelOrchestrator` — no direct project surface.

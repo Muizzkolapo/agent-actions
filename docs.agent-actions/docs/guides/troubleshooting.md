@@ -588,4 +588,3 @@ reduce_key: parent_id
 3. For parallel: merged outputs determine execution count
 4. For aggregation: `reduce_key` groups determine execution count
 
-See [Workflow Dependencies](../reference/execution/workflow-dependencies) for pattern details.

@@ -45,8 +45,6 @@ def mock_config():
     paths = MagicMock(spec=WorkflowPaths)
     cfg = MagicMock(spec=WorkflowRuntimeConfig)
     cfg.paths = paths
-    cfg.run_upstream = False
-    cfg.run_downstream = False
     return cfg
 
 
@@ -75,8 +73,6 @@ class TestLogWorkflowStart:
         assert event.workflow_name == "test_workflow"
         assert event.execution_mode == "sequential"
         assert event.action_count == 2
-        assert event.run_upstream == mock_config.run_upstream
-        assert event.run_downstream == mock_config.run_downstream
 
     def test_async_mode(self, event_logger):
         mgr = MagicMock()

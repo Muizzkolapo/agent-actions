@@ -993,5 +993,4 @@ Explore the features that make these patterns possible:
 - **[Guards](../reference/execution/guards)** — Conditional execution
 - **[Granularity](../reference/execution/granularity)** — Record and file modes
 - **[Context Scope](../reference/context/context-scope)** — Data flow control
-- **[Workflow Dependencies](../reference/execution/workflow-dependencies)** — Chain workflows together
 - **[Reprompting](../reference/validation/reprompting)** — Automatic refinement on failures

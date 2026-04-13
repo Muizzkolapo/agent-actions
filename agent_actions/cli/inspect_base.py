@@ -16,7 +16,8 @@ from agent_actions.config.project_paths import (
 from agent_actions.errors import ConfigurationError
 from agent_actions.models.action_schema import ActionSchema
 from agent_actions.prompt.renderer import ConfigRenderingService
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowPaths, WorkflowRuntimeConfig
+from agent_actions.workflow.coordinator import AgentWorkflow
+from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 
 if TYPE_CHECKING:
     from agent_actions.workflow.schema_service import WorkflowSchemaService

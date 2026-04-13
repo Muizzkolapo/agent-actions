@@ -230,4 +230,3 @@ Enable prompt debug to see rendered prompts per iteration:
 
 - [Context Scope](../context/context-scope) - Field flow control
 - [Field References](../context/field-references) - Accessing version outputs
-- [Workflow Dependencies](./workflow-dependencies) - Dependency patterns

@@ -17,11 +17,9 @@ class StaticTypeChecker:
     def __init__(
         self,
         graph: DataFlowGraph,
-        cross_workflow_actions: set[str] | None = None,
     ) -> None:
         """Initialize the type checker."""
         self.graph = graph
-        self.cross_workflow_actions = cross_workflow_actions or set()
 
     def check_all(self) -> StaticValidationResult:
         """Run all static type checks on the graph."""
@@ -70,10 +68,6 @@ class StaticTypeChecker:
         )
 
         if source_agent in SPECIAL_NAMESPACES:
-            return
-
-        # Cross-workflow deps are resolved at runtime — skip static check.
-        if source_agent in self.cross_workflow_actions:
             return
 
         source_node = self.graph.get_node(source_agent)
@@ -242,7 +236,7 @@ class StaticTypeChecker:
                 if req.source_agent not in SPECIAL_NAMESPACES:
                     referenced.add(req.source_agent)
 
-            implicit = referenced - node.dependencies - self.cross_workflow_actions
+            implicit = referenced - node.dependencies
 
             for agent in implicit:
                 for req in node.input_requirements:
