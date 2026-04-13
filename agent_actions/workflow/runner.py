@@ -336,7 +336,7 @@ class ActionRunner:
 
                 upstream_target.mkdir(parents=True, exist_ok=True)
                 for file_name in target_files:
-                    data = upstream_backend.read_target_file(dep_name, file_name)
+                    data = upstream_backend.read_target(dep_name, file_name)
                     out_path = upstream_target / file_name
                     out_path.write_text(json.dumps(data, indent=2, default=str))
                 logger.info(
