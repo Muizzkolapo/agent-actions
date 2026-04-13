@@ -58,7 +58,7 @@ def _resolve_source_mapping(
     raw_outputs: list[dict],
     input_data: list[dict],
     action_name: str,
-) -> dict[int, int]:
+) -> dict[int, int | list[int]]:
     """Resolve which input produced each output by ``node_id``.
 
     NiFi-inspired: every record carries identity (``node_id``) through the
@@ -79,14 +79,9 @@ def _resolve_source_mapping(
             if isinstance(nid, str):
                 nid_to_idx[nid] = i
 
-    if not nid_to_idx:
-        return {}
-
-    mapping: dict[int, int] = {}
+    mapping: dict[int, int | list[int]] = {}
     for i, item in enumerate(raw_outputs):
-        if not isinstance(item, dict):
-            continue
-        nid = item.get("node_id")
+        nid = item.get("node_id") if isinstance(item, dict) else None
         if not isinstance(nid, str):
             continue  # New record — no parent.  Gets fresh lineage.
         if nid not in nid_to_idx:
