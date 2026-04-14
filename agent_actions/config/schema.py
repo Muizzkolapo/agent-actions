@@ -104,6 +104,10 @@ class RepromptConfig(BaseModel):
         default="return_last",
         description="Behavior when max_attempts exhausted: return_last or raise",
     )
+    use_self_reflection: bool = Field(
+        default=False,
+        description="Include self-reflection instruction in retry prompts",
+    )
 
 
 class HitlConfig(BaseModel):

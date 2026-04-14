@@ -18,7 +18,9 @@ from agent_actions.processing.recovery.response_validator import (
     SchemaValidator,
     UdfValidator,
     build_validation_feedback,
+    resolve_feedback_strategies,
     safe_validate,
+    self_reflection_strategy,
 )
 from agent_actions.processing.recovery.validation import (
     _VALIDATION_REGISTRY,
@@ -310,3 +312,67 @@ class TestSafeValidate:
         # Should not raise — context is used in logging
         result = safe_validate(bad, {}, context="my_action")
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Feedback strategies
+# ---------------------------------------------------------------------------
+
+
+class TestSelfReflectionStrategy:
+    """Tests for self_reflection_strategy and resolve_feedback_strategies."""
+
+    def test_strategy_returns_reflection_text(self):
+        result = self_reflection_strategy({"bad": "data"}, "missing field X")
+        assert "analyze what went wrong" in result.lower()
+        assert "corrected response" in result.lower()
+
+    def test_strategy_ignores_inputs(self):
+        """Reflection text is static — doesn't depend on response or error."""
+        r1 = self_reflection_strategy({"a": 1}, "error A")
+        r2 = self_reflection_strategy({"b": 2}, "error B")
+        assert r1 == r2
+
+    def test_resolve_empty_config(self):
+        assert resolve_feedback_strategies(None) == []
+        assert resolve_feedback_strategies({}) == []
+
+    def test_resolve_reflection_disabled(self):
+        assert resolve_feedback_strategies({"use_self_reflection": False}) == []
+
+    def test_resolve_reflection_enabled(self):
+        strategies = resolve_feedback_strategies({"use_self_reflection": True})
+        assert len(strategies) == 1
+        assert strategies[0] is self_reflection_strategy
+
+    def test_build_feedback_without_strategies(self):
+        """No strategies = identical to old behavior."""
+        base = build_validation_feedback({"x": 1}, "bad field")
+        with_none = build_validation_feedback({"x": 1}, "bad field", strategies=None)
+        with_empty = build_validation_feedback({"x": 1}, "bad field", strategies=[])
+        assert base == with_none == with_empty
+
+    def test_build_feedback_with_reflection(self):
+        """Reflection text is appended after base feedback."""
+        base = build_validation_feedback({"x": 1}, "bad field")
+        with_reflection = build_validation_feedback(
+            {"x": 1}, "bad field", strategies=[self_reflection_strategy]
+        )
+        assert with_reflection.startswith(base)
+        assert "analyze what went wrong" in with_reflection.lower()
+        assert len(with_reflection) > len(base)
+
+    def test_multiple_strategies_compose(self):
+        """Multiple strategies are appended in order."""
+
+        def strategy_a(resp, err):
+            return "STRATEGY_A_OUTPUT"
+
+        def strategy_b(resp, err):
+            return "STRATEGY_B_OUTPUT"
+
+        result = build_validation_feedback({"x": 1}, "err", strategies=[strategy_a, strategy_b])
+        assert "STRATEGY_A_OUTPUT" in result
+        assert "STRATEGY_B_OUTPUT" in result
+        # A appears before B
+        assert result.index("STRATEGY_A_OUTPUT") < result.index("STRATEGY_B_OUTPUT")

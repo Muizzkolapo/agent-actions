@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import RepromptValidationFailedEvent
 
-from .response_validator import UdfValidator, build_validation_feedback, safe_validate
+from .response_validator import (
+    FeedbackStrategy,
+    UdfValidator,
+    build_validation_feedback,
+    resolve_feedback_strategies,
+    safe_validate,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .response_validator import ResponseValidator
 
 logger = logging.getLogger(__name__)
@@ -65,6 +72,7 @@ class RepromptService:
         max_attempts: int = 2,
         on_exhausted: str = "return_last",
         validator: ResponseValidator | None = None,
+        strategies: list[FeedbackStrategy] | None = None,
     ):
         """Initialize with either a ``validation_name`` or a pre-built ``validator``.
 
@@ -95,6 +103,7 @@ class RepromptService:
             self.validation_name = validation_name
 
         self.validation_func = self._validator.validate
+        self._strategies = strategies or []
 
     @property
     def feedback_message(self) -> str:
@@ -171,7 +180,9 @@ class RepromptService:
             if attempts >= self.max_attempts:
                 break
 
-            feedback = build_validation_feedback(response, self._validator.feedback_message)
+            feedback = build_validation_feedback(
+                response, self._validator.feedback_message, strategies=self._strategies
+            )
             current_prompt = f"{original_prompt}\n\n{feedback}"
 
         logger.error(
@@ -214,6 +225,7 @@ def create_reprompt_service_from_config(
         ValueError: If required 'validation' key is missing and no validator provided.
     """
     parsed = parse_reprompt_config(reprompt_config)
+    strategies = resolve_feedback_strategies(reprompt_config)
 
     if parsed is None:
         if validator is not None:
@@ -224,6 +236,7 @@ def create_reprompt_service_from_config(
                 max_attempts=cfg.get("max_attempts", 2),
                 on_exhausted=cfg.get("on_exhausted", "return_last"),
                 validator=validator,
+                strategies=strategies,
             )
         if reprompt_config:
             raise ValueError(
@@ -237,4 +250,5 @@ def create_reprompt_service_from_config(
         max_attempts=parsed.max_attempts,
         on_exhausted=parsed.on_exhausted,
         validator=validator,
+        strategies=strategies,
     )
