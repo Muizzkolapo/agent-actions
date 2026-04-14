@@ -80,6 +80,11 @@ class ResponseSchemaCompiler:
 
         # Load schema (inline or named)
         inline_schema = agent_config.get(SCHEMA_KEY)
+        if inline_schema and agent_config.get("schema_name"):
+            logger.warning(
+                "Action has both 'schema' (inline) and 'schema_name'. "
+                "Inline schema takes precedence; 'schema_name' is ignored."
+            )
         if inline_schema:
             base_schema, schema_name = _load_inline_schema(
                 inline_schema,
