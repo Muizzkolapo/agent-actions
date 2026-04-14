@@ -71,6 +71,8 @@ def check_valid_bisac(response: dict) -> bool:
     )
 ```
 
+**Preflight validation:** The static analyzer checks that the `validation` name matches a `@reprompt_validation`-decorated function in your tools directory. Typos are caught at `agac validate` time, before any LLM calls, with a list of available validators in the error message.
+
 **Decorator contract:**
 - The string argument is the **feedback message** sent to the LLM on failure — make it specific
 - Function receives the parsed dict response from the LLM

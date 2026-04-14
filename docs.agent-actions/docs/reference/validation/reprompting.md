@@ -73,6 +73,10 @@ def check_valid_bisac(response) -> bool:
 
 When the validation function returns `False`, Agent Actions reprompts with the error message from the `@reprompt_validation` decorator, giving the LLM specific guidance on what to fix.
 
+:::tip Typos are caught early
+The static analyzer validates that the function name in `reprompt.validation` matches a `@reprompt_validation`-decorated function in your tools directory. If the name doesn't match, you'll get an error at validation time — before any LLM calls — listing the available validators.
+:::
+
 ### Exhaustion Behavior
 
 When a record exhausts all reprompt attempts, `on_exhausted` determines what happens:
