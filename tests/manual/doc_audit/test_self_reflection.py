@@ -12,7 +12,6 @@ Run:
 from __future__ import annotations
 
 import sys
-import textwrap
 from pathlib import Path
 
 # --- path fixup for standalone execution ---
@@ -131,12 +130,12 @@ def main() -> int:
         for line in extra.strip().splitlines():
             print(f"    {GREEN}{line}{RESET}")
     else:
-        print(f"    \033[31mNO DIFFERENCE — reflection not appended!\033[0m")
+        print("    \033[31mNO DIFFERENCE — reflection not appended!\033[0m")
         return 1
 
     print(f"\n{RULE}")
     print(f"  {GREEN}Review the prompts above.{RESET}")
-    print(f"  Does the reflection instruction help the model reason about its failure?")
+    print("  Does the reflection instruction help the model reason about its failure?")
     print(f"{RULE}\n")
     return 0
 
