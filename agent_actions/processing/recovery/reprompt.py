@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +10,7 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import RepromptValidationFailedEvent
 
 from .response_validator import (
+    FeedbackStrategy,
     UdfValidator,
     build_validation_feedback,
     resolve_feedback_strategies,
@@ -18,6 +18,8 @@ from .response_validator import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .response_validator import ResponseValidator
 
 logger = logging.getLogger(__name__)
@@ -70,7 +72,7 @@ class RepromptService:
         max_attempts: int = 2,
         on_exhausted: str = "return_last",
         validator: ResponseValidator | None = None,
-        strategies: list | None = None,
+        strategies: list[FeedbackStrategy] | None = None,
     ):
         """Initialize with either a ``validation_name`` or a pre-built ``validator``.
 

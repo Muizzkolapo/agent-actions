@@ -9,6 +9,9 @@ from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
+# Strategy callable: (failed_response, feedback_message) -> extra prompt text
+FeedbackStrategy = Callable[[Any, str], str]
+
 
 # ---------------------------------------------------------------------------
 # Protocol
@@ -195,7 +198,7 @@ class ComposedValidator:
 def build_validation_feedback(
     failed_response: Any,
     feedback_message: str,
-    strategies: list[Callable[[Any, str], str]] | None = None,
+    strategies: list[FeedbackStrategy] | None = None,
 ) -> str:
     """Build the feedback string appended to the prompt on validation failure."""
     try:
@@ -233,9 +236,9 @@ Now produce your corrected response."""
 
 def resolve_feedback_strategies(
     reprompt_config: dict | None,
-) -> list[Callable[[Any, str], str]]:
+) -> list[FeedbackStrategy]:
     """Turn reprompt config flags into an ordered list of feedback strategies."""
-    strategies: list[Callable[[Any, str], str]] = []
+    strategies: list[FeedbackStrategy] = []
     if (reprompt_config or {}).get("use_self_reflection"):
         strategies.append(self_reflection_strategy)
     return strategies
