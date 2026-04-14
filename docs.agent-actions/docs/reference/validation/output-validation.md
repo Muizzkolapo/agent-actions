@@ -153,6 +153,26 @@ The retry prompt includes:
 - Specific validation errors
 - Field/constraint that failed
 
+### Schema Mismatch Behavior
+
+Control what happens when an LLM response doesn't match the expected schema using `on_schema_mismatch`:
+
+```yaml
+- name: extract_entities
+  schema: entity_schema
+  on_schema_mismatch: reprompt   # "warn" | "reprompt" | "reject"
+  reprompt:
+    max_attempts: 3
+```
+
+| Value | Behavior |
+|-------|----------|
+| `warn` | Log a warning, accept the response anyway (default) |
+| `reprompt` | Trigger reprompt with schema errors as feedback |
+| `reject` | Reject the response, action fails |
+
+When set to `reprompt`, no custom validation UDF is needed — the schema errors are used directly as feedback to the LLM.
+
 ## Layer 3: Guard Validation
 
 Here's where it gets interesting: schema validation catches structural problems, but what about semantic ones? A score of 25 is a valid integer, but maybe you only want to process high-quality content with scores above 85.

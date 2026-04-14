@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Warn when inline schema shadows schema_name; add missing json_mode warning to AgacClient"
+time: 2026-04-14T11:30:00.000000Z

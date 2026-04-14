@@ -54,6 +54,7 @@ actions:
 | `stop` | string/list | Stop sequence(s) to end generation |
 | `record_limit` | integer | Max records per file (default: unlimited) |
 | `file_limit` | integer | Max files to walk per action (default: unlimited) |
+| `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |
 
 :::note Schema vs Runtime
 The `DefaultsConfig` schema defines only the core defaultable fields above. Additional fields like `api_key`, `context_scope`, `is_operational`, and `prompt_debug` are resolved at runtime through configuration merging and may not be explicitly defined in the defaults schema.
