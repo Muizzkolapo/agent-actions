@@ -55,6 +55,7 @@ def validate_and_reprompt(
     from agent_actions.processing.recovery.reprompt import parse_reprompt_config
     from agent_actions.processing.recovery.response_validator import (
         build_validation_feedback,
+        resolve_feedback_strategies,
         safe_validate,
     )
     from agent_actions.processing.recovery.validation import get_validation_function
@@ -74,6 +75,7 @@ def validate_and_reprompt(
     validation_name = parsed.validation_name
     max_attempts = parsed.max_attempts
     on_exhausted = parsed.on_exhausted
+    strategies = resolve_feedback_strategies(raw_reprompt_config)
 
     _load_validation_udf(agent_config, raw_reprompt_config or {})
 
@@ -155,6 +157,7 @@ def validate_and_reprompt(
             feedback = build_validation_feedback(
                 failed_response=failed_result.content,
                 feedback_message=feedback_message,
+                strategies=strategies,
             )
 
             original_user_content = original_record.get("user_content", "")
@@ -340,14 +343,19 @@ def submit_reprompt_batch(
         BatchTaskPreparator,
     )
     from agent_actions.processing.recovery.reprompt import parse_reprompt_config
-    from agent_actions.processing.recovery.response_validator import build_validation_feedback
+    from agent_actions.processing.recovery.response_validator import (
+        build_validation_feedback,
+        resolve_feedback_strategies,
+    )
     from agent_actions.processing.recovery.validation import get_validation_function
 
-    parsed = parse_reprompt_config((agent_config or {}).get("reprompt", {}))
+    raw_reprompt_config = (agent_config or {}).get("reprompt", {})
+    parsed = parse_reprompt_config(raw_reprompt_config)
     if parsed is None:
         return None
 
     validation_name = parsed.validation_name
+    strategies = resolve_feedback_strategies(raw_reprompt_config)
 
     try:
         _, feedback_message = get_validation_function(validation_name)
@@ -367,6 +375,7 @@ def submit_reprompt_batch(
         feedback = build_validation_feedback(
             failed_response=failed_result.content,
             feedback_message=feedback_message,
+            strategies=strategies,
         )
 
         original_user_content = original_record.get("user_content", "")
