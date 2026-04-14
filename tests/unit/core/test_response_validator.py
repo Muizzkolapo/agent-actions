@@ -18,6 +18,7 @@ from agent_actions.processing.recovery.response_validator import (
     SchemaValidator,
     UdfValidator,
     build_validation_feedback,
+    safe_validate,
 )
 from agent_actions.processing.recovery.validation import (
     _VALIDATION_REGISTRY,
@@ -251,3 +252,61 @@ class TestBuildValidationFeedback:
         feedback = build_validation_feedback(response, "msg")
         assert '"user"' in feedback
         assert '"scores"' in feedback
+
+
+# ---------------------------------------------------------------------------
+# safe_validate
+# ---------------------------------------------------------------------------
+
+
+class TestSafeValidate:
+    """Tests for the safe_validate shared helper."""
+
+    def test_passes(self):
+        assert safe_validate(lambda r: True, {"data": 1}) is True
+
+    def test_fails(self):
+        assert safe_validate(lambda r: False, {"data": 1}) is False
+
+    def test_catches_value_error(self):
+        def bad(r):
+            raise ValueError("bad")
+
+        assert safe_validate(bad, {}) is False
+
+    def test_catches_type_error(self):
+        def bad(r):
+            raise TypeError("bad")
+
+        assert safe_validate(bad, {}) is False
+
+    def test_catches_lookup_error(self):
+        def bad(r):
+            raise KeyError("missing")
+
+        assert safe_validate(bad, {}) is False
+
+    def test_uncaught_propagates(self):
+        def bad(r):
+            raise AttributeError("bug")
+
+        with pytest.raises(AttributeError):
+            safe_validate(bad, {})
+
+    def test_custom_catch(self):
+        def bad(r):
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            safe_validate(bad, {})
+        assert safe_validate(bad, {}, catch=(Exception,)) is False
+
+    def test_context_passed_through(self):
+        """Verify context parameter is accepted without error."""
+
+        def bad(r):
+            raise ValueError("x")
+
+        # Should not raise — context is used in logging
+        result = safe_validate(bad, {}, context="my_action")
+        assert result is False

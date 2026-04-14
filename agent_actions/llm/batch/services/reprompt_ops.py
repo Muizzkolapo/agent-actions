@@ -52,29 +52,30 @@ def validate_and_reprompt(
     agent_config: dict[str, Any] | None,
 ) -> list[BatchResult]:
     """Validate results and reprompt failures with feedback."""
-    from agent_actions.processing.recovery.response_validator import build_validation_feedback
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+    from agent_actions.processing.recovery.response_validator import (
+        build_validation_feedback,
+        safe_validate,
+    )
     from agent_actions.processing.recovery.validation import get_validation_function
     from agent_actions.processing.types import RepromptMetadata
 
-    reprompt_config = (agent_config or {}).get("reprompt")
+    raw_reprompt_config = (agent_config or {}).get("reprompt")
+    parsed = parse_reprompt_config(raw_reprompt_config)
     logger.debug(
-        "Batch reprompt check: agent_config has %d keys, reprompt_config=%s",
+        "Batch reprompt check: agent_config has %d keys, parsed=%s",
         len(agent_config or {}),
-        reprompt_config,
+        parsed,
     )
-    if not reprompt_config:
+    if parsed is None:
         logger.debug("Reprompt not configured, skipping validation")
         return results
 
-    validation_name = reprompt_config.get("validation")
-    if not validation_name:
-        logger.warning("Reprompt enabled but no validation UDF specified")
-        return results
+    validation_name = parsed.validation_name
+    max_attempts = parsed.max_attempts
+    on_exhausted = parsed.on_exhausted
 
-    max_attempts = reprompt_config.get("max_attempts", 2)
-    on_exhausted = reprompt_config.get("on_exhausted", "return_last")
-
-    _load_validation_udf(agent_config, reprompt_config)
+    _load_validation_udf(agent_config, raw_reprompt_config)
 
     try:
         validation_func, feedback_message = get_validation_function(validation_name)
@@ -102,16 +103,12 @@ def validate_and_reprompt(
             ):
                 continue
 
-            try:
-                is_valid = validation_func(result.content)
-            except Exception as e:
-                logger.warning(
-                    "Validation UDF error for %s (treating as failure): %s",
-                    result.custom_id,
-                    e,
-                    exc_info=True,
-                )
-                is_valid = False
+            is_valid = safe_validate(
+                validation_func,
+                result.content,
+                context=result.custom_id,
+                catch=(Exception,),
+            )
 
             validation_status[result.custom_id] = is_valid
 
@@ -263,17 +260,18 @@ def validate_results(
         Empty failed_results means all passed.
         None validation_name means reprompt is not configured.
     """
-    reprompt_config = (agent_config or {}).get("reprompt")
-    if not reprompt_config:
-        return [], None
-
-    validation_name = reprompt_config.get("validation")
-    if not validation_name:
-        return [], None
-
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+    from agent_actions.processing.recovery.response_validator import safe_validate
     from agent_actions.processing.recovery.validation import get_validation_function
 
-    _load_validation_udf(agent_config, reprompt_config)
+    raw_reprompt_config = (agent_config or {}).get("reprompt")
+    parsed = parse_reprompt_config(raw_reprompt_config)
+    if parsed is None:
+        return [], None
+
+    validation_name = parsed.validation_name
+
+    _load_validation_udf(agent_config, raw_reprompt_config)
 
     try:
         validation_func, _ = get_validation_function(validation_name)
@@ -293,16 +291,12 @@ def validate_results(
         ):
             continue
 
-        try:
-            is_valid = validation_func(result.content)
-        except Exception:
-            # UDF raised at runtime — could be a code bug or unexpected LLM output.
-            # Treat as validation failure so the batch can reprompt rather than abort.
-            logger.exception(
-                "Validation UDF raised an exception for record %s (treating as failure)",
-                result.custom_id,
-            )
-            is_valid = False
+        is_valid = safe_validate(
+            validation_func,
+            result.content,
+            context=result.custom_id,
+            catch=(Exception,),
+        )
 
         if not is_valid:
             failed_results.append(result)
@@ -345,13 +339,15 @@ def submit_reprompt_batch(
     from agent_actions.llm.batch.processing.preparator import (
         BatchTaskPreparator,
     )
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
     from agent_actions.processing.recovery.response_validator import build_validation_feedback
     from agent_actions.processing.recovery.validation import get_validation_function
 
-    reprompt_config = (agent_config or {}).get("reprompt", {})
-    validation_name = reprompt_config.get("validation")
-    if not validation_name:
+    parsed = parse_reprompt_config((agent_config or {}).get("reprompt", {}))
+    if parsed is None:
         return None
+
+    validation_name = parsed.validation_name
 
     try:
         _, feedback_message = get_validation_function(validation_name)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
@@ -204,3 +205,33 @@ Your response failed validation: {feedback_message}
 Your response: {response_str}
 
 Please correct and respond again."""
+
+
+# ---------------------------------------------------------------------------
+# Shared validation helper
+# ---------------------------------------------------------------------------
+
+
+def safe_validate(
+    validate_fn: Callable[[Any], bool],
+    response: Any,
+    *,
+    context: str = "",
+    catch: tuple[type[BaseException], ...] = (ValueError, TypeError, LookupError),
+) -> bool:
+    """Call *validate_fn(response)*, catching specified exceptions as failures.
+
+    Returns ``True`` if validation passes, ``False`` if it fails or raises
+    a caught exception.  Uncaught exceptions propagate.
+    """
+    try:
+        return validate_fn(response)
+    except catch as e:
+        logger.warning(
+            "[%s] Validation raised exception (treating as failure): %s: %s",
+            context,
+            e.__class__.__name__,
+            e,
+            exc_info=True,
+        )
+        return False
