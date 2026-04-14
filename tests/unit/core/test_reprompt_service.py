@@ -12,6 +12,7 @@ import pytest
 from agent_actions.processing.recovery.reprompt import (
     RepromptService,
     create_reprompt_service_from_config,
+    parse_reprompt_config,
 )
 from agent_actions.processing.recovery.response_validator import build_validation_feedback
 from agent_actions.processing.recovery.validation import (
@@ -619,3 +620,39 @@ class TestParameterValidation:
         """Should accept max_attempts=1 (no retry)."""
         service = RepromptService(validation_name="test_validator", max_attempts=1)
         assert service.max_attempts == 1
+
+
+# ---------------------------------------------------------------------------
+# parse_reprompt_config
+# ---------------------------------------------------------------------------
+
+
+class TestParseRepromptConfig:
+    """Tests for the parse_reprompt_config shared helper."""
+
+    def test_none_returns_none(self):
+        assert parse_reprompt_config(None) is None
+
+    def test_empty_dict_returns_none(self):
+        assert parse_reprompt_config({}) is None
+
+    def test_no_validation_key_returns_none(self):
+        assert parse_reprompt_config({"max_attempts": 3}) is None
+
+    def test_empty_validation_returns_none(self):
+        assert parse_reprompt_config({"validation": ""}) is None
+
+    def test_full_config(self):
+        parsed = parse_reprompt_config(
+            {"validation": "check_positive", "max_attempts": 5, "on_exhausted": "raise"}
+        )
+        assert parsed is not None
+        assert parsed.validation_name == "check_positive"
+        assert parsed.max_attempts == 5
+        assert parsed.on_exhausted == "raise"
+
+    def test_defaults(self):
+        parsed = parse_reprompt_config({"validation": "check_positive"})
+        assert parsed is not None
+        assert parsed.max_attempts == 2
+        assert parsed.on_exhausted == "return_last"
