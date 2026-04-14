@@ -75,7 +75,7 @@ def validate_and_reprompt(
     max_attempts = parsed.max_attempts
     on_exhausted = parsed.on_exhausted
 
-    _load_validation_udf(agent_config, raw_reprompt_config)
+    _load_validation_udf(agent_config, raw_reprompt_config or {})
 
     try:
         validation_func, feedback_message = get_validation_function(validation_name)
@@ -271,7 +271,7 @@ def validate_results(
 
     validation_name = parsed.validation_name
 
-    _load_validation_udf(agent_config, raw_reprompt_config)
+    _load_validation_udf(agent_config, raw_reprompt_config or {})
 
     try:
         validation_func, _ = get_validation_function(validation_name)
