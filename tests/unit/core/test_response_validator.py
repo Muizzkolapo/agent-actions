@@ -371,9 +371,7 @@ class TestSelfReflectionStrategy:
         def strategy_b(resp, err):
             return "STRATEGY_B_OUTPUT"
 
-        result = build_validation_feedback(
-            {"x": 1}, "err", strategies=[strategy_a, strategy_b]
-        )
+        result = build_validation_feedback({"x": 1}, "err", strategies=[strategy_a, strategy_b])
         assert "STRATEGY_A_OUTPUT" in result
         assert "STRATEGY_B_OUTPUT" in result
         # A appears before B

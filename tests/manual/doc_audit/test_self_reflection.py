@@ -112,9 +112,7 @@ def main() -> int:
     )
 
     # --- Scenario 2: WITH reflection ---
-    prompts_with = _run_scenario(
-        "SCENARIO 2: Reprompt WITH self-reflection", use_reflection=True
-    )
+    prompts_with = _run_scenario("SCENARIO 2: Reprompt WITH self-reflection", use_reflection=True)
 
     # --- Comparison ---
     _header("COMPARISON: Retry prompt #2 (after first failure)")
@@ -128,7 +126,7 @@ def main() -> int:
 
     _label("Added text (reflection block)")
     # Show what reflection adds
-    extra = prompts_with[1][len(prompts_without[1]):]
+    extra = prompts_with[1][len(prompts_without[1]) :]
     if extra.strip():
         for line in extra.strip().splitlines():
             print(f"    {GREEN}{line}{RESET}")
