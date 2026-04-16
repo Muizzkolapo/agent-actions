@@ -90,7 +90,11 @@ class GroqClient(BaseClient, JSONResponseMixin):
         json_completion_kwargs: dict[str, Any] = {
             "messages": envelope.to_dicts(),
             "model": model_name,
-            "response_format": {"type": "json_object"},
+            "response_format": (
+                {"type": "json_schema", "json_schema": schema}
+                if schema
+                else {"type": "json_object"}
+            ),
             **extract_generation_params(
                 agent_config, extra_params=("frequency_penalty", "presence_penalty")
             ),

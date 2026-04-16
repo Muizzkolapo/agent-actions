@@ -101,9 +101,8 @@ class MistralBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             body, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
         )
 
-        # Mistral uses json_object mode (no full schema enforcement in batch)
         if schema:
-            body["response_format"] = {"type": "json_object"}
+            body["response_format"] = {"type": "json_schema", "json_schema": schema}
 
         return {
             "custom_id": batch_task.custom_id,
