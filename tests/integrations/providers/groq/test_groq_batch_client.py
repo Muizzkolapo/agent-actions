@@ -2,7 +2,7 @@
 Tests for GroqBatchClient.
 
 Inherits 11 contract tests from BaseBatchClientTests.
-Adds Groq-specific tests including the json_object regression test for #96.
+Adds Groq-specific tests for structured output schema dispatch and response parsing.
 """
 
 from unittest.mock import Mock
