@@ -60,6 +60,18 @@ class TestIsRetriableError:
         """VendorAPIError is not retriable by default."""
         assert not is_retriable_error(VendorAPIError("api error"))
 
+    def test_vendor_api_error_transient_json_parse_is_retriable(self):
+        """VendorAPIError with transient JSON parse message is retriable."""
+        error = VendorAPIError(
+            "openai API error: We could not parse the JSON body of your request."
+        )
+        assert is_retriable_error(error)
+
+    def test_vendor_api_error_schema_processing_is_retriable(self):
+        """VendorAPIError with schema processing message is retriable."""
+        error = VendorAPIError("We are currently processing your JSON schema. Please try again.")
+        assert is_retriable_error(error)
+
     def test_value_error_not_retriable(self):
         """ValueError is not retriable."""
         assert not is_retriable_error(ValueError("bad value"))
@@ -187,6 +199,20 @@ class TestRetryServiceNonRetriableErrors:
 
         assert exc_info.value is error
         operation.assert_called_once()
+
+    def test_transient_json_parse_error_retried(self):
+        """VendorAPIError with transient JSON parse message is retried."""
+        service = RetryService(max_attempts=3)
+        transient = VendorAPIError(
+            "openai API error: We could not parse the JSON body of your request."
+        )
+        operation = Mock(side_effect=[transient, "success"])
+
+        result = service.execute(operation)
+
+        assert result.response == "success"
+        assert result.attempts == 2
+        assert operation.call_count == 2
 
 
 class TestCreateRetryServiceFromConfig:

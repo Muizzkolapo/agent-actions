@@ -92,7 +92,11 @@ class OpenAIClient(BaseClient):
         completion_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": messages,
-            "response_format": {"type": "json_schema", "json_schema": schema},
+            "response_format": (
+                {"type": "json_schema", "json_schema": schema}
+                if schema
+                else {"type": "json_object"}
+            ),
             **extract_generation_params(
                 agent_config,
                 extra_params=("frequency_penalty", "presence_penalty"),
