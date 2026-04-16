@@ -103,7 +103,11 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             chat_kwargs = {
                 "model": model_name,
                 "messages": messages,
-                "response_format": {"type": "json_object"},
+                "response_format": (
+                    {"type": "json_object", "schema": schema}
+                    if schema
+                    else {"type": "json_object"}
+                ),
                 **extract_generation_params(
                     agent_config,
                     key_map={"top_p": "p", "stop": "stop_sequences"},
