@@ -55,10 +55,8 @@ class InvocationStrategyFactory:
         if reprompt_config and reprompt_config.get("use_llm_critique"):
             from agent_actions.processing.recovery.critique import invoke_critique
 
-            _cfg = agent_config
-
             def critique_fn(response: Any, errors: str) -> str:
-                return invoke_critique(_cfg, response, errors)
+                return invoke_critique(agent_config, response, errors)
 
         retry_service = create_retry_service_from_config(retry_config)
         reprompt_service = create_reprompt_service_from_config(

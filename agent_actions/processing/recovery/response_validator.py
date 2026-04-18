@@ -191,12 +191,23 @@ class ComposedValidator:
 # ---------------------------------------------------------------------------
 
 
+def serialize_response(response: Any) -> str:
+    """Serialize an LLM response to a human-readable string.
+
+    Strings are returned as-is. Dicts/lists are JSON-serialized.
+    Non-serializable objects fall back to ``str()``.
+    """
+    if isinstance(response, str):
+        return response
+    try:
+        return json.dumps(response, indent=2)
+    except Exception:
+        return str(response)
+
+
 def build_validation_feedback(failed_response: Any, feedback_message: str) -> str:
     """Build the feedback string appended to the prompt on validation failure."""
-    try:
-        response_str = json.dumps(failed_response, indent=2)
-    except Exception:
-        response_str = str(failed_response)
+    response_str = serialize_response(failed_response)
 
     return f"""---
 Your response failed validation: {feedback_message}

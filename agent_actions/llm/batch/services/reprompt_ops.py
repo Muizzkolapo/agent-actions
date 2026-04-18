@@ -142,6 +142,23 @@ def validate_and_reprompt(
                 )
             break
 
+        use_critique = reprompt_config.get("use_llm_critique", False)
+        critique_after = reprompt_config.get("critique_after_attempt", 2)
+        apply_critique = use_critique and attempt >= critique_after and attempt < max_attempts
+
+        if apply_critique:
+            from agent_actions.processing.recovery.critique import (
+                format_critique_feedback,
+                invoke_critique,
+            )
+
+            if len(failed_results) > 10:
+                logger.warning(
+                    "Critique enabled for %d failed records — each requires a "
+                    "synchronous LLM call, expect increased latency",
+                    len(failed_results),
+                )
+
         reprompt_records = []
         for failed_result in failed_results:
             custom_id = failed_result.custom_id
@@ -160,15 +177,8 @@ def validate_and_reprompt(
                 feedback_message=feedback_message,
             )
 
-            use_critique = reprompt_config.get("use_llm_critique", False)
-            critique_after = reprompt_config.get("critique_after_attempt", 2)
-            if use_critique and attempt >= critique_after and attempt < max_attempts:
+            if apply_critique:
                 try:
-                    from agent_actions.processing.recovery.critique import (
-                        format_critique_feedback,
-                        invoke_critique,
-                    )
-
                     critique_text = invoke_critique(
                         agent_config, failed_result.content, feedback_message
                     )

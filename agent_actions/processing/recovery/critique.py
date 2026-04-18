@@ -33,15 +33,9 @@ def build_critique_prompt(response: Any, validation_errors: str) -> str:
     Returns:
         Formatted critique prompt string.
     """
-    if isinstance(response, str):
-        response_str = response
-    else:
-        try:
-            import json
+    from .response_validator import serialize_response
 
-            response_str = json.dumps(response, indent=2)
-        except Exception:
-            response_str = str(response)
+    response_str = serialize_response(response)
 
     return CRITIQUE_PROMPT_TEMPLATE.format(
         response=response_str,
