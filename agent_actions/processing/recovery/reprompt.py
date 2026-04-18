@@ -290,5 +290,5 @@ def create_reprompt_service_from_config(
         validator=validator,
         strategies=strategies,
         critique_fn=critique_fn,
-        critique_after_attempt=reprompt_config.get("critique_after_attempt", 2),
+        critique_after_attempt=(reprompt_config or {}).get("critique_after_attempt", 2),
     )

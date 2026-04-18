@@ -180,7 +180,7 @@ def validate_and_reprompt(
             if apply_critique:
                 try:
                     critique_text = invoke_critique(
-                        agent_config, failed_result.content, feedback_message
+                        agent_config or {}, failed_result.content, feedback_message
                     )
                     feedback = format_critique_feedback(critique_text, feedback)
                     logger.info(
