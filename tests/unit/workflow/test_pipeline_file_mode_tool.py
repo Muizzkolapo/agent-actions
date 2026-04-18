@@ -949,3 +949,191 @@ class TestReattachSourceGuid:
 
         # Out of bounds → not set (no crash)
         assert "source_guid" not in structured[0]
+
+    def test_unmapped_outputs_not_defaulted_to_first(self):
+        """Outputs not in source_mapping must NOT inherit source_guid from input[0]."""
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        # 3 outputs: first two mapped, third unmapped (new record)
+        structured = [
+            {"content": {"val": 1}},
+            {"content": {"val": 2}},
+            {"content": {"val": 3}},
+        ]
+        mapping = {0: 0, 1: 1}  # index 2 NOT in mapping
+        original = [
+            {"source_guid": "sg-a"},
+            {"source_guid": "sg-b"},
+            {"source_guid": "sg-c"},
+        ]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        assert structured[0]["source_guid"] == "sg-a"
+        assert structured[1]["source_guid"] == "sg-b"
+        # Index 2 is unmapped — must NOT get sg-a (the old default-to-0 bug)
+        assert "source_guid" not in structured[2]
+
+
+# --- Bug 1: Content preservation when tool returns full records ---
+
+
+def test_file_tool_full_record_content_preserved():
+    """FILE tool returning records with node_id + populated content must preserve content.
+
+    Regression test for content stripping bug: framework must not replace
+    the tool's content dict with {} when re-wrapping the record.
+    """
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "node_id": "flatten_q_0",
+            "lineage": ["extract_abc_0", "flatten_q_0"],
+            "content": {"question_text": "What is X?", "answer_text": "X is Y."},
+        },
+        {
+            "source_guid": "sg-1",
+            "node_id": "flatten_q_1",
+            "lineage": ["extract_abc_0", "flatten_q_1"],
+            "content": {"question_text": "What is Z?", "answer_text": "Z is W."},
+        },
+    ]
+
+    # Tool returns original records (passthrough/filter pattern) — content populated
+    tool_output = [
+        {
+            "node_id": "flatten_q_0",
+            "source_guid": "sg-1",
+            "lineage": ["extract_abc_0", "flatten_q_0"],
+            "content": {"question_text": "What is X?", "answer_text": "X is Y."},
+        },
+        {
+            "node_id": "flatten_q_1",
+            "source_guid": "sg-1",
+            "lineage": ["extract_abc_0", "flatten_q_1"],
+            "content": {"question_text": "What is Z?", "answer_text": "Z is W."},
+        },
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(tool_output, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    assert result.status == ProcessingStatus.SUCCESS
+    assert len(result.data) == 2
+
+    assert result.data[0]["content"]["question_text"] == "What is X?"
+    assert result.data[0]["content"]["answer_text"] == "X is Y."
+    assert result.data[1]["content"]["question_text"] == "What is Z?"
+    assert result.data[1]["content"]["answer_text"] == "Z is W."
+
+
+# --- Bug 2: Lineage collision with shared source_guid ---
+
+
+def test_file_tool_shared_source_guid_each_output_gets_correct_mapping():
+    """When inputs share source_guid, node_id-based mapping must resolve each correctly.
+
+    Regression test for lineage collision: shared source_guid must NOT cause
+    all outputs to inherit the first input's lineage.
+    """
+    pipeline, context = _make_pipeline_and_context()
+
+    # 5 inputs from same source page (shared source_guid), each with unique node_id
+    input_data = [
+        {"source_guid": "sg-shared", "node_id": f"flatten_q_{i}", "content": {"q": f"Q{i}"}}
+        for i in range(5)
+    ]
+
+    # Tool deduplicates 5→4, returns records with original node_ids
+    tool_output = [
+        {"node_id": "flatten_q_0", "source_guid": "sg-shared", "content": {"q": "Q0"}},
+        {"node_id": "flatten_q_1", "source_guid": "sg-shared", "content": {"q": "Q1"}},
+        {"node_id": "flatten_q_3", "source_guid": "sg-shared", "content": {"q": "Q3"}},
+        {"node_id": "flatten_q_4", "source_guid": "sg-shared", "content": {"q": "Q4"}},
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(tool_output, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    assert result.source_mapping == {0: 0, 1: 1, 2: 3, 3: 4}
+
+    for item in result.data:
+        assert item["source_guid"] == "sg-shared"
+
+
+# --- Bug 3: Synthesis lineage via copy pattern ---
+
+
+def test_file_tool_copy_pattern_preserves_lineage():
+    """Tool using copy pattern (copy record + replace content) must extend lineage.
+
+    The copy pattern preserves node_id from the input record, so the framework
+    matches the output to its input and extends the lineage chain. This is the
+    recommended approach for mid-pipeline FILE tools that transform data.
+    """
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "node_id": "extract_abc_0",
+            "lineage": ["ingest_xyz_0", "extract_abc_0"],
+            "content": {"raw_text": "original content"},
+        },
+        {
+            "source_guid": "sg-2",
+            "node_id": "extract_abc_1",
+            "lineage": ["ingest_xyz_1", "extract_abc_1"],
+            "content": {"raw_text": "other content"},
+        },
+    ]
+
+    # Enrichment needs source_data for parent lookup (set by pipeline.py in real flow)
+    context.source_data = input_data
+
+    # Tool copies input records and replaces content (synthesis-via-copy pattern)
+    tool_output = [
+        {
+            "node_id": "extract_abc_0",  # preserved from input
+            "source_guid": "sg-1",
+            "content": {"transformed": "new value from original"},  # replaced content
+        },
+        {
+            "node_id": "extract_abc_1",  # preserved from input
+            "source_guid": "sg-2",
+            "content": {"transformed": "new value from other"},  # replaced content
+        },
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(tool_output, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    assert result.status == ProcessingStatus.SUCCESS
+
+    assert result.source_mapping == {0: 0, 1: 1}
+
+    assert result.data[0]["content"]["transformed"] == "new value from original"
+    assert result.data[1]["content"]["transformed"] == "new value from other"
+
+    assert result.data[0]["source_guid"] == "sg-1"
+    assert result.data[1]["source_guid"] == "sg-2"
+
+    # Lineage must be extended from parent, not truncated to just [self]
+    for i, item in enumerate(result.data):
+        lineage = item.get("lineage", [])
+        # Parent lineage had 2 entries; enrichment appends new node_id → at least 3
+        assert len(lineage) >= 3, f"item[{i}] lineage not extended from parent: {lineage}"
