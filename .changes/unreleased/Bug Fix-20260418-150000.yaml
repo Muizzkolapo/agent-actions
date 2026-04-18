@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "FILE-mode output pipeline: fix lineage collision when inputs share source_guid by removing false default-to-0 in _reattach_source_guid"
+time: 2026-04-18T15:00:00.000000Z

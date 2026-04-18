@@ -136,6 +136,7 @@ class TestRunnerVirtualActionResolution:
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
         runner.workflow_name = "enrich"
+        runner.storage_backend = None
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
@@ -155,6 +156,7 @@ class TestRunnerVirtualActionResolution:
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
         runner.workflow_name = "enrich"
+        runner.storage_backend = None
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
@@ -169,6 +171,7 @@ class TestRunnerVirtualActionResolution:
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
         runner.workflow_name = "enrich"
+        runner.storage_backend = None
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="nonexistent", action_name="extract"),
         }
@@ -209,3 +212,61 @@ class TestRunnerVirtualActionResolution:
 
         assert len(result) == 1
         assert result[0] == upstream_io / "target" / "extract"
+
+
+class TestVirtualActionStorageSync:
+    """Virtual action data synced to downstream storage backend."""
+
+    def test_virtual_action_syncs_to_local_backend(self, tmp_path):
+        """After resolving virtual action dir, data is written to downstream's backend."""
+        import json
+        from unittest.mock import MagicMock
+
+        from agent_actions.workflow.runner import ActionRunner
+
+        # Create upstream directory with data
+        upstream_io = tmp_path / "ingest" / "agent_io"
+        extract_dir = upstream_io / "target" / "extract"
+        extract_dir.mkdir(parents=True)
+        records = [{"source_guid": "sg-1", "node_id": "extract_abc", "question": "Q1"}]
+        (extract_dir / "data.json").write_text(json.dumps(records))
+
+        # Set up runner with mock storage backend
+        mock_backend = MagicMock()
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.project_root = tmp_path
+        runner.workflow_name = "enrich"
+        runner.storage_backend = mock_backend
+        runner.virtual_actions = {
+            "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
+        }
+
+        result = runner._resolve_virtual_action_directory("extract")
+        assert result is not None
+
+        # Verify write_target was called on the downstream's backend
+        mock_backend.write_target.assert_called_once_with(
+            action_name="extract",
+            relative_path="data.json",
+            data=records,
+        )
+
+    def test_virtual_action_no_sync_without_backend(self, tmp_path):
+        """No crash when storage_backend is None."""
+        from agent_actions.workflow.runner import ActionRunner
+
+        upstream_io = tmp_path / "ingest" / "agent_io"
+        extract_dir = upstream_io / "target" / "extract"
+        extract_dir.mkdir(parents=True)
+        (extract_dir / "data.json").write_text('[{"id": 1}]')
+
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.project_root = tmp_path
+        runner.workflow_name = "enrich"
+        runner.storage_backend = None
+        runner.virtual_actions = {
+            "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
+        }
+
+        result = runner._resolve_virtual_action_directory("extract")
+        assert result is not None  # Works without backend sync

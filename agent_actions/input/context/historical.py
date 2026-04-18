@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
+from agent_actions.prompt.context.scope_namespace import _extract_content_data
+
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
@@ -101,7 +103,7 @@ class HistoricalNodeDataLoader:
         )
 
         if record:
-            content: dict[str, Any] = record.get("content", {})
+            content: dict[str, Any] = _extract_content_data(record)
             content_keys = list(content.keys()) if isinstance(content, dict) else []
             logger.debug(
                 "[HISTORICAL] Found record for action '%s': node_id=%s, content_keys=%s",
