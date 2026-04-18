@@ -83,7 +83,13 @@ def _resolve_source_mapping(
     for i, item in enumerate(raw_outputs):
         nid = item.get("node_id") if isinstance(item, dict) else None
         if not isinstance(nid, str):
-            continue  # New record — no parent.  Gets fresh lineage.
+            logger.warning(
+                "FILE tool '%s': output[%d] has no node_id. "
+                "Record will get fresh lineage with no parent.",
+                action_name,
+                i,
+            )
+            continue
         if nid not in nid_to_idx:
             logger.warning(
                 "FILE tool '%s': output[%d] has node_id '%s' not found in inputs. "
@@ -108,14 +114,23 @@ def _reattach_source_guid(
     Mutates structured_data in place.  Only sets source_guid when the output
     item does not already carry a truthy value (explicit tool values win).
     """
-    if not source_mapping or not original_data:
+    if source_mapping is None or not original_data:
         return
 
     for i, item in enumerate(structured_data):
         if item.get("source_guid"):
             continue  # Tool explicitly set it — respect that
 
-        source_idx = source_mapping.get(i, 0)
+        if i not in source_mapping:
+            # Positional fallback only when ALL outputs lack node_id (empty mapping)
+            # and cardinalities match (1:1 passthrough by tools that don't preserve node_id).
+            # When mapping has entries, unmapped outputs are genuinely new records.
+            if not source_mapping and len(structured_data) == len(original_data):
+                source_idx: int | list[int] = i
+            else:
+                continue  # Unmapped output — new record, no parent to inherit from
+        else:
+            source_idx = source_mapping[i]
         if isinstance(source_idx, list):
             source_idx = source_idx[0]  # Many-to-one: use first parent
 
