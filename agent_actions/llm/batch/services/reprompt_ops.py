@@ -141,8 +141,8 @@ def validate_and_reprompt(
                 )
             break
 
-        use_critique = reprompt_config.get("use_llm_critique", False)
-        critique_after = reprompt_config.get("critique_after_attempt", 2)
+        use_critique = (raw_reprompt_config or {}).get("use_llm_critique", False)
+        critique_after = (raw_reprompt_config or {}).get("critique_after_attempt", 2)
         apply_critique = use_critique and attempt >= critique_after and attempt < max_attempts
 
         if apply_critique:
