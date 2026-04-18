@@ -16,6 +16,8 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.text import Text
 
+from agent_actions.workflow.executor import UPSTREAM_SKIP_PREFIX
+
 logger = logging.getLogger(__name__)
 
 _KNOWN_KINDS = frozenset({"tool", "hitl", "source", "seed"})
@@ -265,7 +267,7 @@ class ExecutionRenderer:
             for r in snap.action_results.values()
             if r.status == "skipped"
             and r.skip_reason
-            and "upstream dependency" in r.skip_reason.lower()
+            and r.skip_reason.startswith(UPSTREAM_SKIP_PREFIX)
         )
         other_skipped = status_counts["skipped"] - blocked
 

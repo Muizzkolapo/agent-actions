@@ -30,6 +30,10 @@ from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStat
 
 logger = logging.getLogger(__name__)
 
+# Prefix used in skip_reason for cascade failures.  The renderer checks
+# this prefix to distinguish "blocked by upstream" from "guard-filtered".
+UPSTREAM_SKIP_PREFIX = "Upstream dependency"
+
 
 @dataclass
 class ExecutorDependencies:
@@ -544,9 +548,15 @@ class ActionExecutor:
         if vc_config and isinstance(vc_config, dict):
             source_base = vc_config.get("source")
             if source_base:
-                # Find expanded version agents in the execution order
+                # Find expanded version agents in the execution order.
+                # Version agents are named {base}_{N} where N is a digit.
+                prefix = f"{source_base}_"
                 for action in self.deps.state_manager.execution_order:
-                    if action.startswith(f"{source_base}_") and action != action_name:
+                    if (
+                        action.startswith(prefix)
+                        and action[len(prefix) :].isdigit()
+                        and action != action_name
+                    ):
                         deps_to_check.append(action)
 
         if not deps_to_check:
@@ -583,7 +593,7 @@ class ActionExecutor:
         dep_status = (
             "skipped" if self.deps.state_manager.is_skipped(failed_dependency) else "failed"
         )
-        reason = f"Upstream dependency '{failed_dependency}' {dep_status}"
+        reason = f"{UPSTREAM_SKIP_PREFIX} '{failed_dependency}' {dep_status}"
         duration = (datetime.now() - start_time).total_seconds()
         self.deps.state_manager.update_status(
             action_name, ActionStatus.SKIPPED, skip_reason=reason, execution_time=duration
