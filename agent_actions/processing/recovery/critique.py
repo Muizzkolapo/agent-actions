@@ -78,7 +78,9 @@ def invoke_critique(agent_config: dict[str, Any], response: Any, validation_erro
     from agent_actions.llm.realtime.services.invocation import ClientInvocationService
 
     prompt = build_critique_prompt(response, validation_errors)
-    model_vendor = agent_config.get("model_vendor", "openai")
+    model_vendor = agent_config.get("model_vendor")
+    if not model_vendor:
+        raise ValueError("agent_config missing required 'model_vendor' for critique LLM call")
     action_name = agent_config.get("name", "unknown")
 
     logger.debug("[%s] Invoking critique LLM via %s", action_name, model_vendor)
