@@ -115,7 +115,10 @@ def _reattach_source_guid(
         if item.get("source_guid"):
             continue  # Tool explicitly set it — respect that
 
-        source_idx = source_mapping.get(i, 0)
+        if i not in source_mapping:
+            continue  # Unmapped output — new record, no parent to inherit from
+
+        source_idx = source_mapping[i]
         if isinstance(source_idx, list):
             source_idx = source_idx[0]  # Many-to-one: use first parent
 
