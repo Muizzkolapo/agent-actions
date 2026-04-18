@@ -35,6 +35,7 @@ class ActionResult:
     model_name: str = ""
     error_message: str = ""
     skip_reason: str = ""
+    execution_mode: str = ""  # "batch" for batch-mode actions
 
 
 @dataclass
@@ -92,6 +93,7 @@ def build_execution_snapshot(
             model_name=config.get("model_name", ""),
             error_message=details.get("error_message", ""),
             skip_reason=details.get("skip_reason", ""),
+            execution_mode=details.get("execution_mode", ""),
         )
 
     return WorkflowExecutionSnapshot(
@@ -235,7 +237,14 @@ class ExecutionRenderer:
             )
 
         if result.execution_time > 0:
-            line.append(f" {result.execution_time:.1f}s", style="dim yellow")
+            t = result.execution_time
+            if t >= 60:
+                time_str = f"{int(t // 60)}m{int(t % 60):02d}s"
+            else:
+                time_str = f"{t:.1f}s"
+            if result.execution_mode == "batch":
+                time_str += " (batch)"
+            line.append(f" {time_str}", style="dim yellow")
 
         return line
 
@@ -249,6 +258,16 @@ class ExecutionRenderer:
 
     def _render_footer(self, snap: WorkflowExecutionSnapshot) -> None:
         status_counts = Counter(r.status for r in snap.action_results.values())
+
+        # Distinguish blocked (upstream failed) from other skips (guard, etc.)
+        blocked = sum(
+            1
+            for r in snap.action_results.values()
+            if r.status == "skipped"
+            and r.skip_reason
+            and "upstream dependency" in r.skip_reason.lower()
+        )
+        other_skipped = status_counts["skipped"] - blocked
 
         self.console.print(Rule(style="dim"))
 
@@ -266,8 +285,10 @@ class ExecutionRenderer:
             parts.append(f"{status_counts['completed']} completed")
         if status_counts["completed_with_failures"]:
             parts.append(f"{status_counts['completed_with_failures']} partial")
-        if status_counts["skipped"]:
-            parts.append(f"{status_counts['skipped']} skipped")
+        if blocked:
+            parts.append(f"{blocked} blocked")
+        if other_skipped:
+            parts.append(f"{other_skipped} skipped")
 
         if parts:
             footer.append(f"  ({', '.join(parts)})", style="dim")

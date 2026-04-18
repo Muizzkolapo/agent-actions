@@ -306,7 +306,11 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle successful action run result."""
         if batch_status == "batch_submitted":
-            self.deps.state_manager.update_status(params.action_name, ActionStatus.BATCH_SUBMITTED)
+            self.deps.state_manager.update_status(
+                params.action_name,
+                ActionStatus.BATCH_SUBMITTED,
+                batch_submitted_at=datetime.now().isoformat(),
+            )
             fire_event(BatchSubmittedEvent(action_name=params.action_name))
             return ActionExecutionResult(
                 success=True,
@@ -522,11 +526,32 @@ class ActionExecutor:
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
     ) -> str | None:
-        """Return the name of a failed or skipped upstream dependency, or None if all healthy."""
-        dependencies = action_config.get("dependencies", [])
-        if not dependencies:
+        """Return the name of a failed or skipped upstream dependency, or None if all healthy.
+
+        Checks both explicit dependencies and version sources.  For
+        version-correlation actions (e.g. ``aggregate_votes`` consuming
+        ``filter_learning_quality_1/2/3``), the version sources are
+        checked so that cascade failures propagate as SKIPPED instead of
+        raising "Version correlation failed" errors.
+        """
+        deps_to_check: list[str] = list(action_config.get("dependencies", []))
+
+        # Also check version sources for merge/reduce actions.  If the
+        # version agents (e.g. extract_raw_qa_1, _2, _3) are failed or
+        # skipped, this action cannot correlate — it should be skipped,
+        # not error with "Version correlation failed".
+        vc_config = action_config.get("version_consumption_config")
+        if vc_config and isinstance(vc_config, dict):
+            source_base = vc_config.get("source")
+            if source_base:
+                # Find expanded version agents in the execution order
+                for action in self.deps.state_manager.execution_order:
+                    if action.startswith(f"{source_base}_") and action != action_name:
+                        deps_to_check.append(action)
+
+        if not deps_to_check:
             return None
-        for dep in dependencies:
+        for dep in deps_to_check:
             if self.deps.state_manager.is_failed(dep) or self.deps.state_manager.is_skipped(dep):
                 return dep
             # Also check disposition — covers cascaded failures/skips from prior levels
@@ -718,6 +743,22 @@ class ActionExecutor:
             )
         )
 
+    def _compute_batch_wall_clock(self, action_name: str, fallback: float) -> float:
+        """Compute wall-clock time from batch submission to now.
+
+        Falls back to *fallback* when no ``batch_submitted_at`` timestamp
+        was persisted (e.g. jobs submitted before this feature was added).
+        """
+        details = self.deps.state_manager.get_status_details(action_name)
+        submitted_at = details.get("batch_submitted_at")
+        if submitted_at:
+            try:
+                submitted_dt = datetime.fromisoformat(submitted_at)
+                return (datetime.now() - submitted_dt).total_seconds()
+            except (ValueError, TypeError):
+                pass
+        return fallback
+
     def _handle_batch_check(
         self,
         action_name: str,
@@ -738,9 +779,14 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
+            wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
             self.deps.state_manager.update_status(
-                action_name, final_status, **self._limit_metadata(action_config)
+                action_name,
+                final_status,
+                execution_time=wall_clock,
+                execution_mode="batch",
+                **self._limit_metadata(action_config),
             )
             fire_event(
                 BatchCompleteEvent(
@@ -749,14 +795,14 @@ class ActionExecutor:
                     total=1,
                     completed=1,
                     failed=0,
-                    elapsed_time=duration,
+                    elapsed_time=wall_clock,
                 )
             )
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
-                metrics=ExecutionMetrics(duration=duration),
+                metrics=ExecutionMetrics(duration=wall_clock),
             )
 
         if batch_status == "in_progress":
@@ -818,9 +864,14 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
+            wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
             self.deps.state_manager.update_status(
-                action_name, final_status, **self._limit_metadata(action_config)
+                action_name,
+                final_status,
+                execution_time=wall_clock,
+                execution_mode="batch",
+                **self._limit_metadata(action_config),
             )
             fire_event(
                 BatchCompleteEvent(
@@ -829,14 +880,14 @@ class ActionExecutor:
                     total=1,
                     completed=1,
                     failed=0,
-                    elapsed_time=duration,
+                    elapsed_time=wall_clock,
                 )
             )
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
-                metrics=ExecutionMetrics(duration=duration),
+                metrics=ExecutionMetrics(duration=wall_clock),
             )
 
         if batch_status == "in_progress":
