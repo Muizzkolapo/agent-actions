@@ -324,6 +324,21 @@ def bad_udf(data):
     for record in data:
         fact = record.get("fact")  # None — fact is inside "content"
     # CORRECT: fact = record.get("content", record).get("fact")
+
+# WRONG: Copying all input into output — leaks arbitrary fields past schema validation
+def bad_udf(data):
+    content = data.get("content", data)
+    flat = {}
+    for k, v in content.items():
+        if isinstance(v, dict): flat.update(v)
+        else: flat[k] = v
+    result = flat.copy()                    # Distractor text becomes a top-level key
+    result["computed"] = do_something()
+    return [result]
+    # CORRECT: build result with only schema-declared fields
+    # result = {"computed": do_something(), "question": flat.get("question", "")}
+    # for field in ("source_quote", "answer"):
+    #     if field in flat: result[field] = flat[field]
 ```
 
 ## Best Practices
