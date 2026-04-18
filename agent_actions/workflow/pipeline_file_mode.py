@@ -83,7 +83,13 @@ def _resolve_source_mapping(
     for i, item in enumerate(raw_outputs):
         nid = item.get("node_id") if isinstance(item, dict) else None
         if not isinstance(nid, str):
-            continue  # New record — no parent.  Gets fresh lineage.
+            logger.warning(
+                "FILE tool '%s': output[%d] has no node_id. "
+                "Record will get fresh lineage with no parent.",
+                action_name,
+                i,
+            )
+            continue
         if nid not in nid_to_idx:
             logger.warning(
                 "FILE tool '%s': output[%d] has node_id '%s' not found in inputs. "
