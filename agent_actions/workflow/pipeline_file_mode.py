@@ -108,14 +108,20 @@ def _reattach_source_guid(
     Mutates structured_data in place.  Only sets source_guid when the output
     item does not already carry a truthy value (explicit tool values win).
     """
-    if not source_mapping or not original_data:
+    if source_mapping is None or not original_data:
         return
 
     for i, item in enumerate(structured_data):
         if item.get("source_guid"):
             continue  # Tool explicitly set it — respect that
 
-        source_idx = source_mapping.get(i, 0)
+        source_idx = source_mapping.get(i)
+        if source_idx is None:
+            # No node_id match — positional fallback only when cardinalities match
+            if len(structured_data) == len(original_data):
+                source_idx = i
+            else:
+                continue  # Cardinality mismatch — no safe positional fallback
         if isinstance(source_idx, list):
             source_idx = source_idx[0]  # Many-to-one: use first parent
 

@@ -318,6 +318,7 @@ class ActionRunner:
 
         upstream_target = Path(upstream_folder) / "target" / dep_name
         if upstream_target.exists() and any(upstream_target.iterdir()):
+            self._sync_virtual_action_to_local_backend(dep_name, upstream_target)
             return upstream_target
 
         # SQLite-backed workflows don't write target directories to disk.
@@ -344,6 +345,7 @@ class ActionRunner:
                     dep_name,
                     upstream_target,
                 )
+                self._sync_virtual_action_to_local_backend(dep_name, upstream_target)
                 return upstream_target
         except Exception as e:
             logger.debug("Upstream storage backend export failed for '%s': %s", dep_name, e)
@@ -355,6 +357,43 @@ class ActionRunner:
             upstream_target,
         )
         return None
+
+    def _sync_virtual_action_to_local_backend(self, dep_name: str, upstream_target: Path) -> None:
+        """Copy virtual action data into the downstream's storage backend.
+
+        The historical loader queries ``self.storage_backend`` (the downstream's
+        database).  Without this sync, virtual action records only exist in
+        the upstream's storage, so observe resolution finds nothing.
+        """
+        if getattr(self, "storage_backend", None) is None:
+            return
+
+        import json
+
+        for file_path in sorted(upstream_target.iterdir()):
+            if not file_path.is_file() or file_path.suffix != ".json":
+                continue
+            try:
+                data = json.loads(file_path.read_text())
+                if isinstance(data, list):
+                    self.storage_backend.write_target(
+                        action_name=dep_name,
+                        relative_path=file_path.name,
+                        data=data,
+                    )
+                    logger.debug(
+                        "Synced virtual action '%s/%s' to local storage backend (%d records)",
+                        dep_name,
+                        file_path.name,
+                        len(data),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Failed to sync virtual action '%s/%s' to local backend: %s",
+                    dep_name,
+                    file_path.name,
+                    e,
+                )
 
     def _get_upstream_backend(self, upstream_folder: str, upstream_workflow: str) -> Any:
         """Get or create a cached storage backend for an upstream workflow."""
