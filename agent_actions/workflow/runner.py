@@ -365,7 +365,7 @@ class ActionRunner:
         database).  Without this sync, virtual action records only exist in
         the upstream's storage, so observe resolution finds nothing.
         """
-        if getattr(self, "storage_backend", None) is None:
+        if self.storage_backend is None:
             return
 
         import json

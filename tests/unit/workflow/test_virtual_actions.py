@@ -136,6 +136,7 @@ class TestRunnerVirtualActionResolution:
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
         runner.workflow_name = "enrich"
+        runner.storage_backend = None
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
@@ -155,6 +156,7 @@ class TestRunnerVirtualActionResolution:
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
         runner.workflow_name = "enrich"
+        runner.storage_backend = None
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
@@ -169,6 +171,7 @@ class TestRunnerVirtualActionResolution:
         runner = ActionRunner.__new__(ActionRunner)
         runner.project_root = tmp_path
         runner.workflow_name = "enrich"
+        runner.storage_backend = None
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="nonexistent", action_name="extract"),
         }
