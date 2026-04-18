@@ -160,6 +160,31 @@ def validate_and_reprompt(
                 feedback_message=feedback_message,
             )
 
+            use_critique = reprompt_config.get("use_llm_critique", False)
+            critique_after = reprompt_config.get("critique_after_attempt", 2)
+            if use_critique and attempt >= critique_after and attempt < max_attempts:
+                try:
+                    from agent_actions.processing.recovery.critique import (
+                        format_critique_feedback,
+                        invoke_critique,
+                    )
+
+                    critique_text = invoke_critique(
+                        agent_config, failed_result.content, feedback_message
+                    )
+                    feedback = format_critique_feedback(critique_text, feedback)
+                    logger.info(
+                        "LLM critique appended for %s (attempt %d)",
+                        custom_id,
+                        attempt,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Critique failed for %s, continuing without",
+                        custom_id,
+                        exc_info=True,
+                    )
+
             original_user_content = original_record.get("user_content", "")
             original_record["user_content"] = f"{original_user_content}\n\n{feedback}"
 

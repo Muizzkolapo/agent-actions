@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import RepromptValidationFailedEvent
 
+from .critique import format_critique_feedback
 from .response_validator import UdfValidator, build_validation_feedback
 
 if TYPE_CHECKING:
@@ -39,8 +40,17 @@ class RepromptService:
         max_attempts: int = 2,
         on_exhausted: str = "return_last",
         validator: ResponseValidator | None = None,
+        critique_fn: Callable[[Any, str], str] | None = None,
+        critique_after_attempt: int = 2,
     ):
         """Initialize with either a ``validation_name`` or a pre-built ``validator``.
+
+        Args:
+            critique_fn: Optional callable that takes (response, validation_errors)
+                and returns critique analysis text. When provided, critique fires
+                on attempts after ``critique_after_attempt``.
+            critique_after_attempt: Attempt threshold before critique fires
+                (critique starts on attempt N+1). Default: 2.
 
         Raises:
             ValueError: If neither validation source is provided,
@@ -60,6 +70,8 @@ class RepromptService:
 
         self.max_attempts = max_attempts
         self.on_exhausted = on_exhausted
+        self._critique_fn = critique_fn
+        self._critique_after_attempt = critique_after_attempt
 
         if validator is not None:
             self._validator = validator
@@ -161,6 +173,23 @@ class RepromptService:
                 break
 
             feedback = build_validation_feedback(response, self._validator.feedback_message)
+
+            if self._critique_fn is not None and attempts >= self._critique_after_attempt:
+                try:
+                    critique_text = self._critique_fn(response, self._validator.feedback_message)
+                    feedback = format_critique_feedback(critique_text, feedback)
+                    logger.info(
+                        "[%s] LLM critique appended to reprompt feedback (attempt %d)",
+                        context,
+                        attempts,
+                    )
+                except Exception:
+                    logger.warning(
+                        "[%s] LLM critique call failed, continuing without critique",
+                        context,
+                        exc_info=True,
+                    )
+
             current_prompt = f"{original_prompt}\n\n{feedback}"
 
         logger.error(
@@ -196,15 +225,22 @@ class RepromptService:
 def create_reprompt_service_from_config(
     reprompt_config: dict | None,
     validator: ResponseValidator | None = None,
+    critique_fn: Callable[[Any, str], str] | None = None,
 ) -> RepromptService | None:
     """Create RepromptService from action config, or return None if not enabled.
+
+    Args:
+        reprompt_config: Reprompt configuration dict from agent_config.
+        validator: Pre-built validator (e.g. SchemaValidator).
+        critique_fn: Optional critique callable, wired by the factory when
+            ``use_llm_critique`` is enabled.
 
     Raises:
         ValueError: If required 'validation' key is missing and no validator provided.
     """
     if not reprompt_config:
         if validator is not None:
-            return RepromptService(validator=validator)
+            return RepromptService(validator=validator, critique_fn=critique_fn)
         return None
 
     if validator is None and "validation" not in reprompt_config:
@@ -218,4 +254,6 @@ def create_reprompt_service_from_config(
         max_attempts=reprompt_config.get("max_attempts", 2),
         on_exhausted=reprompt_config.get("on_exhausted", "return_last"),
         validator=validator,
+        critique_fn=critique_fn,
+        critique_after_attempt=reprompt_config.get("critique_after_attempt", 2),
     )

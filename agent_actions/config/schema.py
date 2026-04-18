@@ -104,6 +104,16 @@ class RepromptConfig(BaseModel):
         default="return_last",
         description="Behavior when max_attempts exhausted: return_last or raise",
     )
+    use_llm_critique: bool = Field(
+        default=False,
+        description="Enable LLM critique for stubborn validation failures",
+    )
+    critique_after_attempt: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Attempt threshold before critique fires (critique starts on attempt N+1)",
+    )
 
 
 class HitlConfig(BaseModel):

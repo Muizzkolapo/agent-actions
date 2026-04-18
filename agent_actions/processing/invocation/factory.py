@@ -51,8 +51,19 @@ class InvocationStrategyFactory:
 
         validator = InvocationStrategyFactory._build_validator(agent_config)
 
+        critique_fn = None
+        if reprompt_config and reprompt_config.get("use_llm_critique"):
+            from agent_actions.processing.recovery.critique import invoke_critique
+
+            _cfg = agent_config
+
+            def critique_fn(response: Any, errors: str) -> str:
+                return invoke_critique(_cfg, response, errors)
+
         retry_service = create_retry_service_from_config(retry_config)
-        reprompt_service = create_reprompt_service_from_config(reprompt_config, validator=validator)
+        reprompt_service = create_reprompt_service_from_config(
+            reprompt_config, validator=validator, critique_fn=critique_fn
+        )
 
         return OnlineStrategy(
             retry_service=retry_service,
