@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: Cross-workflow records now deliver content and propagate source_guid through downstream pipelines
+time: 2026-04-18T13:25:17.450389+01:00
