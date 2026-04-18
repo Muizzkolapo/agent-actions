@@ -763,8 +763,8 @@ def test_file_tool_non_dict_output_items():
 
     # Non-dict wrapped as {"content": {"value": ...}} — no node_id, so no mapping
     assert results[0].data[0]["content"]["value"] == "just a string"
-    # New record — enrichment pipeline sets source_guid="" (no parent to inherit from)
-    assert results[0].data[0].get("source_guid") == ""
+    # Same cardinality (1:1) — positional fallback propagates source_guid from input
+    assert results[0].data[0].get("source_guid") == "sg-1"
 
 
 def test_file_tool_merge_reduces_to_fewer_outputs():
@@ -973,6 +973,37 @@ class TestReattachSourceGuid:
         assert structured[1]["source_guid"] == "sg-b"
         # Index 2 is unmapped — must NOT get sg-a (the old default-to-0 bug)
         assert "source_guid" not in structured[2]
+
+    def test_empty_mapping_positional_fallback_same_cardinality(self):
+        """Empty source_mapping with same cardinality uses positional fallback."""
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [{"content": {"val": 1}}, {"content": {"val": 2}}]
+        mapping: dict = {}  # Empty — no node_id matches
+        original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        assert structured[0]["source_guid"] == "sg-a"
+        assert structured[1]["source_guid"] == "sg-b"
+
+    def test_empty_mapping_no_fallback_different_cardinality(self):
+        """Empty source_mapping with different cardinality does NOT reattach."""
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [
+            {"content": {"val": 1}},
+            {"content": {"val": 2}},
+            {"content": {"val": 3}},
+        ]
+        mapping: dict = {}  # Empty — no node_id matches
+        original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        # Cardinality mismatch (3 vs 2): no safe positional fallback
+        for item in structured:
+            assert "source_guid" not in item
 
 
 # --- Bug 1: Content preservation when tool returns full records ---
