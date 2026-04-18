@@ -8,9 +8,23 @@ from agent_actions import udf_tool
 def {{tool_function_name}}(data: dict[str, Any]) -> list[dict[str, Any]]:
     """{{Brief description of what this tool does.}}"""
     content = data.get("content", data)
-    result = content.copy()
 
-    # Your processing logic here
-    result["output_field"] = content.get("input_field", "")
+    # Unwrap namespaced observed fields
+    flat = {}
+    for key, value in content.items():
+        if isinstance(value, dict):
+            flat.update(value)
+        else:
+            flat[key] = value
+
+    # Build result with only schema-declared fields
+    result = {
+        "output_field": flat.get("input_field", ""),
+    }
+
+    # Carry forward fields downstream needs
+    for field in ("question", "options", "answer"):
+        if field in flat:
+            result[field] = flat[field]
 
     return [result]
