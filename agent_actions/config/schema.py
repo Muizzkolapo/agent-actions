@@ -112,7 +112,7 @@ class RepromptConfig(BaseModel):
         default=2,
         ge=1,
         le=10,
-        description="Attempt threshold before critique fires (critique starts on attempt N+1)",
+        description="Critique fires starting on attempt N (e.g. 2 means critique on 2nd failed attempt onward)",
     )
 
 
