@@ -126,7 +126,7 @@ def _reattach_source_guid(
             # and cardinalities match (1:1 passthrough by tools that don't preserve node_id).
             # When mapping has entries, unmapped outputs are genuinely new records.
             if not source_mapping and len(structured_data) == len(original_data):
-                source_idx = i
+                source_idx: int | list[int] = i
             else:
                 continue  # Unmapped output — new record, no parent to inherit from
         else:
