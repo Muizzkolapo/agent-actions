@@ -300,8 +300,13 @@ class TestFileModeObserve:
         """Build a list of file-mode records from content dicts."""
         return [{"content": c, "source_guid": f"sg_{i}"} for i, c in enumerate(contents)]
 
-    def test_file_mode_filters_per_record(self):
-        """observe specific field -> each record filtered to that field only."""
+    def test_file_mode_enriches_per_record(self):
+        """observe specific field -> full record returned with content intact.
+
+        NiFi-inspired: observe enriches records (injects cross-namespace data)
+        rather than stripping to flat dicts. Framework fields and all original
+        content fields are preserved. The tool receives full records.
+        """
         data = self._make_records(
             {"question": "What?", "answer": "42", "noise": "junk"},
             {"question": "Why?", "answer": "because", "noise": "more junk"},
@@ -317,11 +322,16 @@ class TestFileModeObserve:
             agent_indices={"dep": 0, "act": 1},
         )
         assert len(result) == 2
-        assert result[0] == {"question": "What?", "answer": "42"}
-        assert result[1] == {"question": "Why?", "answer": "because"}
+        # Full records preserved — content has all original fields
+        assert result[0]["content"]["question"] == "What?"
+        assert result[0]["content"]["answer"] == "42"
+        assert result[0]["content"]["noise"] == "junk"  # not stripped
+        assert result[0]["source_guid"] == "sg_0"  # framework field preserved
+        assert result[1]["content"]["question"] == "Why?"
+        assert result[1]["content"]["answer"] == "because"
 
     def test_file_mode_wildcard_single_ns_includes_all(self):
-        """observe: ['dep.*'] on input source -> all content fields per record."""
+        """observe: ['dep.*'] on input source -> full record, all content fields."""
         data = self._make_records(
             {"q": "What?", "a": "42"},
             {"q": "Why?", "a": "because"},
@@ -337,8 +347,11 @@ class TestFileModeObserve:
             agent_indices={"dep": 0, "act": 1},
         )
         assert len(result) == 2
-        assert result[0] == {"q": "What?", "a": "42"}
-        assert result[1] == {"q": "Why?", "a": "because"}
+        assert result[0]["content"]["q"] == "What?"
+        assert result[0]["content"]["a"] == "42"
+        assert result[0]["source_guid"] == "sg_0"
+        assert result[1]["content"]["q"] == "Why?"
+        assert result[1]["content"]["a"] == "because"
 
     def test_file_mode_wildcard_does_not_skip_specific_refs(self):
         """observe: ['dep_a.*', 'dep_b.field'] must still resolve dep_b.field.
@@ -364,9 +377,9 @@ class TestFileModeObserve:
             agent_indices={"dep_a": 0, "dep_b": 1, "act": 2},
         )
         assert len(result) == 1
-        # dep_a wildcard should include all content fields
-        assert "text" in result[0]
-        assert "score" in result[0]
+        # dep_a wildcard should include all content fields (in content dict)
+        assert "text" in result[0]["content"]
+        assert "score" in result[0]["content"]
 
     def test_file_mode_no_observe_returns_data_unchanged(self):
         """No observe refs -> data returned as-is."""

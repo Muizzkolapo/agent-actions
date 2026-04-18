@@ -509,3 +509,72 @@ class TestConditionalMerge:
         )
         result = HistoricalNodeDataLoader.load_historical_node_data(request)
         assert result is None
+
+
+class TestHistoricalContentExtraction:
+    """Content extraction from flat vs wrapped record formats."""
+
+    def test_flat_record_returns_business_fields(self):
+        """Historical loader extracts content from flat records (no 'content' wrapper)."""
+        from unittest.mock import MagicMock
+
+        backend = MagicMock()
+        backend.read_target.return_value = [
+            {
+                "source_guid": "sg-001",
+                "node_id": "extract_abc123",
+                "lineage": ["extract_abc123"],
+                "target_id": "tid-001",
+                "metadata": {"model": "gpt-4"},
+                "question_text": "What is X?",
+                "answer_text": "X is Y.",
+            }
+        ]
+
+        request = HistoricalDataRequest(
+            action_name="extract",
+            lineage=["extract_abc123", "enrich_def456"],
+            source_guid="sg-001",
+            file_path="/tmp/test.json",
+            agent_indices={"extract": 0, "enrich": 1},
+            storage_backend=backend,
+        )
+        result = HistoricalNodeDataLoader.load_historical_node_data(request)
+
+        assert result is not None
+        assert result.get("question_text") == "What is X?"
+        assert result.get("answer_text") == "X is Y."
+        # Metadata keys excluded
+        assert "source_guid" not in result
+        assert "node_id" not in result
+        assert "lineage" not in result
+        assert "target_id" not in result
+        assert "metadata" not in result
+
+    def test_wrapped_record_returns_content_dict(self):
+        """Historical loader extracts content from wrapped records."""
+        from unittest.mock import MagicMock
+
+        backend = MagicMock()
+        backend.read_target.return_value = [
+            {
+                "source_guid": "sg-001",
+                "node_id": "extract_abc123",
+                "lineage": ["extract_abc123"],
+                "content": {"question_text": "What is X?", "answer_text": "X is Y."},
+            }
+        ]
+
+        request = HistoricalDataRequest(
+            action_name="extract",
+            lineage=["extract_abc123", "enrich_def456"],
+            source_guid="sg-001",
+            file_path="/tmp/test.json",
+            agent_indices={"extract": 0, "enrich": 1},
+            storage_backend=backend,
+        )
+        result = HistoricalNodeDataLoader.load_historical_node_data(request)
+
+        assert result is not None
+        assert result.get("question_text") == "What is X?"
+        assert result.get("answer_text") == "X is Y."

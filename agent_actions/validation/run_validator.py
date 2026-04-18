@@ -26,3 +26,5 @@ class RunCommandArgs(BaseModel):
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
     )
+    downstream: bool = Field(False, description="Run downstream dependent workflows after this one")
+    upstream: bool = Field(False, description="Run upstream workflow dependencies before this one")

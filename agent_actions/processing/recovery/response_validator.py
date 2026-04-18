@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
+
+# Strategy callable: (failed_response, feedback_message) -> extra prompt text
+FeedbackStrategy = Callable[[Any, str], str]
 
 
 # ---------------------------------------------------------------------------
@@ -205,13 +209,77 @@ def serialize_response(response: Any) -> str:
         return str(response)
 
 
-def build_validation_feedback(failed_response: Any, feedback_message: str) -> str:
+def build_validation_feedback(
+    failed_response: Any,
+    feedback_message: str,
+    strategies: list[FeedbackStrategy] | None = None,
+) -> str:
     """Build the feedback string appended to the prompt on validation failure."""
     response_str = serialize_response(failed_response)
 
-    return f"""---
+    base = f"""---
 Your response failed validation: {feedback_message}
 
 Your response: {response_str}
 
 Please correct and respond again."""
+
+    for strategy in strategies or []:
+        base += "\n\n" + strategy(failed_response, feedback_message)
+
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Feedback strategies
+# ---------------------------------------------------------------------------
+
+
+def self_reflection_strategy(failed_response: Any, feedback_message: str) -> str:
+    """Instruct the model to analyze its failure before retrying."""
+    return """Before producing your corrected response, analyze what went wrong:
+1. What specific error did you make in your previous response?
+2. Why did you make this error?
+3. What must be different in your next response to pass validation?
+
+Now produce your corrected response."""
+
+
+def resolve_feedback_strategies(
+    reprompt_config: dict | None,
+) -> list[FeedbackStrategy]:
+    """Turn reprompt config flags into an ordered list of feedback strategies."""
+    strategies: list[FeedbackStrategy] = []
+    if (reprompt_config or {}).get("use_self_reflection"):
+        strategies.append(self_reflection_strategy)
+    return strategies
+
+
+# ---------------------------------------------------------------------------
+# Shared validation helper
+# ---------------------------------------------------------------------------
+
+
+def safe_validate(
+    validate_fn: Callable[[Any], bool],
+    response: Any,
+    *,
+    context: str = "",
+    catch: tuple[type[BaseException], ...] = (ValueError, TypeError, LookupError),
+) -> bool:
+    """Call *validate_fn(response)*, catching specified exceptions as failures.
+
+    Returns ``True`` if validation passes, ``False`` if it fails or raises
+    a caught exception.  Uncaught exceptions propagate.
+    """
+    try:
+        return validate_fn(response)
+    except catch as e:
+        logger.warning(
+            "[%s] Validation raised exception (treating as failure): %s: %s",
+            context,
+            e.__class__.__name__,
+            e,
+            exc_info=True,
+        )
+        return False

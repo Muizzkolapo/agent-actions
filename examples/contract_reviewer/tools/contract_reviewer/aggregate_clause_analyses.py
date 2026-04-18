@@ -1,8 +1,13 @@
 """
 Aggregate all clause-level risk analyses into a unified contract risk report.
 
-FILE granularity — receives ALL clause records at once and emits a single
-aggregated summary. This is the REDUCE step of the Map-Reduce pattern.
+FILE granularity — receives ALL clause records at once (full records with
+content, node_id, lineage) and emits a single aggregated summary. This is
+the REDUCE step of the Map-Reduce pattern.
+
+Since this tool creates a NEW record (not derived from a single input),
+the output dict has no node_id — the framework treats it as a new root
+with fresh lineage.
 """
 
 from typing import Any

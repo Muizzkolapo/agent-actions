@@ -104,6 +104,10 @@ class RepromptConfig(BaseModel):
         default="return_last",
         description="Behavior when max_attempts exhausted: return_last or raise",
     )
+    use_self_reflection: bool = Field(
+        default=False,
+        description="Include self-reflection instruction in retry prompts",
+    )
     use_llm_critique: bool = Field(
         default=False,
         description="Enable LLM critique for stubborn validation failures",
@@ -466,7 +470,13 @@ class WorkflowConfig(BaseModel):
             all_deps.update(action.dependencies)
             if action.version_context and "base_name" in action.version_context:
                 base_names.add(action.version_context["base_name"])
-        dangling = all_deps - seen - base_names
+        # Upstream action names are valid dependency targets (resolved at runtime)
+        upstream_action_names: set[str] = set()
+        if self.upstream:
+            for ref in self.upstream:
+                upstream_action_names.update(ref.actions)
+
+        dangling = all_deps - seen - base_names - upstream_action_names
         if dangling:
             raise ValueError(
                 f"Dangling dependency references (not defined as actions): {sorted(dangling)}"

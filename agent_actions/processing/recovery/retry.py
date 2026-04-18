@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 RETRIABLE_ERRORS = (NetworkError, RateLimitError)
 
+_TRANSIENT_API_ERROR_PATTERNS = (
+    "could not parse the json body",
+    "we are currently processing your json schema",
+)
+
 
 @dataclass
 class RetryResult:
@@ -50,8 +55,18 @@ def classify_error(error: Exception) -> str:
 
 
 def is_retriable_error(error: Exception) -> bool:
-    """Return True if the error is retriable (NetworkError or RateLimitError)."""
-    return isinstance(error, RETRIABLE_ERRORS)
+    """Return True if the error is retriable.
+
+    Retriable errors include NetworkError, RateLimitError, and VendorAPIError
+    instances whose message matches a known transient pattern (e.g. OpenAI
+    intermittently returning 400 "could not parse the JSON body").
+    """
+    if isinstance(error, RETRIABLE_ERRORS):
+        return True
+    if isinstance(error, VendorAPIError):
+        msg = str(error).lower()
+        return any(pattern in msg for pattern in _TRANSIENT_API_ERROR_PATTERNS)
+    return False
 
 
 class RetryService:

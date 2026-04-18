@@ -1,0 +1,36 @@
+"""{{TOOL_TITLE}} — Aggregates votes from parallel version sources."""
+
+from typing import Any, Dict, List
+from agent_actions import udf_tool
+
+
+@udf_tool()
+def {{tool_function_name}}(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Merge tool for version_consumption pattern.
+    Receives versioned outputs namespaced as {{source_action}}_1, _2, _3.
+    """
+    content = data.get("content", data)
+
+    # Extract versioned results
+    votes = []
+    for i in range(1, {{version_count + 1}}):
+        version_data = content.get(f"{{source_action}}_{i}", {})
+        if version_data:
+            votes.append(version_data)
+
+    # Extract non-versioned observed fields (flattened)
+    flat = {}
+    for key, value in content.items():
+        if isinstance(value, dict) and not key.startswith("{{source_action}}_"):
+            flat.update(value)
+        elif not isinstance(value, dict):
+            flat[key] = value
+
+    # Your aggregation logic here
+    result = {
+        "total_votes": len(votes),
+        "question": flat.get("question", ""),
+    }
+
+    return [result]

@@ -31,6 +31,7 @@ How to configure automatic retry with feedback when LLM output fails validation.
 | `validation` | string | None | Name of `@reprompt_validation` function |
 | `max_attempts` | int | 2 | Total attempts including first try (1-10) |
 | `on_exhausted` | string | `"return_last"` | What to do when all attempts fail |
+| `use_self_reflection` | bool | `false` | Add reflection instruction to retry prompts |
 
 **`on_exhausted` options:**
 - `"return_last"` — Accept the last response even though it failed validation. Downstream actions receive potentially invalid data.
@@ -69,6 +70,8 @@ def check_valid_bisac(response: dict) -> bool:
         for code in codes
     )
 ```
+
+**Preflight validation:** The static analyzer checks that the `validation` name matches a `@reprompt_validation`-decorated function in your tools directory. Typos are caught at `agac validate` time, before any LLM calls, with a list of available validators in the error message.
 
 **Decorator contract:**
 - The string argument is the **feedback message** sent to the LLM on failure — make it specific
@@ -118,6 +121,32 @@ Execution order per attempt:
 3. If schema passes → custom UDF checks business logic
 4. If either fails → feedback appended to prompt, retry
 
+## Self-Reflection
+
+By default, retry prompts tell the model *what* failed but not *why*. Enable self-reflection to add an instruction asking the model to analyze its failure before retrying:
+
+```yaml
+- name: extract_codes
+  schema: bisac_codes
+  reprompt:
+    validation: "check_valid_bisac"
+    max_attempts: 3
+    use_self_reflection: true
+```
+
+This appends to the retry prompt:
+
+```
+Before producing your corrected response, analyze what went wrong:
+1. What specific error did you make in your previous response?
+2. Why did you make this error?
+3. What must be different in your next response to pass validation?
+
+Now produce your corrected response.
+```
+
+No extra API calls — it only modifies the retry prompt text. Use it for complex schemas where the model tends to repeat the same mistake.
+
 ## How the Retry Loop Works
 
 ```
@@ -131,7 +160,7 @@ on_exhausted: "return_last" → accept last response
 on_exhausted: "raise" → RuntimeError
 ```
 
-Each retry appends the validation feedback to the prompt, giving the LLM context about what went wrong. The feedback accumulates — attempt 3 sees feedback from attempts 1 and 2.
+Each retry appends the validation feedback to the prompt, giving the LLM context about what went wrong. When `use_self_reflection: true`, the feedback also includes a reflection instruction asking the model to analyze its failure before responding.
 
 ## Reprompt + Guard Interaction
 

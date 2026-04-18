@@ -54,40 +54,54 @@ _TOOL_RESERVED_FIELDS = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def _infer_source_mapping(
-    output_count: int,
+def _resolve_source_mapping(
+    raw_outputs: list[dict],
     input_data: list[dict],
     action_name: str,
-) -> dict[int, int | list[int]] | None:
-    """Infer source_mapping when the tool does not provide one.
+) -> dict[int, int | list[int]]:
+    """Resolve which input produced each output by ``node_id``.
 
-    Priority:
-    1. Identity mapping when output count matches input count (most common).
-    2. Broadcast when all inputs share the same source_guid.
-    3. Fallback broadcast to first input (with warning).
+    NiFi-inspired: every record carries identity (``node_id``) through the
+    pipeline.  The framework preserves it through the observe filter; tools
+    receive full records and pass them through.  The framework matches each
+    output to its input by ``node_id`` — no heuristics, no guessing.
+
+    Returns a mapping of ``output_index -> input_index`` for outputs that
+    carry a ``node_id`` matching an input.  Outputs without a matching
+    ``node_id`` are omitted — they are new records (e.g. aggregation
+    results) and will receive fresh lineage with no parent.
     """
-    input_count = len(input_data)
+    # Build lookup: node_id -> input index
+    nid_to_idx: dict[str, int] = {}
+    for i, item in enumerate(input_data):
+        if isinstance(item, dict):
+            nid = item.get("node_id")
+            if isinstance(nid, str):
+                nid_to_idx[nid] = i
 
-    if output_count == input_count:
-        return {i: i for i in range(output_count)}
+    mapping: dict[int, int | list[int]] = {}
+    for i, item in enumerate(raw_outputs):
+        nid = item.get("node_id") if isinstance(item, dict) else None
+        if not isinstance(nid, str):
+            logger.warning(
+                "FILE tool '%s': output[%d] has no node_id. "
+                "Record will get fresh lineage with no parent.",
+                action_name,
+                i,
+            )
+            continue
+        if nid not in nid_to_idx:
+            logger.warning(
+                "FILE tool '%s': output[%d] has node_id '%s' not found in inputs. "
+                "Treating as new record.",
+                action_name,
+                i,
+                nid,
+            )
+            continue
+        mapping[i] = nid_to_idx[nid]
 
-    # Check if all inputs share the same source_guid
-    source_guids = {
-        item.get("source_guid")
-        for item in input_data
-        if isinstance(item, dict) and item.get("source_guid")
-    }
-    if len(source_guids) == 1:
-        return {i: 0 for i in range(output_count)}
-
-    logger.warning(
-        "FILE tool '%s' changed cardinality (%d → %d) with mixed source_guids. "
-        "All outputs will inherit source_guid from first input.",
-        action_name,
-        input_count,
-        output_count,
-    )
-    return {i: 0 for i in range(output_count)}
+    return mapping
 
 
 def _reattach_source_guid(
@@ -100,14 +114,23 @@ def _reattach_source_guid(
     Mutates structured_data in place.  Only sets source_guid when the output
     item does not already carry a truthy value (explicit tool values win).
     """
-    if not source_mapping or not original_data:
+    if source_mapping is None or not original_data:
         return
 
     for i, item in enumerate(structured_data):
         if item.get("source_guid"):
             continue  # Tool explicitly set it — respect that
 
-        source_idx = source_mapping.get(i, 0)
+        if i not in source_mapping:
+            # Positional fallback only when ALL outputs lack node_id (empty mapping)
+            # and cardinalities match (1:1 passthrough by tools that don't preserve node_id).
+            # When mapping has entries, unmapped outputs are genuinely new records.
+            if not source_mapping and len(structured_data) == len(original_data):
+                source_idx: int | list[int] = i
+            else:
+                continue  # Unmapped output — new record, no parent to inherit from
+        else:
+            source_idx = source_mapping[i]
         if isinstance(source_idx, list):
             source_idx = source_idx[0]  # Many-to-one: use first parent
 
@@ -176,20 +199,26 @@ def process_file_mode_tool(
                 )
             ]
 
-        # Framework-managed: infer which inputs produced which outputs.
-        source_mapping = None
+        # Framework-managed: resolve which input produced each output by node_id.
+        source_mapping: dict[int, int | list[int]] | None = None
         if original_data:
-            source_mapping = _infer_source_mapping(
-                output_count=len(raw_response),
+            source_mapping = _resolve_source_mapping(
+                raw_outputs=raw_response,
                 input_data=original_data,
                 action_name=context.agent_name,
             )
 
-        # Separate business data from framework fields in tool output
+        # Separate business data from framework fields in tool output.
+        # Tools may return full records (with content wrapper) or flat dicts.
         structured_data = []
         for item in raw_response:
             if isinstance(item, dict):
-                data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
+                if isinstance(item.get("content"), dict):
+                    # Tool returned a full record — use content directly.
+                    data_fields = item["content"]
+                else:
+                    # Tool returned a flat dict — strip reserved fields.
+                    data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
                 structured_item = {"content": data_fields}
 
                 if "source_guid" in item:

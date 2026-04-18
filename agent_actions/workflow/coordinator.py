@@ -163,6 +163,7 @@ class AgentWorkflow:
             self.action_configs,
             project_root=self.config.resolve_project_root(),
             with_udf_registry=True,
+            external_action_names=set(self.metadata.virtual_actions.keys()),
         )
 
         result = self.schema_service.validate()
@@ -436,13 +437,52 @@ class AgentWorkflow:
         with manager.context():
             try:
                 total_actions = len(self.execution_order)
+                levels = self.services.core.action_level_orchestrator.compute_execution_levels()
+                self.services.core.action_level_orchestrator.log_execution_levels(
+                    levels, self.action_indices
+                )
                 self.console.print(f"Found {total_actions} actions to run.")
+                state_mgr = self.services.core.state_manager
+                executor = self.services.core.action_executor
 
-                for idx, action_name in enumerate(self.execution_order):
-                    manager.set_context(action_name=action_name, action_index=idx)
+                for level_idx, level_actions in enumerate(levels):
+                    # Verify completed actions still have outputs (matches
+                    # parallel executor — resets stale completions to pending)
+                    for action_name in level_actions:
+                        if state_mgr.is_completed(action_name):
+                            executor.verify_completion_status(action_name)
 
-                    should_stop = self._run_single_action(idx, action_name, total_actions)
-                    if should_stop:
+                    pending = [a for a in level_actions if not state_mgr.is_completed(a)]
+                    if not pending:
+                        self.console.print(
+                            f"[yellow]Step {level_idx}: All actions complete (skipped)[/yellow]"
+                        )
+                        continue
+
+                    action_count = len(pending)
+                    self.console.print(
+                        f"[cyan]Step {level_idx}: Starting "
+                        f"{action_count} {'action' if action_count == 1 else 'actions'}...[/cyan]"
+                    )
+
+                    level_start = datetime.now()
+                    stop = False
+                    for action_name in pending:
+                        idx = self.action_indices[action_name]
+                        manager.set_context(action_name=action_name, action_index=idx)
+                        should_stop = self._run_single_action(idx, action_name, total_actions)
+                        if should_stop:
+                            stop = True
+                            break
+
+                    level_duration = (datetime.now() - level_start).total_seconds()
+                    has_failed = any(state_mgr.is_failed(a) for a in level_actions)
+                    color = "red" if has_failed else "green"
+                    self.console.print(
+                        f"[{color}]Step {level_idx} complete ({level_duration:.2f}s)[/{color}]"
+                    )
+
+                    if stop:
                         break
 
                 state_mgr = self.services.core.state_manager

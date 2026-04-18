@@ -93,6 +93,10 @@ class ActionLevelOrchestrator:
         version_base_map = self._build_version_base_name_map()
 
         local_configs = copy.deepcopy(self.action_configs)
+        # Virtual actions (from upstream workflows) are pre-completed — exclude
+        # them from dependency tracking so they don't block level assignment.
+        execution_set = set(self.execution_order)
+
         deps_map = {}
         for action in self.execution_order:
             raw_deps = [
@@ -100,6 +104,8 @@ class ActionLevelOrchestrator:
             ]
             # Expand any version base name references to their expanded variants
             expanded_deps = self._expand_version_dependencies(raw_deps, version_base_map)
+            # Filter out virtual actions (not in execution_order, already completed)
+            expanded_deps = [d for d in expanded_deps if d in execution_set]
             deps_map[action] = expanded_deps
             if expanded_deps != raw_deps:
                 local_configs[action]["dependencies"] = expanded_deps

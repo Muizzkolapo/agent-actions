@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -11,9 +10,17 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import RepromptValidationFailedEvent
 
 from .critique import format_critique_feedback
-from .response_validator import UdfValidator, build_validation_feedback
+from .response_validator import (
+    FeedbackStrategy,
+    UdfValidator,
+    build_validation_feedback,
+    resolve_feedback_strategies,
+    safe_validate,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .response_validator import ResponseValidator
 
 logger = logging.getLogger(__name__)
@@ -31,6 +38,32 @@ class RepromptResult:
     exhausted: bool = False
 
 
+@dataclass
+class ParsedRepromptConfig:
+    """Validated reprompt settings extracted from a raw config dict."""
+
+    validation_name: str
+    max_attempts: int = 2
+    on_exhausted: str = "return_last"
+
+
+def parse_reprompt_config(reprompt_config: dict | None) -> ParsedRepromptConfig | None:
+    """Parse a raw reprompt config dict into validated settings.
+
+    Returns ``None`` if *reprompt_config* is empty or has no ``validation`` key.
+    """
+    if not reprompt_config:
+        return None
+    validation_name = reprompt_config.get("validation")
+    if not validation_name:
+        return None
+    return ParsedRepromptConfig(
+        validation_name=validation_name,
+        max_attempts=reprompt_config.get("max_attempts", 2),
+        on_exhausted=reprompt_config.get("on_exhausted", "return_last"),
+    )
+
+
 class RepromptService:
     """Wraps LLM execution with a validate-and-reprompt loop."""
 
@@ -40,6 +73,7 @@ class RepromptService:
         max_attempts: int = 2,
         on_exhausted: str = "return_last",
         validator: ResponseValidator | None = None,
+        strategies: list[FeedbackStrategy] | None = None,
         critique_fn: Callable[[Any, str], str] | None = None,
         critique_after_attempt: int = 2,
     ):
@@ -75,15 +109,13 @@ class RepromptService:
 
         if validator is not None:
             self._validator = validator
+            self.validation_name = validator.name
         else:
             self._validator = UdfValidator(validation_name)
-
-        if validator is not None:
-            self.validation_name = self._validator.name
-        else:
             self.validation_name = validation_name
 
         self.validation_func = self._validator.validate
+        self._strategies = strategies or []
 
     @property
     def feedback_message(self) -> str:
@@ -132,19 +164,7 @@ class RepromptService:
 
             last_response = response
 
-            try:
-                is_valid = self._validator.validate(response)
-            except (ValueError, TypeError, LookupError) as e:
-                logger.warning(
-                    "[%s] Validation '%s' raised exception "
-                    "(treating as validation failure): %s: %s",
-                    context,
-                    self.validation_name,
-                    e.__class__.__name__,
-                    e,
-                    exc_info=True,
-                )
-                is_valid = False
+            is_valid = safe_validate(self._validator.validate, response, context=context)
 
             if is_valid:
                 logger.info(
@@ -172,7 +192,9 @@ class RepromptService:
             if attempts >= self.max_attempts:
                 break
 
-            feedback = build_validation_feedback(response, self._validator.feedback_message)
+            feedback = build_validation_feedback(
+                response, self._validator.feedback_message, strategies=self._strategies
+            )
 
             if self._critique_fn is not None and attempts >= self._critique_after_attempt:
                 try:
@@ -238,22 +260,35 @@ def create_reprompt_service_from_config(
     Raises:
         ValueError: If required 'validation' key is missing and no validator provided.
     """
-    if not reprompt_config:
+    parsed = parse_reprompt_config(reprompt_config)
+    strategies = resolve_feedback_strategies(reprompt_config)
+
+    if parsed is None:
         if validator is not None:
-            return RepromptService(validator=validator, critique_fn=critique_fn)
+            # External validator provided but no validation key -- still respect
+            # other config settings (max_attempts, on_exhausted) if present.
+            cfg = reprompt_config or {}
+            return RepromptService(
+                max_attempts=cfg.get("max_attempts", 2),
+                on_exhausted=cfg.get("on_exhausted", "return_last"),
+                validator=validator,
+                strategies=strategies,
+                critique_fn=critique_fn,
+                critique_after_attempt=cfg.get("critique_after_attempt", 2),
+            )
+        if reprompt_config:
+            raise ValueError(
+                "Reprompt configuration missing required 'validation' field. "
+                "Example: {'validation': 'check_no_forbidden_words', 'max_attempts': 2}"
+            )
         return None
 
-    if validator is None and "validation" not in reprompt_config:
-        raise ValueError(
-            "Reprompt configuration missing required 'validation' field. "
-            "Example: {'validation': 'check_no_forbidden_words', 'max_attempts': 2}"
-        )
-
     return RepromptService(
-        validation_name=reprompt_config.get("validation", ""),
-        max_attempts=reprompt_config.get("max_attempts", 2),
-        on_exhausted=reprompt_config.get("on_exhausted", "return_last"),
+        validation_name=parsed.validation_name,
+        max_attempts=parsed.max_attempts,
+        on_exhausted=parsed.on_exhausted,
         validator=validator,
+        strategies=strategies,
         critique_fn=critique_fn,
         critique_after_attempt=reprompt_config.get("critique_after_attempt", 2),
     )

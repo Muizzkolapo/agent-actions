@@ -467,11 +467,13 @@ class BatchProcessingService:
                         record_failure_counts=record_failure_counts,
                         accumulated_results=BatchRetryService.serialize_results(batch_results),
                     )
-                    reprompt_config = (agent_config or {}).get("reprompt")
-                    if reprompt_config:
-                        state.reprompt_max_attempts = reprompt_config.get("max_attempts", 2)
-                        state.validation_name = reprompt_config.get("validation")
-                        state.on_exhausted = reprompt_config.get("on_exhausted", "return_last")
+                    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+
+                    reprompt_parsed = parse_reprompt_config((agent_config or {}).get("reprompt"))
+                    if reprompt_parsed:
+                        state.reprompt_max_attempts = reprompt_parsed.max_attempts
+                        state.validation_name = reprompt_parsed.validation_name
+                        state.on_exhausted = reprompt_parsed.on_exhausted
 
                     RecoveryStateManager.save(output_directory, file_name, state)
                     logger.info(

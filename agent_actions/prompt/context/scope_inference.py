@@ -148,7 +148,11 @@ def _resolve_input_sources_for_fan_in(
 
 
 def infer_dependencies(
-    action_config: dict, workflow_actions: list[str], action_name: str = "unknown"
+    action_config: dict,
+    workflow_actions: list[str],
+    action_name: str = "unknown",
+    *,
+    validate: bool = True,
 ) -> tuple[list[str], list[str]]:
     """
     Infer input sources and context sources from action configuration.
@@ -335,24 +339,27 @@ def infer_dependencies(
         ]
 
     # 5. Validate all referenced actions exist in workflow
-    all_referenced = set(input_sources_expanded) | set(context_sources_expanded)
-    for dep_action in all_referenced:
-        if dep_action in SPECIAL_NAMESPACES:
-            continue
+    # Skipped at runtime (validate=False) because the static validator
+    # already caught invalid references during preflight.
+    if validate:
+        all_referenced = set(input_sources_expanded) | set(context_sources_expanded)
+        for dep_action in all_referenced:
+            if dep_action in SPECIAL_NAMESPACES:
+                continue
 
-        if dep_action not in workflow_actions:
-            raise ConfigurationError(
-                f"Action '{action_name}': References '{dep_action}' in dependencies/context_scope "
-                f"but '{dep_action}' not found in workflow.\n\n"
-                f"Available actions: {workflow_actions}",
-                context={
-                    "action": action_name,
-                    "missing_action": dep_action,
-                    "workflow_actions": workflow_actions,
-                    "input_sources": input_sources_expanded,
-                    "context_sources": context_sources_expanded,
-                },
-            )
+            if dep_action not in workflow_actions:
+                raise ConfigurationError(
+                    f"Action '{action_name}': References '{dep_action}' in dependencies/context_scope "
+                    f"but '{dep_action}' not found in workflow.\n\n"
+                    f"Available actions: {workflow_actions}",
+                    context={
+                        "action": action_name,
+                        "missing_action": dep_action,
+                        "workflow_actions": workflow_actions,
+                        "input_sources": input_sources_expanded,
+                        "context_sources": context_sources_expanded,
+                    },
+                )
 
     logger.debug(
         f"[INFER_DEPS] Action '{action_name}': "
