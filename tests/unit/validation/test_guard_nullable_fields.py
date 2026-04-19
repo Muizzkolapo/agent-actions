@@ -682,9 +682,13 @@ class TestApplyGuardNullableSchemaFixes:
         """A -> B (passthrough A.*) -> C (tool observes B.field) -> field made nullable."""
         action_configs = dict(
             [
-                _guarded_llm_config(
+                (
                     "guarded_action",
-                    guard={"condition": "score >= 6", "on_false": "filter"},
+                    {
+                        "model_vendor": "openai",
+                        "guard": {"condition": "score >= 6", "on_false": "filter"},
+                        "schema": [{"id": "insights", "type": "object"}],
+                    },
                 ),
                 (
                     "intermediate",
@@ -746,6 +750,55 @@ class TestApplyGuardNullableSchemaFixes:
         fixes = apply_guard_nullable_schema_fixes(action_configs)
 
         assert fixes == ["consumer.data"]
+
+    def test_transitive_wildcard_only_fixes_guarded_fields(self):
+        """Wildcard passthrough only fixes fields produced by the guarded action, not the intermediate's own fields."""
+        action_configs = dict(
+            [
+                (
+                    "guarded",
+                    {
+                        "model_vendor": "openai",
+                        "guard": {"condition": "ok == true", "on_false": "filter"},
+                        "schema": [{"id": "qa_content", "type": "object"}],
+                    },
+                ),
+                (
+                    "intermediate",
+                    {
+                        "model_vendor": "openai",
+                        "context_scope": {
+                            "observe": ["guarded.qa_content"],
+                            "passthrough": ["guarded.*"],
+                        },
+                    },
+                ),
+                _tool_config(
+                    "consumer",
+                    json_output_schema={
+                        "type": "object",
+                        "properties": {
+                            "qa_content": {"type": "object"},
+                            "enrichment": {"type": "string"},
+                        },
+                    },
+                    observe=["intermediate.qa_content", "intermediate.enrichment"],
+                ),
+            ]
+        )
+
+        fixes = apply_guard_nullable_schema_fixes(action_configs)
+
+        assert fixes == ["consumer.qa_content"]
+        # qa_content is from guarded action -> nullable
+        assert action_configs["consumer"]["json_output_schema"]["properties"]["qa_content"][
+            "type"
+        ] == ["object", "null"]
+        # enrichment is the intermediate's own field -> NOT nullable
+        assert (
+            action_configs["consumer"]["json_output_schema"]["properties"]["enrichment"]["type"]
+            == "string"
+        )
 
     def test_transitive_non_matching_passthrough_not_fixed(self):
         """Passthrough from guarded action but different field -> not fixed."""

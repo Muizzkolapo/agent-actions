@@ -1786,6 +1786,16 @@ def apply_guard_nullable_schema_fixes(
     if not guarded_actions:
         return fixes
 
+    # Step 1a: Extract schema field names for each guarded action.
+    # Used to verify wildcard passthrough fields actually belong to the guarded action.
+    guarded_fields: dict[str, set[str]] = {}
+    for g_name in guarded_actions:
+        g_config = action_configs[g_name]
+        schema = g_config.get("json_output_schema") or g_config.get("schema")
+        if schema:
+            field_types = WorkflowStaticAnalyzer._extract_field_types_from_schema(schema)
+            guarded_fields[g_name] = set(field_types.keys())
+
     # Step 1b: Build passthrough map for transitive resolution.
     # {action_name: {source_action: set_of_fields_or_wildcard}}
     passthrough_map: dict[str, dict[str, set[str] | str]] = {}
@@ -1845,7 +1855,11 @@ def apply_guard_nullable_schema_fixes(
                 pt_fields = source_pts.get(g_name)
                 if pt_fields is None:
                     continue
-                if pt_fields == "*" or (isinstance(pt_fields, set) and field in pt_fields):
+                if pt_fields == "*":
+                    # Wildcard: only if the field is actually produced by the guarded action
+                    if field in guarded_fields.get(g_name, set()):
+                        guard_nullable_fields.add(field)
+                elif isinstance(pt_fields, set) and field in pt_fields:
                     guard_nullable_fields.add(field)
 
         if not guard_nullable_fields:
