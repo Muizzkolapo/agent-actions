@@ -199,6 +199,99 @@ class TestUnifiedLineageSourceGuidPropagation:
         assert result["source_guid"] == "sg-first"
 
 
+class TestLineageSourcesPropagation:
+    """Test lineage_sources propagation through ancestry chain."""
+
+    def test_lineage_sources_propagated_from_parent(self):
+        """lineage_sources on parent is propagated to child via add_unified_lineage."""
+        obj = {"content": {"merged": True}}
+        node_id = "options_combiner_ghi"
+        parent_item = {
+            "node_id": "gen_concept_def",
+            "lineage": ["root_xyz", "gen_concept_def", "gen_feynman_abc"],
+            "lineage_sources": ["gen_concept_def", "gen_feynman_abc"],
+            "target_id": "target-parent",
+        }
+
+        result = LineageBuilder.add_unified_lineage(obj, node_id, parent_item)
+
+        assert result["lineage_sources"] == ["gen_concept_def", "gen_feynman_abc"]
+        assert result["lineage"] == [
+            "root_xyz",
+            "gen_concept_def",
+            "gen_feynman_abc",
+            "options_combiner_ghi",
+        ]
+
+    def test_lineage_sources_not_set_without_parent(self):
+        """No parent → no lineage_sources on result."""
+        obj = {"content": {"text": "data"}}
+        result = LineageBuilder.add_unified_lineage(obj, "node_123")
+        assert "lineage_sources" not in result
+
+    def test_lineage_sources_not_set_when_parent_lacks_it(self):
+        """Parent without lineage_sources → no lineage_sources on result."""
+        obj = {"content": {"text": "output"}}
+        parent_item = {
+            "node_id": "single_branch_abc",
+            "lineage": ["root_0", "single_branch_abc"],
+            "target_id": "target-1",
+        }
+
+        result = LineageBuilder.add_unified_lineage(obj, "downstream_xyz", parent_item)
+
+        assert "lineage_sources" not in result
+
+    def test_existing_lineage_sources_not_overwritten(self):
+        """If obj already has lineage_sources, parent's version does not overwrite."""
+        obj = {"content": {"text": "output"}, "lineage_sources": ["own_a", "own_b"]}
+        parent_item = {
+            "lineage": ["root_0", "parent_node"],
+            "lineage_sources": ["parent_x", "parent_y"],
+            "target_id": "target-1",
+        }
+
+        result = LineageBuilder.add_unified_lineage(obj, "node_new", parent_item)
+
+        assert result["lineage_sources"] == ["own_a", "own_b"]
+
+    def test_lineage_sources_propagated_via_add_lineage_tracking(self):
+        """lineage_sources propagated through add_lineage_tracking path."""
+        obj = {"content": {"text": "output"}}
+        item = {
+            "node_id": "merged_parent_abc",
+            "lineage": ["root_0", "branch_a_1", "branch_b_2"],
+            "lineage_sources": ["branch_a_1", "branch_b_2"],
+            "target_id": "target-merged",
+        }
+
+        result = LineageBuilder.add_lineage_tracking(obj, item, "downstream_node")
+
+        assert result["lineage_sources"] == ["branch_a_1", "branch_b_2"]
+
+    def test_add_lineage_tracking_from_sources_keeps_own_lineage_sources(self):
+        """add_lineage_tracking_from_sources sets its own lineage_sources, ignoring parent's."""
+        obj = {"content": {"text": "output"}}
+        source_items = [
+            {
+                "source_guid": "sg-1",
+                "target_id": "t-1",
+                "lineage": ["root_0", "branch_a_1"],
+                "lineage_sources": ["old_x", "old_y"],
+            },
+            {
+                "source_guid": "sg-2",
+                "target_id": "t-2",
+                "lineage": ["root_0", "branch_b_2"],
+            },
+        ]
+
+        result = LineageBuilder.add_lineage_tracking_from_sources(obj, source_items, "merge_node")
+
+        # Uses the computed lineage_sources from source items, not parent's
+        assert result["lineage_sources"] == ["branch_a_1", "branch_b_2"]
+
+
 class TestUnifiedLineageObjectImmutability:
     """Test object immutability."""
 

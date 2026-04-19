@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Cascade failures now report as blocked instead of independent errors; batch-mode actions show wall-clock duration from submission to completion"
-time: 2026-04-18T12:00:00.000000Z
