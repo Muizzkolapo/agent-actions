@@ -43,7 +43,7 @@ def tools_dir(tmp_path):
     # Clean up loaded modules from sys.modules
     clear_module_cache()
     for name in list(sys.modules):
-        if name in ("get_opener", "summarize", "bad_udf"):
+        if name in ("get_opener", "summarize", "bad_udf", "sub_opener"):
             del sys.modules[name]
 
 
@@ -149,6 +149,34 @@ class TestDispatchTaskEndToEnd:
 
         assert "dispatch_task" not in result.formatted_prompt
         assert "During monitoring, you notice an anomaly" in result.formatted_prompt
+
+    def test_dispatch_resolves_function_in_subdirectory(self, tools_dir):
+        """dispatch_task() finds a UDF located in a subdirectory of tools_path."""
+        # Create a function inside a subdirectory
+        subdir = tools_dir / "qanalabs-quiz-gen"
+        subdir.mkdir()
+        (subdir / "sub_opener.py").write_text(
+            'def sub_opener(context_data, *args):\n    return "Found in subdirectory"\n'
+        )
+
+        config = {
+            "agent_type": "test",
+            "prompt": "inline",
+            "context_scope": {"observe": ["source.*"]},
+            "tool_path": [str(tools_dir)],
+        }
+        field_context = {"source": {"text": "hello"}}
+
+        with _stub_raw_prompt("Result: dispatch_task('sub_opener')"):
+            result = PromptPreparationService.prepare_prompt_with_field_context(
+                agent_config=config,
+                agent_name="test",
+                contents={},
+                field_context=field_context,
+            )
+
+        assert "dispatch_task" not in result.formatted_prompt
+        assert "Found in subdirectory" in result.formatted_prompt
 
     def test_no_tools_config_leaves_literal(self):
         """Without any tools config, dispatch_task passes through as literal text."""

@@ -167,6 +167,19 @@ def _resolve_module_file(module_name: str, search_dir: str | Path) -> Path | Non
     if candidate.is_file():
         return candidate
 
+    if "." not in module_name:
+        target_filename = f"{module_name}.py"
+        matches = [p for p in search_dir.rglob(target_filename) if p.is_file()]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            logger.error(
+                "Ambiguous dispatch_task resolution: '%s' found in multiple locations: %s",
+                module_name,
+                [str(m.relative_to(search_dir)) for m in matches],
+            )
+            return None
+
     return None
 
 
