@@ -564,6 +564,56 @@ class TestApplyGuardNullableSchemaFixes:
         fixes = apply_guard_nullable_schema_fixes(action_configs)
         assert fixes == []
 
+    def test_post_expansion_guard_format_warn_not_fixed(self):
+        """Post-expansion guard uses 'behavior' key, not 'on_false'. Warn must not fix."""
+        action_configs = dict(
+            [
+                (
+                    "extract",
+                    {
+                        "model_vendor": "openai",
+                        "guard": {"clause": "score >= 6", "scope": "item", "behavior": "warn"},
+                    },
+                ),
+                _tool_config(
+                    "consumer",
+                    json_output_schema={
+                        "type": "object",
+                        "properties": {"data": {"type": "object"}},
+                    },
+                    observe=["extract.data"],
+                ),
+            ]
+        )
+
+        fixes = apply_guard_nullable_schema_fixes(action_configs)
+        assert fixes == []
+
+    def test_post_expansion_guard_format_filter_fixed(self):
+        """Post-expansion guard with behavior: filter -> field made nullable."""
+        action_configs = dict(
+            [
+                (
+                    "extract",
+                    {
+                        "model_vendor": "openai",
+                        "guard": {"clause": "score >= 6", "scope": "item", "behavior": "filter"},
+                    },
+                ),
+                _tool_config(
+                    "consumer",
+                    json_output_schema={
+                        "type": "object",
+                        "properties": {"data": {"type": "object"}},
+                    },
+                    observe=["extract.data"],
+                ),
+            ]
+        )
+
+        fixes = apply_guard_nullable_schema_fixes(action_configs)
+        assert fixes == ["consumer.data"]
+
     def test_field_not_in_json_output_schema_not_fixed(self):
         """Observed field not in consumer's json_output_schema -> no fix."""
         action_configs = dict(

@@ -1774,7 +1774,8 @@ def apply_guard_nullable_schema_fixes(
         if not guard:
             continue
         if isinstance(guard, dict):
-            behavior = guard.get("on_false", "filter")
+            # Post-expansion configs use "behavior"; raw configs use "on_false".
+            behavior = guard.get("behavior", guard.get("on_false", "filter"))
         elif isinstance(guard, str):
             behavior = "filter"  # string guards default to filter
         else:
