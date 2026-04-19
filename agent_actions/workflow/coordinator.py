@@ -173,6 +173,19 @@ class AgentWorkflow:
                 hint="Fix the static type errors above before running the workflow.",
             )
 
+        # Auto-fix schemas for fields that may be None due to guard filtering.
+        from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
+            apply_guard_nullable_schema_fixes,
+        )
+
+        guard_fixes = apply_guard_nullable_schema_fixes(self.action_configs)
+        if guard_fixes:
+            logger.info(
+                "Auto-fixed %d guard-nullable schema field(s): %s",
+                len(guard_fixes),
+                ", ".join(guard_fixes),
+            )
+
         guard_errors = self._validate_guard_conditions()
         if guard_errors:
             raise PreFlightValidationError(
