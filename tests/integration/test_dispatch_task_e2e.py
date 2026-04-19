@@ -60,36 +60,15 @@ def _stub_raw_prompt(text):
 class TestDispatchTaskEndToEnd:
     """Full pipeline: real UDF on disk, no mocks on the dispatch path."""
 
-    def test_dispatch_resolves_real_udf(self, tools_dir):
-        """dispatch_task('get_opener') loads the module and injects its return value."""
-        config = {
-            "agent_type": "test",
-            "prompt": "inline",
-            "context_scope": {"observe": ["source.*"]},
-            "tool_path": [str(tools_dir)],
-        }
-        field_context = {"source": {"text": "hello"}}
-
-        with _stub_raw_prompt("Start with: dispatch_task('get_opener')"):
-            result = PromptPreparationService.prepare_prompt_with_field_context(
-                agent_config=config,
-                agent_name="test",
-                contents={},
-                field_context=field_context,
-            )
-
-        assert "dispatch_task" not in result.formatted_prompt
-        assert "During monitoring, you notice an anomaly" in result.formatted_prompt
-
     def test_dispatch_passes_context_to_udf(self, tools_dir):
-        """The UDF receives the LLM context as its first argument."""
+        """The UDF receives the LLM context (with observed fields) as its first argument."""
         config = {
             "agent_type": "test",
             "prompt": "inline",
             "context_scope": {"observe": ["source.*"]},
             "tool_path": [str(tools_dir)],
         }
-        field_context = {"source": {"text": "hello"}}
+        field_context = {"source": {"text": "hello", "category": "test"}}
 
         with _stub_raw_prompt("Result: dispatch_task('summarize')"):
             result = PromptPreparationService.prepare_prompt_with_field_context(
@@ -100,7 +79,9 @@ class TestDispatchTaskEndToEnd:
             )
 
         assert "dispatch_task" not in result.formatted_prompt
-        assert "Summary of" in result.formatted_prompt
+        # source.* observe produces {"source": {...}} in llm_context — 1 top-level key.
+        # "0 fields" would mean empty context wasn't passed; "1 fields" proves it was.
+        assert "Summary of 1 fields" in result.formatted_prompt
 
     def test_dispatch_none_return_raises(self, tools_dir):
         """UDF returning None raises AgentActionsError, not silent passthrough."""
