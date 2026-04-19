@@ -158,6 +158,11 @@ class PromptPreparationService:
             mode=mode,
         )
 
+        if not tools_path:
+            from agent_actions.utils.tools_resolver import resolve_tools_path
+
+            tools_path = resolve_tools_path(agent_config)
+
         if tools_path:
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt,
@@ -266,10 +271,16 @@ class PromptPreparationService:
             field_context_metadata=field_context_metadata,
         )
 
-        if request.tools_path:
+        tools_path = request.tools_path
+        if not tools_path:
+            from agent_actions.utils.tools_resolver import resolve_tools_path
+
+            tools_path = resolve_tools_path(request.agent_config)
+
+        if tools_path:
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt,
-                request.tools_path,
+                tools_path,
                 json.dumps(llm_context, ensure_ascii=False),
                 agent_config=request.agent_config,
             )
