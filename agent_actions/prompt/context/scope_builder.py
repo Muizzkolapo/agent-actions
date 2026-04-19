@@ -84,9 +84,6 @@ def build_field_context_with_history(
     - context_scope.passthrough: ["dep.field2"] -> Also loaded (needed for output)
     - Undeclared fields never enter memory
     """
-    from agent_actions.input.context.historical import (
-        HistoricalNodeDataLoader,
-    )
     from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
     field_context = {}
@@ -337,21 +334,6 @@ def build_field_context_with_history(
                         dep_name,
                     )
                     continue
-
-                # Parallel Branch Check (uses same disambiguation as the matcher)
-                is_ancestor = (
-                    HistoricalNodeDataLoader._find_target_node_id(
-                        dep_name, lineage, agent_indices=agent_indices
-                    )
-                    is not None
-                )
-
-                if not is_ancestor:
-                    logger.debug(
-                        "Context dependency '%s' not in lineage (may not have executed yet). "
-                        "Will attempt to load from historical files.",
-                        dep_name,
-                    )
 
                 # Load historical data
                 logger.debug(
