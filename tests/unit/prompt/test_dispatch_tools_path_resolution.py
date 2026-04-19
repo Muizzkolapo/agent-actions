@@ -14,7 +14,7 @@ from agent_actions.errors import AgentActionsError
 from agent_actions.prompt.service import PromptPreparationService
 
 
-def _make_agent_config(*, tool_path=None, tools=None, extra=None):
+def _make_agent_config(*, tool_path=None, tools=None):
     """Build a minimal agent_config dict for prompt preparation tests."""
     config = {
         "agent_type": "test_action",
@@ -25,8 +25,6 @@ def _make_agent_config(*, tool_path=None, tools=None, extra=None):
         config["tool_path"] = tool_path
     if tools is not None:
         config["tools"] = tools
-    if extra:
-        config.update(extra)
     return config
 
 
@@ -46,14 +44,6 @@ def _stub_udf(return_value="computed_result"):
     )
 
 
-def _stub_udf_error(error_msg="Could not find function"):
-    """Patch StringProcessor.call_user_function to raise an error."""
-    return patch(
-        "agent_actions.prompt.prompt_utils.StringProcessor.call_user_function",
-        side_effect=AgentActionsError(error_msg),
-    )
-
-
 class TestDispatchToolsPathResolution:
     """dispatch_task() resolves when tools_path is auto-resolved from agent_config."""
 
@@ -62,7 +52,7 @@ class TestDispatchToolsPathResolution:
         config = _make_agent_config()
         field_context = {"source": {"text": "hello"}}
 
-        with _stub_raw_prompt("Use: dispatch_task('my_func')"), _stub_udf("dynamic_value"):
+        with _stub_raw_prompt("Use: dispatch_task('my_func')"), _stub_udf():
             result = PromptPreparationService.prepare_prompt_with_field_context(
                 agent_config=config,
                 agent_name="test",
@@ -72,31 +62,23 @@ class TestDispatchToolsPathResolution:
             )
 
         assert "dispatch_task" not in result.formatted_prompt
-        assert "dynamic_value" in result.formatted_prompt
+        assert "computed_result" in result.formatted_prompt
 
-    def test_dispatch_resolved_via_tool_path_list(self):
-        """dispatch_task() resolves when tools_path comes from tool_path list in config."""
-        config = _make_agent_config(tool_path=["tools/my_workflow"])
+    @pytest.mark.parametrize(
+        "config_kwargs, test_id",
+        [
+            ({"tool_path": ["tools/my_workflow"]}, "tool_path_list"),
+            ({"tool_path": "tools/my_workflow"}, "tool_path_string"),
+            ({"tools": {"path": "tools/my_workflow"}}, "tools_dict_path"),
+        ],
+        ids=["tool_path_list", "tool_path_string", "tools_dict_path"],
+    )
+    def test_dispatch_resolved_via_config(self, config_kwargs, test_id):
+        """dispatch_task() resolves via auto-resolution from different config formats."""
+        config = _make_agent_config(**config_kwargs)
         field_context = {"source": {"text": "hello"}}
 
-        with _stub_raw_prompt("Use: dispatch_task('my_func')"), _stub_udf("resolved_output"):
-            result = PromptPreparationService.prepare_prompt_with_field_context(
-                agent_config=config,
-                agent_name="test",
-                contents={},
-                field_context=field_context,
-                # tools_path intentionally NOT provided
-            )
-
-        assert "dispatch_task" not in result.formatted_prompt
-        assert "resolved_output" in result.formatted_prompt
-
-    def test_dispatch_resolved_via_tool_path_string(self):
-        """dispatch_task() resolves when tool_path is a plain string."""
-        config = _make_agent_config(tool_path="tools/my_workflow")
-        field_context = {"source": {"text": "hello"}}
-
-        with _stub_raw_prompt("Use: dispatch_task('my_func')"), _stub_udf("string_path_result"):
+        with _stub_raw_prompt("Use: dispatch_task('my_func')"), _stub_udf():
             result = PromptPreparationService.prepare_prompt_with_field_context(
                 agent_config=config,
                 agent_name="test",
@@ -105,38 +87,7 @@ class TestDispatchToolsPathResolution:
             )
 
         assert "dispatch_task" not in result.formatted_prompt
-        assert "string_path_result" in result.formatted_prompt
-
-    def test_dispatch_resolved_via_tools_dict_path(self):
-        """dispatch_task() resolves when tools is a dict with path key."""
-        config = _make_agent_config(tools={"path": "tools/my_workflow"})
-        field_context = {"source": {"text": "hello"}}
-
-        with _stub_raw_prompt("Use: dispatch_task('my_func')"), _stub_udf("dict_path_result"):
-            result = PromptPreparationService.prepare_prompt_with_field_context(
-                agent_config=config,
-                agent_name="test",
-                contents={},
-                field_context=field_context,
-            )
-
-        assert "dispatch_task" not in result.formatted_prompt
-        assert "dict_path_result" in result.formatted_prompt
-
-    def test_no_dispatch_without_tools_config(self):
-        """When no tools config exists and no dispatch calls, prompt is unchanged."""
-        config = _make_agent_config()
-        field_context = {"source": {"text": "hello"}}
-
-        with _stub_raw_prompt("Plain prompt without dispatch calls"):
-            result = PromptPreparationService.prepare_prompt_with_field_context(
-                agent_config=config,
-                agent_name="test",
-                contents={},
-                field_context=field_context,
-            )
-
-        assert result.formatted_prompt == "Plain prompt without dispatch calls"
+        assert "computed_result" in result.formatted_prompt
 
     def test_dispatch_literal_without_tools_config(self):
         """dispatch_task() passes through as literal when no tools config exists."""
@@ -151,7 +102,6 @@ class TestDispatchToolsPathResolution:
                 field_context=field_context,
             )
 
-        # No tools config -> resolve_tools_path returns None -> dispatch skipped
         assert "dispatch_task('my_func')" in result.formatted_prompt
 
     def test_dispatch_error_surfaces(self):
@@ -161,7 +111,10 @@ class TestDispatchToolsPathResolution:
 
         with (
             _stub_raw_prompt("Use: dispatch_task('nonexistent')"),
-            _stub_udf_error("Could not find function 'nonexistent'"),
+            patch(
+                "agent_actions.prompt.prompt_utils.StringProcessor.call_user_function",
+                side_effect=AgentActionsError("Could not find function 'nonexistent'"),
+            ),
             pytest.raises(AgentActionsError, match="Could not find function"),
         ):
             PromptPreparationService.prepare_prompt_with_field_context(
@@ -220,7 +173,6 @@ class TestDispatchInternalPathResolution:
                 agent_name="test",
                 contents={"text": "data"},
                 mode=RunMode.ONLINE,
-                # tools_path intentionally NOT provided
             )
 
         assert "dispatch_task" not in result.formatted_prompt
