@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Pass compiled schemas to Groq, Cohere, and Mistral APIs for structured output enforcement instead of silently ignoring them"
-time: 2026-04-16T17:36:00.000000Z

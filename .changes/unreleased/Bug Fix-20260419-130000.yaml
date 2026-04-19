@@ -1,2 +1,0 @@
-kind: Bug Fix
-body: Drop directives now correctly exclude fields from passthrough wildcards by extracting passthrough before drop and applying drop to both observe and output contexts.

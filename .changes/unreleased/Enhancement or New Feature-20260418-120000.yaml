@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: Add LLM critique escalation for stubborn reprompt failures — after N failed attempts, a separate LLM call analyzes why validation keeps failing and includes that analysis in the next retry prompt
-time: 2026-04-18T12:00:00.000000Z
