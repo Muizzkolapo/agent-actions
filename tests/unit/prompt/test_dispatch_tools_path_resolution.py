@@ -104,6 +104,45 @@ class TestDispatchToolsPathResolution:
 
         assert "dispatch_task('my_func')" in result.formatted_prompt
 
+    def test_empty_string_tools_path_triggers_resolution(self):
+        """Empty string tools_path is falsy — triggers auto-resolution from config."""
+        config = _make_agent_config(tool_path=["tools/my_workflow"])
+        field_context = {"source": {"text": "hello"}}
+
+        with _stub_raw_prompt("Use: dispatch_task('my_func')"), _stub_udf():
+            result = PromptPreparationService.prepare_prompt_with_field_context(
+                agent_config=config,
+                agent_name="test",
+                contents={},
+                field_context=field_context,
+                tools_path="",
+            )
+
+        assert "dispatch_task" not in result.formatted_prompt
+        assert "computed_result" in result.formatted_prompt
+
+    def test_config_validation_error_propagates(self):
+        """ConfigValidationError from resolve_tools_path propagates, not swallowed."""
+        from agent_actions.errors import ConfigValidationError
+
+        config = _make_agent_config()
+        field_context = {"source": {"text": "hello"}}
+
+        with (
+            _stub_raw_prompt("Use: dispatch_task('my_func')"),
+            patch(
+                "agent_actions.utils.tools_resolver.resolve_tools_path",
+                side_effect=ConfigValidationError("path traversal detected"),
+            ),
+            pytest.raises(ConfigValidationError, match="path traversal"),
+        ):
+            PromptPreparationService.prepare_prompt_with_field_context(
+                agent_config=config,
+                agent_name="test",
+                contents={},
+                field_context=field_context,
+            )
+
     def test_dispatch_error_surfaces(self):
         """dispatch_task() with missing function raises, not silently passes through."""
         config = _make_agent_config(tool_path=["tools"])
