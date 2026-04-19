@@ -183,6 +183,8 @@ class BatchSubmissionService:
                     "Use --batch_continue to process completed batches."
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
+            # Only COMPLETED blocks resubmission. FAILED/CANCELLED fall through
+            # so the framework can retry automatically without --force.
             if entry and entry.status == BatchStatus.COMPLETED:
                 logger.info(
                     "Found completed batch job for %s: %s — skipping resubmission",
