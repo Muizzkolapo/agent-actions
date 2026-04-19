@@ -43,12 +43,14 @@ from .type_checker import StaticTypeChecker
 from .workflow_static_analyzer import (
     WorkflowStaticAnalyzer,
     analyze_workflow,
+    apply_guard_nullable_schema_fixes,
 )
 
 __all__ = [
     # Main entry points
     "WorkflowStaticAnalyzer",
     "analyze_workflow",
+    "apply_guard_nullable_schema_fixes",
     # Graph components
     "DataFlowGraph",
     "DataFlowNode",

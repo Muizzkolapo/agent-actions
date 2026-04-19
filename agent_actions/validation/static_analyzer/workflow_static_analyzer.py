@@ -1710,3 +1710,149 @@ def analyze_workflow(
         result.set_strict_mode(True)
 
     return result
+
+
+# ── Guard-nullable schema auto-fix ──────────────────────────────────
+
+
+def _make_schema_field_nullable(schema: dict[str, Any], field_name: str) -> bool:
+    """Add ``"null"`` to a field's type in a JSON Schema dict.
+
+    Handles standard ``properties`` format, ``items.properties`` (array schema),
+    and nested ``schema`` wrapper.  Returns ``True`` if the field was modified.
+    """
+    # Standard properties format
+    properties = schema.get("properties")
+    if isinstance(properties, dict) and field_name in properties:
+        field_def = properties[field_name]
+        if isinstance(field_def, dict) and "type" in field_def:
+            field_type = field_def["type"]
+            if isinstance(field_type, str) and field_type != "null":
+                field_def["type"] = [field_type, "null"]
+                return True
+            if isinstance(field_type, list) and "null" not in field_type:
+                field_type.append("null")
+                return True
+
+    # Array items.properties format
+    items = schema.get("items")
+    if isinstance(items, dict):
+        if _make_schema_field_nullable(items, field_name):
+            return True
+
+    # Nested schema wrapper (e.g. OpenAI compiled)
+    nested = schema.get("schema")
+    if isinstance(nested, dict):
+        if _make_schema_field_nullable(nested, field_name):
+            return True
+
+    return False
+
+
+def apply_guard_nullable_schema_fixes(
+    action_configs: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Make guard-nullable fields accept ``null`` in downstream ``json_output_schema``.
+
+    When upstream actions have ``guard.on_false`` set to ``"filter"`` or
+    ``"skip"``, downstream tool actions that observe those fields may receive
+    ``None`` at runtime.  This function modifies ``json_output_schema`` **in
+    place** so that ``jsonschema.validate()`` accepts ``null`` for those fields.
+
+    Call this after schema compilation and static validation but before
+    workflow execution.
+
+    Returns:
+        List of fixed field paths (e.g. ``["consumer.field"]``).
+    """
+    fixes: list[str] = []
+
+    # Step 1: Identify guarded actions with filter/skip behavior.
+    guarded_actions: set[str] = set()
+    for name, config in action_configs.items():
+        guard = config.get("guard")
+        if not guard:
+            continue
+        if isinstance(guard, dict):
+            behavior = guard.get("on_false", "filter")
+        elif isinstance(guard, str):
+            behavior = "filter"  # string guards default to filter
+        else:
+            continue
+        if behavior in ("filter", "skip"):
+            guarded_actions.add(name)
+
+    if not guarded_actions:
+        return fixes
+
+    # Step 1b: Build passthrough map for transitive resolution.
+    # {action_name: {source_action: set_of_fields_or_wildcard}}
+    passthrough_map: dict[str, dict[str, set[str] | str]] = {}
+    for name, config in action_configs.items():
+        cs = config.get("context_scope")
+        if not isinstance(cs, dict):
+            continue
+        pt_refs = cs.get("passthrough", [])
+        if not isinstance(pt_refs, list):
+            continue
+        for ref in pt_refs:
+            if not isinstance(ref, str) or "." not in ref:
+                continue
+            pt_source, pt_field = ref.split(".", 1)
+            if pt_field == "*":
+                passthrough_map.setdefault(name, {})[pt_source] = "*"
+            else:
+                existing = passthrough_map.setdefault(name, {}).get(pt_source, set())
+                if existing != "*":  # wildcard supersedes specifics
+                    if isinstance(existing, set):
+                        existing.add(pt_field)
+                    passthrough_map[name][pt_source] = existing
+
+    # Step 2: For each tool action, find observed fields from guarded upstreams.
+    for consumer_name, consumer_config in action_configs.items():
+        if consumer_config.get("model_vendor") != "tool":
+            continue
+
+        json_schema = consumer_config.get("json_output_schema")
+        if not json_schema or not isinstance(json_schema, dict):
+            continue
+
+        context_scope = consumer_config.get("context_scope")
+        if not isinstance(context_scope, dict):
+            continue
+
+        observe_refs = context_scope.get("observe", [])
+        if not isinstance(observe_refs, list):
+            continue
+
+        guard_nullable_fields: set[str] = set()
+        for ref in observe_refs:
+            if not isinstance(ref, str) or "." not in ref:
+                continue
+            source, field = ref.split(".", 1)
+            if field == "*":
+                continue
+
+            # Case 1: Direct observation of a guarded action.
+            if source in guarded_actions:
+                guard_nullable_fields.add(field)
+                continue
+
+            # Case 2: Transitive — source passthroughs from a guarded action.
+            source_pts = passthrough_map.get(source, {})
+            for g_name in guarded_actions:
+                pt_fields = source_pts.get(g_name)
+                if pt_fields is None:
+                    continue
+                if pt_fields == "*" or (isinstance(pt_fields, set) and field in pt_fields):
+                    guard_nullable_fields.add(field)
+
+        if not guard_nullable_fields:
+            continue
+
+        # Step 3: Make those fields nullable in json_output_schema.
+        for field_name in sorted(guard_nullable_fields):
+            if _make_schema_field_nullable(json_schema, field_name):
+                fixes.append(f"{consumer_name}.{field_name}")
+
+    return fixes
