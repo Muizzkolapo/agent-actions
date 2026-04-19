@@ -22,24 +22,21 @@ def tools_dir(tmp_path):
 
     # A simple UDF that returns a computed string
     (tools / "get_opener.py").write_text(
-        'def get_opener(context_data, *args):\n'
+        "def get_opener(context_data, *args):\n"
         '    return "During monitoring, you notice an anomaly"\n'
     )
 
     # A UDF that uses context data
     (tools / "summarize.py").write_text(
-        'import json\n'
-        'def summarize(context_data, *args):\n'
-        '    data = json.loads(context_data) if isinstance(context_data, str) else context_data\n'
-        '    keys = list(data.keys()) if isinstance(data, dict) else []\n'
+        "import json\n"
+        "def summarize(context_data, *args):\n"
+        "    data = json.loads(context_data) if isinstance(context_data, str) else context_data\n"
+        "    keys = list(data.keys()) if isinstance(data, dict) else []\n"
         '    return f"Summary of {len(keys)} fields"\n'
     )
 
     # A UDF that returns None (should error)
-    (tools / "bad_udf.py").write_text(
-        'def bad_udf(context_data, *args):\n'
-        '    return None\n'
-    )
+    (tools / "bad_udf.py").write_text("def bad_udf(context_data, *args):\n    return None\n")
 
     yield tools
 
