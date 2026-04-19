@@ -130,15 +130,12 @@ class TestParallelBranchLineageSources:
 
         deep_merge_record(existing, new_record)
 
-        assert "lineage_sources" in existing
         assert existing["lineage_sources"] == [
             "generate_concept_explanation_def",
             "generate_feynman_explanation_abc",
         ]
-        # Lineage also contains both branch node_ids
         assert "generate_concept_explanation_def" in existing["lineage"]
         assert "generate_feynman_explanation_abc" in existing["lineage"]
-        # Content merged from both branches
         assert existing["content"]["concept_explanation"] == "..."
         assert existing["content"]["feynman_explanation"] == "..."
 
