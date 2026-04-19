@@ -158,13 +158,9 @@ class PromptPreparationService:
             mode=mode,
         )
 
-        if tools_path:
-            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
-                formatted_prompt,
-                tools_path,
-                json.dumps(llm_context, ensure_ascii=False),
-                agent_config=agent_config,
-            )
+        formatted_prompt = PromptPreparationService._resolve_and_inject_dispatch(
+            formatted_prompt, llm_context, agent_config, tools_path
+        )
 
         metadata = {
             "mode": mode,
@@ -266,14 +262,9 @@ class PromptPreparationService:
             field_context_metadata=field_context_metadata,
         )
 
-        if request.tools_path:
-            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
-                formatted_prompt,
-                request.tools_path,
-                json.dumps(llm_context, ensure_ascii=False),
-                agent_config=request.agent_config,
-            )
-            logger.debug("Injected function outputs for dispatch_task()")
+        formatted_prompt = PromptPreparationService._resolve_and_inject_dispatch(
+            formatted_prompt, llm_context, request.agent_config, request.tools_path
+        )
 
         metadata: dict[str, Any] = {
             "mode": request.mode,
@@ -483,6 +474,30 @@ class PromptPreparationService:
                 },
                 cause=e,
             ) from e
+
+    @staticmethod
+    def _resolve_and_inject_dispatch(
+        formatted_prompt: str,
+        llm_context: dict[str, Any],
+        agent_config: dict[str, Any],
+        tools_path: str | None = None,
+    ) -> str:
+        """Resolve tools_path from agent_config if needed and inject dispatch_task() results."""
+        if not tools_path:
+            from agent_actions.utils.tools_resolver import resolve_tools_path
+
+            tools_path = resolve_tools_path(agent_config)
+
+        if tools_path:
+            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
+                formatted_prompt,
+                tools_path,
+                json.dumps(llm_context, ensure_ascii=False),
+                agent_config=agent_config,
+            )
+            logger.debug("Injected function outputs for dispatch_task()")
+
+        return formatted_prompt
 
     @staticmethod
     def _build_llm_context(
