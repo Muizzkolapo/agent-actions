@@ -118,4 +118,5 @@ def compile_unified_schema(
                 "operation": "compile_unified_schema",
             },
         )
-    return ensure_json_safe(compiled)
+    sanitised: dict[str, Any] | list[dict[str, Any]] = ensure_json_safe(compiled)
+    return sanitised
