@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from rich.console import Console
 
-from agent_actions.config.types import ActionConfigDict
+from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import get_error_detail
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
@@ -950,7 +950,11 @@ class ActionExecutor:
                 params.action_idx,
             )
             duration = (datetime.now() - params.start_time).total_seconds()
-            batch_status = self._check_batch_submission(params.action_name, params.action_idx)
+            batch_status = self._check_batch_submission(
+                params.action_name,
+                params.action_idx,
+                configured_run_mode=params.action_config.get("run_mode"),
+            )
             return self._handle_run_success(params, output_folder, duration, batch_status)
 
         except Exception as e:
@@ -974,7 +978,11 @@ class ActionExecutor:
                 params.action_idx,
             )
             duration = (datetime.now() - params.start_time).total_seconds()
-            batch_status = self._check_batch_submission(params.action_name, params.action_idx)
+            batch_status = self._check_batch_submission(
+                params.action_name,
+                params.action_idx,
+                configured_run_mode=params.action_config.get("run_mode"),
+            )
             return self._handle_run_success(params, output_folder, duration, batch_status)
 
         except Exception as e:
@@ -997,11 +1005,18 @@ class ActionExecutor:
 
         return None
 
-    def _check_batch_submission(self, action_name: str, action_idx: int) -> str | None:
+    def _check_batch_submission(
+        self,
+        action_name: str,
+        action_idx: int,
+        configured_run_mode: RunMode | None = None,
+    ) -> str | None:
         """Check if batch jobs were submitted."""
         workflow_name = self.deps.action_runner.workflow_name
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         return cast(
             str | None,
-            self.deps.batch_manager.check_batch_submission(action_name, action_idx, agent_io_path),
+            self.deps.batch_manager.check_batch_submission(
+                action_name, action_idx, agent_io_path, configured_run_mode=configured_run_mode
+            ),
         )
