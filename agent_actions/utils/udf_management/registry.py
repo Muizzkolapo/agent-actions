@@ -13,36 +13,14 @@ from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
 
 @dataclass
 class FileUDFResult:
-    """Result type for FILE-level UDFs with explicit source mapping.
+    """Result type for FILE-level UDFs.
 
-    ``source_mapping`` maps output index to input index(es), enabling
-    proper lineage tracking for filter, dedup, and merge operations.
+    Tools return business data only.  The framework handles all metadata
+    propagation (``source_guid``, lineage, ``node_id``) automatically —
+    tools never need to think about it.
     """
 
     outputs: list[dict]
-    source_mapping: dict[int, int | list[int]] | None = None
-    input_count: int | None = None
-
-    def __post_init__(self):
-        """Validate source_mapping bounds."""
-        if self.source_mapping is None:
-            return
-
-        for output_idx, source_idx in self.source_mapping.items():
-            if output_idx < 0 or output_idx >= len(self.outputs):
-                raise ValueError(
-                    f"source_mapping key {output_idx} out of bounds "
-                    f"for outputs (length {len(self.outputs)})"
-                )
-
-            if self.input_count is not None:
-                indices = source_idx if isinstance(source_idx, list) else [source_idx]
-                for idx in indices:
-                    if idx < 0 or idx >= self.input_count:
-                        raise ValueError(
-                            f"source_mapping value {idx} out of bounds "
-                            f"for inputs (count {self.input_count})"
-                        )
 
 
 # Thread safety

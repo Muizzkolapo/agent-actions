@@ -2,6 +2,24 @@
 
 Complete reference for agent-actions workflow configuration.
 
+## Table of Contents
+
+- [Configuration Hierarchy](#configuration-hierarchy)
+- [Project Configuration](#project-configuration)
+- [Workflow Configuration](#workflow-configuration)
+- [Action Fields Reference](#action-fields-reference)
+- [LLM Action Example](#llm-action-example)
+- [Tool Action Example](#tool-action-example)
+- [Versions Configuration](#versions-configuration)
+- [Dependency Patterns](#dependency-patterns)
+- [Cross-Workflow Dependencies](#cross-workflow-dependencies)
+- [Guards](#guards)
+- [Supported Vendors](#supported-vendors)
+- [Limiting Records and Files](#limiting-records-and-files-test-runs)
+- [Run Modes](#run-modes)
+- [Environment Variables](#environment-variables)
+- [Schema Types](#schema-types)
+
 ## Configuration Hierarchy
 
 ```
@@ -213,23 +231,48 @@ Execute actions in parallel or sequential versions:
 
 ## Cross-Workflow Dependencies
 
+Chain workflows together using the `upstream` field at the workflow level. Upstream actions are injected into the downstream workflow's namespace — use them in `dependencies` and `context_scope` with the same syntax as local actions.
+
 ```yaml
+# agent_config/enrich.yml
+name: enrich
+description: "Enrich extracted data"
+upstream:
+  - workflow: ingest
+    actions: [extract, classify]
+
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o
+
 actions:
-  - name: process_upstream_data
-    kind: tool
-    impl: process_data
-    dependencies:
-      - workflow: upstream_workflow_name
-        action: specific_action    # Optional
+  - name: enrich_text
+    intent: "Enrich with additional context"
+    dependencies: [extract]          # References ingest's extract action
+    context_scope:
+      observe:
+        - extract.*                  # All fields from upstream extract
+        - classify.category          # Specific field from upstream classify
 ```
 
-| Syntax | Description |
-|--------|-------------|
-| `action_name` | Single input source |
-| `[{workflow: name}]` | Cross-workflow (all outputs) |
-| `[{workflow: name, action: act}]` | Specific action from another workflow |
+| Field | Type | Description |
+|-------|------|-------------|
+| `upstream` | list | Workflow-level list of upstream references |
+| `upstream[].workflow` | string | Name of upstream workflow |
+| `upstream[].actions` | list[string] | Actions to import (at least 1 required) |
 
-**Note:** Context dependencies (actions referenced in `context_scope` but not in `dependencies`) are auto-inferred via lineage matching.
+**Rules:**
+- Action names cannot collide between local and upstream actions
+- Same action cannot be imported from multiple upstream workflows
+- Without `--upstream`/`--downstream` flags, upstream outputs must already exist
+
+**CLI flags for chaining:**
+
+```bash
+agac run -a ingest --downstream     # Run ingest, then all dependents
+agac run -a analyze --upstream      # Run all dependencies, then analyze
+agac run -a enrich --upstream --downstream  # Run full lineage
+```
 
 ## Guards
 

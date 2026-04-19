@@ -151,9 +151,10 @@ def build_field_context_with_history(
         # BATCH MODE - Use auto-inferred context dependencies
         workflow_actions = list(agent_indices.keys())
 
-        # Infer input sources vs context sources
+        # Infer input sources vs context sources. Validation is skipped
+        # because the static validator already caught invalid references.
         input_sources, context_sources = infer_dependencies(
-            agent_config, workflow_actions, agent_name
+            agent_config, workflow_actions, agent_name, validate=False
         )
 
         logger.debug(

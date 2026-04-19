@@ -129,55 +129,17 @@ actions:
 The minimum allowed value is 5 seconds (useful for testing). For real reviews, use at least 60 seconds — reviewers need time to read instructions and inspect records.
 :::
 
-### Granularity Modes
+### Granularity
 
-HITL actions support two granularity modes:
+HITL actions always use **FILE granularity** — all records are presented in a single review session. Within that session, the reviewer can navigate between records, approve or reject each individually, and submit once. (File granularity here means one UI session for the entire batch, not one session per record.)
 
-#### Record Mode (Default)
-
-Each record is reviewed individually and gets its own decision:
-
-```yaml
-- name: review_each_record
-  kind: hitl
-  granularity: record  # Optional: this is the default
-  dependencies: [extract_data]
-  hitl:
-    instructions: "Approve or reject each record"
-  context_scope:
-    observe:
-      - extract_data.*
-```
-
-**Output**: Each input record gets `hitl_status`, `user_comment`, and `timestamp` fields added.
-
-```json
-[
-  {
-    "id": 1,
-    "name": "Alice",
-    "hitl_status": "approved",
-    "user_comment": "Looks good",
-    "timestamp": "2026-02-12T10:00:00Z"
-  },
-  {
-    "id": 2,
-    "name": "Bob",
-    "hitl_status": "rejected",
-    "user_comment": "Invalid email",
-    "timestamp": "2026-02-12T10:01:00Z"
-  }
-]
-```
-
-#### FILE Mode
-
-Review the entire dataset once and apply a single decision to all records:
+:::warning Record granularity not supported
+Setting `granularity: record` on a HITL action raises a `ConfigurationError`. Record granularity would launch a separate approval UI per record, which is broken UX. If you need per-record filtering before HITL, use a guard to pre-filter records.
+:::
 
 ```yaml
-- name: review_entire_file
+- name: review_data
   kind: hitl
-  granularity: file  # Review all records, make one decision
   dependencies: [extract_data]
   hitl:
     instructions: "Review the full dataset and approve or reject"
@@ -186,30 +148,26 @@ Review the entire dataset once and apply a single decision to all records:
       - extract_data.*
 ```
 
-**Output**: Each record gets the **file-level decision**, but you can still provide per-record feedback in the UI if needed. The `hitl_status` applies to all records, but individual records can have their own `user_comment`.
+**Output**: Each record gets its own `hitl_status`, `user_comment`, and `timestamp` based on per-record review decisions in the UI.
 
 ```json
 [
   {
     "id": 1,
     "name": "Alice",
-    "hitl_status": "approved",  // File-level decision
+    "hitl_status": "approved",
     "user_comment": "",
     "timestamp": "2026-02-12T10:00:00Z"
   },
   {
     "id": 2,
     "name": "Bob",
-    "hitl_status": "approved",  // Same decision for all
-    "user_comment": "Check this one later",  // But can have per-record notes
+    "hitl_status": "rejected",
+    "user_comment": "Invalid email",
     "timestamp": "2026-02-12T10:00:00Z"
   }
 ]
 ```
-
-:::tip When to use FILE mode
-Use FILE mode when you need to approve/reject an entire batch (e.g., "this dataset is ready for processing" vs "this dataset needs work"). The UI still shows records one-by-one for inspection, but the final decision applies to all.
-:::
 
 ## Output Schema
 
@@ -320,7 +278,6 @@ actions:
 
   - name: review_candidates
     kind: hitl
-    granularity: record  # Review each candidate individually
     dependencies: [extract_candidates]
     hitl:
       instructions: "Approve valid candidates, reject false positives"
@@ -332,7 +289,9 @@ actions:
   - name: process_approved_only
     dependencies: [review_candidates]
     intent: "Process only approved candidates"
-    # Downstream can filter: {{ review_candidates | filter(hitl_status='approved') }}
+    guard:
+      condition: "hitl_status == 'approved'"
+      on_false: filter
 ```
 
 ### Pattern 3: Checkpoint Review
@@ -360,6 +319,31 @@ actions:
       condition: "hitl_status == 'approved'"
       on_false: filter  # Exclude items if stage 1 was rejected
 ```
+
+### Pattern 4: Pre-filtered HITL Review
+
+Use a guard on the HITL action itself to show only flagged records to the reviewer:
+
+```yaml
+actions:
+  - name: auto_review_quality
+    intent: "LLM scores each record for quality"
+    prompt: "Score this Q&A for quality (1-10)..."
+
+  - name: review_flagged_items
+    kind: hitl
+    dependencies: [auto_review_quality]
+    guard:
+      condition: 'decision == "review"'
+      on_false: skip  # Auto-approved records skip HITL, preserve original content
+    hitl:
+      instructions: "Review items flagged by auto-review"
+    context_scope:
+      observe:
+        - auto_review_quality.*
+```
+
+The guard runs per-record before the HITL UI launches. Only records where `decision == "review"` appear in the approval UI. See [Guards with File Granularity](../reference/execution/guards.md#guards-with-file-granularity) for how `on_false` modes behave.
 
 ## Debugging & Troubleshooting
 

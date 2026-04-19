@@ -104,12 +104,12 @@ Use FILE for: Aggregation, deduplication, clustering, cross-record analysis.
 `FileUDFResult` wraps FILE-mode output with optional metadata. The runtime
 unwraps it to `.outputs` before structuring records.
 
-**Lineage resolution:** When `source_mapping` is provided, the runtime uses it
-to resolve each output's parent record by array index into the input data.
-This is the recommended approach for FILE-mode tools that filter, dedup, or
-merge records — it correctly handles multiple input records sharing the same
-`source_guid` (e.g. after a flatten step). When `source_mapping` is omitted,
-the runtime falls back to matching by `source_guid`.
+**Important:** Lineage is tracked via `source_guid`, not `source_mapping`.
+The pipeline's FILE-mode handler preserves `source_guid` on each output item
+and `LineageEnricher` resolves ancestry from it. `source_mapping` is validated
+at construction time but is **not yet consumed** by the runtime for lineage
+resolution. Always copy `source_guid` from inputs to outputs for correct
+lineage.
 
 ```python
 from agent_actions import FileUDFResult

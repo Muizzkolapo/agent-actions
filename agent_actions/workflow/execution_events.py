@@ -50,8 +50,6 @@ class WorkflowEventLogger:
                 workflow_name=self.agent_name,
                 action_count=len(self.execution_order),
                 execution_mode=mode,
-                run_upstream=self.config.run_upstream,
-                run_downstream=self.config.run_downstream,
             )
         )
 

@@ -76,7 +76,48 @@ def apply_context_scope(
         prompt_context["seed"] = static_data
         logger.debug("[SEED_DATA] Added to prompt_context under 'seed' namespace")
 
-    # Process DROP: Remove from prompt_context (security)
+    # Process PASSTHROUGH first: extract from pre-drop prompt_context.
+    # Drop is then applied to passthrough_fields explicitly below,
+    # so the drop directive removes fields from both observe and output.
+    passthrough_refs = context_scope.get("passthrough", [])
+    for field_ref in passthrough_refs:
+        try:
+            ns_name, field_name = parse_field_reference(field_ref)
+
+            if field_name == "*":
+                action_fields = extract_action_fields(prompt_context, ns_name)
+                if action_fields:
+                    passthrough_fields.setdefault(ns_name, {}).update(action_fields)
+            else:
+                value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
+
+                if value is _MISSING:
+                    raise ConfigurationError(
+                        f"context_scope.passthrough field '{field_ref}' not found at runtime",
+                        context={
+                            "action": action_name,
+                            "field_ref": field_ref,
+                            "directive": "passthrough",
+                            "operation": "apply_context_scope",
+                            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
+                            f"Check the output schema of '{ns_name}'.",
+                        },
+                    )
+
+                passthrough_fields.setdefault(ns_name, {})[field_name] = value
+
+        except ValueError as e:
+            fire_event(
+                ContextFieldSkippedEvent(
+                    action_name=action_name,
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="passthrough",
+                )
+            )
+            continue
+
+    # Process DROP: Remove from prompt_context (observe) and passthrough_fields (output)
     drop_refs = context_scope.get("drop", [])
     for field_ref in drop_refs:
         try:
@@ -111,6 +152,8 @@ def apply_context_scope(
                         ns_name,
                     )
                 prompt_context[ns_name].clear()
+                if ns_name in passthrough_fields:
+                    del passthrough_fields[ns_name]
             else:
                 # Exact field: warn if absent
                 if field_name not in prompt_context[ns_name]:
@@ -123,6 +166,10 @@ def apply_context_scope(
                         ns_name,
                     )
                 prompt_context[ns_name].pop(field_name, None)
+                if ns_name in passthrough_fields:
+                    passthrough_fields[ns_name].pop(field_name, None)
+                    if not passthrough_fields[ns_name]:
+                        del passthrough_fields[ns_name]
 
         except ValueError as e:
             logger.warning(
@@ -181,45 +228,6 @@ def apply_context_scope(
                     field_ref=field_ref,
                     reason=str(e),
                     directive="observe",
-                )
-            )
-            continue
-
-    # Process PASSTHROUGH: Extract to passthrough_fields (namespaced like llm_context).
-    passthrough_refs = context_scope.get("passthrough", [])
-    for field_ref in passthrough_refs:
-        try:
-            ns_name, field_name = parse_field_reference(field_ref)
-
-            if field_name == "*":
-                action_fields = extract_action_fields(field_context, ns_name)
-                if action_fields:
-                    passthrough_fields.setdefault(ns_name, {}).update(action_fields)
-            else:
-                value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
-
-                if value is _MISSING:
-                    raise ConfigurationError(
-                        f"context_scope.passthrough field '{field_ref}' not found at runtime",
-                        context={
-                            "action": action_name,
-                            "field_ref": field_ref,
-                            "directive": "passthrough",
-                            "operation": "apply_context_scope",
-                            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
-                            f"Check the output schema of '{ns_name}'.",
-                        },
-                    )
-
-                passthrough_fields.setdefault(ns_name, {})[field_name] = value
-
-        except ValueError as e:
-            fire_event(
-                ContextFieldSkippedEvent(
-                    action_name=action_name,
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="passthrough",
                 )
             )
             continue

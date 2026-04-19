@@ -35,7 +35,7 @@ class ReferenceValidator:
 
         current_idx = agent_indices.get(current_agent_name, 999)
 
-        declared_deps = set(agent_config.get("dependencies", []))
+        declared_deps = {d for d in agent_config.get("dependencies", []) if isinstance(d, str)}
 
         # Also include namespaces from context_scope (auto-inferred dependencies)
         context_scope = agent_config.get("context_scope", {})

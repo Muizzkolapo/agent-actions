@@ -38,7 +38,6 @@ class ConfigManager:
         self.agent_name: str | None = None
         self.agent_configs: dict[str, AgentConfig] = {}
         self.execution_order: list[str] = []
-        self.child_pipeline: str | None = None
         self.tool_path: list[str] | None = None
         self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
@@ -165,34 +164,6 @@ class ConfigManager:
                 },
             )
 
-    def check_child_pipeline(self) -> None:
-        if self.user_config is None:
-            raise RuntimeError(
-                "user_config is None: load_configs() must be called before check_child_pipeline()"
-            )
-        if "name" in self.user_config and "actions" in self.user_config:
-            actions = self.user_config.get("actions", [])
-            for action in actions:
-                if isinstance(action, dict) and "child" in action:
-                    if not action["child"]:
-                        continue
-                    self.child_pipeline = action["child"][0]
-                    return
-        else:
-            if self.agent_name is None:
-                raise RuntimeError(
-                    "agent_name is None: validate_agent_name() must be called "
-                    "before check_child_pipeline()"
-                )
-            agent_list = self.user_config.get(self.agent_name, [])
-            for item in agent_list:
-                if isinstance(item, dict) and "child" in item:
-                    if not item["child"]:
-                        continue
-                    self.child_pipeline = item["child"][0]
-                    return
-        self.child_pipeline = None
-
     def get_user_agents(self) -> list[dict[str, Any]]:
         from agent_actions.output.response.expander import ActionExpander
 
@@ -301,11 +272,15 @@ class ConfigManager:
             merged_agent_config = AgentConfig.model_validate(merged_dict)
             self.agent_configs[agent_type] = merged_agent_config
 
-    def determine_execution_order(self) -> None:
+    def determine_execution_order(self, virtual_action_names: set[str] | None = None) -> None:
         """Determine execution order of agents based on their dependencies.
 
         Uses auto-inferred dependencies from context_scope to build the execution graph.
         Only considers is_operational agents.
+
+        Args:
+            virtual_action_names: Action names from upstream workflows that are valid
+                dependency targets but should not appear in the execution order.
         """
         from agent_actions.input.context.normalizer import normalize_all_agent_configs
         from agent_actions.output.response.config_schema import AgentConfig
@@ -323,13 +298,14 @@ class ConfigManager:
             self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
 
         workflow_actions = list(self.agent_configs.keys())
+        all_known_actions = workflow_actions + list(virtual_action_names or set())
 
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
                 try:
                     input_sources, context_sources = infer_dependencies(
-                        config.model_dump(), workflow_actions, agent_type
+                        config.model_dump(), all_known_actions, agent_type
                     )
                     all_deps: list[Any] = input_sources + context_sources
                 except Exception as e:

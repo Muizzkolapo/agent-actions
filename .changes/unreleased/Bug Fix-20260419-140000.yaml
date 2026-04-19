@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "dispatch_task() in prompt templates now resolves UDF functions instead of passing the literal string to the LLM"
+time: 2026-04-19T14:00:00.000000Z

@@ -1003,3 +1003,295 @@ class TestPrimaryDependencyValidation:
         assert not result.is_valid
         errors = [e for e in result.errors if "dep_B" in e.message and "not reachable" in e.message]
         assert len(errors) >= 1
+
+
+class TestPreflightFieldValidation:
+    """Tests for field-level validation: schemaless warnings, cross-action suggestions,
+    and wildcard passthrough expansion."""
+
+    def test_schemaless_tool_explicit_ref_warns(self):
+        """Schemaless tool with explicit field ref produces warning, not error."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "my_tool",
+                    "kind": "tool",
+                    # No schema/output_schema/schema_name → schemaless
+                },
+                {
+                    "name": "consumer",
+                    "depends_on": ["my_tool"],
+                    "context_scope": {
+                        "observe": ["my_tool.result_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        # Should NOT produce errors — schemaless can't prove field is wrong
+        context_errors = [
+            e for e in result.errors if "context_scope" in e.message and "result_field" in e.message
+        ]
+        assert len(context_errors) == 0
+
+        # Should produce a warning about unverifiable field
+        schema_warnings = [w for w in result.warnings if "no output schema" in w.message]
+        assert len(schema_warnings) >= 1
+        assert "result_field" in schema_warnings[0].message
+        assert "my_tool" in schema_warnings[0].message
+
+    def test_schemaless_tool_wildcard_no_warning(self):
+        """Schemaless tool with wildcard observe produces no warning."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "my_tool",
+                    "kind": "tool",
+                },
+                {
+                    "name": "consumer",
+                    "depends_on": ["my_tool"],
+                    "context_scope": {
+                        "observe": ["my_tool.*"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        # Wildcards on schemaless actions are handled by _expand_wildcards (dropped).
+        # No warning about "no output schema" for wildcards.
+        schema_warnings = [w for w in result.warnings if "no output schema" in w.message]
+        assert len(schema_warnings) == 0
+
+    def test_cross_action_suggestion_in_error(self):
+        """When field exists in another action, error hint suggests it."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "action_a",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"question_text": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "action_b",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"answer_text": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "consumer",
+                    "depends_on": ["action_a", "action_b"],
+                    "context_scope": {
+                        "observe": [
+                            "action_b.question_text",  # Wrong action!
+                        ],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        field_errors = [
+            e
+            for e in result.errors
+            if "non-existent field" in e.message and "question_text" in e.message
+        ]
+        assert len(field_errors) >= 1
+        assert "Did you mean" in field_errors[0].hint
+        assert "action_a.question_text" in field_errors[0].hint
+
+    def test_cross_action_no_suggestion_when_field_nowhere(self):
+        """When field doesn't exist in any action, hint shows available fields."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"facts": {"type": "array"}},
+                    },
+                },
+                {
+                    "name": "consumer",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "observe": ["extractor.totally_bogus_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        field_errors = [e for e in result.errors if "totally_bogus_field" in e.message]
+        assert len(field_errors) >= 1
+        assert "Available fields" in field_errors[0].hint
+        assert "Did you mean" not in field_errors[0].hint
+
+    def test_wildcard_expansion_includes_passthrough(self):
+        """Wildcard expansion includes passthrough fields from intermediate action."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "upstream",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"field_x": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "middle",
+                    "depends_on": ["upstream"],
+                    "schema": {
+                        "type": "object",
+                        "properties": {"own_field": {"type": "string"}},
+                    },
+                    "context_scope": {
+                        "passthrough": ["upstream.field_x"],
+                        "observe": ["upstream.*"],
+                    },
+                },
+                {
+                    "name": "consumer",
+                    "depends_on": ["middle"],
+                    "context_scope": {
+                        "observe": ["middle.*"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        # middle.* should expand to include both own_field and field_x (passthrough).
+        # No errors about missing fields.
+        field_errors = [e for e in result.errors if "non-existent field" in e.message]
+        assert len(field_errors) == 0
+
+    def test_known_schema_field_error_unchanged(self):
+        """Regression guard: known schema with nonexistent field still produces error."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "facts": {"type": "array"},
+                            "summary": {"type": "string"},
+                        },
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "observe": ["extractor.nonexistent_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        context_errors = [e for e in result.errors if "non-existent field" in e.message]
+        assert len(context_errors) >= 1
+        assert "nonexistent_field" in context_errors[0].message
+
+    def test_valid_config_no_false_positive(self):
+        """Valid workflow with observe and passthrough produces no errors or warnings."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "facts": {"type": "array"},
+                            "summary": {"type": "string"},
+                        },
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "schema": {
+                        "type": "object",
+                        "properties": {"result": {"type": "string"}},
+                    },
+                    "context_scope": {
+                        "observe": ["extractor.facts"],
+                        "passthrough": ["extractor.summary"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        # No field-related errors or warnings
+        field_errors = [
+            e
+            for e in result.errors
+            if "non-existent field" in e.message or "Cannot verify" in e.message
+        ]
+        assert len(field_errors) == 0
+
+        schema_warnings = [
+            w
+            for w in result.warnings
+            if "no output schema" in w.message or "Cannot verify" in w.message
+        ]
+        assert len(schema_warnings) == 0
+
+    def test_dynamic_schema_explicit_ref_warns(self):
+        """Dynamic schema (non-load-error) with explicit field ref produces warning."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "my_tool",
+                    "kind": "tool",
+                    # Non-str/dict/list schema triggers is_dynamic=True without load_error
+                    "schema": 42,
+                },
+                {
+                    "name": "consumer",
+                    "depends_on": ["my_tool"],
+                    "context_scope": {
+                        "observe": ["my_tool.some_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        # Dynamic schema may produce either a load_error (error) or a
+        # dynamic-without-load-error (warning). Either way, it should NOT
+        # produce a "non-existent field" error (false positive).
+        false_positive_errors = [
+            e
+            for e in result.errors
+            if "non-existent field" in e.message and "some_field" in e.message
+        ]
+        assert len(false_positive_errors) == 0
+
+        # Should have either a schema-load error or a "dynamic" warning
+        schema_issues = [
+            issue
+            for issue in result.errors + result.warnings
+            if "my_tool" in issue.message
+            and ("Cannot validate" in issue.message or "Cannot verify" in issue.message)
+        ]
+        assert len(schema_issues) >= 1

@@ -17,7 +17,6 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
 )
-from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.merge import merge_records_by_key
 
 if TYPE_CHECKING:
@@ -268,20 +267,6 @@ class ActionOutputManager:
                 )
         return outputs, list(target_files)
 
-    def _resolve_upstream_from_manifest(self) -> list[str] | None:
-        """Resolve upstream directories from manifest file, or None."""
-        agent_io_dir = self.agent_folder
-        manifest = ArtifactLinker.read_manifest(agent_io_dir)
-        if manifest is None:
-            return None
-
-        upstream_path = Path(manifest["upstream_path"])
-        if not upstream_path.exists():
-            logger.warning("Manifest upstream path doesn't exist: %s", upstream_path)
-            return None
-
-        return [str(upstream_path)]
-
     def get_upstream_directories(self, idx: int) -> list[str]:
         """Return upstream data directories for an action, resolving dependencies."""
         current_agent = self.execution_order[idx]
@@ -290,9 +275,6 @@ class ActionOutputManager:
         previous_agent_type = self.execution_order[idx - 1] if idx > 0 else None
 
         if not dependencies and not previous_agent_type:
-            manifest_dirs = self._resolve_upstream_from_manifest()
-            if manifest_dirs:
-                return manifest_dirs
             from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 
             result = resolve_start_node_data_source(

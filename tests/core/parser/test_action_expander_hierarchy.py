@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.expander import ActionExpander
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
 
@@ -139,6 +140,13 @@ class TestOutputSchemaContract:
 
         assert result.get("output_schema") == HITL_OUTPUT_SCHEMA
         assert result.get("json_output_schema") == HITL_OUTPUT_JSON_SCHEMA
+
+    def test_hitl_record_granularity_raises(self):
+        """HITL action with granularity: record raises ConfigurationError at expansion."""
+        action = self._make_hitl_action()
+        action["granularity"] = "record"
+        with pytest.raises(ConfigurationError, match="HITL actions require FILE granularity"):
+            self._expand_single(action)
 
     # -- Tool tests --
 

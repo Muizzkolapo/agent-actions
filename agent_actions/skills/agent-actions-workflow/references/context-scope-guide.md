@@ -120,12 +120,66 @@ When you need seed data inside a **UDF tool action**, you must explicitly list i
       - seed.exam_syllabus    # Required for UDF tools only
 ```
 
-> **Common mistake:** Using `seed_data.` as the reference prefix. The config key is `seed_data:` but the reference prefix is `seed.` -- writing `{{ seed_data.exam_syllabus }}` in a prompt will not resolve.
-
 | Syntax | Description |
 |--------|-------------|
 | `$file:path.json` | Load JSON from seed_data directory |
 | `$file:path.yaml` | Load YAML from seed_data directory |
+
+## output_field (json_mode: false)
+
+When `json_mode: false`, the LLM returns raw text instead of structured JSON. The framework wraps this text using `output_field`:
+
+```yaml
+- name: assess_severity
+  json_mode: false
+  output_field: severity               # Default is "raw_response"
+  context_scope:
+    observe: [source.*]
+```
+
+The raw text response gets wrapped as:
+```json
+[{"severity": "The system shows critical degradation in..."}]
+```
+
+### Downstream access
+
+Downstream actions access `output_field` values through the normal namespace:
+
+```yaml
+- name: route_ticket
+  dependencies: [assess_severity]
+  context_scope:
+    observe: [assess_severity.*]       # Sees assess_severity.severity
+```
+
+In prompts: `{{ assess_severity.severity }}`
+In UDFs: `content.get("assess_severity", {}).get("severity", "")`
+
+### Guards with output_field
+
+Guard conditions see flattened field names — the `output_field` value is promoted to top-level:
+
+```yaml
+- name: escalate
+  dependencies: [assess_severity]
+  guard:
+    condition: 'severity != "low"'     # Direct field name, not assess_severity.severity
+  context_scope:
+    observe: [assess_severity.*]
+```
+
+### Constraints
+
+- `json_mode: false` and `schema` together trigger a warning — the schema is ignored at runtime since there's no JSON to validate
+- `output_field` only works with `json_mode: false`
+- Default `output_field` is `"raw_response"` — access as `content.get("action_name", {}).get("raw_response", "")`
+
+## Guard Field Visibility
+
+Guard conditions evaluate against flattened field names from observed data (see Guards section in SKILL.md for examples).
+
+**Collision risk:** When observing from multiple upstream actions with overlapping field names, the last-loaded namespace wins. Avoid this by observing specific fields instead of wildcards when field names might collide.
 
 ## Resolution Order
 

@@ -153,7 +153,7 @@ class TestApplyObserveForFileMode:
     """Integration tests for the main file-mode observe filter."""
 
     def test_cross_namespace_resolution(self):
-        """observe: [upstream.question, source.url] resolves per-record source."""
+        """observe: [upstream.question, source.url] enriches records with cross-ns data."""
         data = [
             {"source_guid": "sg-1", "content": {"question": "What is X?", "answer": "Y"}},
             {"source_guid": "sg-2", "content": {"question": "What is Z?", "answer": "W"}},
@@ -173,8 +173,13 @@ class TestApplyObserveForFileMode:
             source_data=source_data,
         )
         assert len(result) == 2
-        assert result[0] == {"question": "What is X?", "url": "https://one.com"}
-        assert result[1] == {"question": "What is Z?", "url": "https://two.com"}
+        # Full records returned; cross-namespace url injected into content
+        assert result[0]["content"]["question"] == "What is X?"
+        assert result[0]["content"]["url"] == "https://one.com"
+        assert result[0]["source_guid"] == "sg-1"
+        assert result[1]["content"]["question"] == "What is Z?"
+        assert result[1]["content"]["url"] == "https://two.com"
+        assert result[1]["source_guid"] == "sg-2"
 
     def test_multi_dep_collision_distinct_values(self):
         """dep_a.title and dep_b.title from different namespaces get distinct values."""
@@ -203,10 +208,11 @@ class TestApplyObserveForFileMode:
             )
 
         assert len(result) == 1
-        # "title" collides → qualified keys with DIFFERENT values
-        assert result[0]["dep_a.title"] == "Title from A"
-        assert result[0]["dep_b.title"] == "Title from B"
-        assert result[0]["body"] == "Body A"
+        # "title" collides: dep_a.title stays as original "title" in content (input source),
+        # dep_b.title injected with qualified key from historical lookup
+        assert result[0]["content"]["title"] == "Title from A"
+        assert result[0]["content"]["dep_b.title"] == "Title from B"
+        assert result[0]["content"]["body"] == "Body A"
 
     def test_context_source_loading(self):
         """Observe ref targeting an action NOT in dependencies loads via historical."""
@@ -236,22 +242,27 @@ class TestApplyObserveForFileMode:
                 file_path="/tmp/test.json",
             )
 
-        assert result[0] == {"question": "Q?", "category": "science"}
+        assert result[0]["content"]["question"] == "Q?"
+        assert result[0]["content"]["category"] == "science"
+        assert result[0]["source_guid"] == "sg-1"
 
-    def test_backward_compat_single_upstream(self):
-        """Simple single-upstream observe produces identical output to old method."""
+    def test_single_upstream_preserves_full_records(self):
+        """Single-upstream observe returns full records with all content preserved."""
         data = [
-            {"content": {"question": "Q1", "answer": "A1", "extra": "drop"}},
-            {"content": {"question": "Q2", "answer": "A2", "extra": "drop"}},
+            {"content": {"question": "Q1", "answer": "A1", "extra": "kept"}},
+            {"content": {"question": "Q2", "answer": "A2", "extra": "kept"}},
         ]
         config = {
             "context_scope": {"observe": ["upstream.question", "upstream.answer"]},
         }
         result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
         assert len(result) == 2
-        assert list(result[0].keys()) == ["question", "answer"]
-        assert result[0] == {"question": "Q1", "answer": "A1"}
-        assert result[1] == {"question": "Q2", "answer": "A2"}
+        # NiFi enrichment: full records returned, all content fields preserved
+        assert result[0]["content"]["question"] == "Q1"
+        assert result[0]["content"]["answer"] == "A1"
+        assert result[0]["content"]["extra"] == "kept"
+        assert result[1]["content"]["question"] == "Q2"
+        assert result[1]["content"]["answer"] == "A2"
 
     def test_graceful_degradation_unresolvable_namespace(self):
         """Unresolvable namespace warns and skips — doesn't crash."""
@@ -275,8 +286,9 @@ class TestApplyObserveForFileMode:
             agent_indices={"upstream": 0, "review": 1},
             file_path="/tmp/test.json",
         )
-        # Only upstream.question should be present
-        assert result[0] == {"question": "Q?"}
+        # Full record returned; upstream.question present in content
+        assert result[0]["content"]["question"] == "Q?"
+        assert result[0]["source_guid"] == "sg-1"
 
     def test_unresolved_non_input_ns_does_not_leak_record_field(self):
         """Non-input namespace field must NOT fall back to a same-named record field.
@@ -299,7 +311,8 @@ class TestApplyObserveForFileMode:
             },
         }
         # dep_b has no historical data (load returns None) — its field should
-        # be omitted, NOT filled from the primary record's 'score'.
+        # not be injected from cross-namespace. The record's own "score" field
+        # is still in content (NiFi enrichment preserves all original fields).
         with patch(
             "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value=None,
@@ -311,10 +324,12 @@ class TestApplyObserveForFileMode:
                 agent_indices={"dep_a": 0, "dep_b": 1, "merge": 2},
                 file_path="/tmp/test.json",
             )
-        # dep_a.question resolved from record; dep_b.score must be absent.
-        assert result[0] == {"question": "Q?"}
-        assert "score" not in result[0]
-        assert "dep_b.score" not in result[0]
+        # dep_a.question resolved from record content
+        assert result[0]["content"]["question"] == "Q?"
+        # dep_b.score was not injected (no historical data)
+        assert "dep_b.score" not in result[0]["content"]
+        # The record's own "score" field is preserved (NiFi: no stripping)
+        assert result[0]["content"]["score"] == 99
 
     def test_no_deps_with_agent_indices_skips_historical_load(self):
         """Without explicit deps, historical load must NOT shadow live record content.
@@ -350,8 +365,10 @@ class TestApplyObserveForFileMode:
             )
         # Historical load should NOT have been attempted.
         mock_load.assert_not_called()
-        # Live record values must be used.
-        assert result[0] == {"question": "LIVE Q", "answer": "LIVE A"}
+        # Live record values must be used (full record returned).
+        assert result[0]["content"]["question"] == "LIVE Q"
+        assert result[0]["content"]["answer"] == "LIVE A"
+        assert result[0]["source_guid"] == "sg-1"
 
     def test_source_ref_resolves_without_explicit_deps(self):
         """source.url must load from source_data even when no dependencies are declared.
@@ -372,18 +389,20 @@ class TestApplyObserveForFileMode:
             agent_name="review",
             source_data=source_data,
         )
-        assert result[0] == {"question": "Q?", "url": "https://example.com"}
+        assert result[0]["content"]["question"] == "Q?"
+        assert result[0]["content"]["url"] == "https://example.com"
 
     def test_no_observe_returns_data_as_is(self):
         data = [{"content": {"a": 1}}]
         result = apply_observe_for_file_mode(data=data, agent_config={}, agent_name="test")
         assert result is data
 
-    def test_wildcard_returns_data_as_is(self):
+    def test_wildcard_returns_full_record_with_content(self):
+        """Wildcard observe returns full records with all content preserved."""
         data = [{"content": {"a": 1, "b": 2}}]
         config = {"context_scope": {"observe": ["upstream.*"]}}
         result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-        assert result is data
+        assert result[0]["content"] == {"a": 1, "b": 2}
 
     def test_non_dict_records_do_not_crash_heuristic(self):
         """Primitive entries (strings, ints) must not crash the content-key heuristic.
@@ -399,7 +418,9 @@ class TestApplyObserveForFileMode:
         assert result == ["just a string", "another string"]
 
     def test_hitl_merge_back_unaffected(self):
-        """Filtered output is display-only; original_data is separate for merge."""
+        """No cross-namespace refs → fast path returns data as-is.
+        Original is unmodified because nothing was injected.
+        """
         original = [
             {"source_guid": "sg-1", "content": {"question": "Q?", "secret": "hidden"}},
         ]
@@ -407,9 +428,10 @@ class TestApplyObserveForFileMode:
         filtered = apply_observe_for_file_mode(
             data=original, agent_config=config, agent_name="test"
         )
-        # Filtered should not contain secret
-        assert "secret" not in filtered[0]
-        # Original should be unmodified
+        assert filtered[0]["content"]["question"] == "Q?"
+        assert filtered[0]["content"]["secret"] == "hidden"
+        # No cross-namespace refs → fast path returns data directly
+        assert filtered is original
         assert original[0]["content"]["secret"] == "hidden"
 
     def test_source_data_flat_format(self):
@@ -426,7 +448,8 @@ class TestApplyObserveForFileMode:
             agent_name="test",
             source_data=source_data,
         )
-        assert result[0] == {"question": "Q?", "url": "https://example.com"}
+        assert result[0]["content"]["question"] == "Q?"
+        assert result[0]["content"]["url"] == "https://example.com"
 
     def test_multi_source_guid_source_namespace(self):
         """Two records with different source_guid get different source.url values."""
@@ -448,8 +471,10 @@ class TestApplyObserveForFileMode:
             agent_name="review",
             source_data=source_data,
         )
-        assert result[0] == {"question": "Q1", "url": "https://a.com"}
-        assert result[1] == {"question": "Q2", "url": "https://b.com"}
+        assert result[0]["content"]["question"] == "Q1"
+        assert result[0]["content"]["url"] == "https://a.com"
+        assert result[1]["content"]["question"] == "Q2"
+        assert result[1]["content"]["url"] == "https://b.com"
 
     def test_multi_source_guid_context_dep(self):
         """Two records with different source_guid trigger separate historical loads."""
@@ -476,8 +501,10 @@ class TestApplyObserveForFileMode:
                 agent_indices={"upstream": 0, "classify": 1, "review": 2},
                 file_path="/tmp/test.json",
             )
-        assert result[0] == {"q": "Q1", "category": "cat-sg-A"}
-        assert result[1] == {"q": "Q2", "category": "cat-sg-B"}
+        assert result[0]["content"]["q"] == "Q1"
+        assert result[0]["content"]["category"] == "cat-sg-A"
+        assert result[1]["content"]["q"] == "Q2"
+        assert result[1]["content"]["category"] == "cat-sg-B"
         assert mock_load.call_count == 2
 
     def test_ancestry_cache_avoids_redundant_loads(self):
@@ -511,8 +538,8 @@ class TestApplyObserveForFileMode:
                 agent_indices={"upstream": 0, "classify": 1, "review": 2},
                 file_path="/tmp/test.json",
             )
-        assert result[0]["category"] == "science"
-        assert result[1]["category"] == "science"
+        assert result[0]["content"]["category"] == "science"
+        assert result[1]["content"]["category"] == "science"
         # Only one load — cache hit for the second record.
         mock_load.assert_called_once()
 
@@ -534,7 +561,9 @@ class TestApplyObserveForFileMode:
             agent_name="review",
             source_data=source_data,
         )
-        assert result[0] == {"q": "Q1", "url": "https://fallback.com"}
+        assert result[0]["content"]["q"] == "Q1"
+        assert result[0]["content"]["url"] == "https://fallback.com"
+        assert result[0]["source_guid"] == "sg-unknown"
 
     def test_fan_in_non_primary_dep_loaded_historically(self):
         """In a fan-in flow, non-primary deps must be loaded via historical lookup."""
@@ -563,8 +592,10 @@ class TestApplyObserveForFileMode:
                 agent_indices={"dep_a": 0, "dep_b": 1, "merge": 2},
                 file_path="/tmp/test.json",
             )
-        # dep_a.question comes from record content; dep_b.score from historical.
-        assert result[0] == {"question": "Q?", "score": 42}
+        # dep_a.question from record content; dep_b.score injected from historical.
+        assert result[0]["content"]["question"] == "Q?"
+        assert result[0]["content"]["score"] == 42
+        assert result[0]["source_guid"] == "sg-1"
         mock_load.assert_called_once()
 
     def test_ancestry_divergent_records_get_separate_lookups(self):
@@ -606,7 +637,9 @@ class TestApplyObserveForFileMode:
                 agent_indices={"upstream": 0, "classify": 1, "review": 2},
                 file_path="/tmp/test.json",
             )
-        assert result[0] == {"q": "Q1", "label": "label-A"}
-        assert result[1] == {"q": "Q2", "label": "label-B"}
+        assert result[0]["content"]["q"] == "Q1"
+        assert result[0]["content"]["label"] == "label-A"
+        assert result[1]["content"]["q"] == "Q2"
+        assert result[1]["content"]["label"] == "label-B"
         # Two separate loads — different ancestry despite same source_guid.
         assert call_count[0] == 2

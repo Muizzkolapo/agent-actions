@@ -19,7 +19,7 @@ from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import ProcessingContext
+from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
@@ -32,6 +32,7 @@ from agent_actions.workflow.pipeline_file_mode import (
     apply_observe_filter as _apply_observe_filter_impl,
 )
 from agent_actions.workflow.pipeline_file_mode import (
+    prefilter_by_guard,
     process_file_mode_hitl,
     process_file_mode_tool,
 )
@@ -450,39 +451,35 @@ class ProcessingPipeline:
         Select and apply the appropriate processing strategy based on
         configuration. Uses RecordProcessor for unified processing.
         """
-        # Initialize source_data with the input data as a fallback
+        # Initialize source_data with the input data.
+        # For cross-workflow records (source_relative_path is None), the input
+        # data IS the source — there's no staging data in this workflow for them.
         source_data = data
 
-        try:
-            from agent_actions.input.loaders.source_data import SourceDataLoader
+        if self.config.source_relative_path and self.config.storage_backend is not None:
+            try:
+                from agent_actions.input.loaders.source_data import SourceDataLoader
 
-            source_loader = SourceDataLoader(
-                agent_name=self.config.action_name,
-                storage_backend=self.config.storage_backend,  # type: ignore[arg-type]
-            )
+                source_loader = SourceDataLoader(
+                    agent_name=self.config.action_name,
+                    storage_backend=self.config.storage_backend,  # type: ignore[arg-type]
+                )
 
-            # Load the source data using the explicit source_relative_path
-            loaded_source = source_loader.load_source_data(self.config.source_relative_path or "")
+                loaded_source = source_loader.load_source_data(self.config.source_relative_path)
 
-            if isinstance(loaded_source, list):
-                source_data = loaded_source
-            else:
-                # Should be a list, but handle single dict if returned
-                source_data = [loaded_source] if loaded_source else []  # type: ignore[unreachable]
+                if isinstance(loaded_source, list):
+                    source_data = loaded_source
+                else:
+                    source_data = [loaded_source] if loaded_source else []  # type: ignore[unreachable]
 
-            logger.debug("Loaded source data via SourceDataLoader for %s", file_path)
+                logger.debug("Loaded source data via SourceDataLoader for %s", file_path)
 
-        except Exception as e:
-            logger.error(
-                "SourceDataLoader failed to resolve source for '%s': %s. "
-                "Agent: %s. "
-                "Falling back to using input data as source context. "
-                "This will likely cause 'undefined variable' errors if templates expect source fields.",
-                file_path,
-                e,
-                self.config.action_name,
-            )
-            # source_data remains 'data' (the fallback)
+            except (FileNotFoundError, ValueError):
+                # FileNotFoundError: no source data for this path (normal for
+                # cross-workflow workflows that have no staging data).
+                # ValueError: empty/invalid path from storage backend validation.
+                # In both cases, input data is the correct source context.
+                pass
 
         # ── per-action record_limit ──────────────────────────────────────
         record_limit = self.config.action_config.get("record_limit")
@@ -549,10 +546,30 @@ class ProcessingPipeline:
                 source_data=source_data,
                 storage_backend=self.config.storage_backend,
             )
-            if self.is_tool_action:
-                results = self._process_file_mode_tool(filtered, data, context)
+
+            # Guards must run before FILE-mode processing because FILE mode
+            # sends the entire array in one batch and cannot filter per-record.
+            # Pass raw `data` so original_passing preserves pre-observe fields.
+            passing, skipped, original_passing = prefilter_by_guard(
+                filtered,
+                cast(dict[str, Any], self.config.action_config),
+                self.config.action_name,
+                original_data=data,
+            )
+
+            # Align context.source_data with the guard-passing subset so the
+            # enricher's source_mapping indices resolve to the correct parents.
+            context.source_data = original_passing
+
+            if not passing:
+                results = _build_skipped_results(skipped)
             else:
-                results = self._process_file_mode_hitl(filtered, data, context)
+                if self.is_tool_action:
+                    results = self._process_file_mode_tool(passing, original_passing, context)
+                else:
+                    results = self._process_file_mode_hitl(passing, original_passing, context)
+
+                results.extend(_build_skipped_results(skipped))
         else:
             # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
@@ -622,6 +639,18 @@ class ProcessingPipeline:
     ) -> list:
         """Delegator stub — see :func:`pipeline_file_mode.process_file_mode_hitl`."""
         return process_file_mode_hitl(self, data, original_data, context)
+
+
+def _build_skipped_results(skipped: list[dict]) -> list[ProcessingResult]:
+    """Convert guard-skipped items into UNPROCESSED ProcessingResults."""
+    return [
+        ProcessingResult.unprocessed(
+            data=[item],
+            reason="guard_prefilter_skip",
+            source_guid=item.get("source_guid"),
+        )
+        for item in skipped
+    ]
 
 
 def create_processing_pipeline(

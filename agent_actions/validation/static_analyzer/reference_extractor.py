@@ -166,6 +166,24 @@ class ReferenceExtractor:
                 self._walk_ast(child, references, new_locals)
             return
 
+        # {% set %} introduces a name at the current scope level — mutate in place
+        # so subsequent siblings (processed by the parent's loop) see it
+        if isinstance(node, nodes.Assign):
+            if isinstance(node.target, nodes.Name):
+                local_vars.add(node.target.name)
+            for child in node.iter_child_nodes():
+                self._walk_ast(child, references, local_vars)
+            return
+
+        if isinstance(node, nodes.Macro):
+            new_locals = local_vars.copy()
+            for arg in node.args:
+                if isinstance(arg, nodes.Name):
+                    new_locals.add(arg.name)
+            for child in node.iter_child_nodes():
+                self._walk_ast(child, references, new_locals)
+            return
+
         if isinstance(node, nodes.Getattr):
             ref = self._extract_getattr_chain(node)
             if ref:

@@ -31,6 +31,115 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Framework fields that live at the top level of structured records, not inside content.
+_TOOL_RESERVED_FIELDS = frozenset(
+    {
+        "source_guid",
+        "target_id",
+        "node_id",
+        "lineage",
+        "metadata",
+        "content",
+        "parent_target_id",
+        "root_target_id",
+        "chunk_info",
+        "_recovery",
+        "_unprocessed",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_source_mapping(
+    raw_outputs: list[dict],
+    input_data: list[dict],
+    action_name: str,
+) -> dict[int, int | list[int]]:
+    """Resolve which input produced each output by ``node_id``.
+
+    NiFi-inspired: every record carries identity (``node_id``) through the
+    pipeline.  The framework preserves it through the observe filter; tools
+    receive full records and pass them through.  The framework matches each
+    output to its input by ``node_id`` — no heuristics, no guessing.
+
+    Returns a mapping of ``output_index -> input_index`` for outputs that
+    carry a ``node_id`` matching an input.  Outputs without a matching
+    ``node_id`` are omitted — they are new records (e.g. aggregation
+    results) and will receive fresh lineage with no parent.
+    """
+    # Build lookup: node_id -> input index
+    nid_to_idx: dict[str, int] = {}
+    for i, item in enumerate(input_data):
+        if isinstance(item, dict):
+            nid = item.get("node_id")
+            if isinstance(nid, str):
+                nid_to_idx[nid] = i
+
+    mapping: dict[int, int | list[int]] = {}
+    for i, item in enumerate(raw_outputs):
+        nid = item.get("node_id") if isinstance(item, dict) else None
+        if not isinstance(nid, str):
+            logger.warning(
+                "FILE tool '%s': output[%d] has no node_id. "
+                "Record will get fresh lineage with no parent.",
+                action_name,
+                i,
+            )
+            continue
+        if nid not in nid_to_idx:
+            logger.warning(
+                "FILE tool '%s': output[%d] has node_id '%s' not found in inputs. "
+                "Treating as new record.",
+                action_name,
+                i,
+                nid,
+            )
+            continue
+        mapping[i] = nid_to_idx[nid]
+
+    return mapping
+
+
+def _reattach_source_guid(
+    structured_data: list[dict],
+    source_mapping: dict[int, int | list[int]] | None,
+    original_data: list[dict],
+) -> None:
+    """Reattach source_guid from input records to output items using mapping.
+
+    Mutates structured_data in place.  Only sets source_guid when the output
+    item does not already carry a truthy value (explicit tool values win).
+    """
+    if source_mapping is None or not original_data:
+        return
+
+    for i, item in enumerate(structured_data):
+        if item.get("source_guid"):
+            continue  # Tool explicitly set it — respect that
+
+        if i not in source_mapping:
+            # Positional fallback only when ALL outputs lack node_id (empty mapping)
+            # and cardinalities match (1:1 passthrough by tools that don't preserve node_id).
+            # When mapping has entries, unmapped outputs are genuinely new records.
+            if not source_mapping and len(structured_data) == len(original_data):
+                source_idx: int | list[int] = i
+            else:
+                continue  # Unmapped output — new record, no parent to inherit from
+        else:
+            source_idx = source_mapping[i]
+        if isinstance(source_idx, list):
+            source_idx = source_idx[0]  # Many-to-one: use first parent
+
+        if isinstance(source_idx, int) and source_idx < len(original_data):
+            parent_guid = original_data[source_idx].get("source_guid")
+            if parent_guid:
+                item["source_guid"] = parent_guid
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -59,37 +168,27 @@ def process_file_mode_tool(
         List with single ProcessingResult containing all outputs.
     """
     try:
-        # Get tools_path from agent config
         tools_path = context.agent_config.get("tools_path")
 
-        # Invoke tool once with full array
-        # For tools, formatted_prompt is not used, so we pass empty string
         raw_response, executed = run_dynamic_agent(
             agent_config=cast(dict[str, Any], context.agent_config),
             agent_name=context.agent_name,
-            context=data,  # Full array of records
-            formatted_prompt="",  # Not used for tools
+            context=data,
+            formatted_prompt="",
             tools_path=tools_path,
         )
 
-        # Safety net: unwrap FileUDFResult if it wasn't already unwrapped
-        # during validation in _validate_udf_output. Handles the case where
-        # validation is skipped (validate_output=False or no json_output_schema).
         from agent_actions.utils.udf_management.registry import FileUDFResult
 
-        source_mapping = None
         if isinstance(raw_response, FileUDFResult):
-            source_mapping = raw_response.source_mapping
             raw_response = raw_response.outputs
 
-        # Tool should return array
         if not isinstance(raw_response, list):
             raise ValueError(
                 f"FILE mode tool must return a list (or FileUDFResult), "
                 f"got {type(raw_response).__name__}"
             )
 
-        # Empty tool output with non-empty input → FAILED (see _MANIFEST.md)
         if not raw_response and data:
             return [
                 ProcessingResult.failed(
@@ -100,35 +199,39 @@ def process_file_mode_tool(
                 )
             ]
 
-        # Reserved framework fields that go at top level, not in content
-        RESERVED_FIELDS = {
-            "source_guid",
-            "target_id",
-            "node_id",
-            "lineage",
-            "metadata",
-            "content",
-        }
+        # Framework-managed: resolve which input produced each output by node_id.
+        source_mapping: dict[int, int | list[int]] | None = None
+        if original_data:
+            source_mapping = _resolve_source_mapping(
+                raw_outputs=raw_response,
+                input_data=original_data,
+                action_name=context.agent_name,
+            )
 
-        # Wrap each tool output in {content: {...}} structure
-        # Preserve source_guid at top level for lineage chaining
+        # Separate business data from framework fields in tool output.
+        # Tools may return full records (with content wrapper) or flat dicts.
         structured_data = []
         for item in raw_response:
             if isinstance(item, dict):
-                # Separate data fields from reserved framework fields
-                data_fields = {k: v for k, v in item.items() if k not in RESERVED_FIELDS}
-
-                # Build structured item with content
+                if isinstance(item.get("content"), dict):
+                    # Tool returned a full record — use content directly.
+                    data_fields = item["content"]
+                else:
+                    # Tool returned a flat dict — strip reserved fields.
+                    data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
                 structured_item = {"content": data_fields}
 
-                # Preserve source_guid at top level (needed for lineage chaining)
                 if "source_guid" in item:
                     structured_item["source_guid"] = item["source_guid"]
 
                 structured_data.append(structured_item)
             else:
-                # Handle non-dict outputs
                 structured_data.append({"content": {"value": item}})
+
+        # Reattach source_guid from input records — authoritative for FILE mode.
+        # LineageBuilder._propagate_ancestry_chain and RequiredFieldsEnricher
+        # also set source_guid but are idempotent backstops; this is the primary setter.
+        _reattach_source_guid(structured_data, source_mapping, original_data)
 
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
@@ -299,12 +402,15 @@ def process_file_mode_hitl(
                             structured_item[field] = item[field]
                 structured_data.append(structured_item)
 
+        # HITL FILE mode is always 1:1 — identity source_mapping ensures the
+        # enricher extends parent lineage rather than truncating to [node_id].
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=structured_data,
             source_guid=None,
             raw_response=raw_response,
             executed=executed,
+            source_mapping={i: i for i in range(len(structured_data))},
         )
 
         result = pipeline.record_processor.enrichment_pipeline.enrich(result, context)
@@ -314,6 +420,81 @@ def process_file_mode_hitl(
     except Exception:
         logger.exception("Unexpected error in FILE mode HITL processing")
         raise
+
+
+def prefilter_by_guard(
+    data: list[dict],
+    agent_config: dict[str, Any],
+    agent_name: str,
+    original_data: list[dict] | None = None,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Evaluate guard per-record and split into passing and skipped arrays.
+
+    Called before FILE-mode processing to apply per-record guard logic
+    on the full array.  ``behavior: filter`` records are excluded from
+    both returned lists.  ``behavior: skip`` records land in *skipped*
+    so the caller can merge them back into output with original content.
+
+    When ``original_data`` is provided (e.g. pre-observe-filter records),
+    the third return value contains the corresponding original items for
+    each passing record.  This preserves upstream fields that observe
+    filtering may have stripped.
+
+    When no guard is configured, returns ``(data, [], original_data or data)``.
+
+    Note:
+        Guard evaluation uses ``context={}`` because the pre-filter runs
+        before processing context (passthrough fields, source data) is
+        established.  Guard clauses in FILE-mode pre-filter can only
+        reference item-level fields, not workflow context variables.
+
+    Returns:
+        (passing, skipped, original_passing)
+    """
+    originals = original_data if original_data is not None else data
+
+    guard_config = agent_config.get("guard")
+    if not guard_config:
+        return data, [], originals
+
+    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+
+    evaluator = get_guard_evaluator()
+    # The config expander normalizes user-facing "on_false" into "behavior"
+    behavior = str(guard_config.get("behavior", "filter")).lower()
+
+    passing: list[dict] = []
+    skipped: list[dict] = []
+    original_passing: list[dict] = []
+    for idx, item in enumerate(data):
+        content = item.get("content", item)
+        eval_item = content if isinstance(content, dict) else {"_raw": content}
+
+        # context={} — see Note in docstring.
+        result = evaluator.evaluate_with_context(
+            item=eval_item,
+            guard_config=guard_config,
+            context={},
+            conditional_clause=None,
+        )
+
+        if result.should_execute:
+            passing.append(item)
+            original_passing.append(originals[idx])
+        elif behavior == "skip":
+            skipped.append(item)
+        # behavior == "filter": record excluded from both lists
+
+    logger.info(
+        "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered of %d total",
+        agent_name,
+        len(passing),
+        len(skipped),
+        len(data) - len(passing) - len(skipped),
+        len(data),
+    )
+
+    return passing, skipped, original_passing
 
 
 def apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:

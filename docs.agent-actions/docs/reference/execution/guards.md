@@ -213,12 +213,33 @@ guard:
 
 - **No external calls** - Guards can't make API requests
 - **Limited functions** - Only built-in functions available
-- **Not supported with File granularity** - Guards evaluate per-record
+- **File granularity pre-filter** - With File granularity, guards run as a per-record pre-filter before the action receives the array
 - **Single expression** - Complex logic should use tool actions
 
-:::warning
-Guards are not supported with File granularity. Implement filtering logic within your tool function instead.
-:::
+## Guards with File Granularity
+
+When a guard is configured on a File-granularity action (tool or HITL), the guard evaluates per-record as a **pre-filter** before the action receives the data array.
+
+```yaml
+- name: deduplicate_active
+  kind: tool
+  granularity: file
+  impl: deduplicate
+  guard:
+    condition: 'status == "active"'
+    on_false: filter  # Only active records sent to dedup tool
+```
+
+### Behavior
+
+| `on_false` | Passing records | Failing records |
+|------------|----------------|-----------------|
+| `filter` | Sent to action | Removed from pipeline |
+| `skip` | Sent to action | Preserved in output with original content |
+
+The action only sees records that pass the guard. This is useful for:
+- **HITL**: Show only flagged records to the reviewer (see [Pattern 4: Pre-filtered HITL Review](../../guides/human-in-the-loop.md#pattern-4-pre-filtered-hitl-review))
+- **Tools**: Process only qualifying records (e.g., deduplicate only active items)
 
 ## See Also
 

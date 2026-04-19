@@ -130,22 +130,20 @@ By default, every action uses `granularity: Record` -- one record at a time. Set
 
 This matters whenever your logic needs a cross-record view: computing averages, counting distributions, sorting by priority, producing one output from many inputs. Without it, the aggregation tool would see one clause at a time and could never build a contract-level summary.
 
-A FILE granularity tool in Python receives a `list[dict]` and returns a `FileUDFResult`:
+A FILE granularity tool in Python receives a `list[dict]` and returns a `list[dict]`:
 
 ```python
 from agent_actions import udf_tool
 from agent_actions.config.types import Granularity
-from agent_actions.utils.udf_management.registry import FileUDFResult
 
 @udf_tool(granularity=Granularity.FILE)
-def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
+def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # data contains ALL clause records at once
     # ... aggregate logic ...
-    return FileUDFResult(
-        outputs=[single_summary_dict],
-        input_count=len(data),
-    )
+    return [single_summary_dict]
 ```
+
+The framework handles all metadata propagation (`source_guid`, lineage) automatically — tools just return business data.
 
 ### Guard as Filter
 

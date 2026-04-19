@@ -86,7 +86,11 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             messages = envelope.to_dicts()
             json_kwargs = {
                 "model": model_name,
-                "response_format": {"type": "json_object"},
+                "response_format": (
+                    {"type": "json_schema", "json_schema": schema}
+                    if schema
+                    else {"type": "json_object"}
+                ),
                 "messages": messages,
                 **extract_generation_params(
                     agent_config, extra_params=("frequency_penalty", "presence_penalty")

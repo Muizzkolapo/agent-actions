@@ -115,6 +115,90 @@ class TestUnifiedLineageAncestryChain:
         assert "root_target_id" not in result
 
 
+class TestUnifiedLineageSourceGuidPropagation:
+    """Test source_guid propagation through ancestry chain."""
+
+    def test_source_guid_propagated_from_parent(self):
+        """source_guid is propagated from parent when not set on obj."""
+        obj = {"content": {"text": "output"}}
+        node_id = "node_123"
+        parent_item = {
+            "target_id": "target-parent",
+            "source_guid": "sg-original",
+            "lineage": ["node-parent"],
+        }
+
+        result = LineageBuilder.add_unified_lineage(obj, node_id, parent_item)
+
+        assert result["source_guid"] == "sg-original"
+
+    def test_existing_source_guid_not_overwritten(self):
+        """Existing truthy source_guid on obj is preserved, not overwritten."""
+        obj = {"content": {"text": "output"}, "source_guid": "sg-existing"}
+        node_id = "node_456"
+        parent_item = {
+            "target_id": "target-parent",
+            "source_guid": "sg-parent",
+            "lineage": ["node-parent"],
+        }
+
+        result = LineageBuilder.add_unified_lineage(obj, node_id, parent_item)
+
+        assert result["source_guid"] == "sg-existing"
+
+    def test_empty_source_guid_overwritten_by_parent(self):
+        """Empty string source_guid on obj is overwritten by parent's."""
+        obj = {"content": {"text": "output"}, "source_guid": ""}
+        node_id = "node_789"
+        parent_item = {
+            "source_guid": "sg-parent",
+            "lineage": ["node-parent"],
+        }
+
+        result = LineageBuilder.add_unified_lineage(obj, node_id, parent_item)
+
+        assert result["source_guid"] == "sg-parent"
+
+    def test_no_parent_source_guid_leaves_obj_unchanged(self):
+        """When parent has no source_guid, obj is not modified."""
+        obj = {"content": {"text": "output"}}
+        node_id = "node_abc"
+        parent_item = {
+            "target_id": "target-parent",
+            "lineage": ["node-parent"],
+        }
+
+        result = LineageBuilder.add_unified_lineage(obj, node_id, parent_item)
+
+        assert "source_guid" not in result
+
+    def test_source_guid_propagated_in_lineage_tracking(self):
+        """source_guid propagated via add_lineage_tracking (non-unified path)."""
+        obj = {"content": {"text": "output"}}
+        item = {
+            "source_guid": "sg-source",
+            "target_id": "target-source",
+            "lineage": ["node-source"],
+        }
+
+        result = LineageBuilder.add_lineage_tracking(obj, item, "node_new")
+
+        assert result["source_guid"] == "sg-source"
+
+    def test_source_guid_propagated_in_lineage_tracking_from_sources(self):
+        """source_guid propagated via add_lineage_tracking_from_sources (many-to-one)."""
+        obj = {"content": {"text": "output"}}
+        source_items = [
+            {"source_guid": "sg-first", "target_id": "t-1", "lineage": ["node-1"]},
+            {"source_guid": "sg-second", "target_id": "t-2", "lineage": ["node-2"]},
+        ]
+
+        result = LineageBuilder.add_lineage_tracking_from_sources(obj, source_items, "node_merged")
+
+        # First source's source_guid is propagated
+        assert result["source_guid"] == "sg-first"
+
+
 class TestUnifiedLineageObjectImmutability:
     """Test object immutability."""
 

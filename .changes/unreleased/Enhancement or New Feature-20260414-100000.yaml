@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Add self-reflection feedback strategy for reprompt retries (use_self_reflection config option)"
+time: 2026-04-14T10:00:00.000000Z

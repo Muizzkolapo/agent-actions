@@ -119,6 +119,37 @@ class TestVersionOutputCorrelator:
         source_file = temp_agent_folder / "source" / test_filename
         assert source_file.exists(), f"Source file {test_filename} not created"
 
+    def test_correlation_source_includes_lineage(self, correlator, temp_agent_folder):
+        """Source file created by correlation must include lineage for downstream enrichment."""
+        for i in range(1, 3):
+            loop_dir = temp_agent_folder / "target" / f"scorer_{i}"
+            loop_dir.mkdir(parents=True)
+            test_data = [
+                {
+                    "source_guid": "guid-1",
+                    "version_correlation_id": "corr-1",
+                    "target_id": "tid-1",
+                    "node_id": f"node_{i}_abc",
+                    "lineage": ["node_0_root", f"node_{i}_abc"],
+                    "content": {f"score_{i}": 8},
+                }
+            ]
+            with open(loop_dir / "data.json", "w") as f:
+                json.dump(test_data, f)
+
+        correlator.prepare_correlated_input("aggregate", ["scorer_1", "scorer_2"], 3)
+
+        source_file = temp_agent_folder / "source" / "data.json"
+        assert source_file.exists()
+        with open(source_file) as f:
+            source_data = json.load(f)
+
+        assert len(source_data) == 1
+        record = source_data[0]
+        assert record["source_guid"] == "guid-1"
+        assert len(record["lineage"]) >= 2
+        assert "node_0_root" in record["lineage"]
+
     def test_partial_record_handling(self, correlator, temp_agent_folder):
         """Test that records missing from some loops are still included."""
         # Use simple directory names (no node_X_ prefix)
@@ -611,10 +642,10 @@ class TestVersionCorrelatorSourceProtection:
             sparse_source_data = [{"source_guid": "guid-1", "id": "123"}]  # 2 fields
             source_file.write_text(json.dumps(sparse_source_data))
 
-            # This test would require modifying _create_correlation_source_data to
-            # actually write richer data, which it currently doesn't do (it only
-            # writes {source_guid, id}). So this test documents current behavior:
-            # correlation NEVER enriches source data, it only protects existing rich data.
+            # Correlation source records include {source_guid, id, lineage, node_id}
+            # (4 fields). This is still sparser than a rich 8-field source, so the
+            # protection gate will block overwrite in that case. This test documents
+            # that existing sparse source data is not modified without running correlation.
 
             # Just verify source file exists and has sparse data
             with open(source_file) as f:

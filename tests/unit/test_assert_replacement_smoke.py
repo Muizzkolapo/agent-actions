@@ -26,11 +26,6 @@ class TestConfigManagerSequencingGuards:
         with pytest.raises(RuntimeError, match="load_configs.*must be called"):
             cm.validate_agent_name()
 
-    def test_check_child_pipeline_before_load(self, tmp_path):
-        cm = self._make_manager(tmp_path)
-        with pytest.raises(RuntimeError, match="load_configs.*must be called"):
-            cm.check_child_pipeline()
-
     def test_get_user_agents_before_load(self, tmp_path):
         cm = self._make_manager(tmp_path)
         with pytest.raises(RuntimeError, match="load_configs.*must be called"):

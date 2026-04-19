@@ -263,6 +263,41 @@ def test_file_mode_hitl_preserves_target_id():
     assert result.data[0]["source_guid"] == "sg-1"
 
 
+def test_file_mode_hitl_sets_identity_source_mapping():
+    """HITL result must include identity source_mapping for lineage resolution."""
+    pipeline = ProcessingPipeline(
+        config=PipelineConfig(
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
+            idx=0,
+        ),
+        processor_factory=object(),
+    )
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+    )
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "content": {"id": 3}},
+    ]
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(
+            {"hitl_status": "approved", "user_comment": "", "timestamp": "2026-02-12T10:00:00Z"},
+            True,
+        ),
+    ):
+        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+
+    assert len(results) == 1
+    result = results[0]
+    # source_mapping must be an identity map: output[i] came from input[i]
+    assert result.source_mapping == {0: 0, 1: 1, 2: 2}
+
+
 def test_file_mode_hitl_observe_filters_and_orders_fields():
     """context_scope.observe should filter fields shown to HITL and preserve order."""
     pipeline = ProcessingPipeline(
@@ -316,11 +351,13 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
         agent_name="review_data",
     )
 
-    # Filtered records should only contain observe fields in defined order
-    assert list(filtered[0].keys()) == ["question", "answer"]
-    assert list(filtered[1].keys()) == ["question", "answer"]
-    assert filtered[0]["question"] == "What is X?"
-    assert filtered[1]["answer"] == "Z is W"
+    # NiFi enrichment: filtered records are full records with all content preserved
+    assert filtered[0]["content"]["question"] == "What is X?"
+    assert filtered[0]["content"]["answer"] == "X is Y"
+    # All original content fields preserved (no stripping)
+    assert filtered[0]["content"]["selectedAnswerer"] == "Alice"
+    assert filtered[0]["source_guid"] == "sg-1"
+    assert filtered[1]["content"]["answer"] == "Z is W"
 
     # Verify HITL receives filtered data but merge uses original_data
     captured_context = {}
@@ -338,9 +375,8 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     ):
         results = pipeline._process_file_mode_hitl(filtered, original_data, context)
 
-    # HITL UI should have received only filtered fields
-    assert list(captured_context["context"][0].keys()) == ["question", "answer"]
-    assert "selectedAnswerer" not in captured_context["context"][0]
+    # HITL UI receives full enriched records
+    assert captured_context["context"][0]["content"]["question"] == "What is X?"
 
     # Output merge should preserve ALL original content fields
     assert len(results) == 1
@@ -487,34 +523,36 @@ def test_new_observe_no_observe_returns_data_as_is():
 
 
 def test_new_observe_handles_flat_records():
-    """Records without content wrapper should be filtered directly."""
-    data = [{"question": "Q1", "answer": "A1", "extra": "drop"}]
+    """Records without content wrapper: no cross-ns refs → fast path returns as-is."""
+    data = [{"question": "Q1", "answer": "A1", "extra": "keep"}]
     config = {"context_scope": {"observe": ["upstream.answer", "upstream.question"]}}
     result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    assert list(result[0].keys()) == ["answer", "question"]
+    # No cross-namespace refs → fast path returns data unmodified
     assert result[0]["answer"] == "A1"
+    assert result[0]["question"] == "Q1"
+    assert result[0]["extra"] == "keep"
 
 
-def test_new_observe_wildcard_returns_data_as_is():
-    """observe: ['upstream.*'] should return all fields unfiltered."""
+def test_new_observe_wildcard_returns_all_content_fields():
+    """observe: ['upstream.*'] should return full records with all content preserved."""
     data = [
         {"content": {"question": "Q1", "answer": "A1", "extra": "keep"}},
         {"content": {"question": "Q2", "answer": "A2", "extra": "also keep"}},
     ]
     config = {"context_scope": {"observe": ["upstream.*"]}}
     result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    assert result is data
+    assert result[0]["content"] == {"question": "Q1", "answer": "A1", "extra": "keep"}
+    assert result[1]["content"] == {"question": "Q2", "answer": "A2", "extra": "also keep"}
 
 
 def test_new_observe_collision_uses_qualified_keys():
-    """When two refs share the same bare key, both appear with qualified keys.
+    """When two refs share the same bare key with NiFi enrichment.
 
     NOTE: No agent_indices/file_path provided, so dep_b cannot load
-    historically and falls through to content lookup — both qualified keys
-    get the same value.  This test exercises key-naming (qualified vs bare),
-    not cross-namespace value accuracy; see
-    TestApplyObserveForFileMode.test_multi_dep_collision_distinct_values
-    in test_file_mode_observe.py for the distinct-value assertion.
+    historically and falls through to content lookup. With NiFi enrichment,
+    the original content fields are preserved as-is (no qualified key
+    renaming for input-source fields). The original 'title' and 'body'
+    remain in content.
     """
     data = [{"content": {"title": "My Title", "body": "My Body"}}]
     config = {
@@ -523,18 +561,19 @@ def test_new_observe_collision_uses_qualified_keys():
         },
     }
     result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    assert list(result[0].keys()) == ["dep_a.title", "dep_b.title", "body"]
-    assert result[0]["dep_a.title"] == "My Title"
-    assert result[0]["dep_b.title"] == "My Title"  # same value — see docstring
-    assert result[0]["body"] == "My Body"
+    # NiFi enrichment: full record with original content preserved
+    assert result[0]["content"]["title"] == "My Title"
+    assert result[0]["content"]["body"] == "My Body"
 
 
 def test_new_observe_no_collision_stays_bare():
-    """When all refs have unique bare keys, output keys remain bare."""
+    """When all refs have unique bare keys, content fields are preserved."""
     data = [{"content": {"question": "Q1", "answer": "A1"}}]
     config = {"context_scope": {"observe": ["upstream.question", "upstream.answer"]}}
     result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    assert list(result[0].keys()) == ["question", "answer"]
+    # NiFi enrichment: full record returned with content preserved
+    assert result[0]["content"]["question"] == "Q1"
+    assert result[0]["content"]["answer"] == "A1"
 
 
 def test_new_observe_invalid_ref_does_not_misalign_pairs():
@@ -546,7 +585,6 @@ def test_new_observe_invalid_ref_does_not_misalign_pairs():
         },
     }
     result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    assert list(result[0].keys()) == ["dep_a.title", "dep_b.title", "body"]
-    assert result[0]["dep_a.title"] == "T"
-    assert result[0]["dep_b.title"] == "T"
-    assert result[0]["body"] == "B"
+    # NiFi enrichment: full record with original content preserved
+    assert result[0]["content"]["title"] == "T"
+    assert result[0]["content"]["body"] == "B"

@@ -2,7 +2,7 @@
 Tests for GroqBatchClient.
 
 Inherits 11 contract tests from BaseBatchClientTests.
-Adds Groq-specific tests including the json_object regression test for #96.
+Adds Groq-specific tests for structured output schema dispatch and response parsing.
 """
 
 from unittest.mock import Mock
@@ -124,19 +124,15 @@ class TestGroqBatchClient(BaseBatchClientTests):
 
     # -- Groq-specific tests --------------------------------------------------
 
-    def test_format_task_with_schema_uses_json_object_not_json_schema(
-        self, provider, sample_batch_task
-    ):
-        """Regression test for #96: Groq must use json_object, not json_schema.
-
-        The Groq online client uses json_object. The batch client was
-        copy-pasted from OpenAI and incorrectly used json_schema, which
-        Groq's API rejects at batch submission time.
-        """
+    def test_format_task_with_schema_passes_json_schema(self, provider, sample_batch_task):
+        """Groq now supports json_schema structured output — schema must reach the API."""
         schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
         result = provider.format_task_for_provider(sample_batch_task, schema=schema)
 
-        assert result["body"]["response_format"] == {"type": "json_object"}
+        assert result["body"]["response_format"] == {
+            "type": "json_schema",
+            "json_schema": schema,
+        }
 
     def test_format_task_without_schema_omits_response_format(self, provider, sample_batch_task):
         """No schema means no response_format — Groq returns free-form text."""

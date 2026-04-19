@@ -14,6 +14,7 @@ Reprompting is Agent Actions' automatic retry system for validation errors. When
 The reprompting system provides:
 
 - **Automatic retries** - Retry failed validations up to a configurable limit
+- **Self-reflection** - Optionally instruct the model to analyze its failure before retrying
 - **Configurable exhaustion** - Control what happens when all attempts fail
 
 :::info Retry vs Reprompt
@@ -45,6 +46,7 @@ defaults:
 |--------|------|---------|-------------|
 | `max_attempts` | integer | 2 | Maximum retry attempts |
 | `on_exhausted` | string | `return_last` | Behavior when attempts exhausted |
+| `use_self_reflection` | boolean | `false` | Include self-reflection instruction in retry prompts |
 
 ### Custom Validation Functions
 
@@ -71,6 +73,10 @@ def check_valid_bisac(response) -> bool:
 
 When the validation function returns `False`, Agent Actions reprompts with the error message from the `@reprompt_validation` decorator, giving the LLM specific guidance on what to fix.
 
+:::tip Typos are caught early
+The static analyzer validates that the function name in `reprompt.validation` matches a `@reprompt_validation`-decorated function in your tools directory. If the name doesn't match, you'll get an error at validation time — before any LLM calls — listing the available validators.
+:::
+
 ### Exhaustion Behavior
 
 When a record exhausts all reprompt attempts, `on_exhausted` determines what happens:
@@ -79,6 +85,30 @@ When a record exhausts all reprompt attempts, `on_exhausted` determines what hap
 |-------|----------|
 | `return_last` | Return the last response (even if invalid), workflow continues (default) |
 | `raise` | Raise an exception, workflow fails |
+
+### Self-Reflection
+
+By default, retry prompts include the validation error and the failed response — the model knows *what* failed but gets no help thinking about *why*. Self-reflection adds an instruction asking the model to analyze its failure before retrying:
+
+```yaml
+defaults:
+  reprompt:
+    max_attempts: 3
+    use_self_reflection: true
+```
+
+When enabled, the retry prompt includes:
+
+```
+Before producing your corrected response, analyze what went wrong:
+1. What specific error did you make in your previous response?
+2. Why did you make this error?
+3. What must be different in your next response to pass validation?
+
+Now produce your corrected response.
+```
+
+This activates the model's reasoning about the failure rather than just re-rolling with the same prompt. It costs no extra API calls — it only modifies the retry prompt text.
 
 ## How It Works
 

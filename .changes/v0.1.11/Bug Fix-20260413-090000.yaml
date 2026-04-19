@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix FILE-mode lineage: preserve content from full records returned by FILE tools, and skip source data loading in cross-workflow runs"
+time: 2026-04-13T09:00:00.000000Z

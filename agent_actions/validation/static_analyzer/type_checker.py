@@ -14,9 +14,14 @@ from .errors import (
 class StaticTypeChecker:
     """Performs static type checking on workflow data flow graph."""
 
-    def __init__(self, graph: DataFlowGraph) -> None:
+    def __init__(
+        self,
+        graph: DataFlowGraph,
+        external_action_names: set[str] | None = None,
+    ) -> None:
         """Initialize the type checker."""
         self.graph = graph
+        self.external_action_names = external_action_names or set()
 
     def check_all(self) -> StaticValidationResult:
         """Run all static type checks on the graph."""
@@ -64,7 +69,7 @@ class StaticTypeChecker:
             raw_reference=requirement.raw_reference,
         )
 
-        if source_agent in SPECIAL_NAMESPACES:
+        if source_agent in SPECIAL_NAMESPACES or source_agent in self.external_action_names:
             return
 
         source_node = self.graph.get_node(source_agent)

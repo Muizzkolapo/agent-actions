@@ -22,11 +22,9 @@ class RunCommandArgs(BaseModel):
         ge=1,
         le=50,
     )
-    upstream: bool = Field(False, description="Recursively execute upstream dependent workflows")
-    downstream: bool = Field(
-        False, description="Execute all downstream workflows that depend on this workflow"
-    )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
     )
+    downstream: bool = Field(False, description="Run downstream dependent workflows after this one")
+    upstream: bool = Field(False, description="Run upstream workflow dependencies before this one")

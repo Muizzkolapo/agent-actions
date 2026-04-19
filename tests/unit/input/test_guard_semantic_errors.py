@@ -1,7 +1,5 @@
 """Tests for runtime guard semantic error handling, circuit breaker, and error taxonomy."""
 
-import logging
-
 import pytest
 
 from agent_actions.input.preprocessing.filtering.evaluator import GuardResult

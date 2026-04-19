@@ -21,6 +21,7 @@ from typing import Any
 from agent_actions.input.preprocessing.transformation.string_transformer import (
     StringProcessor,
 )
+from agent_actions.utils.json_safety import ensure_json_safe
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ class LLMMessage:
 
     role: str
     content: str
+    cache_control: dict[str, str] | None = None
 
 
 @dataclass
@@ -100,14 +102,26 @@ class LLMMessageEnvelope:
     (RAW style)."""
     rules: list[str] = field(default_factory=list)
 
-    def to_dicts(self, *, role: str | None = None) -> list[dict[str, str]]:
+    def to_dicts(self, *, role: str | None = None) -> list[dict[str, Any]]:
         """Convert messages to plain dicts for provider SDKs.
 
         Args:
             role: If set, only include messages with this role.
         """
         msgs = self.messages if role is None else [m for m in self.messages if m.role == role]
-        return [{"role": m.role, "content": m.content} for m in msgs]
+        result: list[dict[str, Any]] = []
+        for m in msgs:
+            d: dict[str, Any] = {"role": m.role, "content": m.content}
+            if m.cache_control is not None:
+                d["content"] = [
+                    {
+                        "type": "text",
+                        "text": m.content,
+                        "cache_control": m.cache_control,
+                    }
+                ]
+            result.append(d)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +229,7 @@ class MessageBuilder:
         *,
         schema: dict[str, Any] | None = None,
         json_mode: bool = True,
+        enable_prompt_caching: bool = False,
     ) -> LLMMessageEnvelope:
         """Build a message envelope for a realtime (online) provider call."""
         config = MessageBuilder._get_config(provider)
@@ -236,6 +251,16 @@ class MessageBuilder:
         )
 
         messages = MessageBuilder._wrap_in_roles(role, prompt_config, context_str, body)
+
+        if enable_prompt_caching and provider == "anthropic":
+            messages = [
+                LLMMessage(
+                    role=m.role,
+                    content=m.content,
+                    cache_control={"type": "ephemeral"},
+                )
+                for m in messages
+            ]
 
         return LLMMessageEnvelope(
             messages=messages,
@@ -297,8 +322,10 @@ class MessageBuilder:
 
             if isinstance(context_data, str):
                 return context_data
-            return json.dumps(context_data, ensure_ascii=False)
+            return json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
 
+        if isinstance(context_data, dict):
+            return str(ensure_json_safe(context_data))
         return str(StringProcessor.process_as_string(context_data))
 
     @staticmethod

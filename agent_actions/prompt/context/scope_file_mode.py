@@ -2,7 +2,7 @@
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -211,9 +211,11 @@ def apply_observe_for_file_mode(
     if not resolved:
         return data
 
-    # Wildcard -> return all data unfiltered.
-    if any(field == "*" for _, field, _ in resolved):
-        return data
+    # Track which namespaces use wildcards (expanded per-record below).
+    wildcard_ns: set[str] = {ns for ns, field, _ in resolved if field == "*"}
+    # Qualify wildcard-expanded keys with namespace when multiple
+    # wildcards exist (prevents bare-key collisions across namespaces).
+    qualify_wildcards = len(wildcard_ns) > 1
 
     # Determine which namespaces are "input sources" (data in each record).
     # Use fan-in-aware inference so non-primary deps are loaded historically.
@@ -226,7 +228,7 @@ def apply_observe_for_file_mode(
     if agent_indices:
         try:
             input_sources, _ = infer_dependencies(
-                agent_config, list(agent_indices.keys()), agent_name
+                agent_config, list(agent_indices.keys()), agent_name, validate=False
             )
             input_source_names = set(input_sources)
             has_reliable_ns = bool(input_source_names)
@@ -249,7 +251,7 @@ def apply_observe_for_file_mode(
             if isinstance(deps, str):
                 input_source_names = {deps}
             else:
-                input_source_names = set(deps)
+                input_source_names = {d for d in deps if isinstance(d, str)}
             has_reliable_ns = True
         elif data and isinstance(data[0], dict):
             # Best-effort heuristic: treat all top-level keys in record
@@ -272,9 +274,7 @@ def apply_observe_for_file_mode(
     # namespace as cross-namespace and trigger spurious historical
     # loads whose stale results would shadow live record data.
     needed_ns: set = set()
-    for ns, field, _ in resolved:
-        if field == "*":
-            continue
+    for ns, _field, _ in resolved:
         if ns == "source":
             needed_ns.add(ns)
         elif has_reliable_ns and ns not in input_source_names:
@@ -292,6 +292,11 @@ def apply_observe_for_file_mode(
     # Historical lookups depend on source_guid + lineage + parent/root target IDs,
     # so the cache key must include all discriminators to avoid returning stale
     # data when records share a source_guid but diverge in ancestry.
+    # Fast path: no cross-namespace refs to resolve — return data unmodified.
+    # Copies and per-record loops are only needed when injecting cross-ns data.
+    if not needed_ns:
+        return data
+
     cross_ns_cache: dict[tuple, dict[str, dict]] = {}
     filtered: list[dict] = []
     for item in data:
@@ -302,44 +307,44 @@ def apply_observe_for_file_mode(
         content = item.get("content", item) if isinstance(item.get("content"), dict) else item
 
         # Resolve cross-namespace data (cached by ancestry key).
-        if needed_ns:
-            sguid = item.get("source_guid")
-            cache_key = (
-                sguid,
-                tuple(item.get("lineage", [])),
-                item.get("parent_target_id"),
-                item.get("root_target_id"),
+        sguid = item.get("source_guid")
+        cache_key = (
+            sguid,
+            tuple(item.get("lineage", [])),
+            item.get("parent_target_id"),
+            item.get("root_target_id"),
+        )
+        if cache_key not in cross_ns_cache:
+            matched_source = source_index.get(sguid, source_data[0] if source_data else None)
+            cross_ns_cache[cache_key] = _load_file_mode_cross_namespace_data(
+                needed_ns=needed_ns,
+                record=item,
+                agent_name=agent_name,
+                agent_indices=agent_indices,
+                file_path=file_path,
+                source_record=matched_source,
+                storage_backend=storage_backend,
             )
-            if cache_key not in cross_ns_cache:
-                matched_source = source_index.get(sguid, source_data[0] if source_data else None)
-                cross_ns_cache[cache_key] = _load_file_mode_cross_namespace_data(
-                    needed_ns=needed_ns,
-                    record=item,
-                    agent_name=agent_name,
-                    agent_indices=agent_indices,
-                    file_path=file_path,
-                    source_record=matched_source,
-                    storage_backend=storage_backend,
-                )
-            cross_ns_data = cross_ns_cache[cache_key]
-        else:
-            cross_ns_data = {}
+        cross_ns_data = cross_ns_cache[cache_key]
 
-        ordered: dict[str, Any] = {}
+        # NiFi-inspired: enrich the record rather than stripping to a flat
+        # dict.  Shallow-copy record + content to avoid mutating caller's
+        # data when injecting cross-namespace fields.
+        enriched = dict(item)
+        enriched_content = dict(content)
+
         for ns, field, output_key in resolved:
-            # Cross-namespace data takes priority for non-input namespaces.
+            if field == "*":
+                if ns in cross_ns_data:
+                    for f, v in cross_ns_data[ns].items():
+                        key = f"{ns}.{f}" if qualify_wildcards else f
+                        enriched_content[key] = v
+                continue
+
             if ns in cross_ns_data and field in cross_ns_data[ns]:
-                ordered[output_key] = cross_ns_data[ns][field]
-            # Input source (per-record content) -- only when ns is actually
-            # an input source.  Without this guard, an unresolved non-input
-            # namespace (e.g. dep_b) would silently grab a same-named field
-            # from the primary record, producing incorrect context.
-            # When has_reliable_ns is False (content-key heuristic), we
-            # allow the fallback for all refs since we can't distinguish
-            # input namespaces from others.
+                enriched_content[output_key] = cross_ns_data[ns][field]
             elif (not has_reliable_ns or ns in input_source_names) and field in content:
-                ordered[output_key] = content[field]
-            # Field not found anywhere -- skip silently (logged at debug).
+                pass  # already present in enriched_content
             else:
                 logger.debug(
                     "[FILE OBSERVE] Field '%s' (ns='%s') not found for action '%s'. "
@@ -351,6 +356,7 @@ def apply_observe_for_file_mode(
                     list(cross_ns_data.get(ns, {}).keys()),
                 )
 
-        filtered.append(ordered)
+        enriched["content"] = enriched_content
+        filtered.append(enriched)
 
     return filtered

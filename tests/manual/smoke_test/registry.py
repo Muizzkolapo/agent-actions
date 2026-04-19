@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tests.manual.smoke_test.checks.context_scope import ContextScope
 from tests.manual.smoke_test.checks.guards import GuardCheck
+from tests.manual.smoke_test.checks.lineage import LineageCheck
 from tests.manual.smoke_test.checks.output_structure import OutputStructure
 from tests.manual.smoke_test.checks.parallel import ParallelVersions
 from tests.manual.smoke_test.checks.pipeline import PipelineCompleted
@@ -19,6 +20,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            LineageCheck(),
             PromptTraceCheck(),
         ],
     ),
@@ -30,6 +32,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            LineageCheck(),
             PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="generate_executive_summary", behavior="filter"),
@@ -45,6 +48,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            LineageCheck(),
             PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="optimize_seo", behavior="skip"),
@@ -60,6 +64,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            LineageCheck(),
             PromptTraceCheck(),
             SchemaConformance(),
             ParallelVersions(action="score_quality", versions=3),
@@ -77,6 +82,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            LineageCheck(),
             PromptTraceCheck(),
             SchemaConformance(),
             RepromptCheck(action="analyze_clause"),
@@ -90,6 +96,7 @@ EXAMPLES: list[Example] = [
         checks=[
             PipelineCompleted(),
             OutputStructure(),
+            LineageCheck(),
             PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="select_for_users", behavior="filter"),

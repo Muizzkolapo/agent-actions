@@ -358,8 +358,10 @@ def check_and_submit_reprompt(
         True if processing should continue (no reprompt, or reprompt exhausted/failed).
         False if a reprompt batch was submitted (caller should return None).
     """
-    reprompt_config = (agent_config or {}).get("reprompt")
-    if not reprompt_config:
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+
+    parsed = parse_reprompt_config((agent_config or {}).get("reprompt"))
+    if parsed is None:
         return True
 
     failed_results, validation_name = service._retry_service.validate_results(
@@ -370,8 +372,8 @@ def check_and_submit_reprompt(
     if not failed_results:
         return True
 
-    max_attempts = reprompt_config.get("max_attempts", 2)
-    on_exhausted = reprompt_config.get("on_exhausted", "return_last")
+    max_attempts = parsed.max_attempts
+    on_exhausted = parsed.on_exhausted
 
     current_attempt = 0
     if recovery_state:

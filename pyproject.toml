@@ -1,6 +1,6 @@
 [project]
 name = "agent-actions"
-version = "0.1.9"
+version = "0.1.11"
 description = "Declarative YAML-based framework for orchestrating agentic workflows"
 authors = [
     {name = "Muizz Kolapo"},
@@ -45,7 +45,7 @@ dependencies = [
     "mistralai>=0.1.0,<3",
     "cohere>=5.0.0,<6",
     "groq>=0.1.0,<2",
-    "rich>=13.0.0,<15",
+    "rich>=13.0.0,<16",
     "pyyaml>=6.0.0,<7",
     "jinja2>=3.1.0,<4",
     "portalocker>=2.8.2,<4",

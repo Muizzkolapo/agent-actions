@@ -16,7 +16,6 @@ from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.utils.file_handler import FileHandler
-from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.runner_file_processing import (
     collect_files_from_upstream as _collect_files_from_upstream,
 )
@@ -114,6 +113,8 @@ class ActionRunner:
         self.action_configs: dict[str, dict] | None = None
         self.execution_order: list[str] = []  # Set by service_init.initialize_services
         self.action_indices: dict[str, int] = {}  # Set by service_init.initialize_services
+        self.virtual_actions: dict[str, Any] = {}  # Set by service_init from WorkflowMetadata
+        self._upstream_backends: dict[str, Any] = {}  # Cache per upstream workflow
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
@@ -147,28 +148,8 @@ class ActionRunner:
             )
         return action_folder
 
-    def _resolve_upstream_from_manifest(self, agent_folder: Path) -> list[Path] | None:
-        """Resolve upstream directories from manifest file, or None."""
-        agent_io_dir = (
-            agent_folder / "agent_io" if "agent_io" not in str(agent_folder) else agent_folder
-        )
-        manifest = ArtifactLinker.read_manifest(agent_io_dir)
-        if manifest is None:
-            return None
-
-        upstream_path = Path(manifest["upstream_path"])
-        if not upstream_path.exists():
-            logger.warning("Manifest upstream path doesn't exist: %s", upstream_path)
-            return None
-
-        logger.debug("Resolved upstream from manifest: %s", upstream_path)
-        return [upstream_path]
-
     def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> list[Path]:
         """Resolve upstream directories for a start node (no dependencies)."""
-        manifest_dirs = self._resolve_upstream_from_manifest(agent_folder)
-        if manifest_dirs:
-            return manifest_dirs
         result = resolve_start_node_data_source(agent_folder, self.data_source_config, agent_name)
         return result.directories
 
@@ -234,6 +215,15 @@ class ActionRunner:
         missing_dirs = []
 
         for dep_name in dependencies:
+            # Check if this is a virtual action from an upstream workflow
+            if dep_name in self.virtual_actions:
+                virtual_dir = self._resolve_virtual_action_directory(dep_name)
+                if virtual_dir:
+                    resolved_dirs.append(virtual_dir)
+                else:
+                    missing_dirs.append((dep_name, f"upstream:{dep_name}"))
+                continue
+
             dep_path = self._resolve_single_dependency(target_dir, dep_name)
             if dep_path:
                 resolved_dirs.append(dep_path)
@@ -304,6 +294,122 @@ class ActionRunner:
 
         logger.warning("Dependency directory not found for %s", dep_name)
         return None
+
+    def _resolve_virtual_action_directory(self, dep_name: str) -> Path | None:
+        """Resolve the output directory for a virtual action from an upstream workflow.
+
+        Uses ``FileHandler.find_specific_folder`` directly (not ``get_action_folder``)
+        because ``get_action_folder`` always resolves to ``self.workflow_name``, which
+        is the *current* workflow — not the upstream.
+
+        If the upstream stores data in SQLite (no filesystem directory), exports it
+        to the target directory so the downstream workflow can read it normally.
+        """
+        virtual = self.virtual_actions[dep_name]
+        upstream_workflow = virtual.source_workflow
+
+        search_dir = resolve_project_root(self.project_root)
+        upstream_folder = FileHandler.find_specific_folder(
+            str(search_dir), upstream_workflow, "agent_io"
+        )
+        if upstream_folder is None:
+            logger.warning("Could not find agent_io for upstream workflow '%s'", upstream_workflow)
+            return None
+
+        upstream_target = Path(upstream_folder) / "target" / dep_name
+        if upstream_target.exists() and any(upstream_target.iterdir()):
+            self._sync_virtual_action_to_local_backend(dep_name, upstream_target)
+            return upstream_target
+
+        # SQLite-backed workflows don't write target directories to disk.
+        # Export the data so the downstream workflow can read it.
+        try:
+            upstream_backend = self._get_upstream_backend(upstream_folder, upstream_workflow)
+            target_files = upstream_backend.list_target_files(dep_name)
+            if target_files:
+                import json
+                import shutil
+
+                # Clean stale exports before writing fresh data
+                if upstream_target.exists():
+                    shutil.rmtree(upstream_target)
+                upstream_target.mkdir(parents=True, exist_ok=True)
+                for file_name in target_files:
+                    data = upstream_backend.read_target(dep_name, file_name)
+                    out_path = upstream_target / file_name
+                    out_path.write_text(json.dumps(data, indent=2, default=str))
+                logger.info(
+                    "Exported %d file(s) from upstream '%s.%s' to %s",
+                    len(target_files),
+                    upstream_workflow,
+                    dep_name,
+                    upstream_target,
+                )
+                self._sync_virtual_action_to_local_backend(dep_name, upstream_target)
+                return upstream_target
+        except Exception as e:
+            logger.debug("Upstream storage backend export failed for '%s': %s", dep_name, e)
+
+        logger.warning(
+            "Upstream action '%s' from workflow '%s' has no outputs at %s",
+            dep_name,
+            upstream_workflow,
+            upstream_target,
+        )
+        return None
+
+    def _sync_virtual_action_to_local_backend(self, dep_name: str, upstream_target: Path) -> None:
+        """Copy virtual action data into the downstream's storage backend.
+
+        The historical loader queries ``self.storage_backend`` (the downstream's
+        database).  Without this sync, virtual action records only exist in
+        the upstream's storage, so observe resolution finds nothing.
+        """
+        if self.storage_backend is None:
+            return
+
+        import json
+
+        for file_path in sorted(upstream_target.iterdir()):
+            if not file_path.is_file() or file_path.suffix != ".json":
+                continue
+            try:
+                data = json.loads(file_path.read_text())
+                if isinstance(data, list):
+                    self.storage_backend.write_target(
+                        action_name=dep_name,
+                        relative_path=file_path.name,
+                        data=data,
+                    )
+                    logger.debug(
+                        "Synced virtual action '%s/%s' to local storage backend (%d records)",
+                        dep_name,
+                        file_path.name,
+                        len(data),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Failed to sync virtual action '%s/%s' to local backend: %s",
+                    dep_name,
+                    file_path.name,
+                    e,
+                )
+
+    def _get_upstream_backend(self, upstream_folder: str, upstream_workflow: str) -> Any:
+        """Get or create a cached storage backend for an upstream workflow."""
+        if upstream_workflow not in self._upstream_backends:
+            from agent_actions.storage import get_storage_backend
+
+            # Use the same backend type as the current workflow
+            current_type = self.storage_backend.backend_type if self.storage_backend else "sqlite"
+            backend = get_storage_backend(
+                workflow_path=str(Path(upstream_folder).parent),
+                workflow_name=upstream_workflow,
+                backend_type=current_type,
+            )
+            backend.initialize()
+            self._upstream_backends[upstream_workflow] = backend
+        return self._upstream_backends[upstream_workflow]
 
     def _resolve_linear_directory(self, agent_folder: Path, previous_action_type: str) -> Path:
         """Resolve upstream directory for linear workflow (default behavior)."""
@@ -421,16 +527,14 @@ class ActionRunner:
             agent_folder, params.action_config, params.previous_action_type, params.idx
         )
 
-        # Resolve file_type_filter for start nodes — only when the data source
-        # resolver is used (not when inputs come from an upstream manifest)
+        # Resolve file_type_filter for start nodes
         file_type_filter = None
         if not params.action_config.get("dependencies") and not params.previous_action_type:
             agent_folder_path = Path(agent_folder)
-            if not self._resolve_upstream_from_manifest(agent_folder_path):
-                result = resolve_start_node_data_source(
-                    agent_folder_path, self.data_source_config, params.action_name
-                )
-                file_type_filter = result.file_type_filter
+            result = resolve_start_node_data_source(
+                agent_folder_path, self.data_source_config, params.action_name
+            )
+            file_type_filter = result.file_type_filter
 
         self.process_files(
             FileProcessParams(

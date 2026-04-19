@@ -104,6 +104,20 @@ class RepromptConfig(BaseModel):
         default="return_last",
         description="Behavior when max_attempts exhausted: return_last or raise",
     )
+    use_self_reflection: bool = Field(
+        default=False,
+        description="Include self-reflection instruction in retry prompts",
+    )
+    use_llm_critique: bool = Field(
+        default=False,
+        description="Enable LLM critique for stubborn validation failures",
+    )
+    critique_after_attempt: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Critique fires starting on attempt N (e.g. 2 means critique on 2nd failed attempt onward)",
+    )
 
 
 class HitlConfig(BaseModel):
@@ -248,7 +262,6 @@ class ActionConfig(BaseModel):
         default=None, description="Context scope configuration"
     )
     version_mode: VersionMode | None = Field(default=None, description="Version execution mode")
-    child: list[str] | None = Field(default=None, description="Child pipeline reference")
 
     # --- Internal (injected by render step) ---
     version_context: dict[str, Any] | None = Field(
@@ -388,6 +401,17 @@ class DefaultsConfig(BaseModel):
         return v
 
 
+class UpstreamRef(BaseModel):
+    """Reference to actions in an upstream workflow for cross-workflow chaining."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workflow: str = Field(..., description="Name of upstream workflow")
+    actions: list[str] = Field(
+        ..., description="Actions to import from upstream workflow", min_length=1
+    )
+
+
 class WorkflowConfig(BaseModel):
     """Pydantic schema for user-facing workflow YAML files.
 
@@ -401,6 +425,9 @@ class WorkflowConfig(BaseModel):
     version: str | None = Field(default=None, description="Workflow version")
     defaults: DefaultsConfig | None = Field(default=None, description="Default settings")
     actions: list[ActionConfig] = Field(..., description="Workflow actions")
+    upstream: list[UpstreamRef] | None = Field(
+        default=None, description="Upstream workflow dependencies for cross-workflow chaining"
+    )
 
     @model_validator(mode="after")
     def validate_workflow_invariants(self):
@@ -415,6 +442,26 @@ class WorkflowConfig(BaseModel):
         if duplicates:
             raise ValueError(f"Duplicate action names: {sorted(duplicates)}")
 
+        # Check upstream action names don't collide with local action names
+        if self.upstream:
+            for ref in self.upstream:
+                collisions = set(ref.actions) & seen
+                if collisions:
+                    raise ValueError(
+                        f"Action name collision: {sorted(collisions)} exist in both "
+                        f"this workflow and upstream workflow '{ref.workflow}'"
+                    )
+            # Check for collisions across upstream workflows
+            seen_upstream: dict[str, str] = {}
+            for ref in self.upstream:
+                for action_name in ref.actions:
+                    if action_name in seen_upstream:
+                        raise ValueError(
+                            f"Action '{action_name}' imported from both upstream workflow "
+                            f"'{seen_upstream[action_name]}' and '{ref.workflow}'"
+                        )
+                    seen_upstream[action_name] = ref.workflow
+
         # Version base names (e.g. "score_quality") are valid dependency targets
         # even though only their expanded variants exist as concrete actions.
         base_names: set[str] = set()
@@ -423,7 +470,13 @@ class WorkflowConfig(BaseModel):
             all_deps.update(action.dependencies)
             if action.version_context and "base_name" in action.version_context:
                 base_names.add(action.version_context["base_name"])
-        dangling = all_deps - seen - base_names
+        # Upstream action names are valid dependency targets (resolved at runtime)
+        upstream_action_names: set[str] = set()
+        if self.upstream:
+            for ref in self.upstream:
+                upstream_action_names.update(ref.actions)
+
+        dangling = all_deps - seen - base_names - upstream_action_names
         if dangling:
             raise ValueError(
                 f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
@@ -494,5 +547,6 @@ __all__ = [
     "RepromptConfig",
     "ActionConfig",
     "DefaultsConfig",
+    "UpstreamRef",
     "WorkflowConfig",
 ]

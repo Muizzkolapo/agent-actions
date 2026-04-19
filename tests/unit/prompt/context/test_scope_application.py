@@ -469,6 +469,162 @@ class TestDropVersioned:
         assert lc["v_2"]["name"] == "n"
 
 
+class TestDropPassthroughInteraction:
+    """Bug fix: drop directives must exclude fields from passthrough wildcards.
+
+    Previously, drop ran before passthrough extraction. Passthrough read from
+    post-drop context, so dropped fields were silently absent — same end result,
+    but drop couldn't explicitly target passthrough fields.
+
+    Now passthrough extracts from pre-drop context, then drop removes from both
+    prompt_context and passthrough_fields.
+    """
+
+    def test_drop_field_excluded_from_passthrough_wildcard(self):
+        """Core fix: drop: [upstream.debug_info] + passthrough: [upstream.*]
+        excludes debug_info from passthrough output."""
+        fc = {
+            "upstream": {"field1": "val1", "debug_info": "secret", "field2": "val2"},
+        }
+        _, _, pt = apply_context_scope(
+            fc,
+            {
+                "drop": ["upstream.debug_info"],
+                "passthrough": ["upstream.*"],
+            },
+            action_name="test",
+        )
+        assert "debug_info" not in pt.get("upstream", {})
+        assert pt["upstream"]["field1"] == "val1"
+        assert pt["upstream"]["field2"] == "val2"
+
+    def test_drop_multiple_fields_from_passthrough_wildcard(self):
+        """Multiple drop directives each exclude their field from passthrough."""
+        fc = {
+            "upstream": {
+                "field1": "val1",
+                "debug_info": "secret",
+                "internal_notes": "private",
+                "field2": "val2",
+            },
+        }
+        _, _, pt = apply_context_scope(
+            fc,
+            {
+                "drop": ["upstream.debug_info", "upstream.internal_notes"],
+                "passthrough": ["upstream.*"],
+            },
+            action_name="test",
+        )
+        assert "debug_info" not in pt.get("upstream", {})
+        assert "internal_notes" not in pt.get("upstream", {})
+        assert pt["upstream"]["field1"] == "val1"
+        assert pt["upstream"]["field2"] == "val2"
+
+    def test_drop_wildcard_clears_passthrough_namespace(self):
+        """drop: [ns.*] + passthrough: [ns.*] → passthrough namespace removed entirely."""
+        fc = {"upstream": {"a": 1, "b": 2}}
+        _, _, pt = apply_context_scope(
+            fc,
+            {
+                "drop": ["upstream.*"],
+                "passthrough": ["upstream.*"],
+            },
+            action_name="test",
+        )
+        assert "upstream" not in pt
+
+    def test_drop_all_fields_individually_removes_namespace(self):
+        """Dropping every field individually removes the namespace from passthrough."""
+        fc = {"upstream": {"a": 1, "b": 2}}
+        _, _, pt = apply_context_scope(
+            fc,
+            {
+                "drop": ["upstream.a", "upstream.b"],
+                "passthrough": ["upstream.*"],
+            },
+            action_name="test",
+        )
+        assert "upstream" not in pt
+
+    def test_drop_with_specific_passthrough_unaffected(self):
+        """Drop on a field NOT in passthrough has no effect on passthrough output."""
+        fc = {"upstream": {"wanted": "yes", "unwanted": "no"}}
+        _, _, pt = apply_context_scope(
+            fc,
+            {
+                "drop": ["upstream.unwanted"],
+                "passthrough": ["upstream.wanted"],
+            },
+            action_name="test",
+        )
+        assert pt == {"upstream": {"wanted": "yes"}}
+
+    def test_no_warning_on_drop_targeting_existing_field(self):
+        """Drop directive on a field that exists produces no 'matched zero fields' warning."""
+        fc = {"upstream": {"debug_info": "secret", "data": "ok"}}
+        with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
+            apply_context_scope(
+                fc,
+                {
+                    "drop": ["upstream.debug_info"],
+                    "passthrough": ["upstream.*"],
+                },
+                action_name="test",
+            )
+        # No warning calls about "matched zero fields"
+        for call in mock_logger.warning.call_args_list:
+            assert "matched zero fields" not in call[0][0]
+
+    def test_drop_observe_passthrough_full_interaction(self):
+        """All three directives: drop excludes from both observe and passthrough."""
+        fc = {"upstream": {"public": "ok", "debug": "secret", "meta": "info"}}
+        pc, lc, pt = apply_context_scope(
+            fc,
+            {
+                "observe": ["upstream.*"],
+                "passthrough": ["upstream.*"],
+                "drop": ["upstream.debug"],
+            },
+            action_name="test",
+        )
+        # debug excluded from all three outputs
+        assert "debug" not in lc.get("upstream", {})
+        assert "debug" not in pt.get("upstream", {})
+        assert "debug" not in pc.get("upstream", {})
+        # Other fields present in all
+        assert lc["upstream"]["public"] == "ok"
+        assert pt["upstream"]["public"] == "ok"
+        assert pc["upstream"]["public"] == "ok"
+
+    def test_drop_and_passthrough_same_specific_field(self):
+        """Drop on the same specific field as passthrough removes it from output."""
+        fc = {"upstream": {"secret": "s", "public": "p"}}
+        _, _, pt = apply_context_scope(
+            fc,
+            {
+                "drop": ["upstream.secret"],
+                "passthrough": ["upstream.secret", "upstream.public"],
+            },
+            action_name="test",
+        )
+        assert "secret" not in pt.get("upstream", {})
+        assert pt["upstream"]["public"] == "p"
+
+    def test_drop_on_different_namespace_than_passthrough(self):
+        """Drop on namespace A, passthrough on namespace B — no cross-effect."""
+        fc = {"ns_a": {"secret": "s"}, "ns_b": {"data": "d"}}
+        _, _, pt = apply_context_scope(
+            fc,
+            {
+                "drop": ["ns_a.secret"],
+                "passthrough": ["ns_b.*"],
+            },
+            action_name="test",
+        )
+        assert pt == {"ns_b": {"data": "d"}}
+
+
 class TestAllDirectivesCombined:
     """End-to-end with all three directives."""
 

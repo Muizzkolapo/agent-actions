@@ -20,7 +20,6 @@ project/
     └── my_workflow/
         └── agent_io/
             ├── .agent_status.json      # Per-action execution state
-            ├── .upstream_manifest.json  # Cross-workflow linkage (if upstream)
             ├── staging/                # Input data
             ├── source/                 # Source metadata tracking
             └── target/
@@ -161,20 +160,6 @@ ERROR-level events only — a filtered subset of `events.json` for quick error d
 :::tip
 When debugging, check `errors.json` first for a quick overview, then dive into `events.json` for the full trace around the failure timestamp.
 :::
-
-### Upstream Manifest (`.upstream_manifest.json`)
-
-**Path:** `agent_io/.upstream_manifest.json`
-
-Links a workflow's input to an upstream workflow's output when using `--upstream` or `--downstream` execution:
-
-```json
-{
-  "upstream_workflow": "data_extraction",
-  "upstream_path": "../data_extraction/agent_io/target/final_output",
-  "files": ["batch_001.json", "batch_002.json"]
-}
-```
 
 ## Storage Backend (SQLite)
 

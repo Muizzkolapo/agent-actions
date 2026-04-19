@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
+from agent_actions.utils.json_safety import ensure_json_safe
 
 from .schema_conversion import _convert_json_schema_to_unified, compile_field
 
@@ -75,7 +76,14 @@ def compile_unified_schema(
             }
         ]
     elif target == "gemini":
-        compiled = {"name": unified.get("name", ""), "schema": properties}
+        compiled = {
+            "name": unified.get("name", ""),
+            "schema": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        }
     elif target == "ollama":
         compiled = {
             "title": unified.get("name", ""),
@@ -110,4 +118,5 @@ def compile_unified_schema(
                 "operation": "compile_unified_schema",
             },
         )
-    return compiled
+    sanitised: dict[str, Any] | list[dict[str, Any]] = ensure_json_safe(compiled)
+    return sanitised

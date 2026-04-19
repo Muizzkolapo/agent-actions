@@ -385,9 +385,11 @@ class VersionOutputCorrelator:
 
     def _merge_with_pattern(self, agent_records: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Merge content into nested namespaces keyed by version agent name."""
+        from agent_actions.prompt.context.scope_namespace import _extract_content_data
+
         merged_content = {}
         for agent_name, record in agent_records.items():
-            content = record.get("content", {})
+            content = _extract_content_data(record)
             merged_content[agent_name] = content
         return merged_content
 
@@ -451,6 +453,8 @@ class VersionOutputCorrelator:
                 source_record = {
                     "source_guid": record.get("source_guid"),
                     "id": record.get("target_id", record.get("source_guid")),
+                    "lineage": record.get("lineage", []),
+                    "node_id": record.get("node_id"),
                 }
                 source_records.append(source_record)
 

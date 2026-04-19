@@ -2,6 +2,20 @@
 
 How data flows through agent-actions workflow nodes.
 
+## Table of Contents
+
+- [Source Data Format](#source-data-format-critical)
+- [Directory Structure](#directory-structure)
+- [Metadata Fields](#metadata-fields)
+- [Data Shapes by Pattern](#data-shapes-by-pattern)
+- [Data Transformation Patterns](#data-transformation-patterns)
+- [Workflow Stages](#workflow-stages)
+- [Tracing Data Issues](#tracing-data-issues)
+- [Cross-Workflow Data Flow](#cross-workflow-data-flow)
+- [Grounded Retrieval Pattern](#grounded-retrieval-pattern)
+- [Context Passthrough for Merging Branches](#context-passthrough-for-merging-branches)
+- [Best Practices](#best-practices)
+
 ## Source Data Format (Critical)
 
 **Source data must be a flat array of records**, not a wrapper object.
@@ -154,6 +168,90 @@ Complete processing path as array:
 ]
 ```
 
+## Data Shapes by Pattern
+
+What `content` looks like in each mode. These are the shapes your UDF receives after the framework processes the input.
+
+### Record mode (default)
+
+UDF receives one record at a time. The `content` wrapper is already stripped.
+
+```json
+{
+  "extract_claims": {
+    "claims": ["claim 1", "claim 2"],
+    "confidence": 0.85
+  },
+  "seed": {
+    "rubric": {"min_score": 7}
+  }
+}
+```
+
+Access: `content["extract_claims"]["claims"]`
+
+### FILE mode
+
+UDF receives ALL records as a list. Each item retains the `content` wrapper.
+
+```json
+[
+  {
+    "content": {
+      "extract_claims": {"claims": ["claim 1"], "confidence": 0.9}
+    },
+    "source_guid": "abc-123",
+    "node_id": "node_2_xxx_0",
+    "lineage": ["node_0_yyy", "node_1_zzz", "node_2_xxx_0"]
+  },
+  {
+    "content": {
+      "extract_claims": {"claims": ["claim 2"], "confidence": 0.7}
+    },
+    "source_guid": "abc-123",
+    "node_id": "node_2_xxx_1",
+    "lineage": ["node_0_yyy", "node_1_zzz", "node_2_xxx_1"]
+  }
+]
+```
+
+Access: `record["content"]["extract_claims"]["claims"]` for each record.
+
+### Version merge
+
+After `version_consumption: {pattern: merge}`, all version outputs are namespaced by expanded action name.
+
+```json
+{
+  "score_quality_1": {"score": 8, "reasoning": "Clear structure"},
+  "score_quality_2": {"score": 6, "reasoning": "Needs more detail"},
+  "score_quality_3": {"score": 9, "reasoning": "Excellent coverage"}
+}
+```
+
+Access: `content["score_quality_1"]["score"]` or iterate with `content.get(f"score_quality_{i}", {})`.
+
+### Seed data
+
+Seed data lives under the `seed` namespace, keyed by the name from `seed_path:` in config.
+
+```json
+{
+  "seed": {
+    "rubric": {
+      "min_score": 7,
+      "categories": ["accuracy", "clarity"]
+    },
+    "exam_syllabus": {
+      "exam_name": "AWS Solutions Architect",
+      "topics": ["compute", "storage"]
+    }
+  }
+}
+```
+
+Access: `content["seed"]["rubric"]["min_score"]`
+
 ## Data Transformation Patterns
 
 ### Record Multiplication (Flattening)
@@ -279,17 +377,39 @@ cat agent_io/target/node_2_*/data.json | jq '.[0]'
 
 ## Cross-Workflow Data Flow
 
-When workflows chain:
+Chain workflows by declaring `upstream` at the workflow level. Upstream actions are injected as virtual completed actions — their outputs in `agent_io/target/` become available to the downstream workflow.
 
 ```yaml
-# downstream_workflow.yml
-- name: first_action
-  dependencies:
-    - workflow: upstream_workflow
-      action: final_action
+# agent_config/enrich.yml
+name: enrich
+upstream:
+  - workflow: ingest
+    actions: [extract, classify]
+
+actions:
+  - name: enrich_text
+    dependencies: [extract]
+    context_scope:
+      observe:
+        - extract.*
+        - classify.category
 ```
 
-Data from `upstream_workflow.final_action` becomes input.
+**How it works:**
+1. The engine sees `upstream` and validates that `ingest` exists with actions `extract` and `classify`
+2. Those actions are injected into `enrich`'s namespace as virtual completed actions
+3. `enrich_text` references them in `dependencies` and `context_scope` using the same syntax as local actions
+4. I/O resolution reads from `ingest`'s `agent_io/target/extract/` directory
+
+**Running chained workflows:**
+```bash
+agac run -a ingest                  # Run ingest only
+agac run -a enrich                  # Run enrich (ingest must have run already)
+agac run -a ingest --downstream     # Run ingest, then enrich, then anything after
+agac run -a enrich --upstream       # Run ingest first, then enrich
+```
+
+**Data stays in place** — the downstream workflow reads directly from the upstream workflow's output directories. No data copying or staging needed.
 
 ## Grounded Retrieval Pattern
 

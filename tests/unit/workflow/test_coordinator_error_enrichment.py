@@ -36,7 +36,6 @@ def _build_workflow(execution_order=None):
     wf.metadata = metadata
 
     wf.config = MagicMock(spec=WorkflowRuntimeConfig)
-    wf.config.run_downstream = False
 
     runtime = MagicMock()
     runtime.state = WorkflowState()
@@ -46,6 +45,8 @@ def _build_workflow(execution_order=None):
     core = MagicMock(spec=CoreServices)
     core.state_manager = MagicMock()
     core.action_executor = MagicMock()
+    core.action_level_orchestrator = MagicMock()
+    core.action_level_orchestrator.compute_execution_levels.return_value = [["agent_a"]]
     support = MagicMock(spec=SupportServices)
     support.manifest_manager = MagicMock()
     wf.services = WorkflowServices(core=core, support=support)

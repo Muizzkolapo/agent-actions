@@ -60,9 +60,11 @@ All records available at once for cross-record operations.
 - Cross-record validation
 
 :::warning Constraints
-**File granularity only works with tool actions** (`kind: tool`). LLM actions must use Record granularity.
+**File granularity only works with tool and HITL actions** (`kind: tool` or `kind: hitl`). LLM actions must use Record granularity.
 
-**Guards are not supported** with File granularity.
+**HITL actions require File granularity** — setting `granularity: record` on a HITL action raises a `ConfigurationError`. HITL defaults to `file` automatically.
+
+**Guards with File granularity** act as a per-record pre-filter. The guard evaluates each record before the array is passed to the action. See [Guards](./guards) for details.
 :::
 
 ## Tool Implementation
@@ -81,22 +83,29 @@ def validate_email(data, **kwargs):
 
 ### File-Level Tool
 
+FILE tools receive full records with `content`, `node_id`, `source_guid`, and `lineage`. Read business data from `record["content"]`. Return the original record to preserve lineage.
+
 ```python
 from agent_actions import udf_tool
 from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def deduplicate_facts(records, **kwargs):
-    """Process entire array of records."""
+    """Dedup — return full records to preserve lineage tracking."""
     seen = set()
     unique = []
     for record in records:
-        key = record.get('fact_text')
+        content = record.get("content", record)
+        key = content.get("fact_text")
         if key not in seen:
             seen.add(key)
-            unique.append(record)
+            unique.append(record)  # pass through full record
     return unique
 ```
+
+:::tip Record Identity
+FILE tools receive records with a `node_id` that tracks each record's identity through the pipeline. When you return the original record dict, the framework automatically matches it to the correct input and extends the lineage chain. For aggregation (creating new data), return a new dict without `node_id` — the framework treats it as a new record.
+:::
 
 ## Mixing Granularities
 
@@ -121,17 +130,21 @@ actions:
 - **Record → File**: Records collected into array for file-level action
 - **File → Record**: Array elements distributed to record-level processing
 
-## Output Wrapping
+## Output Processing
 
-File mode tools have output automatically wrapped with metadata:
+After a FILE tool returns, the framework:
+
+1. **Matches outputs to inputs by `node_id`** — if an output carries a `node_id` from an input, the framework extends that input's lineage.
+2. **Treats outputs without `node_id` as new records** — they get fresh lineage (e.g., aggregation results).
+3. **Wraps and enriches** — assigns new `target_id`, `node_id`, and extends the `lineage` chain.
 
 ```json
 {
   "source_guid": "abc-123",
   "content": {"question": "What is MCP?"},
   "target_id": "new-uuid-1",
-  "node_id": "flatten_questions_xyz_0",
-  "lineage": ["extract_qa_previous", "flatten_questions_xyz_0"]
+  "node_id": "deduplicate_facts_xyz_0",
+  "lineage": ["extract_qa_abc", "flatten_questions_def_0", "deduplicate_facts_xyz_0"]
 }
 ```
 

@@ -166,4 +166,3 @@ See [Version Actions](../execution/versions) for complete documentation.
 
 - [Version Actions](../execution/versions) - Version configuration and field prefix patterns
 - [Context Scope](./context-scope) - Field visibility and flow control
-- [Workflow Dependencies](../execution/workflow-dependencies) - Dependency patterns

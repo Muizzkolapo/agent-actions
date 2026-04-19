@@ -17,6 +17,43 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _load_source_data_for_reprompt(
+    storage_backend: "StorageBackend | None",
+) -> list[Any] | None:
+    """Load source data from the storage backend for reprompt batch preparation.
+
+    During initial batch preparation the runner passes ``source_data`` so the
+    ``source.*`` observe namespace can be resolved.  During reprompt the same
+    data is needed but is not threaded through the call chain.  This helper
+    reads it back from the storage backend (where it was persisted at ingest
+    time) so the reprompt preparator can resolve ``source.*`` fields
+    identically to the initial batch.
+
+    Returns ``None`` when no backend is configured or no source files exist,
+    which preserves the existing fallback behaviour (``source_content = content``).
+    """
+    if storage_backend is None:
+        return None
+
+    try:
+        source_files = storage_backend.list_source_files()
+        if not source_files:
+            return None
+
+        all_source_data: list[Any] = []
+        for path in source_files:
+            try:
+                records = storage_backend.read_source(path)
+                all_source_data.extend(records)
+            except FileNotFoundError:
+                continue
+
+        return all_source_data if all_source_data else None
+    except Exception:
+        logger.warning("Could not load source data for reprompt", exc_info=True)
+        return None
+
+
 def _load_validation_udf(
     agent_config: dict[str, Any] | None,
     reprompt_config: dict[str, Any],
@@ -52,29 +89,32 @@ def validate_and_reprompt(
     agent_config: dict[str, Any] | None,
 ) -> list[BatchResult]:
     """Validate results and reprompt failures with feedback."""
-    from agent_actions.processing.recovery.response_validator import build_validation_feedback
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+    from agent_actions.processing.recovery.response_validator import (
+        build_validation_feedback,
+        resolve_feedback_strategies,
+        safe_validate,
+    )
     from agent_actions.processing.recovery.validation import get_validation_function
     from agent_actions.processing.types import RepromptMetadata
 
-    reprompt_config = (agent_config or {}).get("reprompt")
+    raw_reprompt_config = (agent_config or {}).get("reprompt")
+    parsed = parse_reprompt_config(raw_reprompt_config)
     logger.debug(
-        "Batch reprompt check: agent_config has %d keys, reprompt_config=%s",
+        "Batch reprompt check: agent_config has %d keys, parsed=%s",
         len(agent_config or {}),
-        reprompt_config,
+        parsed,
     )
-    if not reprompt_config:
+    if parsed is None:
         logger.debug("Reprompt not configured, skipping validation")
         return results
 
-    validation_name = reprompt_config.get("validation")
-    if not validation_name:
-        logger.warning("Reprompt enabled but no validation UDF specified")
-        return results
+    validation_name = parsed.validation_name
+    max_attempts = parsed.max_attempts
+    on_exhausted = parsed.on_exhausted
+    strategies = resolve_feedback_strategies(raw_reprompt_config)
 
-    max_attempts = reprompt_config.get("max_attempts", 2)
-    on_exhausted = reprompt_config.get("on_exhausted", "return_last")
-
-    _load_validation_udf(agent_config, reprompt_config)
+    _load_validation_udf(agent_config, raw_reprompt_config or {})
 
     try:
         validation_func, feedback_message = get_validation_function(validation_name)
@@ -102,16 +142,12 @@ def validate_and_reprompt(
             ):
                 continue
 
-            try:
-                is_valid = validation_func(result.content)
-            except Exception as e:
-                logger.warning(
-                    "Validation UDF error for %s (treating as failure): %s",
-                    result.custom_id,
-                    e,
-                    exc_info=True,
-                )
-                is_valid = False
+            is_valid = safe_validate(
+                validation_func,
+                result.content,
+                context=result.custom_id,
+                catch=(Exception,),
+            )
 
             validation_status[result.custom_id] = is_valid
 
@@ -142,6 +178,23 @@ def validate_and_reprompt(
                 )
             break
 
+        use_critique = (raw_reprompt_config or {}).get("use_llm_critique", False)
+        critique_after = (raw_reprompt_config or {}).get("critique_after_attempt", 2)
+        apply_critique = use_critique and attempt >= critique_after and attempt < max_attempts
+
+        if apply_critique:
+            from agent_actions.processing.recovery.critique import (
+                format_critique_feedback,
+                invoke_critique,
+            )
+
+            if len(failed_results) > 10:
+                logger.warning(
+                    "Critique enabled for %d failed records — each requires a "
+                    "synchronous LLM call, expect increased latency",
+                    len(failed_results),
+                )
+
         reprompt_records = []
         for failed_result in failed_results:
             custom_id = failed_result.custom_id
@@ -158,7 +211,26 @@ def validate_and_reprompt(
             feedback = build_validation_feedback(
                 failed_response=failed_result.content,
                 feedback_message=feedback_message,
+                strategies=strategies,
             )
+
+            if apply_critique:
+                try:
+                    critique_text = invoke_critique(
+                        agent_config or {}, failed_result.content, feedback_message
+                    )
+                    feedback = format_critique_feedback(critique_text, feedback)
+                    logger.info(
+                        "LLM critique appended for %s (attempt %d)",
+                        custom_id,
+                        attempt,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Critique failed for %s, continuing without",
+                        custom_id,
+                        exc_info=True,
+                    )
 
             original_user_content = original_record.get("user_content", "")
             original_record["user_content"] = f"{original_user_content}\n\n{feedback}"
@@ -181,12 +253,14 @@ def validate_and_reprompt(
                 dependency_configs=dependency_configs,
                 storage_backend=storage_backend,
             )
+            source_data = _load_source_data_for_reprompt(storage_backend)
             prepared = preparator.prepare_tasks(
                 agent_config=agent_config or {},
                 data=reprompt_records,
                 provider=provider,
                 output_directory=output_directory,
                 batch_name=reprompt_batch_name,
+                source_data=source_data,
             )
 
             batch_id, status = provider.submit_batch(
@@ -263,17 +337,18 @@ def validate_results(
         Empty failed_results means all passed.
         None validation_name means reprompt is not configured.
     """
-    reprompt_config = (agent_config or {}).get("reprompt")
-    if not reprompt_config:
-        return [], None
-
-    validation_name = reprompt_config.get("validation")
-    if not validation_name:
-        return [], None
-
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+    from agent_actions.processing.recovery.response_validator import safe_validate
     from agent_actions.processing.recovery.validation import get_validation_function
 
-    _load_validation_udf(agent_config, reprompt_config)
+    raw_reprompt_config = (agent_config or {}).get("reprompt")
+    parsed = parse_reprompt_config(raw_reprompt_config)
+    if parsed is None:
+        return [], None
+
+    validation_name = parsed.validation_name
+
+    _load_validation_udf(agent_config, raw_reprompt_config or {})
 
     try:
         validation_func, _ = get_validation_function(validation_name)
@@ -293,16 +368,12 @@ def validate_results(
         ):
             continue
 
-        try:
-            is_valid = validation_func(result.content)
-        except Exception:
-            # UDF raised at runtime — could be a code bug or unexpected LLM output.
-            # Treat as validation failure so the batch can reprompt rather than abort.
-            logger.exception(
-                "Validation UDF raised an exception for record %s (treating as failure)",
-                result.custom_id,
-            )
-            is_valid = False
+        is_valid = safe_validate(
+            validation_func,
+            result.content,
+            context=result.custom_id,
+            catch=(Exception,),
+        )
 
         if not is_valid:
             failed_results.append(result)
@@ -345,13 +416,20 @@ def submit_reprompt_batch(
     from agent_actions.llm.batch.processing.preparator import (
         BatchTaskPreparator,
     )
-    from agent_actions.processing.recovery.response_validator import build_validation_feedback
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+    from agent_actions.processing.recovery.response_validator import (
+        build_validation_feedback,
+        resolve_feedback_strategies,
+    )
     from agent_actions.processing.recovery.validation import get_validation_function
 
-    reprompt_config = (agent_config or {}).get("reprompt", {})
-    validation_name = reprompt_config.get("validation")
-    if not validation_name:
+    raw_reprompt_config = (agent_config or {}).get("reprompt", {})
+    parsed = parse_reprompt_config(raw_reprompt_config)
+    if parsed is None:
         return None
+
+    validation_name = parsed.validation_name
+    strategies = resolve_feedback_strategies(raw_reprompt_config)
 
     try:
         _, feedback_message = get_validation_function(validation_name)
@@ -371,6 +449,7 @@ def submit_reprompt_batch(
         feedback = build_validation_feedback(
             failed_response=failed_result.content,
             feedback_message=feedback_message,
+            strategies=strategies,
         )
 
         original_user_content = original_record.get("user_content", "")
@@ -392,12 +471,14 @@ def submit_reprompt_batch(
             dependency_configs=dependency_configs,
             storage_backend=storage_backend,
         )
+        source_data = _load_source_data_for_reprompt(storage_backend)
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
             data=reprompt_records,
             provider=provider,
             output_directory=output_directory,
             batch_name=reprompt_batch_name,
+            source_data=source_data,
         )
 
         batch_id, _ = provider.submit_batch(

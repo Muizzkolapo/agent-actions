@@ -273,4 +273,3 @@ This structure keeps your agentic workflows organized while enabling reuse. Shar
 - [Templates](./templates.md) — Template-based configuration
 - [Run Modes](../execution/run-modes.md) — Batch vs online execution
 - [Granularity](../execution/granularity.md) — Record vs file processing
-- [Workflow Dependencies](../execution/workflow-dependencies.md) — Cross-agentic-workflow orchestration

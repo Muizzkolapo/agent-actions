@@ -20,13 +20,18 @@ class LineageBuilder:
 
     @staticmethod
     def _propagate_ancestry_chain(obj: dict, parent_item: dict) -> None:
-        """Propagate parent_target_id and root_target_id from parent to *obj* in place."""
+        """Propagate parent_target_id, root_target_id, and source_guid from parent to *obj* in place."""
         if "target_id" in parent_item:
             obj["parent_target_id"] = parent_item["target_id"]
         if "root_target_id" in parent_item:
             obj["root_target_id"] = parent_item["root_target_id"]
         elif "target_id" in parent_item:
             obj["root_target_id"] = parent_item["target_id"]
+        # Propagate source_guid from parent when not already set on obj.
+        # source_guid tracks which original input record this data descends from;
+        # it is a framework concept that must survive FILE-mode tool transformations.
+        if ("source_guid" not in obj or not obj["source_guid"]) and parent_item.get("source_guid"):
+            obj["source_guid"] = parent_item["source_guid"]
 
     @staticmethod
     def filter_node_lineage(lineage: list[Any]) -> list[str]:

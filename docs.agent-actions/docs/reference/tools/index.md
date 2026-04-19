@@ -73,21 +73,23 @@ def filter_questions_by_score(data: dict, **kwargs) -> dict:
 
 ### File Granularity
 
-Use when your logic needs cross-record context:
+Use when your logic needs cross-record context. FILE tools receive **full records** with framework metadata (`node_id`, `source_guid`, `lineage`) and a `content` dict containing business data.
 
 ```python
 from agent_actions import udf_tool
 from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
-def run_dedup(data: list, **kwargs) -> list:
+def run_dedup(data: list[dict], **kwargs) -> list[dict]:
+    """Dedup — return full records to preserve lineage."""
     seen = set()
     unique = []
     for record in data:
-        fact = record.get('fact', '')
+        content = record.get("content", record)
+        fact = content.get("fact", "")
         if fact not in seen:
             seen.add(fact)
-            unique.append(record)
+            unique.append(record)  # return the full record
     return unique
 ```
 
@@ -97,39 +99,47 @@ File granularity is exclusively supported for tool actions. LLM actions must use
 
 ### File Granularity Constraints
 
-- **Guards are not supported** - Implement filtering logic within your tool instead
-- **Input is an array** - Your function receives the entire array of records
-- **Output flexibility** - Return an array of any size (N→M transformation)
+- **Input is an array of full records** — each record has `content`, `node_id`, `source_guid`, `lineage`
+- **Read business data from `record["content"]["field"]`** — not `record["field"]`
+- **Return the original record for passthrough** (filter, dedup, sort, transform) — preserves `node_id` and lineage
+- **Return a new dict for aggregation** (no `node_id`) — framework creates fresh lineage
+- **Output flexibility** — return an array of any size (N→M transformation)
 
 See [Granularity](../execution/granularity.md) for detailed documentation.
 
-### FileUDFResult for Lineage
+### Record Identity and Lineage
 
-Track which input records produced which outputs:
+The framework tracks each record through the pipeline using `node_id` — inspired by [Apache NiFi's FlowFile model](https://nifi.apache.org/docs/nifi-docs/html/nifi-in-depth.html). You never manage `node_id` directly. The framework handles it automatically based on what you return:
 
 ```python
-from agent_actions import udf_tool, FileUDFResult
+from agent_actions import udf_tool
 from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
-def dedup_with_lineage(data: list, **kwargs) -> FileUDFResult:
+def dedup_tool(data: list[dict], **kwargs) -> list[dict]:
     seen = {}
     outputs = []
-    source_mapping = {}
 
-    for idx, record in enumerate(data):
-        fact = record['fact']
+    for record in data:
+        content = record.get("content", record)
+        fact = content.get("fact", "")
         if fact not in seen:
-            seen[fact] = len(outputs)
-            outputs.append(record)
-            source_mapping[len(outputs) - 1] = idx
+            seen[fact] = True
+            outputs.append(record)  # full record → lineage extended
 
-    return FileUDFResult(
-        outputs=outputs,
-        source_mapping=source_mapping,
-        input_count=len(data)
-    )
+    return outputs
+
+
+@udf_tool(granularity=Granularity.FILE)
+def aggregate_tool(data: list[dict], **kwargs) -> list[dict]:
+    total = sum(r.get("content", r).get("score", 0) for r in data)
+    return [{"summary": f"Total: {total}", "count": len(data)}]  # new dict → fresh lineage
 ```
+
+| What you return | Framework behavior |
+|---|---|
+| Original record dict (has `node_id`) | Extends parent lineage — downstream `observe` can load ancestor data |
+| New dict (no `node_id`) | Creates new root — fresh lineage, no parent |
 
 ## Tool Discovery
 

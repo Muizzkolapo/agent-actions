@@ -14,7 +14,7 @@ from agent_actions.logging.events import (
     UDFDiscoveryStartEvent,
     WorkflowInitializationStartEvent,
 )
-from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfig
+from agent_actions.workflow.models import VirtualAction, WorkflowMetadata, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +64,23 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
     manager = config.manager
     _run_config_stage(manager.load_configs, "load_configs", manager)
     _run_config_stage(manager.validate_agent_name, "validate_agent_name", manager)
-    _run_config_stage(manager.check_child_pipeline, "check_child_pipeline", manager)
-
     # Discover UDFs BEFORE expanding actions (which needs UDF metadata)
     discover_workflow_udfs(config, console)
 
     user_agents = _run_config_stage(manager.get_user_agents, "get_user_agents", manager)
     _run_config_stage(manager.merge_agent_configs, "merge_agent_configs", manager, user_agents)
-    _run_config_stage(manager.determine_execution_order, "determine_execution_order", manager)
+
+    virtual_actions = _run_config_stage(
+        _inject_upstream_virtual_actions, "inject_upstream_virtual_actions", manager, manager
+    )
+
+    virtual_action_names = set(virtual_actions.keys()) if virtual_actions else set()
+    _run_config_stage(
+        manager.determine_execution_order,
+        "determine_execution_order",
+        manager,
+        virtual_action_names,
+    )
 
     execution_order = manager.execution_order
     action_configs = manager.get_all_agent_configs_as_dicts()
@@ -94,8 +103,46 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         execution_order=execution_order,
         action_indices=action_indices,
         action_configs=action_configs,
-        child_pipeline=manager.child_pipeline,
+        virtual_actions=virtual_actions,
     )
+
+
+def _inject_upstream_virtual_actions(
+    manager: ConfigManager,
+) -> dict[str, VirtualAction]:
+    """Parse ``upstream`` declarations and build virtual action map.
+
+    Returns:
+        Dict mapping action name to ``VirtualAction``.
+    """
+    if manager.user_config is None:
+        return {}
+
+    upstream_refs = manager.user_config.get("upstream")
+    if not upstream_refs or not isinstance(upstream_refs, list):
+        return {}
+
+    # Filter to well-formed refs once, reuse for validation and building
+    parsed_refs = [ref for ref in upstream_refs if isinstance(ref, dict) and "workflow" in ref]
+    if not parsed_refs:
+        return {}
+
+    if manager.project_root:
+        from agent_actions.workflow.orchestrator import WorkflowOrchestrator
+
+        orchestrator = WorkflowOrchestrator(manager.project_root)
+        orchestrator.validate_upstream_refs(manager.agent_name or "unknown", parsed_refs)
+
+    virtual_actions: dict[str, VirtualAction] = {}
+    for ref in parsed_refs:
+        workflow_name = ref["workflow"]
+        for action_name in ref.get("actions", []):
+            virtual_actions[action_name] = VirtualAction(
+                source_workflow=workflow_name,
+                action_name=action_name,
+            )
+
+    return virtual_actions
 
 
 def discover_workflow_udfs(config: WorkflowRuntimeConfig, console: Console) -> None:

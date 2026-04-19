@@ -42,7 +42,6 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
 
     # Config
     wf.config = MagicMock(spec=WorkflowRuntimeConfig)
-    wf.config.run_downstream = False
 
     # Runtime state
     runtime = MagicMock()
@@ -54,6 +53,8 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     core = MagicMock(spec=CoreServices)
     core.state_manager = MagicMock()
     core.action_executor = MagicMock()
+    core.action_level_orchestrator = MagicMock()
+    core.action_level_orchestrator.compute_execution_levels.return_value = [["agent_a"]]
     support = MagicMock(spec=SupportServices)
     support.manifest_manager = MagicMock()
     wf.services = WorkflowServices(core=core, support=support)
@@ -234,12 +235,11 @@ class TestRunWorkflowWithContext:
         wf.event_logger.handle_workflow_error.assert_called_once()
         assert wf.state.failed is True
 
-    def test_downstream_resolved_after_completion(self):
-        """After all agents complete, should attempt downstream resolution."""
+    def test_success_after_completion(self):
+        """After all agents complete, should return success."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = True
         wf.services.core.state_manager.is_workflow_complete.return_value = True
-        wf._resolve_downstream_workflows = MagicMock(return_value=True)
 
         mgr = MagicMock()
         mgr.context.return_value.__enter__ = MagicMock()
@@ -248,7 +248,6 @@ class TestRunWorkflowWithContext:
             result = wf._run_workflow_with_context(datetime.now())
 
         assert result == ("success", {})
-        wf._resolve_downstream_workflows.assert_called_once()
 
 
 # ── _reset_retryable_actions ─────────────────────────────────────────
