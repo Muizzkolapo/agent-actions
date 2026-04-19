@@ -60,13 +60,7 @@ def _merge_lineage(existing: dict[str, Any], new_lineage: list[Any]) -> None:
 
 
 def _populate_lineage_sources(existing: dict[str, Any], new_record: dict[str, Any]) -> None:
-    """Track branch leaf node_ids in lineage_sources when merging parallel branches.
-
-    Called after field merging in deep_merge_record. When two records from
-    different branches (different node_ids) are merged, lineage_sources
-    accumulates the leaf node_id from each branch so the historical context
-    loader can resolve all upstream branches via Mode 2.
-    """
+    """Track branch leaf node_ids in lineage_sources when merging parallel branches."""
     existing_node_id = existing.get("node_id")
     new_node_id = new_record.get("node_id")
 
