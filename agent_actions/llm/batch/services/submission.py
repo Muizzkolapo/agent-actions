@@ -183,6 +183,13 @@ class BatchSubmissionService:
                     "Use --batch_continue to process completed batches."
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
+            if entry and entry.status == BatchStatus.COMPLETED:
+                logger.info(
+                    "Found completed batch job for %s: %s — skipping resubmission",
+                    batch_name,
+                    entry.batch_id,
+                )
+                return SubmissionResult(batch_id=entry.batch_id)
 
         tasks, context_map = self.prepare_batch_tasks(
             agent_config, data, output_directory, batch_name, source_data, workflow_metadata
