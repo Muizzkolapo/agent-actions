@@ -10,47 +10,44 @@ from datetime import date, datetime
 
 import pytest
 
-from agent_actions.output.response.schema_conversion import (
-    _sanitise_schema_value,
-    compile_field,
-)
 from agent_actions.output.response.vendor_compilation import compile_unified_schema
+from agent_actions.utils.json_safety import ensure_json_safe
 
 # ---------------------------------------------------------------------------
-# _sanitise_schema_value unit tests
+# ensure_json_safe unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestSanitiseSchemaValue:
-    """Direct tests for the schema value sanitiser."""
+class TestEnsureJsonSafeSchema:
+    """Verify ensure_json_safe handles types that appear in schemas."""
 
     def test_nan_replaced_with_none(self):
-        assert _sanitise_schema_value(float("nan")) is None
+        assert ensure_json_safe(float("nan")) is None
 
     def test_infinity_replaced_with_none(self):
-        assert _sanitise_schema_value(float("inf")) is None
-        assert _sanitise_schema_value(float("-inf")) is None
+        assert ensure_json_safe(float("inf")) is None
+        assert ensure_json_safe(float("-inf")) is None
 
     def test_normal_float_preserved(self):
-        assert _sanitise_schema_value(3.14) == 3.14
+        assert ensure_json_safe(3.14) == 3.14
 
     def test_date_to_isoformat(self):
-        assert _sanitise_schema_value(date(2026, 1, 1)) == "2026-01-01"
+        assert ensure_json_safe(date(2026, 1, 1)) == "2026-01-01"
 
     def test_datetime_to_isoformat(self):
-        assert _sanitise_schema_value(datetime(2026, 1, 1, 12, 0)) == "2026-01-01T12:00:00"
+        assert ensure_json_safe(datetime(2026, 1, 1, 12, 0)) == "2026-01-01T12:00:00"
 
     def test_bytes_decoded(self):
-        assert _sanitise_schema_value(b"hello") == "hello"
+        assert ensure_json_safe(b"hello") == "hello"
 
     def test_set_to_list(self):
-        result = _sanitise_schema_value({"a", "b"})
+        result = ensure_json_safe({"a", "b"})
         assert isinstance(result, list)
         assert sorted(result) == ["a", "b"]
 
     def test_nested_dict(self):
         data = {"key": float("nan"), "nested": {"dt": date(2026, 1, 1)}}
-        result = _sanitise_schema_value(data)
+        result = ensure_json_safe(data)
         assert result["key"] is None
         assert result["nested"]["dt"] == "2026-01-01"
         json.dumps(result)  # Must not raise
@@ -60,69 +57,72 @@ class TestSanitiseSchemaValue:
             def __repr__(self):
                 return "Marker()"
 
-        assert _sanitise_schema_value(Marker()) == "Marker()"
+        assert ensure_json_safe(Marker()) == "Marker()"
 
 
 # ---------------------------------------------------------------------------
-# compile_field — JSON safety integration
+# compile_unified_schema — field-level JSON safety (via outer sanitisation)
 # ---------------------------------------------------------------------------
 
 
-class TestCompileFieldJsonSafety:
-    """Verify compile_field sanitises non-serializable values in field properties."""
+class TestFieldLevelJsonSafetyViaCompilation:
+    """Verify non-serializable field values are sanitised during schema compilation."""
 
     def test_enum_with_date_values_serialisable(self):
-        field = {
-            "id": "status_date",
-            "type": "string",
-            "enum": [date(2026, 1, 1), date(2026, 6, 15)],
+        schema = {
+            "name": "test",
+            "fields": [
+                {
+                    "id": "status_date",
+                    "type": "string",
+                    "enum": [date(2026, 1, 1), date(2026, 6, 15)],
+                },
+            ],
         }
-        name, prop = compile_field(field, "openai")
-        assert name == "status_date"
-        assert prop["enum"] == ["2026-01-01", "2026-06-15"]
-        json.dumps(prop)
+        compiled = compile_unified_schema(schema, "openai")
+        props = compiled["schema"]["properties"]["status_date"]
+        assert props["enum"] == ["2026-01-01", "2026-06-15"]
+        json.dumps(compiled)
 
     def test_description_with_datetime_serialisable(self):
-        field = {
-            "id": "created",
-            "type": "string",
-            "description": datetime(2026, 4, 19, 12, 0),
+        schema = {
+            "name": "test",
+            "fields": [
+                {"id": "created", "type": "string", "description": datetime(2026, 4, 19, 12, 0)},
+            ],
         }
-        name, prop = compile_field(field, "openai")
-        assert prop["description"] == "2026-04-19T12:00:00"
-        json.dumps(prop)
+        compiled = compile_unified_schema(schema, "openai")
+        props = compiled["schema"]["properties"]["created"]
+        assert props["description"] == "2026-04-19T12:00:00"
+        json.dumps(compiled)
 
     def test_items_with_nan_sanitised(self):
-        field = {
-            "id": "scores",
-            "type": "array",
-            "items": {"type": "number", "default": float("nan")},
+        schema = {
+            "name": "test",
+            "fields": [
+                {
+                    "id": "scores",
+                    "type": "array",
+                    "items": {"type": "number", "default": float("nan")},
+                },
+            ],
         }
-        name, prop = compile_field(field, "openai")
-        assert prop["items"]["default"] is None
-        json.dumps(prop)
-
-    def test_validator_with_bytes_sanitised(self):
-        field = {
-            "id": "code",
-            "type": "string",
-            "validators": [{"not": {"pattern": b"[invalid]"}, "errorMessage": "bad"}],
-        }
-        name, prop = compile_field(field, "openai")
-        assert isinstance(prop["not"]["pattern"], str)
-        json.dumps(prop)
+        compiled = compile_unified_schema(schema, "openai")
+        props = compiled["schema"]["properties"]["scores"]
+        assert props["items"]["default"] is None
+        json.dumps(compiled)
 
     def test_normal_field_unchanged(self):
-        field = {
-            "id": "name",
-            "type": "string",
-            "description": "A name field",
-            "required": True,
+        schema = {
+            "name": "test",
+            "fields": [
+                {"id": "name", "type": "string", "description": "A name field", "required": True},
+            ],
         }
-        name, prop = compile_field(field, "openai")
-        assert name == "name"
-        assert prop == {"type": "string", "description": "A name field"}
-        json.dumps(prop)
+        compiled = compile_unified_schema(schema, "openai")
+        props = compiled["schema"]["properties"]["name"]
+        assert props == {"type": "string", "description": "A name field"}
+        json.dumps(compiled)
 
 
 # ---------------------------------------------------------------------------

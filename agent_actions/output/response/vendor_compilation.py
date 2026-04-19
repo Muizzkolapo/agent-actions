@@ -9,12 +9,9 @@ import logging
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
+from agent_actions.utils.json_safety import ensure_json_safe
 
-from .schema_conversion import (
-    _convert_json_schema_to_unified,
-    _sanitise_schema_value,
-    compile_field,
-)
+from .schema_conversion import _convert_json_schema_to_unified, compile_field
 
 logger = logging.getLogger(__name__)
 
@@ -121,4 +118,4 @@ def compile_unified_schema(
                 "operation": "compile_unified_schema",
             },
         )
-    return _sanitise_schema_value(compiled)
+    return ensure_json_safe(compiled)
