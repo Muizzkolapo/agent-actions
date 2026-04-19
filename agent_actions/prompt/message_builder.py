@@ -13,7 +13,9 @@ Architecture invariant: all prompt-to-message assembly MUST go through
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from enum import Enum
 from textwrap import dedent
 from typing import Any
@@ -23,6 +25,45 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# JSON safety
+# ---------------------------------------------------------------------------
+
+
+def _ensure_json_safe(obj: Any) -> Any:
+    """Recursively convert non-JSON-serializable types to safe representations.
+
+    Handles types that ``json.dumps()`` either rejects (TypeError) or serialises
+    into tokens that are invalid JSON (NaN, Infinity).  Applied at serialisation
+    boundaries so that provider SDKs never receive unparseable payloads.
+    """
+    if obj is None or isinstance(obj, (bool, str)):
+        return obj
+    if isinstance(obj, int):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            logger.warning("Replacing non-finite float %r with null in JSON payload", obj)
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): _ensure_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_ensure_json_safe(item) for item in obj]
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", errors="replace")
+    if isinstance(obj, (set, frozenset)):
+        return [_ensure_json_safe(item) for item in obj]
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    # Fallback: convert unknown types to their string representation
+    logger.warning(
+        "Converting non-serializable type %s to string in JSON payload",
+        type(obj).__name__,
+    )
+    return str(obj)
 
 
 # ---------------------------------------------------------------------------
@@ -321,8 +362,10 @@ class MessageBuilder:
 
             if isinstance(context_data, str):
                 return context_data
-            return json.dumps(context_data, ensure_ascii=False)
+            return json.dumps(_ensure_json_safe(context_data), ensure_ascii=False)
 
+        if isinstance(context_data, dict):
+            return str(_ensure_json_safe(context_data))
         return str(StringProcessor.process_as_string(context_data))
 
     @staticmethod

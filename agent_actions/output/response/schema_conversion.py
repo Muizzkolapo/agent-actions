@@ -6,11 +6,47 @@ and compiles individual fields for target systems.
 """
 
 import logging
+import math
+from datetime import date, datetime
 from typing import Any
 
 from agent_actions.errors import SchemaValidationError
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitise_schema_value(obj: Any) -> Any:
+    """Recursively sanitise schema values for JSON serialisation.
+
+    Schema definitions parsed from YAML can contain Python-specific types
+    (``datetime.date`` from bare date literals, ``float('nan')`` from ``.nan``)
+    and dispatch functions can return arbitrary types.  This ensures every
+    value in the compiled schema is safe for ``json.dumps()``.
+    """
+    if obj is None or isinstance(obj, (bool, str)):
+        return obj
+    if isinstance(obj, int):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            logger.warning("Replacing non-finite float %r with null in schema value", obj)
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): _sanitise_schema_value(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitise_schema_value(item) for item in obj]
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", errors="replace")
+    if isinstance(obj, (set, frozenset)):
+        return [_sanitise_schema_value(item) for item in obj]
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    logger.warning(
+        "Converting non-serializable type %s to string in schema value",
+        type(obj).__name__,
+    )
+    return str(obj)
 
 
 def _convert_json_schema_to_unified(json_schema: dict[str, Any]) -> dict[str, Any]:
@@ -124,15 +160,15 @@ def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]
     prop: dict[str, Any] = {"type": field["type"]}
     for k in ("title", "description", "pattern", "minItems", "maxItems"):
         if k in field:
-            prop[k] = field[k]
+            prop[k] = _sanitise_schema_value(field[k])
     if field["type"] == "array" and "items" in field:
-        prop["items"] = field["items"]
+        prop["items"] = _sanitise_schema_value(field["items"])
     if "enum" in field:
-        prop["enum"] = field["enum"]
+        prop["enum"] = _sanitise_schema_value(field["enum"])
     if "validators" in field:
         for v in field["validators"]:
             if "not" in v:
-                prop["not"] = v["not"]
+                prop["not"] = _sanitise_schema_value(v["not"])
                 if "errorMessage" in v:
-                    prop["errorMessage"] = v["errorMessage"]
+                    prop["errorMessage"] = _sanitise_schema_value(v["errorMessage"])
     return (target_field, prop)

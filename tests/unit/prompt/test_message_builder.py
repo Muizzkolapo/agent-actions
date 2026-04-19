@@ -7,6 +7,8 @@ generated, ensuring zero behavioural change during migration.
 
 from __future__ import annotations
 
+import json
+from datetime import date, datetime
 from textwrap import dedent
 
 import pytest
@@ -15,6 +17,7 @@ from agent_actions.prompt.message_builder import (
     LLMMessage,
     LLMMessageEnvelope,
     MessageBuilder,
+    _ensure_json_safe,
 )
 
 # ---------------------------------------------------------------------------
@@ -538,3 +541,147 @@ class TestEdgeCases:
         # The envelope has a system message with empty content;
         # the Anthropic batch client checks truthiness before setting params["system"]
         assert system_dicts[0]["content"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Tests — _ensure_json_safe utility
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureJsonSafe:
+    """Verify _ensure_json_safe converts non-serializable types correctly."""
+
+    def test_primitives_pass_through(self):
+        assert _ensure_json_safe(None) is None
+        assert _ensure_json_safe(True) is True
+        assert _ensure_json_safe(42) == 42
+        assert _ensure_json_safe(3.14) == 3.14
+        assert _ensure_json_safe("hello") == "hello"
+
+    def test_nan_replaced_with_none(self):
+        result = _ensure_json_safe(float("nan"))
+        assert result is None
+
+    def test_infinity_replaced_with_none(self):
+        assert _ensure_json_safe(float("inf")) is None
+        assert _ensure_json_safe(float("-inf")) is None
+
+    def test_bytes_decoded_to_string(self):
+        assert _ensure_json_safe(b"hello") == "hello"
+
+    def test_bytes_with_invalid_utf8(self):
+        result = _ensure_json_safe(b"\xff\xfe")
+        assert isinstance(result, str)
+
+    def test_set_converted_to_list(self):
+        result = _ensure_json_safe({1, 2, 3})
+        assert isinstance(result, list)
+        assert sorted(result) == [1, 2, 3]
+
+    def test_frozenset_converted_to_list(self):
+        result = _ensure_json_safe(frozenset(["a", "b"]))
+        assert isinstance(result, list)
+        assert sorted(result) == ["a", "b"]
+
+    def test_datetime_to_isoformat(self):
+        dt = datetime(2026, 4, 19, 12, 0, 0)
+        assert _ensure_json_safe(dt) == "2026-04-19T12:00:00"
+
+    def test_date_to_isoformat(self):
+        d = date(2026, 4, 19)
+        assert _ensure_json_safe(d) == "2026-04-19"
+
+    def test_tuple_converted_to_list(self):
+        result = _ensure_json_safe((1, "a", True))
+        assert result == [1, "a", True]
+
+    def test_nested_dict_sanitised(self):
+        data = {
+            "name": "test",
+            "score": float("nan"),
+            "tags": {"a", "b"},
+            "created": date(2026, 1, 1),
+        }
+        result = _ensure_json_safe(data)
+        assert result["name"] == "test"
+        assert result["score"] is None
+        assert isinstance(result["tags"], list)
+        assert result["created"] == "2026-01-01"
+        # Entire result must be JSON-serializable
+        json.dumps(result)  # Should not raise
+
+    def test_nested_list_sanitised(self):
+        data = [float("inf"), b"data", {1, 2}]
+        result = _ensure_json_safe(data)
+        assert result[0] is None
+        assert result[1] == "data"
+        assert isinstance(result[2], list)
+        json.dumps(result)
+
+    def test_custom_object_becomes_string(self):
+        class Custom:
+            def __repr__(self):
+                return "Custom()"
+
+        result = _ensure_json_safe(Custom())
+        assert result == "Custom()"
+        json.dumps(result)
+
+    def test_deeply_nested_sanitisation(self):
+        data = {"level1": {"level2": [{"value": float("nan"), "items": {1, 2}}]}}
+        result = _ensure_json_safe(data)
+        assert result["level1"]["level2"][0]["value"] is None
+        assert isinstance(result["level1"]["level2"][0]["items"], list)
+        json.dumps(result)
+
+    def test_non_string_dict_keys_converted(self):
+        data = {1: "one", 2: "two"}
+        result = _ensure_json_safe(data)
+        assert all(isinstance(k, str) for k in result.keys())
+        assert result["1"] == "one"
+        assert result["2"] == "two"
+        json.dumps(result)
+
+
+# ---------------------------------------------------------------------------
+# Tests — context serialisation with non-serializable types
+# ---------------------------------------------------------------------------
+
+
+class TestContextSerialisationJsonSafety:
+    """Verify _serialise_context handles dict context with non-serializable types."""
+
+    def test_ollama_dict_with_nan_serialises(self):
+        ctx = {"temperature": float("nan"), "text": "hello"}
+        env = MessageBuilder.build("ollama", PROMPT, ctx, json_mode=True)
+        content = env.messages[1].content
+        parsed = json.loads(content)
+        assert parsed["temperature"] is None
+        assert parsed["text"] == "hello"
+
+    def test_ollama_dict_with_datetime_serialises(self):
+        ctx = {"created": datetime(2026, 4, 19), "text": "hello"}
+        env = MessageBuilder.build("ollama", PROMPT, ctx, json_mode=True)
+        content = env.messages[1].content
+        parsed = json.loads(content)
+        assert parsed["created"] == "2026-04-19T00:00:00"
+
+    def test_ollama_dict_with_bytes_serialises(self):
+        ctx = {"data": b"binary", "text": "hello"}
+        env = MessageBuilder.build("ollama", PROMPT, ctx, json_mode=True)
+        content = env.messages[1].content
+        parsed = json.loads(content)
+        assert parsed["data"] == "binary"
+
+    def test_openai_dict_context_with_nan_produces_valid_string(self):
+        ctx = {"score": float("nan"), "text": "hello"}
+        env = MessageBuilder.build("openai", PROMPT, ctx, json_mode=True)
+        content = env.messages[0].content
+        assert "None" in content  # NaN replaced with None before str()
+        assert isinstance(content, str)
+
+    def test_openai_dict_context_with_set_produces_valid_string(self):
+        ctx = {"tags": {"a", "b"}, "text": "hello"}
+        env = MessageBuilder.build("openai", PROMPT, ctx, json_mode=True)
+        content = env.messages[0].content
+        assert isinstance(content, str)
