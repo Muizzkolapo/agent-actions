@@ -3,6 +3,8 @@
 import json
 import logging
 
+from agent_actions.utils.json_safety import ensure_json_safe
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +38,7 @@ class ContextService:
         # For LLM vendors, convert to JSON string if dict
         if isinstance(context_data_str, str):
             return context_data_str
-        return json.dumps(context_data_str, ensure_ascii=False)
+        return json.dumps(ensure_json_safe(context_data_str), ensure_ascii=False)
 
     @staticmethod
     def prepare_tool_context(
