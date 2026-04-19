@@ -14,7 +14,6 @@ Run:
 import json
 import sys
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,7 +21,6 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
@@ -54,8 +52,7 @@ class SimulationRunner:
         # Mock task preparation to return tasks
         mock_prepared = MagicMock()
         mock_prepared.tasks = [
-            {"target_id": f"r{i}", "content": f"data-{i}", "prompt": "p"}
-            for i in range(10)
+            {"target_id": f"r{i}", "content": f"data-{i}", "prompt": "p"} for i in range(10)
         ]
         mock_prepared.context_map = {}
         mock_prepared.task_count = 10
@@ -228,7 +225,9 @@ def run_simulation():
         print(f"  Run 1: batch_id={bid1} (completed)")
 
         bid2 = sim4.submit_run(force=True, label="forced resubmit")
-        print(f"  Run 2 (force=True): batch_id={bid2}, new={sim4.submissions[-1]['new_submission']}")
+        print(
+            f"  Run 2 (force=True): batch_id={bid2}, new={sim4.submissions[-1]['new_submission']}"
+        )
 
         if sim4.submissions[-1]["new_submission"]:
             print("  PASS: Force flag overrode completed guard")

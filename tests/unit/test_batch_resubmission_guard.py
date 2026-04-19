@@ -31,6 +31,20 @@ def _make_entry(status: str, batch_id: str = "batch-123") -> BatchJobEntry:
     )
 
 
+def _stub_submission_path(svc: BatchSubmissionService, batch_id: str = "batch-new") -> None:
+    """Wire up mocks so submit_batch_job can reach _submit_to_provider."""
+    mock_prepared = MagicMock()
+    mock_prepared.tasks = [{"target_id": "r1", "content": "x", "prompt": "p"}]
+    mock_prepared.context_map = {}
+    mock_prepared.task_count = 1
+    mock_prepared.stats = MagicMock(total_filtered=0, total_skipped=0)
+    svc._task_preparator.prepare_tasks.return_value = mock_prepared
+
+    svc._client_resolver.get_for_config.return_value = MagicMock(
+        submit_batch=MagicMock(return_value=(batch_id, "submitted"))
+    )
+
+
 class TestCompletedBatchSkipsResubmission:
     """Completed batch in registry must block new submission."""
 
@@ -49,18 +63,15 @@ class TestCompletedBatchSkipsResubmission:
 
         assert result.batch_id == "batch-done-1"
         assert result.is_submitted
-        # prepare_batch_tasks must NOT be called — no new submission
         svc._task_preparator.prepare_tasks.assert_not_called()
 
     def test_completed_batch_does_not_compare_record_counts(self, tmp_path):
         """Completed batch blocks resubmission regardless of input data size change."""
         svc = _make_service()
-        # Registry has a batch that completed with 5 records
         entry = _make_entry(BatchStatus.COMPLETED, batch_id="batch-5")
         entry.record_count = 5
         svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
 
-        # New run has 10 records — still should NOT resubmit
         result = svc.submit_batch_job(
             agent_config={"model_vendor": "openai"},
             batch_name="my_action",
@@ -102,18 +113,7 @@ class TestFailedCancelledBatchAllowsResubmission:
         svc = _make_service()
         entry = _make_entry(status, batch_id="batch-failed")
         svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
-
-        # Mock the task preparation and submission path
-        mock_prepared = MagicMock()
-        mock_prepared.tasks = [{"target_id": "r1", "content": "x", "prompt": "p"}]
-        mock_prepared.context_map = {}
-        mock_prepared.task_count = 1
-        mock_prepared.stats = MagicMock(total_filtered=0, total_skipped=0)
-        svc._task_preparator.prepare_tasks.return_value = mock_prepared
-
-        svc._client_resolver.get_for_config.return_value = MagicMock(
-            submit_batch=MagicMock(return_value=("batch-new", "submitted"))
-        )
+        _stub_submission_path(svc, batch_id="batch-new")
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
@@ -126,7 +126,6 @@ class TestFailedCancelledBatchAllowsResubmission:
                 output_directory=str(tmp_path),
             )
 
-        # Should have submitted a NEW batch
         assert result.batch_id == "batch-new"
         svc._task_preparator.prepare_tasks.assert_called_once()
 
@@ -139,17 +138,7 @@ class TestForceOverridesCompletedGuard:
         svc = _make_service()
         entry = _make_entry(BatchStatus.COMPLETED, batch_id="batch-done")
         svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
-
-        mock_prepared = MagicMock()
-        mock_prepared.tasks = [{"target_id": "r1", "content": "x", "prompt": "p"}]
-        mock_prepared.context_map = {}
-        mock_prepared.task_count = 1
-        mock_prepared.stats = MagicMock(total_filtered=0, total_skipped=0)
-        svc._task_preparator.prepare_tasks.return_value = mock_prepared
-
-        svc._client_resolver.get_for_config.return_value = MagicMock(
-            submit_batch=MagicMock(return_value=("batch-forced", "submitted"))
-        )
+        _stub_submission_path(svc, batch_id="batch-forced")
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
@@ -171,17 +160,7 @@ class TestForceOverridesCompletedGuard:
         svc = _make_service(force_batch=True)
         entry = _make_entry(BatchStatus.COMPLETED, batch_id="batch-done")
         svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
-
-        mock_prepared = MagicMock()
-        mock_prepared.tasks = [{"target_id": "r1", "content": "x", "prompt": "p"}]
-        mock_prepared.context_map = {}
-        mock_prepared.task_count = 1
-        mock_prepared.stats = MagicMock(total_filtered=0, total_skipped=0)
-        svc._task_preparator.prepare_tasks.return_value = mock_prepared
-
-        svc._client_resolver.get_for_config.return_value = MagicMock(
-            submit_batch=MagicMock(return_value=("batch-forced-2", "submitted"))
-        )
+        _stub_submission_path(svc, batch_id="batch-forced-2")
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
@@ -204,17 +183,7 @@ class TestNoBatchEntryAllowsSubmission:
         """First-time batch submission works when registry is empty."""
         svc = _make_service()
         svc._registry_manager_factory.return_value.get_batch_job.return_value = None
-
-        mock_prepared = MagicMock()
-        mock_prepared.tasks = [{"target_id": "r1", "content": "x", "prompt": "p"}]
-        mock_prepared.context_map = {}
-        mock_prepared.task_count = 1
-        mock_prepared.stats = MagicMock(total_filtered=0, total_skipped=0)
-        svc._task_preparator.prepare_tasks.return_value = mock_prepared
-
-        svc._client_resolver.get_for_config.return_value = MagicMock(
-            submit_batch=MagicMock(return_value=("batch-first", "submitted"))
-        )
+        _stub_submission_path(svc, batch_id="batch-first")
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
