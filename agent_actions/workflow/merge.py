@@ -22,6 +22,8 @@ def deep_merge_record(existing: dict[str, Any], new_record: dict[str, Any]) -> N
                 existing["content"] = value
         elif key == "lineage" and isinstance(value, list):
             _merge_lineage(existing, value)
+        elif key == "lineage_sources":
+            pass  # Owned by _populate_lineage_sources below
         elif key not in existing:
             existing[key] = value
 

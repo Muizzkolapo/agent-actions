@@ -195,6 +195,26 @@ class TestParallelBranchLineageSources:
 
         assert "lineage_sources" not in existing
 
+    def test_pre_existing_lineage_sources_not_inherited(self):
+        """When new_record carries lineage_sources from a prior fan-in, it is ignored — only current-level branches tracked."""
+        existing = {
+            "source_guid": "book-001",
+            "node_id": "action_g_456",
+            "lineage": ["root_0", "action_g_456"],
+            "content": {"g_field": "G"},
+        }
+        new_record = {
+            "source_guid": "book-001",
+            "node_id": "action_e_123",
+            "lineage": ["root_0", "action_b_1", "action_e_123"],
+            "lineage_sources": ["action_b_1", "action_c_2"],
+            "content": {"e_field": "E"},
+        }
+
+        deep_merge_record(existing, new_record)
+
+        assert existing["lineage_sources"] == ["action_g_456", "action_e_123"]
+
     def test_merge_records_by_key_populates_lineage_sources(self):
         """End-to-end: merge_records_by_key sets lineage_sources for parallel branch records."""
         records = [
