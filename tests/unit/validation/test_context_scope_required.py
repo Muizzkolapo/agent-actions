@@ -106,10 +106,10 @@ class TestContextScopeRequired:
         catches it with an indentation error. The static analyzer normalizes null
         to {} and reports 'no context_scope' (the indentation hint is in the
         normalizer's ConfigurationError, not here)."""
+        import pytest
+
         from agent_actions.errors import ConfigurationError
         from agent_actions.input.context.normalizer import normalize_all_agent_configs
-
-        import pytest
 
         agent_configs = {
             "misindented": {

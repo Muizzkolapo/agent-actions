@@ -1188,3 +1188,116 @@ class TestRecoveryMetadataTypes:
         m = RecoveryMetadata()
         assert m.to_dict() == {}
         assert m.is_empty() is True
+
+
+# ---------------------------------------------------------------------------
+# TestLLMCritiqueIntegration
+# ---------------------------------------------------------------------------
+
+
+class TestLLMCritiqueIntegration:
+    """Integration tests for LLM critique within the reprompt loop."""
+
+    def test_critique_fires_after_threshold_end_to_end(self):
+        """Full reprompt loop: critique fires on attempt 3+ but not 1-2."""
+        critique_calls = []
+
+        def mock_critique(response, errors):
+            critique_calls.append((response, errors))
+            return "The model needs to include the 'status' field"
+
+        validator = _StubValidator(
+            [False, False, False, True],
+            feedback="missing status field",
+        )
+        svc = RepromptService(
+            validator=validator,
+            max_attempts=5,
+            critique_fn=mock_critique,
+            critique_after_attempt=2,
+        )
+
+        captured_prompts = []
+        result = svc.execute(
+            llm_operation=_llm_op_factory(
+                [
+                    ({"v": 1}, True),
+                    ({"v": 2}, True),
+                    ({"v": 3}, True),
+                    ({"status": "ok"}, True),
+                ],
+                capture_prompts=captured_prompts,
+            ),
+            original_prompt="extract status",
+            context="test_action",
+        )
+
+        assert result.passed is True
+        assert result.attempts == 4
+
+        # Attempts 1: failed, below threshold (2) — no critique
+        # Attempt 2: failed, at threshold — critique fires
+        # Attempt 3: failed, above threshold — critique fires
+        # Attempt 4: passes
+        assert len(critique_calls) == 2
+
+        # Prompts 2 and 3 (0-indexed) should contain critique analysis
+        assert "## Analysis of Failure" not in captured_prompts[1]  # attempt 1→2: no critique
+        assert "## Analysis of Failure" in captured_prompts[2]  # attempt 2→3: critique
+        assert "## Analysis of Failure" in captured_prompts[3]  # attempt 3→4: critique
+
+        # Standard feedback always present
+        assert "missing status field" in captured_prompts[1]
+        assert "missing status field" in captured_prompts[2]
+        assert "missing status field" in captured_prompts[3]
+
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_critique_failure_graceful_degradation(self, _fire):
+        """When critique raises, reprompt continues with standard feedback only."""
+        call_count = 0
+
+        def failing_critique(response, errors):
+            nonlocal call_count
+            call_count += 1
+            raise ConnectionError("LLM provider unreachable")
+
+        validator = _StubValidator(
+            [False, False, False],
+            feedback="wrong output",
+        )
+        svc = RepromptService(
+            validator=validator,
+            max_attempts=3,
+            on_exhausted="return_last",
+            critique_fn=failing_critique,
+            critique_after_attempt=1,
+        )
+
+        captured_prompts = []
+        result = svc.execute(
+            llm_operation=_llm_op_factory(
+                [
+                    ({"v": 1}, True),
+                    ({"v": 2}, True),
+                    ({"v": 3}, True),
+                ],
+                capture_prompts=captured_prompts,
+            ),
+            original_prompt="test",
+            context="test_action",
+        )
+
+        # Loop exhausted but didn't crash
+        assert result.passed is False
+        assert result.exhausted is True
+        assert result.attempts == 3
+
+        # Critique was attempted on attempts 1 and 2 (< max_attempts=3)
+        assert call_count == 2
+
+        # Standard feedback still present despite critique failure
+        assert "wrong output" in captured_prompts[1]
+        assert "wrong output" in captured_prompts[2]
+        # No critique section since it failed
+        assert "## Analysis of Failure" not in captured_prompts[1]
+        assert "## Analysis of Failure" not in captured_prompts[2]

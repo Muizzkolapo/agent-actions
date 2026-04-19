@@ -21,6 +21,7 @@ from typing import Any
 from agent_actions.input.preprocessing.transformation.string_transformer import (
     StringProcessor,
 )
+from agent_actions.utils.json_safety import ensure_json_safe
 
 logger = logging.getLogger(__name__)
 
@@ -321,8 +322,10 @@ class MessageBuilder:
 
             if isinstance(context_data, str):
                 return context_data
-            return json.dumps(context_data, ensure_ascii=False)
+            return json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
 
+        if isinstance(context_data, dict):
+            return str(ensure_json_safe(context_data))
         return str(StringProcessor.process_as_string(context_data))
 
     @staticmethod
