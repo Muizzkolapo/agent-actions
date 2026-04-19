@@ -118,6 +118,136 @@ class TestCheckUpstreamHealth:
         assert result is None
 
 
+class TestVersionSourceCascade:
+    """Tests for version-source cascade detection in _check_upstream_health."""
+
+    def test_skipped_version_source_detected(self, executor, mock_deps):
+        """Version source skipped → merge action detected as blocked."""
+        mock_deps.state_manager.execution_order = [
+            "extract_raw_qa_1",
+            "extract_raw_qa_2",
+            "extract_raw_qa_3",
+            "canonicalize_qa",
+        ]
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.side_effect = lambda n: n.startswith("extract_raw_qa_")
+        mock_deps.action_runner.storage_backend = None
+
+        config = {
+            "dependencies": [],
+            "version_consumption_config": {"source": "extract_raw_qa", "pattern": "merge"},
+        }
+        result = executor._check_upstream_health("canonicalize_qa", config)
+        assert result == "extract_raw_qa_1"
+
+    def test_failed_version_source_detected(self, executor, mock_deps):
+        """Version source failed → merge action detected as blocked."""
+        mock_deps.state_manager.execution_order = [
+            "extract_raw_qa_1",
+            "extract_raw_qa_2",
+            "canonicalize_qa",
+        ]
+        mock_deps.state_manager.is_failed.side_effect = lambda n: n == "extract_raw_qa_2"
+        mock_deps.state_manager.is_skipped.return_value = False
+        mock_deps.action_runner.storage_backend = None
+
+        config = {
+            "dependencies": [],
+            "version_consumption_config": {"source": "extract_raw_qa", "pattern": "merge"},
+        }
+        result = executor._check_upstream_health("canonicalize_qa", config)
+        assert result == "extract_raw_qa_2"
+
+    def test_healthy_version_sources_pass(self, executor, mock_deps):
+        """All version sources healthy → returns None."""
+        mock_deps.state_manager.execution_order = [
+            "extract_raw_qa_1",
+            "extract_raw_qa_2",
+            "canonicalize_qa",
+        ]
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
+        mock_deps.action_runner.storage_backend = None
+
+        config = {
+            "dependencies": [],
+            "version_consumption_config": {"source": "extract_raw_qa", "pattern": "merge"},
+        }
+        result = executor._check_upstream_health("canonicalize_qa", config)
+        assert result is None
+
+    def test_non_version_agent_not_matched(self, executor, mock_deps):
+        """Actions with same prefix but non-digit suffix are not matched."""
+        mock_deps.state_manager.execution_order = [
+            "extract_raw_qa_1",
+            "extract_raw_qa_validator",  # not a version agent
+            "canonicalize_qa",
+        ]
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
+        mock_deps.action_runner.storage_backend = None
+
+        config = {
+            "dependencies": [],
+            "version_consumption_config": {"source": "extract_raw_qa", "pattern": "merge"},
+        }
+        result = executor._check_upstream_health("canonicalize_qa", config)
+        assert result is None  # only _1 is a version agent, and it's healthy
+
+    def test_no_version_config_skips_check(self, executor, mock_deps):
+        """No version_consumption_config → only checks dependencies."""
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
+        mock_deps.action_runner.storage_backend = None
+
+        config = {"dependencies": []}
+        result = executor._check_upstream_health("agent_b", config)
+        assert result is None
+
+    def test_empty_version_config_skips_check(self, executor, mock_deps):
+        """Empty version_consumption_config dict → skips version source check."""
+        mock_deps.state_manager.execution_order = ["extract_1", "merge"]
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
+        mock_deps.action_runner.storage_backend = None
+
+        config = {"dependencies": [], "version_consumption_config": {}}
+        result = executor._check_upstream_health("merge", config)
+        assert result is None
+
+
+class TestComputeBatchWallClock:
+    """Tests for _compute_batch_wall_clock."""
+
+    def test_computes_from_persisted_timestamp(self, executor, mock_deps):
+        """Wall-clock computed from batch_submitted_at to now."""
+        # Submitted 60 seconds ago
+        submitted = datetime.now().replace(microsecond=0)
+        from datetime import timedelta
+
+        submitted = datetime.now() - timedelta(seconds=60)
+        mock_deps.state_manager.get_status_details.return_value = {
+            "batch_submitted_at": submitted.isoformat(),
+        }
+        result = executor._compute_batch_wall_clock("agent_a", fallback=5.0)
+        assert result >= 59.0  # at least 59 seconds (clock tolerance)
+        assert result < 65.0  # not wildly off
+
+    def test_missing_timestamp_returns_fallback(self, executor, mock_deps):
+        """No batch_submitted_at → returns fallback."""
+        mock_deps.state_manager.get_status_details.return_value = {}
+        result = executor._compute_batch_wall_clock("agent_a", fallback=5.0)
+        assert result == 5.0
+
+    def test_malformed_timestamp_returns_fallback(self, executor, mock_deps):
+        """Unparseable timestamp → returns fallback."""
+        mock_deps.state_manager.get_status_details.return_value = {
+            "batch_submitted_at": "not-a-date",
+        }
+        result = executor._compute_batch_wall_clock("agent_a", fallback=3.0)
+        assert result == 3.0
+
+
 class TestHandleDependencySkip:
     """Tests for _handle_dependency_skip()."""
 

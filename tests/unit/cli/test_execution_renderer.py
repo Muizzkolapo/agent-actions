@@ -125,6 +125,72 @@ class TestExecutionRenderer:
         assert "┌" in output
         assert "└" in output
 
+    def test_renders_batch_time_with_indicator(self):
+        snap = _basic_snapshot(
+            action_results={
+                "batch_action": ActionResult(
+                    name="batch_action",
+                    kind="llm",
+                    status="completed",
+                    execution_time=974.0,
+                    execution_mode="batch",
+                    model_vendor="openai",
+                    model_name="gpt-4o",
+                ),
+            },
+            execution_levels=[["batch_action"]],
+        )
+        output = _capture_render(snap)
+        assert "16m14s" in output
+        assert "(batch)" in output
+
+    def test_renders_short_time_as_seconds(self):
+        snap = _basic_snapshot(
+            action_results={
+                "fast": ActionResult(
+                    name="fast", kind="tool", status="completed", execution_time=3.7
+                ),
+            },
+            execution_levels=[["fast"]],
+        )
+        output = _capture_render(snap)
+        assert "3.7s" in output
+        assert "(batch)" not in output
+
+    def test_footer_blocked_vs_skipped(self):
+        from agent_actions.workflow.executor import UPSTREAM_SKIP_PREFIX
+
+        snap = _basic_snapshot(
+            action_results={
+                "root_fail": ActionResult(
+                    name="root_fail", kind="llm", status="failed", error_message="billing"
+                ),
+                "blocked_1": ActionResult(
+                    name="blocked_1",
+                    kind="llm",
+                    status="skipped",
+                    skip_reason=f"{UPSTREAM_SKIP_PREFIX} 'root_fail' failed",
+                ),
+                "blocked_2": ActionResult(
+                    name="blocked_2",
+                    kind="tool",
+                    status="skipped",
+                    skip_reason=f"{UPSTREAM_SKIP_PREFIX} 'root_fail' failed",
+                ),
+                "guard_skip": ActionResult(
+                    name="guard_skip",
+                    kind="tool",
+                    status="skipped",
+                    skip_reason="guard condition not met",
+                ),
+            },
+            execution_levels=[["root_fail"], ["blocked_1", "blocked_2"], ["guard_skip"]],
+        )
+        output = _capture_render(snap)
+        assert "1 failed" in output
+        assert "2 blocked" in output
+        assert "1 skipped" in output
+
     def test_renders_done_footer(self):
         output = _capture_render(_basic_snapshot())
         assert "Done in" in output

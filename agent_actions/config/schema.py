@@ -108,6 +108,16 @@ class RepromptConfig(BaseModel):
         default=False,
         description="Include self-reflection instruction in retry prompts",
     )
+    use_llm_critique: bool = Field(
+        default=False,
+        description="Enable LLM critique for stubborn validation failures",
+    )
+    critique_after_attempt: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Critique fires starting on attempt N (e.g. 2 means critique on 2nd failed attempt onward)",
+    )
 
 
 class HitlConfig(BaseModel):

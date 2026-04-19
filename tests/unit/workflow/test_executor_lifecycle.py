@@ -267,15 +267,15 @@ class TestHandleRunSuccess:
         return ActionRunParams(**defaults)
 
     def test_batch_submitted_status(self, executor, mock_deps):
-        """batch_submitted batch_status should return batch_submitted result."""
+        """batch_submitted batch_status should return batch_submitted result with timestamp."""
         params = self._make_params()
         with patch("agent_actions.workflow.executor.fire_event"):
             result = executor._handle_run_success(params, "/out", 1.0, "batch_submitted")
 
         assert result.status == ActionStatus.BATCH_SUBMITTED
-        mock_deps.state_manager.update_status.assert_called_with(
-            "agent_a", ActionStatus.BATCH_SUBMITTED
-        )
+        call_args = mock_deps.state_manager.update_status.call_args
+        assert call_args[0] == ("agent_a", ActionStatus.BATCH_SUBMITTED)
+        assert "batch_submitted_at" in call_args[1]  # timestamp persisted
 
     def test_passthrough_status(self, executor, mock_deps):
         """passthrough batch_status should mark completed."""
