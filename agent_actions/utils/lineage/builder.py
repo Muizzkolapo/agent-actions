@@ -32,6 +32,10 @@ class LineageBuilder:
         # it is a framework concept that must survive FILE-mode tool transformations.
         if ("source_guid" not in obj or not obj["source_guid"]) and parent_item.get("source_guid"):
             obj["source_guid"] = parent_item["source_guid"]
+        # Propagate lineage_sources from merged parent records so downstream
+        # actions can resolve all parallel branches via Mode 2 historical lookup.
+        if "lineage_sources" in parent_item and "lineage_sources" not in obj:
+            obj["lineage_sources"] = parent_item["lineage_sources"]
 
     @staticmethod
     def filter_node_lineage(lineage: list[Any]) -> list[str]:

@@ -25,6 +25,8 @@ def deep_merge_record(existing: dict[str, Any], new_record: dict[str, Any]) -> N
         elif key not in existing:
             existing[key] = value
 
+    _populate_lineage_sources(existing, new_record)
+
 
 def _merge_lineage(existing: dict[str, Any], new_lineage: list[Any]) -> None:
     """Merge lineage arrays with deduplication by node_id."""
@@ -53,6 +55,30 @@ def _merge_lineage(existing: dict[str, Any], new_lineage: list[Any]) -> None:
                     existing_ids.add(node_id)
             else:
                 existing["lineage"].append(entry)
+
+
+def _populate_lineage_sources(existing: dict[str, Any], new_record: dict[str, Any]) -> None:
+    """Track branch leaf node_ids in lineage_sources when merging parallel branches.
+
+    Called after field merging in deep_merge_record. When two records from
+    different branches (different node_ids) are merged, lineage_sources
+    accumulates the leaf node_id from each branch so the historical context
+    loader can resolve all upstream branches via Mode 2.
+    """
+    existing_node_id = existing.get("node_id")
+    new_node_id = new_record.get("node_id")
+
+    if not existing_node_id or not new_node_id:
+        return
+
+    if existing_node_id == new_node_id:
+        return
+
+    if "lineage_sources" in existing:
+        if new_node_id not in existing["lineage_sources"]:
+            existing["lineage_sources"].append(new_node_id)
+    else:
+        existing["lineage_sources"] = [existing_node_id, new_node_id]
 
 
 def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> str | None:
