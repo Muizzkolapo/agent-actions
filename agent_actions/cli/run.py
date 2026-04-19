@@ -75,14 +75,22 @@ class RunCommand:
         plan = orchestrator.resolve_execution_plan(self.agent_name, direction)
         click.echo(f"Execution plan ({direction}): {' -> '.join(plan)}")
 
-        for workflow_name in plan:
+        for i, workflow_name in enumerate(plan):
             click.echo(f"\n--- Running workflow: {workflow_name} ---")
             chain_args = self.args.model_copy(
                 update={"agent": workflow_name, "downstream": False, "upstream": False}
             )
-            RunCommand(chain_args)._execute_single(project_root=project_root)
+            status = RunCommand(chain_args)._execute_single(project_root=project_root)
 
-    def _execute_single(self, project_root: Path | None = None) -> None:
+            if status == "PAUSED":
+                for deferred_name in plan[i + 1 :]:
+                    click.echo(
+                        f"Downstream workflow '{deferred_name}' deferred "
+                        f"— waiting for parent batch to complete"
+                    )
+                break
+
+    def _execute_single(self, project_root: Path | None = None) -> str:
         click.echo(f"Starting agent run for: {self.args.agent}")
 
         if project_root is not None:
@@ -232,6 +240,8 @@ class RunCommand:
 
         if status == "FAILED":
             raise SystemExit(1)
+
+        return status
 
 
 @click.command()

@@ -17,6 +17,43 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _load_source_data_for_reprompt(
+    storage_backend: "StorageBackend | None",
+) -> list[Any] | None:
+    """Load source data from the storage backend for reprompt batch preparation.
+
+    During initial batch preparation the runner passes ``source_data`` so the
+    ``source.*`` observe namespace can be resolved.  During reprompt the same
+    data is needed but is not threaded through the call chain.  This helper
+    reads it back from the storage backend (where it was persisted at ingest
+    time) so the reprompt preparator can resolve ``source.*`` fields
+    identically to the initial batch.
+
+    Returns ``None`` when no backend is configured or no source files exist,
+    which preserves the existing fallback behaviour (``source_content = content``).
+    """
+    if storage_backend is None:
+        return None
+
+    try:
+        source_files = storage_backend.list_source_files()
+        if not source_files:
+            return None
+
+        all_source_data: list[Any] = []
+        for path in source_files:
+            try:
+                records = storage_backend.read_source(path)
+                all_source_data.extend(records)
+            except FileNotFoundError:
+                continue
+
+        return all_source_data if all_source_data else None
+    except Exception:
+        logger.warning("Could not load source data for reprompt", exc_info=True)
+        return None
+
+
 def _load_validation_udf(
     agent_config: dict[str, Any] | None,
     reprompt_config: dict[str, Any],
@@ -141,6 +178,23 @@ def validate_and_reprompt(
                 )
             break
 
+        use_critique = (raw_reprompt_config or {}).get("use_llm_critique", False)
+        critique_after = (raw_reprompt_config or {}).get("critique_after_attempt", 2)
+        apply_critique = use_critique and attempt >= critique_after and attempt < max_attempts
+
+        if apply_critique:
+            from agent_actions.processing.recovery.critique import (
+                format_critique_feedback,
+                invoke_critique,
+            )
+
+            if len(failed_results) > 10:
+                logger.warning(
+                    "Critique enabled for %d failed records — each requires a "
+                    "synchronous LLM call, expect increased latency",
+                    len(failed_results),
+                )
+
         reprompt_records = []
         for failed_result in failed_results:
             custom_id = failed_result.custom_id
@@ -159,6 +213,24 @@ def validate_and_reprompt(
                 feedback_message=feedback_message,
                 strategies=strategies,
             )
+
+            if apply_critique:
+                try:
+                    critique_text = invoke_critique(
+                        agent_config or {}, failed_result.content, feedback_message
+                    )
+                    feedback = format_critique_feedback(critique_text, feedback)
+                    logger.info(
+                        "LLM critique appended for %s (attempt %d)",
+                        custom_id,
+                        attempt,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Critique failed for %s, continuing without",
+                        custom_id,
+                        exc_info=True,
+                    )
 
             original_user_content = original_record.get("user_content", "")
             original_record["user_content"] = f"{original_user_content}\n\n{feedback}"
@@ -181,12 +253,14 @@ def validate_and_reprompt(
                 dependency_configs=dependency_configs,
                 storage_backend=storage_backend,
             )
+            source_data = _load_source_data_for_reprompt(storage_backend)
             prepared = preparator.prepare_tasks(
                 agent_config=agent_config or {},
                 data=reprompt_records,
                 provider=provider,
                 output_directory=output_directory,
                 batch_name=reprompt_batch_name,
+                source_data=source_data,
             )
 
             batch_id, status = provider.submit_batch(
@@ -397,12 +471,14 @@ def submit_reprompt_batch(
             dependency_configs=dependency_configs,
             storage_backend=storage_backend,
         )
+        source_data = _load_source_data_for_reprompt(storage_backend)
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
             data=reprompt_records,
             provider=provider,
             output_directory=output_directory,
             batch_name=reprompt_batch_name,
+            source_data=source_data,
         )
 
         batch_id, _ = provider.submit_batch(
