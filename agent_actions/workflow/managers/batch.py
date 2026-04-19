@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from rich.console import Console
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ProcessingError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -174,9 +175,17 @@ class BatchLifecycleManager:
             )
 
     def check_batch_submission(
-        self, agent_name: str, agent_idx: int, agent_io_path: Path
+        self,
+        agent_name: str,
+        agent_idx: int,
+        agent_io_path: Path,
+        configured_run_mode: RunMode | None = None,
     ) -> str | None:
         """Return 'batch_submitted', 'passthrough', 'no_batches', or None."""
+        # YAML config is authoritative — stale batch files do not override
+        if configured_run_mode == RunMode.ONLINE:
+            return None
+
         node_output_dir = agent_io_path / "target" / agent_name
         registry_file = node_output_dir / "batch" / ".batch_registry.json"
 
