@@ -124,7 +124,6 @@ class TestCheckBatchSubmissionRunMode:
         )
         agent_io = Path("/tmp/fake_agent_io")
 
-        # Even with registry file present, ONLINE mode should return None
         with patch.object(Path, "exists", return_value=True):
             result = manager.check_batch_submission(
                 "extract", 0, agent_io, configured_run_mode=RunMode.ONLINE
