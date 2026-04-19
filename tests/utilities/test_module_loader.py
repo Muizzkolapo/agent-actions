@@ -163,7 +163,7 @@ def test_resolve_module_file_ambiguous_returns_none(tmp_path, capsys):
         (d / "my_function.py").write_text("X = 1")
     result = _resolve_module_file("my_function", tmp_path)
     assert result is None
-    assert "Ambiguous dispatch_task resolution" in capsys.readouterr().err
+    assert "Ambiguous module resolution" in capsys.readouterr().err
 
 
 def test_resolve_module_file_dotted_name_no_recursive(tmp_path):
@@ -173,8 +173,6 @@ def test_resolve_module_file_dotted_name_no_recursive(tmp_path):
     pkg = subdir / "pkg"
     pkg.mkdir()
     (pkg / "mod.py").write_text("X = 1")
-    # Direct path: tmp_path/pkg/mod.py does not exist
-    # Recursive would find deep/pkg/mod.py but dotted names skip recursive
     result = _resolve_module_file("pkg.mod", tmp_path)
     assert result is None
 
