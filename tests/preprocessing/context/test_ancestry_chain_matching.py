@@ -246,6 +246,37 @@ class TestFindTargetNodeId:
         )
         assert result is None
 
+    def test_both_parallel_branches_resolved_via_lineage(self):
+        """Mode 1: Both parallel branch node_ids are in lineage — both resolve without lineage_sources."""
+        agent_indices = {
+            "source": 0,
+            "generate_feynman_explanation": 1,
+            "generate_concept_explanation": 2,
+            "options_combiner": 3,
+        }
+        lineage = [
+            "source_uuid_s",
+            "generate_feynman_explanation_abc",
+            "generate_concept_explanation_def",
+            "options_combiner_ghi",
+        ]
+
+        result_a = HistoricalNodeDataLoader._find_target_node_id(
+            action_name="generate_feynman_explanation",
+            lineage=lineage,
+            lineage_sources=None,
+            agent_indices=agent_indices,
+        )
+        assert result_a == "generate_feynman_explanation_abc"
+
+        result_b = HistoricalNodeDataLoader._find_target_node_id(
+            action_name="generate_concept_explanation",
+            lineage=lineage,
+            lineage_sources=None,
+            agent_indices=agent_indices,
+        )
+        assert result_b == "generate_concept_explanation_def"
+
     def test_agent_indices_none_disables_disambiguation(self):
         """Without agent_indices, no prefix disambiguation is performed.
 
