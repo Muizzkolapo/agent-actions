@@ -134,6 +134,49 @@ def test_resolve_module_file_empty_name(tmp_path):
     assert result is None
 
 
+def test_resolve_module_file_subdirectory(tmp_path):
+    """Recursive fallback finds module in a subdirectory."""
+    subdir = tmp_path / "qanalabs-quiz-gen"
+    subdir.mkdir()
+    target = subdir / "my_function.py"
+    target.write_text("X = 1")
+    result = _resolve_module_file("my_function", tmp_path)
+    assert result == target
+
+
+def test_resolve_module_file_flat_takes_precedence(tmp_path):
+    """Flat path is preferred over recursive match when both exist."""
+    flat = tmp_path / "my_function.py"
+    flat.write_text("X = 1")
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    (subdir / "my_function.py").write_text("X = 2")
+    result = _resolve_module_file("my_function", tmp_path)
+    assert result == flat
+
+
+def test_resolve_module_file_ambiguous_returns_none(tmp_path, capsys):
+    """Ambiguous match (same name in multiple subdirs) returns None and logs error."""
+    for name in ("sub_a", "sub_b"):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "my_function.py").write_text("X = 1")
+    result = _resolve_module_file("my_function", tmp_path)
+    assert result is None
+    assert "Ambiguous module resolution" in capsys.readouterr().err
+
+
+def test_resolve_module_file_dotted_name_no_recursive(tmp_path):
+    """Dotted module names use direct path only, no recursive fallback."""
+    subdir = tmp_path / "deep"
+    subdir.mkdir()
+    pkg = subdir / "pkg"
+    pkg.mkdir()
+    (pkg / "mod.py").write_text("X = 1")
+    result = _resolve_module_file("pkg.mod", tmp_path)
+    assert result is None
+
+
 def test_load_module_from_directory_basic(tmp_path):
     """Load a simple module without mutating sys.path."""
     (tmp_path / "dir_mod.py").write_text("VALUE = 99")
