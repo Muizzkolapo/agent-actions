@@ -62,7 +62,7 @@ class TestValidationStrategyProtocol:
 
     def test_on_exhausted_default(self):
         strategy = ValidationStrategy(validation_func=_always_pass, feedback_message="fix")
-        assert strategy.on_exhausted == "keep_last"
+        assert strategy.on_exhausted == "return_last"
 
     def test_on_exhausted_custom(self):
         strategy = ValidationStrategy(

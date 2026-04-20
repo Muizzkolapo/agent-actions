@@ -28,7 +28,7 @@ class ValidationStrategy:
         feedback_message: str,
         strategies: list[FeedbackStrategy] | None = None,
         max_attempts: int = 3,
-        on_exhausted: str = "keep_last",
+        on_exhausted: str = "return_last",
     ) -> None:
         self._validation_func = validation_func
         self._feedback_message = feedback_message

@@ -140,12 +140,9 @@ def validate_and_reprompt(
     all_graduated: list[BatchResult] = []
     active_results = results
     reprompted_ids: dict[str, int] = {}
-    validation_passed: set[str] = set()
 
     for attempt in range(max_attempts):
         graduated, still_failing = loop.split(active_results)
-        for r in graduated:
-            validation_passed.add(r.custom_id)
         all_graduated.extend(graduated)
 
         if not still_failing:
@@ -319,7 +316,7 @@ def validate_and_reprompt(
             r.recovery_metadata = RecoveryMetadata()
         r.recovery_metadata.reprompt = RepromptMetadata(
             attempts=reprompted_ids[r.custom_id],
-            passed=r.custom_id in validation_passed,
+            passed=True,
             validation=validation_name,
         )
 
