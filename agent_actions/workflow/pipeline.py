@@ -602,7 +602,7 @@ class ProcessingPipeline:
                         self.config.action_name,
                         NODE_LEVEL_RECORD_ID,
                         DISPOSITION_SKIPPED,
-                        reason="All records guard-skipped or filtered",
+                        reason="All records filtered — no output produced",
                     )
                 except Exception as e:
                     logger.warning(

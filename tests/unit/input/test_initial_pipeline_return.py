@@ -246,7 +246,7 @@ class TestInitialPipelineGuardSkipAndToolAction:
             "test_agent",
             "__node__",
             "skipped",
-            reason="All records guard-skipped or filtered",
+            reason="All records filtered — no output produced",
         )
 
     def test_empty_input_does_not_raise(self, online_ctx):

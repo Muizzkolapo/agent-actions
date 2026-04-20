@@ -671,15 +671,17 @@ def _process_online_mode_with_record_processor(
         storage_backend=ctx.storage_backend,
     )
 
-    # If input had records but no actual work was done (all guard-skipped/
-    # filtered/unprocessed), signal this to the executor via a node-level
-    # disposition so the tally shows SKIP instead of OK.
+    # Signal node-level SKIP only when output is truly empty (all-filtered).
+    # Guard-skipped records ARE in `processed_items` (result_collector extends
+    # output for SKIPPED status), so downstream can consume them — do not
+    # cascade-block when passthrough data exists.
     if (
         data_chunk
         and stats.success == 0
         and stats.failed == 0
         and stats.exhausted == 0
         and stats.deferred == 0
+        and not processed_items
     ):
         if ctx.storage_backend is not None:
             try:
@@ -687,7 +689,7 @@ def _process_online_mode_with_record_processor(
                     ctx.agent_name,
                     NODE_LEVEL_RECORD_ID,
                     DISPOSITION_SKIPPED,
-                    reason="All records guard-skipped or filtered",
+                    reason="All records filtered — no output produced",
                 )
             except Exception as e:
                 logger.warning(

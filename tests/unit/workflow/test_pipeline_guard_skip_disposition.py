@@ -89,7 +89,7 @@ class TestGuardSkipDisposition:
             "test_action",
             NODE_LEVEL_RECORD_ID,
             DISPOSITION_SKIPPED,
-            reason="All records guard-skipped or filtered",
+            reason="All records filtered — no output produced",
         )
 
     def test_no_disposition_when_all_unprocessed_with_output(self, pipeline_and_mocks):
