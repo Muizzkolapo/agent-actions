@@ -87,9 +87,8 @@ class TestSplit:
         """Result with no recovery_metadata attribute is treated as not graduated."""
         strategy = _make_strategy(evaluate_fn=lambda r: False)
         loop = EvaluationLoop(strategy)
-        result = MagicMock(spec=[])  # no attributes at all
+        result = MagicMock(spec=[])
         result.custom_id = "r1"
-        # spec=[] means no recovery_metadata attr → getattr returns None
 
         _, failing = loop.split([result])
 
@@ -97,7 +96,6 @@ class TestSplit:
         assert failing[0].custom_id == "r1"
 
     def test_graduated_not_re_evaluated(self):
-        """Already-graduated records must not trigger strategy.evaluate()."""
         call_log = []
 
         def tracking_evaluate(r):
@@ -115,7 +113,6 @@ class TestSplit:
         assert "r2" in call_log
 
     def test_none_recovery_metadata(self):
-        """recovery_metadata=None is treated as not graduated."""
         strategy = _make_strategy(evaluate_fn=lambda r: True)
         loop = EvaluationLoop(strategy)
         result = _make_result("r1", recovery_metadata=None)
@@ -245,7 +242,6 @@ class TestBuildResubmission:
         assert submissions[0]["custom_id"] == "r_missing"
 
     def test_does_not_mutate_original_result(self):
-        """build_resubmission must not modify the BatchResult objects."""
         strategy = _make_strategy()
         strategy.build_feedback.return_value = "feedback"
         loop = EvaluationLoop(strategy)
@@ -257,7 +253,6 @@ class TestBuildResubmission:
         assert result.recovery_metadata == original_meta
 
     def test_does_not_mutate_context_map(self):
-        """build_resubmission must not modify the context_map dict."""
         strategy = _make_strategy()
         strategy.build_feedback.return_value = "feedback"
         loop = EvaluationLoop(strategy)

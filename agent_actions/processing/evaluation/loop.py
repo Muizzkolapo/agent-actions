@@ -1,15 +1,7 @@
 """
 EvaluationLoop — graduated pool pattern for batch result evaluation.
 
-The core mechanism:
-1. split() separates results into (graduated, still_failing)
-   - Already-graduated records (recovery_metadata.evaluation.passed == True) skip evaluation
-   - Non-graduated records are evaluated via strategy.evaluate()
-2. tag_graduated() marks passing records so they are never re-evaluated
-3. build_resubmission() creates new submission records for failing results,
-   appending strategy-specific feedback
-
-This module is strategy-agnostic. Concrete strategies (validation, critique, etc.)
+Strategy-agnostic: concrete strategies (validation, critique, etc.)
 implement the EvaluationStrategy protocol and are plugged in by callers.
 """
 
