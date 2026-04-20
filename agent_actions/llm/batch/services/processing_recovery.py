@@ -248,22 +248,33 @@ def handle_reprompt_recovery(
     action_name: str | None,
     start_time: float,
 ) -> str | None:
-    """Handle reprompt recovery batch completion."""
-    merged = service._retry_service.process_reprompt_results(
-        reprompt_results=recovery_results,
-        accumulated_results=accumulated,
+    """Handle reprompt recovery batch completion.
+
+    Uses the graduated pool pattern: only recovery_results are evaluated
+    (never the full accumulated set).  Results that pass are graduated and
+    persisted to ``state.graduated_results`` so they are never re-evaluated.
+    """
+    from agent_actions.processing.evaluation import EvaluationLoop  # type: ignore[import-not-found]
+    from agent_actions.processing.evaluation.strategies import (  # type: ignore[import-not-found]
+        ValidationStrategy,
     )
 
-    failed_results, validation_name = service._retry_service.validate_results(
-        results=merged,
-        agent_config=agent_config,
-    )
+    strategy = ValidationStrategy(agent_config, max_attempts=state.reprompt_max_attempts)
+    loop = EvaluationLoop(strategy)
 
-    if failed_results and state.reprompt_attempt < state.reprompt_max_attempts:
+    # Only evaluate what came back from the reprompt batch — NOT the full set.
+    graduated, still_failing = loop.split(recovery_results)
+    loop.tag_graduated(graduated)
+
+    # Persist graduated results (never re-evaluated on next cycle).
+    state.graduated_results.extend(BatchRetryService.serialize_results(graduated))  # type: ignore[attr-defined]
+    state.evaluation_strategy_name = strategy.name  # type: ignore[attr-defined]
+
+    if still_failing and state.reprompt_attempt < state.reprompt_max_attempts:
         next_attempt = state.reprompt_attempt + 1
         submission = service._retry_service.submit_reprompt_batch(
             provider=provider,
-            failed_results=failed_results,
+            failed_results=still_failing,
             context_map=context_map,
             output_directory=output_directory,
             file_name=parent_file_name,
@@ -286,26 +297,28 @@ def handle_reprompt_recovery(
             )
             manager.save_batch_job(recovery_file_name, recovery_entry)
 
-            for fr in failed_results:
+            for fr in still_failing:
                 state.reprompt_attempts_per_record[fr.custom_id] = (
                     state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
                 )
 
             state.reprompt_attempt = next_attempt
-            state.accumulated_results = BatchRetryService.serialize_results(merged)
             RecoveryStateManager.save(output_directory, parent_file_name, state)
             return None  # More reprompts pending
 
-    if failed_results and validation_name:
-        on_exhausted = state.on_exhausted
-        failed_ids = {r.custom_id for r in failed_results}
-        merged = service._retry_service.apply_exhausted_reprompt_metadata(
-            results=merged,
+    # Exhausted or all graduated — finalize.
+    if still_failing:
+        failed_ids = {r.custom_id for r in still_failing}
+        service._retry_service.apply_exhausted_reprompt_metadata(
+            results=still_failing,
             failed_ids=failed_ids,
-            validation_name=validation_name,
+            validation_name=strategy.name,
             attempt=state.reprompt_attempt,
-            on_exhausted=on_exhausted,
+            on_exhausted=state.on_exhausted,
         )
+        state.graduated_results.extend(BatchRetryService.serialize_results(still_failing))  # type: ignore[attr-defined]
+
+    final_results = BatchRetryService.deserialize_results(state.graduated_results)  # type: ignore[attr-defined]
 
     # Rebuild exhausted_recovery from state if retry had exhausted records.
     # Invariant: state.missing_ids and state.record_failure_counts are frozen
@@ -321,7 +334,7 @@ def handle_reprompt_recovery(
     RecoveryStateManager.delete(output_directory, parent_file_name)
     return finalize_batch_output(
         service,
-        batch_results=merged,
+        batch_results=final_results,
         exhausted_recovery=exhausted_recovery,
         context_map=context_map,
         output_directory=output_directory,
@@ -354,37 +367,47 @@ def check_and_submit_reprompt(
 ) -> bool:
     """Check if reprompt is needed and submit async batch if so.
 
+    Uses the graduated pool pattern: splits batch_results via EvaluationLoop
+    into graduated (pass) and still_failing.  Graduated results are persisted
+    to ``state.graduated_results`` and never re-evaluated.
+
     Returns:
         True if processing should continue (no reprompt, or reprompt exhausted/failed).
         False if a reprompt batch was submitted (caller should return None).
     """
+    from agent_actions.processing.evaluation import EvaluationLoop  # type: ignore[import-not-found]
+    from agent_actions.processing.evaluation.strategies import (
+        ValidationStrategy,  # type: ignore[import-not-found]
+    )
+
     from agent_actions.processing.recovery.reprompt import parse_reprompt_config
 
     parsed = parse_reprompt_config((agent_config or {}).get("reprompt"))
     if parsed is None:
         return True
 
-    failed_results, validation_name = service._retry_service.validate_results(
-        results=batch_results,
-        agent_config=agent_config,
-    )
-
-    if not failed_results:
-        return True
-
     max_attempts = parsed.max_attempts
     on_exhausted = parsed.on_exhausted
+
+    strategy = ValidationStrategy(agent_config, max_attempts=max_attempts)
+    loop = EvaluationLoop(strategy)
+
+    graduated, still_failing = loop.split(batch_results)
+    loop.tag_graduated(graduated)
+
+    if not still_failing:
+        return True  # All passed, no reprompt needed
 
     current_attempt = 0
     if recovery_state:
         current_attempt = recovery_state.reprompt_attempt
 
     if current_attempt >= max_attempts:
-        failed_ids = {r.custom_id for r in failed_results}
+        failed_ids = {r.custom_id for r in still_failing}
         service._retry_service.apply_exhausted_reprompt_metadata(
-            results=batch_results,
+            results=still_failing,
             failed_ids=failed_ids,
-            validation_name=validation_name or "",
+            validation_name=strategy.name,
             attempt=current_attempt,
             on_exhausted=on_exhausted,
         )
@@ -393,7 +416,7 @@ def check_and_submit_reprompt(
     next_attempt = current_attempt + 1
     submission = service._retry_service.submit_reprompt_batch(
         provider=provider,
-        failed_results=failed_results,
+        failed_results=still_failing,
         context_map=context_map,
         output_directory=output_directory,
         file_name=file_name,
@@ -423,13 +446,17 @@ def check_and_submit_reprompt(
     state.phase = "reprompt"
     state.reprompt_attempt = next_attempt
     state.reprompt_max_attempts = max_attempts
-    state.validation_name = validation_name
+    state.validation_name = strategy.name
     state.on_exhausted = on_exhausted
-    for fr in failed_results:
+    state.evaluation_strategy_name = strategy.name  # type: ignore[attr-defined]
+
+    # Persist graduated results immediately — never re-evaluated.
+    state.graduated_results = BatchRetryService.serialize_results(graduated)  # type: ignore[attr-defined]
+
+    for fr in still_failing:
         state.reprompt_attempts_per_record[fr.custom_id] = (
             state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
         )
-    state.accumulated_results = BatchRetryService.serialize_results(batch_results)
 
     if exhausted_recovery:
         state.missing_ids = list(exhausted_recovery.keys())
@@ -441,7 +468,7 @@ def check_and_submit_reprompt(
     logger.info(
         "Async reprompt submitted for %s: %d failed records, batch %s",
         file_name,
-        len(failed_results),
+        len(still_failing),
         reprompt_batch_id,
     )
     return False  # Recovery pending — caller should return None
@@ -551,7 +578,18 @@ def write_record_dispositions(
             )
 
         try:
-            if metadata.get("retry_exhausted"):
+            # Check for evaluation/reprompt exhaustion via _recovery metadata.
+            recovery = item.get("_recovery", {})
+            reprompt_recovery = recovery.get("reprompt", {})
+            if reprompt_recovery.get("passed") is False:
+                validation = reprompt_recovery.get("validation", "unknown")
+                service._storage_backend.set_disposition(
+                    action_name,
+                    source_guid,
+                    DISPOSITION_EXHAUSTED,
+                    reason=f"evaluation_exhausted:{validation}",
+                )
+            elif metadata.get("retry_exhausted"):
                 service._storage_backend.set_disposition(
                     action_name,
                     source_guid,
