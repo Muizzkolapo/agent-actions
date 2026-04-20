@@ -46,25 +46,44 @@ def pipeline_and_mocks(tmp_path):
 class TestGuardSkipDisposition:
     """Tests for DISPOSITION_SKIPPED write after collect_results."""
 
-    def _run_with_stats(self, pipeline, config, stats, file_path, base_dir, output_dir, data=None):
-        """Call process() with mocked collect_results stats."""
+    def _run_with_stats(
+        self, pipeline, config, stats, file_path, base_dir, output_dir, data=None, output=None
+    ):
+        """Call process() with mocked collect_results stats.
+
+        Args:
+            output: The output list returned by collect_results. Defaults to
+                ``data`` (simulating passthrough). Pass ``[]`` to simulate
+                filtered records that produce no output.
+        """
         if data is None:
             data = [{"id": "1"}, {"id": "2"}]
+        if output is None:
+            output = data
 
         pipeline.record_processor.process_batch.return_value = []
 
         with patch(
             "agent_actions.workflow.pipeline.ResultCollector.collect_results",
-            return_value=(data, stats),
+            return_value=(output, stats),
         ):
             pipeline.process(file_path, base_dir, output_dir, data=data)
 
-    def test_writes_disposition_when_all_guard_skipped(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED should be written when all records are skipped."""
+    def test_no_disposition_when_all_guard_skipped_with_output(self, pipeline_and_mocks):
+        """Guard-skipped records ARE in output — no node-level skip, downstream proceeds."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(skipped=2)
 
         self._run_with_stats(pipeline, config, stats, fp, base, out)
+
+        config.storage_backend.set_disposition.assert_not_called()
+
+    def test_writes_disposition_when_all_filtered(self, pipeline_and_mocks):
+        """All-filtered produces empty output — node-level skip blocks downstream."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(filtered=2)
+
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
 
         config.storage_backend.set_disposition.assert_called_once_with(
             "test_action",
@@ -73,21 +92,30 @@ class TestGuardSkipDisposition:
             reason="All records guard-skipped or filtered",
         )
 
-    def test_writes_disposition_when_all_filtered(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED should be written when all records are filtered."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(filtered=2)
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-        config.storage_backend.set_disposition.assert_called_once()
-
-    def test_writes_disposition_when_all_unprocessed(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED should be written when all records are unprocessed."""
+    def test_no_disposition_when_all_unprocessed_with_output(self, pipeline_and_mocks):
+        """Unprocessed records ARE in output — no node-level skip."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(unprocessed=2)
 
         self._run_with_stats(pipeline, config, stats, fp, base, out)
+
+        config.storage_backend.set_disposition.assert_not_called()
+
+    def test_no_disposition_when_mixed_skip_filter_with_output(self, pipeline_and_mocks):
+        """Mixed skip+filter: skipped records produce output, so no cascade-block."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(skipped=1, filtered=1)
+
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[{"id": "1"}])
+
+        config.storage_backend.set_disposition.assert_not_called()
+
+    def test_writes_disposition_when_skipped_data_is_empty(self, pipeline_and_mocks):
+        """Guard-skipped records with empty data produce empty output — cascade-block."""
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(skipped=2)
+
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
 
         config.storage_backend.set_disposition.assert_called_once()
 
@@ -142,19 +170,19 @@ class TestGuardSkipDisposition:
         """DISPOSITION_SKIPPED must NOT crash if storage_backend is None."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         config.storage_backend = None
-        stats = CollectionStats(skipped=2)
+        stats = CollectionStats(filtered=2)
 
-        # Should not raise
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
+        # Should not raise — empty output enters the block, but backend is None
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
 
     def test_storage_error_is_logged_not_raised(self, pipeline_and_mocks):
         """Storage errors during disposition write should be logged, not propagated."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         config.storage_backend.set_disposition.side_effect = RuntimeError("DB error")
-        stats = CollectionStats(skipped=2)
+        stats = CollectionStats(filtered=2)
 
-        # Should not raise
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
+        # Should not raise — empty output enters the block, storage error is caught
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
 
 
 class TestToolActionEmptyOutputUsesGenericPath:
