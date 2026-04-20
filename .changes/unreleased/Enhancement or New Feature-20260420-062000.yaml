@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Add generic EvaluationLoop with graduated pool pattern for batch result evaluation"
+time: 2026-04-20T06:20:00.000000Z
