@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix sync reprompt to use graduated pool — only re-validate failing records, not all"
+time: 2026-04-20T06:30:00.000000Z

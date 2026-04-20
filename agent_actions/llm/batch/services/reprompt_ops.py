@@ -88,12 +88,18 @@ def validate_and_reprompt(
     file_name: str | None,
     agent_config: dict[str, Any] | None,
 ) -> list[BatchResult]:
-    """Validate results and reprompt failures with feedback."""
+    """Validate results and reprompt failures using graduated pool pattern.
+
+    Records that pass validation are graduated and never re-validated.
+    Only failing records are resubmitted for reprompt.
+    Each cycle, the failure set can only shrink — never grow.
+    """
+    from agent_actions.processing.evaluation import EvaluationLoop
+    from agent_actions.processing.evaluation.strategies import ValidationStrategy
     from agent_actions.processing.recovery.reprompt import parse_reprompt_config
     from agent_actions.processing.recovery.response_validator import (
         build_validation_feedback,
         resolve_feedback_strategies,
-        safe_validate,
     )
     from agent_actions.processing.recovery.validation import get_validation_function
     from agent_actions.processing.types import RepromptMetadata
@@ -122,65 +128,60 @@ def validate_and_reprompt(
         logger.error("Failed to get validation function: %s", e)
         return results
 
-    reprompt_attempts: dict[str, int] = {}
-    validation_status: dict[str, bool] = {}
-    result_map = {r.custom_id: r for r in results}
+    strategy = ValidationStrategy(
+        validation_func=validation_func,
+        feedback_message=feedback_message,
+        strategies=strategies,
+        max_attempts=max_attempts,
+        on_exhausted=on_exhausted,
+    )
+    loop = EvaluationLoop(strategy)
 
-    attempt = 0
-    while attempt < max_attempts:
-        attempt += 1
+    all_graduated: list[BatchResult] = []
+    active_results = results
+    reprompted_ids: dict[str, int] = {}
+    validation_passed: set[str] = set()
 
-        failed_results = []
-        for result in result_map.values():
-            if not result.success:
-                continue
+    for attempt in range(max_attempts):
+        graduated, still_failing = loop.split(active_results)
+        for r in graduated:
+            validation_passed.add(r.custom_id)
+        all_graduated.extend(graduated)
 
-            if (
-                result.recovery_metadata
-                and result.recovery_metadata.reprompt
-                and result.recovery_metadata.reprompt.passed
-            ):
-                continue
-
-            is_valid = safe_validate(
-                validation_func,
-                result.content,
-                context=result.custom_id,
-                catch=(Exception,),
-            )
-
-            validation_status[result.custom_id] = is_valid
-
-            if not is_valid:
-                failed_results.append(result)
-
-        if not failed_results:
-            logger.info("All %d records passed validation", len(result_map))
+        if not still_failing:
+            logger.info("All records passed validation after %d attempts", attempt + 1)
             break
 
         logger.warning(
             "Reprompt attempt %d/%d: %d records failed validation",
-            attempt,
+            attempt + 1,
             max_attempts,
-            len(failed_results),
+            len(still_failing),
         )
 
-        for failed_result in failed_results:
-            reprompt_attempts[failed_result.custom_id] = (
-                reprompt_attempts.get(failed_result.custom_id, 0) + 1
-            )
+        for r in still_failing:
+            reprompted_ids[r.custom_id] = reprompted_ids.get(r.custom_id, 0) + 1
 
-        if attempt >= max_attempts:
-            if on_exhausted == "raise" and failed_results:
+        if attempt == max_attempts - 1:
+            if on_exhausted == "raise" and still_failing:
                 raise RuntimeError(
-                    f"Reprompt validation exhausted for {failed_results[0].custom_id} "
-                    f"after {attempt} attempts (validation: {validation_name})"
+                    f"Reprompt validation exhausted for {still_failing[0].custom_id} "
+                    f"after {attempt + 1} attempts (validation: {validation_name})"
                 )
+            for r in still_failing:
+                if not r.recovery_metadata:
+                    r.recovery_metadata = RecoveryMetadata()
+                r.recovery_metadata.reprompt = RepromptMetadata(
+                    attempts=reprompted_ids[r.custom_id],
+                    passed=False,
+                    validation=validation_name,
+                )
+            all_graduated.extend(still_failing)
             break
 
         use_critique = (raw_reprompt_config or {}).get("use_llm_critique", False)
         critique_after = (raw_reprompt_config or {}).get("critique_after_attempt", 2)
-        apply_critique = use_critique and attempt >= critique_after and attempt < max_attempts
+        apply_critique = use_critique and attempt + 1 >= critique_after
 
         if apply_critique:
             from agent_actions.processing.recovery.critique import (
@@ -188,15 +189,15 @@ def validate_and_reprompt(
                 invoke_critique,
             )
 
-            if len(failed_results) > 10:
+            if len(still_failing) > 10:
                 logger.warning(
                     "Critique enabled for %d failed records — each requires a "
                     "synchronous LLM call, expect increased latency",
-                    len(failed_results),
+                    len(still_failing),
                 )
 
         reprompt_records = []
-        for failed_result in failed_results:
+        for failed_result in still_failing:
             custom_id = failed_result.custom_id
 
             if custom_id not in context_map:
@@ -223,7 +224,7 @@ def validate_and_reprompt(
                     logger.info(
                         "LLM critique appended for %s (attempt %d)",
                         custom_id,
-                        attempt,
+                        attempt + 1,
                     )
                 except Exception:
                     logger.warning(
@@ -242,12 +243,13 @@ def validate_and_reprompt(
 
         if not reprompt_records:
             logger.warning("No records to reprompt")
+            all_graduated.extend(still_failing)
             break
 
         try:
             from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 
-            reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
+            reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt + 1}"
             preparator = BatchTaskPreparator(
                 action_indices=action_indices,
                 dependency_configs=dependency_configs,
@@ -285,13 +287,15 @@ def validate_and_reprompt(
                     batch_id,
                     final_status,
                 )
+                all_graduated.extend(still_failing)
                 break
 
             reprompt_results = provider.retrieve_results(batch_id, output_directory)
 
+            failing_map = {r.custom_id: r for r in still_failing}
             for reprompt_result in reprompt_results:
-                if reprompt_result.custom_id in result_map:
-                    existing_recovery = result_map[reprompt_result.custom_id].recovery_metadata
+                if reprompt_result.custom_id in failing_map:
+                    existing_recovery = failing_map[reprompt_result.custom_id].recovery_metadata
 
                     if not reprompt_result.recovery_metadata:
                         reprompt_result.recovery_metadata = RecoveryMetadata()
@@ -299,27 +303,27 @@ def validate_and_reprompt(
                     if existing_recovery and existing_recovery.retry:
                         reprompt_result.recovery_metadata.retry = existing_recovery.retry
 
-                result_map[reprompt_result.custom_id] = reprompt_result
+            active_results = reprompt_results
 
         except Exception as e:
             logger.exception("Error during reprompt batch submission: %s", e)
+            all_graduated.extend(still_failing)
             break
 
-    for custom_id, attempts in reprompt_attempts.items():
-        if custom_id in result_map:
-            result = result_map[custom_id]
-            passed = validation_status.get(custom_id, False)
+    for r in all_graduated:
+        if r.custom_id not in reprompted_ids:
+            continue
+        if r.recovery_metadata and r.recovery_metadata.reprompt:
+            continue
+        if not r.recovery_metadata:
+            r.recovery_metadata = RecoveryMetadata()
+        r.recovery_metadata.reprompt = RepromptMetadata(
+            attempts=reprompted_ids[r.custom_id],
+            passed=r.custom_id in validation_passed,
+            validation=validation_name,
+        )
 
-            if not result.recovery_metadata:
-                result.recovery_metadata = RecoveryMetadata()
-
-            result.recovery_metadata.reprompt = RepromptMetadata(
-                attempts=attempts,
-                passed=passed,
-                validation=validation_name,
-            )
-
-    return list(result_map.values())
+    return all_graduated
 
 
 def validate_results(
