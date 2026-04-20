@@ -8,7 +8,7 @@ implement the EvaluationStrategy protocol and are plugged in by callers.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BatchResult
@@ -42,7 +42,9 @@ class EvaluationLoop:
 
     def _is_already_graduated(self, result: BatchResult) -> bool:
         """Check if a result was already graduated in a prior cycle."""
-        meta = getattr(result, "recovery_metadata", None) or {}
+        meta = getattr(result, "recovery_metadata", None)
+        if not isinstance(meta, dict):
+            return False
         eval_meta = meta.get("evaluation", {})
         return eval_meta.get("passed") is True
 
@@ -74,14 +76,13 @@ class EvaluationLoop:
         """Mark as done. Never evaluated again."""
         for result in results:
             meta = getattr(result, "recovery_metadata", None)
-            if meta is None:
+            if not isinstance(meta, dict):
                 meta = {}
-                result.recovery_metadata = meta
-
             meta["evaluation"] = {
                 "passed": True,
                 "strategy_name": self.strategy.name,
             }
+            cast(Any, result).recovery_metadata = meta
 
     def build_resubmission(self, failed: list[BatchResult], context_map: dict) -> list[dict]:
         """Append strategy.build_feedback() to each, return submission records."""
