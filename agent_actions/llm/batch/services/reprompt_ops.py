@@ -77,6 +77,54 @@ def _load_validation_udf(
         import_validation_module(validation_module, None)
 
 
+def build_evaluation_loop(
+    agent_config: dict[str, Any] | None,
+    *,
+    max_attempts: int | None = None,
+    on_exhausted: str | None = None,
+) -> tuple | None:
+    """Build an EvaluationLoop + ValidationStrategy from agent_config.
+
+    Consolidates the repeated config-parse → UDF-load → strategy-construct
+    sequence used by validate_and_reprompt, handle_reprompt_recovery, and
+    check_and_submit_reprompt.
+
+    Returns ``(loop, strategy, validation_name)`` or ``None`` if reprompt
+    is not configured or the validation function cannot be resolved.
+    """
+    from agent_actions.processing.evaluation import EvaluationLoop
+    from agent_actions.processing.evaluation.strategies import ValidationStrategy
+    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
+    from agent_actions.processing.recovery.response_validator import (
+        resolve_feedback_strategies,
+    )
+    from agent_actions.processing.recovery.validation import get_validation_function
+
+    raw_reprompt_config = (agent_config or {}).get("reprompt")
+    parsed = parse_reprompt_config(raw_reprompt_config)
+    if parsed is None:
+        return None
+
+    _load_validation_udf(agent_config, raw_reprompt_config or {})
+
+    try:
+        validation_func, feedback_message = get_validation_function(parsed.validation_name)
+    except ValueError as e:
+        logger.error("Failed to get validation function: %s", e)
+        return None
+
+    strategies = resolve_feedback_strategies(raw_reprompt_config)
+
+    strategy = ValidationStrategy(
+        validation_func=validation_func,
+        feedback_message=feedback_message,
+        strategies=strategies,
+        max_attempts=max_attempts if max_attempts is not None else parsed.max_attempts,
+        on_exhausted=on_exhausted if on_exhausted is not None else parsed.on_exhausted,
+    )
+    return EvaluationLoop(strategy), strategy, parsed.validation_name
+
+
 def validate_and_reprompt(
     action_indices: dict[str, int],
     dependency_configs: dict[str, dict],
@@ -94,49 +142,28 @@ def validate_and_reprompt(
     Only failing records are resubmitted for reprompt.
     Each cycle, the failure set can only shrink — never grow.
     """
-    from agent_actions.processing.evaluation import EvaluationLoop
-    from agent_actions.processing.evaluation.strategies import ValidationStrategy
-    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
     from agent_actions.processing.recovery.response_validator import (
         build_validation_feedback,
-        resolve_feedback_strategies,
     )
-    from agent_actions.processing.recovery.validation import get_validation_function
     from agent_actions.processing.types import RepromptMetadata
 
-    raw_reprompt_config = (agent_config or {}).get("reprompt")
-    parsed = parse_reprompt_config(raw_reprompt_config)
     logger.debug(
-        "Batch reprompt check: agent_config has %d keys, parsed=%s",
+        "Batch reprompt check: agent_config has %d keys",
         len(agent_config or {}),
-        parsed,
     )
-    if parsed is None:
+    setup = build_evaluation_loop(agent_config)
+    if setup is None:
         logger.debug("Reprompt not configured, skipping validation")
         return results
 
-    validation_name = parsed.validation_name
-    max_attempts = parsed.max_attempts
-    on_exhausted = parsed.on_exhausted
-    strategies = resolve_feedback_strategies(raw_reprompt_config)
+    loop, strategy, validation_name = setup
+    max_attempts = strategy.max_attempts
+    on_exhausted = strategy.on_exhausted
+    feedback_message = strategy._feedback_message
+    strategies = strategy._strategies
+    raw_reprompt_config = (agent_config or {}).get("reprompt") or {}
 
-    _load_validation_udf(agent_config, raw_reprompt_config or {})
-
-    try:
-        validation_func, feedback_message = get_validation_function(validation_name)
-    except ValueError as e:
-        logger.error("Failed to get validation function: %s", e)
-        return results
-
-    strategy = ValidationStrategy(
-        validation_func=validation_func,
-        feedback_message=feedback_message,
-        strategies=strategies,
-        max_attempts=max_attempts,
-        on_exhausted=on_exhausted,
-    )
-    loop = EvaluationLoop(strategy)
-
+    source_data = _load_source_data_for_reprompt(storage_backend)
     all_graduated: list[BatchResult] = []
     active_results = results
     reprompted_ids: dict[str, int] = {}
@@ -252,7 +279,6 @@ def validate_and_reprompt(
                 dependency_configs=dependency_configs,
                 storage_backend=storage_backend,
             )
-            source_data = _load_source_data_for_reprompt(storage_backend)
             prepared = preparator.prepare_tasks(
                 agent_config=agent_config or {},
                 data=reprompt_records,

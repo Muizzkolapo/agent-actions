@@ -1,7 +1,6 @@
 """Tests for graduated results tracking in RecoveryState."""
 
 import json
-from pathlib import Path
 
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,

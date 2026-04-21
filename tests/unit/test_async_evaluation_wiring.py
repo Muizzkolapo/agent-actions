@@ -231,7 +231,9 @@ class TestHandleRepromptRecoveryGraduatedPool:
         call_kwargs = service._retry_service.apply_exhausted_reprompt_metadata.call_args.kwargs
         assert call_kwargs["validation_name"] == "validation"
         assert {r.custom_id for r in call_kwargs["results"]} == {"r2"}
-        assert len(state.graduated_results) == 2
+        # Only graduated records (r1) are in state; exhausted records (r2) are
+        # combined directly at finalization without a serialize round-trip.
+        assert len(state.graduated_results) == 1
 
     def test_all_graduated_no_submission(self, mock_loop):
         """When all recovery_results pass, no reprompt batch is submitted."""
