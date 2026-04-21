@@ -273,9 +273,13 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
                 )
             )
 
-    # Action completions (in dependencies)
+    # Action completions (in dependencies) — prefer workflow-scoped actions
     elif is_in_dependencies_context(lines, params.position.line):
-        for name in index.actions:
+        workflow = index.workflow_for_file(current_file)
+        action_names = (
+            index.workflow_actions.get(workflow, index.actions) if workflow else index.actions
+        )
+        for name in action_names:
             items.append(
                 lsp.CompletionItem(
                     label=name,
