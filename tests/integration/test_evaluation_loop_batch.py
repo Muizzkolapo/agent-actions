@@ -240,24 +240,33 @@ class TestFailureSetShrinksDeterministic:
 class TestNonDeterministicConvergence:
     """With random validation, graduated records are never re-evaluated."""
 
-    def test_graduated_never_re_evaluated(self, make_batch_results, nondeterministic_strategy):
+    def test_graduated_never_re_evaluated(self, make_batch_results, make_strategy):
         """Once tagged graduated, strategy.evaluate() is never called for that record."""
         results = make_batch_results(20)
-        strategy = nondeterministic_strategy(pass_probability=0.4, seed=123)
+        rng = random.Random(123)
+        strategy = make_strategy(
+            name="nondeterministic",
+            max_attempts=5,
+            evaluate_fn=lambda r: rng.random() < 0.4,
+        )
         loop = EvaluationLoop(strategy)
 
         all_graduated = []
         active = results
 
         for _cycle in range(5):
+            pre_call_count = strategy.evaluate.call_count
             graduated, failing = loop.split(active)
+
+            # evaluate() called exactly once per active record — never for graduated
+            assert strategy.evaluate.call_count - pre_call_count == len(active)
+
             loop.tag_graduated(graduated)
             all_graduated.extend(graduated)
             active = failing
             if not active:
                 break
 
-        # Key invariant: graduated count + remaining active = total
         assert len(all_graduated) + len(active) == 20
 
     def test_failure_set_cannot_grow(self, make_batch_results, nondeterministic_strategy):
@@ -307,9 +316,11 @@ class TestDispositionCorrect:
 
         assert len(active) == 5
         assert strategy.evaluate.call_count == 5 * strategy.max_attempts
+        # build_feedback called for every failing record on every resubmission
+        assert strategy.build_feedback.call_count == 5 * strategy.max_attempts
 
     def test_disposition_reason_includes_strategy_name(self, make_batch_results, make_strategy):
-        """Reason string is 'evaluation_exhausted:{strategy_name}'."""
+        """Exhausted records carry the strategy name for disposition tracing."""
         results = make_batch_results(3)
         strategy = make_strategy(
             name="custom_check", max_attempts=1, on_exhausted="drop", evaluate_return=False
@@ -321,12 +332,13 @@ class TestDispositionCorrect:
         assert len(graduated) == 0
         assert len(failing) == 3
 
-        # Verify the exhaustion reason format that processing_recovery constructs
-        expected_reason = f"evaluation_exhausted:{strategy.name}"
-        assert expected_reason == "evaluation_exhausted:custom_check"
-
+        # build_resubmission should invoke build_feedback for every failing record
         submissions = loop.build_resubmission(failing, {})
         assert len(submissions) == 3
+        assert strategy.build_feedback.call_count == 3
+
+        # Strategy name is accessible for disposition reason construction
+        assert strategy.name == "custom_check"
 
 
 # ─── Test 5: Retry + Evaluation Interaction ───────────────────────────────────
