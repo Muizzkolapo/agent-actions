@@ -76,6 +76,10 @@ def _make_project(tmp_path: Path) -> tuple[ProjectIndex, Path, Path, Path, Path]
         "summarize": Location(file_path=file_b, line=11, column=0),
     }
 
+    # Cached workflow derivation (mirrors what the indexer populates)
+    index.file_to_workflow[file_a] = "workflow_a"
+    index.file_to_workflow[file_b] = "workflow_b"
+
     # Global (last-indexed wins — workflow_b's classify overwrites workflow_a's)
     index.actions["classify"] = loc_b
     index.actions["extract"] = Location(file_path=file_a, line=6, column=0)
@@ -321,9 +325,10 @@ class TestMixedLayout:
         }
         index.actions["flat_action"] = flat_loc
 
-        # From flat file, "classify" resolves via global
+        # From flat file, "classify" resolves via global (workflow_b's, last-indexed)
         loc = index.get_action("classify", current_file=flat_file)
         assert loc is not None
+        assert loc.line == 10
 
         # "flat_action" resolves from flat file's own file_actions
         loc_flat = index.get_action("flat_action", current_file=flat_file)
