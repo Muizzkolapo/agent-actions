@@ -27,7 +27,7 @@ def _make_project(tmp_path: Path) -> tuple[ProjectIndex, Path, Path, Path, Path]
               agent_config/
                 pipeline.yml      <- defines "classify" at line 10
 
-    Returns (index, root, file_a, file_b, classify_loc_a, classify_loc_b)
+    Returns (index, root, file_a, file_b)
     """
     root = tmp_path / "project"
     root.mkdir()
@@ -180,15 +180,14 @@ class TestGetActionCollision:
         """Actions that only exist in one workflow resolve correctly from that workflow."""
         index, root, file_a, file_b = _make_project(tmp_path)
 
-        # "extract" only exists in workflow_a
+        # "extract" only exists in workflow_a — resolves from workflow_a
         loc = index.get_action("extract", current_file=file_a)
         assert loc is not None
         assert loc.file_path == file_a
 
-        # From workflow_b, "extract" resolves via global fallback
+        # From workflow_b, "extract" does NOT leak — workflow isolation
         loc_from_b = index.get_action("extract", current_file=file_b)
-        assert loc_from_b is not None
-        assert loc_from_b.file_path == file_a  # global dict has it
+        assert loc_from_b is None
 
 
 # ---------------------------------------------------------------------------

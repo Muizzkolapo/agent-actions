@@ -168,33 +168,33 @@ class ProjectIndex:
         return None
 
     def get_action(self, name: str, current_file: Path | None = None) -> Location | None:
-        """Get action location: per-file → per-workflow → global."""
+        """Get action location: per-file → per-workflow → global (flat layout only)."""
         # 1. Same file (most specific)
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
                 return self.file_actions[current_file][name].location
 
-        # 2. Same workflow
+        # 2. Same workflow — if file belongs to a workflow, stop here (no cross-workflow leakage)
         if current_file:
             workflow = self.workflow_for_file(current_file)
-            if workflow and workflow in self.workflow_actions:
-                loc = self.workflow_actions[workflow].get(name)
-                if loc:
-                    return loc
+            if workflow:
+                if workflow in self.workflow_actions:
+                    return self.workflow_actions[workflow].get(name)
+                return None
 
-        # 3. Global fallback (flat layout)
+        # 3. Global fallback (flat layout or no current_file)
         return self.actions.get(name)
 
     def get_action_metadata(
         self, name: str, current_file: Path | None = None
     ) -> ActionMetadata | None:
-        """Get action metadata: per-file → same-workflow files → any file."""
+        """Get action metadata: per-file → same-workflow files → any file (flat layout only)."""
         # 1. Same file
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
                 return self.file_actions[current_file][name]
 
-        # 2. Same workflow files (uses cached file_to_workflow for O(1) lookup)
+        # 2. Same workflow — if file belongs to a workflow, search only that workflow's files
         if current_file:
             workflow = self.file_to_workflow.get(current_file) or self.workflow_for_file(
                 current_file
@@ -203,8 +203,9 @@ class ProjectIndex:
                 for file_path, actions in self.file_actions.items():
                     if self.file_to_workflow.get(file_path) == workflow and name in actions:
                         return actions[name]
+                return None
 
-        # 3. Any file (global fallback)
+        # 3. Any file (flat layout or no current_file)
         for actions in self.file_actions.values():
             if name in actions:
                 return actions[name]
