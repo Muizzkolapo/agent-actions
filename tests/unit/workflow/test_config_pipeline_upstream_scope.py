@@ -4,8 +4,6 @@ Verifies that when upstream_scope is set (by --downstream chain), only
 virtual actions from in-scope upstreams are injected.
 """
 
-from unittest.mock import MagicMock
-
 from agent_actions.workflow.config_pipeline import _inject_upstream_virtual_actions
 from tests.conftest import make_mock_config_manager as _make_manager
 
@@ -99,10 +97,7 @@ class TestUpstreamScopeFiltering:
 
     def test_no_upstream_config_returns_empty(self):
         """No upstream declarations — scope is irrelevant."""
-        manager = MagicMock()
-        manager.user_config = {}
-        manager.project_root = None
-
+        manager = _make_manager([])
         result = _inject_upstream_virtual_actions(manager, upstream_scope=["wf_a"])
         assert result == {}
 

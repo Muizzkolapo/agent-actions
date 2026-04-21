@@ -200,9 +200,9 @@ class WorkflowOrchestrator:
         return ordered
 
     def build_upstream_scope_map(self, plan: list[str]) -> dict[str, list[str]]:
-        """For each workflow in *plan*, return the subset of its declared upstreams that are also in the plan.
+        """Map each workflow in *plan* to its in-plan upstreams.
 
-        This scopes virtual-action injection so that ``--downstream`` only
+        Scopes virtual-action injection so that ``--downstream`` only
         resolves data from upstreams that actually ran in this chain.
         """
         plan_set = set(plan)
