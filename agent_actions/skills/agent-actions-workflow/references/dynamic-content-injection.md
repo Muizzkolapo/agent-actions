@@ -156,9 +156,88 @@ YOU MUST START YOUR QUESTION WITH THIS EXACT OPENER PHRASE.
 | LLM ignores injected value | Make prompt instruction emphatic |
 | Same value for all records | Ensure random.choice() called per record |
 
+## Dispatch in Prompts: Shared Prompt with Dynamic Fields
+
+When multiple actions share the same prompt but need different output field names (e.g., `_1`, `_2`, `_3` suffixes), use `dispatch_task()` to generate the entire prompt with the correct field names baked in.
+
+### The Problem
+
+Three parallel actions share one prompt but each needs different output fields:
+- `generate_distractor_1` → `explanation_why_it_is_incorrect_1`
+- `generate_distractor_2` → `explanation_why_it_is_incorrect_2`
+- `generate_distractor_3` → `explanation_why_it_is_incorrect_3`
+
+If the prompt uses generic field names, gpt-4o-mini drops the suffix ~15% of the time.
+
+### Solution: dispatch_task() generates the full prompt
+
+**Step 1: Create the dispatch tool**
+
+```python
+from agent_actions import udf_tool
+
+def _detect_number(context: dict) -> int:
+    """Detect which variant from observed field names."""
+    for key in context:
+        if isinstance(context[key], dict):
+            for field in context[key]:
+                for n in (1, 2, 3):
+                    if f"distractor_{n}_text" in field:
+                        return n
+    return 1
+
+@udf_tool
+def generate_distractor_prompt(input_data: dict) -> dict:
+    n = _detect_number(input_data)
+    prompt_text = f"""Your prompt text here...
+
+## OUTPUT
+```json
+{{{{
+  "thinking_process_{n}": "...",
+  "explanation_why_it_is_incorrect_{n}": "..."
+}}}}
+```"""
+    return {"authoring_prompt": prompt_text}
+```
+
+**Step 2: Single prompt with dispatch**
+
+```markdown
+{prompt Generate_Distractor_Explanation}
+dispatch_task('generate_distractor_prompt')
+{end_prompt}
+```
+
+**Step 3: All actions reference the same prompt**
+
+```yaml
+- name: generate_distractor_1
+  prompt: $quiz_gen.Generate_Distractor_Explanation
+- name: generate_distractor_2
+  prompt: $quiz_gen.Generate_Distractor_Explanation
+- name: generate_distractor_3
+  prompt: $quiz_gen.Generate_Distractor_Explanation
+```
+
+### Key Requirements
+
+- Dispatch tools **must** use `@udf_tool` decorator — plain functions won't be discovered
+- Signature: `context_data_str: str, *args` → returns `str` (the prompt text)
+- The returned string replaces the `dispatch_task()` call in the prompt
+- Use `{{{{` and `}}}}` for literal braces in f-strings containing JSON
+- Must be at `tools/` root directory — subdirectories (`tools/shared/`, `tools/workflow-name/`) won't be found
+- Parse context with `json.loads(context_data_str)` — the framework passes a JSON string, not a dict
+
+### Common Pitfalls
+
+- **Jinja in examples**: If your prompt contains `{{ ref('table') }}` as an example, the framework's Jinja engine will try to resolve it. Strip Jinja-like syntax from prompt examples or use plain text descriptions instead.
+- **Field name leaking**: If the prompt references `distractor_1_text` by name, the LLM may output it literally ("People might choose distractor_1_text because..."). Use natural language ("the wrong option") instead.
+- **Third-person references**: LLMs default to "This option claims..." which sounds academic. Instruct them to discuss ideas directly.
+
 ## Alternative: Schema Field Injection
 
-For simpler cases, you can use schema-level dispatch (if supported):
+For simpler cases, you can use schema-level dispatch:
 
 ```yaml
 schema:
