@@ -30,6 +30,7 @@ FRAMEWORK_NAMESPACES = frozenset({"version", "seed", "workflow", "loop"})
 
 __all__ = [
     "apply_context_scope",
+    "flatten_observe_context",
     "format_llm_context",
     "merge_passthrough_fields",
 ]
@@ -325,3 +326,36 @@ def merge_passthrough_fields(llm_response: list[dict], passthrough_fields: dict)
         else:
             result.append(item)  # type: ignore[unreachable]
     return result
+
+
+def flatten_observe_context(llm_context: dict) -> dict:
+    """Flatten namespaced observe context for tool UDF consumption.
+
+    Converts ``{"ns": {"field": val}}`` to ``{"field": val}``.
+    Qualifies keys as ``"ns.field"`` when the same bare field name
+    appears in multiple namespaces (collision handling matches
+    :func:`scope_file_mode._resolve_observe_refs`).
+    """
+    from collections import Counter
+
+    if not llm_context:
+        return {}
+
+    # Count bare field names across all namespaces to detect collisions.
+    bare_counts: Counter[str] = Counter()
+    for ns_data in llm_context.values():
+        if isinstance(ns_data, dict):
+            bare_counts.update(ns_data.keys())
+
+    collisions = {k for k, v in bare_counts.items() if v > 1}
+
+    flat: dict = {}
+    for ns_name, ns_data in llm_context.items():
+        if isinstance(ns_data, dict):
+            for field, value in ns_data.items():
+                key = f"{ns_name}.{field}" if field in collisions else field
+                flat[key] = value
+        else:
+            flat[ns_name] = ns_data
+
+    return flat
