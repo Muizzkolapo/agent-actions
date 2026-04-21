@@ -251,11 +251,14 @@ class TestSelectiveRepromptResubmission:
 
     @patch("agent_actions.llm.batch.infrastructure.recovery_state.RecoveryStateManager.save")
     @patch("agent_actions.llm.batch.infrastructure.recovery_state.RecoveryStateManager.delete")
-    def test_recovery_cycle_only_evaluates_reprompt_results(self, _mock_delete, _mock_save):
-        """handle_reprompt_recovery validates merged results, not the full original batch.
+    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
+    def test_recovery_cycle_only_evaluates_reprompt_results(
+        self, mock_build_loop, _mock_delete, _mock_save
+    ):
+        """handle_reprompt_recovery splits recovery results, not the full batch.
 
-        The recovery path merges reprompt results into accumulated, then validates
-        the merged set. Only records that still fail are submitted for another round.
+        The graduated pool pattern evaluates only recovery_results via
+        loop.split().  Only still_failing records are submitted for the next round.
         """
         from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
         from agent_actions.llm.batch.services.processing_recovery import (
@@ -264,10 +267,11 @@ class TestSelectiveRepromptResubmission:
         from agent_actions.llm.batch.services.retry import BatchRetryService
 
         accumulated = _make_results(10, fail_ids=set())
-        recovery_results = [
-            BatchResult(custom_id="rec_003", content='{"answer": "now_ok"}', success=True),
-            BatchResult(custom_id="rec_007", content='{"answer": "still_bad"}', success=True),
-        ]
+        rec_003_ok = BatchResult(custom_id="rec_003", content='{"answer": "now_ok"}', success=True)
+        rec_007_bad = BatchResult(
+            custom_id="rec_007", content='{"answer": "still_bad"}', success=True
+        )
+        recovery_results = [rec_003_ok, rec_007_bad]
 
         state = RecoveryState(
             phase="reprompt",
@@ -279,12 +283,16 @@ class TestSelectiveRepromptResubmission:
             reprompt_attempts_per_record={"rec_003": 1, "rec_007": 1},
         )
 
+        # Mock the evaluation loop: rec_003 graduates, rec_007 still fails
+        mock_loop = MagicMock()
+        mock_loop.split.return_value = ([rec_003_ok], [rec_007_bad])
+        mock_strategy = MagicMock()
+        mock_strategy.name = "check_it"
+        mock_strategy.max_attempts = 3
+        mock_strategy.on_exhausted = "return_last"
+        mock_build_loop.return_value = (mock_loop, mock_strategy, "check_it")
+
         service = MagicMock()
-        service._retry_service.process_reprompt_results.return_value = accumulated
-        service._retry_service.validate_results.return_value = (
-            [BatchResult(custom_id="rec_007", content='{"answer": "still_bad"}', success=True)],
-            "check_it",
-        )
         service._retry_service.submit_reprompt_batch.return_value = ("batch_rp_2", 1)
 
         entry = MagicMock()
@@ -310,12 +318,11 @@ class TestSelectiveRepromptResubmission:
 
         assert result is None
 
-        # Validated the full merged set (10 records), not just recovery batch (2)
-        validated_results = _extract_call_arg(
-            service._retry_service.validate_results.call_args, "results"
-        )
-        assert len(validated_results) == 10
+        # loop.split was called with recovery_results (2 records), not full batch (10)
+        split_arg = mock_loop.split.call_args[0][0]
+        assert len(split_arg) == 2
 
+        # Only the 1 still-failing record was submitted for reprompt
         submitted_failures = _extract_call_arg(
             service._retry_service.submit_reprompt_batch.call_args,
             "failed_results",
@@ -382,53 +389,56 @@ class TestCheckAndSubmitRepromptSelectivity:
     """check_and_submit_reprompt only submits failed records."""
 
     @patch("agent_actions.llm.batch.infrastructure.recovery_state.RecoveryStateManager.save")
-    def test_submits_only_validation_failures(self, _mock_save):
-        """check_and_submit_reprompt validates all results but submits only failures."""
+    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
+    def test_submits_only_validation_failures(self, mock_build_loop, _mock_save):
+        """check_and_submit_reprompt splits all results but submits only failures."""
         from agent_actions.llm.batch.services.processing_recovery import (
             check_and_submit_reprompt,
         )
 
         all_results = _make_results(10, fail_ids=set())
         fail_ids = {"rec_003", "rec_007"}
-        failed_batch_results = [
+        still_failing = [
             BatchResult(custom_id=cid, content='{"answer": "bad"}', success=True)
             for cid in fail_ids
         ]
+        graduated = [r for r in all_results if r.custom_id not in fail_ids]
+
+        # Mock evaluation loop: 8 graduate, 2 still fail
+        mock_loop = MagicMock()
+        mock_loop.split.return_value = (graduated, still_failing)
+        mock_strategy = MagicMock()
+        mock_strategy.name = "check_it"
+        mock_strategy.max_attempts = 3
+        mock_strategy.on_exhausted = "return_last"
+        mock_build_loop.return_value = (mock_loop, mock_strategy, "check_it")
 
         service = MagicMock()
-        service._retry_service.validate_results.return_value = (
-            failed_batch_results,
-            "check_it",
-        )
         service._retry_service.submit_reprompt_batch.return_value = ("batch_rp", 2)
 
         entry = MagicMock()
         entry.provider = "openai"
         manager = MagicMock()
 
-        with patch(
-            "agent_actions.processing.recovery.reprompt.parse_reprompt_config",
-        ) as mock_parse:
-            mock_parse.return_value = MagicMock(
-                validation_name="check_it",
-                max_attempts=3,
-                on_exhausted="return_last",
-            )
-
-            result = check_and_submit_reprompt(
-                service,
-                batch_results=all_results,
-                context_map=_make_context_map(10),
-                output_directory="/tmp/out",
-                file_name="batch_1",
-                entry=entry,
-                agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
-                manager=manager,
-                provider=MagicMock(),
-            )
+        result = check_and_submit_reprompt(
+            service,
+            batch_results=all_results,
+            context_map=_make_context_map(10),
+            output_directory="/tmp/out",
+            file_name="batch_1",
+            entry=entry,
+            agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            manager=manager,
+            provider=MagicMock(),
+        )
 
         assert result is False
 
+        # loop.split was called with all 10 results
+        split_arg = mock_loop.split.call_args[0][0]
+        assert len(split_arg) == 10
+
+        # Only the 2 failures were submitted for reprompt
         submitted = _extract_call_arg(
             service._retry_service.submit_reprompt_batch.call_args,
             "failed_results",
