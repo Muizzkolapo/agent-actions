@@ -143,33 +143,66 @@ class ProjectIndex:
     # NOTE: This replaces the previous Location-only entries for richer metadata.
     file_actions: dict[Path, dict[str, ActionMetadata]] = field(default_factory=dict)
 
+    # Per-workflow action index: workflow_name → {action_name → Location}
+    workflow_actions: dict[str, dict[str, Location]] = field(default_factory=dict)
+
     # Per-file reference list: file_path → [Reference]
     references_by_file: dict[Path, list[Reference]] = field(default_factory=dict)
 
     # Per-file duplicate action names: file_path → {duplicate action name}
     duplicate_actions_by_file: dict[Path, set[str]] = field(default_factory=dict)
 
+    def workflow_for_file(self, file_path: Path) -> str | None:
+        """Derive the workflow name from a file path.
+
+        Looks for 'agent_workflow/{name}/...' in the path components.
+        Returns None for flat-layout files.
+        """
+        parts = file_path.parts
+        for i, part in enumerate(parts):
+            if part == "agent_workflow" and i + 1 < len(parts):
+                return parts[i + 1]
+        return None
+
     def get_action(self, name: str, current_file: Path | None = None) -> Location | None:
-        """Get action location, preferring same-file actions."""
-        # First check same file
+        """Get action location: per-file → per-workflow → global."""
+        # 1. Same file (most specific)
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
                 return self.file_actions[current_file][name].location
 
-        # Fall back to global
+        # 2. Same workflow
+        if current_file:
+            workflow = self.workflow_for_file(current_file)
+            if workflow and workflow in self.workflow_actions:
+                loc = self.workflow_actions[workflow].get(name)
+                if loc:
+                    return loc
+
+        # 3. Global fallback (flat layout)
         return self.actions.get(name)
 
     def get_action_metadata(
         self, name: str, current_file: Path | None = None
     ) -> ActionMetadata | None:
-        """Get action metadata, preferring same-file actions."""
+        """Get action metadata: per-file → same-workflow files → any file."""
+        # 1. Same file
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
                 return self.file_actions[current_file][name]
+
+        # 2. Same workflow files
         if current_file:
-            for actions in self.file_actions.values():
-                if name in actions:
-                    return actions[name]
+            workflow = self.workflow_for_file(current_file)
+            if workflow:
+                for file_path, actions in self.file_actions.items():
+                    if self.workflow_for_file(file_path) == workflow and name in actions:
+                        return actions[name]
+
+        # 3. Any file (global fallback)
+        for actions in self.file_actions.values():
+            if name in actions:
+                return actions[name]
         return None
 
     def get_prompt(self, ref: str) -> PromptDefinition | None:
