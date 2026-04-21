@@ -249,7 +249,9 @@ class TestSelectiveRepromptResubmission:
             assert len(data_arg) == 2, f"Expected 2 records per reprompt batch, got {len(data_arg)}"
             assert {r["target_id"] for r in data_arg} == persistent_fail
 
-    def test_recovery_cycle_only_evaluates_reprompt_results(self):
+    @patch("agent_actions.llm.batch.infrastructure.recovery_state.RecoveryStateManager.save")
+    @patch("agent_actions.llm.batch.infrastructure.recovery_state.RecoveryStateManager.delete")
+    def test_recovery_cycle_only_evaluates_reprompt_results(self, _mock_delete, _mock_save):
         """handle_reprompt_recovery validates merged results, not the full original batch.
 
         The recovery path merges reprompt results into accumulated, then validates
@@ -379,7 +381,8 @@ class TestSelectiveRepromptResubmission:
 class TestCheckAndSubmitRepromptSelectivity:
     """check_and_submit_reprompt only submits failed records."""
 
-    def test_submits_only_validation_failures(self):
+    @patch("agent_actions.llm.batch.infrastructure.recovery_state.RecoveryStateManager.save")
+    def test_submits_only_validation_failures(self, _mock_save):
         """check_and_submit_reprompt validates all results but submits only failures."""
         from agent_actions.llm.batch.services.processing_recovery import (
             check_and_submit_reprompt,
