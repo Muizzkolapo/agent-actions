@@ -33,6 +33,7 @@ class WorkflowRuntimeConfig:
     verify_keys: bool = False
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None
+    upstream_scope: list[str] | None = None
 
     def resolve_project_root(self) -> Path:
         """Resolve effective project root from manager, config, or cwd."""
