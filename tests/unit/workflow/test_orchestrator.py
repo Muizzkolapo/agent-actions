@@ -246,3 +246,105 @@ class TestUpstreamRefValidation:
                 "enrich",
                 [{"workflow": "ingest", "actions": ["extract"]}],
             )
+
+
+class TestBuildUpstreamScopeMap:
+    """Test build_upstream_scope_map for various DAG shapes."""
+
+    def test_simple_chain(self, tmp_path):
+        """A -> B: B's scope is [A]."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "a")
+        _write_workflow(config_dir, "b", upstream=[{"workflow": "a"}])
+
+        orch = WorkflowOrchestrator(tmp_path)
+        scope = orch.build_upstream_scope_map(["a", "b"])
+        assert scope["a"] == []
+        assert scope["b"] == ["a"]
+
+    def test_fan_in_one_triggered(self, tmp_path):
+        """A and B both feed C. Plan=[A, C] — C scoped to only A."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "a")
+        _write_workflow(config_dir, "b")
+        _write_workflow(
+            config_dir,
+            "c",
+            upstream=[{"workflow": "a"}, {"workflow": "b"}],
+        )
+
+        orch = WorkflowOrchestrator(tmp_path)
+        scope = orch.build_upstream_scope_map(["a", "c"])
+        assert scope["a"] == []
+        assert scope["c"] == ["a"]  # b filtered out
+
+    def test_fan_in_other_triggered(self, tmp_path):
+        """A and B both feed C. Plan=[B, C] — C scoped to only B."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "a")
+        _write_workflow(config_dir, "b")
+        _write_workflow(
+            config_dir,
+            "c",
+            upstream=[{"workflow": "a"}, {"workflow": "b"}],
+        )
+
+        orch = WorkflowOrchestrator(tmp_path)
+        scope = orch.build_upstream_scope_map(["b", "c"])
+        assert scope["c"] == ["b"]  # a filtered out
+
+    def test_diamond(self, tmp_path):
+        """A -> B, A -> C, B -> D, C -> D. Full plan — D gets both B and C."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "a")
+        _write_workflow(config_dir, "b", upstream=[{"workflow": "a"}])
+        _write_workflow(config_dir, "c", upstream=[{"workflow": "a"}])
+        _write_workflow(
+            config_dir,
+            "d",
+            upstream=[{"workflow": "b"}, {"workflow": "c"}],
+        )
+
+        orch = WorkflowOrchestrator(tmp_path)
+        plan = orch.resolve_execution_plan("a", "downstream")
+        scope = orch.build_upstream_scope_map(plan)
+        assert set(scope["d"]) == {"b", "c"}
+
+    def test_diamond_partial(self, tmp_path):
+        """Same diamond, but plan=[B, D] — D scoped to only B."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "a")
+        _write_workflow(config_dir, "b", upstream=[{"workflow": "a"}])
+        _write_workflow(config_dir, "c", upstream=[{"workflow": "a"}])
+        _write_workflow(
+            config_dir,
+            "d",
+            upstream=[{"workflow": "b"}, {"workflow": "c"}],
+        )
+
+        orch = WorkflowOrchestrator(tmp_path)
+        scope = orch.build_upstream_scope_map(["b", "d"])
+        assert scope["d"] == ["b"]  # c filtered out
+
+    def test_single_workflow(self, tmp_path):
+        """Leaf workflow with no upstreams — scope is empty."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "solo")
+
+        orch = WorkflowOrchestrator(tmp_path)
+        scope = orch.build_upstream_scope_map(["solo"])
+        assert scope["solo"] == []
+
+    def test_deep_chain_partial(self, tmp_path):
+        """A -> B -> C -> D. Plan=[B, C, D] — each scoped to its in-plan parent."""
+        config_dir = tmp_path / "agent_config"
+        _write_workflow(config_dir, "a")
+        _write_workflow(config_dir, "b", upstream=[{"workflow": "a"}])
+        _write_workflow(config_dir, "c", upstream=[{"workflow": "b"}])
+        _write_workflow(config_dir, "d", upstream=[{"workflow": "c"}])
+
+        orch = WorkflowOrchestrator(tmp_path)
+        scope = orch.build_upstream_scope_map(["b", "c", "d"])
+        assert scope["b"] == []  # a not in plan
+        assert scope["c"] == ["b"]
+        assert scope["d"] == ["c"]
