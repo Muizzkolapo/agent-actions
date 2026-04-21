@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Observe injection for tool UDF actions now matches LLM action namespace structure"
+time: 2026-04-21T06:70:01.000000Z
