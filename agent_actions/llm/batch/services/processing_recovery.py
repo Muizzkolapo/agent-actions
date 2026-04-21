@@ -254,19 +254,14 @@ def handle_reprompt_recovery(
     (never the full accumulated set).  Results that pass are graduated and
     persisted to ``state.graduated_results`` so they are never re-evaluated.
     """
-    from agent_actions.llm.batch.services.reprompt_ops import _load_validation_udf
-    from agent_actions.processing.evaluation import EvaluationLoop
-    from agent_actions.processing.evaluation.strategies import ValidationStrategy
-    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
-    from agent_actions.processing.recovery.response_validator import (
-        resolve_feedback_strategies,
-    )
-    from agent_actions.processing.recovery.validation import get_validation_function
+    from agent_actions.llm.batch.services.reprompt_ops import build_evaluation_loop
 
-    raw_reprompt_config = (agent_config or {}).get("reprompt")
-    parsed = parse_reprompt_config(raw_reprompt_config)
-    if parsed is None:
-        # No validation configured — treat all recovery results as graduated.
+    setup = build_evaluation_loop(
+        agent_config,
+        max_attempts=state.reprompt_max_attempts,
+        on_exhausted=state.on_exhausted,
+    )
+    if setup is None:
         return finalize_batch_output(
             service,
             batch_results=recovery_results,
@@ -281,24 +276,10 @@ def handle_reprompt_recovery(
             start_time=start_time,
         )
 
-    _load_validation_udf(agent_config, raw_reprompt_config or {})
-    validation_func, feedback_message = get_validation_function(parsed.validation_name)
-    strategies = resolve_feedback_strategies(raw_reprompt_config)
+    loop, strategy, _ = setup
 
-    strategy = ValidationStrategy(
-        validation_func=validation_func,
-        feedback_message=feedback_message,
-        strategies=strategies,
-        max_attempts=state.reprompt_max_attempts,
-        on_exhausted=state.on_exhausted,
-    )
-    loop = EvaluationLoop(strategy)
-
-    # Only evaluate what came back from the reprompt batch — NOT the full set.
     graduated, still_failing = loop.split(recovery_results)
     loop.tag_graduated(graduated)
-
-    # Persist graduated results (never re-evaluated on next cycle).
     state.graduated_results.extend(BatchRetryService.serialize_results(graduated))
     state.evaluation_strategy_name = strategy.name
 
@@ -348,8 +329,11 @@ def handle_reprompt_recovery(
             attempt=state.reprompt_attempt,
             on_exhausted=state.on_exhausted,
         )
-        state.graduated_results.extend(BatchRetryService.serialize_results(still_failing))
+    # Deserialize prior-cycle graduated results; append current cycle's objects
+    # directly to avoid a redundant serialize→deserialize round-trip.
     final_results = BatchRetryService.deserialize_results(state.graduated_results)
+    if still_failing:
+        final_results.extend(still_failing)
     # Rebuild exhausted_recovery from state if retry had exhausted records.
     # Invariant: state.missing_ids and state.record_failure_counts are frozen
     # at the end of the retry phase (set in handle_retry_recovery or
@@ -405,35 +389,15 @@ def check_and_submit_reprompt(
         True if processing should continue (no reprompt, or reprompt exhausted/failed).
         False if a reprompt batch was submitted (caller should return None).
     """
-    from agent_actions.llm.batch.services.reprompt_ops import _load_validation_udf
-    from agent_actions.processing.evaluation import EvaluationLoop
-    from agent_actions.processing.evaluation.strategies import ValidationStrategy
-    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
-    from agent_actions.processing.recovery.response_validator import (
-        resolve_feedback_strategies,
-    )
-    from agent_actions.processing.recovery.validation import get_validation_function
+    from agent_actions.llm.batch.services.reprompt_ops import build_evaluation_loop
 
-    raw_reprompt_config = (agent_config or {}).get("reprompt")
-    parsed = parse_reprompt_config(raw_reprompt_config)
-    if parsed is None:
+    setup = build_evaluation_loop(agent_config)
+    if setup is None:
         return True
 
-    max_attempts = parsed.max_attempts
-    on_exhausted = parsed.on_exhausted
-
-    _load_validation_udf(agent_config, raw_reprompt_config or {})
-    validation_func, feedback_message = get_validation_function(parsed.validation_name)
-    strategies = resolve_feedback_strategies(raw_reprompt_config)
-
-    strategy = ValidationStrategy(
-        validation_func=validation_func,
-        feedback_message=feedback_message,
-        strategies=strategies,
-        max_attempts=max_attempts,
-        on_exhausted=on_exhausted,
-    )
-    loop = EvaluationLoop(strategy)
+    loop, strategy, _ = setup
+    max_attempts = strategy.max_attempts
+    on_exhausted = strategy.on_exhausted
 
     graduated, still_failing = loop.split(batch_results)
     loop.tag_graduated(graduated)
@@ -492,7 +456,6 @@ def check_and_submit_reprompt(
     state.validation_name = strategy.name
     state.on_exhausted = on_exhausted
     state.evaluation_strategy_name = strategy.name
-    # Persist graduated results immediately — never re-evaluated.
     state.graduated_results = BatchRetryService.serialize_results(graduated)
     for fr in still_failing:
         state.reprompt_attempts_per_record[fr.custom_id] = (
