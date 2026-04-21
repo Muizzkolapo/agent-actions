@@ -185,12 +185,42 @@ Only if (1) is yes AND (2) is yes AND (3) is no does the framework skip re-execu
 
 The framework stores `record_limit` and `file_limit` values as metadata when an action completes. If these values differ on the next run, the action resets to PENDING automatically.
 
-For all other config changes, clear the cache manually:
+For all other config changes, clear the cache manually. **CRITICAL: You must clear ALL THREE stores** — missing any one causes silent failures:
 
-```bash
-rm -rf agent_workflow/<workflow>/agent_io/target/<action_name>
-agac run -a <workflow>
+```python
+# Full reset script — use this pattern every time
+import sqlite3, json, shutil, os
+
+db_path = 'agent_workflow/<workflow>/agent_io/target/<workflow>.db'
+conn = sqlite3.connect(db_path)
+actions = ['action_1', 'action_2']  # actions to reset
+for a in actions:
+    conn.execute('DELETE FROM target_data WHERE action_name=?', (a,))
+    conn.execute('DELETE FROM record_disposition WHERE action_name=?', (a,))  # CRITICAL — forgetting this causes "All records guard-skipped"
+conn.commit(); conn.close()
+
+# Remove target folders (stale batch files override YAML config)
+base = 'agent_workflow/<workflow>/agent_io/target'
+for a in actions:
+    p = os.path.join(base, a)
+    if os.path.isdir(p): shutil.rmtree(p)
+
+# Reset status
+path = 'agent_workflow/<workflow>/agent_io/.agent_status.json'
+with open(path) as f: data = json.load(f)
+for a in actions:
+    if a in data:
+        data[a]['status'] = 'pending'
+        data[a].pop('skip_reason', None)
+        data[a].pop('error_message', None)
+with open(path, 'w') as f: json.dump(data, f, indent=4)
 ```
+
+**Why all three?**
+- Missing `target_data` clear → old data used instead of fresh run
+- Missing `record_disposition` clear → "All records guard-skipped" (stale entries block processing)
+- Missing status reset → action skipped as "completed"
+- Missing target folder removal → stale batch files override `run_mode` config
 
 ### enable_caching flag
 
