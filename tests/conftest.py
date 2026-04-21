@@ -106,6 +106,35 @@ def cleanup_temp_files():
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+# ---------------------------------------------------------------------------
+# Shared workflow test helpers
+# ---------------------------------------------------------------------------
+
+
+def write_workflow_config(config_dir: Path, name: str, upstream: list[dict] | None = None) -> None:
+    """Write a minimal workflow YAML to *config_dir* for orchestrator tests."""
+    lines = [f"name: {name}", "description: test", "actions:"]
+    lines.append(f"  - name: {name}_action")
+    lines.append("    intent: do something")
+    if upstream:
+        lines.append("upstream:")
+        for ref in upstream:
+            lines.append(f"  - workflow: {ref['workflow']}")
+            actions = ref.get("actions", [f"{ref['workflow']}_action"])
+            lines.append(f"    actions: [{', '.join(actions)}]")
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / f"{name}.yml").write_text("\n".join(lines))
+
+
+def make_mock_config_manager(upstream_refs: list[dict], agent_name: str = "downstream_wf") -> Mock:
+    """Create a mock ConfigManager with upstream declarations."""
+    manager = Mock()
+    manager.agent_name = agent_name
+    manager.user_config = {"upstream": upstream_refs}
+    manager.project_root = None
+    return manager
+
+
 @pytest.fixture(autouse=True)
 def _reset_global_singletons():
     """Prevent singleton state from leaking between tests."""
