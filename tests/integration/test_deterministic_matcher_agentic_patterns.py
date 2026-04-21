@@ -836,3 +836,143 @@ class TestDiamondMergePattern:
             field_context["branch_recommendations"]["recommended_audience"]
             == "intermediate developers"
         )
+
+    def test_both_branches_in_lineage_mode_1_only(self, diamond_storage, diamond_indices):
+        """Both parallel branch node_ids in lineage — resolved via Mode 1 without lineage_sources."""
+        merged_item = {
+            "source_guid": "book-001",
+            "node_id": "merge_report_uuid_mr",
+            "lineage": [
+                "source_uuid_b",
+                "branch_seo_uuid_bs",
+                "branch_recommendations_uuid_br",
+                "merge_report_uuid_mr",
+            ],
+            # lineage_sources is None — Mode 1 alone must resolve both
+            "content": {},
+        }
+
+        field_context = build_field_context_with_history(
+            agent_name="merge_report",
+            agent_config={
+                "idx": 3,
+                "dependencies": [],
+                "context_scope": {
+                    "observe": [
+                        "branch_seo.seo_title",
+                        "branch_recommendations.recommended_audience",
+                    ]
+                },
+            },
+            agent_indices=diamond_indices,
+            current_item=merged_item,
+            file_path="/mock/batch_001.json",
+            context_scope={
+                "observe": [
+                    "branch_seo.seo_title",
+                    "branch_recommendations.recommended_audience",
+                ]
+            },
+            storage_backend=diamond_storage,
+        )
+
+        assert "branch_seo" in field_context
+        assert (
+            field_context["branch_seo"]["seo_title"] == "Top 10 Python Libraries for Data Science"
+        )
+        assert "branch_recommendations" in field_context
+        assert (
+            field_context["branch_recommendations"]["recommended_audience"]
+            == "intermediate developers"
+        )
+
+    def test_diamond_wildcard_observe(self, diamond_storage, diamond_indices):
+        """Wildcard observe loads all fields from both parallel branches."""
+        merged_item = {
+            "source_guid": "book-001",
+            "node_id": "merge_report_uuid_mr",
+            "lineage": [
+                "source_uuid_b",
+                "branch_seo_uuid_bs",
+                "merge_report_uuid_mr",
+            ],
+            "lineage_sources": [
+                "branch_seo_uuid_bs",
+                "branch_recommendations_uuid_br",
+            ],
+            "content": {},
+        }
+
+        field_context = build_field_context_with_history(
+            agent_name="merge_report",
+            agent_config={
+                "idx": 3,
+                "dependencies": [],
+                "context_scope": {
+                    "observe": [
+                        "branch_seo.*",
+                        "branch_recommendations.*",
+                    ]
+                },
+            },
+            agent_indices=diamond_indices,
+            current_item=merged_item,
+            file_path="/mock/batch_001.json",
+            context_scope={
+                "observe": [
+                    "branch_seo.*",
+                    "branch_recommendations.*",
+                ]
+            },
+            storage_backend=diamond_storage,
+        )
+
+        # Wildcard: all fields from both branches
+        assert (
+            field_context["branch_seo"]["seo_title"] == "Top 10 Python Libraries for Data Science"
+        )
+        assert field_context["branch_seo"]["keywords"] == ["python", "data-science", "pandas"]
+        assert (
+            field_context["branch_recommendations"]["recommended_audience"]
+            == "intermediate developers"
+        )
+        assert field_context["branch_recommendations"]["similar_books"] == [
+            "Fluent Python",
+            "Python Data Science Handbook",
+        ]
+
+    def test_single_upstream_observe_unchanged(self, diamond_storage, diamond_indices):
+        """Single-branch observe still works — regression guard for parallel branch fix."""
+        single_dep_item = {
+            "source_guid": "book-001",
+            "node_id": "merge_report_uuid_mr",
+            "lineage": [
+                "source_uuid_b",
+                "branch_seo_uuid_bs",
+                "merge_report_uuid_mr",
+            ],
+            "content": {},
+        }
+
+        field_context = build_field_context_with_history(
+            agent_name="merge_report",
+            agent_config={
+                "idx": 3,
+                "dependencies": [],
+                "context_scope": {
+                    "observe": ["branch_seo.seo_title"],
+                },
+            },
+            agent_indices=diamond_indices,
+            current_item=single_dep_item,
+            file_path="/mock/batch_001.json",
+            context_scope={"observe": ["branch_seo.seo_title"]},
+            storage_backend=diamond_storage,
+        )
+
+        assert "branch_seo" in field_context
+        assert (
+            field_context["branch_seo"]["seo_title"] == "Top 10 Python Libraries for Data Science"
+        )
+        # branch_recommendations not requested — must not appear
+        assert "branch_recommendations" not in field_context
