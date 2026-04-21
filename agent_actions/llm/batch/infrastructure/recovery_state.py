@@ -48,6 +48,12 @@ class RecoveryState:
     # Accumulated results (serialized BatchResult dicts)
     accumulated_results: list[dict[str, Any]] = field(default_factory=list)
 
+    # Evaluation loop: graduated results (passed evaluation, never re-evaluated)
+    graduated_results: list[dict[str, Any]] = field(default_factory=list)
+
+    # Which evaluation strategy is active (e.g., "validation", "critique")
+    evaluation_strategy_name: str | None = None
+
 
 class RecoveryStateManager:
     """Persists RecoveryState to JSON files in the batch/ subdirectory."""
