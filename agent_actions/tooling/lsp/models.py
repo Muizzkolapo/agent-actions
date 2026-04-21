@@ -146,6 +146,9 @@ class ProjectIndex:
     # Per-workflow action index: workflow_name → {action_name → Location}
     workflow_actions: dict[str, dict[str, Location]] = field(default_factory=dict)
 
+    # Cached workflow derivation: file_path → workflow_name (populated at index time)
+    file_to_workflow: dict[Path, str] = field(default_factory=dict)
+
     # Per-file reference list: file_path → [Reference]
     references_by_file: dict[Path, list[Reference]] = field(default_factory=dict)
 
@@ -191,12 +194,14 @@ class ProjectIndex:
             if name in self.file_actions[current_file]:
                 return self.file_actions[current_file][name]
 
-        # 2. Same workflow files
+        # 2. Same workflow files (uses cached file_to_workflow for O(1) lookup)
         if current_file:
-            workflow = self.workflow_for_file(current_file)
+            workflow = self.file_to_workflow.get(current_file) or self.workflow_for_file(
+                current_file
+            )
             if workflow:
                 for file_path, actions in self.file_actions.items():
-                    if self.workflow_for_file(file_path) == workflow and name in actions:
+                    if self.file_to_workflow.get(file_path) == workflow and name in actions:
                         return actions[name]
 
         # 3. Any file (global fallback)

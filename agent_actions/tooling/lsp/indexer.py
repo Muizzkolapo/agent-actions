@@ -99,20 +99,17 @@ def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
         if not workflow_path.is_dir():
             continue
 
-        workflow_name = workflow_path.name
-        index.workflows[workflow_name] = workflow_path
+        index.workflows[workflow_path.name] = workflow_path
 
         config_dir = workflow_path / "agent_config"
         if not config_dir.exists():
             continue
 
         for yaml_file in config_dir.glob("*.yml"):
-            _index_workflow_file(index, yaml_file, yaml, workflow_name)
+            _index_workflow_file(index, yaml_file, yaml)
 
 
-def _index_workflow_file(
-    index: ProjectIndex, yaml_file: Path, yaml: YAML, workflow_name: str | None = None
-) -> None:
+def _index_workflow_file(index: ProjectIndex, yaml_file: Path, yaml: YAML) -> None:
     """Index a single workflow YAML file."""
     try:
         content = yaml_file.read_text()
@@ -126,7 +123,7 @@ def _index_workflow_file(
         actions = data.get("actions", []) if isinstance(data, dict) else []
         action_data_map = _build_action_data_map(actions)
 
-        _index_workflow_lines(index, yaml_file, lines, action_data_map, workflow_name)
+        _index_workflow_lines(index, yaml_file, lines, action_data_map)
 
     except Exception as e:
         logger.warning("Error indexing %s: %s", yaml_file, e)
@@ -146,9 +143,12 @@ def _index_workflow_lines(
     yaml_file: Path,
     lines: list[str],
     action_data_map: dict,
-    workflow_name: str | None = None,
 ) -> None:
     """Index action metadata and references from workflow lines."""
+    workflow_name = index.workflow_for_file(yaml_file)
+    if workflow_name:
+        index.file_to_workflow[yaml_file] = workflow_name
+
     current_action = None
     current_action_indent = None
     dependencies_indent = None
