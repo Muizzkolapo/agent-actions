@@ -8,6 +8,7 @@ All LLM/batch API calls are mocked. Integration = testing the interaction
 between EvaluationLoop, strategies, RecoveryState, and processing_recovery.
 """
 
+import random
 from unittest.mock import MagicMock
 
 import pytest
@@ -38,7 +39,7 @@ ValidationStrategy = strategies_mod.ValidationStrategy
 def make_batch_results():
     """Factory for creating N batch results with optional metadata."""
 
-    def _make(n: int, passing_ids: set[str] | None = None) -> list[BatchResult]:
+    def _make(n: int) -> list[BatchResult]:
         results = []
         for i in range(n):
             custom_id = f"record_{i}"
@@ -69,12 +70,37 @@ def deterministic_strategy():
 
 
 @pytest.fixture
+def make_strategy():
+    """Factory for creating strategy mocks with configurable evaluate behavior."""
+
+    def _make(
+        *,
+        name: str = "test_validation",
+        max_attempts: int = 3,
+        on_exhausted: str = "keep_last",
+        evaluate_fn=None,
+        evaluate_return=None,
+        feedback: str = "Fix.",
+    ):
+        strategy = MagicMock(spec=EvaluationStrategy)
+        strategy.name = name
+        strategy.max_attempts = max_attempts
+        strategy.on_exhausted = on_exhausted
+        if evaluate_fn is not None:
+            strategy.evaluate.side_effect = evaluate_fn
+        elif evaluate_return is not None:
+            strategy.evaluate.return_value = evaluate_return
+        strategy.build_feedback.return_value = feedback
+        return strategy
+
+    return _make
+
+
+@pytest.fixture
 def nondeterministic_strategy():
     """Strategy that passes different records each call (simulated)."""
 
     def _make(pass_probability: float = 0.5, seed: int = 42):
-        import random
-
         rng = random.Random(seed)
         strategy = MagicMock(spec=EvaluationStrategy)
         strategy.name = "nondeterministic"
@@ -114,31 +140,23 @@ class TestGraduatedPoolWorks:
         assert len(graduated_2) == 1  # record_7
         assert len(failing_2) == 2  # record_8, record_9
 
-    def test_already_graduated_not_resubmitted(self, make_batch_results):
+    def test_already_graduated_not_resubmitted(self, make_batch_results, make_strategy):
         """Graduated records from cycle 1 are never in the failing set of cycle 2."""
         results = make_batch_results(10)
         passing = {f"record_{i}" for i in range(7)}
 
-        # Use side_effect (not plain lambda) so we can track call counts
-        strategy = MagicMock(spec=EvaluationStrategy)
-        strategy.name = "test_validation"
-        strategy.max_attempts = 3
-        strategy.on_exhausted = "keep_last"
-        strategy.evaluate.side_effect = lambda r: r.custom_id in passing
-        strategy.build_feedback.return_value = "Please fix the output."
-
+        # side_effect (not plain lambda) so we can track call counts
+        strategy = make_strategy(evaluate_fn=lambda r: r.custom_id in passing)
         loop = EvaluationLoop(strategy)
 
-        # Cycle 1: 7 pass, 3 fail
         graduated, failing = loop.split(results)
         assert len(graduated) == 7
         loop.tag_graduated(graduated)
         graduated_ids = {r.custom_id for r in graduated}
 
-        # Reset call tracking
         strategy.evaluate.reset_mock()
 
-        # Cycle 2: pass ALL results (including graduated) back to split
+        # Pass ALL results (including graduated) back to split
         graduated_2, failing_2 = loop.split(results)
 
         # Graduated records must NOT appear in the failing set
@@ -157,28 +175,25 @@ class TestGraduatedPoolWorks:
 class TestFailureSetShrinksDeterministic:
     """With deterministic validation, each cycle has fewer failures (never more)."""
 
-    def test_monotonic_shrinking(self, make_batch_results):
+    def test_monotonic_shrinking(self, make_batch_results, make_strategy):
         """Failure count decreases or stays same on each cycle -- never increases."""
         results = make_batch_results(10)
 
-        # Progressively more records pass each cycle
         cycle_passing = [
-            {f"record_{i}" for i in range(3)},  # cycle 0: 3 pass, 7 fail
-            {f"record_{i}" for i in range(5)},  # cycle 1: 2 more, 5 fail
-            {f"record_{i}" for i in range(8)},  # cycle 2: 3 more, 2 fail
+            {f"record_{i}" for i in range(3)},  # 3 pass, 7 fail
+            {f"record_{i}" for i in range(5)},  # 2 more, 5 fail
+            {f"record_{i}" for i in range(8)},  # 3 more, 2 fail
         ]
 
         active = results
         failure_counts = []
 
         for passing in cycle_passing:
-            strategy = MagicMock(spec=EvaluationStrategy)
-            strategy.name = "progressive"
-            strategy.max_attempts = 5
-            strategy.on_exhausted = "keep_last"
-            strategy.evaluate.side_effect = lambda r, p=passing: r.custom_id in p
-            strategy.build_feedback.return_value = "Fix."
-
+            strategy = make_strategy(
+                name="progressive",
+                max_attempts=5,
+                evaluate_fn=lambda r, p=passing: r.custom_id in p,
+            )
             loop = EvaluationLoop(strategy)
             graduated, failing = loop.split(active)
             loop.tag_graduated(graduated)
@@ -194,23 +209,19 @@ class TestFailureSetShrinksDeterministic:
                 f"to {failure_counts[i]} at cycle {i}"
             )
 
-    def test_converges_to_zero(self, make_batch_results):
+    def test_converges_to_zero(self, make_batch_results, make_strategy):
         """If strategy eventually passes all, loop terminates with all graduated."""
         results = make_batch_results(10)
         all_graduated = []
         active = results
 
         for cycle in range(10):
-            # Each cycle, one more record passes
             passing = {f"record_{i}" for i in range(min(cycle + 1, 10))}
-
-            strategy = MagicMock(spec=EvaluationStrategy)
-            strategy.name = "converging"
-            strategy.max_attempts = 10
-            strategy.on_exhausted = "keep_last"
-            strategy.evaluate.side_effect = lambda r, p=passing: r.custom_id in p
-            strategy.build_feedback.return_value = "Fix."
-
+            strategy = make_strategy(
+                name="converging",
+                max_attempts=10,
+                evaluate_fn=lambda r, p=passing: r.custom_id in p,
+            )
             loop = EvaluationLoop(strategy)
             graduated, failing = loop.split(active)
             loop.tag_graduated(graduated)
@@ -278,49 +289,31 @@ class TestNonDeterministicConvergence:
 class TestDispositionCorrect:
     """Exhausted records get correct disposition after max_attempts."""
 
-    def test_exhausted_records_get_correct_disposition(self, make_batch_results):
+    def test_exhausted_records_get_correct_disposition(self, make_batch_results, make_strategy):
         """After max_attempts, failing records remain with correct metadata."""
         results = make_batch_results(5)
-
-        strategy = MagicMock(spec=EvaluationStrategy)
-        strategy.name = "strict_validation"
-        strategy.max_attempts = 2
-        strategy.on_exhausted = "keep_last"
-        strategy.evaluate.return_value = False
-        strategy.build_feedback.return_value = "Output invalid."
+        strategy = make_strategy(name="strict_validation", max_attempts=2, evaluate_return=False)
 
         loop = EvaluationLoop(strategy)
-        all_graduated = []
         active = results
 
         for _attempt in range(strategy.max_attempts):
             graduated, failing = loop.split(active)
             loop.tag_graduated(graduated)
-            all_graduated.extend(graduated)
             if not failing:
                 break
             loop.build_resubmission(failing, {})
             active = failing
 
-        # Nothing graduated -- always-failing strategy
-        assert len(all_graduated) == 0
-        # All records remain in active/failing after exhausting attempts
         assert len(active) == 5
-        # Each record was evaluated max_attempts times
         assert strategy.evaluate.call_count == 5 * strategy.max_attempts
-        # Caller uses on_exhausted policy for these records
-        assert strategy.on_exhausted == "keep_last"
 
-    def test_disposition_reason_includes_strategy_name(self, make_batch_results):
+    def test_disposition_reason_includes_strategy_name(self, make_batch_results, make_strategy):
         """Reason string is 'evaluation_exhausted:{strategy_name}'."""
         results = make_batch_results(3)
-
-        strategy = MagicMock(spec=EvaluationStrategy)
-        strategy.name = "custom_check"
-        strategy.max_attempts = 1
-        strategy.on_exhausted = "drop"
-        strategy.evaluate.return_value = False
-        strategy.build_feedback.return_value = "Bad."
+        strategy = make_strategy(
+            name="custom_check", max_attempts=1, on_exhausted="drop", evaluate_return=False
+        )
 
         loop = EvaluationLoop(strategy)
         graduated, failing = loop.split(results)
@@ -332,7 +325,6 @@ class TestDispositionCorrect:
         expected_reason = f"evaluation_exhausted:{strategy.name}"
         assert expected_reason == "evaluation_exhausted:custom_check"
 
-        # build_resubmission should produce records for all failures
         submissions = loop.build_resubmission(failing, {})
         assert len(submissions) == 3
 
@@ -343,71 +335,37 @@ class TestDispositionCorrect:
 class TestRetryEvaluationInteraction:
     """Missing records trigger retry FIRST, then evaluation runs on complete set."""
 
-    def test_retry_before_evaluation(self):
+    def test_retry_before_evaluation(self, make_batch_results, make_strategy):
         """Evaluation does not run until retry produces complete result set."""
-        strategy = MagicMock(spec=EvaluationStrategy)
-        strategy.name = "validation"
-        strategy.max_attempts = 3
-        strategy.on_exhausted = "keep_last"
-        strategy.evaluate.return_value = True
+        strategy = make_strategy(name="validation", evaluate_return=True)
 
-        # Simulate: initial batch returns 8 of 10 results (2 missing)
-        initial_results = []
-        for i in range(8):
-            r = MagicMock(spec=BatchResult)
-            r.custom_id = f"record_{i}"
-            r.recovery_metadata = {}
-            r.content = f"content_{i}"
-            initial_results.append(r)
+        # Simulate: initial 8 results + 2 recovered by retry
+        initial_results = make_batch_results(8)
+        retry_results = make_batch_results(10)[8:]  # records 8-9
 
-        # After retry: 2 missing results recovered
-        retry_results = []
-        for i in range(8, 10):
-            r = MagicMock(spec=BatchResult)
-            r.custom_id = f"record_{i}"
-            r.recovery_metadata = {}
-            r.content = f"content_{i}"
-            retry_results.append(r)
-
-        # Evaluation runs on complete set (initial + retry)
         complete_results = initial_results + retry_results
         loop = EvaluationLoop(strategy)
         graduated, failing = loop.split(complete_results)
 
-        # All 10 should be evaluated and graduate
         assert len(graduated) == 10
         assert len(failing) == 0
         assert strategy.evaluate.call_count == 10
 
-    def test_evaluation_after_retry_uses_full_set(self):
+    def test_evaluation_after_retry_uses_full_set(self, make_batch_results, make_strategy):
         """After retry fills gaps, evaluation runs on all returned results."""
-        strategy = MagicMock(spec=EvaluationStrategy)
-        strategy.name = "validation"
-        strategy.max_attempts = 3
-        strategy.on_exhausted = "keep_last"
-        # Even-indexed records pass, odd fail
-        strategy.evaluate.side_effect = lambda r: int(r.custom_id.split("_")[1]) % 2 == 0
-        strategy.build_feedback.return_value = "Fix."
+        strategy = make_strategy(
+            name="validation",
+            evaluate_fn=lambda r: int(r.custom_id.split("_")[1]) % 2 == 0,
+        )
 
-        complete_results = []
-        for i in range(10):
-            r = MagicMock(spec=BatchResult)
-            r.custom_id = f"record_{i}"
-            r.recovery_metadata = {}
-            r.content = f"content_{i}"
-            complete_results.append(r)
-
+        complete_results = make_batch_results(10)
         loop = EvaluationLoop(strategy)
         graduated, failing = loop.split(complete_results)
 
-        # Even: 0,2,4,6,8 = 5 graduated
         assert len(graduated) == 5
-        # Odd: 1,3,5,7,9 = 5 failing
         assert len(failing) == 5
-        # All 10 were evaluated
         assert strategy.evaluate.call_count == 10
 
-        # Verify correct records graduated
         graduated_ids = {r.custom_id for r in graduated}
         expected = {"record_0", "record_2", "record_4", "record_6", "record_8"}
         assert graduated_ids == expected
@@ -473,26 +431,14 @@ class TestBackwardCompat:
         assert state.graduated_results == []
         assert state.evaluation_strategy_name is None
 
-    def test_old_state_evaluation_loop_still_works(self):
+    def test_old_state_evaluation_loop_still_works(self, make_batch_results, make_strategy):
         """EvaluationLoop works on results from old state (no evaluation metadata)."""
-        results = []
-        for i in range(5):
-            r = MagicMock(spec=BatchResult)
-            r.custom_id = f"record_{i}"
-            r.recovery_metadata = {}
-            r.content = f"content_{i}"
-            results.append(r)
-
-        strategy = MagicMock(spec=EvaluationStrategy)
-        strategy.name = "validation"
-        strategy.max_attempts = 3
-        strategy.on_exhausted = "keep_last"
-        strategy.evaluate.return_value = True
+        results = make_batch_results(5)
+        strategy = make_strategy(name="validation", evaluate_return=True)
 
         loop = EvaluationLoop(strategy)
         graduated, failing = loop.split(results)
 
-        # All pass -- old results treated as not-yet-evaluated
         assert len(graduated) == 5
         assert len(failing) == 0
 
