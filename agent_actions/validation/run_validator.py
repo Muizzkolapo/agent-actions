@@ -28,3 +28,4 @@ class RunCommandArgs(BaseModel):
     )
     downstream: bool = Field(False, description="Run downstream dependent workflows after this one")
     upstream: bool = Field(False, description="Run upstream workflow dependencies before this one")
+    upstream_scope: list[str] | None = None
