@@ -79,14 +79,16 @@ class RunCommand:
 
         for i, workflow_name in enumerate(plan):
             click.echo(f"\n--- Running workflow: {workflow_name} ---")
-            # Empty scope list means no upstreams in plan (e.g. the target itself) — pass None
-            scope = scope_map.get(workflow_name) or None
+            scope = scope_map.get(workflow_name, [])
+            # Target/root workflows have no in-plan upstreams ([]) and need
+            # standalone mode (None = resolve all declared upstreams).
+            upstream_scope = scope if scope else None
             chain_args = self.args.model_copy(
                 update={
                     "agent": workflow_name,
                     "downstream": False,
                     "upstream": False,
-                    "upstream_scope": scope,
+                    "upstream_scope": upstream_scope,
                 }
             )
             status = RunCommand(chain_args)._execute_single(project_root=project_root)

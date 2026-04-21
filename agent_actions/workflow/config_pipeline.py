@@ -138,7 +138,6 @@ def _inject_upstream_virtual_actions(
     if not parsed_refs:
         return {}
 
-    # Scope to only the upstreams that are part of the current execution plan
     if upstream_scope is not None:
         scope_set = set(upstream_scope)
         parsed_refs = [ref for ref in parsed_refs if ref["workflow"] in scope_set]

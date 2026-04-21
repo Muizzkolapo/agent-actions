@@ -12,21 +12,7 @@ import pytest
 
 from agent_actions.errors import ConfigurationError, WorkflowError
 from agent_actions.workflow.orchestrator import WorkflowOrchestrator
-
-
-def _write_workflow(config_dir, name, upstream=None):
-    """Write a minimal workflow YAML to the config directory."""
-    lines = [f"name: {name}", "description: test", "actions:"]
-    lines.append(f"  - name: {name}_action")
-    lines.append("    intent: do something")
-    if upstream:
-        lines.append("upstream:")
-        for ref in upstream:
-            lines.append(f"  - workflow: {ref['workflow']}")
-            actions = ref.get("actions", [f"{ref['workflow']}_action"])
-            lines.append(f"    actions: [{', '.join(actions)}]")
-    config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / f"{name}.yml").write_text("\n".join(lines))
+from tests.conftest import write_workflow_config as _write_workflow
 
 
 class TestWorkflowDAGDiscovery:

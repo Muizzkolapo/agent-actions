@@ -7,15 +7,7 @@ virtual actions from in-scope upstreams are injected.
 from unittest.mock import MagicMock
 
 from agent_actions.workflow.config_pipeline import _inject_upstream_virtual_actions
-
-
-def _make_manager(upstream_refs: list[dict], agent_name: str = "downstream_wf") -> MagicMock:
-    """Create a mock ConfigManager with upstream declarations."""
-    manager = MagicMock()
-    manager.agent_name = agent_name
-    manager.user_config = {"upstream": upstream_refs}
-    manager.project_root = None  # skip validation
-    return manager
+from tests.conftest import make_mock_config_manager as _make_manager
 
 
 class TestUpstreamScopeFiltering:
