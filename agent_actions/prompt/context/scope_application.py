@@ -2,6 +2,7 @@
 
 import json
 import logging
+from collections import Counter
 from copy import deepcopy
 from typing import Any
 
@@ -336,8 +337,6 @@ def flatten_observe_context(llm_context: dict) -> dict:
     appears in multiple namespaces (collision handling matches
     :func:`scope_file_mode._resolve_observe_refs`).
     """
-    from collections import Counter
-
     if not llm_context:
         return {}
 

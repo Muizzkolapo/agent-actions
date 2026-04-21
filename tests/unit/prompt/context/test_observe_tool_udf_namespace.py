@@ -41,7 +41,6 @@ class TestToolUdfFlatInjection:
         assert llm_ctx == {"tool": {"answer": "42"}}
 
     def test_flatten_removes_namespace_wrapper(self):
-        """flatten_observe_context strips the action-name key."""
         namespaced = {"upstream": {"question_type": "yes_no"}}
         flat = flatten_observe_context(namespaced)
         assert flat == {"question_type": "yes_no"}
@@ -51,7 +50,6 @@ class TestToolUdfFlatInjection:
         assert flatten_observe_context({}) == {}
 
     def test_flatten_non_dict_value_preserved(self):
-        """Non-dict namespace values are kept under their key."""
         ctx = {"scalar_ns": "just_a_string"}
         flat = flatten_observe_context(ctx)
         assert flat == {"scalar_ns": "just_a_string"}
@@ -81,7 +79,6 @@ class TestToolUdfMultipleFields:
         assert flat["url"] == "http://example.com"
 
     def test_collision_qualified_keys(self):
-        """Same field name in multiple namespaces → qualified as 'ns.field'."""
         namespaced = {
             "dep_a": {"title": "Title A", "unique_a": "val_a"},
             "dep_b": {"title": "Title B"},
