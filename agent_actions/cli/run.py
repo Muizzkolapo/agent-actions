@@ -75,10 +75,19 @@ class RunCommand:
         plan = orchestrator.resolve_execution_plan(self.agent_name, direction)
         click.echo(f"Execution plan ({direction}): {' -> '.join(plan)}")
 
+        scope_map = orchestrator.build_upstream_scope_map(plan)
+
         for i, workflow_name in enumerate(plan):
             click.echo(f"\n--- Running workflow: {workflow_name} ---")
+            # Empty scope list means no upstreams in plan (e.g. the target itself) — pass None
+            scope = scope_map.get(workflow_name) or None
             chain_args = self.args.model_copy(
-                update={"agent": workflow_name, "downstream": False, "upstream": False}
+                update={
+                    "agent": workflow_name,
+                    "downstream": False,
+                    "upstream": False,
+                    "upstream_scope": scope,
+                }
             )
             status = RunCommand(chain_args)._execute_single(project_root=project_root)
 
@@ -129,6 +138,7 @@ class RunCommand:
                 fresh=self.args.fresh,
                 verify_keys=self.args.verify_keys,
                 project_root=project_root,
+                upstream_scope=self.args.upstream_scope,
             )
         )
 
