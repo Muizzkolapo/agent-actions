@@ -71,7 +71,11 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
     _run_config_stage(manager.merge_agent_configs, "merge_agent_configs", manager, user_agents)
 
     virtual_actions = _run_config_stage(
-        _inject_upstream_virtual_actions, "inject_upstream_virtual_actions", manager, manager
+        _inject_upstream_virtual_actions,
+        "inject_upstream_virtual_actions",
+        manager,
+        manager,
+        config.upstream_scope,
     )
 
     virtual_action_names = set(virtual_actions.keys()) if virtual_actions else set()
@@ -109,8 +113,15 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
 
 def _inject_upstream_virtual_actions(
     manager: ConfigManager,
+    upstream_scope: list[str] | None = None,
 ) -> dict[str, VirtualAction]:
     """Parse ``upstream`` declarations and build virtual action map.
+
+    Args:
+        manager: Config manager with loaded workflow config.
+        upstream_scope: When set (by ``--downstream`` chain), only inject
+            virtual actions from these upstream workflows.  ``None`` means
+            inject all declared upstreams (standalone run).
 
     Returns:
         Dict mapping action name to ``VirtualAction``.
@@ -126,6 +137,12 @@ def _inject_upstream_virtual_actions(
     parsed_refs = [ref for ref in upstream_refs if isinstance(ref, dict) and "workflow" in ref]
     if not parsed_refs:
         return {}
+
+    if upstream_scope is not None:
+        scope_set = set(upstream_scope)
+        parsed_refs = [ref for ref in parsed_refs if ref["workflow"] in scope_set]
+        if not parsed_refs:
+            return {}
 
     if manager.project_root:
         from agent_actions.workflow.orchestrator import WorkflowOrchestrator

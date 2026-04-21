@@ -205,3 +205,74 @@ class TestExecuteChain:
         assert child_args.upstream is False
         # But should preserve other flags
         assert child_args.fresh is True
+
+
+class TestChainUpstreamScope:
+    """_execute_chain passes upstream_scope from scope map to each workflow."""
+
+    def test_fan_in_passes_correct_scope(self, tmp_path):
+        """When A triggers downstream C (which has upstreams A and B),
+        C should get upstream_scope=['A'] — B is filtered out."""
+        from agent_actions.cli.run import RunCommand
+
+        args = RunCommandArgs(agent="a", downstream=True)
+        cmd = RunCommand(args)
+
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.resolve_execution_plan.return_value = ["a", "c"]
+        mock_orchestrator.build_upstream_scope_map.return_value = {
+            "a": [],
+            "c": ["a"],
+        }
+
+        captured_args: list[RunCommandArgs] = []
+        original_init = RunCommand.__init__
+
+        def capture_init(self_inner, args_inner):
+            original_init(self_inner, args_inner)
+            captured_args.append(args_inner)
+
+        with (
+            patch(
+                "agent_actions.workflow.orchestrator.WorkflowOrchestrator",
+                return_value=mock_orchestrator,
+            ),
+            patch.object(RunCommand, "__init__", capture_init),
+            patch.object(RunCommand, "_execute_single"),
+        ):
+            cmd._execute_chain(project_root=tmp_path)
+
+        # workflow "a" — target, no upstreams in plan → scope is None
+        assert captured_args[0].upstream_scope is None
+        # workflow "c" — downstream, scoped to ["a"]
+        assert captured_args[1].upstream_scope == ["a"]
+
+    def test_target_workflow_gets_no_scope(self, tmp_path):
+        """The target workflow (entry point) should get upstream_scope=None."""
+        from agent_actions.cli.run import RunCommand
+
+        args = RunCommandArgs(agent="solo", downstream=True)
+        cmd = RunCommand(args)
+
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.resolve_execution_plan.return_value = ["solo"]
+        mock_orchestrator.build_upstream_scope_map.return_value = {"solo": []}
+
+        captured_args: list[RunCommandArgs] = []
+        original_init = RunCommand.__init__
+
+        def capture_init(self_inner, args_inner):
+            original_init(self_inner, args_inner)
+            captured_args.append(args_inner)
+
+        with (
+            patch(
+                "agent_actions.workflow.orchestrator.WorkflowOrchestrator",
+                return_value=mock_orchestrator,
+            ),
+            patch.object(RunCommand, "__init__", capture_init),
+            patch.object(RunCommand, "_execute_single"),
+        ):
+            cmd._execute_chain(project_root=tmp_path)
+
+        assert captured_args[0].upstream_scope is None

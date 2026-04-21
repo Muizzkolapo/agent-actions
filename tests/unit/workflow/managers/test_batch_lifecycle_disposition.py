@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
 
@@ -109,3 +110,73 @@ class TestCheckBatchSubmission:
             result = manager.check_batch_submission("extract", 0, agent_io)
 
         assert result is None
+
+
+class TestCheckBatchSubmissionRunMode:
+    """Test that configured_run_mode overrides stale batch file detection."""
+
+    def test_online_mode_ignores_stale_registry(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """Stale .batch_registry.json + run_mode=ONLINE → returns None."""
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+        agent_io = Path("/tmp/fake_agent_io")
+
+        with patch.object(Path, "exists", return_value=True):
+            result = manager.check_batch_submission(
+                "extract", 0, agent_io, configured_run_mode=RunMode.ONLINE
+            )
+
+        assert result is None
+
+    def test_batch_mode_respects_registry(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """Stale .batch_registry.json + run_mode=BATCH → returns 'batch_submitted'."""
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+        agent_io = Path("/tmp/fake_agent_io")
+
+        with patch.object(Path, "exists", return_value=True):
+            result = manager.check_batch_submission(
+                "extract", 0, agent_io, configured_run_mode=RunMode.BATCH
+            )
+
+        assert result == "batch_submitted"
+
+    def test_no_registry_online_mode(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """No registry file + run_mode=ONLINE → returns None (short-circuits)."""
+        mock_storage_backend.has_disposition.return_value = False
+
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+        agent_io = Path("/tmp/fake_agent_io")
+
+        with patch.object(Path, "exists", return_value=False):
+            result = manager.check_batch_submission(
+                "extract", 0, agent_io, configured_run_mode=RunMode.ONLINE
+            )
+
+        assert result is None
+        # Should not even check filesystem or dispositions
+        mock_storage_backend.has_disposition.assert_not_called()
+
+    def test_none_run_mode_preserves_existing_behavior(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """configured_run_mode=None (default) → existing behavior unchanged."""
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+        agent_io = Path("/tmp/fake_agent_io")
+
+        with patch.object(Path, "exists", return_value=True):
+            result = manager.check_batch_submission("extract", 0, agent_io)
+
+        assert result == "batch_submitted"

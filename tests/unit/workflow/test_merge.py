@@ -110,6 +110,176 @@ class TestMergeLineage:
         assert existing["lineage"] == "invalid"
 
 
+class TestParallelBranchLineageSources:
+    """Tests for lineage_sources population during parallel branch merges."""
+
+    def test_two_branch_merge_populates_lineage_sources(self):
+        """Merging records from two parallel branches sets lineage_sources with both leaf node_ids."""
+        existing = {
+            "source_guid": "book-001",
+            "node_id": "generate_concept_explanation_def",
+            "lineage": ["reconstruct_options_xyz", "generate_concept_explanation_def"],
+            "content": {"concept_explanation": "..."},
+        }
+        new_record = {
+            "source_guid": "book-001",
+            "node_id": "generate_feynman_explanation_abc",
+            "lineage": ["reconstruct_options_xyz", "generate_feynman_explanation_abc"],
+            "content": {"feynman_explanation": "..."},
+        }
+
+        deep_merge_record(existing, new_record)
+
+        assert existing["lineage_sources"] == [
+            "generate_concept_explanation_def",
+            "generate_feynman_explanation_abc",
+        ]
+        assert "generate_concept_explanation_def" in existing["lineage"]
+        assert "generate_feynman_explanation_abc" in existing["lineage"]
+        assert existing["content"]["concept_explanation"] == "..."
+        assert existing["content"]["feynman_explanation"] == "..."
+
+    def test_three_branch_merge_populates_lineage_sources(self):
+        """Merging three parallel branches accumulates all leaf node_ids in lineage_sources."""
+        branch_a = {
+            "source_guid": "book-001",
+            "node_id": "node_4_seo",
+            "lineage": ["node_0_extract", "node_4_seo"],
+            "content": {"seo_score": 85},
+        }
+        branch_b = {
+            "source_guid": "book-001",
+            "node_id": "node_5_recs",
+            "lineage": ["node_0_extract", "node_5_recs"],
+            "content": {"similar_books": ["Refactoring"]},
+        }
+        branch_c = {
+            "source_guid": "book-001",
+            "node_id": "node_6_level",
+            "lineage": ["node_0_extract", "node_6_level"],
+            "content": {"reading_level": "advanced"},
+        }
+
+        deep_merge_record(branch_a, branch_b)
+        deep_merge_record(branch_a, branch_c)
+
+        assert len(branch_a["lineage_sources"]) == 3
+        assert "node_4_seo" in branch_a["lineage_sources"]
+        assert "node_5_recs" in branch_a["lineage_sources"]
+        assert "node_6_level" in branch_a["lineage_sources"]
+
+    def test_single_branch_no_lineage_sources(self):
+        """Merging records with same node_id (same branch) does not set lineage_sources."""
+        existing = {
+            "source_guid": "abc",
+            "node_id": "action_1",
+            "lineage": ["root_0", "action_1"],
+        }
+        new_record = {
+            "source_guid": "abc",
+            "node_id": "action_1",
+            "lineage": ["root_0", "action_1"],
+            "content": {"extra": "data"},
+        }
+
+        deep_merge_record(existing, new_record)
+
+        assert "lineage_sources" not in existing
+
+    def test_no_lineage_sources_when_no_node_id(self):
+        """Records without node_id do not get lineage_sources."""
+        existing = {"source_guid": "abc", "field_1": "A"}
+        new_record = {"source_guid": "abc", "field_2": "B"}
+
+        deep_merge_record(existing, new_record)
+
+        assert "lineage_sources" not in existing
+
+    def test_pre_existing_lineage_sources_not_inherited(self):
+        """When new_record carries lineage_sources from a prior fan-in, it is ignored — only current-level branches tracked."""
+        existing = {
+            "source_guid": "book-001",
+            "node_id": "action_g_456",
+            "lineage": ["root_0", "action_g_456"],
+            "content": {"g_field": "G"},
+        }
+        new_record = {
+            "source_guid": "book-001",
+            "node_id": "action_e_123",
+            "lineage": ["root_0", "action_b_1", "action_e_123"],
+            "lineage_sources": ["action_b_1", "action_c_2"],
+            "content": {"e_field": "E"},
+        }
+
+        deep_merge_record(existing, new_record)
+
+        assert existing["lineage_sources"] == ["action_g_456", "action_e_123"]
+
+    def test_merge_records_by_key_populates_lineage_sources(self):
+        """End-to-end: merge_records_by_key sets lineage_sources for parallel branch records."""
+        records = [
+            {
+                "source_guid": "book-001",
+                "node_id": "branch_a_001",
+                "lineage": ["root_0", "branch_a_001"],
+                "content": {"field_a": "A"},
+            },
+            {
+                "source_guid": "book-001",
+                "node_id": "branch_b_002",
+                "lineage": ["root_0", "branch_b_002"],
+                "content": {"field_b": "B"},
+            },
+        ]
+
+        result = merge_records_by_key(records)
+
+        assert len(result) == 1
+        merged = result[0]
+        assert merged["lineage_sources"] == ["branch_a_001", "branch_b_002"]
+        assert "branch_a_001" in merged["lineage"]
+        assert "branch_b_002" in merged["lineage"]
+
+    def test_merge_json_files_populates_lineage_sources(self):
+        """End-to-end: merge_json_files from parallel branches sets lineage_sources."""
+        with TemporaryDirectory() as tmpdir:
+            file1 = Path(tmpdir) / "branch_a.json"
+            file2 = Path(tmpdir) / "branch_b.json"
+
+            file1.write_text(
+                json.dumps(
+                    [
+                        {
+                            "source_guid": "book-001",
+                            "node_id": "gen_concept_def",
+                            "lineage": ["root_xyz", "gen_concept_def"],
+                            "content": {"concept": "explanation"},
+                        }
+                    ]
+                )
+            )
+            file2.write_text(
+                json.dumps(
+                    [
+                        {
+                            "source_guid": "book-001",
+                            "node_id": "gen_feynman_abc",
+                            "lineage": ["root_xyz", "gen_feynman_abc"],
+                            "content": {"feynman": "explanation"},
+                        }
+                    ]
+                )
+            )
+
+            result = merge_json_files([file1, file2])
+
+            assert len(result) == 1
+            merged = result[0]
+            assert merged["lineage_sources"] == ["gen_concept_def", "gen_feynman_abc"]
+            assert merged["content"]["concept"] == "explanation"
+            assert merged["content"]["feynman"] == "explanation"
+
+
 class TestGetCorrelationValue:
     """Tests for get_correlation_value function."""
 

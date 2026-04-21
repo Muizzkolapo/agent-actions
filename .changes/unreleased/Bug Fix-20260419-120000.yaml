@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Prevent non-serializable data (NaN, Infinity, datetime, bytes, sets) from producing invalid JSON in OpenAI request payloads"
-time: 2026-04-19T12:00:00.000000Z

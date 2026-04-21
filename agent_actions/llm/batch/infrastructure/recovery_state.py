@@ -2,7 +2,7 @@
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +48,36 @@ class RecoveryState:
     # Accumulated results (serialized BatchResult dicts)
     accumulated_results: list[dict[str, Any]] = field(default_factory=list)
 
+    # Evaluation loop: graduated results (passed evaluation, never re-evaluated)
+    graduated_results: list[dict[str, Any]] = field(default_factory=list)
+
+    # Which evaluation strategy is active (e.g., "validation", "critique")
+    evaluation_strategy_name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict without deep-copying already-serialized lists.
+
+        ``dataclasses.asdict()`` recursively copies every nested dict/list,
+        which is wasteful for ``accumulated_results`` and ``graduated_results``
+        — they are already plain ``list[dict]`` ready for JSON serialization.
+        """
+        return {
+            "phase": self.phase,
+            "retry_attempt": self.retry_attempt,
+            "retry_max_attempts": self.retry_max_attempts,
+            "missing_ids": self.missing_ids,
+            "record_failure_counts": self.record_failure_counts,
+            "reprompt_attempt": self.reprompt_attempt,
+            "reprompt_max_attempts": self.reprompt_max_attempts,
+            "validation_name": self.validation_name,
+            "reprompt_attempts_per_record": self.reprompt_attempts_per_record,
+            "validation_status": self.validation_status,
+            "on_exhausted": self.on_exhausted,
+            "accumulated_results": self.accumulated_results,
+            "graduated_results": self.graduated_results,
+            "evaluation_strategy_name": self.evaluation_strategy_name,
+        }
+
 
 class RecoveryStateManager:
     """Persists RecoveryState to JSON files in the batch/ subdirectory."""
@@ -59,7 +89,7 @@ class RecoveryStateManager:
         ensure_directory_exists(state_path, is_file=True)
 
         with open(state_path, "w", encoding="utf-8") as f:
-            json.dump(asdict(state), f, indent=2, ensure_ascii=False)
+            json.dump(state.to_dict(), f, ensure_ascii=False)
 
         logger.debug(
             "Saved recovery state to %s (phase=%s, retry=%d, reprompt=%d)",

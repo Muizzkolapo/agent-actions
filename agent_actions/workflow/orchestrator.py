@@ -199,6 +199,15 @@ class WorkflowOrchestrator:
 
         return ordered
 
+    def build_upstream_scope_map(self, plan: list[str]) -> dict[str, list[str]]:
+        """Map each workflow in *plan* to its in-plan upstreams.
+
+        Scopes virtual-action injection so that ``--downstream`` only
+        resolves data from upstreams that actually ran in this chain.
+        """
+        plan_set = set(plan)
+        return {w: [u for u in self.graph.get(w, []) if u in plan_set] for w in plan}
+
     def _collect_descendants(self, target: str) -> set[str]:
         """BFS forward from target to find all downstream workflows."""
         visited: set[str] = {target}
