@@ -139,9 +139,16 @@ def _build_action_data_map(actions: list) -> dict:
 
 
 def _index_workflow_lines(
-    index: ProjectIndex, yaml_file: Path, lines: list[str], action_data_map: dict
+    index: ProjectIndex,
+    yaml_file: Path,
+    lines: list[str],
+    action_data_map: dict,
 ) -> None:
     """Index action metadata and references from workflow lines."""
+    workflow_name = index.workflow_for_file(yaml_file)
+    if workflow_name:
+        index.file_to_workflow[yaml_file] = workflow_name
+
     current_action = None
     current_action_indent = None
     dependencies_indent = None
@@ -169,6 +176,8 @@ def _index_workflow_lines(
             action_meta = ActionMetadata(name=action_name, location=action_location)
             index.file_actions[yaml_file][action_name] = action_meta
             index.actions[action_name] = action_location
+            if workflow_name:
+                index.workflow_actions.setdefault(workflow_name, {})[action_name] = action_location
 
             action_data = action_data_map.get(action_name, {})
             _populate_versions_summary(action_meta, action_data)
