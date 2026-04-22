@@ -9,6 +9,8 @@ import pytest
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.processing.recovery.retry import (
+    RetryExhaustedException,
+    RetryResult,
     RetryService,
     classify_error,
     create_retry_service_from_config,
@@ -255,3 +257,32 @@ class TestRetryServiceEdgeCases:
         result = service.execute(operation, context="test_action")
 
         assert result.exhausted
+
+
+class TestRetryExhaustedException:
+    """Tests for RetryExhaustedException — carries retry_result for callers to inspect."""
+
+    def test_carries_retry_result(self):
+        """Exception exposes the RetryResult so callers can distinguish exhaustion from guard-skip."""
+        retry_result = RetryResult(
+            response=None,
+            attempts=3,
+            exhausted=True,
+            last_error="429 Too Many Requests",
+        )
+        exc = RetryExhaustedException(retry_result)
+
+        assert exc.retry_result is retry_result
+
+    def test_message_includes_attempts_and_error(self):
+        """Exception message surfaces attempts count and last error for log diagnostics."""
+        retry_result = RetryResult(
+            response=None,
+            attempts=3,
+            exhausted=True,
+            last_error="429 Too Many Requests",
+        )
+        exc = RetryExhaustedException(retry_result)
+
+        assert "3 attempts" in str(exc)
+        assert "429 Too Many Requests" in str(exc)
