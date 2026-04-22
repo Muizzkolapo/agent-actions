@@ -82,8 +82,8 @@ class TestValidationStrategyEvaluate:
         result = _make_result("r1", content={"valid": False})
         assert strategy.evaluate(result) is False
 
-    def test_success_false_skips_validation(self):
-        """API-failed results pass through without validation."""
+    def test_success_false_fails_validation(self):
+        """API-failed results fail validation without calling the UDF."""
         call_log = []
 
         def tracking_validate(response):
@@ -92,7 +92,7 @@ class TestValidationStrategyEvaluate:
 
         strategy = ValidationStrategy(validation_func=tracking_validate, feedback_message="fix")
         result = _make_result("r1", success=False)
-        assert strategy.evaluate(result) is True
+        assert strategy.evaluate(result) is False
         assert call_log == []
 
     def test_already_passed_skips_validation(self):
@@ -153,6 +153,23 @@ class TestValidationStrategyBuildFeedback:
         result = _make_result("r1", content={"bad": "data"})
         feedback = strategy.build_feedback(result)
         assert "bad" in feedback
+
+    def test_api_failure_returns_api_error_feedback(self):
+        """API-failed results get a feedback message about the API error, not validation."""
+        strategy = ValidationStrategy(validation_func=_always_fail, feedback_message="fix")
+        result = _make_result("r1", content=None, success=False)
+        feedback = strategy.build_feedback(result)
+        assert isinstance(feedback, str)
+        assert "API error" in feedback
+        assert "fix" not in feedback  # should NOT use the validation feedback message
+
+    def test_api_failure_with_none_content_does_not_crash(self):
+        """build_feedback handles None content from API failures gracefully."""
+        strategy = ValidationStrategy(validation_func=_always_fail, feedback_message="fix")
+        result = _make_result("r1", content=None, success=False)
+        # Must not raise
+        feedback = strategy.build_feedback(result)
+        assert len(feedback) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -260,8 +277,8 @@ class TestGraduatedPoolIntegration:
         graduated_1, _ = loop.split([])
         assert evaluated_ids == []
 
-    def test_api_failures_pass_through(self):
-        """Results with success=False are graduated without validation."""
+    def test_api_failures_are_not_graduated(self):
+        """Results with success=False are routed to still_failing, not graduated."""
         strategy = ValidationStrategy(validation_func=_always_fail, feedback_message="fix")
         loop = EvaluationLoop(strategy)
 
@@ -272,8 +289,41 @@ class TestGraduatedPoolIntegration:
 
         graduated, failing = loop.split(results)
 
-        assert [r.custom_id for r in graduated] == ["r2"]
-        assert [r.custom_id for r in failing] == ["r1"]
+        assert [r.custom_id for r in graduated] == []
+        assert [r.custom_id for r in failing] == ["r1", "r2"]
+
+    def test_mixed_api_failures_and_validation_failures(self):
+        """API failures and validation failures both end up in still_failing."""
+
+        def validate(response):
+            return response.get("valid", False)
+
+        strategy = ValidationStrategy(validation_func=validate, feedback_message="fix")
+        loop = EvaluationLoop(strategy)
+        results = [
+            _make_result("pass-1", content={"valid": True}, success=True),
+            _make_result("api-fail", content=None, success=False),
+            _make_result("val-fail", content={"valid": False}, success=True),
+            _make_result("pass-2", content={"valid": True}, success=True),
+        ]
+
+        graduated, failing = loop.split(results)
+
+        assert [r.custom_id for r in graduated] == ["pass-1", "pass-2"]
+        assert [r.custom_id for r in failing] == ["api-fail", "val-fail"]
+
+    def test_api_failure_resubmission_uses_api_error_feedback(self):
+        """Resubmission of API-failed records uses API error feedback, not validation."""
+        strategy = ValidationStrategy(validation_func=_always_fail, feedback_message="validate")
+        loop = EvaluationLoop(strategy)
+        result = _make_result("api-fail", content=None, success=False)
+        context_map = {"api-fail": {"user_content": "original prompt"}}
+
+        submissions = loop.build_resubmission([result], context_map)
+
+        assert len(submissions) == 1
+        assert "API error" in submissions[0]["feedback"]
+        assert "validate" not in submissions[0]["feedback"]
 
     def test_build_feedback_for_failing(self):
         strategy = ValidationStrategy(
