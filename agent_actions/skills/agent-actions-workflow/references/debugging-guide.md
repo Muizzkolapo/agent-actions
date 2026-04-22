@@ -191,7 +191,7 @@ For all other config changes, clear the cache manually. **CRITICAL: You must cle
 # Full reset script — use this pattern every time
 import sqlite3, json, shutil, os
 
-db_path = 'agent_workflow/<workflow>/agent_io/target/<workflow>.db'
+db_path = 'agent_workflow/<workflow>/agent_io/store/<workflow>.db'
 conn = sqlite3.connect(db_path)
 actions = ['action_1', 'action_2']  # actions to reset
 for a in actions:

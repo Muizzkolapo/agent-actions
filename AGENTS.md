@@ -54,6 +54,7 @@ These are the **stable paths** that exist in every user's project:
 | `seed_data/*.json` | Reference data |
 | `agent_io/staging/` | Input data |
 | `agent_io/target/{action}/` | Output data per action |
+| `agent_io/store/` | Durable database (SQLite) |
 | `.env` | Environment variables |
 
 Use this to answer: "I'm changing this code — what user files does it affect?" Or in reverse: "Something broke in my config — what framework code touches it?"
