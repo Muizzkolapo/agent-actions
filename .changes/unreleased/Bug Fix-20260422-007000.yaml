@@ -1,3 +1,3 @@
 kind: Bug Fix
 body: "Fix false guard-skip on completed actions: clear stale dispositions on limit change, cross-check output before trusting SKIPPED, use PASSTHROUGH for WHERE-clause skip with data"
-time: 2026-04-22T00:70:00.000000Z
+time: 2026-04-22T07:00:00.000000Z
