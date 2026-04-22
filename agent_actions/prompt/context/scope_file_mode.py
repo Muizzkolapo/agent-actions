@@ -278,11 +278,8 @@ def apply_observe_for_file_mode(
     version_ns_in_content: set[str] = set()
     if data and isinstance(data[0], dict):
         sample = data[0]
-        sample_content = (
-            sample.get("content", sample)
-            if isinstance(sample.get("content"), dict) and sample.get("content")
-            else sample
-        )
+        sample_cv = sample.get("content")
+        sample_content = sample_cv if isinstance(sample_cv, dict) and sample_cv else sample
         if sample_content:
             ref_namespaces = [ns for ns, _, _ in resolved]
             detected = _detect_version_namespaces(sample_content, ref_namespaces)
