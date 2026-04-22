@@ -5,12 +5,9 @@ is either the old content or the new content, never a partial write.
 """
 
 import json
-import logging
 import os
 from pathlib import Path
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 
 def atomic_json_write(
