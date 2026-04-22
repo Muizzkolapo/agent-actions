@@ -343,6 +343,58 @@ class TestLimitStatusInvalidation:
         assert result.status == ActionStatus.COMPLETED
         mock_deps.action_runner.run_action.assert_not_called()
 
+    def test_limits_changed_clears_dispositions(self, executor, mock_deps):
+        """When limits change, stale dispositions must be cleared alongside status reset."""
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
+        mock_deps.state_manager.get_status_details.return_value = {
+            "status": ActionStatus.COMPLETED,
+            "record_limit": 10,
+            "file_limit": None,
+        }
+        storage = MagicMock()
+        mock_deps.action_runner.storage_backend = storage
+
+        result = executor._maybe_invalidate_completed_status(
+            "act_a", {"record_limit": 2, "file_limit": None}, ActionStatus.COMPLETED
+        )
+
+        assert result == ActionStatus.PENDING
+        storage.clear_disposition.assert_called_once_with("act_a")
+
+    def test_limits_unchanged_does_not_clear_dispositions(self, executor, mock_deps):
+        """When limits are unchanged, dispositions are untouched."""
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
+        mock_deps.state_manager.get_status_details.return_value = {
+            "status": ActionStatus.COMPLETED,
+            "record_limit": 10,
+            "file_limit": None,
+        }
+        storage = MagicMock()
+        mock_deps.action_runner.storage_backend = storage
+
+        result = executor._maybe_invalidate_completed_status(
+            "act_a", {"record_limit": 10, "file_limit": None}, ActionStatus.COMPLETED
+        )
+
+        assert result == ActionStatus.COMPLETED
+        storage.clear_disposition.assert_not_called()
+
+    def test_limits_changed_no_storage_backend(self, executor, mock_deps):
+        """When limits change but no storage backend, status resets without error."""
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
+        mock_deps.state_manager.get_status_details.return_value = {
+            "status": ActionStatus.COMPLETED,
+            "record_limit": 10,
+            "file_limit": None,
+        }
+        mock_deps.action_runner.storage_backend = None
+
+        result = executor._maybe_invalidate_completed_status(
+            "act_a", {"record_limit": 2, "file_limit": None}, ActionStatus.COMPLETED
+        )
+
+        assert result == ActionStatus.PENDING
+
     def test_no_limits_old_status_no_invalidation(self, executor, mock_deps):
         """Old status file without limit keys + config with no limits = no invalidation."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
