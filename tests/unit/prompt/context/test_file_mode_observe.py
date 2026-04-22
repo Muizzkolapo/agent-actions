@@ -1003,6 +1003,10 @@ class TestVersionNamespaceObserve:
         assert content["url"] == "https://ex.com"
         # upstream.question from item-level fallback (content was empty)
         assert content["question"] == "Q?"
+        # Metadata keys must NOT leak into enriched content
+        assert "source_guid" not in content
+        assert "lineage" not in content
+        assert "node_id" not in content
 
     def test_non_version_input_source_not_treated_as_version_ns(self):
         """Non-version input source keys in content are NOT treated as version namespaces.

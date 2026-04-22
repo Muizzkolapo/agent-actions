@@ -11,6 +11,7 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_namespace import (
+    _RECORD_METADATA_KEYS,
     _detect_version_namespaces,
     _extract_content_data,
     _load_historical_node,
@@ -265,7 +266,7 @@ def apply_observe_for_file_mode(
             sample_content = (
                 sample_content_val
                 if isinstance(sample_content_val, dict) and sample_content_val
-                else sample
+                else {k: v for k, v in sample.items() if k not in _RECORD_METADATA_KEYS}
             )
             input_source_names = set(sample_content.keys())
 
@@ -279,7 +280,11 @@ def apply_observe_for_file_mode(
     if data and isinstance(data[0], dict):
         sample = data[0]
         sample_cv = sample.get("content")
-        sample_content = sample_cv if isinstance(sample_cv, dict) and sample_cv else sample
+        sample_content = (
+            sample_cv
+            if isinstance(sample_cv, dict) and sample_cv
+            else {k: v for k, v in sample.items() if k not in _RECORD_METADATA_KEYS}
+        )
         if sample_content:
             ref_namespaces = [ns for ns, _, _ in resolved]
             detected = _detect_version_namespaces(sample_content, ref_namespaces)
@@ -334,9 +339,15 @@ def apply_observe_for_file_mode(
 
         # Extract content, guarding against the empty-content trap:
         # item.get("content", item) returns {} when content exists but is
-        # empty, instead of falling back to item.  Check for non-empty dict.
+        # empty, instead of falling back to item.  Filter metadata keys
+        # from the fallback to prevent infrastructure fields from leaking
+        # into enriched_content (source_guid, lineage, node_id, etc.).
         content_val = item.get("content")
-        content = content_val if isinstance(content_val, dict) and content_val else item
+        content = (
+            content_val
+            if isinstance(content_val, dict) and content_val
+            else {k: v for k, v in item.items() if k not in _RECORD_METADATA_KEYS}
+        )
 
         # Resolve cross-namespace data (cached by ancestry key).
         sguid = item.get("source_guid")

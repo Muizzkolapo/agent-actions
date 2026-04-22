@@ -562,7 +562,12 @@ def apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> li
         if not isinstance(item, dict):
             filtered.append(item)  # type: ignore[unreachable]
             continue
-        content = item.get("content", item) if isinstance(item.get("content"), dict) else item
+        content_val = item.get("content")
+        content = (
+            content_val
+            if isinstance(content_val, dict) and content_val
+            else {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
+        )
         ordered = {ok: content[bk] for ok, bk in key_pairs if bk in content}
         missing = [bk for _, bk in key_pairs if bk not in content]
         if missing:
