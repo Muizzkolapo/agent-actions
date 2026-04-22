@@ -3,13 +3,18 @@
 from unittest.mock import MagicMock
 
 from agent_actions.processing.evaluation.loop import EvaluationLoop
+from agent_actions.processing.types import (
+    EvaluationMetadata,
+    RecoveryMetadata,
+    RetryMetadata,
+)
 
 
-def _make_result(custom_id: str, recovery_metadata: dict | None = None) -> MagicMock:
-    """Create a mock BatchResult."""
+def _make_result(custom_id: str, recovery_metadata: RecoveryMetadata | None = None) -> MagicMock:
+    """Create a mock BatchResult with typed RecoveryMetadata."""
     result = MagicMock()
     result.custom_id = custom_id
-    result.recovery_metadata = recovery_metadata if recovery_metadata is not None else {}
+    result.recovery_metadata = recovery_metadata
     return result
 
 
@@ -65,7 +70,12 @@ class TestSplit:
     def test_already_graduated_skipped(self):
         strategy = _make_strategy()
         loop = EvaluationLoop(strategy)
-        already_done = _make_result("r1", recovery_metadata={"evaluation": {"passed": True}})
+        already_done = _make_result(
+            "r1",
+            recovery_metadata=RecoveryMetadata(
+                evaluation=EvaluationMetadata(passed=True, strategy_name="test"),
+            ),
+        )
         fresh = _make_result("r2")
 
         graduated, failing = loop.split([already_done, fresh])
@@ -104,7 +114,12 @@ class TestSplit:
 
         strategy = _make_strategy(evaluate_fn=tracking_evaluate)
         loop = EvaluationLoop(strategy)
-        already_done = _make_result("r1", recovery_metadata={"evaluation": {"passed": True}})
+        already_done = _make_result(
+            "r1",
+            recovery_metadata=RecoveryMetadata(
+                evaluation=EvaluationMetadata(passed=True, strategy_name="test"),
+            ),
+        )
         fresh = _make_result("r2")
 
         loop.split([already_done, fresh])
@@ -132,7 +147,12 @@ class TestSplit:
 
         strategy = _make_strategy(evaluate_fn=tracking_evaluate)
         loop = EvaluationLoop(strategy)
-        result = _make_result("r1", recovery_metadata={"evaluation": {"passed": False}})
+        result = _make_result(
+            "r1",
+            recovery_metadata=RecoveryMetadata(
+                evaluation=EvaluationMetadata(passed=False, strategy_name="test"),
+            ),
+        )
 
         _, failing = loop.split([result])
 
@@ -148,7 +168,8 @@ class TestTagGraduated:
 
         loop.tag_graduated([result])
 
-        assert result.recovery_metadata["evaluation"]["passed"] is True
+        assert isinstance(result.recovery_metadata, RecoveryMetadata)
+        assert result.recovery_metadata.evaluation.passed is True
 
     def test_sets_strategy_name(self):
         strategy = _make_strategy(name="my_strategy")
@@ -157,7 +178,7 @@ class TestTagGraduated:
 
         loop.tag_graduated([result])
 
-        assert result.recovery_metadata["evaluation"]["strategy_name"] == "my_strategy"
+        assert result.recovery_metadata.evaluation.strategy_name == "my_strategy"
 
     def test_creates_metadata_if_missing(self):
         strategy = _make_strategy()
@@ -168,17 +189,21 @@ class TestTagGraduated:
 
         loop.tag_graduated([result])
 
-        assert result.recovery_metadata["evaluation"]["passed"] is True
+        assert isinstance(result.recovery_metadata, RecoveryMetadata)
+        assert result.recovery_metadata.evaluation.passed is True
 
-    def test_preserves_existing_metadata_keys(self):
+    def test_preserves_existing_retry_metadata(self):
+        """tag_graduated must not destroy retry/reprompt metadata."""
         strategy = _make_strategy()
         loop = EvaluationLoop(strategy)
-        result = _make_result("r1", recovery_metadata={"retry": {"attempts": 2}})
+        retry = RetryMetadata(attempts=2, failures=1, succeeded=True, reason="timeout")
+        result = _make_result("r1", recovery_metadata=RecoveryMetadata(retry=retry))
 
         loop.tag_graduated([result])
 
-        assert result.recovery_metadata["retry"] == {"attempts": 2}
-        assert result.recovery_metadata["evaluation"]["passed"] is True
+        assert result.recovery_metadata.retry is retry
+        assert result.recovery_metadata.retry.attempts == 2
+        assert result.recovery_metadata.evaluation.passed is True
 
     def test_multiple_results(self):
         strategy = _make_strategy(name="test")
@@ -188,8 +213,9 @@ class TestTagGraduated:
         loop.tag_graduated(results)
 
         for r in results:
-            assert r.recovery_metadata["evaluation"]["passed"] is True
-            assert r.recovery_metadata["evaluation"]["strategy_name"] == "test"
+            assert isinstance(r.recovery_metadata, RecoveryMetadata)
+            assert r.recovery_metadata.evaluation.passed is True
+            assert r.recovery_metadata.evaluation.strategy_name == "test"
 
 
 class TestBuildResubmission:
@@ -245,12 +271,12 @@ class TestBuildResubmission:
         strategy = _make_strategy()
         strategy.build_feedback.return_value = "feedback"
         loop = EvaluationLoop(strategy)
-        result = _make_result("r1", recovery_metadata={"existing": "data"})
-        original_meta = dict(result.recovery_metadata)
+        retry = RetryMetadata(attempts=1, failures=0, succeeded=True, reason="timeout")
+        result = _make_result("r1", recovery_metadata=RecoveryMetadata(retry=retry))
 
         loop.build_resubmission([result], {"r1": {"user_content": "prompt"}})
 
-        assert result.recovery_metadata == original_meta
+        assert result.recovery_metadata.retry is retry
 
     def test_does_not_mutate_context_map(self):
         strategy = _make_strategy()
@@ -328,3 +354,97 @@ class TestSplitThenTagRoundtrip:
 
         graduated, _ = loop.split([result])
         assert len(graduated) == 1
+
+
+class TestTypedMetadataRoundtrip:
+    """Regression tests for the tag_graduated type mismatch bug.
+
+    Before the fix, tag_graduated replaced RecoveryMetadata with a raw dict,
+    destroying retry/reprompt metadata. _is_already_graduated checked
+    isinstance(meta, dict) which never matched a RecoveryMetadata dataclass.
+    """
+
+    def test_tag_graduated_preserves_recovery_metadata_type(self):
+        """tag_graduated must produce RecoveryMetadata, not a raw dict."""
+        strategy = _make_strategy(name="validation")
+        loop = EvaluationLoop(strategy)
+        result = _make_result("r1", recovery_metadata=RecoveryMetadata())
+
+        loop.tag_graduated([result])
+
+        assert isinstance(result.recovery_metadata, RecoveryMetadata)
+        assert isinstance(result.recovery_metadata.evaluation, EvaluationMetadata)
+
+    def test_tag_graduated_preserves_retry_metadata(self):
+        """Existing retry metadata must survive tag_graduated."""
+        strategy = _make_strategy()
+        loop = EvaluationLoop(strategy)
+        retry = RetryMetadata(attempts=3, failures=2, succeeded=True, reason="timeout")
+        result = _make_result("r1", recovery_metadata=RecoveryMetadata(retry=retry))
+
+        loop.tag_graduated([result])
+
+        assert result.recovery_metadata.retry is retry
+        assert result.recovery_metadata.retry.attempts == 3
+        assert result.recovery_metadata.retry.failures == 2
+
+    def test_is_already_graduated_with_typed_metadata(self):
+        """_is_already_graduated must detect typed EvaluationMetadata, not only raw dicts."""
+        strategy = _make_strategy()
+        loop = EvaluationLoop(strategy)
+        meta = RecoveryMetadata(
+            evaluation=EvaluationMetadata(passed=True, strategy_name="test"),
+        )
+        result = _make_result("r1", recovery_metadata=meta)
+
+        assert loop._is_already_graduated(result) is True
+
+    def test_is_already_graduated_false_when_not_passed(self):
+        """evaluation.passed=False means not graduated."""
+        strategy = _make_strategy()
+        loop = EvaluationLoop(strategy)
+        meta = RecoveryMetadata(
+            evaluation=EvaluationMetadata(passed=False, strategy_name="test"),
+        )
+        result = _make_result("r1", recovery_metadata=meta)
+
+        assert loop._is_already_graduated(result) is False
+
+    def test_tag_then_split_with_typed_metadata(self):
+        """Full roundtrip: tag → split correctly skips graduated with typed metadata."""
+        strategy = _make_strategy(evaluate_fn=lambda r: True)
+        loop = EvaluationLoop(strategy)
+        retry = RetryMetadata(attempts=1, failures=0, succeeded=True, reason="timeout")
+        result = _make_result("r1", recovery_metadata=RecoveryMetadata(retry=retry))
+
+        graduated, _ = loop.split([result])
+        loop.tag_graduated(graduated)
+
+        # Change strategy to reject everything — graduated should still be detected
+        loop.strategy.evaluate = lambda r: False
+        graduated2, failing2 = loop.split([result])
+
+        assert len(graduated2) == 1
+        assert len(failing2) == 0
+        # Retry metadata survived the entire roundtrip
+        assert result.recovery_metadata.retry.attempts == 1
+
+    def test_evaluation_metadata_serializes(self):
+        """RecoveryMetadata.to_dict() includes evaluation when present."""
+        meta = RecoveryMetadata(
+            retry=RetryMetadata(attempts=1, failures=0, succeeded=True, reason="ok"),
+            evaluation=EvaluationMetadata(passed=True, strategy_name="validation"),
+        )
+        d = meta.to_dict()
+
+        assert d["retry"]["attempts"] == 1
+        assert d["evaluation"]["passed"] is True
+        assert d["evaluation"]["strategy_name"] == "validation"
+
+    def test_recovery_metadata_not_empty_with_evaluation(self):
+        """is_empty() returns False when only evaluation is set."""
+        meta = RecoveryMetadata(
+            evaluation=EvaluationMetadata(passed=True, strategy_name="test"),
+        )
+
+        assert meta.is_empty() is False

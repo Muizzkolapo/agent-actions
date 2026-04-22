@@ -72,11 +72,27 @@ class RepromptMetadata:
 
 
 @dataclass
+class EvaluationMetadata:
+    """Metadata for evaluation graduation, stored in output _recovery.evaluation field."""
+
+    passed: bool
+    strategy_name: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "passed": self.passed,
+            "strategy_name": self.strategy_name,
+        }
+
+
+@dataclass
 class RecoveryMetadata:
     """Container for recovery metadata, stored under the _recovery output key."""
 
     retry: RetryMetadata | None = None
     reprompt: RepromptMetadata | None = None
+    evaluation: EvaluationMetadata | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization. Returns empty dict if no recovery."""
@@ -85,11 +101,13 @@ class RecoveryMetadata:
             result["retry"] = self.retry.to_dict()
         if self.reprompt:
             result["reprompt"] = self.reprompt.to_dict()
+        if self.evaluation:
+            result["evaluation"] = self.evaluation.to_dict()
         return result
 
     def is_empty(self) -> bool:
         """Return True if no recovery occurred."""
-        return self.retry is None and self.reprompt is None
+        return self.retry is None and self.reprompt is None and self.evaluation is None
 
 
 @dataclass

@@ -15,6 +15,7 @@ import pytest
 
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.processing.types import EvaluationMetadata, RecoveryMetadata
 
 # Skip entire module if evaluation loop code is not yet available.
 # Created by specs 062 (PR #295) and 063 (PR #297).
@@ -45,7 +46,7 @@ def make_batch_results():
             custom_id = f"record_{i}"
             result = MagicMock(spec=BatchResult)
             result.custom_id = custom_id
-            result.recovery_metadata = {}
+            result.recovery_metadata = None
             result.content = f"content_{i}"
             results.append(result)
         return results
@@ -459,9 +460,9 @@ class TestBackwardCompat:
         results = make_batch_results(10)
         # Simulate: first 5 have no metadata (old), last 5 have graduated metadata
         for i in range(5, 10):
-            results[i].recovery_metadata = {
-                "evaluation": {"passed": True, "strategy_name": "validation"}
-            }
+            results[i].recovery_metadata = RecoveryMetadata(
+                evaluation=EvaluationMetadata(passed=True, strategy_name="validation"),
+            )
 
         strategy = MagicMock(spec=EvaluationStrategy)
         strategy.name = "validation"
