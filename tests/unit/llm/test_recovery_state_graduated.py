@@ -1,6 +1,10 @@
 """Tests for graduated results tracking in RecoveryState."""
 
 import json
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
@@ -195,3 +199,148 @@ class TestRecoveryStateManagerIntegration:
         assert loaded is not None
         assert len(loaded.graduated_results) == 2
         assert loaded.evaluation_strategy_name == "validation"
+
+
+class TestRecoveryStateAtomicWrite:
+    """Verify save() uses atomic writes to prevent crash corruption."""
+
+    def test_save_writes_via_temp_file(self, tmp_path):
+        """save() writes to a temp file first, then renames — observable mid-write."""
+        state = RecoveryState(phase="retry", retry_attempt=1)
+        captured_tmp = {}
+
+        original_replace = Path.replace
+
+        def spy_replace(self_path, target):
+            # Temp file should exist with valid JSON before rename
+            captured_tmp["path"] = self_path
+            captured_tmp["existed"] = self_path.exists()
+            if self_path.exists():
+                captured_tmp["content"] = json.loads(self_path.read_text())
+            return original_replace(self_path, target)
+
+        with patch.object(Path, "replace", spy_replace):
+            path = RecoveryStateManager.save(str(tmp_path), "atomic_test", state)
+
+        # Temp file was observed with valid data before rename
+        assert captured_tmp["existed"] is True
+        assert captured_tmp["content"]["phase"] == "retry"
+        assert str(captured_tmp["path"]).endswith(".json.tmp")
+
+        # Final file is correct, temp file gone
+        assert path.exists()
+        assert not captured_tmp["path"].exists()
+
+    def test_original_file_survives_write_error(self, tmp_path):
+        """If save() fails mid-write, the previous state file is untouched."""
+        tmpdir = str(tmp_path)
+
+        # Save initial good state
+        state_v1 = RecoveryState(
+            phase="retry",
+            graduated_results=[{"custom_id": "r1"}],
+        )
+        path = RecoveryStateManager.save(tmpdir, "crash_test", state_v1)
+
+        # Record original content
+        original_content = path.read_text()
+
+        # Attempt a second save that fails during json.dump
+        state_v2 = RecoveryState(
+            phase="reprompt",
+            graduated_results=[{"custom_id": "r1"}, {"custom_id": "r2"}],
+        )
+        with (
+            patch(
+                "agent_actions.utils.atomic_write.json.dump",
+                side_effect=OSError("disk full"),
+            ),
+            pytest.raises(OSError),
+        ):
+            RecoveryStateManager.save(tmpdir, "crash_test", state_v2)
+
+        # Original file is still intact
+        assert path.read_text() == original_content
+        loaded = RecoveryStateManager.load(tmpdir, "crash_test")
+        assert loaded is not None
+        assert loaded.phase == "retry"
+        assert len(loaded.graduated_results) == 1
+
+        # No leftover temp file
+        tmp_file = path.with_suffix(".json.tmp")
+        assert not tmp_file.exists()
+
+    def test_save_error_cleans_up_temp_file(self, tmp_path):
+        """On write failure, the temp file is removed — no disk litter."""
+        state = RecoveryState(phase="retry")
+        with patch(
+            "agent_actions.utils.atomic_write.json.dump",
+            side_effect=OSError("disk full"),
+        ):
+            try:
+                RecoveryStateManager.save(str(tmp_path), "cleanup_test", state)
+            except OSError:
+                pass
+
+        # No temp file left behind
+        batch_dir = tmp_path / "batch"
+        assert batch_dir.exists()
+        assert list(batch_dir.glob("*.tmp")) == []
+
+    def test_rename_failure_cleans_up_and_preserves_original(self, tmp_path):
+        """If rename fails after successful write, temp is cleaned up and original survives."""
+        tmpdir = str(tmp_path)
+
+        # Save initial good state
+        state_v1 = RecoveryState(
+            phase="retry",
+            graduated_results=[{"custom_id": "r1"}],
+        )
+        path = RecoveryStateManager.save(tmpdir, "rename_test", state_v1)
+        original_content = path.read_text()
+
+        # Attempt a second save where rename fails
+        state_v2 = RecoveryState(phase="reprompt")
+        with (
+            patch.object(Path, "replace", side_effect=OSError("cross-device link")),
+            pytest.raises(OSError),
+        ):
+            RecoveryStateManager.save(tmpdir, "rename_test", state_v2)
+
+        # Original file is untouched
+        assert path.read_text() == original_content
+        loaded = RecoveryStateManager.load(tmpdir, "rename_test")
+        assert loaded is not None
+        assert loaded.phase == "retry"
+
+        # Temp file cleaned up
+        assert not path.with_suffix(".json.tmp").exists()
+
+    def test_save_error_raises_oserror(self, tmp_path):
+        """save() propagates write failures as OSError."""
+        state = RecoveryState(phase="retry")
+        with patch(
+            "agent_actions.utils.atomic_write.json.dump",
+            side_effect=ValueError("bad data"),
+        ):
+            with pytest.raises(OSError, match="Failed to write"):
+                RecoveryStateManager.save(str(tmp_path), "error_test", state)
+
+    def test_large_state_serialization_roundtrip(self, tmp_path):
+        """200-record graduated state survives save/load roundtrip."""
+        state = RecoveryState(
+            phase="reprompt",
+            reprompt_attempt=1,
+            graduated_results=[
+                {"custom_id": f"rec_{i:04d}", "content": f'{{"v": {i}}}', "success": True}
+                for i in range(200)
+            ],
+            evaluation_strategy_name="validation",
+        )
+        RecoveryStateManager.save(str(tmp_path), "large_test", state)
+        loaded = RecoveryStateManager.load(str(tmp_path), "large_test")
+
+        assert loaded is not None
+        assert len(loaded.graduated_results) == 200
+        assert loaded.graduated_results[0]["custom_id"] == "rec_0000"
+        assert loaded.graduated_results[199]["custom_id"] == "rec_0199"

@@ -3,7 +3,6 @@
 import dataclasses
 import json
 import logging
-import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -18,6 +17,7 @@ from agent_actions.logging.events.cache_events import (
     CacheMissEvent,
     CacheUpdateEvent,
 )
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -344,21 +344,6 @@ class BatchRegistryManager:
 
         raw_data = {file_name: entry.to_dict() for file_name, entry in registry.items()}
 
-        tmp_path = self._registry_path.with_suffix(".json.tmp")
+        atomic_json_write(self._registry_path, raw_data, indent=2, ensure_ascii=False)
 
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(raw_data, f, indent=2, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())  # Force write to disk
-
-            tmp_path.replace(self._registry_path)
-
-            logger.debug(
-                "Registry persisted to %s (%d entries)", self._registry_path, len(registry)
-            )
-
-        except Exception as e:
-            if tmp_path.exists():
-                tmp_path.unlink()
-            raise OSError(f"Failed to persist registry to {self._registry_path}: {e}") from e
+        logger.debug("Registry persisted to %s (%d entries)", self._registry_path, len(registry))

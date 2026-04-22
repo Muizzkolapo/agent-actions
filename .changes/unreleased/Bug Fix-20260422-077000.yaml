@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Shared atomic_json_write utility prevents crash corruption across recovery state, batch registry, batch context, and action status files"
+time: 2026-04-22T07:70:00.000000Z

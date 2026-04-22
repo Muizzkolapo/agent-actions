@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -88,8 +89,7 @@ class RecoveryStateManager:
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
         ensure_directory_exists(state_path, is_file=True)
 
-        with open(state_path, "w", encoding="utf-8") as f:
-            json.dump(state.to_dict(), f, ensure_ascii=False)
+        atomic_json_write(state_path, state.to_dict(), ensure_ascii=False)
 
         logger.debug(
             "Saved recovery state to %s (phase=%s, retry=%d, reprompt=%d)",

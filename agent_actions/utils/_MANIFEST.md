@@ -22,6 +22,7 @@ pathways.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
+| `atomic_write.py` | Module | `atomic_json_write()` — write JSON via temp file + fsync + rename to prevent crash corruption. | `file_io` |
 | `constants.py` | Module | Shared configuration key constants and reserved names used across CLI/workflows. | `configuration`, `validation` |
 | `dict.py` | Module | `get_nested_value` helper for safely reading dot-separated fields from nested dicts. | `filtering`, `preprocessing` |
 | `graph_utils.py` | Module | Graph algorithms for dependency resolution (`topological_sort`). | `errors` |
