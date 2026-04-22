@@ -95,6 +95,19 @@ class TestValidationStrategyEvaluate:
         assert strategy.evaluate(result) is False
         assert call_log == []
 
+    def test_success_false_with_content_still_fails(self):
+        """API failures with partial content still fail — UDF is never called."""
+        call_log = []
+
+        def tracking_validate(response):
+            call_log.append(response)
+            return True  # would pass if called
+
+        strategy = ValidationStrategy(validation_func=tracking_validate, feedback_message="fix")
+        result = _make_result("r1", content={"partial": "data"}, success=False)
+        assert strategy.evaluate(result) is False
+        assert call_log == []
+
     def test_already_passed_skips_validation(self):
         """Results with reprompt.passed=True skip validation."""
         call_log = []
