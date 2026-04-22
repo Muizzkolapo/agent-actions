@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
+from agent_actions.processing.recovery.retry import RetryExhaustedException
 from agent_actions.processing.types import (
     RecoveryMetadata,
     RepromptMetadata,
@@ -189,7 +190,7 @@ class OnlineStrategy(InvocationStrategy):
             self._track_retry_metadata(retry_result, recovery_metadata)
 
             if retry_result.exhausted:
-                return None, False
+                raise RetryExhaustedException(retry_result)
             return retry_result.response
 
         reprompt_result = reprompt_service.execute(
@@ -198,7 +199,7 @@ class OnlineStrategy(InvocationStrategy):
             context=f"action={context.agent_name}",
         )
 
-        if reprompt_result.attempts > 1:
+        if reprompt_result.attempts > 1 or reprompt_result.exhausted:
             recovery_metadata.reprompt = RepromptMetadata(
                 attempts=reprompt_result.attempts,
                 passed=reprompt_result.passed,
