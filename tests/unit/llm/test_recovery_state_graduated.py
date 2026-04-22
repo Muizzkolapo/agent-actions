@@ -1,6 +1,7 @@
 """Tests for graduated results tracking in RecoveryState."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -203,20 +204,32 @@ class TestRecoveryStateManagerIntegration:
 class TestRecoveryStateAtomicWrite:
     """Verify save() uses atomic writes to prevent crash corruption."""
 
-    def test_save_uses_temp_file_then_rename(self, tmp_path):
-        """save() writes to .json.tmp then renames to .json — no partial writes."""
+    def test_save_writes_via_temp_file(self, tmp_path):
+        """save() writes to a temp file first, then renames — observable mid-write."""
         state = RecoveryState(phase="retry", retry_attempt=1)
-        path = RecoveryStateManager.save(str(tmp_path), "atomic_test", state)
+        captured_tmp = {}
 
-        # The final file exists and is valid
+        original_replace = Path.replace
+
+        def spy_replace(self_path, target):
+            # Temp file should exist with valid JSON before rename
+            captured_tmp["path"] = self_path
+            captured_tmp["existed"] = self_path.exists()
+            if self_path.exists():
+                captured_tmp["content"] = json.loads(self_path.read_text())
+            return original_replace(self_path, target)
+
+        with patch.object(Path, "replace", spy_replace):
+            path = RecoveryStateManager.save(str(tmp_path), "atomic_test", state)
+
+        # Temp file was observed with valid data before rename
+        assert captured_tmp["existed"] is True
+        assert captured_tmp["content"]["phase"] == "retry"
+        assert str(captured_tmp["path"]).endswith(".json.tmp")
+
+        # Final file is correct, temp file gone
         assert path.exists()
-        with open(path) as f:
-            data = json.load(f)
-        assert data["phase"] == "retry"
-
-        # No leftover temp file
-        tmp_file = path.with_suffix(".json.tmp")
-        assert not tmp_file.exists()
+        assert not captured_tmp["path"].exists()
 
     def test_original_file_survives_write_error(self, tmp_path):
         """If save() fails mid-write, the previous state file is untouched."""
@@ -274,6 +287,35 @@ class TestRecoveryStateAtomicWrite:
         assert batch_dir.exists()
         assert list(batch_dir.glob("*.tmp")) == []
 
+    def test_rename_failure_cleans_up_and_preserves_original(self, tmp_path):
+        """If rename fails after successful write, temp is cleaned up and original survives."""
+        tmpdir = str(tmp_path)
+
+        # Save initial good state
+        state_v1 = RecoveryState(
+            phase="retry",
+            graduated_results=[{"custom_id": "r1"}],
+        )
+        path = RecoveryStateManager.save(tmpdir, "rename_test", state_v1)
+        original_content = path.read_text()
+
+        # Attempt a second save where rename fails
+        state_v2 = RecoveryState(phase="reprompt")
+        with (
+            patch.object(Path, "replace", side_effect=OSError("cross-device link")),
+            pytest.raises(OSError),
+        ):
+            RecoveryStateManager.save(tmpdir, "rename_test", state_v2)
+
+        # Original file is untouched
+        assert path.read_text() == original_content
+        loaded = RecoveryStateManager.load(tmpdir, "rename_test")
+        assert loaded is not None
+        assert loaded.phase == "retry"
+
+        # Temp file cleaned up
+        assert not path.with_suffix(".json.tmp").exists()
+
     def test_save_error_raises_oserror(self, tmp_path):
         """save() wraps write failures in OSError with context."""
         state = RecoveryState(phase="retry")
@@ -284,8 +326,8 @@ class TestRecoveryStateAtomicWrite:
             with pytest.raises(OSError, match="Failed to save recovery state"):
                 RecoveryStateManager.save(str(tmp_path), "error_test", state)
 
-    def test_large_state_atomic_roundtrip(self, tmp_path):
-        """200-record graduated state survives atomic save/load roundtrip."""
+    def test_large_state_serialization_roundtrip(self, tmp_path):
+        """200-record graduated state survives save/load roundtrip."""
         state = RecoveryState(
             phase="reprompt",
             reprompt_attempt=1,
