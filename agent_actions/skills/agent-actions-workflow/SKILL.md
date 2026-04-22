@@ -49,6 +49,7 @@ project/
    agent_config/my_workflow.yml
    agent_io/staging/                # Input data
    agent_io/target/                 # Output per action
+   agent_io/store/                  # Durable database
    seed_data/                       # Static reference data
  prompt_store/                      # Prompt templates
  schema/                            # Output schemas (flat — no subdirs)

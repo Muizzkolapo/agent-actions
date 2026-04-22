@@ -51,7 +51,7 @@ class ValidationStrategy:
     def evaluate(self, result: BatchResult) -> bool:
         """Return True if the result passes validation."""
         if not result.success:
-            return True
+            return False
 
         if (
             result.recovery_metadata
@@ -69,6 +69,12 @@ class ValidationStrategy:
 
     def build_feedback(self, result: BatchResult) -> str:
         """Build validation feedback for a failing result."""
+        if not result.success:
+            return (
+                "---\n"
+                "The previous attempt failed due to an API error and produced no response.\n"
+                "Please respond again."
+            )
         return build_validation_feedback(
             failed_response=result.content,
             feedback_message=self._feedback_message,

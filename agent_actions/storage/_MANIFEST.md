@@ -5,7 +5,7 @@
 Extensible storage backend module for workflow data persistence. Provides a pluggable
 storage layer that supports SQLite (default) with architecture designed for future
 backends (S3, DuckDB, etc.). One database per workflow stored at
-`{workflow}/agent_io/target/{workflow_name}.db`.
+`{workflow}/agent_io/store/{workflow_name}.db`.
 
 ## Sub-Modules
 
@@ -40,16 +40,16 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
-| `get_storage_backend()` | `agent_io/target/{workflow_name}.db` | Writes | `storage_backend` |
+| `get_storage_backend()` | `agent_io/store/{workflow_name}.db` | Writes | `storage_backend` |
 | `StorageBackend.write_target()` | `agent_io/target/{action}/` | Writes | — |
 | `StorageBackend.read_target()` | `agent_io/target/{action}/` | Reads | — |
-| `StorageBackend.write_source()` | `agent_io/target/{workflow_name}.db` | Writes | — |
-| `StorageBackend.read_source()` | `agent_io/target/{workflow_name}.db` | Reads | — |
-| `StorageBackend.list_target_files()` | `agent_io/target/{workflow_name}.db` | Reads | — |
-| `StorageBackend.set_disposition()` | `agent_io/target/{workflow_name}.db` | Writes | — |
-| `StorageBackend.get_disposition()` | `agent_io/target/{workflow_name}.db` | Reads | — |
-| `StorageBackend.delete_target()` | `agent_io/target/{workflow_name}.db` | Writes | — |
-| `StorageBackend.initialize()` | `agent_io/target/{workflow_name}.db` | Writes | — |
+| `StorageBackend.write_source()` | `agent_io/store/{workflow_name}.db` | Writes | — |
+| `StorageBackend.read_source()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.list_target_files()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.set_disposition()` | `agent_io/store/{workflow_name}.db` | Writes | — |
+| `StorageBackend.get_disposition()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.delete_target()` | `agent_io/store/{workflow_name}.db` | Writes | — |
+| `StorageBackend.initialize()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 
 **Internal only**: `SQLiteBackend._validate_identifier`, `SQLiteBackend._format_size`, `Disposition`, `VALID_DISPOSITIONS`, `NODE_LEVEL_RECORD_ID`, `DISPOSITION_*` constants -- no direct project surface.
 
