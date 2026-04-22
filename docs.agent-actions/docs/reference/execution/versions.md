@@ -102,40 +102,56 @@ Downstream actions consume outputs from all version iterations. The `version_con
 
 ### merge (Fan-In)
 
-The most common pattern. All version outputs are collected into a single record, keyed by version name (e.g., `extract_raw_qa_1`, `extract_raw_qa_2`). Use this for aggregation, voting, and consensus:
+The most common pattern. All version outputs are collected into a single record, keyed by version name (e.g., `score_quality_1`, `score_quality_2`). Use this for aggregation, voting, and consensus:
 
 ```yaml
-- name: extract_raw_qa
+- name: score_quality
   versions:
     range: [1, 3]
 
-- name: flatten_questions
-  dependencies: [extract_raw_qa]
+- name: aggregate_scores
+  dependencies: [score_quality]
   version_consumption:
-    source: extract_raw_qa
+    source: score_quality
     pattern: merge
   context_scope:
     observe:
-      - extract_raw_qa.*  # Wildcard reference
+      - score_quality.*  # Wildcard reference
 ```
 
 Outputs are merged as nested namespaces:
 
 ```json
 {
-  "extract_raw_qa_1": {"questions": ["Q1a", "Q1b"]},
-  "extract_raw_qa_2": {"questions": ["Q2a", "Q2b"]},
-  "extract_raw_qa_3": {"questions": ["Q3a", "Q3b"]}
+  "score_quality_1": {"overall_score": 8, "confidence": 0.9},
+  "score_quality_2": {"overall_score": 7, "confidence": 0.85},
+  "score_quality_3": {"overall_score": 9, "confidence": 0.95}
 }
 ```
 
-Access in prompts:
+Access in prompts (LLM actions):
 
 ```yaml
 prompt: |
-  Strategy 1: {{ extract_raw_qa_1.questions }}
-  Strategy 2: {{ extract_raw_qa_2.questions }}
+  Scorer 1: {{ score_quality_1.overall_score }}
+  Scorer 2: {{ score_quality_2.overall_score }}
 ```
+
+Access in tool UDFs (FILE mode):
+
+```python
+# Each version is a nested dict in content
+scorer_1 = content.get("score_quality_1", {})
+scorer_2 = content.get("score_quality_2", {})
+
+# Iterate all versions dynamically
+scores = []
+for key, data in content.items():
+    if key.startswith("score_quality_") and isinstance(data, dict):
+        scores.append(data.get("overall_score", 0))
+```
+
+When observe uses wildcards (`score_quality.*`), fields are also expanded as qualified flat keys (`score_quality_1.overall_score`, `score_quality_2.overall_score`) alongside the nested dicts. Both access patterns work.
 
 ## Common Patterns
 

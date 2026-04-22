@@ -15,6 +15,7 @@ from agent_actions.processing.recovery.reprompt import (
     parse_reprompt_config,
 )
 from agent_actions.processing.recovery.response_validator import build_validation_feedback
+from agent_actions.processing.recovery.retry import RetryExhaustedException, RetryResult
 from agent_actions.processing.recovery.validation import (
     _VALIDATION_REGISTRY,
     reprompt_validation,
@@ -656,3 +657,84 @@ class TestParseRepromptConfig:
         assert parsed is not None
         assert parsed.max_attempts == 2
         assert parsed.on_exhausted == "return_last"
+
+
+class TestRepromptServiceRetryExhaustion:
+    """Tests for RetryExhaustedException propagating from llm_operation.
+
+    When the wrapped LLM call exhausts all retries (e.g. all attempts hit
+    a 429), it must raise RetryExhaustedException so the reprompt loop
+    can distinguish this from a legitimate guard-skip.
+    """
+
+    def setup_method(self):
+        """Clear registry and register test UDF."""
+        _VALIDATION_REGISTRY.clear()
+
+        @reprompt_validation("Must be positive")
+        def check_positive(response: dict) -> bool:
+            return response.get("value", 0) > 0
+
+    @staticmethod
+    def _exhausted_exc(attempts: int = 2, error: str = "429 rate limit"):
+        return RetryExhaustedException(
+            RetryResult(
+                response=None,
+                attempts=attempts,
+                exhausted=True,
+                last_error=error,
+            )
+        )
+
+    def test_retry_exhausted_first_attempt_returns_exhausted_result(self):
+        """First-attempt retry exhaustion returns passed=False, exhausted=True — not a silent pass."""
+        service = RepromptService(
+            validation_name="check_positive", max_attempts=3, on_exhausted="return_last"
+        )
+        llm_operation = Mock(side_effect=self._exhausted_exc())
+
+        result = service.execute(
+            llm_operation=llm_operation, original_prompt="test prompt", context="test_action"
+        )
+
+        assert result.passed is False
+        assert result.exhausted is True
+        assert result.attempts == 1
+        assert result.response is None
+        assert result.executed is True
+        assert llm_operation.call_count == 1
+
+    def test_retry_exhausted_preserves_previous_response(self):
+        """When a prior attempt produced a response, retry exhaustion preserves it in last_response."""
+        service = RepromptService(
+            validation_name="check_positive", max_attempts=3, on_exhausted="return_last"
+        )
+        first_response = ({"value": -5}, True)
+        llm_operation = Mock(side_effect=[first_response, self._exhausted_exc()])
+
+        result = service.execute(
+            llm_operation=llm_operation, original_prompt="test prompt", context="test_action"
+        )
+
+        assert result.passed is False
+        assert result.exhausted is True
+        assert result.attempts == 2
+        assert result.response == {"value": -5}
+        assert llm_operation.call_count == 2
+
+    def test_retry_exhausted_with_on_exhausted_raise_raises(self):
+        """on_exhausted='raise' must honor strict failure mode when retry exhausts, not swallow it."""
+        service = RepromptService(
+            validation_name="check_positive", max_attempts=3, on_exhausted="raise"
+        )
+        llm_operation = Mock(side_effect=self._exhausted_exc(attempts=2, error="429 throttled"))
+
+        with pytest.raises(RuntimeError) as exc_info:
+            service.execute(
+                llm_operation=llm_operation,
+                original_prompt="test prompt",
+                context="test_action",
+            )
+
+        assert "Retry exhausted" in str(exc_info.value)
+        assert "429 throttled" in str(exc_info.value)
