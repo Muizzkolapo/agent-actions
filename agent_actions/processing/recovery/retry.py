@@ -16,6 +16,21 @@ logger = logging.getLogger(__name__)
 
 RETRIABLE_ERRORS = (NetworkError, RateLimitError)
 
+
+class RetryExhaustedException(Exception):
+    """Raised when all retry attempts are exhausted.
+
+    Carries the :class:`RetryResult` so callers (e.g. the reprompt loop)
+    can distinguish retry exhaustion from a legitimate guard-skip.
+    """
+
+    def __init__(self, retry_result: "RetryResult") -> None:
+        self.retry_result = retry_result
+        super().__init__(
+            f"Retry exhausted after {retry_result.attempts} attempts: {retry_result.last_error}"
+        )
+
+
 _TRANSIENT_API_ERROR_PATTERNS = (
     "could not parse the json body",
     "we are currently processing your json schema",
