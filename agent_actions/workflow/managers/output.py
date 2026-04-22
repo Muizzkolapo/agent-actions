@@ -196,9 +196,6 @@ class ActionOutputManager:
             self.storage_backend.write_target(agent_type, relative_path, data)
 
         if data_by_path:
-            # Passthrough succeeded — upstream data was written to this
-            # action's target.  Use PASSTHROUGH (not SKIPPED) so downstream
-            # actions are NOT cascade-blocked.
             self.storage_backend.set_disposition(
                 agent_type,
                 NODE_LEVEL_RECORD_ID,
@@ -206,7 +203,6 @@ class ActionOutputManager:
                 reason=f"Action {agent_type} skipped — upstream data passed through",
             )
         else:
-            # No upstream data to pass through — truly skipped.
             self.storage_backend.set_disposition(
                 agent_type,
                 NODE_LEVEL_RECORD_ID,

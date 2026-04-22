@@ -713,8 +713,7 @@ class TestStaleDispositionFullChain:
         # Upstream "write_scenario_question" has stale SKIPPED disposition from prior run
         # but also has output from the current run.
         storage.has_disposition.side_effect = (
-            lambda dep, disp, **kw: dep == "write_scenario_question"
-            and disp == DISPOSITION_SKIPPED
+            lambda dep, disp, **kw: dep == "write_scenario_question" and disp == DISPOSITION_SKIPPED
         )
         storage.list_target_files.return_value = ["combined_scraped.json"]
         mock_deps.action_runner.storage_backend = storage
@@ -763,7 +762,8 @@ class TestStaleDispositionFullChain:
 
         # Step 1: limits changed → status reset + dispositions cleared
         mock_deps.state_manager.get_status_details.return_value = {
-            "record_limit": 9, "file_limit": None,
+            "record_limit": 9,
+            "file_limit": None,
         }
         new_status = executor._maybe_invalidate_completed_status(
             "add_answer_text", {"record_limit": 2, "file_limit": None}, ActionStatus.COMPLETED

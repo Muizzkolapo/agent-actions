@@ -469,10 +469,6 @@ class ActionExecutor:
                 if storage_backend.has_disposition(
                     action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
                 ):
-                    # Cross-check: the pipeline only sets this disposition when
-                    # output is empty.  If target data exists, the disposition
-                    # is stale (left over from a prior run) — clear it and
-                    # warn so the write-path bug that caused it can be found.
                     target_files = storage_backend.list_target_files(action_name)
                     if target_files:
                         storage_backend.clear_disposition(
@@ -587,7 +583,6 @@ class ActionExecutor:
         for dep in deps_to_check:
             if self.deps.state_manager.is_failed(dep) or self.deps.state_manager.is_skipped(dep):
                 return dep
-            # Also check disposition — covers cascaded failures/skips from prior levels
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
                 has_failed = storage_backend.has_disposition(
@@ -599,9 +594,6 @@ class ActionExecutor:
                     dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
                 )
                 if has_skipped:
-                    # Cross-check: if the upstream produced output, the
-                    # SKIPPED disposition is stale — clear it, warn so
-                    # the write-path bug can be found, and proceed.
                     target_files = storage_backend.list_target_files(dep)
                     if target_files:
                         storage_backend.clear_disposition(
