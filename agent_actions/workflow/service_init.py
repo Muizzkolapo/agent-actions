@@ -57,7 +57,8 @@ def initialize_storage_backend(
             backend_type="sqlite",
         )
         backend.initialize()
-        logger.debug("Storage backend: %s", backend.db_path)
+        db_path = workflow_dir / "agent_io" / "store" / f"{metadata.agent_name}.db"
+        logger.debug("Storage backend: %s", db_path)
         return backend
     except (OSError, ValueError, sqlite3.Error) as e:
         logger.error(
