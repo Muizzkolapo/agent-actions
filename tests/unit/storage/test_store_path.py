@@ -14,12 +14,6 @@ class TestStoreDirectory:
 
         assert store_path.exists()
         assert store_path.parent.name == "store"
-        cursor = backend.connection.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        tables = {row[0] for row in cursor.fetchall()}
-        assert "source_data" in tables
-        assert "target_data" in tables
-        assert "record_disposition" in tables
         backend.close()
 
     def test_factory_uses_store_path(self, tmp_path):

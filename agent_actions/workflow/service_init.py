@@ -57,6 +57,7 @@ def initialize_storage_backend(
             backend_type="sqlite",
         )
         backend.initialize()
+        logger.debug("Storage backend: %s", backend.db_path)
         return backend
     except (OSError, ValueError, sqlite3.Error) as e:
         logger.error(

@@ -27,7 +27,6 @@ class PathType(Enum):
     RENDERED_WORKFLOWS = "rendered_workflows"
     BATCH = "batch"
     SEED_DATA = "seed_data"
-    STORE = "store"
 
 
 @dataclass
@@ -67,7 +66,6 @@ class PathManager:
         PathType.RENDERED_WORKFLOWS: "artefact/rendered_workflows",
         PathType.BATCH: "batch",
         PathType.SEED_DATA: "seed_data",
-        PathType.STORE: "{agent_name}/agent_io/store",
     }
 
     # Validation rules for different path types

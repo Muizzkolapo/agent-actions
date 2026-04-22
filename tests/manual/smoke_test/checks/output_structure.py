@@ -23,7 +23,7 @@ class OutputStructure(Check):
         action_dirs = [d for d in ctx.target_dir.iterdir() if d.is_dir()]
 
         # Check for storage DB (DB-based output)
-        db_files = list(ctx.store_dir.glob("*.db")) if ctx.store_dir.exists() else []
+        db_files = list(ctx.store_dir.glob("*.db"))
 
         if action_dirs:
             results.append(
