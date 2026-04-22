@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Move SQLite database from agent_io/target/ to agent_io/store/ — enables gitignoring ephemeral target/ while committing durable state"
+time: 2026-04-22T07:30:00.000000Z

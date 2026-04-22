@@ -182,8 +182,24 @@ class SQLiteBackend(StorageBackend):
             return self._connection
 
     def initialize(self) -> None:
-        """Create connection, tables, and indexes."""
+        """Create connection, tables, and indexes.
+
+        Auto-migrates the database from the legacy ``target/`` location
+        to ``store/`` on first run if needed.
+        """
         with self._lock:
+            # Auto-migrate: if db exists in target/ but not store/, move it
+            if not self.db_path.exists():
+                legacy_path = self.db_path.parent.parent / "target" / self.db_path.name
+                if legacy_path.exists():
+                    self.db_path.parent.mkdir(parents=True, exist_ok=True)
+                    legacy_path.rename(self.db_path)
+                    logger.info(
+                        "Migrated database from %s to %s",
+                        legacy_path,
+                        self.db_path,
+                    )
+
             self._open_connection()
             cursor = self.connection.cursor()
             try:
