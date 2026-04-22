@@ -6,6 +6,7 @@ from agent_actions.processing.evaluation.loop import EvaluationLoop
 from agent_actions.processing.types import (
     EvaluationMetadata,
     RecoveryMetadata,
+    RepromptMetadata,
     RetryMetadata,
 )
 
@@ -193,7 +194,7 @@ class TestTagGraduated:
         assert result.recovery_metadata.evaluation.passed is True
 
     def test_preserves_existing_retry_metadata(self):
-        """tag_graduated must not destroy retry/reprompt metadata."""
+        """tag_graduated must not destroy retry metadata."""
         strategy = _make_strategy()
         loop = EvaluationLoop(strategy)
         retry = RetryMetadata(attempts=2, failures=1, succeeded=True, reason="timeout")
@@ -203,6 +204,20 @@ class TestTagGraduated:
 
         assert result.recovery_metadata.retry is retry
         assert result.recovery_metadata.retry.attempts == 2
+        assert result.recovery_metadata.evaluation.passed is True
+
+    def test_preserves_existing_reprompt_metadata(self):
+        """tag_graduated must not destroy reprompt metadata."""
+        strategy = _make_strategy()
+        loop = EvaluationLoop(strategy)
+        reprompt = RepromptMetadata(attempts=3, passed=True, validation="schema_check")
+        result = _make_result("r1", recovery_metadata=RecoveryMetadata(reprompt=reprompt))
+
+        loop.tag_graduated([result])
+
+        assert result.recovery_metadata.reprompt is reprompt
+        assert result.recovery_metadata.reprompt.attempts == 3
+        assert result.recovery_metadata.reprompt.validation == "schema_check"
         assert result.recovery_metadata.evaluation.passed is True
 
     def test_multiple_results(self):
