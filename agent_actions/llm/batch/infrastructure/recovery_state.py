@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -88,17 +89,29 @@ class RecoveryStateManager:
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
         ensure_directory_exists(state_path, is_file=True)
 
-        with open(state_path, "w", encoding="utf-8") as f:
-            json.dump(state.to_dict(), f, ensure_ascii=False)
+        tmp_path = state_path.with_suffix(".json.tmp")
 
-        logger.debug(
-            "Saved recovery state to %s (phase=%s, retry=%d, reprompt=%d)",
-            state_path,
-            state.phase,
-            state.retry_attempt,
-            state.reprompt_attempt,
-        )
-        return state_path
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state.to_dict(), f, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+
+            tmp_path.replace(state_path)
+
+            logger.debug(
+                "Saved recovery state to %s (phase=%s, retry=%d, reprompt=%d)",
+                state_path,
+                state.phase,
+                state.retry_attempt,
+                state.reprompt_attempt,
+            )
+            return state_path
+
+        except Exception as e:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise OSError(f"Failed to save recovery state to {state_path}: {e}") from e
 
     @staticmethod
     def load(output_directory: str, file_name: str) -> RecoveryState | None:

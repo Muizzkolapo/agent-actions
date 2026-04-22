@@ -1,6 +1,9 @@
 """Tests for graduated results tracking in RecoveryState."""
 
 import json
+from unittest.mock import patch
+
+import pytest
 
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
@@ -195,3 +198,108 @@ class TestRecoveryStateManagerIntegration:
         assert loaded is not None
         assert len(loaded.graduated_results) == 2
         assert loaded.evaluation_strategy_name == "validation"
+
+
+class TestRecoveryStateAtomicWrite:
+    """Verify save() uses atomic writes to prevent crash corruption."""
+
+    def test_save_uses_temp_file_then_rename(self, tmp_path):
+        """save() writes to .json.tmp then renames to .json — no partial writes."""
+        state = RecoveryState(phase="retry", retry_attempt=1)
+        path = RecoveryStateManager.save(str(tmp_path), "atomic_test", state)
+
+        # The final file exists and is valid
+        assert path.exists()
+        with open(path) as f:
+            data = json.load(f)
+        assert data["phase"] == "retry"
+
+        # No leftover temp file
+        tmp_file = path.with_suffix(".json.tmp")
+        assert not tmp_file.exists()
+
+    def test_original_file_survives_write_error(self, tmp_path):
+        """If save() fails mid-write, the previous state file is untouched."""
+        tmpdir = str(tmp_path)
+
+        # Save initial good state
+        state_v1 = RecoveryState(
+            phase="retry",
+            graduated_results=[{"custom_id": "r1"}],
+        )
+        path = RecoveryStateManager.save(tmpdir, "crash_test", state_v1)
+
+        # Record original content
+        original_content = path.read_text()
+
+        # Attempt a second save that fails during json.dump
+        state_v2 = RecoveryState(
+            phase="reprompt",
+            graduated_results=[{"custom_id": "r1"}, {"custom_id": "r2"}],
+        )
+        with patch(
+            "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
+            side_effect=OSError("disk full"),
+        ):
+            try:
+                RecoveryStateManager.save(tmpdir, "crash_test", state_v2)
+            except OSError:
+                pass
+
+        # Original file is still intact
+        assert path.read_text() == original_content
+        loaded = RecoveryStateManager.load(tmpdir, "crash_test")
+        assert loaded is not None
+        assert loaded.phase == "retry"
+        assert len(loaded.graduated_results) == 1
+
+        # No leftover temp file
+        tmp_file = path.with_suffix(".json.tmp")
+        assert not tmp_file.exists()
+
+    def test_save_error_cleans_up_temp_file(self, tmp_path):
+        """On write failure, the temp file is removed — no disk litter."""
+        state = RecoveryState(phase="retry")
+        with patch(
+            "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
+            side_effect=OSError("disk full"),
+        ):
+            try:
+                RecoveryStateManager.save(str(tmp_path), "cleanup_test", state)
+            except OSError:
+                pass
+
+        # No temp file left behind
+        batch_dir = tmp_path / "batch"
+        if batch_dir.exists():
+            tmp_files = list(batch_dir.glob("*.tmp"))
+            assert tmp_files == []
+
+    def test_save_error_raises_oserror(self, tmp_path):
+        """save() wraps write failures in OSError with context."""
+        state = RecoveryState(phase="retry")
+        with patch(
+            "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
+            side_effect=ValueError("bad data"),
+        ):
+            with pytest.raises(OSError, match="Failed to save recovery state"):
+                RecoveryStateManager.save(str(tmp_path), "error_test", state)
+
+    def test_large_state_atomic_roundtrip(self, tmp_path):
+        """200-record graduated state survives atomic save/load roundtrip."""
+        state = RecoveryState(
+            phase="reprompt",
+            reprompt_attempt=1,
+            graduated_results=[
+                {"custom_id": f"rec_{i:04d}", "content": f'{{"v": {i}}}', "success": True}
+                for i in range(200)
+            ],
+            evaluation_strategy_name="validation",
+        )
+        RecoveryStateManager.save(str(tmp_path), "large_test", state)
+        loaded = RecoveryStateManager.load(str(tmp_path), "large_test")
+
+        assert loaded is not None
+        assert len(loaded.graduated_results) == 200
+        assert loaded.graduated_results[0]["custom_id"] == "rec_0000"
+        assert loaded.graduated_results[199]["custom_id"] == "rec_0199"

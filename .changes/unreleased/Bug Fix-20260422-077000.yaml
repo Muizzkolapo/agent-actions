@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Recovery state writes are now atomic — crash mid-write no longer corrupts state file"
+time: 2026-04-22T07:70:00.000000Z
