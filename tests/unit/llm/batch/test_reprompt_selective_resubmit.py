@@ -385,6 +385,277 @@ class TestSelectiveRepromptResubmission:
         assert accessed_ids == FAIL_IDS
 
 
+class TestRepromptDroppedRecordReconciliation:
+    """Prove that records dropped by the provider are detected, not silently lost."""
+
+    @patch("agent_actions.llm.batch.processing.preparator.BatchTaskPreparator")
+    def test_dropped_records_appear_in_output_with_metadata(self, MockPreparator):
+        """Provider returns 1 of 3 failed records — 2 dropped records appear
+        in output with reprompt recovery metadata (passed=False)."""
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+
+        results = _make_results(10, fail_ids=FAIL_IDS)
+        context_map = _make_context_map(10)
+
+        mock_prep = MockPreparator.return_value
+        mock_prepared = MagicMock()
+        mock_prepared.tasks = [MagicMock() for _ in range(3)]
+        mock_prep.prepare_tasks.return_value = mock_prepared
+
+        # Provider drops rec_007 and rec_009 — only returns rec_003
+        provider = MagicMock()
+        provider.submit_batch.return_value = ("batch_rp_1", "submitted")
+        provider.retrieve_results.return_value = [
+            BatchResult(custom_id="rec_003", content='{"answer": "fixed"}', success=True),
+        ]
+
+        with (
+            _reprompt_patches(),
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(_validation_func_for_bad_content, "fix it"),
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                return_value="completed",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+            ) as MockBatchStatus,
+        ):
+            MockBatchStatus.COMPLETED = "completed"
+            final = validate_and_reprompt(
+                action_indices={},
+                dependency_configs={},
+                storage_backend=None,
+                results=results,
+                provider=provider,
+                context_map=context_map,
+                output_directory="/tmp/out",
+                file_name="batch_1",
+                agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            )
+
+        final_ids = {r.custom_id for r in final}
+        input_ids = {r.custom_id for r in results}
+
+        # Every input record must appear in the output — none lost
+        assert final_ids == input_ids, f"Missing: {input_ids - final_ids}"
+
+        # Dropped records must have reprompt metadata with passed=False
+        dropped_ids = {"rec_007", "rec_009"}
+        for r in final:
+            if r.custom_id in dropped_ids:
+                assert r.recovery_metadata is not None, f"{r.custom_id} missing recovery_metadata"
+                assert r.recovery_metadata.reprompt is not None, (
+                    f"{r.custom_id} missing reprompt metadata"
+                )
+                assert r.recovery_metadata.reprompt.passed is False, (
+                    f"{r.custom_id} should be marked passed=False"
+                )
+                assert r.recovery_metadata.reprompt.validation == "check_it"
+
+    @patch("agent_actions.llm.batch.processing.preparator.BatchTaskPreparator")
+    def test_no_records_dropped_is_zero_diff(self, MockPreparator):
+        """When provider returns all records, behavior is identical to before the fix."""
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+
+        results = _make_results(10, fail_ids=FAIL_IDS)
+        context_map = _make_context_map(10)
+
+        mock_prep = MockPreparator.return_value
+        mock_prepared = MagicMock()
+        mock_prepared.tasks = [MagicMock() for _ in range(3)]
+        mock_prep.prepare_tasks.return_value = mock_prepared
+
+        # Provider returns ALL 3 failing records — none dropped
+        provider = MagicMock()
+        provider.submit_batch.return_value = ("batch_rp_1", "submitted")
+        provider.retrieve_results.return_value = [
+            BatchResult(custom_id=cid, content='{"answer": "fixed"}', success=True)
+            for cid in FAIL_IDS
+        ]
+
+        with (
+            _reprompt_patches(),
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(_validation_func_for_bad_content, "fix it"),
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                return_value="completed",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+            ) as MockBatchStatus,
+        ):
+            MockBatchStatus.COMPLETED = "completed"
+            final = validate_and_reprompt(
+                action_indices={},
+                dependency_configs={},
+                storage_backend=None,
+                results=results,
+                provider=provider,
+                context_map=context_map,
+                output_directory="/tmp/out",
+                file_name="batch_1",
+                agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            )
+
+        final_ids = {r.custom_id for r in final}
+        input_ids = {r.custom_id for r in results}
+        assert final_ids == input_ids
+
+        # Every reprompted record must have passed=True metadata
+        for r in final:
+            if r.custom_id in FAIL_IDS:
+                assert r.recovery_metadata is not None, f"{r.custom_id} missing recovery_metadata"
+                assert r.recovery_metadata.reprompt is not None, (
+                    f"{r.custom_id} missing reprompt metadata"
+                )
+                assert r.recovery_metadata.reprompt.passed is True, (
+                    f"{r.custom_id} should be marked passed=True"
+                )
+
+    @patch("agent_actions.llm.batch.processing.preparator.BatchTaskPreparator")
+    def test_all_records_dropped_all_exhausted(self, MockPreparator):
+        """Provider drops every record — all end up in output with passed=False."""
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+
+        fail_ids = {"rec_001", "rec_002"}
+        results = _make_results(5, fail_ids=fail_ids)
+        context_map = _make_context_map(5)
+
+        mock_prep = MockPreparator.return_value
+        mock_prepared = MagicMock()
+        mock_prepared.tasks = [MagicMock() for _ in range(2)]
+        mock_prep.prepare_tasks.return_value = mock_prepared
+
+        # Provider returns NOTHING
+        provider = MagicMock()
+        provider.submit_batch.return_value = ("batch_rp_1", "submitted")
+        provider.retrieve_results.return_value = []
+
+        with (
+            _reprompt_patches(),
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(_validation_func_for_bad_content, "fix it"),
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                return_value="completed",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+            ) as MockBatchStatus,
+        ):
+            MockBatchStatus.COMPLETED = "completed"
+            final = validate_and_reprompt(
+                action_indices={},
+                dependency_configs={},
+                storage_backend=None,
+                results=results,
+                provider=provider,
+                context_map=context_map,
+                output_directory="/tmp/out",
+                file_name="batch_1",
+                agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            )
+
+        final_ids = {r.custom_id for r in final}
+        input_ids = {r.custom_id for r in results}
+        assert final_ids == input_ids, f"Missing: {input_ids - final_ids}"
+
+        # Both dropped records marked as failed
+        for r in final:
+            if r.custom_id in fail_ids:
+                assert r.recovery_metadata is not None
+                assert r.recovery_metadata.reprompt is not None
+                assert r.recovery_metadata.reprompt.passed is False
+
+    @patch("agent_actions.llm.batch.processing.preparator.BatchTaskPreparator")
+    def test_dropped_records_not_counted_twice(self, MockPreparator):
+        """Dropped records go to all_graduated only — not also to active_results.
+
+        If a dropped record leaked into active_results it would be re-validated
+        and could be counted in both graduated and active pools.
+        """
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+
+        fail_ids = {"rec_001", "rec_002", "rec_003"}
+        dropped_id = "rec_002"
+        results = _make_results(5, fail_ids=fail_ids)
+        context_map = _make_context_map(5)
+
+        mock_prep = MockPreparator.return_value
+        mock_prepared = MagicMock()
+        mock_prepared.tasks = [MagicMock() for _ in range(3)]
+        mock_prep.prepare_tasks.return_value = mock_prepared
+
+        # Attempt 1: provider drops rec_002, returns rec_001 and rec_003 (still bad)
+        # Attempt 2: provider returns rec_001 and rec_003 fixed
+        provider_retrieve_side_effects = [
+            # Attempt 1: drop rec_002
+            [
+                BatchResult(custom_id="rec_001", content='{"answer": "bad"}', success=True),
+                BatchResult(custom_id="rec_003", content='{"answer": "bad"}', success=True),
+            ],
+            # Attempt 2: both pass
+            [
+                BatchResult(custom_id="rec_001", content='{"answer": "fixed"}', success=True),
+                BatchResult(custom_id="rec_003", content='{"answer": "fixed"}', success=True),
+            ],
+        ]
+
+        provider = MagicMock()
+        provider.submit_batch.return_value = ("batch_rp", "submitted")
+        provider.retrieve_results.side_effect = provider_retrieve_side_effects
+
+        with (
+            _reprompt_patches(),
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(_validation_func_for_bad_content, "fix it"),
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                return_value="completed",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+            ) as MockBatchStatus,
+        ):
+            MockBatchStatus.COMPLETED = "completed"
+            final = validate_and_reprompt(
+                action_indices={},
+                dependency_configs={},
+                storage_backend=None,
+                results=results,
+                provider=provider,
+                context_map=context_map,
+                output_directory="/tmp/out",
+                file_name="batch_1",
+                agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            )
+
+        final_ids = [r.custom_id for r in final]
+        input_ids = {r.custom_id for r in results}
+
+        # All records present
+        assert set(final_ids) == input_ids
+
+        # No duplicate IDs in output
+        assert len(final_ids) == len(set(final_ids)), f"Duplicate IDs in output: {final_ids}"
+
+        # rec_002 is marked as dropped (passed=False)
+        rec_002 = [r for r in final if r.custom_id == dropped_id][0]
+        assert rec_002.recovery_metadata is not None
+        assert rec_002.recovery_metadata.reprompt is not None
+        assert rec_002.recovery_metadata.reprompt.passed is False
+
+
 class TestCheckAndSubmitRepromptSelectivity:
     """check_and_submit_reprompt only submits failed records."""
 

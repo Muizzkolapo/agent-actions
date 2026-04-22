@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Reprompt batch reconciles submitted vs received records — missing records are exhausted, not silently dropped"
+time: 2026-04-22T07:60:00.000000Z
