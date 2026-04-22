@@ -316,6 +316,7 @@ class TestHandleRunSuccess:
     def test_guard_all_skipped_returns_skipped(self, executor, mock_deps):
         """When all records are guard-skipped, status should be 'skipped' and ActionSkipEvent fired."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        mock_deps.action_runner.storage_backend.list_target_files.return_value = []
         params = self._make_params()
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
@@ -341,6 +342,7 @@ class TestHandleRunSuccess:
     def test_guard_all_skipped_records_in_run_tracker(self, executor, mock_deps):
         """Guard-all-skipped should record in run_tracker with skip_reason."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        mock_deps.action_runner.storage_backend.list_target_files.return_value = []
         executor.run_tracker = MagicMock()
         executor.run_id = "run-123"
         params = self._make_params()
