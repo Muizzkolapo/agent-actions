@@ -109,8 +109,7 @@ class RecoveryStateManager:
             return state_path
 
         except Exception as e:
-            if tmp_path.exists():
-                tmp_path.unlink()
+            tmp_path.unlink(missing_ok=True)
             raise OSError(f"Failed to save recovery state to {state_path}: {e}") from e
 
     @staticmethod
