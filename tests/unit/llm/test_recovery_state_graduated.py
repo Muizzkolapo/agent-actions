@@ -237,14 +237,14 @@ class TestRecoveryStateAtomicWrite:
             phase="reprompt",
             graduated_results=[{"custom_id": "r1"}, {"custom_id": "r2"}],
         )
-        with patch(
-            "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
-            side_effect=OSError("disk full"),
+        with (
+            patch(
+                "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
+                side_effect=OSError("disk full"),
+            ),
+            pytest.raises(OSError),
         ):
-            try:
-                RecoveryStateManager.save(tmpdir, "crash_test", state_v2)
-            except OSError:
-                pass
+            RecoveryStateManager.save(tmpdir, "crash_test", state_v2)
 
         # Original file is still intact
         assert path.read_text() == original_content
@@ -271,9 +271,8 @@ class TestRecoveryStateAtomicWrite:
 
         # No temp file left behind
         batch_dir = tmp_path / "batch"
-        if batch_dir.exists():
-            tmp_files = list(batch_dir.glob("*.tmp"))
-            assert tmp_files == []
+        assert batch_dir.exists()
+        assert list(batch_dir.glob("*.tmp")) == []
 
     def test_save_error_raises_oserror(self, tmp_path):
         """save() wraps write failures in OSError with context."""
