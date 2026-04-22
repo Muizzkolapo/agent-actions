@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.retry_polling import (
     import_validation_module,
     wait_for_batch_completion,
@@ -314,6 +315,29 @@ def validate_and_reprompt(
                 break
 
             reprompt_results = provider.retrieve_results(batch_id, output_directory)
+
+            submitted_ids = {r.custom_id for r in still_failing}
+            received_ids = BatchResultReconciler.collect_result_custom_ids(reprompt_results)
+            dropped_ids = submitted_ids - received_ids
+
+            if dropped_ids:
+                logger.warning(
+                    "Reprompt batch %s: provider dropped %d of %d records: %s",
+                    batch_id,
+                    len(dropped_ids),
+                    len(submitted_ids),
+                    sorted(dropped_ids),
+                )
+                for r in still_failing:
+                    if r.custom_id in dropped_ids:
+                        if not r.recovery_metadata:
+                            r.recovery_metadata = RecoveryMetadata()
+                        r.recovery_metadata.reprompt = RepromptMetadata(
+                            attempts=reprompted_ids.get(r.custom_id, 1),
+                            passed=False,
+                            validation=validation_name,
+                        )
+                        all_graduated.append(r)
 
             failing_map = {r.custom_id: r for r in still_failing}
             for reprompt_result in reprompt_results:

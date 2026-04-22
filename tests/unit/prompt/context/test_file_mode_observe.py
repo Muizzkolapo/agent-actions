@@ -643,3 +643,397 @@ class TestApplyObserveForFileMode:
         assert result[1]["content"]["label"] == "label-B"
         # Two separate loads — different ancestry despite same source_guid.
         assert call_count[0] == 2
+
+
+# -----------------------------------------------------------------------
+# Version namespace detection and injection (version_consumption merge)
+# -----------------------------------------------------------------------
+
+
+class TestVersionNamespaceObserve:
+    """Tests for version-correlated namespace resolution in FILE mode.
+
+    When upstream actions use version_consumption with merge pattern,
+    records contain nested dicts keyed by version action names. The
+    observe filter must detect these and resolve fields from content
+    directly — not via historical lookup (which fails for version keys).
+    """
+
+    def _make_merged_data(self, version_count=3):
+        """Create version-correlated merged data as VersionOutputCorrelator produces."""
+        content = {}
+        for i in range(1, version_count + 1):
+            content[f"gen_code_{i}"] = {
+                "code": f"code_{i}",
+                "language": f"lang_{i}",
+            }
+        return [
+            {
+                "source_guid": "sg-001",
+                "node_id": "node-1",
+                "content": content,
+                "lineage": ["lineage-1"],
+            }
+        ]
+
+    def test_wildcard_expansion_from_version_namespaces(self):
+        """Wildcards on version namespaces expand to qualified keys from content."""
+        data = self._make_merged_data(3)
+        config = {
+            "dependencies": ["gen_code_1", "gen_code_2", "gen_code_3"],
+            "context_scope": {
+                "observe": ["gen_code_1.*", "gen_code_2.*", "gen_code_3.*"],
+            },
+        }
+        indices = {
+            "source": 0,
+            "gen_code_1": 1,
+            "gen_code_2": 2,
+            "gen_code_3": 3,
+            "aggregate": 4,
+        }
+
+        result = apply_observe_for_file_mode(
+            data=data,
+            agent_config=config,
+            agent_name="aggregate",
+            agent_indices=indices,
+            file_path="/tmp/test.json",
+        )
+
+        content = result[0]["content"]
+        # Multiple wildcard namespaces → qualified keys (ns.field)
+        assert content["gen_code_1.code"] == "code_1"
+        assert content["gen_code_1.language"] == "lang_1"
+        assert content["gen_code_2.code"] == "code_2"
+        assert content["gen_code_3.language"] == "lang_3"
+
+    def test_specific_field_resolution_from_version_namespaces(self):
+        """Specific field refs resolve from version namespace content."""
+        data = self._make_merged_data(2)
+        config = {
+            "dependencies": ["gen_code_1", "gen_code_2"],
+            "context_scope": {
+                "observe": ["gen_code_1.code", "gen_code_2.code"],
+            },
+        }
+        indices = {
+            "source": 0,
+            "gen_code_1": 1,
+            "gen_code_2": 2,
+            "aggregate": 3,
+        }
+
+        result = apply_observe_for_file_mode(
+            data=data,
+            agent_config=config,
+            agent_name="aggregate",
+            agent_indices=indices,
+            file_path="/tmp/test.json",
+        )
+
+        content = result[0]["content"]
+        # "code" collides across namespaces → qualified keys
+        assert content["gen_code_1.code"] == "code_1"
+        assert content["gen_code_2.code"] == "code_2"
+
+    def test_version_ns_does_not_trigger_historical_lookup(self):
+        """Version namespaces in content must NOT attempt historical lookup."""
+        data = self._make_merged_data(2)
+        config = {
+            "dependencies": ["gen_code_1", "gen_code_2"],
+            "context_scope": {
+                "observe": ["gen_code_1.*", "gen_code_2.*"],
+            },
+        }
+        indices = {
+            "source": 0,
+            "gen_code_1": 1,
+            "gen_code_2": 2,
+            "aggregate": 3,
+        }
+
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
+        ) as mock_load:
+            apply_observe_for_file_mode(
+                data=data,
+                agent_config=config,
+                agent_name="aggregate",
+                agent_indices=indices,
+                file_path="/tmp/test.json",
+            )
+
+        # No historical loads — version data resolved from content directly.
+        mock_load.assert_not_called()
+
+    def test_version_ns_with_non_version_context_dep(self):
+        """Version namespaces + non-version context dep: both resolve correctly."""
+        data = [
+            {
+                "source_guid": "sg-1",
+                "node_id": "node-1",
+                "content": {
+                    "gen_code_1": {"code": "code_1"},
+                    "gen_code_2": {"code": "code_2"},
+                },
+                "lineage": ["lineage-1"],
+            }
+        ]
+        config = {
+            "dependencies": ["gen_code_1", "gen_code_2"],
+            "context_scope": {
+                "observe": [
+                    "gen_code_1.code",
+                    "gen_code_2.code",
+                    "classify.category",
+                ],
+            },
+        }
+        indices = {
+            "source": 0,
+            "gen_code_1": 1,
+            "gen_code_2": 2,
+            "classify": 3,
+            "aggregate": 4,
+        }
+
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
+            return_value={"category": "science"},
+        ) as mock_load:
+            result = apply_observe_for_file_mode(
+                data=data,
+                agent_config=config,
+                agent_name="aggregate",
+                agent_indices=indices,
+                file_path="/tmp/test.json",
+            )
+
+        content = result[0]["content"]
+        # Version fields from content
+        assert content["gen_code_1.code"] == "code_1"
+        assert content["gen_code_2.code"] == "code_2"
+        # Context dep from historical lookup
+        assert content["category"] == "science"
+        # Historical load only for classify, not version namespaces
+        mock_load.assert_called_once()
+
+    def test_version_ns_single_wildcard_no_qualification(self):
+        """Single version namespace wildcard uses bare keys (no ns. prefix)."""
+        data = [
+            {
+                "source_guid": "sg-1",
+                "node_id": "node-1",
+                "content": {
+                    "gen_code_1": {"code": "code_1", "language": "python"},
+                },
+                "lineage": ["lineage-1"],
+            }
+        ]
+        config = {
+            "dependencies": ["gen_code_1"],
+            "context_scope": {"observe": ["gen_code_1.*"]},
+        }
+        indices = {"source": 0, "gen_code_1": 1, "aggregate": 2}
+
+        result = apply_observe_for_file_mode(
+            data=data,
+            agent_config=config,
+            agent_name="aggregate",
+            agent_indices=indices,
+            file_path="/tmp/test.json",
+        )
+
+        content = result[0]["content"]
+        # Single wildcard → bare keys (no qualification)
+        assert content["code"] == "code_1"
+        assert content["language"] == "python"
+
+    def test_version_ns_multiple_records(self):
+        """Version namespace resolution works across multiple records."""
+        data = [
+            {
+                "source_guid": "sg-1",
+                "node_id": "node-1",
+                "content": {
+                    "gen_code_1": {"code": "code_A1"},
+                    "gen_code_2": {"code": "code_A2"},
+                },
+                "lineage": ["lineage-1"],
+            },
+            {
+                "source_guid": "sg-2",
+                "node_id": "node-2",
+                "content": {
+                    "gen_code_1": {"code": "code_B1"},
+                    "gen_code_2": {"code": "code_B2"},
+                },
+                "lineage": ["lineage-2"],
+            },
+        ]
+        config = {
+            "dependencies": ["gen_code_1", "gen_code_2"],
+            "context_scope": {
+                "observe": ["gen_code_1.code", "gen_code_2.code"],
+            },
+        }
+        indices = {
+            "source": 0,
+            "gen_code_1": 1,
+            "gen_code_2": 2,
+            "aggregate": 3,
+        }
+
+        result = apply_observe_for_file_mode(
+            data=data,
+            agent_config=config,
+            agent_name="aggregate",
+            agent_indices=indices,
+            file_path="/tmp/test.json",
+        )
+
+        # First record
+        assert result[0]["content"]["gen_code_1.code"] == "code_A1"
+        assert result[0]["content"]["gen_code_2.code"] == "code_A2"
+        # Second record — different per-record content
+        assert result[1]["content"]["gen_code_1.code"] == "code_B1"
+        assert result[1]["content"]["gen_code_2.code"] == "code_B2"
+
+    def test_version_ns_preserves_original_nested_dicts(self):
+        """Original nested version namespace dicts are preserved in content."""
+        data = self._make_merged_data(2)
+        config = {
+            "dependencies": ["gen_code_1", "gen_code_2"],
+            "context_scope": {
+                "observe": ["gen_code_1.*", "gen_code_2.*"],
+            },
+        }
+        indices = {
+            "source": 0,
+            "gen_code_1": 1,
+            "gen_code_2": 2,
+            "aggregate": 3,
+        }
+
+        result = apply_observe_for_file_mode(
+            data=data,
+            agent_config=config,
+            agent_name="aggregate",
+            agent_indices=indices,
+            file_path="/tmp/test.json",
+        )
+
+        content = result[0]["content"]
+        # Original nested dicts are preserved alongside expanded keys
+        assert isinstance(content["gen_code_1"], dict)
+        assert content["gen_code_1"]["code"] == "code_1"
+        # Expanded keys also present
+        assert content["gen_code_1.code"] == "code_1"
+
+    def test_version_ns_does_not_mutate_input_data(self):
+        """Version namespace enrichment must not mutate caller's input data."""
+        data = self._make_merged_data(2)
+        original_content = dict(data[0]["content"])
+        original_keys = set(original_content.keys())
+
+        config = {
+            "dependencies": ["gen_code_1", "gen_code_2"],
+            "context_scope": {
+                "observe": ["gen_code_1.*", "gen_code_2.*"],
+            },
+        }
+        indices = {
+            "source": 0,
+            "gen_code_1": 1,
+            "gen_code_2": 2,
+            "aggregate": 3,
+        }
+
+        apply_observe_for_file_mode(
+            data=data,
+            agent_config=config,
+            agent_name="aggregate",
+            agent_indices=indices,
+            file_path="/tmp/test.json",
+        )
+
+        # Input data must not be mutated.
+        assert set(data[0]["content"].keys()) == original_keys
+
+    def test_empty_content_fallback(self):
+        """Record with empty content {} falls back to item-level keys.
+
+        Regression: data.get("content", data) returns {} when content
+        exists but is empty, instead of falling back to the full item.
+        """
+        source_data = [{"source_guid": "sg-1", "content": {"url": "https://ex.com"}}]
+        data = [
+            {
+                "source_guid": "sg-1",
+                "node_id": "node-1",
+                "content": {},
+                "question": "Q?",
+                "lineage": ["lineage-1"],
+            }
+        ]
+        config = {
+            "dependencies": "upstream",
+            "context_scope": {
+                "observe": ["source.url", "upstream.question"],
+            },
+        }
+        indices = {"source": 0, "upstream": 1, "downstream": 2}
+
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
+            return_value=None,
+        ):
+            result = apply_observe_for_file_mode(
+                data=data,
+                agent_config=config,
+                agent_name="downstream",
+                agent_indices=indices,
+                file_path="/tmp/test.json",
+                source_data=source_data,
+            )
+
+        content = result[0]["content"]
+        # source.url from source_data
+        assert content["url"] == "https://ex.com"
+        # upstream.question from item-level fallback (content was empty)
+        assert content["question"] == "Q?"
+        # Metadata keys must NOT leak into enriched content
+        assert "source_guid" not in content
+        assert "lineage" not in content
+        assert "node_id" not in content
+
+    def test_non_version_input_source_not_treated_as_version_ns(self):
+        """Non-version input source keys in content are NOT treated as version namespaces.
+
+        Regression: only keys matching the _N pattern should be detected as
+        version namespaces.  A regular namespace like "upstream" that happens
+        to be a dict in content should NOT trigger version namespace injection.
+        """
+        data = [
+            {
+                "source_guid": "sg-1",
+                "content": {"question": "Q?", "answer": "A!"},
+            }
+        ]
+        config = {
+            "dependencies": "upstream",
+            "context_scope": {"observe": ["upstream.question"]},
+        }
+        indices = {"source": 0, "upstream": 1, "review": 2}
+
+        result = apply_observe_for_file_mode(
+            data=data,
+            agent_config=config,
+            agent_name="review",
+            agent_indices=indices,
+            file_path="/tmp/test.json",
+        )
+
+        # Fast path should fire — no version namespaces detected.
+        assert result is data
