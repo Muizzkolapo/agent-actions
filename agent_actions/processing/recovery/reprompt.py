@@ -17,6 +17,7 @@ from .response_validator import (
     resolve_feedback_strategies,
     safe_validate,
 )
+from .retry import RetryExhaustedException
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -149,7 +150,29 @@ class RepromptService:
         while attempts < self.max_attempts:
             attempts += 1
 
-            response, executed = llm_operation(current_prompt)
+            try:
+                response, executed = llm_operation(current_prompt)
+            except RetryExhaustedException as exc:
+                logger.warning(
+                    "[%s] Retry exhausted on reprompt attempt %d/%d: %s",
+                    context,
+                    attempts,
+                    self.max_attempts,
+                    exc.retry_result.last_error,
+                )
+                if exhausted_behavior == "raise":
+                    raise RuntimeError(
+                        f"Retry exhausted during reprompt attempt {attempts}/{self.max_attempts}: "
+                        f"{exc.retry_result.last_error}"
+                    ) from exc
+                return RepromptResult(
+                    response=last_response,
+                    executed=True,
+                    attempts=attempts,
+                    passed=False,
+                    validation_name=self.validation_name,
+                    exhausted=True,
+                )
 
             if not executed:
                 logger.info("[%s] Guard skipped execution, bypassing reprompt", context)

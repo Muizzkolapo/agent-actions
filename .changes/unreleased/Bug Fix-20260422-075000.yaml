@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Version consumption merge now delivers data correctly to FILE mode tool actions"
+time: 2026-04-22T07:50:00.000000Z
