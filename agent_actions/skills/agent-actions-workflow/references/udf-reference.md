@@ -208,6 +208,15 @@ for key, data in content.items():
         scores.append(data.get("overall_score", 0))
 ```
 
+When observe uses wildcards (`score_quality.*`), fields are also expanded as qualified flat keys alongside the nested dicts:
+
+```python
+# With observe: [score_quality_1.*, score_quality_2.*]
+# Both access patterns work:
+score = content.get("score_quality_1", {}).get("overall_score")  # nested dict
+score = content.get("score_quality_1.overall_score")              # expanded key
+```
+
 ### Seed data
 
 Seed data lives under the `seed` namespace:
