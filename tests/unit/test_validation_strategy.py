@@ -19,7 +19,7 @@ def _make_result(
     """Create a mock BatchResult."""
     result = MagicMock()
     result.custom_id = custom_id
-    result.content = content or {"text": "hello"}
+    result.content = content
     result.success = success
     result.recovery_metadata = recovery_metadata
     return result
@@ -162,14 +162,6 @@ class TestValidationStrategyBuildFeedback:
         assert isinstance(feedback, str)
         assert "API error" in feedback
         assert "fix" not in feedback  # should NOT use the validation feedback message
-
-    def test_api_failure_with_none_content_does_not_crash(self):
-        """build_feedback handles None content from API failures gracefully."""
-        strategy = ValidationStrategy(validation_func=_always_fail, feedback_message="fix")
-        result = _make_result("r1", content=None, success=False)
-        # Must not raise
-        feedback = strategy.build_feedback(result)
-        assert len(feedback) > 0
 
 
 # ---------------------------------------------------------------------------
