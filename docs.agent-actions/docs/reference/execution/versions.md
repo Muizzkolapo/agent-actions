@@ -151,7 +151,7 @@ for key, data in content.items():
         results.append(data)
 ```
 
-When observe uses wildcards (`extract_raw_qa.*`), fields are also expanded as qualified flat keys (`extract_raw_qa_1.field`, `extract_raw_qa_2.field`) alongside the nested dicts. Both access patterns work.
+When observe uses wildcards (`extract_raw_qa.*`), fields are also expanded as qualified flat keys (`extract_raw_qa_1.questions`, `extract_raw_qa_2.questions`) alongside the nested dicts. Both access patterns work.
 
 ## Common Patterns
 
