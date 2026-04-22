@@ -129,13 +129,29 @@ Outputs are merged as nested namespaces:
 }
 ```
 
-Access in prompts:
+Access in prompts (LLM actions):
 
 ```yaml
 prompt: |
   Strategy 1: {{ extract_raw_qa_1.questions }}
   Strategy 2: {{ extract_raw_qa_2.questions }}
 ```
+
+Access in tool UDFs (FILE mode):
+
+```python
+# Each version is a nested dict in content
+version_1 = content.get("extract_raw_qa_1", {})
+version_2 = content.get("extract_raw_qa_2", {})
+
+# Iterate all versions dynamically
+results = []
+for key, data in content.items():
+    if key.startswith("extract_raw_qa_") and isinstance(data, dict):
+        results.append(data)
+```
+
+When observe uses wildcards (`extract_raw_qa.*`), fields are also expanded as qualified flat keys (`extract_raw_qa_1.field`, `extract_raw_qa_2.field`) alongside the nested dicts. Both access patterns work.
 
 ## Common Patterns
 
