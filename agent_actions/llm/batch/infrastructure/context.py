@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ProcessingError
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -28,8 +29,7 @@ class BatchContextManager:
 
             ensure_directory_exists(context_path, is_file=True)
 
-            with open(context_path, "w", encoding="utf-8") as f:
-                json.dump(context_map, f, indent=2, ensure_ascii=False)
+            atomic_json_write(context_path, context_map, indent=2, ensure_ascii=False)
 
             logger.debug("Saved context map to %s (%d entries)", context_path, len(context_map))
 

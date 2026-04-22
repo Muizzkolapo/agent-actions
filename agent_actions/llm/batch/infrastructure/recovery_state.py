@@ -2,11 +2,11 @@
 
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -89,28 +89,16 @@ class RecoveryStateManager:
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
         ensure_directory_exists(state_path, is_file=True)
 
-        tmp_path = state_path.with_suffix(".json.tmp")
+        atomic_json_write(state_path, state.to_dict(), ensure_ascii=False)
 
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(state.to_dict(), f, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
-
-            tmp_path.replace(state_path)
-
-            logger.debug(
-                "Saved recovery state to %s (phase=%s, retry=%d, reprompt=%d)",
-                state_path,
-                state.phase,
-                state.retry_attempt,
-                state.reprompt_attempt,
-            )
-            return state_path
-
-        except Exception as e:
-            tmp_path.unlink(missing_ok=True)
-            raise OSError(f"Failed to save recovery state to {state_path}: {e}") from e
+        logger.debug(
+            "Saved recovery state to %s (phase=%s, retry=%d, reprompt=%d)",
+            state_path,
+            state.phase,
+            state.retry_attempt,
+            state.reprompt_attempt,
+        )
+        return state_path
 
     @staticmethod
     def load(output_directory: str, file_name: str) -> RecoveryState | None:

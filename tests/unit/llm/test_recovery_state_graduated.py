@@ -252,7 +252,7 @@ class TestRecoveryStateAtomicWrite:
         )
         with (
             patch(
-                "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
+                "agent_actions.utils.atomic_write.json.dump",
                 side_effect=OSError("disk full"),
             ),
             pytest.raises(OSError),
@@ -274,7 +274,7 @@ class TestRecoveryStateAtomicWrite:
         """On write failure, the temp file is removed — no disk litter."""
         state = RecoveryState(phase="retry")
         with patch(
-            "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
+            "agent_actions.utils.atomic_write.json.dump",
             side_effect=OSError("disk full"),
         ):
             try:
@@ -317,13 +317,13 @@ class TestRecoveryStateAtomicWrite:
         assert not path.with_suffix(".json.tmp").exists()
 
     def test_save_error_raises_oserror(self, tmp_path):
-        """save() wraps write failures in OSError with context."""
+        """save() propagates write failures as OSError."""
         state = RecoveryState(phase="retry")
         with patch(
-            "agent_actions.llm.batch.infrastructure.recovery_state.json.dump",
+            "agent_actions.utils.atomic_write.json.dump",
             side_effect=ValueError("bad data"),
         ):
-            with pytest.raises(OSError, match="Failed to save recovery state"):
+            with pytest.raises(OSError, match="Failed to write"):
                 RecoveryStateManager.save(str(tmp_path), "error_test", state)
 
     def test_large_state_serialization_roundtrip(self, tmp_path):

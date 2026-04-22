@@ -6,6 +6,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.atomic_write import atomic_json_write
+
 logger = logging.getLogger(__name__)
 
 
@@ -79,8 +81,7 @@ class ActionStateManager:
         """Persist current status to file."""
         try:
             self.status_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.status_file, "w", encoding="utf-8") as f:
-                json.dump(self.action_status, f, indent=4)
+            atomic_json_write(self.status_file, self.action_status, indent=4)
         except (OSError, ValueError, TypeError) as e:
             logger.error("Error saving status: %s", e)
 
