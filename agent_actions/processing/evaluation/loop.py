@@ -8,7 +8,9 @@ implement the EvaluationStrategy protocol and are plugged in by callers.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from agent_actions.processing.types import EvaluationMetadata, RecoveryMetadata
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BatchResult
@@ -43,10 +45,12 @@ class EvaluationLoop:
     def _is_already_graduated(self, result: BatchResult) -> bool:
         """Check if a result was already graduated in a prior cycle."""
         meta = getattr(result, "recovery_metadata", None)
-        if not isinstance(meta, dict):
+        if meta is None:
             return False
-        eval_meta = meta.get("evaluation", {})
-        return eval_meta.get("passed") is True
+        eval_meta = getattr(meta, "evaluation", None)
+        if eval_meta is None:
+            return False
+        return getattr(eval_meta, "passed", False) is True
 
     def split(self, results: list[BatchResult]) -> tuple[list[BatchResult], list[BatchResult]]:
         """→ (graduated, still_failing). Skips already-graduated."""
@@ -76,13 +80,13 @@ class EvaluationLoop:
         """Mark as done. Never evaluated again."""
         for result in results:
             meta = getattr(result, "recovery_metadata", None)
-            if not isinstance(meta, dict):
-                meta = {}
-            meta["evaluation"] = {
-                "passed": True,
-                "strategy_name": self.strategy.name,
-            }
-            cast(Any, result).recovery_metadata = meta
+            if not isinstance(meta, RecoveryMetadata):
+                meta = RecoveryMetadata()
+            meta.evaluation = EvaluationMetadata(
+                passed=True,
+                strategy_name=self.strategy.name,
+            )
+            result.recovery_metadata = meta
 
     def build_resubmission(self, failed: list[BatchResult], context_map: dict) -> list[dict]:
         """Append strategy.build_feedback() to each, return submission records."""
