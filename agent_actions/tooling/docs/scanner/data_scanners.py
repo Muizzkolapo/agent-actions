@@ -96,11 +96,11 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
         if artefact_dir in agent_io_dir.parents or agent_io_dir == artefact_dir:
             continue
 
-        target_dir = agent_io_dir / "target"
-        if not target_dir.exists():
+        store_dir = agent_io_dir / "store"
+        if not store_dir.exists():
             continue
 
-        for db_file in target_dir.glob("*.db"):
+        for db_file in store_dir.glob("*.db"):
             workflow_name = db_file.stem
 
             try:

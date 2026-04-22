@@ -38,10 +38,10 @@ class PreviewCommand:
             self.workflow_name, self.workflow, auto_create=False, project_root=project_root
         )
 
-        target_dir = paths.io_dir / "target"
+        store_dir = paths.io_dir / "store"
         workflow_dir = paths.io_dir.parent
 
-        db_path = target_dir / f"{self.workflow_name}.db"
+        db_path = store_dir / f"{self.workflow_name}.db"
 
         if not db_path.exists():
             self.console.print(
