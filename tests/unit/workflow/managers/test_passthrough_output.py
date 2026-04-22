@@ -76,11 +76,11 @@ class TestPassthroughFromBackend:
             "transform", "batch_0.json", upstream_data
         )
 
-        # Disposition recorded
+        # Disposition recorded as passthrough (data was written)
         mock_storage_backend.set_disposition.assert_called_once()
         call_args = mock_storage_backend.set_disposition.call_args
         assert call_args[0][0] == "transform"
-        assert call_args[0][2] == "skipped"
+        assert call_args[0][2] == "passthrough"
 
     def test_multiple_backend_files(self, make_manager, mock_storage_backend):
         """All files from upstream node are forwarded."""
@@ -181,8 +181,8 @@ class TestPassthroughFromFilesystem:
         mock_storage_backend.write_target.assert_called_once()
         assert mock_storage_backend.write_target.call_args[0][1] == "batch_0.json"
 
-    def test_empty_upstream_writes_nothing(self, make_manager, mock_storage_backend):
-        """No upstream data → no writes, but disposition is still recorded."""
+    def test_empty_upstream_writes_skipped_disposition(self, make_manager, mock_storage_backend):
+        """No upstream data → no writes, disposition is SKIPPED (not PASSTHROUGH)."""
         mock_storage_backend.list_target_files.return_value = []
 
         mgr = make_manager(
@@ -193,6 +193,9 @@ class TestPassthroughFromFilesystem:
 
         mock_storage_backend.write_target.assert_not_called()
         mock_storage_backend.set_disposition.assert_called_once()
+        call_args = mock_storage_backend.set_disposition.call_args
+        assert call_args[0][0] == "transform"
+        assert call_args[0][2] == "skipped"
 
 
 # ---------------------------------------------------------------------------

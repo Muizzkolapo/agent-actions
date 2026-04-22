@@ -159,6 +159,12 @@ class ActionExecutor:
         ) != action_config.get("file_limit"):
             logger.info("Limit config changed for %s, resetting to pending", action_name)
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+            if storage_backend is not None:
+                try:
+                    storage_backend.clear_disposition(action_name)
+                except Exception as e:
+                    logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
             return ActionStatus.PENDING
         return current_status
 
@@ -463,11 +469,28 @@ class ActionExecutor:
                 if storage_backend.has_disposition(
                     action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
                 ):
-                    logger.info(
-                        "Action '%s' had all records guard-skipped — marking as skipped",
-                        action_name,
-                    )
-                    return ActionStatus.SKIPPED
+                    # Cross-check: the pipeline only sets this disposition when
+                    # output is empty.  If target data exists, the disposition
+                    # is stale (left over from a prior run) — clear it and
+                    # warn so the write-path bug that caused it can be found.
+                    target_files = storage_backend.list_target_files(action_name)
+                    if target_files:
+                        storage_backend.clear_disposition(
+                            action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+                        )
+                        logger.warning(
+                            "Stale guard-skip disposition on '%s' — action has %d target file(s). "
+                            "A write path set SKIPPED despite output existing. "
+                            "Clearing disposition and proceeding as COMPLETED.",
+                            action_name,
+                            len(target_files),
+                        )
+                    else:
+                        logger.info(
+                            "Action '%s' had all records guard-skipped — marking as skipped",
+                            action_name,
+                        )
+                        return ActionStatus.SKIPPED
                 item_failures = storage_backend.get_failed_items(action_name)
                 if item_failures:
                     logger.warning(
@@ -566,15 +589,35 @@ class ActionExecutor:
                 return dep
             # Also check disposition — covers cascaded failures/skips from prior levels
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-            if storage_backend is not None and (
-                storage_backend.has_disposition(
+            if storage_backend is not None:
+                has_failed = storage_backend.has_disposition(
                     dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
                 )
-                or storage_backend.has_disposition(
+                if has_failed:
+                    return dep
+                has_skipped = storage_backend.has_disposition(
                     dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
                 )
-            ):
-                return dep
+                if has_skipped:
+                    # Cross-check: if the upstream produced output, the
+                    # SKIPPED disposition is stale — clear it, warn so
+                    # the write-path bug can be found, and proceed.
+                    target_files = storage_backend.list_target_files(dep)
+                    if target_files:
+                        storage_backend.clear_disposition(
+                            dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+                        )
+                        logger.warning(
+                            "Stale upstream SKIPPED disposition on '%s' — "
+                            "upstream has %d target file(s). "
+                            "A write path set SKIPPED despite output existing. "
+                            "Clearing disposition; downstream '%s' will proceed.",
+                            dep,
+                            len(target_files),
+                            action_name,
+                        )
+                    else:
+                        return dep
         return None
 
     def _handle_dependency_skip(

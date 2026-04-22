@@ -195,10 +195,24 @@ class ActionOutputManager:
                 data = merge_records_by_key(all_records, reduce_key)
             self.storage_backend.write_target(agent_type, relative_path, data)
 
-        reason = f"Action {agent_type} skipped due to WHERE clause condition"
-        self.storage_backend.set_disposition(
-            agent_type, NODE_LEVEL_RECORD_ID, DISPOSITION_SKIPPED, reason=reason
-        )
+        if data_by_path:
+            # Passthrough succeeded — upstream data was written to this
+            # action's target.  Use PASSTHROUGH (not SKIPPED) so downstream
+            # actions are NOT cascade-blocked.
+            self.storage_backend.set_disposition(
+                agent_type,
+                NODE_LEVEL_RECORD_ID,
+                DISPOSITION_PASSTHROUGH,
+                reason=f"Action {agent_type} skipped — upstream data passed through",
+            )
+        else:
+            # No upstream data to pass through — truly skipped.
+            self.storage_backend.set_disposition(
+                agent_type,
+                NODE_LEVEL_RECORD_ID,
+                DISPOSITION_SKIPPED,
+                reason=f"Action {agent_type} skipped due to WHERE clause condition",
+            )
 
     def _read_upstream_from_backend(self, action_name: str) -> dict[str, list[dict]]:
         """Read all target files for a node from storage backend."""
