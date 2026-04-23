@@ -246,24 +246,17 @@ Access: `content["score_quality_1"]["score"]` (nested dict) or `content["score_q
 
 ### Seed data
 
-Seed data lives under the `seed` namespace, keyed by the name from `seed_path:` in config.
+Seed data is flattened like any other namespace. Requires `observe: [seed.*]` in the action config.
 
+**RECORD mode** — seed fields are flat:
 ```json
 {
-  "seed": {
-    "rubric": {
-      "min_score": 7,
-      "categories": ["accuracy", "clarity"]
-    },
-    "exam_syllabus": {
-      "exam_name": "AWS Solutions Architect",
-      "topics": ["compute", "storage"]
-    }
-  }
+  "rubric": {"min_score": 7, "categories": ["accuracy", "clarity"]},
+  "exam_syllabus": {"exam_name": "AWS Solutions Architect", "topics": ["compute", "storage"]}
 }
 ```
 
-Access: `content["seed"]["rubric"]["min_score"]`
+Access: `data.get("rubric", {})["min_score"]`
 
 ## Data Transformation Patterns
 
