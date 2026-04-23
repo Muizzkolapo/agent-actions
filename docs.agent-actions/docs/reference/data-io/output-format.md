@@ -78,7 +78,7 @@ The following fields are metadata and are automatically excluded when extracting
 - `_recovery`
 - `_unprocessed`
 
-This means when an action references upstream data, it sees the `content` fields without these wrappers or system fields.
+This means when an action references upstream data, it sees the `content` fields organized by upstream action namespace, without these wrappers or system fields.
 
 ### Record Types
 

@@ -35,9 +35,9 @@ Guards evaluate conditions and decide whether an action should run for each reco
 
 ```yaml
 guard:
-  condition: "score > 85"
-  condition: "status == 'approved'"
-  condition: "facts != []"
+  condition: "upstream_action.score > 85"
+  condition: "upstream_action.status == 'approved'"
+  condition: "upstream_action.facts != []"
 ```
 
 | Operator | Description |
@@ -63,27 +63,27 @@ Boolean keywords are case-insensitive, matching SQL convention:
 
 ```yaml
 guard:
-  condition: 'passes_filter == true'   # valid
-  condition: 'passes_filter == True'   # valid
-  condition: 'passes_filter == TRUE'   # valid
+  condition: 'upstream_action.passes_filter == true'   # valid
+  condition: 'upstream_action.passes_filter == True'   # valid
+  condition: 'upstream_action.passes_filter == TRUE'   # valid
 ```
 
 Prefer explicit comparison over a bare field reference for boolean fields. A bare reference evaluates using Python truthiness — this fails silently when the upstream action stores `"false"` as a string (which is truthy) rather than a Python `bool`:
 
 ```yaml
 # Fragile — string "false" is truthy, so the guard never filters
-condition: 'passes_filter'
+condition: 'upstream_action.passes_filter'
 
 # Explicit — correct regardless of whether the value is a bool or a string
-condition: 'passes_filter == true'
+condition: 'upstream_action.passes_filter == true'
 ```
 
 ### Built-in Functions
 
 ```yaml
 guard:
-  condition: 'len(items) > 0'
-  condition: 'max(scores) >= 85'
+  condition: 'len(upstream_action.items) > 0'
+  condition: 'max(upstream_action.scores) >= 85'
 ```
 
 Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
@@ -96,7 +96,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 - name: canonicalize_facts
   dependencies: fact_extractor
   guard:
-    condition: 'candidate_facts_list != []'
+    condition: 'fact_extractor.candidate_facts_list != []'
     on_false: "filter"
 ```
 
@@ -105,7 +105,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 ```yaml
 - name: enhance_summary
   guard:
-    condition: 'needs_enhancement == true'
+    condition: 'analyze_content.needs_enhancement == true'
     on_false: "skip"
 ```
 
@@ -114,7 +114,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 ```yaml
 - name: generate_final_output
   guard:
-    condition: 'quality_score >= 85'
+    condition: 'evaluate_quality.quality_score >= 85'
     on_false: "filter"
 ```
 
@@ -124,9 +124,8 @@ Guards can access:
 
 | Source | Syntax |
 |--------|--------|
-| Direct field | `candidate_facts_list` |
-| Specific action | `extract_facts.count` |
-| Context scope observed | `num_similar_facts` |
+| Upstream action field | `extract_facts.count` |
+| Context scope observed | `group_by_similarity.num_similar_facts` |
 
 ```yaml
 - name: validate
@@ -134,7 +133,7 @@ Guards can access:
     observe:
       - group_by_similarity.num_similar_facts
   guard:
-    condition: 'num_similar_facts != 1'
+    condition: 'group_by_similarity.num_similar_facts != 1'
     on_false: "skip"
 ```
 
@@ -155,7 +154,7 @@ When Action A skips a record (`on_false: skip`), Action B still receives it and 
 actions:
   - name: extract_facts
     guard:
-      condition: 'status == "active"'
+      condition: 'classify.status == "active"'
       on_false: "skip"       # Inactive records pass through with original content
 
   - name: generate_summary
@@ -184,7 +183,7 @@ Guard evaluation errors are classified into three categories, each with differen
 
 ```yaml
 guard:
-  condition: 'passes_filter == true'
+  condition: 'upstream_action.passes_filter == true'
   on_false: filter
   passthrough_on_error: false   # filter the record if evaluation fails
 ```
@@ -202,11 +201,11 @@ String values on the right-hand side of comparisons **must be quoted**. Unquoted
 ```yaml
 # WRONG — "approved" is interpreted as a field name
 guard:
-  condition: 'hitl_status == approved'
+  condition: 'review_report.hitl_status == approved'
 
 # CORRECT — quote string literals
 guard:
-  condition: 'hitl_status == "approved"'
+  condition: 'review_report.hitl_status == "approved"'
 ```
 
 ## Limitations
@@ -226,7 +225,7 @@ When a guard is configured on a File-granularity action (tool or HITL), the guar
   granularity: file
   impl: deduplicate
   guard:
-    condition: 'status == "active"'
+    condition: 'upstream_action.status == "active"'
     on_false: filter  # Only active records sent to dedup tool
 ```
 

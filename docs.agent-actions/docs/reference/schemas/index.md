@@ -191,7 +191,7 @@ from agent_actions import udf_tool
 
 @udf_tool
 def select_question_schema(input_data: dict) -> str:
-    question_type = input_data.get("question_type", "").upper()
+    question_type = input_data["source"]["question_type"].upper()
 
     if question_type == "MULTIPLE_CHOICE":
         return "mc_question_schema"  # References schema/mc_question_schema.yml (or .yaml/.json)
@@ -208,7 +208,7 @@ For more dynamic cases, return a complete schema definition:
 ```python
 @udf_tool
 def select_output_schema(input_data: dict) -> dict:
-    complexity = input_data.get("complexity", "simple")
+    complexity = input_data["source"]["complexity"]
 
     if complexity == "detailed":
         return {
@@ -247,13 +247,13 @@ The dispatch tool receives all available context:
 @udf_tool
 def select_schema(input_data: dict) -> str:
     # Source fields from current record
-    content_type = input_data.get("content_type")
+    content_type = input_data["source"]["content_type"]
 
     # Seed data
-    exam_type = input_data.get("exam_syllabus", {}).get("type")
+    exam_type = input_data["seed"]["exam_syllabus"]["type"]
 
     # Upstream action outputs
-    classification = input_data.get("classify_content", {}).get("category")
+    classification = input_data["classify_content"]["category"]
 
     # Make decision based on any combination
     if classification == "code":

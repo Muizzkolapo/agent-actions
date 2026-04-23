@@ -77,7 +77,7 @@ from agent_actions import udf_tool
 @udf_tool
 def validate_email(data, **kwargs):
     """Process single record."""
-    email = data.get('email', '')
+    email = data["source"]["email"]
     return {"valid": is_valid_email(email)}
 ```
 
@@ -96,7 +96,7 @@ def deduplicate_facts(records, **kwargs):
     unique = []
     for record in records:
         content = record["content"]
-        key = content.get("fact_text")
+        key = content["extract_facts"]["fact_text"]
         if key not in seen:
             seen.add(key)
             unique.append(record)  # pass through full record

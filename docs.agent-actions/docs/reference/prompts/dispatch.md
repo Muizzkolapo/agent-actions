@@ -33,7 +33,7 @@ from agent_actions import udf_tool
 @udf_tool
 def handle_quiz_type(input_data: dict) -> dict:
     """Return appropriate authoring prompt based on quiz type."""
-    quiz_type = input_data.get("quiz_type", "APPLICATION").upper()
+    quiz_type = input_data["source"]["quiz_type"].upper()
 
     prompts = {
         "UNDERSTANDING": "Generate a conceptual question...",

@@ -140,15 +140,15 @@ prompt: |
 Access in tool UDFs (FILE mode):
 
 ```python
-# Each version is a nested dict in content
-scorer_1 = content.get("score_quality_1", {})
-scorer_2 = content.get("score_quality_2", {})
+# Each version is a nested namespace in content
+scorer_1 = content["score_quality_1"]
+scorer_2 = content["score_quality_2"]
 
 # Iterate all versions dynamically
 scores = []
 for key, data in content.items():
     if key.startswith("score_quality_") and isinstance(data, dict):
-        scores.append(data.get("overall_score", 0))
+        scores.append(data["overall_score"])
 ```
 
 When observe uses wildcards (`score_quality.*`), fields are also expanded as qualified flat keys (`score_quality_1.overall_score`, `score_quality_2.overall_score`) alongside the nested dicts. Both access patterns work.

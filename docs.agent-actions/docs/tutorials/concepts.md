@@ -127,7 +127,7 @@ actions:
     impl: publish_to_portal
     dependencies: [review_report]
     guard:
-      condition: "hitl_status == 'approved'"
+      condition: "review_report.hitl_status == 'approved'"
       on_false: skip
 ```
 

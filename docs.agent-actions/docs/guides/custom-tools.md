@@ -22,7 +22,7 @@ from agent_actions import udf_tool
 @udf_tool()
 def validate_product_price(data: dict[str, Any]) -> dict[str, Any]:
     """Ensure product price is positive and reasonable."""
-    price = data.get('price', 0)
+    price = data["source"]["price"]
     if price <= 0:
         raise ValueError(f"Price must be positive, got {price}")
     return data
@@ -34,6 +34,9 @@ actions:
   - name: price_validator
     kind: tool
     impl: validate_product_price
+    context_scope:
+      observe:
+        - source.*
 ```
 
 Agent Actions discovers tools automatically—no module paths needed.
@@ -48,11 +51,10 @@ from agent_actions import udf_tool
 def my_tool(data: dict[str, Any]) -> dict[str, Any]:
     """
     Args:
-        data: Flat dict of observed fields from upstream actions.
-              Fields are delivered without namespace wrappers — access
-              them directly with data.get("field").
-              When two upstream actions share a field name, the
-              framework qualifies them: data.get("action.field").
+        data: Dict of namespaced fields from upstream actions.
+              Each upstream action's output is nested under its
+              action name: data["action_name"]["field"].
+              Source data is under data["source"]["field"].
 
     Returns:
         Modified data dict
@@ -71,7 +73,7 @@ def my_tool(data: dict[str, Any]) -> dict[str, Any]:
 @udf_tool()
 def validate_email(data: dict[str, Any]) -> dict[str, Any]:
     import re
-    email = data.get('email', '')
+    email = data["source"]["email"]
     if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
         raise ValueError(f"Invalid email: {email}")
     return data
@@ -82,7 +84,8 @@ def validate_email(data: dict[str, Any]) -> dict[str, Any]:
 ```python
 @udf_tool()
 def enrich_customer_data(data: dict[str, Any]) -> dict[str, Any]:
-    ltv = data.get('lifetime_value', 0)
+    customer = data["classify_customer"]
+    ltv = customer["lifetime_value"]
     if ltv > 10000:
         data['tier'] = 'platinum'
     elif ltv > 5000:
@@ -98,7 +101,7 @@ def enrich_customer_data(data: dict[str, Any]) -> dict[str, Any]:
 @udf_tool()
 def fetch_product_details(data: dict[str, Any]) -> dict[str, Any]:
     import requests
-    product_id = data.get('product_id')
+    product_id = data["extract_data"]["product_id"]
     response = requests.get(f"https://api.example.com/products/{product_id}")
     if response.ok:
         data['external_details'] = response.json()
@@ -110,7 +113,7 @@ def fetch_product_details(data: dict[str, Any]) -> dict[str, Any]:
 ```python
 @udf_tool()
 def calculate_order_totals(data: dict[str, Any]) -> dict[str, Any]:
-    items = data.get('items', [])
+    items = data["source"]["items"]
     subtotal = sum(item['price'] * item['quantity'] for item in items)
     data['subtotal'] = subtotal
     data['tax'] = subtotal * 0.08
@@ -133,7 +136,7 @@ def deduplicate_questions(data: list[dict]) -> list[dict]:
     result = []
     for record in data:
         content = record["content"]
-        question = content.get("question_text", "")
+        question = content["extract_questions"]["question_text"]
         if question not in seen:
             seen.add(question)
             result.append(record)  # pass through the full record
@@ -144,8 +147,8 @@ def deduplicate_questions(data: list[dict]) -> list[dict]:
 
 | | Record-level | File-level |
 |---|---|---|
-| Input | Single `dict` with unwrapped business fields | `list[dict]` — each record has `content`, `node_id`, `lineage` |
-| Read fields | `data["field"]` | `record["content"]["field"]` |
+| Input | Single `dict` with namespaced upstream data | `list[dict]` — each record has `content`, `node_id`, `lineage` |
+| Read fields | `data["action_name"]["field"]` | `record["content"]["action_name"]["field"]` |
 | Passthrough | Return modified dict | Return the original record dict |
 | New records | N/A | Return a new dict without `node_id` |
 

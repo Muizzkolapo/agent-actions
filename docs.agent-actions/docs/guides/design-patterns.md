@@ -366,7 +366,7 @@ actions:
   - name: fulfill_order
     dependencies: [classify_order]
     guard:
-      condition: 'order_status == "in_stock"'
+      condition: 'classify_order.order_status == "in_stock"'
       on_false: "filter"
     intent: "Generate fulfillment instructions for in-stock orders"
     prompt: $prompts.fulfill_order
@@ -384,7 +384,7 @@ actions:
   - name: create_backorder
     dependencies: [classify_order]
     guard:
-      condition: 'order_status == "out_of_stock"'
+      condition: 'classify_order.order_status == "out_of_stock"'
       on_false: "filter"
     intent: "Create backorder with estimated restock timeline"
     prompt: $prompts.create_backorder
@@ -401,7 +401,7 @@ actions:
   - name: process_refund
     dependencies: [classify_order]
     guard:
-      condition: 'order_status == "cancelled"'
+      condition: 'classify_order.order_status == "cancelled"'
       on_false: "filter"
     intent: "Process refund and generate confirmation"
     prompt: $prompts.process_refund
@@ -503,7 +503,7 @@ actions:
   - name: finalize
     dependencies: [critique_against_guidelines]
     guard:
-      condition: 'approved == true'
+      condition: 'critique_against_guidelines.approved == true'
       on_false: "filter"
     prompt: |
       Polish this approved marketing copy for publication.
@@ -521,7 +521,7 @@ actions:
   - name: revise
     dependencies: [critique_against_guidelines]
     guard:
-      condition: 'approved == false'
+      condition: 'critique_against_guidelines.approved == false'
       on_false: "filter"
     prompt: |
       Revise this marketing copy based on the critique.
@@ -727,7 +727,7 @@ actions:
   - name: extract_invoice
     dependencies: [detect_document_type]
     guard:
-      condition: 'document_type == "invoice"'
+      condition: 'detect_document_type.document_type == "invoice"'
       on_false: "filter"
     intent: "Extract structured data from invoices"
     prompt: $prompts.extract_invoice
@@ -747,7 +747,7 @@ actions:
   - name: analyze_contract
     dependencies: [detect_document_type]
     guard:
-      condition: 'document_type == "contract"'
+      condition: 'detect_document_type.document_type == "contract"'
       on_false: "filter"
     intent: "Analyze contract terms and flag key obligations"
     prompt: $prompts.analyze_contract
@@ -766,7 +766,7 @@ actions:
   - name: respond_to_letter
     dependencies: [detect_document_type]
     guard:
-      condition: 'document_type == "letter"'
+      condition: 'detect_document_type.document_type == "letter"'
       on_false: "filter"
     intent: "Draft appropriate response to correspondence"
     prompt: $prompts.respond_to_letter
@@ -963,7 +963,7 @@ def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
     """Majority vote across 3 parallel voters."""
     keep_count = sum(
         1 for i in range(1, 4)
-        if data.get(f"vote_quality_{i}", {}).get("verdict") == "keep"
+        if data[f"vote_quality_{i}"]["verdict"] == "keep"
     )
     return {
         "filter": "keep" if keep_count >= 2 else "filter",
@@ -977,7 +977,7 @@ def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
 - name: generate_answer
   dependencies: [aggregate_votes]
   guard:
-    condition: 'filter == "keep"'
+    condition: 'aggregate_votes.filter == "keep"'
     on_false: filter
   prompt: $my_workflow.Generate_Answer
 ```
