@@ -774,6 +774,74 @@ class TestNamespacedContentGuardEvaluation:
         # Should return the same object — not reclassified
         assert result is parse_err
 
+    def test_reclassify_passes_through_data_error_with_none_message(self, evaluator):
+        """DATA error with no error message is not reclassified."""
+        from agent_actions.input.preprocessing.filtering.guard_filter import (
+            ErrorCategory,
+            FilterResult,
+        )
+
+        no_msg = FilterResult(success=False, error=None, error_category=ErrorCategory.DATA)
+        result = evaluator._reclassify_missing_field_error(no_msg, "x == y")
+
+        assert result is no_msg
+
+    def test_compound_condition_missing_and_present_field(self, evaluator):
+        """AND condition with one missing field treats entire condition as not matched."""
+        record = {
+            "content": {"validate": {"pass": True}},
+            "source_guid": "sg-1",
+        }
+        guard = {
+            "clause": "validate.pass == true AND nonexistent.field == true",
+            "scope": "item",
+            "behavior": "skip",
+        }
+
+        result = evaluator.evaluate_early(record, guard)
+
+        # First clause matches, but second field is missing → whole condition not matched
+        assert result.should_execute is False
+        assert result.behavior == "skip"
+
+    def test_should_skip_with_namespaced_content(self, evaluator):
+        """should_skip applies guard behavior on namespaced content with dotted paths."""
+        record = {
+            "content": {"validate": {"pass": True}},
+            "source_guid": "sg-1",
+        }
+        agent_config = {
+            "guard": {
+                "clause": "validate.pass == false",
+                "scope": "item",
+                "behavior": "skip",
+            }
+        }
+
+        result = evaluator.should_skip(agent_config, record)
+
+        # pass is True, condition says == false → not matched → should skip
+        assert result is True
+
+    def test_should_filter_with_namespaced_content(self, evaluator):
+        """should_filter applies guard behavior on namespaced content with dotted paths."""
+        record = {
+            "content": {"classify": {"topic": "science"}},
+            "source_guid": "sg-1",
+        }
+        agent_config = {
+            "guard": {
+                "clause": 'classify.topic == "math"',
+                "scope": "item",
+                "behavior": "filter",
+            }
+        }
+
+        result = evaluator.should_filter(agent_config, record)
+
+        # topic is "science", condition says == "math" → not matched → should filter
+        assert result is True
+
 
 class TestHelpersIntegration:
     """Tests for integration with processing/helpers.py."""

@@ -260,6 +260,7 @@ class GuardEvaluator:
         return FilterResult(
             success=True,
             matched=False,
+            error=filter_result.error,
             execution_time=filter_result.execution_time,
         )
 
