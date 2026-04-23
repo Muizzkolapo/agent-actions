@@ -1,9 +1,9 @@
 """
 Integration tests for the deterministic record matcher.
 
-Exercises the FULL pipeline path with a mock StorageBackend.
-build_field_context_with_history() reads from record namespaces;
-historical loading is used for storage-backend-based lookups.
+Two layers tested:
+1. build_field_context_with_history() — reads from record namespaces
+2. HistoricalNodeDataLoader — lower-level storage-backend lookups (tested independently)
 
 These tests validate mission-critical matching behavior:
 - Ancestor mode (node_id in lineage)
