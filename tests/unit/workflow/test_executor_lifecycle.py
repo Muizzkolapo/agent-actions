@@ -554,14 +554,12 @@ class TestHandleAgentSkip:
         status_mgr_call = mock_deps.state_manager.update_status.call_args
         assert status_mgr_call[0][1] == result.status == ActionStatus.COMPLETED
 
-    def test_no_disposition_written(self, executor, mock_deps):
-        """WHERE-clause skip writes no disposition — record is unchanged."""
+    def test_skip_does_not_use_output_manager(self, executor, mock_deps):
+        """WHERE-clause skip does not interact with output manager."""
         with patch("agent_actions.workflow.executor.fire_event"):
             executor._handle_action_skip("agent_a", 0, {}, datetime.now())
 
-        mock_deps.output_manager.storage_backend = MagicMock()
-        storage = mock_deps.action_runner.storage_backend
-        storage.set_disposition.assert_not_called()
+        assert mock_deps.output_manager.method_calls == []
 
     def test_total_agents_from_execution_order(self, executor, mock_deps):
         """total_agents should come from agent_runner.execution_order length."""

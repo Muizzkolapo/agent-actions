@@ -11,7 +11,7 @@ import pytest
 
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.workflow.managers.output import (
-    AgentOutputManager,
+    ActionOutputManager,
     OutputManagerConfig,
 )
 
@@ -26,7 +26,7 @@ def mock_storage_backend():
 
 @pytest.fixture
 def make_manager(tmp_path, mock_storage_backend):
-    """Factory that builds an AgentOutputManager with sensible defaults."""
+    """Factory that builds an ActionOutputManager with sensible defaults."""
 
     def _make(
         execution_order=None,
@@ -42,7 +42,7 @@ def make_manager(tmp_path, mock_storage_backend):
             version_correlator=MagicMock(),
             storage_backend=storage_backend or mock_storage_backend,
         )
-        return AgentOutputManager(config)
+        return ActionOutputManager(config)
 
     return _make
 

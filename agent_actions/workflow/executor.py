@@ -261,8 +261,6 @@ class ActionExecutor:
         there is no data to copy forward and no disposition to write —
         the action simply completes with status COMPLETED.
         """
-        # No disposition written: the record is unchanged, downstream
-        # proceeds normally reading existing namespaces.
         self.deps.state_manager.update_status(
             action_name, ActionStatus.COMPLETED, **self._limit_metadata(action_config)
         )
