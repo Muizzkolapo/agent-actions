@@ -9,10 +9,9 @@ if TYPE_CHECKING:
 
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
-from agent_actions.prompt.context.scope_namespace import (
-    _extract_content_data,
-)
+from agent_actions.prompt.context.scope_namespace import _extract_content_data
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
+from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
@@ -93,15 +92,21 @@ def apply_observe_for_file_mode(
     if not resolved:
         return data
 
-    # Track which namespaces use wildcards (expanded per-record below).
-    wildcard_ns: set[str] = {ns for ns, field, _ in resolved if field == "*"}
+    # Single pass over resolved refs: collect wildcards and detect source refs.
+    wildcard_ns: set[str] = set()
+    has_source_refs = False
+    for ns, field, _ in resolved:
+        if field == "*":
+            wildcard_ns.add(ns)
+        if ns == "source":
+            has_source_refs = True
     # Qualify wildcard-expanded keys with namespace when multiple
     # wildcards exist (prevents bare-key collisions across namespaces).
     qualify_wildcards = len(wildcard_ns) > 1
 
     # Build source index for "source" namespace (the only cross-record ref).
-    has_source_refs = any(ns == "source" for ns, _, _ in resolved)
     source_index: dict[str | None, dict] = {}
+    fallback_source = source_data[0] if source_data else None
     if has_source_refs and source_data:
         for src in source_data:
             sguid = src.get("source_guid") if isinstance(src, dict) else None
@@ -109,33 +114,32 @@ def apply_observe_for_file_mode(
                 source_index[sguid] = src
 
     # Per-record loop: extract observed fields from namespaced content.
+    source_content_cache: dict[str | None, dict] = {}
     filtered: list[dict] = []
     for item in data:
         if not isinstance(item, dict):
             filtered.append(item)  # type: ignore[unreachable]
             continue
 
-        # Extract namespaced content from record.
-        content_val = item.get("content")
-        content = content_val if isinstance(content_val, dict) else {}
+        content = get_existing_content(item)
 
         # Shallow-copy to avoid mutating caller's data.
         enriched = dict(item)
         enriched_content = dict(content)
 
-        # Resolve source record once per item (not per ref).
-        source_content: dict = {}
+        # Resolve source content once per item, cached by source_guid.
+        source_ns_data: dict = {}
         if has_source_refs:
             sguid = item.get("source_guid")
-            matched_source = source_index.get(sguid, source_data[0] if source_data else None)
-            source_content = _extract_content_data(matched_source) if matched_source else {}
+            if sguid not in source_content_cache:
+                matched = source_index.get(sguid, fallback_source)
+                source_content_cache[sguid] = _extract_content_data(matched) if matched else {}
+            source_ns_data = source_content_cache[sguid]
 
         for ns, field, output_key in resolved:
-            # Resolve namespace data.
             if ns == "source":
-                ns_data = source_content
+                ns_data = source_ns_data
             else:
-                # Action namespace: directly on the record's namespaced content.
                 ns_data = content.get(ns, {})
                 if not isinstance(ns_data, dict):
                     ns_data = {}

@@ -66,8 +66,8 @@ def build_field_context_with_history(
         current_item: Current record being processed (has lineage, content)
         file_path: Path to current file
         context_scope: Controls which fields to load (progressive data exposure)
-        output_directory: Optional output directory (legacy, unused)
-        storage_backend: Optional storage backend for loading historical data from SQLite/TinyDB
+        output_directory: Unused (legacy parameter retained for caller compatibility)
+        storage_backend: Unused (legacy parameter retained for caller compatibility)
 
     Returns:
         Dict with namespaces: source, {dep_names}, version, workflow
