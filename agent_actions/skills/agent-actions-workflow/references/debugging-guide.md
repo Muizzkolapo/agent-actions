@@ -11,6 +11,8 @@ Comprehensive troubleshooting for agent-actions workflows.
 - [Quick Diagnostics](#quick-diagnostics)
 - [Common Error Messages](#common-error-messages)
 - [Filtered Pipeline Debugging](#filtered-pipeline-debugging)
+- [Tool Produces Empty Output](#tool-produces-empty-output)
+- [Retry Exhaustion Mislabeling](#retry-exhaustion-mislabeling)
 - [Reprompt vs Guard Decision](#reprompt-vs-guard-decision)
 - [Granularity Visualization](#granularity-visualization)
 
@@ -89,7 +91,7 @@ When debugging bad LLM outputs, inspect the compiled prompt and context the LLM 
 # Query prompt traces from the SQLite backend
 python3 -c "
 import sqlite3, json
-conn = sqlite3.connect('agent_workflow/<workflow>/agent_io/.agent_actions.db')
+conn = sqlite3.connect('agent_workflow/<workflow>/agent_io/store/<workflow>.db')
 for row in conn.execute(
     'SELECT record_id, compiled_prompt, llm_context FROM prompt_trace WHERE action_name=?',
     ('<action_name>',)
@@ -102,6 +104,8 @@ for row in conn.execute(
 ```
 
 Prompt traces capture the exact prompt sent to the LLM, the context data, and the response — per record, per attempt.
+
+> **Tool actions have no prompt traces.** Prompt traces only exist for LLM actions. If a tool action produces empty or wrong output, do not look at prompt_trace — it will either be empty or show data from a different (LLM) action. Instead, debug the tool function directly (see [Tool Produces Empty Output](#tool-produces-empty-output) below).
 
 ### 6. Schema Field Drift
 
@@ -222,6 +226,8 @@ with open(path, 'w') as f: json.dump(data, f, indent=4)
 - Missing status reset → action skipped as "completed"
 - Missing target folder removal → stale batch files override `run_mode` config
 
+> **"Guard-skipped" on actions with no guard?** If you see "All records guard-skipped" on an action that has no guard configured, the cause is stale disposition records from a previous run. Clearing `record_disposition` for the action (as shown above) resolves this. Running with `--fresh` also clears stale dispositions.
+
 ### enable_caching flag
 
 `enable_caching: true` is the default. Setting `enable_caching: false` on an action disables result caching — the action re-runs every time.
@@ -326,6 +332,53 @@ generate_explanation:  0 records  ← All filtered!
 - Fix upstream prompts to produce passing values
 - Lower threshold: `>= 7` instead of `>= 8`
 - Allow multiple statuses: `'status == "PASS" or status == "NEEDS_REVIEW"'`
+
+## Tool Produces Empty Output
+
+When a tool action produces 0 records despite receiving input:
+
+### 1. Check the tool function receives data
+
+Add a temporary print to your tool to see what it actually receives:
+
+```python
+@udf_tool()
+def my_tool(data: dict) -> dict:
+    print(f"DEBUG tool input keys: {list(data.keys())}")
+    # ... rest of tool
+```
+
+Run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a <workflow>` and check the output.
+
+### 2. Check field namespacing
+
+Upstream data arrives **namespaced by action name**, not flat. This is the most common cause of empty tool output:
+
+```python
+# WRONG — field is not at top level
+value = data.get("consensus_score")  # Returns None
+
+# CORRECT — field is nested under the producing action's name
+value = data.get("aggregate_scores", {}).get("consensus_score")
+```
+
+### 3. Check observe/context_scope configuration
+
+If the tool expects data from upstream actions, verify `context_scope.observe` includes those actions. Missing observe entries mean the tool receives empty context.
+
+### 4. Check version merge delivery (FILE mode)
+
+For FILE granularity actions consuming versioned data, ensure the content wrapper delivers data correctly. If the upstream action uses FILE mode, the merge step must unwrap version namespaces before the tool sees the data.
+
+## Retry Exhaustion Mislabeling
+
+When retry is configured alongside reprompt, exhausted retries can appear in logs as "Guard skipped" rather than "Retry exhausted". If you see records labeled "guard-skipped" that you expected to be retried:
+
+1. Check whether `retry` and `reprompt` are both configured on the action
+2. Look at the record's disposition history — retry exhaustion inside a reprompt cycle can produce misleading status labels
+3. The record was likely retried the configured number of times but the final status was recorded under the wrong category
+
+This is a known interaction between the retry and reprompt subsystems.
 
 ## Known Tool Limitations
 
