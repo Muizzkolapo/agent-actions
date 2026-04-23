@@ -64,9 +64,13 @@ class InlineSchemaValidator(BaseActionEntryValidator):
                 continue
 
             if not isinstance(field_type, str):
+                if isinstance(field_type, dict):
+                    # Dict values are valid nested JSON Schema property
+                    # definitions (e.g. {type: array, items: {type: string}}).
+                    continue
                 errors.append(
                     f"{desc} 'schema' value for field '{field_name}' must be "
-                    f"a string type, found {type(field_type).__name__}."
+                    f"a string or dict type, found {type(field_type).__name__}."
                 )
                 continue
 

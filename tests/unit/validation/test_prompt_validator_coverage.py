@@ -132,7 +132,9 @@ class TestCheckPromptIdDuplicates:
         all_seen: set[str] = {"id1"}
         dups, cross = validator._check_prompt_id_duplicates("file2.md", ["id1"], all_seen)
         assert cross == ["id1"]
-        assert validator.has_errors()
+        # Cross-file duplicates are warnings, not errors
+        assert not validator.has_errors()
+        assert any("duplicate" in str(w).lower() for w in validator.get_warnings())
 
 
 # ---------------------------------------------------------------------------
@@ -286,8 +288,9 @@ class TestValidateMethod:
         (tmp_path / "a.md").write_text("# Prompt A\n{prompt shared}\nContent A\n{end_prompt}")
         (tmp_path / "b.md").write_text("# Prompt B\n{prompt shared}\nContent B\n{end_prompt}")
         result = validator.validate(tmp_path)
-        assert result is False
-        assert any("duplicate" in e.lower() for e in validator.get_errors())
+        # Cross-file duplicates are warnings (not errors), so validation passes
+        assert result is True
+        assert any("duplicate" in w.lower() for w in validator.get_warnings())
 
 
 # ---------------------------------------------------------------------------
