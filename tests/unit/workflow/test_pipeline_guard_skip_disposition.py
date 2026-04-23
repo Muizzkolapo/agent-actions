@@ -101,6 +101,19 @@ class TestGuardSkipDisposition:
 
         config.storage_backend.set_disposition.assert_not_called()
 
+    def test_no_disposition_when_all_unprocessed_empty_data(self, pipeline_and_mocks):
+        """Bug #10: UNPROCESSED with empty data → empty output, but must NOT trigger SKIPPED.
+
+        Records were unprocessed (not filtered). The disposition condition must
+        check stats.unprocessed to avoid falsely writing SKIPPED.
+        """
+        pipeline, config, fp, base, out = pipeline_and_mocks
+        stats = CollectionStats(unprocessed=5)
+
+        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
+
+        config.storage_backend.set_disposition.assert_not_called()
+
     def test_no_disposition_when_mixed_skip_filter_with_output(self, pipeline_and_mocks):
         """Mixed skip+filter: skipped records produce output, so no cascade-block."""
         pipeline, config, fp, base, out = pipeline_and_mocks
