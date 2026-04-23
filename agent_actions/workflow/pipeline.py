@@ -583,19 +583,11 @@ class ProcessingPipeline:
             storage_backend=self.config.storage_backend,
         )
 
-        # Signal node-level SKIP only when output is truly empty (all-filtered).
-        # Guard-skipped records ARE in `output` (result_collector extends output
-        # for SKIPPED status), so downstream can consume them — do not cascade-
-        # block when passthrough data exists.
-        if (
-            data
-            and stats.success == 0
-            and stats.failed == 0
-            and stats.exhausted == 0
-            and stats.deferred == 0
-            and stats.unprocessed == 0
-            and not output
-        ):
+        # Signal node-level SKIP only when output is truly empty and the
+        # only outcomes were guard-skip / guard-filter.  Guard-skipped
+        # records with passthrough data ARE in `output`, so `not output`
+        # prevents cascade-blocking when passthrough data exists.
+        if data and stats.only_guard_outcomes and not output:
             storage_backend = self.config.storage_backend
             if storage_backend is not None:
                 try:

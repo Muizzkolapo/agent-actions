@@ -671,19 +671,12 @@ def _process_online_mode_with_record_processor(
         storage_backend=ctx.storage_backend,
     )
 
-    # Signal node-level SKIP only when output is truly empty (all-filtered).
-    # Guard-skipped records ARE in `processed_items` (result_collector extends
-    # output for SKIPPED status), so downstream can consume them — do not
-    # cascade-block when passthrough data exists.
-    if (
-        data_chunk
-        and stats.success == 0
-        and stats.failed == 0
-        and stats.exhausted == 0
-        and stats.deferred == 0
-        and stats.unprocessed == 0
-        and not processed_items
-    ):
+    # Signal node-level SKIP only when output is truly empty and the
+    # only outcomes were guard-skip / guard-filter.  Guard-skipped
+    # records with passthrough data ARE in `processed_items`, so
+    # `not processed_items` prevents cascade-blocking when passthrough
+    # data exists.
+    if data_chunk and stats.only_guard_outcomes and not processed_items:
         if ctx.storage_backend is not None:
             try:
                 ctx.storage_backend.set_disposition(

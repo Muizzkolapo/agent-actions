@@ -3,7 +3,7 @@
 import collections
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.errors import AgentActionsError
@@ -51,6 +51,17 @@ class CollectionStats:
     exhausted: int = 0
     deferred: int = 0
     unprocessed: int = 0
+
+    @property
+    def only_guard_outcomes(self) -> bool:
+        """True when every collected record was guard-skipped or guard-filtered.
+
+        Uses ``dataclasses.fields()`` so that adding a new status field
+        automatically makes this return False until the new field is
+        accounted for — no manual update needed.
+        """
+        total = sum(getattr(self, f.name) for f in fields(self))
+        return (self.skipped + self.filtered) == total
 
 
 def _safe_set_disposition(
