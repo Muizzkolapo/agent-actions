@@ -337,7 +337,7 @@ def chunk_document(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     chunks = []
     for record in data:
         source_guid = record.get("source_guid")
-        text = record.get("content", record).get("text", "")
+        text = record["content"].get("text", "")
         for i, part in enumerate(split_text(text)):
             chunks.append({
                 "source_guid": source_guid,  # Required for lineage
