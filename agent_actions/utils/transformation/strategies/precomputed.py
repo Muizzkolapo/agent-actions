@@ -76,5 +76,5 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
                 merged.append(merged_item)
             else:
                 merged.append(item)
-        action_name = agent_config.get("agent_type", "unknown")
+        action_name = agent_config["agent_type"]
         return DataTransformer.transform_structure([{source_guid: merged}], action_name)

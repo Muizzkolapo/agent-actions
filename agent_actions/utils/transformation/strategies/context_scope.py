@@ -58,7 +58,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
                         context_for_passthrough, content_dict, fields_to_merge
                     )
                 )
-        action_name = agent_config.get("agent_type", "unknown")
+        action_name = agent_config["agent_type"]
         return DataTransformer.transform_structure([{source_guid: updated}], action_name)
 
     @staticmethod
@@ -133,7 +133,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
                         context_for_passthrough, item_dict, fields_to_merge
                     )
                 )
-        action_name = agent_config.get("agent_type", "unknown")
+        action_name = agent_config["agent_type"]
         return DataTransformer.transform_structure([{source_guid: updated}], action_name)
 
 
@@ -189,5 +189,5 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
         passthrough_fields: dict | None = None,
     ) -> list:
         """Structure data without passthrough."""
-        action_name = agent_config.get("agent_type", "unknown")
+        action_name = agent_config["agent_type"]
         return DataTransformer.transform_structure([{source_guid: data}], action_name)

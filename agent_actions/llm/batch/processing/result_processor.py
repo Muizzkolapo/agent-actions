@@ -231,9 +231,9 @@ class BatchResultProcessor:
                     custom_id,
                 )
 
-        action_name = (
-            ctx.agent_config.get("action_name", "unknown") if ctx.agent_config else "unknown"
-        )
+        if not ctx.agent_config or "action_name" not in ctx.agent_config:
+            raise ValueError("agent_config must contain 'action_name' for content namespacing")
+        action_name = ctx.agent_config["action_name"]
         structured_items = DataTransformer.transform_structure(
             [{original_source_guid: generated_list}], action_name
         )
