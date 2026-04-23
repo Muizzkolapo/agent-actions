@@ -82,6 +82,7 @@ If a tool action produces zero/default values:
 - Fields arrive **namespaced by action name**: `content["aggregate_scores"]["consensus_score"]`
 - NOT flat: `content["consensus_score"]` → returns `None`
 - Check the tool code for flat `content.get("field")` patterns — these should be `content.get("action_name", {}).get("field")`
+- For a full debugging walkthrough, see [Tool Produces Empty Output](#tool-produces-empty-output)
 
 ### 5a. Prompt Trace Inspection
 

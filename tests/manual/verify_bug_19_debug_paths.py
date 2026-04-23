@@ -41,7 +41,6 @@ print("=" * 60)
 print("Bug #19: Verify debugging guide database paths are correct")
 print("=" * 60)
 
-# --- Check 1: What path does the storage layer actually use? ---
 print("\n1. Actual database path in storage layer")
 storage_init = ROOT / "agent_actions" / "storage" / "__init__.py"
 source = storage_init.read_text()
@@ -52,7 +51,6 @@ check(
     f"Found: {match.group(0) if match else 'NOT FOUND'}",
 )
 
-# --- Check 2: debugging-guide.md uses correct path ---
 print("\n2. Debugging guide uses correct database path")
 guide_text = DEBUGGING_GUIDE.read_text()
 check(
@@ -64,7 +62,6 @@ check(
     "agent_io/store/<workflow>.db" in guide_text,
 )
 
-# --- Check 3: troubleshooting.md uses correct path ---
 print("\n3. Troubleshooting guide uses correct database path")
 troubleshooting_text = TROUBLESHOOTING.read_text()
 check(
@@ -76,7 +73,6 @@ check(
     "agent_io/store/" in troubleshooting_text,
 )
 
-# --- Check 4: Prompt trace caveats present ---
 print("\n4. Prompt trace caveats for tool actions")
 check(
     "debugging-guide.md has tool action prompt trace caveat",
