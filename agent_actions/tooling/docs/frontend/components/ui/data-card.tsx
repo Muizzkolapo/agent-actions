@@ -456,7 +456,7 @@ export interface DataCardProps {
   actionInfo?: ActionInfo
 }
 
-function getDisplayFields(record: Record<string, unknown>, actionName?: string): Record<string, unknown> {
+export function getDisplayFields(record: Record<string, unknown>, actionName?: string): Record<string, unknown> {
   const contentVal = record.content
   if (contentVal && typeof contentVal === "object" && !Array.isArray(contentVal)) {
     const content = contentVal as Record<string, unknown>
