@@ -14,18 +14,15 @@ class ContextService:
     @staticmethod
     def prepare_context_data(
         context_data_str: str | dict,
-        original_context: str | dict | None,
         is_tool: bool,
     ) -> str | dict:
         """
         Prepare context data for LLM/tool invocation.
 
-        CRITICAL: Tools and LLMs now share the same llm_context to ensure
-        consistent behavior across vendors.
+        Tools receive namespaced data directly. LLMs receive JSON strings.
 
         Args:
-            context_data_str: Context data for LLM (may have context_scope.drop applied)
-            original_context: Original untransformed context for tools (optional)
+            context_data_str: Context data (may have context_scope.drop applied)
             is_tool: Whether this is a tool vendor invocation
 
         Returns:
@@ -39,27 +36,3 @@ class ContextService:
         if isinstance(context_data_str, str):
             return context_data_str
         return json.dumps(ensure_json_safe(context_data_str), ensure_ascii=False)
-
-    @staticmethod
-    def prepare_tool_context(
-        context_data_str: str | dict, original_context: str | dict | None
-    ) -> str:
-        """
-        Prepare tool context as JSON string for tool injection.
-
-        CRITICAL: Tools and LLMs now share the same llm_context.
-
-        Args:
-            context_data_str: Transformed context data (with context_scope.drop applied)
-            original_context: Original untransformed context for tools (optional)
-
-        Returns:
-            JSON string of tool context
-        """
-        result = ContextService.prepare_context_data(
-            context_data_str, original_context, is_tool=False
-        )
-        # Ensure string return type for backward compatibility
-        if isinstance(result, str):
-            return result
-        return json.dumps(result, ensure_ascii=False)

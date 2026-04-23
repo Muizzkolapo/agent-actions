@@ -27,7 +27,6 @@ def create_dynamic_agent(
     tool_args: dict[str, Any] | None = None,
     source_content: Any | None = None,
     additional_context: dict | None = None,
-    original_context: str | dict | None = None,
 ) -> list[Any]:
     """Build and execute a prompt against the selected vendor.
 
@@ -42,8 +41,6 @@ def create_dynamic_agent(
         source_content: Source content for tool handler (optional).
         additional_context: Additional context from context_scope.observe (optional).
             Formatted and appended to prompt before LLM invocation.
-        original_context: Original untransformed context for guards/debug (optional).
-            Tools and LLMs use the same transformed context_data_str.
 
     Returns:
         List of response items from the LLM.
@@ -75,7 +72,7 @@ def create_dynamic_agent(
     is_tool = model_vendor == "tool"
 
     # Prepare context data (critical: preserve context separation)
-    context_data = ContextService.prepare_context_data(context_data_str, original_context, is_tool)
+    context_data = ContextService.prepare_context_data(context_data_str, is_tool)
 
     # Note: dispatch_task() injection now happens in PromptPreparationService
     captured_results = {}

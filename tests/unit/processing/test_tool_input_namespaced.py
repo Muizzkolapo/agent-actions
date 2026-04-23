@@ -23,7 +23,7 @@ class TestContextServiceNamespaced:
     def test_tool_receives_namespaced_dict(self):
         """Tool path returns the namespaced dict unchanged — no flatten."""
         namespaced = {"extract": {"text": "hello"}, "classify": {"topic": "science"}}
-        result = ContextService.prepare_context_data(namespaced, None, is_tool=True)
+        result = ContextService.prepare_context_data(namespaced, is_tool=True)
         assert result == namespaced
         assert isinstance(result["extract"], dict)
         assert result["extract"]["text"] == "hello"
@@ -34,7 +34,7 @@ class TestContextServiceNamespaced:
             "extract": {"text": "original"},
             "rewrite": {"text": "rewritten"},
         }
-        result = ContextService.prepare_context_data(namespaced, None, is_tool=True)
+        result = ContextService.prepare_context_data(namespaced, is_tool=True)
         assert result["extract"]["text"] == "original"
         assert result["rewrite"]["text"] == "rewritten"
 
@@ -45,7 +45,7 @@ class TestContextServiceNamespaced:
             "score_2": {"score": 6},
             "score_3": {"score": 9},
         }
-        result = ContextService.prepare_context_data(namespaced, None, is_tool=True)
+        result = ContextService.prepare_context_data(namespaced, is_tool=True)
         assert len(result) == 3
         assert result["score_1"]["score"] == 8
         assert result["score_2"]["score"] == 6
@@ -53,18 +53,18 @@ class TestContextServiceNamespaced:
 
     def test_tool_string_context_passthrough(self):
         """String context passes through unchanged for tools."""
-        result = ContextService.prepare_context_data("raw string", None, is_tool=True)
+        result = ContextService.prepare_context_data("raw string", is_tool=True)
         assert result == "raw string"
 
     def test_tool_empty_dict(self):
         """Empty dict passes through unchanged."""
-        result = ContextService.prepare_context_data({}, None, is_tool=True)
+        result = ContextService.prepare_context_data({}, is_tool=True)
         assert result == {}
 
     def test_llm_still_json_serializes(self):
         """LLM path still JSON-serializes dicts (unchanged behavior)."""
         namespaced = {"extract": {"text": "hello"}}
-        result = ContextService.prepare_context_data(namespaced, None, is_tool=False)
+        result = ContextService.prepare_context_data(namespaced, is_tool=False)
         assert isinstance(result, str)
         assert '"extract"' in result
 
@@ -96,8 +96,6 @@ class TestRunDynamicAgentNamespaced:
         call_args = mock_builder.call_args
         # context_data_str (positional arg 2) should be the namespaced dict
         assert call_args[0][2] == namespaced
-        # original_context should also be the same namespaced dict
-        assert call_args[1]["original_context"] == namespaced
 
     @patch("agent_actions.llm.realtime.builder.create_dynamic_agent")
     def test_content_key_not_unwrapped(self, mock_builder):
