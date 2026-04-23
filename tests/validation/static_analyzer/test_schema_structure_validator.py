@@ -64,11 +64,6 @@ class TestUnifiedFormat:
                 "duplicate",
                 id="duplicate_field_ids",
             ),
-            pytest.param(
-                {"name": "test_schema", "fields": [{"id": "items", "type": "array"}]},
-                "items",
-                id="array_without_items",
-            ),
         ],
     )
     def test_unified_validation_errors(self, validator, schema, error_pattern):
@@ -86,15 +81,23 @@ class TestUnifiedFormat:
         errors = validator.validate_schema(schema, "test_action")
         assert len(errors) == 0
 
-    def test_array_object_items_without_properties(self, validator):
-        """Test array with object items but no properties is rejected."""
+    def test_array_without_items_accepted(self, validator):
+        """Array without items is valid JSON Schema (array of anything)."""
+        schema = {
+            "name": "test_schema",
+            "fields": [{"id": "items", "type": "array"}],
+        }
+        errors = validator.validate_schema(schema, "test_action")
+        assert len(errors) == 0
+
+    def test_array_object_items_without_properties_accepted(self, validator):
+        """Object items without properties is valid JSON Schema (any object)."""
         schema = {
             "name": "test_schema",
             "fields": [{"id": "items", "type": "array", "items": {"type": "object"}}],
         }
         errors = validator.validate_schema(schema, "test_action")
-        assert len(errors) == 1
-        assert "properties" in errors[0].message.lower()
+        assert len(errors) == 0
 
 
 class TestJsonSchemaFormat:
@@ -117,16 +120,6 @@ class TestJsonSchemaFormat:
                 {"type": "object", "properties": {}},
                 "empty",
                 id="empty_properties",
-            ),
-            pytest.param(
-                {"type": "array"},
-                "items",
-                id="array_missing_items",
-            ),
-            pytest.param(
-                {"type": "array", "items": "not a dict"},
-                "items",
-                id="array_invalid_items",
             ),
             pytest.param(
                 {
@@ -164,6 +157,18 @@ class TestJsonSchemaFormat:
         errors = validator.validate_schema(schema, "test_action")
         assert len(errors) == 0
 
+    def test_array_without_items_accepted(self, validator):
+        """Array without items is valid JSON Schema (array of anything)."""
+        schema = {"type": "array"}
+        errors = validator.validate_schema(schema, "test_action")
+        assert len(errors) == 0
+
+    def test_array_non_dict_items_accepted(self, validator):
+        """Array with non-dict items is accepted (no structural validation)."""
+        schema = {"type": "array", "items": "not a dict"}
+        errors = validator.validate_schema(schema, "test_action")
+        assert len(errors) == 0
+
 
 class TestInlineShorthandFormat:
     """Tests for inline shorthand format validation."""
@@ -179,7 +184,7 @@ class TestInlineShorthandFormat:
         [
             pytest.param({"name": "invalid_type"}, "invalid", id="invalid_type"),
             pytest.param({"items": "array[invalid]"}, "invalid", id="invalid_array_item_type"),
-            pytest.param({"name": 123}, "string", id="non_string_type_value"),
+            pytest.param({"name": 123}, "string or dict", id="non_string_type_value"),
         ],
     )
     def test_inline_validation_errors(self, validator, schema, error_pattern):

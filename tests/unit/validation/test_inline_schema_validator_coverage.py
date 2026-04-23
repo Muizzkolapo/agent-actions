@@ -190,7 +190,13 @@ class TestInvalidInlineSchemaTypes:
         ctx = _make_context({"schema": {"field1": 123}})
         result = validator.validate(ctx)
         assert len(result.errors) == 1
-        assert "must be a string type" in result.errors[0]
+        assert "must be a string or dict type" in result.errors[0]
+
+    def test_dict_field_type_value_accepted(self, validator):
+        """Dict values in inline schemas are valid (nested JSON Schema)."""
+        ctx = _make_context({"schema": {"tags": {"type": "array", "items": {"type": "string"}}}})
+        result = validator.validate(ctx)
+        assert len(result.errors) == 0
 
     def test_mixed_valid_and_invalid(self, validator):
         ctx = _make_context(

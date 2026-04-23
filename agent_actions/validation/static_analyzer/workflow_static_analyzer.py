@@ -36,7 +36,7 @@ from .schema_extractor import SchemaExtractor
 
 logger = logging.getLogger(__name__)
 from .schema_structure_validator import SchemaStructureValidator
-from .type_checker import StaticTypeChecker
+from .type_checker import StaticTypeChecker, _camel_to_snake
 
 
 class WorkflowStaticAnalyzer:
@@ -650,6 +650,13 @@ class WorkflowStaticAnalyzer:
                         continue
 
                     available_fields = output_schema.available_fields
+                    if field_name not in available_fields:
+                        # Try camelCase → snake_case normalization (HITL
+                        # runtime converts field names to snake_case).
+                        snake_name = _camel_to_snake(field_name)
+                        if snake_name != field_name and snake_name in available_fields:
+                            continue
+
                     if field_name not in available_fields:
                         suggestions = self._find_field_in_other_actions(
                             field_name, exclude={dep_name, action_name}
