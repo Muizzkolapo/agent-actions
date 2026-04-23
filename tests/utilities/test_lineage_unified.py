@@ -288,8 +288,9 @@ class TestLineageSourcesPropagation:
 
         result = LineageBuilder.add_lineage_tracking_from_sources(obj, source_items, "merge_node")
 
-        # Uses the computed lineage_sources from source items, not parent's
-        assert result["lineage_sources"] == ["branch_a_1", "branch_b_2"]
+        # Uses the computed lineage_sources from source items, not parent's.
+        # lineage_sources includes every node_id from every source's lineage chain.
+        assert result["lineage_sources"] == ["root_0", "branch_a_1", "root_0", "branch_b_2"]
 
 
 class TestUnifiedLineageObjectImmutability:
