@@ -86,7 +86,10 @@ class PromptValidator(BaseValidator):
         ]
         if cross_file:
             id_list = ", ".join(cross_file)
-            self.add_error(
+            # Cross-file duplicates are a warning, not an error.  The runtime
+            # loads prompts per-workflow (one .md file per workflow), so IDs
+            # only need to be unique within a single file.
+            self.add_warning(
                 f"Prompt IDs in file '{file_name}' duplicate IDs from other files: {id_list}."
             )
         return (duplicates, cross_file)
@@ -117,7 +120,9 @@ class PromptValidator(BaseValidator):
             duplicates, cross_file = self._check_prompt_id_duplicates(
                 prompt_file.name, prompt_ids_in_file, all_prompt_ids_seen
             )
-            if not duplicates and not cross_file:
+            if not duplicates:
+                # Cross-file duplicates are now warnings (not errors), so
+                # they should not prevent tracking or counting prompts.
                 all_prompt_ids_seen.update(prompt_ids_in_file)
                 file_prompts_count = len(prompt_ids_in_file)
             self._run_prompt_format_check(content, prompt_file.name)
@@ -131,7 +136,7 @@ class PromptValidator(BaseValidator):
                 exc_info=True,
             )
             return 0
-        has_errors = bool(duplicates or cross_file)
+        has_errors = bool(duplicates)
         return 0 if has_errors else file_prompts_count
 
     def _validate_prompt_format_logic(self, content: str, file_name: str) -> str | None:

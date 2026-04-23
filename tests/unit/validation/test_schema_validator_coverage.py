@@ -140,11 +140,12 @@ class TestCheckCommonSchemaIssuesStatic:
         )
         assert any("required properties not defined" in i for i in issues)
 
-    def test_array_without_items(self, validator):
+    def test_array_without_items_accepted(self, validator):
+        """Array without items is valid JSON Schema — no longer an issue."""
         issues = SchemaValidator._check_common_schema_issues_static(
             {"type": "array"}, "test_schema"
         )
-        assert any("'items' is not defined" in i for i in issues)
+        assert not any("items" in i.lower() for i in issues)
 
     def test_unused_definitions(self, validator):
         issues = SchemaValidator._check_common_schema_issues_static(

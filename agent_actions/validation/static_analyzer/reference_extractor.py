@@ -22,9 +22,12 @@ class ReferenceExtractor:
     DOT_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
     ACTION_DOT_PATTERN = re.compile(r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
 
-    # Jinja2 builtins to skip
+    # Jinja2 builtins to skip — includes ``loop`` (the implicit loop variable
+    # available inside ``{% for %}`` blocks) so that ``{{ loop.index }}`` is
+    # not misinterpreted as a reference to an action named "loop".
     JINJA_BUILTINS = frozenset(
         {
+            "loop",
             "range",
             "dict",
             "lipsum",
