@@ -82,17 +82,18 @@ With passthrough, UDF returns `dict` (not list) with only new fields.
 
 ## UDF Patterns
 
-### 6. Content wrapper
+### 6. Flat field access (RECORD mode)
 
-**Status:** Working — framework provides data in `content` key.
+**Status:** Working — framework flattens observed fields for tools.
 
-Always use the safety wrapper. In record mode, data is usually already unwrapped, but the wrapper handles both cases:
+RECORD mode tools receive flat fields. Access directly with `data.get("field")`. When two upstream actions share a field name, the framework qualifies them as `data.get("action.field")`:
 
 ```python
 def my_udf(data):
-    content = data.get('content', data)  # Always use this
-    return [{'result': content['my_field']}]
+    return [{'result': data.get('my_field', '')}]
 ```
+
+For FILE mode, read from `record["content"]["field"]`.
 
 ### 7. Return type: list vs dict
 
@@ -101,18 +102,19 @@ def my_udf(data):
 - Without passthrough: return `list[dict]`
 - With passthrough in YAML: return `dict` with only new fields
 
-### 8. Namespaced field access
+### 8. Collision-qualified field access
 
-**Status:** Working — fields are namespaced by action name, by design.
+**Status:** Working — unique fields are bare, collisions are dot-qualified.
 
-UDFs receive upstream fields nested under the action name that produced them. Flat access (`content.get("field")`) returns None.
+When observing from multiple upstream actions, unique field names are accessed directly. Fields that appear in multiple namespaces get dot-qualified:
 
 ```python
-# CORRECT — namespaced access
-score = content.get("aggregate_scores", {}).get("consensus_score", 0)
+# Single upstream — bare access
+score = data.get("consensus_score", 0)
 
-# WRONG — flat access returns None
-score = content.get("consensus_score", 0)
+# Multiple upstreams sharing "score" — qualified access
+score_a = data.get("action_a.score", 0)
+score_b = data.get("action_b.score", 0)
 ```
 
 ### 9. UDF defaults must match schema types
@@ -265,7 +267,7 @@ observe: [seed.rubric]              # Correct
 # NOT: seed_data.rubric             # Wrong — silently resolves to empty
 ```
 
-In prompts: `{{ seed.rubric.score_range }}`. In UDFs: `content.get("seed", {}).get("rubric", {})`.
+In prompts: `{{ seed.rubric.score_range }}`. In UDFs (RECORD mode): `data.get("rubric", {})` — seed namespace is flattened like any other.
 
 ### 23. Redundant dependencies
 

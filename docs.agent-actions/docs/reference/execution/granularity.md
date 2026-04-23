@@ -95,7 +95,7 @@ def deduplicate_facts(records, **kwargs):
     seen = set()
     unique = []
     for record in records:
-        content = record.get("content", record)
+        content = record["content"]
         key = content.get("fact_text")
         if key not in seen:
             seen.add(key)

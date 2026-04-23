@@ -29,8 +29,8 @@ from agent_actions import udf_tool
 @udf_tool()
 def my_function(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Process data and return result."""
-    content = data.get("content", data)
-    return [{"result": f"Processed: {content['text']}"}]
+    # RECORD mode: fields arrive flat — access directly
+    return [{"result": f"Processed: {data.get('text', '')}"}]
 ```
 
 | Parameter | Type | Required | Description |
@@ -66,34 +66,39 @@ Function names must be unique across all tool directories. Move shared code to `
 
 ## Record Mode (Default)
 
-UDF receives one record at a time. The framework unwraps the `content` wrapper before calling your function.
+UDF receives one record at a time. The framework resolves observe references and delivers **flat fields** — no namespace wrappers.
 
 ```python
 @udf_tool()
 def my_function(data: dict[str, Any]) -> list[dict[str, Any]]:
-    content = data.get("content", data)  # Safety net — usually already unwrapped
-    result = content.copy()
-    result["computed_field"] = some_calculation(content)
-    return [result]
+    # Fields arrive flat — access directly
+    claims = data.get("claims", [])
+    confidence = data.get("confidence", 0)
+    return [{"computed_field": some_calculation(claims, confidence)}]
 ```
 
-**What `content` looks like:**
+**What `data` looks like (flat — no namespace wrappers):**
 
 ```json
 {
-  "extract_claims": {
-    "claims": ["claim 1", "claim 2"],
-    "confidence": 0.85
-  },
-  "seed": {
-    "rubric": {"min_score": 7}
-  }
+  "claims": ["claim 1", "claim 2"],
+  "confidence": 0.85
+}
+```
+
+When two upstream actions share a field name, the framework qualifies them to avoid collisions:
+
+```json
+{
+  "extract_claims.text": "claim text",
+  "extract_summary.text": "summary text",
+  "confidence": 0.9
 }
 ```
 
 | Input | Output |
 |-------|--------|
-| `dict` — business fields, already unwrapped | `list[dict]` (or `dict` with passthrough) |
+| `dict` — flat business fields | `list[dict]` (or `dict` with passthrough) |
 
 ## File Mode
 
@@ -110,7 +115,7 @@ def run_dedup(data: list[dict]) -> list[dict]:
     outputs = []
 
     for record in data:
-        content = record.get("content", record)
+        content = record["content"]
         fact = content.get("fact", "")
         if fact not in seen:
             seen[fact] = True
@@ -161,68 +166,94 @@ outputs.append({"summary": "merged result", "count": len(data)})  # no node_id =
 
 ## How Observed Fields Arrive
 
-Observed fields arrive **namespaced by the action that produced them**. This is the #1 source of UDF bugs — flat access returns `None`.
+### RECORD mode — flat fields
 
-### Standard observed fields (NAMESPACED)
+In RECORD mode, the framework flattens observed fields before passing them to the tool. You access fields directly:
 
 ```python
-# CORRECT — namespaced access
-title = content.get("write_marketing_copy", {}).get("listing_title", "")
-
-# WRONG — flat access returns None
-title = content.get("listing_title", "")  # None — field is under action namespace
+# CORRECT — flat access
+title = data.get("listing_title", "")
+description = data.get("listing_description", "")
 ```
 
-When observing from a single upstream, unwrap the namespace upfront:
+When two upstream actions share a field name, the framework qualifies them with dot-separated prefixes:
 
 ```python
-upstream = content.get("write_marketing_copy", {})
-title = upstream.get("listing_title", "")
-description = upstream.get("listing_description", "")
+# observe: [action_a.*, action_b.*]
+# Both have a "title" field → collision → qualified keys
+title_a = data.get("action_a.title", "")
+title_b = data.get("action_b.title", "")
+
+# Unique fields stay bare (no qualification needed)
+confidence = data.get("confidence", 0)
+```
+
+### FILE mode — content dict
+
+In FILE mode, observed fields are inside `record["content"]`, also flat:
+
+```python
+for record in data:
+    content = record["content"]
+    title = content.get("listing_title", "")
 ```
 
 ### output_field values (json_mode: false)
 
-With `json_mode: false` and `output_field`, the raw text lives under the action namespace:
+With `json_mode: false` and `output_field`, the raw text arrives as a flat field:
 
 ```python
 # Config: output_field: severity  (on action "assess_severity")
-severity = content.get("assess_severity", {}).get("severity", "")
+# RECORD mode:
+severity = data.get("severity", "")
 
 # Default output_field is "raw_response"
-raw = content.get("action_name", {}).get("raw_response", "")
+raw = data.get("raw_response", "")
 ```
 
 ### Version consumption merge
 
-After `version_consumption: {pattern: merge}`, versions are namespaced by expanded name:
+After `version_consumption: {pattern: merge}`, the access pattern depends on the mode:
+
+**RECORD mode** — version fields collide (e.g., multiple versions all have `score`), so they arrive as dot-qualified flat keys:
 
 ```python
-scorer_1 = content.get("score_quality_1", {}).get("overall_score")
-scorer_2 = content.get("score_quality_2", {}).get("overall_score")
+score_1 = data.get("score_quality_1.score")
+score_2 = data.get("score_quality_2.score")
 
-# Iterate dynamically
-scores = []
-for key, data in content.items():
-    if key.startswith("score_quality_") and isinstance(data, dict):
-        scores.append(data.get("overall_score", 0))
+# Iterate all versions:
+scores = [v for k, v in data.items() if k.endswith(".score")]
 ```
 
-When observe uses wildcards (`score_quality.*`), fields are also expanded as qualified flat keys alongside the nested dicts:
+**FILE mode** — version namespaces are preserved as nested dicts in `content`, alongside qualified flat keys. Both access patterns work:
 
 ```python
-# With observe: [score_quality_1.*, score_quality_2.*]
-# Both access patterns work:
-score = content.get("score_quality_1", {}).get("overall_score")  # nested dict
-score = content.get("score_quality_1.overall_score")              # expanded key
+content = record["content"]
+
+# Nested dict access:
+scorer_1 = content.get("score_quality_1", {})
+score = scorer_1.get("score")
+
+# Qualified flat key access:
+score = content.get("score_quality_1.score")
+
+# Iterate via nested dicts:
+scores = []
+for key, val in content.items():
+    if key.startswith("score_quality_") and isinstance(val, dict):
+        scores.append(val.get("score", 0))
 ```
 
 ### Seed data
 
-Seed data lives under the `seed` namespace:
+Seed data is flattened like any other namespace. Requires `observe: [seed.*]` in your action config:
 
 ```python
-rules = content.get("seed", {}).get("marketplace_rules", {})
+# RECORD mode — seed namespace is flattened:
+rules = data.get("marketplace_rules", {})
+
+# FILE mode — seed fields injected into content:
+rules = record["content"].get("marketplace_rules", {})
 ```
 
 ## Passthrough Pattern
@@ -233,8 +264,7 @@ When the YAML config uses `passthrough`, return a **dict** (not list) with only 
 @udf_tool()
 def inject_random_opener(data: dict) -> dict:
     """Return dict when using passthrough — only new fields."""
-    content = data.get('content', data)
-    quiz_type = content.get('quiz_type_used', 'general').lower()
+    quiz_type = data.get('quiz_type_used', 'general').lower()
     opener = random.choice(OPENERS.get(quiz_type, OPENERS['default']))
     return {"suggested_opener": opener, "quiz_type": quiz_type.upper()}
 ```
@@ -250,26 +280,36 @@ def inject_random_opener(data: dict) -> dict:
 
 ## Version Consumption Merge
 
-Process merged results from parallel versioned actions:
+Process merged results from parallel versioned actions. In RECORD mode, version fields arrive as dot-qualified flat keys:
 
 ```python
 @udf_tool()
 def combine_results(data: dict[str, Any]) -> list[dict[str, Any]]:
-    content = data.get('content', data)
+    # Version fields collide (each version has "score", "reasoning") → qualified keys
     results = []
-
     for i in range(1, 4):  # versions 1-3
-        worker_key = f'score_quality_{i}'
-        worker_data = content.get(worker_key, {})
-        if isinstance(worker_data, dict):
-            results.append({
-                'version': i,
-                'score': worker_data.get('score', 0),
-                'reasoning': worker_data.get('reasoning', ''),
-            })
+        score = data.get(f'score_quality_{i}.score', 0)
+        reasoning = data.get(f'score_quality_{i}.reasoning', '')
+        if score or reasoning:
+            results.append({'version': i, 'score': score, 'reasoning': reasoning})
 
     avg_score = sum(r['score'] for r in results) / len(results) if results else 0
     return [{'all_scores': results, 'average_score': avg_score}]
+```
+
+In FILE mode, version namespaces are nested dicts — both access patterns work:
+
+```python
+@udf_tool(granularity=Granularity.FILE)
+def combine_results_file(data: list[dict]) -> list[dict]:
+    for record in data:
+        content = record["content"]
+        # Nested dict access:
+        scorer_1 = content.get("score_quality_1", {})
+        score = scorer_1.get("score", 0)
+        # Or qualified flat key:
+        score = content.get("score_quality_1.score", 0)
+    # ...
 ```
 
 ## TypedDict for Nested Objects
@@ -309,37 +349,39 @@ class MyOutput(TypedDict, total=False):
 ## Common Mistakes
 
 ```python
-# WRONG: Forgot content wrapper
-def bad_udf(data):
-    return [{'result': data['field']}]  # KeyError if wrapped
-
 # WRONG: Returned dict instead of list (without passthrough)
 def bad_udf(data):
     return {'result': 'value'}  # Must be [{'result': 'value'}]
-
-# WRONG: Flat access for observed fields
-def bad_udf(data):
-    content = data.get("content", data)
-    result = content.get("field")  # None — field is under action namespace
-    # CORRECT: result = content.get("upstream_action", {}).get("field")
 
 # WRONG: Default doesn't match schema type
 def bad_udf(data):
     return [{"name": None}]  # schema says type: string → validation error
     # CORRECT: return [{"name": ""}]
 
-# WRONG: FILE mode forgetting to unwrap content
+# WRONG: Using old namespaced access (pre-PR #306)
+def bad_udf(data):
+    result = data.get("upstream_action", {}).get("field")  # None — fields are flat now
+    # CORRECT: result = data.get("field")
+
+# WRONG: Ignoring collision qualification
+def bad_udf(data):
+    # When two upstreams share "title", bare access returns None
+    title = data.get("title")  # None — collision produces qualified keys
+    # CORRECT: title = data.get("action_a.title")
+
+# WRONG: FILE mode forgetting to read from content
 def bad_udf(data):
     for record in data:
         fact = record.get("fact")  # None — fact is inside "content"
-    # CORRECT: fact = record.get("content", record).get("fact")
+    # CORRECT: fact = record["content"].get("fact")
 ```
 
 ## Best Practices
 
-- Always use `data.get("content", data)` as the first line — handles both wrapped and unwrapped cases
-- Use `.get()` with defaults for all field access: `content.get("score", 0)` prevents `KeyError`
-- Return complete records — prefer `content.copy()` + add fields over building from scratch
+- **RECORD mode**: Access fields directly with `data.get("field", default)` — fields are flat
+- **FILE mode**: Read from `record["content"]` — business fields are inside the content dict
+- **Collisions**: When observing from multiple upstreams, check for dot-qualified keys like `data.get("action.field")`
+- Use `.get()` with defaults for all field access: `data.get("score", 0)` prevents `KeyError`
 - Use descriptive TypedDict names (`QuestionQualityInput`, not `Input1`)
 - Document expected input/output in the docstring
 

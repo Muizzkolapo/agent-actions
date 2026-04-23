@@ -48,7 +48,11 @@ from agent_actions import udf_tool
 def my_tool(data: dict[str, Any]) -> dict[str, Any]:
     """
     Args:
-        data: Input dict from upstream action (defined by context_scope)
+        data: Flat dict of observed fields from upstream actions.
+              Fields are delivered without namespace wrappers — access
+              them directly with data.get("field").
+              When two upstream actions share a field name, the
+              framework qualifies them: data.get("action.field").
 
     Returns:
         Modified data dict
@@ -128,7 +132,7 @@ def deduplicate_questions(data: list[dict]) -> list[dict]:
     seen = set()
     result = []
     for record in data:
-        content = record.get("content", record)
+        content = record["content"]
         question = content.get("question_text", "")
         if question not in seen:
             seen.add(question)

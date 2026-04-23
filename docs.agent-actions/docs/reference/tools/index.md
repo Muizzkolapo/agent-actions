@@ -85,7 +85,7 @@ def run_dedup(data: list[dict], **kwargs) -> list[dict]:
     seen = set()
     unique = []
     for record in data:
-        content = record.get("content", record)
+        content = record["content"]
         fact = content.get("fact", "")
         if fact not in seen:
             seen.add(fact)
@@ -121,7 +121,7 @@ def dedup_tool(data: list[dict], **kwargs) -> list[dict]:
     outputs = []
 
     for record in data:
-        content = record.get("content", record)
+        content = record["content"]
         fact = content.get("fact", "")
         if fact not in seen:
             seen[fact] = True

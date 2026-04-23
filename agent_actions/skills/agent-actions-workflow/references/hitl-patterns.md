@@ -134,13 +134,14 @@ The merge tool receives both auto-approved records (passed through by the guard 
 ```python
 @udf_tool()
 def merge_review_decisions(data: dict[str, Any]) -> list[dict[str, Any]]:
-    content = data.get("content", data)
-    auto = content.get("auto_review", {})
-    human = content.get("human_review", {})
+    # Fields arrive flat — if "decision" collides across auto_review and
+    # human_review, access with qualified keys
+    auto_decision = data.get("auto_review.decision", "reject")
+    human_decision = data.get("human_review.decision")
 
     # Human review overrides auto review when present
-    decision = human.get("decision") or auto.get("decision", "reject")
-    return [{"final_decision": decision, "reviewed_by": "human" if human else "auto"}]
+    decision = human_decision or auto_decision
+    return [{"final_decision": decision, "reviewed_by": "human" if human_decision else "auto"}]
 ```
 
 ## Common Mistakes

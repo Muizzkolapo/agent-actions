@@ -36,7 +36,7 @@ Source record
 ```
 
 Once you understand this chain, most issues become obvious:
-- UDF gets None for a field? Fields are namespaced — use `content["action_name"]["field"]`
+- UDF gets None for a field? In RECORD mode, check for field name collisions — use `data.get("action.field")` when two upstreams share a field name. In FILE mode, read from `record["content"]["field"]`
 - Downstream can't see a field? It wasn't in `passthrough` — only `observe` fields reach the LLM, `passthrough` fields reach the output
 - Historical lookup fails? Lineage is broken — check the upstream action's output for correct `lineage` arrays
 
@@ -140,7 +140,7 @@ Every action falls into one of three roles. Mixing them causes bugs:
 
 ## Writing UDFs
 
-Observed fields arrive **namespaced by the action that produced them**. This matters because multiple upstream actions can share field names without collision.
+Observed fields arrive **flat** in RECORD mode tools. The framework resolves namespaces and delivers fields directly. When multiple upstream actions share a field name, the framework qualifies them as `"action.field"` to prevent collisions.
 
 ```python
 from typing import Any
@@ -148,24 +148,21 @@ from agent_actions import udf_tool
 
 @udf_tool()
 def enrich_listing(data: dict[str, Any]) -> list[dict[str, Any]]:
-    content = data.get("content", data)
+    # RECORD mode: fields are flat — access directly
+    title = data.get("listing_title", "")
 
-    # Upstream fields are under the action name
-    copy = content.get("write_marketing_copy", {})
-    title = copy.get("listing_title", "")
-
-    # Seed data lives under "seed"
-    rules = content.get("seed", {}).get("marketplace_rules", {})
+    # Seed data is flattened like any other namespace
+    rules = data.get("marketplace_rules", {})
 
     return [{"enriched_title": f"{title} — {rules.get('brand', '')}"}]
 ```
 
 A few things to remember:
-- Access fields as `content["action_name"]["field"]` — not `content["field"]` (flat access returns None)
-- Seed data: `content["seed"]["key"]`
-- Version merge: `content["score_quality_1"]`, `content["score_quality_2"]`, etc.
+- **RECORD mode**: Fields are flat — access with `data.get("field")` directly
+- **Collision handling**: When two upstream actions share a field name, access with `data.get("action_name.field")` (dot-qualified)
+- **FILE mode**: Access fields via `record["content"]["field"]`
+- Seed data: `data.get("key", {})` (seed namespace is flattened like any other; requires `observe: [seed.*]`)
 - Return `list[dict]` — or `dict` when the YAML uses `passthrough`
-- The `data.get("content", data)` wrapper is a safety net that should always be there
 
 ## Guards
 
@@ -205,7 +202,26 @@ When you need consensus (multiple independent judgments on the same data), use v
     observe: [score_quality.*]
 ```
 
-The merge tool receives each version namespaced: `content["score_quality_1"]["score"]`, `content["score_quality_2"]["score"]`, etc.
+**RECORD mode** — the merge tool receives dot-qualified flat keys (because version fields like `score` collide across namespaces):
+```python
+score_1 = data.get("score_quality_1.score")  # 8
+score_2 = data.get("score_quality_2.score")  # 7
+
+# Iterate all versions:
+scores = [v for k, v in data.items() if k.endswith(".score")]
+```
+
+**FILE mode** — each record's `content` has both nested dicts and qualified flat keys:
+```python
+# Nested dict access:
+scorer_1 = record["content"].get("score_quality_1", {})
+score = scorer_1.get("score")
+
+# Or iterate dynamically:
+for key, val in record["content"].items():
+    if key.startswith("score_quality_") and isinstance(val, dict):
+        scores.append(val.get("score", 0))
+```
 
 **Voting rule matters:** With 3 voters and majority rule (2/3 must reject), a biased prompt makes each voter 70% likely to reject → overall rejection is ~84%. Switching to unanimous (all 3 must agree) with the same bias → ~34%. Match the voting rule to the prompt's bias direction: if the prompt leans toward rejection, require unanimity to reject.
 
@@ -220,7 +236,7 @@ defaults:
       rubric: $file:evaluation_rubric.json
 ```
 
-In prompts: `{{ seed.rubric.min_score }}`. In UDFs: `content.get("seed", {}).get("rubric", {})`. The config key is `seed_path:` but the reference prefix is `seed.` — using `seed_data.` is a common mistake that silently resolves to empty.
+In prompts: `{{ seed.rubric.min_score }}`. In UDFs (RECORD mode): `data.get("rubric", {})` — the seed namespace is flattened like any other. Requires `observe: [seed.*]` or `observe: [seed.rubric]` in the action config. The config key is `seed_path:` but the prompt prefix is `seed.` — using `seed_data.` is a common mistake that silently resolves to empty.
 
 **Prompt templates** — defined in `prompt_store/workflow_name.md`:
 ```markdown
@@ -248,7 +264,11 @@ When output looks wrong, start with: what did the upstream action actually produ
 cat agent_io/target/<action>/sample.json | python3 -c "
 import json, sys; data = json.load(sys.stdin)
 print(f'{len(data)} records')
-if data: print(list(data[0].get('content', data[0]).keys())[:10])
+if data:
+    rec = data[0]
+    content = rec.get('content', rec)
+    print('content keys:', list(content.keys())[:10])
+    print('record keys:', [k for k in rec if k != 'content'][:10])
 "
 ```
 
@@ -264,7 +284,7 @@ Read these when you need depth beyond what's covered above:
 - **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough, output_field, seed data details
 
 ### Building
-- **[UDF Reference](references/udf-reference.md)** — @udf_tool decorator, record/file mode, namespaced access, passthrough, version merge
+- **[UDF Reference](references/udf-reference.md)** — @udf_tool decorator, record/file mode, flat field access, passthrough, version merge
 - **[Action Anatomy](references/action-anatomy.md)** — action structure, pre-creation checklist, data lineage, record matching
 - **[Prompt Patterns](references/prompt-patterns.md)** — Jinja2 templates, variable access, max_tokens/temperature, anti-patterns
 - **[Dynamic Content Injection](references/dynamic-content-injection.md)** — tool action injection pattern for randomized/computed prompt content
