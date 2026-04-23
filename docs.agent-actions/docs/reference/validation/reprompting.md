@@ -18,8 +18,10 @@ The reprompting system provides:
 - **Configurable exhaustion** - Control what happens when all attempts fail
 
 :::info Retry vs Reprompt
-**Retry** handles transient errors (rate limits, network issues) - same request, wait, retry.
-**Reprompt** handles validation errors (bad JSON, schema violations) - modify prompt with feedback, retry.
+**Retry** handles transient errors (rate limits, network issues) — same request, wait, retry.
+**Reprompt** handles validation errors (bad JSON, schema violations) — modify prompt with feedback, retry.
+
+When both are configured, retry runs inside each reprompt attempt. If retry exhausts during a reprompt cycle, the `on_exhausted` policy is respected. API-failed records that reach validation are rejected and reprompted, not silently graduated.
 
 See [Retry & Error Handling](../execution/retry.md) for transient error handling.
 :::
@@ -227,6 +229,10 @@ flowchart LR
 ```
 
 A single record might be retried twice (transport failures), then reprompted once (schema failure) — that's 4 LLM calls total. The recovery metadata captures the full history.
+
+#### Retry Exhaustion Inside Reprompt
+
+If retry exhausts during a reprompt attempt, the record is marked `exhausted=True, passed=False`. The `on_exhausted` policy applies: `"raise"` stops the workflow, `"return_last"` accepts the last response from a prior successful attempt if one exists.
 
 ### Batch Mode
 

@@ -95,7 +95,7 @@ After Phase 1 ensures all recoverable records are present, Phase 2 checks whethe
 
 1. Load the validation UDF specified in `reprompt.validation`
 2. For each attempt (up to `max_attempts`):
-   - Validate all successful results that haven't already passed
+   - Validate all results that haven't already passed (API-failed records fail validation and are included)
    - Identify failures
    - If all pass, stop
    - For each failed result:
@@ -147,9 +147,9 @@ When a record goes through both phases, retry metadata from Phase 1 is preserved
 
 ### Skip Logic
 
-Phase 2 skips records that:
-- Were not successful (no valid response to validate)
-- Already have reprompt metadata marked as passed (from a previous cycle)
+Phase 2 skips records that already have reprompt metadata marked as passed (from a previous cycle).
+
+API-failed records (`success=False`) are **not** skipped — they fail validation and are reprompted with guidance to retry. This prevents API failures from silently graduating as valid output.
 
 ## Recovery Metadata
 
