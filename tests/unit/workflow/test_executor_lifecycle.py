@@ -194,7 +194,7 @@ class TestExecuteAgentSync:
                 "agent_a", action_idx=0, action_config={"agent_type": "a"}, is_last_action=False
             )
 
-        assert result.status == ActionStatus.SKIPPED
+        assert result.status == ActionStatus.COMPLETED
         mock_deps.output_manager.create_passthrough_output.assert_called_once()
 
     def test_normal_path_runs_agent(self, executor, mock_deps):
@@ -541,7 +541,7 @@ class TestHandleAgentSkip:
             result = executor._handle_action_skip("agent_a", 0, {}, datetime.now())
 
         assert result.success is True
-        assert result.status == ActionStatus.SKIPPED
+        assert result.status == ActionStatus.COMPLETED
         mock_deps.output_manager.create_passthrough_output.assert_called_once_with(0, "agent_a")
         mock_deps.state_manager.update_status.assert_called_with(
             "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None

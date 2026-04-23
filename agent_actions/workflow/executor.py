@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 # this prefix to distinguish "blocked by upstream" from "guard-filtered".
 UPSTREAM_SKIP_PREFIX = "Upstream dependency"
 
+# Reason string for WHERE-clause passthrough (action data forwarded, LLM logic skipped).
+WHERE_PASSTHROUGH_REASON = "WHERE clause \u2014 data passed through"
+
 
 @dataclass
 class ExecutorDependencies:
@@ -268,7 +271,7 @@ class ActionExecutor:
                 action_name=action_name,
                 action_index=action_idx,
                 total_actions=total_actions,
-                skip_reason="WHERE clause condition not met",
+                skip_reason=WHERE_PASSTHROUGH_REASON,
                 mode=action_config.get("run_mode", ""),
             )
         )
@@ -277,14 +280,14 @@ class ActionExecutor:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=action_name,
-                status="skipped",
+                status="success",
                 duration_seconds=duration,
-                skip_reason="WHERE clause condition not met",
+                skip_reason=WHERE_PASSTHROUGH_REASON,
             )
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=True, status=ActionStatus.SKIPPED, metrics=ExecutionMetrics(duration=duration)
+            success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics(duration=duration)
         )
 
     def _track_action_start(self, params: ActionRunParams) -> None:
