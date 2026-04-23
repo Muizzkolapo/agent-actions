@@ -3,6 +3,7 @@
 from typing import Any
 
 from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.utils.content import get_existing_content, wrap_content
 from agent_actions.utils.id_generation import IDGenerator
 
 
@@ -46,11 +47,12 @@ class ExhaustedRecordBuilder:
             resolved_source_guid = "unknown"
 
         empty_content = ExhaustedRecordBuilder.build_empty_content(agent_config)
+        existing = get_existing_content(original_row) if isinstance(original_row, dict) else {}
 
         node_id = IDGenerator.generate_node_id(action_name)
         exhausted_item: dict[str, Any] = {
             "source_guid": resolved_source_guid,
-            "content": empty_content,
+            "content": wrap_content(action_name, empty_content, existing),
             "node_id": node_id,
             "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
             "_recovery": recovery_metadata.to_dict(),
