@@ -184,8 +184,8 @@ class TestExecuteAgentSync:
         assert event.failed == 1
         assert event.completed == 0
 
-    def test_skip_evaluator_creates_passthrough(self, executor, mock_deps):
-        """When skip evaluator says skip, should create passthrough output."""
+    def test_skip_evaluator_marks_completed(self, executor, mock_deps):
+        """When skip evaluator says skip, should mark completed without copying data."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.PENDING
         mock_deps.skip_evaluator.should_skip_action.return_value = True
 
@@ -195,7 +195,6 @@ class TestExecuteAgentSync:
             )
 
         assert result.status == ActionStatus.COMPLETED
-        mock_deps.output_manager.create_passthrough_output.assert_called_once()
 
     def test_normal_path_runs_agent(self, executor, mock_deps):
         """Normal pending agent should go through _execute_action_run."""
@@ -535,14 +534,13 @@ class TestVerifyCompletionStatus:
 class TestHandleAgentSkip:
     """Tests for _handle_action_skip."""
 
-    def test_creates_passthrough_and_fires_event(self, executor, mock_deps):
-        """Should create passthrough output, mark completed, and fire skip event."""
+    def test_marks_completed_and_fires_event(self, executor, mock_deps):
+        """Should mark completed and fire skip event without copying data."""
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
             result = executor._handle_action_skip("agent_a", 0, {}, datetime.now())
 
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED
-        mock_deps.output_manager.create_passthrough_output.assert_called_once_with(0, "agent_a")
         mock_deps.state_manager.update_status.assert_called_with(
             "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None
         )
@@ -555,6 +553,15 @@ class TestHandleAgentSkip:
 
         status_mgr_call = mock_deps.state_manager.update_status.call_args
         assert status_mgr_call[0][1] == result.status == ActionStatus.COMPLETED
+
+    def test_no_disposition_written(self, executor, mock_deps):
+        """WHERE-clause skip writes no disposition — record is unchanged."""
+        with patch("agent_actions.workflow.executor.fire_event"):
+            executor._handle_action_skip("agent_a", 0, {}, datetime.now())
+
+        mock_deps.output_manager.storage_backend = MagicMock()
+        storage = mock_deps.action_runner.storage_backend
+        storage.set_disposition.assert_not_called()
 
     def test_total_agents_from_execution_order(self, executor, mock_deps):
         """total_agents should come from agent_runner.execution_order length."""
