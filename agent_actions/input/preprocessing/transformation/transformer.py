@@ -57,8 +57,14 @@ class DataTransformer:
         return result
 
     @staticmethod
-    def transform_structure(data: list[dict]) -> list[dict]:
-        """Flatten nested {source_guid: contents} structure to list of dicts."""
+    def transform_structure(data: list[dict], action_name: str | None = None) -> list[dict]:
+        """Flatten nested {source_guid: contents} structure to list of dicts.
+
+        When *action_name* is provided, content is wrapped under the action
+        namespace (additive model).
+        """
+        from agent_actions.utils.content import wrap_content
+
         result = []
 
         for data_item in data:
@@ -66,9 +72,15 @@ class DataTransformer:
                 for source_guid, contents in data_item.items():
                     if isinstance(contents, list):
                         for content in contents:
-                            result.append({"source_guid": source_guid, "content": content})
+                            wrapped = wrap_content(action_name, content) if action_name else content
+                            result.append({"source_guid": source_guid, "content": wrapped})
                     else:
-                        result.append({"source_guid": source_guid, "content": contents})
+                        wrapped = (
+                            wrap_content(action_name, contents)
+                            if action_name and isinstance(contents, dict)
+                            else contents
+                        )
+                        result.append({"source_guid": source_guid, "content": wrapped})
 
         return result
 
