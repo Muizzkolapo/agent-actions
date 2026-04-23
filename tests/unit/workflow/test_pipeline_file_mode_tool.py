@@ -54,8 +54,8 @@ def test_file_udf_result_unwrapped():
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 2
-    assert result.data[0]["content"]["name"] == "alice"
-    assert result.data[1]["content"]["name"] == "bob"
+    assert result.data[0]["content"]["my_file_tool"]["name"] == "alice"
+    assert result.data[1]["content"]["my_file_tool"]["name"] == "bob"
 
 
 def test_file_udf_result_source_mapping_auto_inferred():
@@ -129,7 +129,7 @@ def test_file_tool_plain_list_still_works():
 
     assert len(results) == 1
     assert results[0].status == ProcessingStatus.SUCCESS
-    assert results[0].data[0]["content"]["score"] == 0.9
+    assert results[0].data[0]["content"]["my_file_tool"]["score"] == 0.9
 
 
 # --- Empty tool output detection ---
@@ -446,6 +446,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
     # Verify the result contains all 3 expanded items
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 3
+    # RECORD mode — content is still flat until record_processor is updated
     contents = [r["content"] for r in result.data]
     assert contents[0] == {"question": "Q1", "answer": "A1"}
     assert contents[1] == {"question": "Q2", "answer": "A2"}
@@ -762,7 +763,7 @@ def test_file_tool_non_dict_output_items():
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     # Non-dict wrapped as {"content": {"value": ...}} — no node_id, so no mapping
-    assert results[0].data[0]["content"]["value"] == "just a string"
+    assert results[0].data[0]["content"]["my_file_tool"]["value"] == "just a string"
     # Same cardinality (1:1) — positional fallback propagates source_guid from input
     assert results[0].data[0].get("source_guid") == "sg-1"
 
@@ -1058,10 +1059,10 @@ def test_file_tool_full_record_content_preserved():
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 2
 
-    assert result.data[0]["content"]["question_text"] == "What is X?"
-    assert result.data[0]["content"]["answer_text"] == "X is Y."
-    assert result.data[1]["content"]["question_text"] == "What is Z?"
-    assert result.data[1]["content"]["answer_text"] == "Z is W."
+    assert result.data[0]["content"]["my_file_tool"]["question_text"] == "What is X?"
+    assert result.data[0]["content"]["my_file_tool"]["answer_text"] == "X is Y."
+    assert result.data[1]["content"]["my_file_tool"]["question_text"] == "What is Z?"
+    assert result.data[1]["content"]["my_file_tool"]["answer_text"] == "Z is W."
 
 
 # --- Bug 2: Lineage collision with shared source_guid ---
@@ -1157,8 +1158,8 @@ def test_file_tool_copy_pattern_preserves_lineage():
 
     assert result.source_mapping == {0: 0, 1: 1}
 
-    assert result.data[0]["content"]["transformed"] == "new value from original"
-    assert result.data[1]["content"]["transformed"] == "new value from other"
+    assert result.data[0]["content"]["my_file_tool"]["transformed"] == "new value from original"
+    assert result.data[1]["content"]["my_file_tool"]["transformed"] == "new value from other"
 
     assert result.data[0]["source_guid"] == "sg-1"
     assert result.data[1]["source_guid"] == "sg-2"
