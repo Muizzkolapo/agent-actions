@@ -57,15 +57,22 @@ class DataTransformer:
         return result
 
     @staticmethod
-    def transform_structure(data: list[dict], action_name: str = "") -> list[dict]:
+    def transform_structure(
+        data: list[dict],
+        action_name: str = "",
+        *,
+        version_merge: bool = False,
+    ) -> list[dict]:
         """Flatten nested {source_guid: contents} structure to list of dicts.
 
-        Content is wrapped under *action_name* namespace (additive model).
+        Content is wrapped under *action_name* namespace (additive model)
+        unless *version_merge* is ``True``, in which case content is used
+        as-is because version namespaces are already the correct format.
 
         Raises:
-            ValueError: If *action_name* is empty.
+            ValueError: If *action_name* is empty and *version_merge* is False.
         """
-        if not action_name:
+        if not action_name and not version_merge:
             raise ValueError("action_name is required for namespaced content wrapping")
 
         from agent_actions.utils.content import wrap_content
@@ -80,15 +87,20 @@ class DataTransformer:
                             result.append(
                                 {
                                     "source_guid": source_guid,
-                                    "content": wrap_content(action_name, content),
+                                    "content": content
+                                    if version_merge
+                                    else wrap_content(action_name, content),
                                 }
                             )
                     else:
-                        wrapped = (
-                            wrap_content(action_name, contents)
-                            if isinstance(contents, dict)
-                            else contents
-                        )
+                        if version_merge:
+                            wrapped = contents
+                        else:
+                            wrapped = (
+                                wrap_content(action_name, contents)
+                                if isinstance(contents, dict)
+                                else contents
+                            )
                         result.append({"source_guid": source_guid, "content": wrapped})
 
         return result
