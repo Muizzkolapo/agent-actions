@@ -42,7 +42,7 @@ Filter records before presenting them to the human. Only records matching the gu
     timeout: 3600
   dependencies: [auto_review_quality]
   guard:
-    condition: 'decision == "review"'
+    condition: 'auto_review_quality.decision == "review"'
     on_false: "skip"             # Approved records skip human review
   context_scope:
     observe: [auto_review_quality.*]
@@ -82,7 +82,7 @@ When downstream actions depend on HITL output, use passthrough to preserve data 
       - source.id
 ```
 
-Lineage is preserved through HITL actions — downstream actions can resolve historical lookups through the HITL node back to earlier ancestors.
+Lineage is preserved through HITL actions — downstream actions can access namespaces from earlier ancestors through the HITL node.
 
 ## Auto-Review + HITL (Triage Pattern)
 
@@ -109,7 +109,7 @@ The most common production pattern: LLM pre-screens all records, routes confiden
     timeout: 3600
   dependencies: [auto_review]
   guard:
-    condition: 'decision == "review"'
+    condition: 'auto_review.decision == "review"'
     on_false: "skip"
   context_scope:
     observe: [auto_review.*]
@@ -134,10 +134,10 @@ The merge tool receives both auto-approved records (passed through by the guard 
 ```python
 @udf_tool()
 def merge_review_decisions(data: dict[str, Any]) -> list[dict[str, Any]]:
-    # Fields arrive flat — if "decision" collides across auto_review and
-    # human_review, access with qualified keys
-    auto_decision = data.get("auto_review.decision", "reject")
-    human_decision = data.get("human_review.decision")
+    # Fields are namespaced — each action's fields under its name
+    # Both use .get() since a record may arrive from only one path
+    auto_decision = data.get("auto_review", {}).get("decision", "reject")
+    human_decision = data.get("human_review", {}).get("decision")
 
     # Human review overrides auto review when present
     decision = human_decision or auto_decision

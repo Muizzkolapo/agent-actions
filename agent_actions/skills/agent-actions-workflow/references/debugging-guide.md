@@ -36,7 +36,8 @@ import json, sys
 data = json.load(sys.stdin)
 print(f'  Records: {len(data)}')
 if data:
-    print(f'  Fields: {list(data[0].get(\"content\", data[0]).keys())[:8]}')
+    content = data[0]['content']
+    print(f'  Namespaces: {list(content.keys())[:8]}')
 " 2>/dev/null || echo "  No data"
 done
 ```
@@ -54,8 +55,10 @@ cat agent_workflow/<workflow>/agent_io/target/<upstream>/*.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for r in data:
-    content = r.get('content', r)
-    print({k: v for k, v in content.items() if not k.startswith('_')})" 2>/dev/null
+    content = r['content']
+    for ns, fields in content.items():
+        if isinstance(fields, dict):
+            print(f'{ns}: {fields}')" 2>/dev/null
 ```
 
 All comparison operators (`==`, `!=`, `>`, `>=`, `<`, `<=`) are supported. If guard results seem wrong, test the condition directly:
@@ -79,9 +82,9 @@ If the first action's API call fails (401, network error), check whether the fai
 ### 5. Tool UDF Data Access
 
 If a tool action produces zero/default values:
-- Fields arrive **namespaced by action name**: `content["aggregate_scores"]["consensus_score"]`
-- NOT flat: `content["consensus_score"]` → returns `None`
-- Check the tool code for flat `content.get("field")` patterns — these should be `content.get("action_name", {}).get("field")`
+- **RECORD mode**: Fields are namespaced — access with `data["action_name"]["field"]`, not `data.get("field")`
+- **FILE mode**: Fields are namespaced inside content — access with `record["content"]["action_name"]["field"]`
+- Check the tool code for flat `data.get("field")` patterns — these should be `data["action_name"]["field"]`
 - For a full debugging walkthrough, see [Tool Produces Empty Output](#tool-produces-empty-output)
 
 ### 5a. Prompt Trace Inspection
@@ -279,11 +282,11 @@ import json, sys
 data = json.load(sys.stdin)
 print(f'Total: {len(data)} records')
 for i, record in enumerate(data, 1):
-    content = record.get('content', {})
-    status = content.get('validation_status', 'unknown')
+    fields = record['content']['validate_code_quality']
+    status = fields.get('validation_status', 'unknown')
     print(f'  Record {i}: {status}')
     if status != 'PASS':
-        reasoning = content.get('validation_reasoning', '')[:150]
+        reasoning = fields.get('validation_reasoning', '')[:150]
         print(f'    Reason: {reasoning}...')
 "
 ```
@@ -343,14 +346,14 @@ Run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a <workflow>` and check the ou
 
 ### 2. Check field namespacing
 
-Upstream data arrives **namespaced by action name**, not flat. This is the most common cause of empty tool output:
+Upstream data arrives **namespaced by action name**. This is the most common cause of empty tool output:
 
 ```python
-# WRONG — field is not at top level
+# WRONG — flat access, field is not at top level
 value = data.get("consensus_score")  # Returns None
 
-# CORRECT — field is nested under the producing action's name
-value = data.get("aggregate_scores", {}).get("consensus_score")
+# CORRECT — field is under the producing action's namespace
+value = data["aggregate_scores"]["consensus_score"]
 ```
 
 ### 3. Check observe/context_scope configuration

@@ -10,7 +10,7 @@ What each framework feature promises, its current status, and how to work with i
 
 **Status:** Working — by design.
 
-Guards evaluate the **input** to an action (upstream output), not the action's own output. Place the guard on the action that *consumes* the field, not the one that *produces* it.
+Guards evaluate the **input** to an action (upstream output), not the action's own output. Place the guard on the action that *consumes* the field, not the one that *produces* it. Guard conditions use dotted namespace paths.
 
 ```yaml
 # Guard goes on the consumer, not the producer
@@ -18,7 +18,7 @@ Guards evaluate the **input** to an action (upstream output), not the action's o
 - name: next_action
   dependencies: [validate_data]
   guard:
-    condition: 'validation_status == "PASS"'  # Checks validate_data's output
+    condition: 'validate_data.validation_status == "PASS"'  # Dotted namespace path
 ```
 
 If all records are filtered (0 records downstream), the guard condition was false for every record. Fix: adjust upstream prompts, lower thresholds, or allow multiple statuses.
@@ -82,18 +82,18 @@ With passthrough, UDF returns `dict` (not list) with only new fields.
 
 ## UDF Patterns
 
-### 6. Flat field access (RECORD mode)
+### 6. Namespaced field access (RECORD mode)
 
-**Status:** Working — framework flattens observed fields for tools.
+**Status:** Working — framework delivers fields namespaced by action name.
 
-RECORD mode tools receive flat fields. Access directly with `data.get("field")`. When two upstream actions share a field name, the framework qualifies them as `data.get("action.field")`:
+RECORD mode tools receive fields namespaced by action name. Access with `data["action_name"]["field"]`:
 
 ```python
 def my_udf(data):
-    return [{'result': data.get('my_field', '')}]
+    return [{'result': data['upstream_action']['my_field']}]
 ```
 
-For FILE mode, read from `record["content"]["field"]`.
+For FILE mode, read from `record["content"]["action_name"]["field"]`.
 
 ### 7. Return type: list vs dict
 
@@ -102,19 +102,19 @@ For FILE mode, read from `record["content"]["field"]`.
 - Without passthrough: return `list[dict]`
 - With passthrough in YAML: return `dict` with only new fields
 
-### 8. Collision-qualified field access
+### 8. Namespaced field access — no collisions
 
-**Status:** Working — unique fields are bare, collisions are dot-qualified.
+**Status:** Working — each action's fields are isolated under its namespace.
 
-When observing from multiple upstream actions, unique field names are accessed directly. Fields that appear in multiple namespaces get dot-qualified:
+When observing from multiple upstream actions, each action's fields are under its own namespace. No collision handling needed:
 
 ```python
-# Single upstream — bare access
-score = data.get("consensus_score", 0)
+# Single upstream
+score = data["aggregate_scores"]["consensus_score"]
 
-# Multiple upstreams sharing "score" — qualified access
-score_a = data.get("action_a.score", 0)
-score_b = data.get("action_b.score", 0)
+# Multiple upstreams — each isolated under its namespace
+score_a = data["action_a"]["score"]
+score_b = data["action_b"]["score"]
 ```
 
 ### 9. UDF defaults must match schema types
@@ -171,7 +171,7 @@ See: **[Dynamic Content Injection](dynamic-content-injection.md)**
 
 ## Guards
 
-### 13. Guard conditions see flattened field names
+### 13. Guard conditions use dotted namespace paths
 
 **Status:** Working — by design. See Guards section in SKILL.md for examples.
 
@@ -192,8 +192,9 @@ When `on_false: "filter"` removes records, fields produced by the filtered actio
 **Workaround:** Declare the field in the schema but NOT in `required`. In the UDF, omit the key (not set it to None) when the upstream was filtered:
 
 ```python
-if content.get("response_text"):
-    result["merchant_response"] = {"response_text": content["response_text"]}
+upstream = content.get("upstream_action", {})
+if upstream.get("response_text"):
+    result["merchant_response"] = {"response_text": upstream["response_text"]}
 ```
 
 ### 16. Guard operators
@@ -267,7 +268,7 @@ observe: [seed.rubric]              # Correct
 # NOT: seed_data.rubric             # Wrong — silently resolves to empty
 ```
 
-In prompts: `{{ seed.rubric.score_range }}`. In UDFs (RECORD mode): `data.get("rubric", {})` — seed namespace is flattened like any other.
+In prompts: `{{ seed.rubric.score_range }}`. In UDFs (RECORD mode): `data["seed"]["rubric"]` — seed data is under the `seed` namespace.
 
 ### 23. Redundant dependencies
 

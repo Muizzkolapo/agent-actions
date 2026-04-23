@@ -62,8 +62,8 @@ OPENERS = {
 @udf_tool()
 def inject_random_opener(data: dict) -> dict:
     """Inject a randomized scenario opener based on question type."""
-    # RECORD mode: fields arrive flat
-    quiz_type = data.get('quiz_type_used', 'general').lower()
+    # RECORD mode: fields are namespaced by upstream action
+    quiz_type = data["get_authoring_prompt"]["quiz_type_used"].lower()
 
     # Map quiz type to opener category
     type_to_category = {

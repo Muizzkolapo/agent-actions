@@ -27,7 +27,7 @@ context_scope:
 
 ## Observe Directive
 
-Include fields in LLM context. When specified, **only listed fields** are visible.
+Select which namespaces the action can read from the record. When specified, **only listed namespaces/fields** are visible.
 
 ```yaml
 - name: Cluster_Validation_Agent
@@ -154,17 +154,17 @@ Downstream actions access `output_field` values through the normal namespace:
 ```
 
 In prompts: `{{ assess_severity.severity }}`
-In UDFs (RECORD mode): `data.get("severity", "")` — fields are flat after observe resolution
+In UDFs (RECORD mode): `data["assess_severity"]["severity"]` — fields are namespaced by action name
 
 ### Guards with output_field
 
-Guard conditions see flattened field names — the `output_field` value is promoted to top-level:
+Guard conditions use dotted namespace paths:
 
 ```yaml
 - name: escalate
   dependencies: [assess_severity]
   guard:
-    condition: 'severity != "low"'     # Direct field name, not assess_severity.severity
+    condition: 'assess_severity.severity != "low"'
   context_scope:
     observe: [assess_severity.*]
 ```
@@ -173,13 +173,13 @@ Guard conditions see flattened field names — the `output_field` value is promo
 
 - `json_mode: false` and `schema` together trigger a warning — the schema is ignored at runtime since there's no JSON to validate
 - `output_field` only works with `json_mode: false`
-- Default `output_field` is `"raw_response"` — in RECORD mode UDFs: `data.get("raw_response", "")`
+- Default `output_field` is `"raw_response"` — in RECORD mode UDFs: `data["action_name"]["raw_response"]`
 
 ## Guard Field Visibility
 
-Guard conditions evaluate against flattened field names from observed data (see Guards section in SKILL.md for examples).
+Guard conditions evaluate against dotted namespace paths from observed data (see Guards section in SKILL.md for examples). Use `action_name.field` syntax in guard conditions.
 
-**Collision risk:** When observing from multiple upstream actions with overlapping field names, the last-loaded namespace wins. Avoid this by observing specific fields instead of wildcards when field names might collide.
+**No collision risk:** Each action's fields are isolated under its namespace, so overlapping field names across upstream actions do not conflict.
 
 ## Resolution Order
 

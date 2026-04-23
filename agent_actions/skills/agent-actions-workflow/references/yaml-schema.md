@@ -133,7 +133,7 @@ actions:
 
   # Conditional
   guard:
-    condition: "facts != []"
+    condition: "prior_action.facts != []"
     on_false: filter
 
   # Debug
@@ -297,7 +297,7 @@ guard:
 
 ```yaml
 guard:
-  condition: 'len(candidate_facts_list) >= 3 and status == "valid"'
+  condition: 'len(upstream_action.candidate_facts_list) >= 3 and upstream_action.status == "valid"'
   on_false: "filter"
 ```
 

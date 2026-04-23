@@ -99,7 +99,7 @@ actions:
       Level: {{ assess_reading_level.reading_level }}
 ```
 
-**How matching works:** This is a **fan-in pattern** - `generate_seo` (first in list) is the primary input. The other two are loaded via historical context with lineage matching, ensuring all three come from the same parent record.
+**How matching works:** This is a **fan-in pattern** - `generate_seo` (first in list) is the primary input. The other two are matched via lineage, ensuring all three come from the same parent record. Each action's output is available under its namespace.
 
 ## Multi-enrichment Pattern
 
@@ -175,14 +175,14 @@ actions:
   - name: fast_path
     dependencies: classify
     guard:
-      condition: 'complexity == "low"'
+      condition: 'classify.complexity == "low"'
       on_false: "skip"
     schema: { result: string }
 
   - name: slow_path
     dependencies: classify
     guard:
-      condition: 'complexity == "high"'
+      condition: 'classify.complexity == "high"'
       on_false: "skip"
     schema: { result: string }
 
@@ -203,8 +203,8 @@ Write workflows that consume from multiple different upstream workflows by detec
 @udf_tool()
 def format_options(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Format options differently based on input type."""
-    # RECORD mode: fields arrive flat
-    options = data.get('options', [])
+    # RECORD mode: fields are namespaced by upstream action
+    options = data["upstream_action"]["options"]
     formatted = []
 
     for option in options:
@@ -249,12 +249,12 @@ Run same action multiple times in parallel, then consume all results:
       - process_data.*
 ```
 
-**RECORD mode — version fields collide, so they arrive as dot-qualified flat keys:**
+**RECORD mode — each version is a separate namespace:**
 ```json
 {
-  "process_data_1.result": "output 1", "process_data_1.score": 0.85,
-  "process_data_2.result": "output 2", "process_data_2.score": 0.92,
-  "process_data_3.result": "output 3", "process_data_3.score": 0.88
+  "process_data_1": {"result": "output 1", "score": 0.85},
+  "process_data_2": {"result": "output 2", "score": 0.92},
+  "process_data_3": {"result": "output 3", "score": 0.88}
 }
 ```
 
@@ -262,11 +262,12 @@ Run same action multiple times in parallel, then consume all results:
 ```python
 @udf_tool()
 def combine_parallel_results(data: dict[str, Any]) -> list[dict[str, Any]]:
-    # Version fields are dot-qualified (result/score collide across versions)
+    # Each version is a namespace — access via action name
     results = []
     for i in range(1, 6):
-        result = data.get(f'process_data_{i}.result')
-        score = data.get(f'process_data_{i}.score', 0)
+        version_ns = data.get(f'process_data_{i}', {})
+        result = version_ns.get('result')
+        score = version_ns.get('score', 0)
         if result is not None:
             results.append({'worker_id': i, 'result': result, 'score': score})
 
@@ -325,7 +326,7 @@ def chunk_document(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     chunks = []
     for record in data:
         source_guid = record.get("source_guid")
-        text = record["content"].get("text", "")
+        text = record["content"]["source"]["text"]
         for i, part in enumerate(split_text(text)):
             chunks.append({
                 "source_guid": source_guid,  # Required for lineage
