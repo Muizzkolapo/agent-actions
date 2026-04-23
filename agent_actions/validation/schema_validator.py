@@ -282,8 +282,8 @@ class SchemaValidator(BaseValidator):
                         f"Schema '{schema_name}' has required properties not "
                         f"defined in 'properties': {', '.join(undefined_props)}."
                     )
-        if schema_data.get("type") == "array" and "items" not in schema_data:
-            issues.append(f"Schema '{schema_name}' is 'array' type but 'items' is not defined.")
+        # Array schemas without ``items`` are valid JSON Schema (means
+        # "array of anything").  Do not flag as an issue.
         if "definitions" in schema_data:
             definition_refs = _find_refs(schema_data)
             unused_defs = [
@@ -304,6 +304,7 @@ class SchemaValidator(BaseValidator):
             "writeonly",
             "deprecated",
             "$defs",
+            "name",
         }
         suspicious_keys = unknown_keys - acceptable_custom
         if suspicious_keys:

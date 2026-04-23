@@ -1,5 +1,7 @@
 """Static type checker for workflow field references."""
 
+import re
+
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 from .data_flow_graph import DataFlowGraph, DataFlowNode, InputRequirement
@@ -9,6 +11,13 @@ from .errors import (
     StaticTypeWarning,
     StaticValidationResult,
 )
+
+_CAMEL_RE = re.compile(r"([a-z0-9])([A-Z])")
+
+
+def _camel_to_snake(name: str) -> str:
+    """Convert camelCase to snake_case (e.g. ``hitlStatus`` → ``hitl_status``)."""
+    return _CAMEL_RE.sub(r"\1_\2", name).lower()
 
 
 class StaticTypeChecker:
@@ -145,6 +154,14 @@ class StaticTypeChecker:
         available = output_schema.available_fields
 
         if root_field not in available:
+            # Try camelCase → snake_case normalization.  The HITL runtime
+            # converts field names to snake_case, so user configs may
+            # reference ``hitlStatus`` while the canonical schema uses
+            # ``hitl_status``.
+            snake_field = _camel_to_snake(root_field)
+            if snake_field != root_field and snake_field in available:
+                return  # Accepted — runtime will normalize
+
             if root_field in output_schema.dropped_fields:
                 result.add_error(
                     StaticTypeError(
