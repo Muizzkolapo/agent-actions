@@ -71,7 +71,6 @@ def create_dynamic_agent(
     model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
     is_tool = model_vendor == "tool"
 
-    # Prepare context data (critical: preserve context separation)
     context_data = ContextService.prepare_context_data(context_data_str, is_tool)
 
     # Note: dispatch_task() injection now happens in PromptPreparationService
