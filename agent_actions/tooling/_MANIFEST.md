@@ -39,7 +39,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | `find_project_root()` | `agent_actions.yml` | Reads | — |
 | `find_all_project_roots()` | `agent_actions.yml` | Reads | — |
 | `resolve_reference()` | `seed_data/*.json` | Reads | `seed_data_path` |
-| `render_card_markdown()` | `agent_io/target/{action}/` | Transforms | — |
+| `render_card_markdown(*, action_name=)` | `agent_io/target/{action}/` | Transforms | — |
 
 ## Dependencies
 

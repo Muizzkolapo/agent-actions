@@ -16,7 +16,8 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { CellValue, DataCard, type ActionInfo } from "@/components/ui/data-card"
+import { CellValue, DataCard, getDisplayFields, type ActionInfo } from "@/components/ui/data-card"
+import { classifyField } from "@/lib/data-card-utils"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { DataNode, WorkflowDataSummary } from "@/lib/mock-data"
 
@@ -436,16 +437,21 @@ function NodeDetail({
       }
     : undefined
 
+  const actionName = node.node
+
   const columns = useMemo(() => {
     if (node.preview.length === 0) return []
     const colSet = new Set<string>()
     for (const row of node.preview) {
-      for (const key of Object.keys(row)) {
-        colSet.add(key)
+      const fields = getDisplayFields(row, actionName)
+      for (const key of Object.keys(fields)) {
+        if (classifyField(key) === "content") {
+          colSet.add(key)
+        }
       }
     }
     return Array.from(colSet)
-  }, [node.preview])
+  }, [node.preview, actionName])
 
   const totalPages = Math.ceil(node.preview.length / RECORDS_PER_PAGE)
   const pageRecords = node.preview.slice(
@@ -544,18 +550,21 @@ function NodeDetail({
                 </tr>
               </thead>
               <tbody>
-                {pageRecords.map((row, i) => (
-                  <tr key={page * RECORDS_PER_PAGE + i} className="hover:bg-accent/20 transition-colors">
-                    <td className="font-mono text-muted-foreground tabular-nums">
-                      {page * RECORDS_PER_PAGE + i + 1}
-                    </td>
-                    {columns.map((col) => (
-                      <td key={col} className="max-w-[300px]">
-                        <CellValue value={row[col]} />
+                {pageRecords.map((row, i) => {
+                  const fields = getDisplayFields(row, actionName)
+                  return (
+                    <tr key={page * RECORDS_PER_PAGE + i} className="hover:bg-accent/20 transition-colors">
+                      <td className="font-mono text-muted-foreground tabular-nums">
+                        {page * RECORDS_PER_PAGE + i + 1}
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                      {columns.map((col) => (
+                        <td key={col} className="max-w-[300px]">
+                          <CellValue value={fields[col]} />
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

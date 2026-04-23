@@ -456,17 +456,26 @@ export interface DataCardProps {
   actionInfo?: ActionInfo
 }
 
-function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
+export function getDisplayFields(record: Record<string, unknown>, actionName?: string): Record<string, unknown> {
   const contentVal = record.content
   if (contentVal && typeof contentVal === "object" && !Array.isArray(contentVal)) {
-    return contentVal as Record<string, unknown>
+    const content = contentVal as Record<string, unknown>
+    // Unwrap namespace: with the additive model, content is
+    // { action_a: {...}, action_b: {...} }. Show only this action's fields.
+    if (actionName && actionName in content) {
+      const ns = content[actionName]
+      if (ns && typeof ns === "object" && !Array.isArray(ns)) {
+        return ns as Record<string, unknown>
+      }
+    }
+    return content
   }
   return record
 }
 
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
-  const displayRecord = getDisplayFields(record)
+  const displayRecord = getDisplayFields(record, actionInfo?.name)
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)

@@ -1,6 +1,7 @@
 """Regression tests for I-5: scan_logs() and extract_action_metrics() 100k-line cap.
 
-Also covers scan_sqlite_readonly prompt trace attachment (spec 015).
+Also covers scan_sqlite_readonly prompt trace attachment (spec 015)
+and namespace unwrapping (spec 092).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import sqlite3
 from pathlib import Path
 
 from agent_actions.tooling.docs.scanner.data_scanners import (
+    _unwrap_record_content,
     extract_action_metrics,
     extract_runtime_warnings,
     scan_logs,
@@ -509,3 +511,120 @@ class TestScanSqliteReadonlyTraceAttachment:
         trace = records[0]["_trace"]
         assert trace["attempt"] == 1
         assert "retry" in trace["compiled_prompt"]
+
+
+# ---------------------------------------------------------------------------
+# _unwrap_record_content (spec 092)
+# ---------------------------------------------------------------------------
+
+
+class TestUnwrapRecordContent:
+    """Verify _unwrap_record_content extracts action-specific fields."""
+
+    def test_unwraps_namespaced_content(self):
+        record = {
+            "source_guid": "g1",
+            "content": {
+                "classify": {"genre": "fiction", "confidence": 0.9},
+                "summarize": {"summary": "A book"},
+            },
+            "node_id": "n1",
+        }
+        result = _unwrap_record_content(record, "classify")
+        assert result["content"] == {"genre": "fiction", "confidence": 0.9}
+        assert result["source_guid"] == "g1"
+        assert result["node_id"] == "n1"
+
+    def test_leaves_flat_content_unchanged(self):
+        """Pre-namespace records with flat content pass through."""
+        record = {"content": {"genre": "fiction"}, "source_guid": "g1"}
+        result = _unwrap_record_content(record, "classify")
+        assert result is record  # no copy needed
+
+    def test_no_content_key(self):
+        record = {"question": "What?"}
+        result = _unwrap_record_content(record, "classify")
+        assert result is record
+
+    def test_content_not_dict(self):
+        record = {"content": "plain string"}
+        result = _unwrap_record_content(record, "classify")
+        assert result is record
+
+    def test_action_value_not_dict(self):
+        """When content[action_name] is not a dict, don't unwrap."""
+        record = {"content": {"classify": "not-a-dict"}}
+        result = _unwrap_record_content(record, "classify")
+        assert result is record
+
+    def test_does_not_mutate_original(self):
+        """Unwrapping returns a new dict; the original is untouched."""
+        original_content = {
+            "classify": {"genre": "fiction"},
+            "summarize": {"summary": "..."},
+        }
+        record = {"source_guid": "g1", "content": original_content}
+        result = _unwrap_record_content(record, "classify")
+        assert result["content"] == {"genre": "fiction"}
+        assert record["content"] is original_content  # original unchanged
+
+
+class TestScanSqliteNamespaceUnwrap:
+    """Verify scan_sqlite_readonly unwraps namespaced content per action."""
+
+    def test_preview_records_show_action_fields(self, tmp_path):
+        """Preview records should have unwrapped content for the action."""
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
+        conn.execute(
+            "CREATE TABLE target_data "
+            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
+        )
+        namespaced_record = {
+            "source_guid": "g1",
+            "content": {
+                "extract": {"question": "What?", "answer": "Yes"},
+                "classify": {"genre": "fiction"},
+            },
+        }
+        conn.execute(
+            "INSERT INTO target_data VALUES (?, ?, ?, ?)",
+            ("extract", "data.json", json.dumps([namespaced_record]), 1),
+        )
+        conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("g1", "data.json", "{}"))
+        conn.commit()
+        conn.close()
+
+        result = scan_sqlite_readonly(db_path, "test_wf")
+        records = result["nodes"]["extract"]["preview"]
+        assert len(records) == 1
+        # content should be unwrapped to show extract's fields
+        assert records[0]["content"] == {"question": "What?", "answer": "Yes"}
+        assert records[0]["source_guid"] == "g1"
+
+    def test_flat_content_records_unchanged(self, tmp_path):
+        """Records without namespaced content pass through unchanged."""
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
+        conn.execute(
+            "CREATE TABLE target_data "
+            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
+        )
+        flat_record = {
+            "source_guid": "g1",
+            "content": {"genre": "fiction", "confidence": 0.9},
+        }
+        conn.execute(
+            "INSERT INTO target_data VALUES (?, ?, ?, ?)",
+            ("classify", "data.json", json.dumps([flat_record]), 1),
+        )
+        conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("g1", "data.json", "{}"))
+        conn.commit()
+        conn.close()
+
+        result = scan_sqlite_readonly(db_path, "test_wf")
+        records = result["nodes"]["classify"]["preview"]
+        assert len(records) == 1
+        assert records[0]["content"] == {"genre": "fiction", "confidence": 0.9}
