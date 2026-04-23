@@ -4,11 +4,8 @@ Integration tests for context scope with split records.
 These tests verify that the context scope system (observe, drop, passthrough)
 works correctly with the deterministic node_id key-join matcher.
 
-Tests the full integration:
-    build_field_context_with_history()
-        -> _load_historical_node()
-            -> HistoricalNodeDataLoader.load_historical_node_data()
-                -> _find_target_node_id() + _find_record_by_identifiers()
+Tests the full integration via build_field_context_with_history(),
+which reads dependency data from the record's namespaced content.
 """
 
 import json

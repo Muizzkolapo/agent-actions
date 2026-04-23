@@ -1,21 +1,20 @@
 """Reproduction script for version_consumption merge bug in FILE mode tools.
 
-Bug 1: apply_observe_for_file_mode fails to expand version namespace fields
-       because it either takes the fast path (skipping wildcard expansion) or
-       tries historical lookup (which fails — version keys aren't ancestors).
-       LLM actions work because build_field_context_with_history uses
-       _detect_version_namespaces() which the FILE mode path lacks.
+Bug 1: apply_observe_for_file_mode failed to expand version namespace fields
+       because it either took the fast path (skipping wildcard expansion) or
+       tried historical lookup (which failed — version keys aren't ancestors).
+       Fixed: observe now reads from record namespaces directly.
 
-Bug 2: data.get("content", data) returns {} when content key exists but is
+Bug 2: data.get("content", data) returned {} when content key existed but was
        empty, instead of falling back to the full record.
+       Fixed: get_existing_content utility handles this correctly.
 
 Run:  python tests/manual/repro_bug_03_version_merge_tool.py
-Expected: FAIL before fix, PASS after fix.
+Expected: PASS (both bugs are fixed).
 """
 
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 project_root = str(Path(__file__).resolve().parent.parent.parent)
 sys.path.insert(0, project_root)
@@ -56,19 +55,13 @@ def test_version_wildcard_expansion():
         "aggregate": 4,
     }
 
-    # Patch historical loader to avoid filesystem access — it's irrelevant here
-    # because version data lives in the record content, not in historical files.
-    with patch(
-        "agent_actions.prompt.context.scope_file_mode._load_historical_node",
-        return_value=None,
-    ):
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="aggregate",
-            agent_indices=agent_indices,
-            file_path="/tmp/test.json",
-        )
+    result = apply_observe_for_file_mode(
+        data=data,
+        agent_config=agent_config,
+        agent_name="aggregate",
+        agent_indices=agent_indices,
+        file_path="/tmp/test.json",
+    )
 
     content = result[0].get("content", result[0])
 
@@ -116,17 +109,13 @@ def test_version_specific_field_resolution():
         "aggregate": 3,
     }
 
-    with patch(
-        "agent_actions.prompt.context.scope_file_mode._load_historical_node",
-        return_value=None,
-    ):
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="aggregate",
-            agent_indices=agent_indices,
-            file_path="/tmp/test.json",
-        )
+    result = apply_observe_for_file_mode(
+        data=data,
+        agent_config=agent_config,
+        agent_name="aggregate",
+        agent_indices=agent_indices,
+        file_path="/tmp/test.json",
+    )
 
     content = result[0].get("content", result[0])
 
@@ -186,18 +175,14 @@ def test_content_empty_fallback_trap():
 
     agent_indices = {"source": 0, "upstream": 1, "downstream": 2}
 
-    with patch(
-        "agent_actions.prompt.context.scope_file_mode._load_historical_node",
-        return_value=None,
-    ):
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="downstream",
-            agent_indices=agent_indices,
-            file_path="/tmp/test.json",
-            source_data=source_data,
-        )
+    result = apply_observe_for_file_mode(
+        data=data,
+        agent_config=agent_config,
+        agent_name="downstream",
+        agent_indices=agent_indices,
+        file_path="/tmp/test.json",
+        source_data=source_data,
+    )
 
     result_item = result[0]
     content = result_item.get("content", {})

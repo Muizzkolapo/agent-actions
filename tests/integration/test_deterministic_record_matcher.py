@@ -1,11 +1,9 @@
 """
 Integration tests for the deterministic record matcher.
 
-Exercises the FULL pipeline path with a mock StorageBackend:
-    build_field_context_with_history()
-        -> _load_historical_node()
-            -> load_historical_node_data()
-                -> _find_target_node_id() + _find_record_by_identifiers()
+Two layers tested:
+1. build_field_context_with_history() — reads from record namespaces
+2. HistoricalNodeDataLoader — lower-level storage-backend lookups (tested independently)
 
 These tests validate mission-critical matching behavior:
 - Ancestor mode (node_id in lineage)

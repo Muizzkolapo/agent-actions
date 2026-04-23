@@ -1,10 +1,7 @@
-"""Namespace enrichment, historical data loading, and field filtering."""
+"""Namespace enrichment and field filtering."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
-
-if TYPE_CHECKING:
-    from agent_actions.storage.backend import StorageBackend
+from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
@@ -73,117 +70,6 @@ def _enrich_source_namespace(
             merged[key] = value
 
     return merged
-
-
-def _load_historical_node(
-    action_name: str,
-    lineage: list[str],
-    source_guid: str,
-    file_path: str,
-    agent_indices: dict[str, int],
-    parent_target_id: str | None = None,
-    root_target_id: str | None = None,
-    output_directory: str | None = None,
-    storage_backend: Optional["StorageBackend"] = None,
-    lineage_sources: list[str] | None = None,
-) -> dict | None:
-    """
-    Load historical node data from saved files or storage backend.
-
-    Uses HistoricalNodeDataLoader with HistoricalDataRequest.
-    Returns content dict or None if not found.
-
-    Args:
-        action_name: Name of the action to load historical data for
-        lineage: Lineage chain of the current record
-        source_guid: Source GUID for logging/diagnostics (not used for matching)
-        file_path: Path to the current file being processed
-        agent_indices: Mapping of action names to their indices
-        parent_target_id: Optional parent target ID (metadata only)
-        root_target_id: Optional root target ID (metadata only)
-        output_directory: Optional output directory (legacy, unused)
-        storage_backend: Optional storage backend for SQLite/TinyDB queries
-        lineage_sources: Optional list of merge-parent node_ids for merge-parent mode
-    """
-    from agent_actions.input.context.historical import (
-        HistoricalDataRequest,
-        HistoricalNodeDataLoader,
-    )
-
-    request = HistoricalDataRequest(
-        action_name=action_name,
-        lineage=lineage,
-        source_guid=source_guid,
-        file_path=file_path,
-        agent_indices=agent_indices,
-        lineage_sources=lineage_sources,
-        parent_target_id=parent_target_id,
-        root_target_id=root_target_id,
-        output_directory=output_directory,
-        storage_backend=storage_backend,
-    )
-
-    return HistoricalNodeDataLoader.load_historical_node_data(request)
-
-
-def _detect_version_namespaces(input_data: dict[str, Any], input_sources: list[str]) -> list[str]:
-    """
-    Detect if input_data contains nested version namespaces from version_consumption merge.
-
-    Version namespaces are created when upstream actions use version_consumption with merge pattern.
-    They have the pattern: action_name_N where N is a digit.
-
-    Args:
-        input_data: Content data that may contain nested version namespaces
-        input_sources: List of input source names to check against
-
-    Returns:
-        List of detected version namespace names (e.g., ["action_1", "action_2", "action_3"])
-
-    Example:
-        input_data = {
-            "generate_answer_1": {"answer": "..."},
-            "generate_answer_2": {"answer": "..."},
-            "some_field": "value"
-        }
-        input_sources = ["generate_answer_1", "generate_answer_2"]
-
-        Returns: ["generate_answer_1", "generate_answer_2"]
-    """
-    if not input_data or not isinstance(input_data, dict):
-        return []
-
-    version_namespaces = []
-
-    # Check if any keys in input_data match version iteration pattern
-    for key in input_data.keys():
-        # Check if this key looks like a version iteration: ends with _N where N is digit
-        if "_" in key:
-            parts = key.rsplit("_", 1)
-            if len(parts) == 2 and parts[1].isdigit():
-                # Check if this matches any input source or is a variant of an input source
-                if key in input_sources:
-                    # Direct match - this is a version namespace
-                    version_namespaces.append(key)
-                    logger.debug(
-                        f"[VERSION DETECT] '{key}' matches input source - treating as version namespace"
-                    )
-                else:
-                    # Check if the base name (without _N) is referenced in input sources
-                    base_name = parts[0]
-                    # Check if any input source is a version of this base
-                    has_version_siblings = any(
-                        src.startswith(f"{base_name}_") and src.rsplit("_", 1)[1].isdigit()
-                        for src in input_sources
-                    )
-                    if has_version_siblings:
-                        version_namespaces.append(key)
-                        logger.debug(
-                            f"[VERSION DETECT] '{key}' has version siblings in input_sources - "
-                            f"treating as version namespace"
-                        )
-
-    return version_namespaces
 
 
 def _filter_and_store_fields(
