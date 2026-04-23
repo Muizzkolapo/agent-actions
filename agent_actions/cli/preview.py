@@ -136,12 +136,14 @@ class PreviewCommand:
             )
         )
 
+        records = self._unwrap_records(result["records"])
+
         if self.format_type == "json":
-            self._show_json(result["records"])
+            self._show_json(records)
         elif self.format_type == "raw":
-            self._show_raw(result["records"])
+            self._show_raw(records)
         else:
-            self._show_table(result["records"])
+            self._show_table(records)
 
         if result["total_count"] > self.offset + self.limit:
             remaining = result["total_count"] - (self.offset + self.limit)
@@ -149,19 +151,30 @@ class PreviewCommand:
                 f"\n[dim]{remaining} more records. Use [bold]--offset {self.offset + self.limit}[/bold] to see more.[/dim]"
             )
 
-    def _unwrap_content(self, record: dict) -> dict:
-        """Extract action-specific content from a namespaced record.
+    def _unwrap_records(self, records: list) -> list:
+        """Replace namespaced content with the previewed action's fields.
 
         With the additive model, record["content"] is
         {"action_a": {...}, "action_b": {...}, ...}. When previewing a
-        specific action, unwrap to show that action's fields.
+        specific action, unwrap so all formats show that action's fields.
         """
-        content = record.get("content")
-        if isinstance(content, dict):
-            if self.action and self.action in content and isinstance(content[self.action], dict):
-                return content[self.action]
-            return content
-        return record
+        if not self.action:
+            return records
+        out = []
+        for record in records:
+            if not isinstance(record, dict):
+                out.append(record)
+                continue
+            content = record.get("content")
+            if (
+                isinstance(content, dict)
+                and self.action in content
+                and isinstance(content[self.action], dict)
+            ):
+                out.append({**record, "content": content[self.action]})
+            else:
+                out.append(record)
+        return out
 
     def _show_table(self, records: list) -> None:
         if not records:
@@ -170,7 +183,10 @@ class PreviewCommand:
         all_keys: set[str] = set()
         for record in records:
             if isinstance(record, dict):
-                all_keys.update(self._unwrap_content(record).keys())
+                if "content" in record and isinstance(record["content"], dict):
+                    all_keys.update(record["content"].keys())
+                else:
+                    all_keys.update(record.keys())
 
         display_keys = [k for k in sorted(all_keys) if not k.startswith("_")]
 
@@ -187,7 +203,11 @@ class PreviewCommand:
 
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):
-                data = self._unwrap_content(record)
+                data = (
+                    record.get("content", record)
+                    if isinstance(record.get("content"), dict)
+                    else record
+                )
                 values = [str(idx)]
                 for key in display_keys:
                     val = data.get(key, "")
