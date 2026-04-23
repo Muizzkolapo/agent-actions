@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove dead code from replacement content model — delete create_passthrough_output and its helpers (get_upstream_directories, upstream read methods) from ActionOutputManager; skip now adds nothing to the record"
+time: 2026-04-24T09:50:00.000000Z
