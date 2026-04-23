@@ -531,9 +531,9 @@ class TestNamespacedContentGuardEvaluation:
     Guard conditions use dotted paths: ``action_name.field == val``.
     """
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def evaluator(self):
-        """Create evaluator with real guard filter (no mocks)."""
+        """Create evaluator with real guard filter (shared across class)."""
         from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter
 
         return GuardEvaluator(guard_filter=GuardFilter())
@@ -597,12 +597,10 @@ class TestNamespacedContentGuardEvaluation:
             "clause": "pass == false",
             "scope": "item",
             "behavior": "skip",
-            # passthrough_on_error defaults to True
         }
 
         result = evaluator.evaluate_early(record, guard)
 
-        # Must NOT silently pass — flat field should trigger skip
         assert result.should_execute is False
         assert result.behavior == "skip"
         assert result.error is not None
@@ -639,12 +637,10 @@ class TestNamespacedContentGuardEvaluation:
             "clause": "nonexistent_action.field == true",
             "scope": "item",
             "behavior": "skip",
-            # passthrough_on_error defaults to True
         }
 
         result = evaluator.evaluate_early(record, guard)
 
-        # Must NOT silently pass — missing field means condition is not met
         assert result.should_execute is False
         assert result.behavior == "skip"
 
@@ -679,7 +675,6 @@ class TestNamespacedContentGuardEvaluation:
 
         result = evaluator.evaluate_early(record, guard)
 
-        # Warn: proceed but flag
         assert result.should_execute is True
         assert result.behavior == "warn"
 
@@ -694,7 +689,7 @@ class TestNamespacedContentGuardEvaluation:
 
         result = evaluator.evaluate_with_context(item, guard, context)
 
-        assert result.should_execute is True  # condition matched (pass IS false)
+        assert result.should_execute is True
 
     def test_phase2_context_namespace_access(self, evaluator):
         """Phase 2 evaluation can access namespaces from context dict."""
