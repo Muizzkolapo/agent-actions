@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: "LSP guard completions only suggest dotted namespace paths — bare field names no longer valid"
+time: 2026-04-24T09:10:00.000000Z

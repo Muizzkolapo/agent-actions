@@ -109,9 +109,21 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
 
     for action in actions.values():
         if action.guard_condition and action.guard_variables:
-            available = collect_available_guard_variables(file_path, index)
+            available = _action_guard_variables(action, index)
             for variable in action.guard_variables:
                 if variable not in available:
+                    message = (
+                        f"Guard condition references `{variable}` which is not observed "
+                        "in context_scope."
+                    )
+                    # Suggest dotted paths if the bare field matches a namespace suffix
+                    if "." not in variable:
+                        matches = sorted(
+                            v for v in available if "." in v and v.rsplit(".", 1)[1] == variable
+                        )
+                        if matches:
+                            suggestion = ", ".join(f"`{m}`" for m in matches)
+                            message += f" Did you mean {suggestion}?"
                     diagnostics.append(
                         _build_diagnostic(
                             Location(
@@ -119,8 +131,7 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                                 line=action.guard_line or action.location.line,
                                 column=0,
                             ),
-                            f"Guard condition references `{variable}` which is not observed "
-                            "in context_scope.",
+                            message,
                             lsp.DiagnosticSeverity.Warning,
                         )
                     )
@@ -141,25 +152,38 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
 
 
 def collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> set[str]:
-    """Collect variables available for guard/reprompt conditions."""
+    """Collect all guard-referenceable variables across all actions in a file.
+
+    Used by completions and signature help where cursor-to-action mapping
+    is not available. For per-action diagnostic validation, use
+    ``_action_guard_variables`` instead.
+    """
     actions = index.file_actions.get(file_path, {})
     variables: set[str] = set()
     for action in actions.values():
         for observed in action.context_observe:
             variables.add(observed)
-            if "." in observed:
-                _, field = observed.split(".", 1)
-                variables.add(field)
         for passthrough in action.context_passthrough:
             variables.add(passthrough)
-            if "." in passthrough:
-                _, field = passthrough.split(".", 1)
-                variables.add(field)
         if action.schema_ref:
             schema = index.get_schema_definition(action.schema_ref)
             if schema:
                 for field in schema.fields:
                     variables.add(f"{action.name}.{field}")
+    return variables
+
+
+def _action_guard_variables(action, index: ProjectIndex) -> set[str]:
+    """Variables available to a specific action's guard condition.
+
+    An action's guard runs before the action, so it can only see what
+    that action declares in its own context_scope (observe + passthrough).
+    """
+    variables: set[str] = set()
+    for observed in action.context_observe:
+        variables.add(observed)
+    for passthrough in action.context_passthrough:
+        variables.add(passthrough)
     return variables
 
 
