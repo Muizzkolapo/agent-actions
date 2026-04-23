@@ -195,6 +195,8 @@ class GuardEvaluator:
             request = FilterItemRequest(data=eval_context, condition=clause)
             filter_result = self._filter.filter_item(request)
 
+            filter_result = self._reclassify_missing_field_error(filter_result, clause)
+
             return GuardResult.from_filter_result(filter_result, behavior, passthrough_on_error)
 
         except (ValueError, TypeError, KeyError, AttributeError) as e:
@@ -207,11 +209,74 @@ class GuardEvaluator:
                 return GuardResult.skipped(error=str(e))
             return GuardResult.filtered(error=str(e))
 
+    def _reclassify_missing_field_error(
+        self, filter_result: FilterResult, clause: str
+    ) -> FilterResult:
+        """Reclassify DATA errors for missing fields in namespaced content.
+
+        With namespaced content, guard conditions must use dotted paths
+        (e.g., ``validate.pass == false``).  Two cases are handled:
+
+        1. **Flat field with namespace match** — the field exists inside a
+           namespace but was referenced without the prefix.  Reclassified as
+           SEMANTIC so the guard behavior always applies (bypasses
+           ``passthrough_on_error``).
+        2. **Genuinely missing field** — the field does not exist anywhere.
+           Treated as *condition not matched* so the guard behavior applies
+           instead of silently passing.
+        """
+        if (
+            filter_result.success
+            or filter_result.error_category != ErrorCategory.DATA
+            or not filter_result.error
+        ):
+            return filter_result
+
+        # Only reclassify MissingFieldError-originated errors
+        if "does not exist in the data" not in filter_result.error:
+            return filter_result
+
+        if "Did you mean:" in filter_result.error:
+            # Flat field reference that exists in a namespace → semantic error
+            logger.warning(
+                "Guard: flat field reference in condition '%s'. "
+                "Content is namespaced — use dotted paths (e.g., action_name.field). %s",
+                clause,
+                filter_result.error,
+            )
+            return FilterResult(
+                success=False,
+                error=filter_result.error,
+                error_category=ErrorCategory.SEMANTIC,
+                execution_time=filter_result.execution_time,
+            )
+
+        # Field genuinely missing → treat as condition not matched
+        logger.debug(
+            "Guard: field not found in condition '%s', treating as not matched: %s",
+            clause,
+            filter_result.error,
+        )
+        return FilterResult(
+            success=True,
+            matched=False,
+            error=filter_result.error,
+            execution_time=filter_result.execution_time,
+        )
+
     def _prepare_eval_context(self, context: Any) -> dict[str, Any]:
-        """Flatten nested content structures so guards can access both metadata and content fields."""
+        """Promote content namespaces to top-level keys for guard evaluation.
+
+        With namespaced content, each action's output is a nested dict::
+
+            {"content": {"action_a": {"field": "val"}, "action_b": {...}}}
+
+        After promotion, guard conditions use dotted paths to access fields::
+
+            action_a.field == "val"
+        """
         if isinstance(context, dict):
             if "content" in context and isinstance(context["content"], dict):
-                # Content fields override top-level on conflict
                 result = {k: v for k, v in context.items() if k != "content"}
                 result.update(context["content"])
                 return result
@@ -220,7 +285,11 @@ class GuardEvaluator:
         return {"_raw": context}
 
     def _build_evaluation_context(self, item: Any, context: dict[str, Any]) -> dict[str, Any]:
-        """Merge item content with full context for Phase 2 evaluation."""
+        """Merge item content with full context for Phase 2 evaluation.
+
+        Namespaced content in ``item["content"]`` is promoted to top-level keys
+        so guard conditions can use dotted paths (e.g., ``action.field``).
+        """
         eval_data = {}
 
         if context:
