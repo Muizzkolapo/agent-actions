@@ -23,7 +23,6 @@ __all__ = [
 ]
 
 
-# Complex field context building with historical data requires all these parameters
 def build_field_context_with_history(
     agent_name: str,
     agent_config: dict | None,
