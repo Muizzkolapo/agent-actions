@@ -1,28 +1,22 @@
-"""Regression test: infer_dependencies fallback logs at WARNING level.
+"""Regression test: build_field_context_with_history logs at DEBUG when namespace missing.
 
-When ``infer_dependencies`` raises inside ``apply_observe_for_file_mode``,
-the handler must emit a WARNING (not DEBUG) so operators can see that
-dependency inference failed and the code fell back to raw dependencies.
+With the additive content model, dependency data lives on the record's
+namespaced content.  When a namespace is absent (skipped action), the
+builder logs at DEBUG and continues — not an error.
 """
 
 import logging
-from unittest.mock import patch
 
 import pytest
 
-from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
+from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
-_LOGGER_NAME = "agent_actions.prompt.context.scope_file_mode"
+_LOGGER_NAME = "agent_actions.prompt.context.scope_builder"
 
 
 @pytest.fixture()
 def _enable_log_propagation():
-    """Ensure the agent_actions logger propagates to root so caplog captures records.
-
-    ``LoggerFactory.reset()`` (autouse conftest fixture) clears handlers but
-    may leave ``propagate=False`` on the ``agent_actions`` logger, which
-    prevents caplog from seeing any records.
-    """
+    """Ensure the agent_actions logger propagates to root so caplog captures records."""
     aa_logger = logging.getLogger("agent_actions")
     original = aa_logger.propagate
     aa_logger.propagate = True
@@ -31,70 +25,77 @@ def _enable_log_propagation():
 
 
 @pytest.mark.usefixtures("_enable_log_propagation")
-class TestInferDependenciesFallbackWarning:
-    """Verify the except-handler around infer_dependencies logs a warning."""
+class TestMissingNamespaceLogging:
+    """Verify the builder logs gracefully when a namespace is missing."""
 
-    def test_warning_logged_when_infer_dependencies_raises(self, caplog):
-        """When infer_dependencies raises, a WARNING must be emitted."""
-        agent_config = {
-            "dependencies": "upstream",
-            "context_scope": {"observe": ["upstream.question"]},
+    def test_missing_namespace_logs_debug_not_error(self, caplog):
+        """When a dependency namespace is absent on the record, DEBUG is logged."""
+        current_item = {
+            "content": {
+                "extract": {"text": "hello"},
+                # "classify" is NOT present (skipped)
+            },
+            "lineage": ["node-1"],
+            "source_guid": "sg-1",
         }
-        data = [{"question": "What?"}]
-        agent_indices = {"upstream": 0, "current": 1}
-
-        with patch(
-            "agent_actions.prompt.context.scope_file_mode.infer_dependencies",
-            side_effect=RuntimeError("boom"),
-        ):
-            with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-                result = apply_observe_for_file_mode(
-                    data=data,
-                    agent_config=agent_config,
-                    agent_name="current",
-                    agent_indices=agent_indices,
-                )
-
-        # The fallback should still produce a result (raw dependencies path)
-        assert isinstance(result, list)
-
-        # Verify the warning was emitted
-        warning_messages = [
-            record.message for record in caplog.records if record.levelno == logging.WARNING
-        ]
-        assert any(
-            "infer_dependencies failed" in msg and "current" in msg for msg in warning_messages
-        ), (
-            f"Expected a WARNING containing 'infer_dependencies failed' and "
-            f"'current', got: {warning_messages}"
-        )
-
-    def test_no_warning_when_infer_dependencies_succeeds(self, caplog):
-        """When infer_dependencies succeeds, no fallback warning is emitted."""
         agent_config = {
-            "dependencies": "upstream",
-            "context_scope": {"observe": ["upstream.question"]},
+            "dependencies": ["extract"],
+            "context_scope": {
+                "observe": ["extract.text", "classify.topic"],
+            },
         }
-        data = [{"question": "What?"}]
-        agent_indices = {"upstream": 0, "current": 1}
 
-        with patch(
-            "agent_actions.prompt.context.scope_file_mode.infer_dependencies",
-            return_value=(["upstream"], []),
-        ):
-            with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-                apply_observe_for_file_mode(
-                    data=data,
-                    agent_config=agent_config,
-                    agent_name="current",
-                    agent_indices=agent_indices,
-                )
+        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
+            result = build_field_context_with_history(
+                agent_name="summarize",
+                agent_config=agent_config,
+                agent_indices={"extract": 0, "classify": 1, "summarize": 2},
+                current_item=current_item,
+                file_path="/tmp/test.json",
+                context_scope=agent_config["context_scope"],
+            )
 
-        warning_messages = [
-            record.message
-            for record in caplog.records
-            if record.levelno == logging.WARNING and "infer_dependencies failed" in record.message
-        ]
-        assert warning_messages == [], (
-            f"No fallback warning expected on success, got: {warning_messages}"
-        )
+        # extract namespace loaded
+        assert "extract" in result
+        assert result["extract"]["text"] == "hello"
+
+        # classify namespace absent — not in result, no error
+        assert "classify" not in result
+
+        # Should log at DEBUG, not WARNING or ERROR
+        debug_messages = [r.message for r in caplog.records if r.levelno == logging.DEBUG]
+        assert any("classify" in msg and "not found" in msg for msg in debug_messages)
+
+    def test_all_namespaces_present(self, caplog):
+        """When all namespaces are present, no missing-namespace log is emitted."""
+        current_item = {
+            "content": {
+                "extract": {"text": "hello"},
+                "classify": {"topic": "science"},
+            },
+            "lineage": ["node-1"],
+            "source_guid": "sg-1",
+        }
+        agent_config = {
+            "dependencies": ["extract"],
+            "context_scope": {
+                "observe": ["extract.text", "classify.topic"],
+            },
+        }
+
+        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
+            result = build_field_context_with_history(
+                agent_name="summarize",
+                agent_config=agent_config,
+                agent_indices={"extract": 0, "classify": 1, "summarize": 2},
+                current_item=current_item,
+                file_path="/tmp/test.json",
+                context_scope=agent_config["context_scope"],
+            )
+
+        assert result["extract"]["text"] == "hello"
+        assert result["classify"]["topic"] == "science"
+
+        # No "not found" messages
+        debug_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not any("not found" in msg for msg in debug_messages)

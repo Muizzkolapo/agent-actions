@@ -1,4 +1,4 @@
-"""Field context builder with historical data loading."""
+"""Field context builder — reads from record's namespaced content."""
 
 import logging
 from typing import TYPE_CHECKING, Any, Optional
@@ -11,12 +11,9 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextNamespaceLoadedEvent
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_namespace import (
-    _detect_version_namespaces,
-    _enrich_source_namespace,
     _extract_allowed_fields_per_dependency,
     _extract_content_data,
     _filter_and_store_fields,
-    _load_historical_node,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,9 +41,8 @@ def build_field_context_with_history(
     """
     Build field context with explicit namespace structure.
 
-    AUTO-INFERRED CONTEXT DEPENDENCIES:
-    - Input sources (from dependencies field): Data already in current_item
-    - Context sources (auto-inferred from context_scope): Loaded via historical loader
+    Additive content model: all dependency data lives on the record's
+    namespaced content.  No storage backend lookup required.
 
     IMPORTANT: agent_indices is REQUIRED when action has dependencies.
     No fallbacks - this ensures consistent behavior across all execution modes.
@@ -88,12 +84,16 @@ def build_field_context_with_history(
 
     field_context = {}
 
-    # 1. SOURCE namespace - original input data
-    source_namespace = {}
-    if source_content:
-        source_namespace = _extract_content_data(source_content)
-
-    source_namespace = _enrich_source_namespace(source_namespace, current_item)
+    # 1. SOURCE namespace - original input data.
+    # source_content is raw input (not a record), so we must not filter
+    # _RECORD_METADATA_KEYS from it.  _extract_content_data is designed
+    # for records; use it only to unwrap the {"content": {...}} wrapper.
+    source_namespace: dict = {}
+    if source_content and isinstance(source_content, dict):
+        if "content" in source_content and isinstance(source_content["content"], dict):
+            source_namespace = source_content["content"]
+        else:
+            source_namespace = dict(source_content)
 
     if source_namespace:
         field_context["source"] = source_namespace
@@ -107,24 +107,15 @@ def build_field_context_with_history(
             )
         )
 
-    # 2. DEPENDENCY namespaces - separate input sources from context sources
-    logger.debug(
-        "[CONTEXT BUILD] Action '%s': agent_config=%s, agent_indices=%s, current_item=%s, file_path=%s",
-        agent_name,
-        bool(agent_config),
-        len(agent_indices) if agent_indices else 0,
-        bool(current_item),
-        bool(file_path),
-    )
+    # 2. DEPENDENCY namespaces — read from record's namespaced content.
+    # With the additive content model, every previous action's output is
+    # stored under its namespace on the record: content = {"action_a": {...}, ...}.
+    # No storage backend lookup required.
     batch_mode_enabled = bool(agent_config and agent_indices and current_item and file_path)
     logger.debug(
-        "[CONTEXT BUILD] Action '%s': batch_mode_enabled=%s (config=%s, indices=%s, item=%s, path=%s)",
+        "[CONTEXT BUILD] Action '%s': batch_mode_enabled=%s",
         agent_name,
         batch_mode_enabled,
-        bool(agent_config),
-        bool(agent_indices),
-        bool(current_item),
-        bool(file_path),
     )
     if batch_mode_enabled:
         # Narrowed by batch_mode_enabled — all are truthy
@@ -145,11 +136,7 @@ def build_field_context_with_history(
                 f"file_path must not be None when batch_mode is enabled (action: '{agent_name}')"
             )
 
-        # BATCH MODE - Use auto-inferred context dependencies
         workflow_actions = list(agent_indices.keys())
-
-        # Infer input sources vs context sources. Validation is skipped
-        # because the static validator already caught invalid references.
         input_sources, context_sources = infer_dependencies(
             agent_config, workflow_actions, agent_name, validate=False
         )
@@ -161,252 +148,54 @@ def build_field_context_with_history(
             context_sources,
         )
 
-        lineage = current_item.get("lineage", [])
-        source_guid = current_item.get("source_guid")
-        current_idx = agent_indices.get(agent_name, 999)
-        allowed_fields_map = None
+        # Additive model: all dependency data lives on the record.
+        namespaced_content = _extract_content_data(current_item)
+        all_deps = input_sources + context_sources
 
-        # 2a. INPUT SOURCES - Data is already in current_item (the file being processed)
-        # Put it under the action name so prompts can reference {{ action_name.field }}
-        if input_sources and current_item:
-            input_data = _extract_content_data(current_item)
-
-            # Get allowed fields for input sources
-            all_deps_for_fields = input_sources + context_sources
+        if all_deps:
             allowed_fields_map = _extract_allowed_fields_per_dependency(
-                all_deps_for_fields, context_scope, agent_name
+                all_deps, context_scope, agent_name
             )
 
-            # Check if input_data contains nested version namespaces from version_consumption
-            # This happens when upstream action used version_consumption with merge pattern
-            # Structure: {version_1: {fields}, version_2: {fields}, ...}
-            version_namespaces_detected = _detect_version_namespaces(input_data, input_sources)
-
-            if version_namespaces_detected:
-                # Split nested version namespaces into separate top-level namespaces
-                logger.debug(
-                    "[VERSION NAMESPACES] Detected nested version namespaces in input_data: %s",
-                    version_namespaces_detected,
-                )
-
-                for version_name, version_data in input_data.items():
-                    if not isinstance(version_data, dict):
-                        # Not a version namespace, skip
-                        continue
-
-                    if version_name not in version_namespaces_detected:
-                        # Not a detected version namespace, skip
-                        continue
-
-                    # Add as separate namespace in field_context
-                    allowed_fields = allowed_fields_map.get(version_name)
-                    _filter_and_store_fields(
-                        field_context,
-                        version_name,
-                        version_data,
-                        allowed_fields,
-                        source_type="VERSION NAMESPACE",
-                        metadata_collector=metadata_collector,
-                    )
-
-                # Load parallel version sources via historical lookup
-                # When input_sources has multiple versioned branches (e.g., action_1, action_2),
-                # current_item only contains data from one. Load others from historical data.
-                parallel_version_sources = [
-                    src
-                    for src in input_sources
-                    if src not in field_context and src in agent_indices
-                ]
-                if parallel_version_sources and source_guid:
-                    logger.debug(
-                        "[PARALLEL VERSIONS] Loading %d parallel version sources "
-                        "via historical lookup: %s",
-                        len(parallel_version_sources),
-                        parallel_version_sources,
-                    )
-                    for version_source in parallel_version_sources:
-                        version_idx = agent_indices.get(version_source)
-                        if version_idx is None or version_idx >= current_idx:
-                            continue
-
-                        try:
-                            historical_data = _load_historical_node(
-                                action_name=version_source,
-                                lineage=lineage,
-                                source_guid=source_guid or "",
-                                file_path=file_path,
-                                agent_indices=agent_indices,
-                                parent_target_id=current_item.get("parent_target_id"),
-                                root_target_id=current_item.get("root_target_id"),
-                                output_directory=output_directory,
-                                storage_backend=storage_backend,
-                                lineage_sources=current_item.get("lineage_sources"),
-                            )
-                        except (ValueError, TypeError, KeyError):
-                            logger.warning(
-                                "Failed to load historical data for version source '%s'",
-                                version_source,
-                                exc_info=True,
-                            )
-                            historical_data = None
-
-                        if historical_data:
-                            allowed_fields = allowed_fields_map.get(version_source)
-                            _filter_and_store_fields(
-                                field_context,
-                                version_source,
-                                historical_data,
-                                allowed_fields,
-                                source_type="PARALLEL VERSION",
-                                metadata_collector=metadata_collector,
-                            )
-                        else:
-                            logger.warning(
-                                "[PARALLEL VERSION] Could not load '%s' "
-                                "via historical lookup. source_guid=%s",
-                                version_source,
-                                source_guid,
-                            )
-            else:
-                # No version namespaces detected - use original behavior
-                logger.debug(
-                    "[INPUT SOURCE] input_data keys: %s",
-                    list(input_data.keys()) if input_data else "EMPTY",
-                )
-                for input_source_name in input_sources:
-                    allowed_fields = allowed_fields_map.get(input_source_name)
-                    logger.debug(
-                        "[INPUT SOURCE] '%s': allowed_fields=%s",
-                        input_source_name,
-                        allowed_fields,
-                    )
-                    _filter_and_store_fields(
-                        field_context,
-                        input_source_name,
-                        input_data,
-                        allowed_fields,
-                        source_type="INPUT SOURCE",
-                        fail_on_missing=True,
-                        metadata_collector=metadata_collector,
-                    )
-
-        # 2b. CONTEXT SOURCES - Load via historical loader (lineage matching)
-        logger.debug(
-            "[CONTEXT SOURCES CHECK] Action '%s': context_sources=%s, will load=%s",
-            agent_name,
-            context_sources,
-            bool(context_sources),
-        )
-        if context_sources:
-            # Get allowed fields for context sources
-            if allowed_fields_map is None:
-                all_deps_for_fields = input_sources + context_sources
-                allowed_fields_map = _extract_allowed_fields_per_dependency(
-                    all_deps_for_fields, context_scope, agent_name
-                )
-
-            logger.debug(
-                "[CONTEXT SOURCES] Loading %d context dependencies: %s (storage_backend=%s)",
-                len(context_sources),
-                context_sources,
-                "available" if storage_backend else "NOT available",
-            )
-
-            for dep_name in context_sources:
-                # Skip special reserved namespaces - they're populated differently
+            for dep_name in all_deps:
                 if dep_name in SPECIAL_NAMESPACES:
                     logger.debug("Skipping special namespace '%s' (handled separately)", dep_name)
                     continue
 
-                # Check if dependency should be loaded
-                dep_idx = agent_indices.get(dep_name)
-                if dep_idx is None:
-                    logger.warning(
-                        "Context dependency '%s' not found in agent_indices. Available: %s",
-                        dep_name,
-                        list(agent_indices.keys()),
-                    )
-                    continue
-
-                if dep_idx >= current_idx:
+                dep_data = namespaced_content.get(dep_name)
+                if dep_data is None:
+                    # Missing namespace: skipped action or not yet produced — not an error.
                     logger.debug(
-                        "Skipping context dependency '%s' (comes after current action)",
+                        "[RECORD NAMESPACE] '%s' not found on record for action '%s'",
                         dep_name,
+                        agent_name,
                     )
                     continue
 
-                # Load historical data
-                logger.debug(
-                    "[HISTORICAL LOAD] Loading context dep '%s' from file_path=%s",
-                    dep_name,
-                    file_path,
-                )
-                try:
-                    historical_data = _load_historical_node(
-                        action_name=dep_name,
-                        lineage=lineage,
-                        source_guid=source_guid or "",
-                        file_path=file_path,
-                        agent_indices=agent_indices,
-                        parent_target_id=current_item.get("parent_target_id"),
-                        root_target_id=current_item.get("root_target_id"),
-                        output_directory=output_directory,
-                        storage_backend=storage_backend,
-                        lineage_sources=current_item.get("lineage_sources"),
-                    )
-                except (ValueError, TypeError, KeyError):
+                if not isinstance(dep_data, dict):
                     logger.warning(
-                        "Failed to load historical data for context dep '%s'",
+                        "[RECORD NAMESPACE] '%s' for action '%s' is %s, not dict — skipping",
                         dep_name,
-                        exc_info=True,
-                    )
-                    historical_data = None
-
-                logger.debug(
-                    "[HISTORICAL] Action '%s': dep='%s' -> %s",
-                    agent_name,
-                    dep_name,
-                    "FOUND" if historical_data else "NOT FOUND",
-                )
-                if historical_data is None:
-                    logger.warning(
-                        "[CONTEXT SOURCE] Context dependency '%s' historical data not found. "
-                        "Lineage: %s, source_guid: %s. "
-                        "Dependency will not be available in field_context.",
-                        dep_name,
-                        lineage,
-                        source_guid,
+                        agent_name,
+                        type(dep_data).__name__,
                     )
                     continue
 
-                logger.debug(
-                    "[HISTORICAL LOAD] Loaded context dep '%s': fields=%s",
-                    dep_name,
-                    list(historical_data.keys()),
-                )
-
-                # PROGRESSIVE DATA EXPOSURE: Filter to only allowed fields
                 allowed_fields = allowed_fields_map.get(dep_name)
                 _filter_and_store_fields(
                     field_context,
                     dep_name,
-                    historical_data,
+                    dep_data,
                     allowed_fields,
-                    source_type="CONTEXT SOURCE",
+                    source_type="RECORD NAMESPACE",
                     fail_on_missing=True,
                     metadata_collector=metadata_collector,
                 )
 
     else:
-        # Log why batch mode condition wasn't met
         logger.debug(
-            "[CONTEXT BUILD SKIP] Action '%s': Batch mode condition not met. "
-            "agent_config=%s, agent_indices=%s, current_item=%s, file_path=%s",
+            "[CONTEXT BUILD SKIP] Action '%s': Batch mode condition not met.",
             agent_name,
-            bool(agent_config),
-            len(agent_indices) if agent_indices else 0,
-            bool(current_item),
-            bool(file_path),
         )
 
     if agent_config and agent_config.get("dependencies") and not agent_indices:

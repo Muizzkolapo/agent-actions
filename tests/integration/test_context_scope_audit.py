@@ -294,20 +294,16 @@ class TestFrameworkNamespaces:
 
 
 class TestFileModeObserve:
-    """FILE mode observe must filter per-record, not bypass filtering."""
+    """FILE mode observe must extract fields from namespaced content."""
 
-    def _make_records(self, *contents):
-        """Build a list of file-mode records from content dicts."""
-        return [{"content": c, "source_guid": f"sg_{i}"} for i, c in enumerate(contents)]
+    def _make_records(self, ns_name, *contents):
+        """Build file-mode records with namespaced content."""
+        return [{"content": {ns_name: c}, "source_guid": f"sg_{i}"} for i, c in enumerate(contents)]
 
     def test_file_mode_enriches_per_record(self):
-        """observe specific field -> full record returned with content intact.
-
-        NiFi-inspired: observe enriches records (injects cross-namespace data)
-        rather than stripping to flat dicts. Framework fields and all original
-        content fields are preserved. The tool receives full records.
-        """
+        """observe specific field -> extracts from namespace, preserves original."""
         data = self._make_records(
+            "dep",
             {"question": "What?", "answer": "42", "noise": "junk"},
             {"question": "Why?", "answer": "because", "noise": "more junk"},
         )
@@ -322,17 +318,19 @@ class TestFileModeObserve:
             agent_indices={"dep": 0, "act": 1},
         )
         assert len(result) == 2
-        # Full records preserved — content has all original fields
+        # Observed fields extracted from namespace
         assert result[0]["content"]["question"] == "What?"
         assert result[0]["content"]["answer"] == "42"
-        assert result[0]["content"]["noise"] == "junk"  # not stripped
-        assert result[0]["source_guid"] == "sg_0"  # framework field preserved
+        # Original namespace preserved
+        assert result[0]["content"]["dep"]["noise"] == "junk"
+        assert result[0]["source_guid"] == "sg_0"
         assert result[1]["content"]["question"] == "Why?"
         assert result[1]["content"]["answer"] == "because"
 
     def test_file_mode_wildcard_single_ns_includes_all(self):
-        """observe: ['dep.*'] on input source -> full record, all content fields."""
+        """observe: ['dep.*'] extracts all fields from namespace."""
         data = self._make_records(
+            "dep",
             {"q": "What?", "a": "42"},
             {"q": "Why?", "a": "because"},
         )
@@ -354,22 +352,20 @@ class TestFileModeObserve:
         assert result[1]["content"]["a"] == "because"
 
     def test_file_mode_wildcard_does_not_skip_specific_refs(self):
-        """observe: ['dep_a.*', 'dep_b.field'] must still resolve dep_b.field.
-
-        Previously, any wildcard caused a global short-circuit (return data),
-        skipping cross-namespace resolution for specific-field refs.
-        """
-        data = self._make_records(
-            {"text": "hello", "score": 0.9},
-        )
+        """observe: ['dep_a.*', 'dep_b.field'] resolves both namespaces."""
+        data = [
+            {
+                "content": {
+                    "dep_a": {"text": "hello", "score": 0.9},
+                    "dep_b": {"extra": "bonus"},
+                },
+                "source_guid": "sg_0",
+            }
+        ]
         agent_config = {
             "dependencies": "dep_a",
             "context_scope": {"observe": ["dep_a.*", "dep_b.extra"]},
         }
-        # dep_b is a context source not in the record — without the fix,
-        # the wildcard on dep_a would return raw data skipping dep_b loading.
-        # With the fix, dep_b.extra should be attempted (may be absent if no
-        # historical data, but the wildcard should not prevent the attempt).
         result = apply_observe_for_file_mode(
             data,
             agent_config,
@@ -377,13 +373,15 @@ class TestFileModeObserve:
             agent_indices={"dep_a": 0, "dep_b": 1, "act": 2},
         )
         assert len(result) == 1
-        # dep_a wildcard should include all content fields (in content dict)
-        assert "text" in result[0]["content"]
-        assert "score" in result[0]["content"]
+        # dep_a wildcard extracts all fields (qualified because 2 wildcards? no, only 1)
+        assert result[0]["content"]["text"] == "hello"
+        assert result[0]["content"]["score"] == 0.9
+        # dep_b specific field also extracted
+        assert result[0]["content"]["extra"] == "bonus"
 
     def test_file_mode_no_observe_returns_data_unchanged(self):
         """No observe refs -> data returned as-is."""
-        data = [{"content": {"a": 1}, "source_guid": "sg_0"}]
+        data = [{"content": {"dep": {"a": 1}}, "source_guid": "sg_0"}]
         agent_config = {"dependencies": "dep", "context_scope": {}}
         result = apply_observe_for_file_mode(data, agent_config, agent_name="act")
         assert result == data
