@@ -199,12 +199,8 @@ _RECOVERY_META = RecoveryMetadata(
             id="metadata",
         ),
         pytest.param(VersionIdEnricher, {}, {}, id="version_id"),
-        pytest.param(
-            RequiredFieldsEnricher, {"source_guid": "sg-1"}, {}, id="required_fields"
-        ),
-        pytest.param(
-            RecoveryEnricher, {"recovery_metadata": _RECOVERY_META}, {}, id="recovery"
-        ),
+        pytest.param(RequiredFieldsEnricher, {"source_guid": "sg-1"}, {}, id="required_fields"),
+        pytest.param(RecoveryEnricher, {"recovery_metadata": _RECOVERY_META}, {}, id="recovery"),
     ],
 )
 def test_enricher_does_not_touch_content(enricher_cls, extra_result_kwargs, extra_context_kwargs):
