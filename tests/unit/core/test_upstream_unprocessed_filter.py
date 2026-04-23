@@ -82,7 +82,7 @@ class TestTaskPreparerUpstreamUnprocessed:
     def test_returns_upstream_unprocessed_status(self):
         preparer = TaskPreparer()
         item = {
-            "content": "stale data",
+            "content": {"upstream_action": {"data": "stale"}},
             "source_guid": "sg_123",
             "_unprocessed": True,
         }
@@ -92,7 +92,7 @@ class TestTaskPreparerUpstreamUnprocessed:
         assert result.is_upstream_unprocessed is True
         assert result.guard_behavior is None
         assert result.source_guid == "sg_123"
-        assert result.original_content == "stale data"
+        assert result.original_content == {"upstream_action": {"data": "stale"}}
         assert result.formatted_prompt == ""
 
     @patch.object(TaskPreparer, "_load_full_context")
@@ -100,7 +100,7 @@ class TestTaskPreparerUpstreamUnprocessed:
         """Verify _load_full_context is NOT called for unprocessed records."""
         preparer = TaskPreparer()
         item = {
-            "content": "stale",
+            "content": {"upstream_action": {"val": "stale"}},
             "_unprocessed": True,
         }
         preparer.prepare(item, self._make_context())
@@ -109,7 +109,7 @@ class TestTaskPreparerUpstreamUnprocessed:
     def test_preserves_existing_target_id(self):
         preparer = TaskPreparer()
         item = {
-            "content": "stale",
+            "content": {"upstream_action": {"val": "stale"}},
             "source_guid": "sg_456",
             "_unprocessed": True,
         }

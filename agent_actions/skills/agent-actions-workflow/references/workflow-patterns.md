@@ -202,13 +202,9 @@ Write workflows that consume from multiple different upstream workflows by detec
 ```python
 @udf_tool()
 def format_options(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Format options differently based on input type.
-
-    Observed fields arrive namespaced by action name.
-    """
-    content = data.get('content', data)
-    upstream = content.get('generate_scenarios', {})
-    options = upstream.get('options', [])
+    """Format options differently based on input type."""
+    # RECORD mode: fields arrive flat
+    options = data.get('options', [])
     formatted = []
 
     for option in options:
@@ -253,12 +249,12 @@ Run same action multiple times in parallel, then consume all results:
       - process_data.*
 ```
 
-**Data structure after merge:**
+**RECORD mode — version fields collide, so they arrive as dot-qualified flat keys:**
 ```json
 {
-  "process_data_1": {"result": "output 1", "score": 0.85},
-  "process_data_2": {"result": "output 2", "score": 0.92},
-  "process_data_3": {"result": "output 3", "score": 0.88}
+  "process_data_1.result": "output 1", "process_data_1.score": 0.85,
+  "process_data_2.result": "output 2", "process_data_2.score": 0.92,
+  "process_data_3.result": "output 3", "process_data_3.score": 0.88
 }
 ```
 
@@ -266,28 +262,20 @@ Run same action multiple times in parallel, then consume all results:
 ```python
 @udf_tool()
 def combine_parallel_results(data: dict[str, Any]) -> list[dict[str, Any]]:
-    content = data.get('content', data)
+    # Version fields are dot-qualified (result/score collide across versions)
     results = []
-
     for i in range(1, 6):
-        worker_key = f'process_data_{i}'
-        worker_data = content.get(worker_key, {})
-        if isinstance(worker_data, dict):
-            results.append({
-                'worker_id': i,
-                'result': worker_data.get('result'),
-                'score': worker_data.get('score', 0)
-            })
+        result = data.get(f'process_data_{i}.result')
+        score = data.get(f'process_data_{i}.score', 0)
+        if result is not None:
+            results.append({'worker_id': i, 'result': result, 'score': score})
 
     avg_score = sum(r['score'] for r in results) / len(results) if results else 0
-
-    output = content.copy()
-    output.update({
+    return [{
         'all_results': results,
         'average_score': avg_score,
-        'total_workers': len(results)
-    })
-    return [output]
+        'total_workers': len(results),
+    }]
 ```
 
 ## Map-Reduce Pattern
@@ -337,7 +325,7 @@ def chunk_document(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     chunks = []
     for record in data:
         source_guid = record.get("source_guid")
-        text = record.get("content", record).get("text", "")
+        text = record["content"].get("text", "")
         for i, part in enumerate(split_text(text)):
             chunks.append({
                 "source_guid": source_guid,  # Required for lineage

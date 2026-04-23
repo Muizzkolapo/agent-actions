@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: "Enrichment pipeline works with namespaced content — passthrough merges into action namespace"
+time: 2026-04-23T08:80:00.000000Z

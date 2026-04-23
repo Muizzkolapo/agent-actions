@@ -1,8 +1,7 @@
-"""Action output management for previous output loading and passthrough creation."""
+"""Action output management for previous output loading and version correlation."""
 
 import json
 import logging
-import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -17,7 +16,6 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
 )
-from agent_actions.workflow.merge import merge_records_by_key
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -40,7 +38,7 @@ class OutputManagerConfig:
 
 
 class ActionOutputManager:
-    """Manages action output loading, passthrough creation, and version correlation."""
+    """Manages action output loading and version correlation."""
 
     def __init__(self, config: OutputManagerConfig):
         """Initialize output manager.
@@ -162,96 +160,6 @@ class ActionOutputManager:
 
         return previous_outputs
 
-    def create_passthrough_output(self, idx: int, agent_type: str):
-        """Create passthrough output for a skipped action."""
-        upstream_dirs = self.get_upstream_directories(idx)
-        agent_config = self.action_configs.get(agent_type, {})
-        reduce_key = agent_config.get("reduce_key")
-
-        # Collect data by relative_path from all upstream nodes
-        data_by_path: dict[str, list[list[dict]]] = {}
-        target_prefix = str(self.agent_folder / "target") + os.sep
-
-        for input_dir in upstream_dirs:
-            # Only query backend for paths under target/ (not staging/local dirs)
-            if input_dir.startswith(target_prefix):
-                action_name = Path(input_dir).name
-                target_files = self._read_upstream_from_backend(action_name)
-                if target_files:
-                    for relative_path, data in target_files.items():
-                        data_by_path.setdefault(relative_path, []).append(data)
-                    continue
-
-            for relative_path, data in self._read_upstream_from_filesystem(input_dir):
-                data_by_path.setdefault(relative_path, []).append(data)
-
-        for relative_path, data_sources in data_by_path.items():
-            if len(data_sources) == 1:
-                data = data_sources[0]
-            else:
-                all_records: list[Any] = []
-                for source_data in data_sources:
-                    all_records.extend(source_data)
-                data = merge_records_by_key(all_records, reduce_key)
-            self.storage_backend.write_target(agent_type, relative_path, data)
-
-        if data_by_path:
-            self.storage_backend.set_disposition(
-                agent_type,
-                NODE_LEVEL_RECORD_ID,
-                DISPOSITION_PASSTHROUGH,
-                reason=f"Action {agent_type} skipped — upstream data passed through",
-            )
-        else:
-            self.storage_backend.set_disposition(
-                agent_type,
-                NODE_LEVEL_RECORD_ID,
-                DISPOSITION_SKIPPED,
-                reason=f"Action {agent_type} skipped due to WHERE clause condition",
-            )
-
-    def _read_upstream_from_backend(self, action_name: str) -> dict[str, list[dict]]:
-        """Read all target files for a node from storage backend."""
-        try:
-            target_files = self.storage_backend.list_target_files(action_name)
-        except Exception as e:
-            logger.warning("Failed to list target files for %s: %s", action_name, e, exc_info=True)
-            return {}
-        result: dict[str, list[dict]] = {}
-        for relative_path in target_files:
-            try:
-                result[relative_path] = self.storage_backend.read_target(action_name, relative_path)
-            except Exception as e:
-                logger.warning(
-                    "Failed to read backend entry %s/%s: %s",
-                    action_name,
-                    relative_path,
-                    e,
-                    exc_info=True,
-                )
-        return result
-
-    def _read_upstream_from_filesystem(self, input_dir: str) -> list[tuple[str, list[dict]]]:
-        """Read JSON files from a filesystem directory."""
-        results: list[tuple[str, list[dict]]] = []
-        if not input_dir or not os.path.exists(input_dir):
-            return results
-        for item in os.listdir(input_dir):
-            if item.startswith(".") or not item.endswith(".json"):
-                continue
-            src = os.path.join(input_dir, item)
-            if not os.path.isfile(src):
-                continue
-            try:
-                with open(src, encoding="utf-8") as f:
-                    data = json.load(f)
-                if not isinstance(data, list):
-                    data = [data]
-                results.append((item, data))
-            except (OSError, json.JSONDecodeError) as e:
-                logger.warning("Could not read %s: %s", src, e, exc_info=True)
-        return results
-
     def _load_outputs_from_backend(self, action_name: str) -> tuple[list[Any], list[str]]:
         """Load all target data for a node from storage backend."""
         try:
@@ -276,91 +184,6 @@ class ActionOutputManager:
                     exc_info=True,
                 )
         return outputs, list(target_files)
-
-    def get_upstream_directories(self, idx: int) -> list[str]:
-        """Return upstream data directories for an action, resolving dependencies."""
-        current_agent = self.execution_order[idx]
-        agent_config = self.action_configs.get(current_agent, {})
-        dependencies = agent_config.get("dependencies", [])
-        previous_agent_type = self.execution_order[idx - 1] if idx > 0 else None
-
-        if not dependencies and not previous_agent_type:
-            from agent_actions.input.loaders.data_source import resolve_start_node_data_source
-
-            result = resolve_start_node_data_source(
-                self.agent_folder, self.data_source_config, current_agent
-            )
-            return [str(d) for d in result.directories]
-
-        if dependencies:
-            upstream_dirs = []
-            target_dir = self.agent_folder / "target"
-
-            for dep_name in dependencies:
-                # Use simple directory name (no index prefix)
-                dep_output = target_dir / dep_name
-                if dep_output.exists():
-                    upstream_dirs.append(str(dep_output))
-                else:
-                    logger.warning(
-                        "Dependency %s for agent %s not found.",
-                        dep_name,
-                        current_agent,
-                        extra={"agent": current_agent, "dependency": dep_name},
-                    )
-
-            if upstream_dirs:
-                return upstream_dirs
-
-        if self._version_consumption_map is None:
-            with self._version_consumption_lock:
-                if self._version_consumption_map is None:
-                    self._version_consumption_map = (
-                        self.version_correlator.detect_explicit_version_consumption(
-                            self.execution_order, self.action_configs
-                        )
-                    )
-
-        if current_agent in self._version_consumption_map:
-            consumption_config = self._version_consumption_map[current_agent]
-            version_sources = consumption_config["version_agents"]
-            pattern = consumption_config["pattern"]
-
-            correlated_dir = self.version_correlator.prepare_correlated_input(
-                current_agent, version_sources, idx
-            )
-
-            if correlated_dir:
-                self.console.print(
-                    f"[blue]🔗 Using correlated input for {current_agent} from "
-                    f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
-                )
-                return [correlated_dir]
-
-            raise ConfigurationError(
-                f"Version correlation failed for '{current_agent}'. "
-                f"Could not load outputs from version sources: {version_sources}. "
-                f"Check that all version agents completed successfully.",
-                context={
-                    "agent": current_agent,
-                    "version_sources": version_sources,
-                    "pattern": pattern,
-                },
-            )
-
-        if idx <= 0:
-            raise ConfigurationError(
-                f"Action at idx={idx} has declared dependencies that could not be resolved "
-                f"and has no upstream agent to fall back to.",
-                context={
-                    "agent": current_agent,
-                    "idx": idx,
-                    "execution_order": self.execution_order,
-                    "operation": "resolve_input_dirs",
-                },
-            )
-        prev_agent = self.execution_order[idx - 1]
-        return [str(self.agent_folder / "target" / prev_agent)]
 
     def setup_correlation_wrapper(self, idx: int) -> Callable | None:
         """Create a correlation-aware setup_directories wrapper if needed."""

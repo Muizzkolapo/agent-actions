@@ -170,35 +170,31 @@ Complete processing path as array:
 
 ## Data Shapes by Pattern
 
-What `content` looks like in each mode. These are the shapes your UDF receives after the framework processes the input.
+What your UDF receives after the framework processes the input.
 
 ### Record mode (default)
 
-UDF receives one record at a time. The `content` wrapper is already stripped.
+UDF receives one record at a time. Fields are **flat** — no namespace wrappers. When two upstream actions share a field name, the framework qualifies them as `"action.field"`.
 
 ```json
 {
-  "extract_claims": {
-    "claims": ["claim 1", "claim 2"],
-    "confidence": 0.85
-  },
-  "seed": {
-    "rubric": {"min_score": 7}
-  }
+  "claims": ["claim 1", "claim 2"],
+  "confidence": 0.85
 }
 ```
 
-Access: `content["extract_claims"]["claims"]`
+Access: `data.get("claims")`. With collisions: `data.get("extract_claims.claims")`.
 
 ### FILE mode
 
-UDF receives ALL records as a list. Each item retains the `content` wrapper.
+UDF receives ALL records as a list. Business fields are inside `record["content"]`, also flat.
 
 ```json
 [
   {
     "content": {
-      "extract_claims": {"claims": ["claim 1"], "confidence": 0.9}
+      "claims": ["claim 1"],
+      "confidence": 0.9
     },
     "source_guid": "abc-123",
     "node_id": "node_2_xxx_0",
@@ -206,7 +202,8 @@ UDF receives ALL records as a list. Each item retains the `content` wrapper.
   },
   {
     "content": {
-      "extract_claims": {"claims": ["claim 2"], "confidence": 0.7}
+      "claims": ["claim 2"],
+      "confidence": 0.7
     },
     "source_guid": "abc-123",
     "node_id": "node_2_xxx_1",
@@ -215,42 +212,51 @@ UDF receives ALL records as a list. Each item retains the `content` wrapper.
 ]
 ```
 
-Access: `record["content"]["extract_claims"]["claims"]` for each record.
+Access: `record["content"]["claims"]` for each record.
 
 ### Version merge
 
-After `version_consumption: {pattern: merge}`, all version outputs are namespaced by expanded action name.
+After `version_consumption: {pattern: merge}`, the access pattern depends on the mode.
+
+**RECORD mode** — version fields collide (all versions share `score`, `reasoning`), so they arrive as dot-qualified flat keys:
 
 ```json
 {
-  "score_quality_1": {"score": 8, "reasoning": "Clear structure"},
-  "score_quality_2": {"score": 6, "reasoning": "Needs more detail"},
-  "score_quality_3": {"score": 9, "reasoning": "Excellent coverage"}
+  "score_quality_1.score": 8, "score_quality_1.reasoning": "Clear structure",
+  "score_quality_2.score": 6, "score_quality_2.reasoning": "Needs more detail",
+  "score_quality_3.score": 9, "score_quality_3.reasoning": "Excellent coverage"
 }
 ```
 
-Access: `content["score_quality_1"]["score"]` or iterate with `content.get(f"score_quality_{i}", {})`.
+Access: `data.get("score_quality_1.score")` or iterate with `[v for k, v in data.items() if k.endswith(".score")]`.
 
-### Seed data
-
-Seed data lives under the `seed` namespace, keyed by the name from `seed_path:` in config.
+**FILE mode** — version namespaces are preserved as nested dicts in `content`, alongside qualified flat keys:
 
 ```json
 {
-  "seed": {
-    "rubric": {
-      "min_score": 7,
-      "categories": ["accuracy", "clarity"]
-    },
-    "exam_syllabus": {
-      "exam_name": "AWS Solutions Architect",
-      "topics": ["compute", "storage"]
-    }
+  "content": {
+    "score_quality_1": {"score": 8, "reasoning": "Clear structure"},
+    "score_quality_2": {"score": 6, "reasoning": "Needs more detail"},
+    "score_quality_1.score": 8, "score_quality_2.score": 6
   }
 }
 ```
 
-Access: `content["seed"]["rubric"]["min_score"]`
+Access: `content["score_quality_1"]["score"]` (nested dict) or `content["score_quality_1.score"]` (flat key).
+
+### Seed data
+
+Seed data is flattened like any other namespace. Requires `observe: [seed.*]` in the action config.
+
+**RECORD mode** — seed fields are flat:
+```json
+{
+  "rubric": {"min_score": 7, "categories": ["accuracy", "clarity"]},
+  "exam_syllabus": {"exam_name": "AWS Solutions Architect", "topics": ["compute", "storage"]}
+}
+```
+
+Access: `data.get("rubric", {})["min_score"]`
 
 ## Data Transformation Patterns
 

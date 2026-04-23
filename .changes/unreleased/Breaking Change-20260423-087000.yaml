@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: "Tools receive namespaced content directly — no flattening, data.get('content', data) pattern is dead"
+time: 2026-04-23T08:70:00.000000Z

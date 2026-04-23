@@ -62,10 +62,8 @@ OPENERS = {
 @udf_tool()
 def inject_random_opener(data: dict) -> dict:
     """Inject a randomized scenario opener based on question type."""
-    content = data.get('content', data)
-
-    # Get question type from upstream context
-    quiz_type = content.get('quiz_type_used', 'general').lower()
+    # RECORD mode: fields arrive flat
+    quiz_type = data.get('quiz_type_used', 'general').lower()
 
     # Map quiz type to opener category
     type_to_category = {

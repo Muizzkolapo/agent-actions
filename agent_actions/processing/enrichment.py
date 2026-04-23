@@ -173,19 +173,25 @@ class PassthroughEnricher(Enricher):
     """Merge passthrough fields into results."""
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
-        """Merge passthrough_fields into each item.
+        """Merge passthrough_fields into the current action's content namespace.
 
-        Targets the ``content`` sub-dict when present (structured output),
-        otherwise merges directly into the top-level item dict (passthrough
-        into the flat content namespace).
+        Content is namespaced: ``{"action_a": {...}, "action_b": {...}}``.
+        Passthrough fields are merged into ``content[context.action_name]``,
+        not at the top level.
         """
         if not result.passthrough_fields:
             return result
 
+        action_name = context.action_name
         for item in result.data:
-            content = item.get("content", item)
-            if isinstance(content, dict):
-                content.update(result.passthrough_fields)
+            content = item.get("content")
+            if not isinstance(content, dict):
+                continue
+            ns = content.get(action_name)
+            if isinstance(ns, dict):
+                ns.update(result.passthrough_fields)
+            else:
+                content[action_name] = dict(result.passthrough_fields)
 
         return result
 

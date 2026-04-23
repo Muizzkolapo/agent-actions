@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 # this prefix to distinguish "blocked by upstream" from "guard-filtered".
 UPSTREAM_SKIP_PREFIX = "Upstream dependency"
 
+# Reason string for WHERE-clause skip (action skipped, record unchanged).
+WHERE_SKIP_REASON = "WHERE clause — action skipped"
+
 
 @dataclass
 class ExecutorDependencies:
@@ -251,8 +254,15 @@ class ActionExecutor:
         action_config: ActionConfigDict,
         start_time: datetime,
     ) -> ActionExecutionResult:
-        """Handle action skip due to WHERE clause condition."""
-        self.deps.output_manager.create_passthrough_output(action_idx, action_name)
+        """Handle action skip due to WHERE clause condition.
+
+        With the additive content model, skip means "add nothing to the
+        record."  The record already carries all upstream namespaces, so
+        there is no data to copy forward and no disposition to write —
+        the action simply completes with status COMPLETED.
+        """
+        # No disposition written: the record is unchanged, downstream
+        # proceeds normally reading existing namespaces.
         self.deps.state_manager.update_status(
             action_name, ActionStatus.COMPLETED, **self._limit_metadata(action_config)
         )
@@ -268,7 +278,7 @@ class ActionExecutor:
                 action_name=action_name,
                 action_index=action_idx,
                 total_actions=total_actions,
-                skip_reason="WHERE clause condition not met",
+                skip_reason=WHERE_SKIP_REASON,
                 mode=action_config.get("run_mode", ""),
             )
         )
@@ -277,14 +287,14 @@ class ActionExecutor:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=action_name,
-                status="skipped",
+                status="success",
                 duration_seconds=duration,
-                skip_reason="WHERE clause condition not met",
+                skip_reason=WHERE_SKIP_REASON,
             )
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=True, status=ActionStatus.SKIPPED, metrics=ExecutionMetrics(duration=duration)
+            success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics(duration=duration)
         )
 
     def _track_action_start(self, params: ActionRunParams) -> None:
