@@ -186,35 +186,10 @@ class SchemaStructureValidator:
                 )
 
         if field_type == "array":
-            items = field.get("items")
-            if not items:
-                errors.append(
-                    StaticTypeError(
-                        message=f"Array field '{field_id}' missing 'items' definition",
-                        location=FieldLocation(
-                            agent_name=action_name,
-                            config_field=f"{config_field}.fields[{index}]",
-                        ),
-                        referenced_agent=action_name,
-                        referenced_field=str(field_id),
-                        hint="Add 'items': {type: 'string'} or {type: 'object', properties: {...}}",
-                    )
-                )
-            elif isinstance(items, dict):
-                items_type = items.get("type")
-                if items_type == "object" and not items.get("properties"):
-                    errors.append(
-                        StaticTypeError(
-                            message=f"Array field '{field_id}' has object items without properties",
-                            location=FieldLocation(
-                                agent_name=action_name,
-                                config_field=f"{config_field}.fields[{index}].items",
-                            ),
-                            referenced_agent=action_name,
-                            referenced_field=str(field_id),
-                            hint="Add 'properties' to define object structure: items: {type: object, properties: {...}}",
-                        )
-                    )
+            # Arrays without ``items`` and object items without ``properties``
+            # are valid JSON Schema ("array of anything" / "any object").
+            # Do not error — real workflows use these patterns legitimately.
+            pass
 
         return errors
 
@@ -242,35 +217,15 @@ class SchemaStructureValidator:
             return errors
 
         if schema_type == "array":
+            # Arrays without ``items`` and object items without ``properties``
+            # are valid JSON Schema patterns.  Only validate nested properties
+            # when they are explicitly provided.
             items = schema.get("items")
-            if not items or not isinstance(items, dict):
-                errors.append(
-                    StaticTypeError(
-                        message="Array schema missing or invalid 'items' definition",
-                        location=FieldLocation(agent_name=action_name, config_field=config_field),
-                        referenced_agent=action_name,
-                        referenced_field="items",
-                        hint="Add 'items': {type: 'object', properties: {...}} or {type: 'string'}",
-                    )
-                )
-            elif items.get("type") == "object":
-                properties = items.get("properties", {})
-                if not properties:
-                    errors.append(
-                        StaticTypeError(
-                            message="Array items have object type but empty 'properties'",
-                            location=FieldLocation(
-                                agent_name=action_name, config_field=f"{config_field}.items"
-                            ),
-                            referenced_agent=action_name,
-                            referenced_field="properties",
-                            hint="Define properties for the object: properties: {name: {type: string}, ...}",
-                        )
-                    )
-                else:
+            if isinstance(items, dict):
+                if items.get("type") == "object" and items.get("properties"):
                     errors.extend(
                         self._validate_object_properties(
-                            properties,
+                            items["properties"],
                             action_name,
                             f"{config_field}.items",
                             items.get("required", []),
@@ -402,15 +357,19 @@ class SchemaStructureValidator:
 
         for field_name, field_type in schema.items():
             if not isinstance(field_type, str):
+                if isinstance(field_type, dict):
+                    # Dict values are valid nested JSON Schema property
+                    # definitions (e.g. {type: array, items: {type: string}}).
+                    continue
                 errors.append(
                     StaticTypeError(
-                        message=f"Inline schema field '{field_name}' type must be a string",
+                        message=f"Inline schema field '{field_name}' type must be a string or dict",
                         location=FieldLocation(
                             agent_name=action_name, config_field=f"{config_field}.{field_name}"
                         ),
                         referenced_agent=action_name,
                         referenced_field=field_name,
-                        hint="Example: {name: 'string!', age: 'number'}",
+                        hint="Example: {name: 'string!', age: 'number'} or {tags: {type: 'array', items: {type: 'string'}}}",
                     )
                 )
                 continue
