@@ -69,8 +69,10 @@ class LineageBuilder:
     ) -> dict:
         """Add lineage from multiple source items (many-to-one).
 
-        For multiple sources, adds a ``lineage_sources`` field with all parent
-        node_ids. Ancestry chain is propagated from the first source item.
+        For multiple sources, adds a ``lineage_sources`` field with every
+        node_id from every source's lineage chain, so downstream lookups
+        can resolve any ancestor on any branch. Ancestry chain is propagated
+        from the first source item.
         """
         obj = obj.copy()
         obj["node_id"] = node_id
@@ -89,7 +91,7 @@ class LineageBuilder:
                 lineage = item.get("lineage", [])
                 filtered = LineageBuilder.filter_node_lineage(lineage)
                 if filtered:
-                    parent_node_ids.append(filtered[-1])
+                    parent_node_ids.extend(filtered)
 
             base_lineage = LineageBuilder.filter_node_lineage(first_source.get("lineage", []))
             obj["lineage"] = base_lineage + [node_id]

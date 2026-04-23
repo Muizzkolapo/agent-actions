@@ -5,7 +5,8 @@ The matcher uses exact node_id key-join with two explicit modes:
 - Mode 1 (Ancestor): node_id in lineage chain
 - Mode 2 (Merge parent): node_id in lineage_sources
 
-No fallbacks. No guessing. If node_id isn't found, returns None.
+lineage_sources contains every node_id from every merge parent's lineage
+chain, so Mode 2 resolves both leaf and intermediate nodes on all branches.
 
 RFC Reference: docs/specs/RFC_ancestry_chain.md
 """
@@ -609,3 +610,100 @@ class TestHistoricalContentExtraction:
         assert result is not None
         assert result.get("question_text") == "What is X?"
         assert result.get("answer_text") == "X is Y."
+
+
+class TestAsymmetricDiamondFanIn:
+    """Tests for diamond/fan-in with asymmetric branch depths.
+
+    DAG:
+        root → B → C          (branch A, depth 2)
+        root → D → E → F      (branch B, depth 3)
+        merge at G
+
+    lineage_sources includes every node_id from every merge parent's
+    lineage chain, so Mode 2 resolves intermediate nodes on all branches.
+    """
+
+    @pytest.fixture
+    def diamond_dag(self):
+        """Build asymmetric diamond DAG records."""
+        from agent_actions.utils.lineage.builder import LineageBuilder
+
+        agent_indices = {"root": 0, "B": 1, "C": 2, "D": 3, "E": 4, "F": 5, "G": 6}
+
+        root = {"source_guid": "sg-001", "node_id": "root_001", "lineage": ["root_001"]}
+
+        branch_a_b = LineageBuilder.add_lineage_tracking({}, root, "B_002")
+        branch_a_c = LineageBuilder.add_lineage_tracking({}, branch_a_b, "C_003")
+
+        branch_b_d = LineageBuilder.add_lineage_tracking({}, root, "D_004")
+        branch_b_e = LineageBuilder.add_lineage_tracking({}, branch_b_d, "E_005")
+        branch_b_f = LineageBuilder.add_lineage_tracking({}, branch_b_e, "F_006")
+
+        merged_g = LineageBuilder.add_lineage_tracking_from_sources(
+            {"source_guid": "sg-001"},
+            [branch_a_c, branch_b_f],
+            "G_007",
+        )
+
+        return {"merged_g": merged_g, "agent_indices": agent_indices}
+
+    def test_lineage_sources_includes_all_branch_nodes(self, diamond_dag):
+        """lineage_sources contains every node_id from both branches."""
+        merged = diamond_dag["merged_g"]
+        ls = merged["lineage_sources"]
+        for nid in ("root_001", "B_002", "C_003", "D_004", "E_005", "F_006"):
+            assert nid in ls, f"{nid} missing from lineage_sources"
+
+    def test_intermediate_nodes_resolved_via_mode2(self, diamond_dag):
+        """_find_target_node_id finds D and E through lineage_sources (Mode 2)."""
+        merged = diamond_dag["merged_g"]
+        indices = diamond_dag["agent_indices"]
+
+        for action, expected in (("D", "D_004"), ("E", "E_005")):
+            result = HistoricalNodeDataLoader._find_target_node_id(
+                action_name=action,
+                lineage=merged["lineage"],
+                lineage_sources=merged.get("lineage_sources"),
+                agent_indices=indices,
+            )
+            assert result == expected, f"Expected {expected} for {action}, got {result}"
+
+    def test_first_branch_resolved_via_mode1(self, diamond_dag):
+        """Nodes on the first branch are in lineage — Mode 1 finds them."""
+        merged = diamond_dag["merged_g"]
+        indices = diamond_dag["agent_indices"]
+
+        result = HistoricalNodeDataLoader._find_target_node_id(
+            action_name="B",
+            lineage=merged["lineage"],
+            lineage_sources=merged.get("lineage_sources"),
+            agent_indices=indices,
+        )
+        assert result == "B_002"
+
+    def test_leaf_node_resolved_via_mode2(self, diamond_dag):
+        """Leaf node F on branch B is in lineage_sources — Mode 2 finds it."""
+        merged = diamond_dag["merged_g"]
+        indices = diamond_dag["agent_indices"]
+
+        result = HistoricalNodeDataLoader._find_target_node_id(
+            action_name="F",
+            lineage=merged["lineage"],
+            lineage_sources=merged.get("lineage_sources"),
+            agent_indices=indices,
+        )
+        assert result == "F_006"
+
+    def test_nonexistent_action_returns_none(self, diamond_dag):
+        """Action not on any branch returns None."""
+        merged = diamond_dag["merged_g"]
+        indices = diamond_dag["agent_indices"]
+
+        result = HistoricalNodeDataLoader._find_target_node_id(
+            action_name="Z",
+            lineage=merged["lineage"],
+            lineage_sources=merged.get("lineage_sources"),
+            agent_indices={**indices, "Z": 7},
+        )
+        assert result is None
