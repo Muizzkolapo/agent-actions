@@ -74,4 +74,7 @@ def get_existing_content(record: dict[str, Any]) -> dict[str, Any]:
 
     Returns an empty dict if the record has no content.
     """
-    return record.get("content", {})
+    content = record.get("content")
+    if isinstance(content, dict):
+        return content
+    return {}
