@@ -9,7 +9,6 @@ import pytest
 
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope,
-    flatten_observe_context,
 )
 
 # ---------------------------------------------------------------------------
@@ -40,59 +39,9 @@ class TestToolUdfFlatInjection:
         )
         assert llm_ctx == {"tool": {"answer": "42"}}
 
-    def test_flatten_removes_namespace_wrapper(self):
-        namespaced = {"upstream": {"question_type": "yes_no"}}
-        flat = flatten_observe_context(namespaced)
-        assert flat == {"question_type": "yes_no"}
-        assert "upstream" not in flat
-
-    def test_flatten_empty(self):
-        assert flatten_observe_context({}) == {}
-
-    def test_flatten_non_dict_value_preserved(self):
-        ctx = {"scalar_ns": "just_a_string"}
-        flat = flatten_observe_context(ctx)
-        assert flat == {"scalar_ns": "just_a_string"}
-
 
 # ---------------------------------------------------------------------------
-# 2. Tool UDF observe — multiple fields
-# ---------------------------------------------------------------------------
-
-
-class TestToolUdfMultipleFields:
-    """All fields accessible without extra nesting."""
-
-    def test_multiple_fields_from_single_namespace(self):
-        namespaced = {"A": {"question_type": "yes_no", "confidence": 0.95}}
-        flat = flatten_observe_context(namespaced)
-        assert flat["question_type"] == "yes_no"
-        assert flat["confidence"] == 0.95
-
-    def test_fields_from_multiple_namespaces_no_collision(self):
-        namespaced = {
-            "A": {"question_type": "yes_no"},
-            "source": {"url": "http://example.com"},
-        }
-        flat = flatten_observe_context(namespaced)
-        assert flat["question_type"] == "yes_no"
-        assert flat["url"] == "http://example.com"
-
-    def test_collision_qualified_keys(self):
-        namespaced = {
-            "dep_a": {"title": "Title A", "unique_a": "val_a"},
-            "dep_b": {"title": "Title B"},
-        }
-        flat = flatten_observe_context(namespaced)
-        assert flat["dep_a.title"] == "Title A"
-        assert flat["dep_b.title"] == "Title B"
-        assert flat["unique_a"] == "val_a"
-        # Bare 'title' should NOT exist (it's ambiguous)
-        assert "title" not in flat
-
-
-# ---------------------------------------------------------------------------
-# 3. LLM observe — unchanged
+# 2. LLM observe — unchanged
 # ---------------------------------------------------------------------------
 
 
@@ -122,31 +71,12 @@ class TestLlmObserveUnchanged:
 
 
 # ---------------------------------------------------------------------------
-# 4. Cross-action observe — tool feeds LLM
+# 3. Cross-action observe — tool feeds LLM
 # ---------------------------------------------------------------------------
 
 
 class TestCrossActionToolFeedsLlm:
     """Tool UDF output consumed by LLM action via observe resolves correctly."""
-
-    def test_tool_output_flat_resolves_in_downstream(self):
-        """After flatten, tool passes flat fields → downstream observe works."""
-        # Simulate: tool received namespaced context, we flattened it
-        tool_input_namespaced = {"A": {"question_type": "yes_no"}}
-        tool_input_flat = flatten_observe_context(tool_input_namespaced)
-
-        # Tool uses the flat field and includes it in output
-        tool_output = {"question_type": tool_input_flat["question_type"], "summary": "42"}
-
-        # Downstream LLM action observes tool's output
-        field_context = {"tool_b": tool_output}
-        _, llm_ctx, _ = apply_context_scope(
-            field_context,
-            {"observe": ["tool_b.question_type", "tool_b.summary"]},
-            action_name="downstream_llm",
-        )
-        assert llm_ctx["tool_b"]["question_type"] == "yes_no"
-        assert llm_ctx["tool_b"]["summary"] == "42"
 
     def test_without_flatten_downstream_breaks(self):
         """Without flatten, tool passes namespaced fields → downstream observe fails."""
@@ -174,7 +104,7 @@ class TestCrossActionToolFeedsLlm:
 
 
 # ---------------------------------------------------------------------------
-# 5. File-mode observe — tool UDF
+# 4. File-mode observe — tool UDF
 # ---------------------------------------------------------------------------
 
 
@@ -215,7 +145,7 @@ class TestFileModeObserveToolUdf:
 
 
 # ---------------------------------------------------------------------------
-# 6. Security — drop still works
+# 5. Security — drop still works
 # ---------------------------------------------------------------------------
 
 
@@ -238,12 +168,3 @@ class TestDropStillWorks:
         # api_key must NOT leak through wildcard observe
         assert "api_key" not in llm_ctx.get("tool", {})
         assert llm_ctx["tool"]["summary"] == "safe_data"
-
-    def test_drop_on_flattened_context(self):
-        """flatten_observe_context preserves all fields — drop is applied upstream."""
-        # flatten itself doesn't drop; drop is handled by apply_context_scope
-        namespaced = {"dep": {"api_key": "secret", "name": "test"}}
-        flat = flatten_observe_context(namespaced)
-        # flatten keeps everything (drop is responsibility of apply_context_scope)
-        assert "api_key" in flat
-        assert "name" in flat
