@@ -7,7 +7,7 @@ import pytest
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.result_collector import ResultCollector
+from agent_actions.processing.result_collector import CollectionStats, ResultCollector
 from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
@@ -605,3 +605,47 @@ class TestResultCollectorDispositions:
         calls = backend.set_disposition.call_args_list
         assert calls[0] == (("agent", "src-d", "deferred"), {"reason": "batch_queued:task_id=t-1"})
         assert calls[1] == (("agent", "src-f", "filtered"), {"reason": "guard_filter"})
+
+
+class TestCollectionStatsOnlyGuardOutcomes:
+    """Tests for CollectionStats.only_guard_outcomes property.
+
+    The property uses dataclasses.fields() to sum all stat fields, so adding
+    a new field to CollectionStats automatically makes it return False when
+    the new field has a non-zero count — no manual update needed.
+    """
+
+    def test_all_filtered(self):
+        assert CollectionStats(filtered=5).only_guard_outcomes is True
+
+    def test_all_skipped(self):
+        assert CollectionStats(skipped=3).only_guard_outcomes is True
+
+    def test_mixed_filtered_and_skipped(self):
+        assert CollectionStats(filtered=2, skipped=3).only_guard_outcomes is True
+
+    def test_all_zeros(self):
+        """All-zero stats: 0 == 0 → True (preserves existing behavior)."""
+        assert CollectionStats().only_guard_outcomes is True
+
+    def test_unprocessed_blocks(self):
+        assert CollectionStats(unprocessed=5).only_guard_outcomes is False
+
+    def test_success_blocks(self):
+        assert CollectionStats(success=1).only_guard_outcomes is False
+
+    def test_failed_blocks(self):
+        assert CollectionStats(failed=1).only_guard_outcomes is False
+
+    def test_exhausted_blocks(self):
+        assert CollectionStats(exhausted=1).only_guard_outcomes is False
+
+    def test_deferred_blocks(self):
+        assert CollectionStats(deferred=1).only_guard_outcomes is False
+
+    def test_mixed_filtered_with_unprocessed_blocks(self):
+        """Filtered + unprocessed: not all-guard, must block."""
+        assert CollectionStats(filtered=3, unprocessed=2).only_guard_outcomes is False
+
+    def test_mixed_skipped_with_success_blocks(self):
+        assert CollectionStats(skipped=2, success=1).only_guard_outcomes is False
