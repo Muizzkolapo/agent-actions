@@ -69,6 +69,11 @@ def get_all_namespaces(record: dict[str, Any]) -> list[str]:
     return list(content.keys())
 
 
+def is_version_merge(agent_config: dict[str, Any]) -> bool:
+    """True when the action consumes version output (content is pre-namespaced)."""
+    return bool(agent_config.get("version_consumption_config"))
+
+
 def get_existing_content(record: dict[str, Any]) -> dict[str, Any]:
     """Return the existing namespaced content dict from a record.
 

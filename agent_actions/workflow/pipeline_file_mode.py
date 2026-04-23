@@ -213,9 +213,13 @@ def process_file_mode_tool(
         # existing namespaces from the input record.
         # Version merge: version namespaces are already the correct additive
         # format — spread instead of wrapping under the action name.
-        from agent_actions.utils.content import get_existing_content, wrap_content
+        from agent_actions.utils.content import (
+            get_existing_content,
+            is_version_merge,
+            wrap_content,
+        )
 
-        is_version_merge = bool(context.agent_config.get("version_consumption_config"))
+        version_merge = is_version_merge(context.agent_config)
 
         structured_data = []
         for idx, item in enumerate(raw_response):
@@ -233,7 +237,7 @@ def process_file_mode_tool(
                 if isinstance(input_idx, int) and input_idx < len(original_data):
                     existing = get_existing_content(original_data[input_idx])
 
-                if is_version_merge:
+                if version_merge:
                     content = {**existing, **data_fields}
                 else:
                     content = wrap_content(context.agent_name, data_fields, existing)

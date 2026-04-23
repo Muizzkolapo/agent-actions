@@ -1,6 +1,7 @@
 """Passthrough strategies that extract fields from context_scope.passthrough config."""
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
+from agent_actions.utils.content import is_version_merge
 
 from .base import IPassthroughTransformStrategy
 
@@ -59,7 +60,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
                     )
                 )
         action_name = agent_config["agent_type"]
-        version_merge = bool(agent_config.get("version_consumption_config"))
+        version_merge = is_version_merge(agent_config)
         return DataTransformer.transform_structure(
             [{source_guid: updated}], action_name, version_merge=version_merge
         )
@@ -137,7 +138,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
                     )
                 )
         action_name = agent_config["agent_type"]
-        version_merge = bool(agent_config.get("version_consumption_config"))
+        version_merge = is_version_merge(agent_config)
         return DataTransformer.transform_structure(
             [{source_guid: updated}], action_name, version_merge=version_merge
         )
@@ -196,7 +197,7 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
     ) -> list:
         """Structure data without passthrough."""
         action_name = agent_config["agent_type"]
-        version_merge = bool(agent_config.get("version_consumption_config"))
+        version_merge = is_version_merge(agent_config)
         return DataTransformer.transform_structure(
             [{source_guid: data}], action_name, version_merge=version_merge
         )
