@@ -548,6 +548,14 @@ class TestHandleAgentSkip:
         )
         mock_fire.assert_called_once()
 
+    def test_state_manager_and_result_status_agree(self, executor, mock_deps):
+        """Regression: state_manager.update_status and result.status must agree."""
+        with patch("agent_actions.workflow.executor.fire_event"):
+            result = executor._handle_action_skip("agent_a", 0, {}, datetime.now())
+
+        status_mgr_call = mock_deps.state_manager.update_status.call_args
+        assert status_mgr_call[0][1] == result.status == ActionStatus.COMPLETED
+
     def test_total_agents_from_execution_order(self, executor, mock_deps):
         """total_agents should come from agent_runner.execution_order length."""
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:

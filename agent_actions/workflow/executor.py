@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 UPSTREAM_SKIP_PREFIX = "Upstream dependency"
 
 # Reason string for WHERE-clause passthrough (action data forwarded, LLM logic skipped).
-WHERE_PASSTHROUGH_REASON = "WHERE clause \u2014 data passed through"
+WHERE_PASSTHROUGH_REASON = "WHERE clause — data passed through"
 
 
 @dataclass
