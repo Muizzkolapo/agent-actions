@@ -58,7 +58,8 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
                         context_for_passthrough, content_dict, fields_to_merge
                     )
                 )
-        return DataTransformer.transform_structure([{source_guid: updated}])
+        action_name = agent_config["agent_type"]
+        return DataTransformer.transform_structure([{source_guid: updated}], action_name)
 
     @staticmethod
     def has_passthrough_config(agent_config: dict) -> bool:
@@ -132,7 +133,8 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
                         context_for_passthrough, item_dict, fields_to_merge
                     )
                 )
-        return DataTransformer.transform_structure([{source_guid: updated}])
+        action_name = agent_config["agent_type"]
+        return DataTransformer.transform_structure([{source_guid: updated}], action_name)
 
 
 class NoOpStrategy(IPassthroughTransformStrategy):
@@ -187,4 +189,5 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
         passthrough_fields: dict | None = None,
     ) -> list:
         """Structure data without passthrough."""
-        return DataTransformer.transform_structure([{source_guid: data}])
+        action_name = agent_config["agent_type"]
+        return DataTransformer.transform_structure([{source_guid: data}], action_name)

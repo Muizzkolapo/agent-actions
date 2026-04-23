@@ -209,24 +209,38 @@ def process_file_mode_tool(
             )
 
         # Separate business data from framework fields in tool output.
-        # Tools may return full records (with content wrapper) or flat dicts.
+        # Additive model: wrap tool output under action namespace, preserve
+        # existing namespaces from the input record.
+        from agent_actions.utils.content import get_existing_content, wrap_content
+
         structured_data = []
-        for item in raw_response:
+        for idx, item in enumerate(raw_response):
             if isinstance(item, dict):
                 if isinstance(item.get("content"), dict):
-                    # Tool returned a full record — use content directly.
                     data_fields = item["content"]
                 else:
-                    # Tool returned a flat dict — strip reserved fields.
                     data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
-                structured_item = {"content": data_fields}
+
+                # Carry forward existing namespaces from the input record.
+                input_idx = source_mapping.get(idx) if source_mapping else None
+                if isinstance(input_idx, list):
+                    input_idx = input_idx[0]
+                existing = {}
+                if isinstance(input_idx, int) and input_idx < len(original_data):
+                    existing = get_existing_content(original_data[input_idx])
+
+                structured_item: dict[str, Any] = {
+                    "content": wrap_content(context.agent_name, data_fields, existing),
+                }
 
                 if "source_guid" in item:
                     structured_item["source_guid"] = item["source_guid"]
 
                 structured_data.append(structured_item)
             else:
-                structured_data.append({"content": {"value": item}})
+                structured_data.append(
+                    {"content": wrap_content(context.agent_name, {"value": item})}
+                )
 
         # Reattach source_guid from input records — authoritative for FILE mode.
         # LineageBuilder._propagate_ancestry_chain and RequiredFieldsEnricher

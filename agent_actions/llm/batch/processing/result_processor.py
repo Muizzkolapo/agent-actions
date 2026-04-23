@@ -231,8 +231,11 @@ class BatchResultProcessor:
                     custom_id,
                 )
 
+        if not ctx.agent_config or "action_name" not in ctx.agent_config:
+            raise ValueError("agent_config must contain 'action_name' for content namespacing")
+        action_name = ctx.agent_config["action_name"]
         structured_items = DataTransformer.transform_structure(
-            [{original_source_guid: generated_list}]
+            [{original_source_guid: generated_list}], action_name
         )
 
         # Batch items inherit target_id from the original input row.
@@ -420,11 +423,19 @@ class BatchResultProcessor:
                             "RecoveryMetadata.retry is None for exhausted record "
                             f"custom_id={custom_id}; expected retry metadata with attempt count"
                         )
+                    from agent_actions.utils.content import get_existing_content, wrap_content
+
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         ctx.agent_config or {}
                     )
+                    existing = get_existing_content(original_row)
+                    if not ctx.agent_config or "action_name" not in ctx.agent_config:
+                        raise ValueError(
+                            "agent_config must contain 'action_name' for content namespacing"
+                        )
+                    stage6_action_name = ctx.agent_config["action_name"]
                     exhausted_item = {
-                        "content": empty_content,
+                        "content": wrap_content(stage6_action_name, empty_content, existing),
                         "source_guid": source_guid,
                         "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
                         "_unprocessed": True,
@@ -461,8 +472,10 @@ class BatchResultProcessor:
                     else:
                         reason = "batch_not_returned"
 
+                    from agent_actions.utils.content import get_existing_content
+
                     passthrough_item = {
-                        "content": original_row.get("content", original_row),
+                        "content": get_existing_content(original_row),
                         "source_guid": source_guid,
                         "metadata": {
                             "reason": reason,
