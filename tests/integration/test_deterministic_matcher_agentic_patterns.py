@@ -126,11 +126,13 @@ class TestContractReviewerPattern:
             "generate_summary": 4,
         }
 
-    def test_summary_observes_aggregate_via_ancestor_mode(self, contract_storage, contract_indices):
-        """generate_summary resolves aggregate_risk via lineage (ancestor mode).
+    def test_summary_observes_aggregate_via_record_namespace(
+        self, contract_storage, contract_indices
+    ):
+        """generate_summary reads aggregate_risk from record's namespaced content.
 
-        The summary action's lineage includes aggregate_risk_uuid_agg.
-        This tests the linear chain AFTER the fan-in.
+        With the additive model, aggregate_risk output is stored under its
+        namespace on the record — no storage backend lookup needed.
         """
         current_item = {
             "source_guid": "contract-001",
@@ -140,7 +142,13 @@ class TestContractReviewerPattern:
                 "aggregate_risk_uuid_agg",
                 "generate_summary_uuid_gs",
             ],
-            "content": {},
+            "content": {
+                "aggregate_risk": {
+                    "overall_risk": "high",
+                    "clause_count": 3,
+                    "high_risk_clauses": [1],
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -164,7 +172,6 @@ class TestContractReviewerPattern:
                     "aggregate_risk.high_risk_clauses",
                 ]
             },
-            storage_backend=contract_storage,
         )
 
         assert "aggregate_risk" in field_context
@@ -314,7 +321,10 @@ class TestProductListingPattern:
     def test_format_listing_sees_correct_product_description(
         self, product_storage, product_indices
     ):
-        """format_listing for prod-001 sees 'Premium organic coffee', not 'Budget instant'."""
+        """format_listing for prod-001 reads from record's namespaced content.
+
+        With the additive model, all upstream outputs are on the record.
+        """
         current_item = {
             "source_guid": "prod-001",
             "node_id": "format_listing_uuid_fl",
@@ -327,7 +337,16 @@ class TestProductListingPattern:
                 "optimize_seo_uuid_os",
                 "format_listing_uuid_fl",
             ],
-            "content": {},
+            "content": {
+                "generate_description": {
+                    "product_description": "Premium organic coffee beans",
+                    "search_keywords": ["organic", "coffee", "fair-trade"],
+                },
+                "validate_compliance": {
+                    "compliance_passed": True,
+                    "violations": [],
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -351,7 +370,6 @@ class TestProductListingPattern:
                     "validate_compliance.compliance_passed",
                 ]
             },
-            storage_backend=product_storage,
         )
 
         assert "generate_description" in field_context
@@ -476,7 +494,7 @@ class TestVersionedClassifierPattern:
     def test_final_decision_observes_aggregate_consensus(
         self, versioned_storage, versioned_indices
     ):
-        """final_decision sees the aggregated consensus, not individual classifiers."""
+        """final_decision reads aggregate consensus from record's namespaced content."""
         current_item = {
             "source_guid": "doc-001",
             "node_id": "final_decision_uuid_fd",
@@ -485,7 +503,13 @@ class TestVersionedClassifierPattern:
                 "aggregate_classifications_uuid_ac",
                 "final_decision_uuid_fd",
             ],
-            "content": {},
+            "content": {
+                "aggregate_classifications": {
+                    "consensus_label": "spam",
+                    "vote_count": {"spam": 2, "ham": 1},
+                    "avg_confidence": 0.823,
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -509,7 +533,6 @@ class TestVersionedClassifierPattern:
                     "aggregate_classifications.avg_confidence",
                 ]
             },
-            storage_backend=versioned_storage,
         )
 
         assert "aggregate_classifications" in field_context
@@ -638,7 +661,7 @@ class TestHITLCrossGatePattern:
         }
 
     def test_approved_record_2_sees_its_own_consolidation(self, hitl_storage, hitl_indices):
-        """generate_question for record 2 sees page 12, not page 47."""
+        """generate_question for record 2 reads consolidation from record namespace."""
         current_item = {
             "source_guid": "mcp-src-002",
             "node_id": "generate_question_uuid_gq2",
@@ -649,7 +672,13 @@ class TestHITLCrossGatePattern:
                 "review_uuid_r2",
                 "generate_question_uuid_gq2",
             ],
-            "content": {},
+            "content": {
+                "consolidate": {
+                    "final_source_quote": "The MCP protocol enables tool use",
+                    "answer": "MCP provides a standard interface for AI tool invocation",
+                    "source_page": 12,
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -663,7 +692,6 @@ class TestHITLCrossGatePattern:
             current_item=current_item,
             file_path="/mock/batch_001.json",
             context_scope={"observe": ["consolidate.answer", "consolidate.source_page"]},
-            storage_backend=hitl_storage,
         )
 
         assert "consolidate" in field_context
@@ -674,7 +702,7 @@ class TestHITLCrossGatePattern:
         )
 
     def test_approved_record_5_sees_its_own_consolidation(self, hitl_storage, hitl_indices):
-        """generate_question for record 5 sees page 47, not page 12."""
+        """generate_question for record 5 reads its own consolidation from record namespace."""
         current_item = {
             "source_guid": "mcp-src-005",
             "node_id": "generate_question_uuid_gq5",
@@ -685,7 +713,13 @@ class TestHITLCrossGatePattern:
                 "review_uuid_r5",
                 "generate_question_uuid_gq5",
             ],
-            "content": {},
+            "content": {
+                "consolidate": {
+                    "final_source_quote": "The MCP protocol enables tool use",
+                    "answer": "MCP allows LLMs to call external tools safely",
+                    "source_page": 47,
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -699,7 +733,6 @@ class TestHITLCrossGatePattern:
             current_item=current_item,
             file_path="/mock/batch_001.json",
             context_scope={"observe": ["consolidate.answer", "consolidate.source_page"]},
-            storage_backend=hitl_storage,
         )
 
         assert "consolidate" in field_context
@@ -784,7 +817,7 @@ class TestDiamondMergePattern:
         }
 
     def test_merge_observes_both_branches(self, diamond_storage, diamond_indices):
-        """merge_report sees SEO data AND recommendation data from both branches."""
+        """merge_report reads both branches from record's namespaced content."""
         merged_item = {
             "source_guid": "book-001",
             "node_id": "merge_report_uuid_mr",
@@ -793,11 +826,16 @@ class TestDiamondMergePattern:
                 "branch_seo_uuid_bs",
                 "merge_report_uuid_mr",
             ],
-            "lineage_sources": [
-                "branch_seo_uuid_bs",
-                "branch_recommendations_uuid_br",
-            ],
-            "content": {},
+            "content": {
+                "branch_seo": {
+                    "seo_title": "Top 10 Python Libraries for Data Science",
+                    "keywords": ["python", "data-science", "pandas"],
+                },
+                "branch_recommendations": {
+                    "recommended_audience": "intermediate developers",
+                    "similar_books": ["Fluent Python", "Python Data Science Handbook"],
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -821,24 +859,21 @@ class TestDiamondMergePattern:
                     "branch_recommendations.recommended_audience",
                 ]
             },
-            storage_backend=diamond_storage,
         )
 
-        # branch_seo is in lineage (ancestor mode)
         assert "branch_seo" in field_context
         assert (
             field_context["branch_seo"]["seo_title"] == "Top 10 Python Libraries for Data Science"
         )
 
-        # branch_recommendations is in lineage_sources (merge-parent mode)
         assert "branch_recommendations" in field_context
         assert (
             field_context["branch_recommendations"]["recommended_audience"]
             == "intermediate developers"
         )
 
-    def test_both_branches_in_lineage_mode_1_only(self, diamond_storage, diamond_indices):
-        """Both parallel branch node_ids in lineage — resolved via Mode 1 without lineage_sources."""
+    def test_both_branches_in_content(self, diamond_storage, diamond_indices):
+        """Both parallel branches on the record — resolved from namespaced content."""
         merged_item = {
             "source_guid": "book-001",
             "node_id": "merge_report_uuid_mr",
@@ -848,8 +883,16 @@ class TestDiamondMergePattern:
                 "branch_recommendations_uuid_br",
                 "merge_report_uuid_mr",
             ],
-            # lineage_sources is None — Mode 1 alone must resolve both
-            "content": {},
+            "content": {
+                "branch_seo": {
+                    "seo_title": "Top 10 Python Libraries for Data Science",
+                    "keywords": ["python", "data-science", "pandas"],
+                },
+                "branch_recommendations": {
+                    "recommended_audience": "intermediate developers",
+                    "similar_books": ["Fluent Python", "Python Data Science Handbook"],
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -873,7 +916,6 @@ class TestDiamondMergePattern:
                     "branch_recommendations.recommended_audience",
                 ]
             },
-            storage_backend=diamond_storage,
         )
 
         assert "branch_seo" in field_context
@@ -887,20 +929,21 @@ class TestDiamondMergePattern:
         )
 
     def test_diamond_wildcard_observe(self, diamond_storage, diamond_indices):
-        """Wildcard observe loads all fields from both parallel branches."""
+        """Wildcard observe loads all fields from both branches on the record."""
         merged_item = {
             "source_guid": "book-001",
             "node_id": "merge_report_uuid_mr",
-            "lineage": [
-                "source_uuid_b",
-                "branch_seo_uuid_bs",
-                "merge_report_uuid_mr",
-            ],
-            "lineage_sources": [
-                "branch_seo_uuid_bs",
-                "branch_recommendations_uuid_br",
-            ],
-            "content": {},
+            "lineage": ["source_uuid_b", "branch_seo_uuid_bs", "merge_report_uuid_mr"],
+            "content": {
+                "branch_seo": {
+                    "seo_title": "Top 10 Python Libraries for Data Science",
+                    "keywords": ["python", "data-science", "pandas"],
+                },
+                "branch_recommendations": {
+                    "recommended_audience": "intermediate developers",
+                    "similar_books": ["Fluent Python", "Python Data Science Handbook"],
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -909,25 +952,17 @@ class TestDiamondMergePattern:
                 "idx": 3,
                 "dependencies": [],
                 "context_scope": {
-                    "observe": [
-                        "branch_seo.*",
-                        "branch_recommendations.*",
-                    ]
+                    "observe": ["branch_seo.*", "branch_recommendations.*"],
                 },
             },
             agent_indices=diamond_indices,
             current_item=merged_item,
             file_path="/mock/batch_001.json",
             context_scope={
-                "observe": [
-                    "branch_seo.*",
-                    "branch_recommendations.*",
-                ]
+                "observe": ["branch_seo.*", "branch_recommendations.*"],
             },
-            storage_backend=diamond_storage,
         )
 
-        # Wildcard: all fields from both branches
         assert (
             field_context["branch_seo"]["seo_title"] == "Top 10 Python Libraries for Data Science"
         )
@@ -942,16 +977,17 @@ class TestDiamondMergePattern:
         ]
 
     def test_single_upstream_observe_unchanged(self, diamond_storage, diamond_indices):
-        """Single-branch observe still works — regression guard for parallel branch fix."""
+        """Single-branch observe still works — regression guard."""
         single_dep_item = {
             "source_guid": "book-001",
             "node_id": "merge_report_uuid_mr",
-            "lineage": [
-                "source_uuid_b",
-                "branch_seo_uuid_bs",
-                "merge_report_uuid_mr",
-            ],
-            "content": {},
+            "lineage": ["source_uuid_b", "branch_seo_uuid_bs", "merge_report_uuid_mr"],
+            "content": {
+                "branch_seo": {
+                    "seo_title": "Top 10 Python Libraries for Data Science",
+                    "keywords": ["python", "data-science", "pandas"],
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -959,15 +995,12 @@ class TestDiamondMergePattern:
             agent_config={
                 "idx": 3,
                 "dependencies": [],
-                "context_scope": {
-                    "observe": ["branch_seo.seo_title"],
-                },
+                "context_scope": {"observe": ["branch_seo.seo_title"]},
             },
             agent_indices=diamond_indices,
             current_item=single_dep_item,
             file_path="/mock/batch_001.json",
             context_scope={"observe": ["branch_seo.seo_title"]},
-            storage_backend=diamond_storage,
         )
 
         assert "branch_seo" in field_context

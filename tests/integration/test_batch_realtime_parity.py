@@ -333,11 +333,17 @@ class TestEdgeCases:
     def test_empty_contents_parity(
         self,
         parity_agent_config_no_context_scope,
+        parity_contents,
         parity_current_item,
         parity_agent_indices,
         parity_dependency_configs,
     ):
-        """Both modes should handle empty contents identically."""
+        """Both modes should handle empty contents identically.
+
+        source_content is required so the observed source.text field exists
+        at runtime.  With the additive model, the source namespace is
+        populated exclusively from source_content — not from current_item.
+        """
         common_args = {
             "agent_config": parity_agent_config_no_context_scope,
             "agent_name": "parity_test_agent_simple",
@@ -345,6 +351,7 @@ class TestEdgeCases:
             "agent_indices": parity_agent_indices,
             "dependency_configs": parity_dependency_configs,
             "current_item": parity_current_item,
+            "source_content": parity_contents,
         }
 
         batch_result = PromptPreparationService.prepare_prompt_with_context(

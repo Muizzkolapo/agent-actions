@@ -139,7 +139,7 @@ class TestAncestorMode:
         assert content["answer_text"] == "Paris is the capital of France"
 
     def test_e2e_context_build_loads_observed_field(self, linear_pipeline_storage):
-        """build_field_context_with_history resolves extract.answer_text correctly."""
+        """build_field_context_with_history reads extract namespace from record."""
         current_item = {
             "source_guid": "src-001",
             "node_id": "classify_uuid_ccc",
@@ -149,7 +149,12 @@ class TestAncestorMode:
                 "transform_uuid_xxx",
                 "classify_uuid_ccc",
             ],
-            "content": {},
+            "content": {
+                "extract": {
+                    "answer_text": "Paris is the capital of France",
+                    "confidence": 0.98,
+                },
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -163,7 +168,6 @@ class TestAncestorMode:
             current_item=current_item,
             file_path="/mock/test.json",
             context_scope={"observe": ["extract.answer_text"]},
-            storage_backend=linear_pipeline_storage,
         )
 
         assert "extract" in field_context
@@ -267,13 +271,16 @@ class TestMergeParentMode:
         assert content["label"] == "neutral"
 
     def test_e2e_context_build_with_lineage_sources(self, merge_storage):
-        """build_field_context_with_history passes lineage_sources through the full chain."""
+        """build_field_context_with_history reads merge branches from record namespace."""
         merged_item = {
             "source_guid": "src-merge",
             "node_id": "merge_action_uuid_mmm",
             "lineage": ["source_uuid_m", "branch_a_uuid_aaa", "merge_action_uuid_mmm"],
             "lineage_sources": ["branch_a_uuid_aaa", "branch_b_uuid_bbb"],
-            "content": {},
+            "content": {
+                "branch_a": {"score": 0.85, "label": "positive"},
+                "branch_b": {"score": 0.42, "label": "neutral"},
+            },
         }
 
         field_context = build_field_context_with_history(
@@ -287,7 +294,6 @@ class TestMergeParentMode:
             current_item=merged_item,
             file_path="/mock/test.json",
             context_scope={"observe": ["branch_b.score", "branch_b.label"]},
-            storage_backend=merge_storage,
         )
 
         assert "branch_b" in field_context, (

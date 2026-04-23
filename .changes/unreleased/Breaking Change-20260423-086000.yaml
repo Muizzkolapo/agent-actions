@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: "Observe reads from record namespaces instead of storage backend lookups"
+time: 2026-04-23T08:60:00.000000Z

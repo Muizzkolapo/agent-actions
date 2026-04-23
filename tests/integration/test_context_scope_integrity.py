@@ -848,22 +848,19 @@ class TestFileModeObserve:
     """FILE-mode specific observe behavior."""
 
     def test_file_mode_observe_filters_fields_per_record(self):
-        """FILE-mode observe returns full records with all content preserved (NiFi enrichment)."""
+        """FILE-mode observe extracts fields from namespaced content."""
         data = [
             {
-                "content": {"title": "Record 1", "body": "Text 1", "secret": "hidden1"},
+                "content": {"dep": {"title": "Record 1", "body": "Text 1", "secret": "hidden1"}},
                 "source_guid": "sg1",
-                "lineage": [],
             },
             {
-                "content": {"title": "Record 2", "body": "Text 2", "secret": "hidden2"},
+                "content": {"dep": {"title": "Record 2", "body": "Text 2", "secret": "hidden2"}},
                 "source_guid": "sg2",
-                "lineage": [],
             },
             {
-                "content": {"title": "Record 3", "body": "Text 3", "secret": "hidden3"},
+                "content": {"dep": {"title": "Record 3", "body": "Text 3", "secret": "hidden3"}},
                 "source_guid": "sg3",
-                "lineage": [],
             },
         ]
         agent_config = {
@@ -881,27 +878,24 @@ class TestFileModeObserve:
         for i, record in enumerate(result, 1):
             assert record["content"]["title"] == f"Record {i}"
             assert record["content"]["body"] == f"Text {i}"
-            # NiFi enrichment preserves all original content fields
-            assert record["content"]["secret"] == f"hidden{i}"
+            # Original namespace preserved
+            assert record["content"]["dep"]["secret"] == f"hidden{i}"
             assert record["source_guid"] == f"sg{i}"
 
     def test_file_mode_observe_preserves_record_order(self):
         """Output array order matches input array order."""
         data = [
             {
-                "content": {"name": "Charlie", "age": 30, "city": "NYC"},
+                "content": {"dep": {"name": "Charlie", "age": 30, "city": "NYC"}},
                 "source_guid": "sg3",
-                "lineage": [],
             },
             {
-                "content": {"name": "Alice", "age": 25, "city": "LA"},
+                "content": {"dep": {"name": "Alice", "age": 25, "city": "LA"}},
                 "source_guid": "sg1",
-                "lineage": [],
             },
             {
-                "content": {"name": "Bob", "age": 35, "city": "Chicago"},
+                "content": {"dep": {"name": "Bob", "age": 35, "city": "Chicago"}},
                 "source_guid": "sg2",
-                "lineage": [],
             },
         ]
         agent_config = {
@@ -920,29 +914,19 @@ class TestFileModeObserve:
         assert result[1]["content"]["name"] == "Alice"
         assert result[2]["content"]["name"] == "Bob"
 
-    def test_file_mode_cross_namespace_loading(self):
-        """FILE-mode loads ancestor data per-record using ancestry cache."""
-        storage = MockStorageBackend(
-            {
-                "classify": [
-                    {
-                        "node_id": "classify_r1",
-                        "source_guid": "sg1",
-                        "content": {
-                            "category": "science",
-                            "score": 0.95,
-                            "method": "auto",
-                        },
-                    },
-                ],
-            }
-        )
+    def test_file_mode_cross_namespace_from_record(self):
+        """FILE-mode reads cross-namespace data from record's namespaced content.
 
+        With the additive model, all previous action outputs are on the record.
+        No storage backend lookup needed.
+        """
         data = [
             {
-                "content": {"text": "Biology paper", "length": 500, "format": "pdf"},
+                "content": {
+                    "extract": {"text": "Biology paper", "length": 500, "format": "pdf"},
+                    "classify": {"category": "science", "score": 0.95, "method": "auto"},
+                },
                 "source_guid": "sg1",
-                "lineage": ["classify_r1", "extract_r1"],
                 "node_id": "enrich_r1",
             },
         ]
@@ -950,35 +934,30 @@ class TestFileModeObserve:
             "context_scope": {"observe": ["extract.text", "classify.category"]},
             "dependencies": "extract",
         }
-        agent_indices = {"extract": 0, "classify": 1, "enrich": 2}
 
         result = apply_observe_for_file_mode(
             data=data,
             agent_config=agent_config,
             agent_name="enrich",
-            agent_indices=agent_indices,
-            file_path="/mock/path/file.json",
-            storage_backend=storage,
         )
 
         assert len(result) == 1
-        # Input source field from record content
+        # Fields extracted from namespaces
         assert result[0]["content"]["text"] == "Biology paper"
-        # Cross-namespace field injected into content from historical lookup
         assert result[0]["content"]["category"] == "science"
-        # NiFi enrichment: all original content fields preserved
-        assert result[0]["content"]["length"] == 500
-        # Framework fields preserved at top level
+        # Original namespaces preserved
+        assert result[0]["content"]["extract"]["length"] == 500
         assert result[0]["source_guid"] == "sg1"
 
     def test_file_mode_missing_field_warns(self):
-        """FILE-mode: observe references field not in record -> field absent from output,
-        but all original content fields are preserved (NiFi enrichment)."""
+        """FILE-mode: observe references missing field -> field absent from output,
+        but all original content preserved."""
         data = [
             {
-                "content": {"title": "Exists", "body": "Also exists", "extra": "here too"},
+                "content": {
+                    "dep": {"title": "Exists", "body": "Also exists", "extra": "here too"},
+                },
                 "source_guid": "sg1",
-                "lineage": [],
             },
         ]
         agent_config = {
@@ -996,9 +975,9 @@ class TestFileModeObserve:
         assert result[0]["content"]["title"] == "Exists"
         # nonexistent_field is simply absent (not injected)
         assert "nonexistent_field" not in result[0]["content"]
-        # NiFi enrichment: all original content fields are preserved
-        assert result[0]["content"]["body"] == "Also exists"
-        assert result[0]["content"]["extra"] == "here too"
+        # Original namespace preserved
+        assert result[0]["content"]["dep"]["body"] == "Also exists"
+        assert result[0]["content"]["dep"]["extra"] == "here too"
 
 
 # ---------------------------------------------------------------------------
