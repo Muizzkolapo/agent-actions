@@ -524,6 +524,262 @@ class TestOutputFieldPromotionInTaskPreparer:
         assert result["assess_severity"] == {"severity": "high"}
 
 
+class TestNamespacedContentGuardEvaluation:
+    """Tests for guard evaluation with namespaced content (additive model).
+
+    Content is always namespaced: ``{"content": {"action_name": {"field": val}}}``.
+    Guard conditions use dotted paths: ``action_name.field == val``.
+    """
+
+    @pytest.fixture
+    def evaluator(self):
+        """Create evaluator with real guard filter (no mocks)."""
+        from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter
+
+        return GuardEvaluator(guard_filter=GuardFilter())
+
+    def test_dotted_path_resolves_from_namespace(self, evaluator):
+        """Dotted path accesses the correct namespace field."""
+        record = {
+            "content": {
+                "validate": {"pass": True, "score": 0.9},
+                "generate": {"question": "Q?"},
+            },
+            "source_guid": "sg-1",
+        }
+        guard = {"clause": "validate.pass == true", "scope": "item", "behavior": "skip"}
+
+        result = evaluator.evaluate_early(record, guard)
+
+        assert result.should_execute is True
+        assert result.matched is True
+
+    def test_dotted_path_condition_not_matched(self, evaluator):
+        """Guard not matched when dotted path field has wrong value."""
+        record = {
+            "content": {"validate": {"pass": True}},
+            "source_guid": "sg-1",
+        }
+        guard = {"clause": "validate.pass == false", "scope": "item", "behavior": "skip"}
+
+        result = evaluator.evaluate_early(record, guard)
+
+        assert result.should_execute is False
+        assert result.behavior == "skip"
+
+    def test_cross_namespace_field_access(self, evaluator):
+        """Guard accesses field from one specific namespace among many."""
+        record = {
+            "content": {
+                "extract": {"entities": ["A", "B"]},
+                "classify": {"topic": "science", "confidence": 0.95},
+                "enrich": {"sources": ["wiki"]},
+            },
+            "source_guid": "sg-1",
+        }
+        guard = {"clause": "classify.confidence > 0.9", "scope": "item", "behavior": "filter"}
+
+        result = evaluator.evaluate_early(record, guard)
+
+        assert result.should_execute is True
+
+    def test_flat_field_reference_becomes_semantic_error(self, evaluator):
+        """Flat field that exists in a namespace is reclassified as SEMANTIC error.
+
+        With passthrough_on_error=True (default), DATA errors would silently
+        pass. SEMANTIC errors always apply the guard behavior.
+        """
+        record = {
+            "content": {"validate": {"pass": True}},
+            "source_guid": "sg-1",
+        }
+        guard = {
+            "clause": "pass == false",
+            "scope": "item",
+            "behavior": "skip",
+            # passthrough_on_error defaults to True
+        }
+
+        result = evaluator.evaluate_early(record, guard)
+
+        # Must NOT silently pass — flat field should trigger skip
+        assert result.should_execute is False
+        assert result.behavior == "skip"
+        assert result.error is not None
+        assert "Did you mean:" in result.error
+
+    def test_flat_field_reference_with_filter_behavior(self, evaluator):
+        """Flat field reference with filter behavior applies filter."""
+        record = {
+            "content": {"assess": {"severity": "high"}},
+            "source_guid": "sg-1",
+        }
+        guard = {
+            "clause": 'severity == "high"',
+            "scope": "item",
+            "behavior": "filter",
+        }
+
+        result = evaluator.evaluate_early(record, guard)
+
+        assert result.should_execute is False
+        assert result.behavior == "filter"
+
+    def test_missing_field_evaluates_as_not_matched(self, evaluator):
+        """Missing field (not in any namespace) treats condition as not matched.
+
+        With passthrough_on_error=True (default), this used to silently pass.
+        Now treats as condition=False so the guard behavior is applied.
+        """
+        record = {
+            "content": {"validate": {"pass": True}},
+            "source_guid": "sg-1",
+        }
+        guard = {
+            "clause": "nonexistent_action.field == true",
+            "scope": "item",
+            "behavior": "skip",
+            # passthrough_on_error defaults to True
+        }
+
+        result = evaluator.evaluate_early(record, guard)
+
+        # Must NOT silently pass — missing field means condition is not met
+        assert result.should_execute is False
+        assert result.behavior == "skip"
+
+    def test_missing_field_with_filter_behavior(self, evaluator):
+        """Missing field with filter behavior applies filter."""
+        record = {
+            "content": {"validate": {"pass": True}},
+            "source_guid": "sg-1",
+        }
+        guard = {
+            "clause": "nonexistent.field == true",
+            "scope": "item",
+            "behavior": "filter",
+        }
+
+        result = evaluator.evaluate_early(record, guard)
+
+        assert result.should_execute is False
+        assert result.behavior == "filter"
+
+    def test_missing_field_with_warn_behavior(self, evaluator):
+        """Missing field with warn behavior allows execution but flags warning."""
+        record = {
+            "content": {"validate": {"pass": True}},
+            "source_guid": "sg-1",
+        }
+        guard = {
+            "clause": "nonexistent.field == true",
+            "scope": "item",
+            "behavior": "warn",
+        }
+
+        result = evaluator.evaluate_early(record, guard)
+
+        # Warn: proceed but flag
+        assert result.should_execute is True
+        assert result.behavior == "warn"
+
+    def test_phase2_namespaced_content_with_context(self, evaluator):
+        """Phase 2 evaluation with namespaced content in item and context."""
+        item = {
+            "content": {"validate": {"pass": False, "violations": ["missing field"]}},
+            "source_guid": "sg-1",
+        }
+        context = {"assess": {"severity": "high"}}
+        guard = {"clause": "validate.pass == false", "scope": "item", "behavior": "skip"}
+
+        result = evaluator.evaluate_with_context(item, guard, context)
+
+        assert result.should_execute is True  # condition matched (pass IS false)
+
+    def test_phase2_context_namespace_access(self, evaluator):
+        """Phase 2 evaluation can access namespaces from context dict."""
+        item = {"content": {}, "source_guid": "sg-1"}
+        context = {"assess": {"severity": "high"}}
+        guard = {"clause": 'assess.severity == "high"', "scope": "item", "behavior": "skip"}
+
+        result = evaluator.evaluate_with_context(item, guard, context)
+
+        assert result.should_execute is True
+
+    def test_prepare_eval_context_namespaced_content(self, evaluator):
+        """_prepare_eval_context promotes namespaces to top-level keys."""
+        context = {
+            "content": {
+                "action_a": {"field1": "val1"},
+                "action_b": {"field2": "val2"},
+            },
+            "source_guid": "sg-1",
+        }
+
+        result = evaluator._prepare_eval_context(context)
+
+        assert result["action_a"] == {"field1": "val1"}
+        assert result["action_b"] == {"field2": "val2"}
+        assert result["source_guid"] == "sg-1"
+        assert "content" not in result
+
+    def test_build_evaluation_context_namespaced_content(self, evaluator):
+        """_build_evaluation_context promotes namespaces from item content."""
+        item = {
+            "content": {
+                "validate": {"pass": True},
+                "generate": {"question": "Q?"},
+            },
+            "source_guid": "sg-1",
+        }
+        context = {"upstream": {"data": "value"}}
+
+        result = evaluator._build_evaluation_context(item, context)
+
+        assert result["validate"] == {"pass": True}
+        assert result["generate"] == {"question": "Q?"}
+        assert result["source_guid"] == "sg-1"
+        assert result["upstream"] == {"data": "value"}
+        assert "content" not in result
+
+    def test_reclassify_ignores_non_data_errors(self, evaluator):
+        """_reclassify_missing_field_error passes through non-DATA errors unchanged."""
+        from agent_actions.input.preprocessing.filtering.guard_filter import (
+            ErrorCategory,
+            FilterResult,
+        )
+
+        semantic = FilterResult(
+            success=False, error="broken condition", error_category=ErrorCategory.SEMANTIC
+        )
+        assert evaluator._reclassify_missing_field_error(semantic, "x == y") is semantic
+
+        timeout = FilterResult(
+            success=False, error="timed out", error_category=ErrorCategory.TIMEOUT
+        )
+        assert evaluator._reclassify_missing_field_error(timeout, "x == y") is timeout
+
+        success = FilterResult(success=True, matched=True)
+        assert evaluator._reclassify_missing_field_error(success, "x == y") is success
+
+    def test_reclassify_ignores_parse_errors(self, evaluator):
+        """_reclassify_missing_field_error does not reclassify parse errors."""
+        from agent_actions.input.preprocessing.filtering.guard_filter import (
+            ErrorCategory,
+            FilterResult,
+        )
+
+        parse_err = FilterResult(
+            success=False,
+            error="Error evaluating guard condition: Parse error: unexpected token",
+            error_category=ErrorCategory.DATA,
+        )
+        result = evaluator._reclassify_missing_field_error(parse_err, "bad syntax")
+
+        # Should return the same object — not reclassified
+        assert result is parse_err
+
+
 class TestHelpersIntegration:
     """Tests for integration with processing/helpers.py."""
 
