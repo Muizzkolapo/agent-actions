@@ -285,7 +285,7 @@ Prompt traces only exist for **LLM actions**. Tool (UDF) actions do not generate
 
 ### Querying Traces Directly
 
-For bulk analysis across many records:
+For bulk analysis across many records, you can query the storage backend directly. With the default SQLite backend:
 
 ```bash
 sqlite3 my_workflow/agent_io/store/my_workflow.db \

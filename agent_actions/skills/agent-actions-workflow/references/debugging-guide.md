@@ -86,23 +86,12 @@ If a tool action produces zero/default values:
 
 ### 5a. Prompt Trace Inspection
 
-When debugging bad LLM outputs, inspect the compiled prompt and context the LLM actually received:
+When debugging bad LLM outputs, inspect the compiled prompt and context the LLM actually received. The easiest way is through the Data Explorer:
 
-```bash
-# Query prompt traces from the SQLite backend
-python3 -c "
-import sqlite3, json
-conn = sqlite3.connect('agent_workflow/<workflow>/agent_io/store/<workflow>.db')
-for row in conn.execute(
-    'SELECT record_id, compiled_prompt, llm_context FROM prompt_trace WHERE action_name=?',
-    ('<action_name>',)
-).fetchmany(3):
-    print(f'Record: {row[0]}')
-    print(f'Prompt: {row[1][:200]}...')
-    print(f'Context: {row[2][:200]}...')
-    print()
-"
-```
+1. Run `agac docs` to generate the documentation catalog
+2. Open the Data Explorer in your browser
+3. Navigate to the action's output, find the record with unexpected output
+4. Click the **Prompt Trace** accordion — it shows the compiled prompt, LLM context, and raw response
 
 Prompt traces capture the exact prompt sent to the LLM, the context data, and the response — per record, per attempt.
 
@@ -112,8 +101,7 @@ Prompt traces capture the exact prompt sent to the LLM, the context data, and th
 
 If downstream actions fail with "declared fields not found":
 - The LLM may produce different field names than the schema defines
-- Check DB: `SELECT data FROM target_data WHERE action_name='<action>';`
-- Compare actual keys against schema `id:` values
+- Use the Data Explorer to inspect the action's output and compare actual field names against schema `id:` values
 
 ---
 
@@ -190,10 +178,12 @@ Only if (1) is yes AND (2) is yes AND (3) is no does the framework skip re-execu
 
 The framework stores `record_limit` and `file_limit` values as metadata when an action completes. If these values differ on the next run, the action resets to PENDING automatically.
 
-For all other config changes, clear the cache manually. **CRITICAL: You must clear ALL THREE stores** — missing any one causes silent failures:
+For all other config changes, clear the cache manually. The simplest approach is `agac run -a <workflow> --fresh`, which clears stored results and resets all actions to pending.
+
+For selective resets, you need to clear **ALL THREE stores** — missing any one causes silent failures. Example using the default SQLite backend:
 
 ```python
-# Full reset script — use this pattern every time
+# Selective reset — SQLite backend (default)
 import sqlite3, json, shutil, os
 
 db_path = 'agent_workflow/<workflow>/agent_io/store/<workflow>.db'
