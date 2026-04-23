@@ -80,9 +80,10 @@
 | `status` | Function | Display the status of an agent workflow. | - |
 | `clean.py` | Module | Clean command for the Agent Actions CLI. | `cli`, `llm_invocation`, `validation` |
 | `clean_cli` | Function | CLI entrypoint for 'clean'. | - |
-| `preview.py` | Module | Preview command for viewing SQLite storage data. | `cli`, `storage`, `validation` |
+| `preview.py` | Module | Preview command for viewing SQLite storage data. Unwraps namespaced `content[action_name]` when displaying action output. | `cli`, `storage`, `validation` |
 | `PreviewCommand` | Class | Implementation of the preview command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the preview command. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `_unwrap_content` | Method | Extract action-specific fields from namespaced content for display. | - |
 | `preview` | Function | Preview data stored in the SQLite storage backend. | - |
 
 ## Project Surface

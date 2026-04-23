@@ -113,6 +113,23 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
     return workflow_data
 
 
+def _unwrap_record_content(record: dict, action_name: str) -> dict:
+    """Unwrap namespaced content for a specific action.
+
+    With the additive model, record["content"] is
+    {"action_a": {...}, "action_b": {...}, ...}. Replace it with the
+    specific action's fields so consumers see actual output data.
+    """
+    content = record.get("content")
+    if (
+        isinstance(content, dict)
+        and action_name in content
+        and isinstance(content[action_name], dict)
+    ):
+        return {**record, "content": content[action_name]}
+    return record
+
+
 def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | None:
     """Open a workflow SQLite DB read-only and extract stats + preview data.
 
@@ -210,10 +227,12 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
                         if len(records) >= 20:
                             break
                         if isinstance(item, dict):
+                            item = _unwrap_record_content(item, action_name)
                             records.append({**item, "_file": file_path})
                         else:
                             records.append({"_file": file_path, "_value": item})
                 elif isinstance(row_data, dict):
+                    row_data = _unwrap_record_content(row_data, action_name)
                     records.append({**row_data, "_file": file_path})
                 else:
                     records.append({"_file": file_path, "_value": row_data})

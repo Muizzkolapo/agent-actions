@@ -109,6 +109,7 @@ def _is_long_form(key: str) -> bool:
 def render_card_markdown(
     record: dict[str, Any],
     *,
+    action_name: str | None = None,
     max_fields: int = 12,
 ) -> str:
     """Render a single record as a markdown card suitable for IDE hover.
@@ -120,8 +121,25 @@ def render_card_markdown(
         ...
         ---
         _metadata: node_id, lineage, ..._
+
+    When *action_name* is given and ``record["content"]`` is a namespaced
+    dict (additive model), the content is unwrapped to show only that
+    action's fields.
     """
-    groups = classify_record(record)
+    display = record
+    if action_name:
+        content = record.get("content")
+        if (
+            isinstance(content, dict)
+            and action_name in content
+            and isinstance(content[action_name], dict)
+        ):
+            # Flatten action fields into the record so classify_record
+            # sees them as individual content fields, not as a nested
+            # "content" blob.
+            display = {k: v for k, v in record.items() if k != "content"}
+            display.update(content[action_name])
+    groups = classify_record(display)
     lines: list[str] = []
 
     # Identity header

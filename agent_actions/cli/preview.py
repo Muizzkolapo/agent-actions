@@ -149,6 +149,20 @@ class PreviewCommand:
                 f"\n[dim]{remaining} more records. Use [bold]--offset {self.offset + self.limit}[/bold] to see more.[/dim]"
             )
 
+    def _unwrap_content(self, record: dict) -> dict:
+        """Extract action-specific content from a namespaced record.
+
+        With the additive model, record["content"] is
+        {"action_a": {...}, "action_b": {...}, ...}. When previewing a
+        specific action, unwrap to show that action's fields.
+        """
+        content = record.get("content")
+        if isinstance(content, dict):
+            if self.action and self.action in content and isinstance(content[self.action], dict):
+                return content[self.action]
+            return content
+        return record
+
     def _show_table(self, records: list) -> None:
         if not records:
             return
@@ -156,10 +170,7 @@ class PreviewCommand:
         all_keys: set[str] = set()
         for record in records:
             if isinstance(record, dict):
-                if "content" in record and isinstance(record["content"], dict):
-                    all_keys.update(record["content"].keys())
-                else:
-                    all_keys.update(record.keys())
+                all_keys.update(self._unwrap_content(record).keys())
 
         display_keys = [k for k in sorted(all_keys) if not k.startswith("_")]
 
@@ -176,11 +187,7 @@ class PreviewCommand:
 
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):
-                data = (
-                    record.get("content", record)
-                    if isinstance(record.get("content"), dict)
-                    else record
-                )
+                data = self._unwrap_content(record)
                 values = [str(idx)]
                 for key in display_keys:
                     val = data.get(key, "")

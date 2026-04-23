@@ -180,3 +180,40 @@ class TestRenderCardMarkdown:
         # No content separator before metadata when no content fields
         parts = md.split("---")
         assert len(parts) <= 2  # at most one separator
+
+    def test_namespace_unwrap_with_action_name(self):
+        """When action_name is given, namespaced content is unwrapped."""
+        record = {
+            "source_guid": "g1",
+            "content": {
+                "classify": {"genre": "fiction", "confidence": 0.9},
+                "summarize": {"summary": "A book about..."},
+            },
+        }
+        md = render_card_markdown(record, action_name="classify")
+        # Should show the action's fields, not the namespace keys
+        assert "Genre" in md  # humanized "genre"
+        assert "fiction" in md
+        assert "Confidence" in md
+        # Should NOT show other action names as fields
+        assert "Summarize" not in md
+        assert "Classify" not in md
+
+    def test_namespace_unwrap_without_action_name(self):
+        """Without action_name, namespaced content renders as-is."""
+        record = {
+            "content": {
+                "classify": {"genre": "fiction"},
+            },
+        }
+        md = render_card_markdown(record)
+        # "content" is a top-level key classified as "content"
+        # Its value (the namespace dict) renders as JSON
+        assert "classify" in md
+
+    def test_namespace_unwrap_flat_content_unaffected(self):
+        """action_name with flat content (no namespace) passes through."""
+        record = {"genre": "fiction", "confidence": 0.9}
+        md = render_card_markdown(record, action_name="classify")
+        assert "Genre" in md
+        assert "fiction" in md
