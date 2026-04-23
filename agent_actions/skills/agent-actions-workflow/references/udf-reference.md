@@ -246,14 +246,14 @@ for key, val in content.items():
 
 ### Seed data
 
-Seed data lives under the `seed` key:
+Seed data is flattened like any other namespace. Requires `observe: [seed.*]` in your action config:
 
 ```python
-# RECORD mode:
-rules = data.get("seed", {}).get("marketplace_rules", {})
+# RECORD mode — seed namespace is flattened:
+rules = data.get("marketplace_rules", {})
 
-# FILE mode:
-rules = record["content"].get("seed", {}).get("marketplace_rules", {})
+# FILE mode — seed fields injected into content:
+rules = record["content"].get("marketplace_rules", {})
 ```
 
 ## Passthrough Pattern

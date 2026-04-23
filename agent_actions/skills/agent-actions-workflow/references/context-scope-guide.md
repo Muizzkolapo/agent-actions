@@ -154,7 +154,7 @@ Downstream actions access `output_field` values through the normal namespace:
 ```
 
 In prompts: `{{ assess_severity.severity }}`
-In UDFs: `content.get("assess_severity", {}).get("severity", "")`
+In UDFs (RECORD mode): `data.get("severity", "")` — fields are flat after observe resolution
 
 ### Guards with output_field
 
@@ -173,7 +173,7 @@ Guard conditions see flattened field names — the `output_field` value is promo
 
 - `json_mode: false` and `schema` together trigger a warning — the schema is ignored at runtime since there's no JSON to validate
 - `output_field` only works with `json_mode: false`
-- Default `output_field` is `"raw_response"` — access as `content.get("action_name", {}).get("raw_response", "")`
+- Default `output_field` is `"raw_response"` — in RECORD mode UDFs: `data.get("raw_response", "")`
 
 ## Guard Field Visibility
 

@@ -267,7 +267,7 @@ observe: [seed.rubric]              # Correct
 # NOT: seed_data.rubric             # Wrong — silently resolves to empty
 ```
 
-In prompts: `{{ seed.rubric.score_range }}`. In UDFs: `content.get("seed", {}).get("rubric", {})`.
+In prompts: `{{ seed.rubric.score_range }}`. In UDFs (RECORD mode): `data.get("rubric", {})` — seed namespace is flattened like any other.
 
 ### 23. Redundant dependencies
 

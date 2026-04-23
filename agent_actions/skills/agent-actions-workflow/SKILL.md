@@ -151,8 +151,8 @@ def enrich_listing(data: dict[str, Any]) -> list[dict[str, Any]]:
     # RECORD mode: fields are flat — access directly
     title = data.get("listing_title", "")
 
-    # Seed data lives under "seed"
-    rules = data.get("seed", {}).get("marketplace_rules", {})
+    # Seed data is flattened like any other namespace
+    rules = data.get("marketplace_rules", {})
 
     return [{"enriched_title": f"{title} — {rules.get('brand', '')}"}]
 ```
@@ -161,7 +161,7 @@ A few things to remember:
 - **RECORD mode**: Fields are flat — access with `data.get("field")` directly
 - **Collision handling**: When two upstream actions share a field name, access with `data.get("action_name.field")` (dot-qualified)
 - **FILE mode**: Access fields via `record["content"]["field"]`
-- Seed data: `data.get("seed", {}).get("key", {})`
+- Seed data: `data.get("key", {})` (seed namespace is flattened like any other; requires `observe: [seed.*]`)
 - Return `list[dict]` — or `dict` when the YAML uses `passthrough`
 
 ## Guards
@@ -236,7 +236,7 @@ defaults:
       rubric: $file:evaluation_rubric.json
 ```
 
-In prompts: `{{ seed.rubric.min_score }}`. In UDFs: `data.get("seed", {}).get("rubric", {})`. The config key is `seed_path:` but the reference prefix is `seed.` — using `seed_data.` is a common mistake that silently resolves to empty.
+In prompts: `{{ seed.rubric.min_score }}`. In UDFs (RECORD mode): `data.get("rubric", {})` — the seed namespace is flattened like any other. Requires `observe: [seed.*]` or `observe: [seed.rubric]` in the action config. The config key is `seed_path:` but the prompt prefix is `seed.` — using `seed_data.` is a common mistake that silently resolves to empty.
 
 **Prompt templates** — defined in `prompt_store/workflow_name.md`:
 ```markdown
