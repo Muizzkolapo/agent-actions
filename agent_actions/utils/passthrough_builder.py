@@ -42,7 +42,7 @@ class PassthroughItemBuilder:
         node_id = IDGenerator.generate_node_id(action_name)
 
         lineage = LineageBuilder.build_lineage(row, node_id)
-        content = row.get("content", row)
+        content = row.get("content", {})
 
         processed_item = FieldManager().create_processed_item(
             source_guid=resolved_source_guid,
