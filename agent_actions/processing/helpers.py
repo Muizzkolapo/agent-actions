@@ -54,23 +54,18 @@ def run_dynamic_agent(
 
     from agent_actions.llm.realtime import builder as agent_builder
 
-    if isinstance(context, dict) and "content" in context and isinstance(context["content"], dict):
-        processed_context = context["content"]
-    else:
-        processed_context = context
-
-    llm_data = llm_context if llm_context is not None else processed_context
+    llm_data = llm_context if llm_context is not None else context
 
     response = agent_builder.create_dynamic_agent(
         agent_config,
         agent_name,
-        llm_data,  # Send transformed context to LLM
+        llm_data,
         formatted_prompt,
         tools_path=tools_path,
         tool_args=tool_args,
         source_content=source_content,
         additional_context=None,
-        original_context=processed_context,
+        original_context=context,
     )
 
     response = _validate_llm_output_schema(

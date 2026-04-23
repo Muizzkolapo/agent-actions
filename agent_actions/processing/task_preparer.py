@@ -148,7 +148,7 @@ class TaskPreparer:
             return item, source_guid, snapshot
         else:
             if isinstance(item, dict):
-                content = item.get("content", item)
+                content = item["content"]
                 source_guid = item.get("source_guid")
                 if source_guid == "":
                     source_guid = None  # Preserve None for fallback lineage/recovery

@@ -31,14 +31,8 @@ class ContextService:
         Returns:
             Prepared context data (str or dict depending on vendor needs)
         """
-        # Match file-mode's flat field injection (apply_observe_for_file_mode).
+        # Tools receive namespaced data directly — no flattening.
         if is_tool:
-            if isinstance(context_data_str, dict):
-                from agent_actions.prompt.context.scope_application import (
-                    flatten_observe_context,
-                )
-
-                return flatten_observe_context(context_data_str)
             return context_data_str
 
         # For LLM vendors, convert to JSON string if dict
