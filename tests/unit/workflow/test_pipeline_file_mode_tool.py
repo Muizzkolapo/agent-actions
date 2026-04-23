@@ -415,6 +415,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
     agent_config = {
         "kind": "tool",
         "granularity": "record",
+        "agent_type": "flatten_tool",
         "context_scope": {"observe": ["source.*"]},
     }
     agent_name = "flatten_tool"
@@ -446,8 +447,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
     # Verify the result contains all 3 expanded items
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 3
-    # RECORD mode — content is still flat until record_processor is updated
-    contents = [r["content"] for r in result.data]
+    contents = [r["content"]["flatten_tool"] for r in result.data]
     assert contents[0] == {"question": "Q1", "answer": "A1"}
     assert contents[1] == {"question": "Q2", "answer": "A2"}
     assert contents[2] == {"question": "Q3", "answer": "A3"}
@@ -461,8 +461,8 @@ def test_record_tool_list_return_produces_multiple_output_items():
         [result], agent_config, agent_name, is_first_stage=False
     )
     assert len(output) == 3
-    assert output[0]["content"]["question"] == "Q1"
-    assert output[2]["content"]["question"] == "Q3"
+    assert output[0]["content"]["flatten_tool"]["question"] == "Q1"
+    assert output[2]["content"]["flatten_tool"]["question"] == "Q3"
 
 
 # --- SchemaValidationError re-raise in process_batch ---

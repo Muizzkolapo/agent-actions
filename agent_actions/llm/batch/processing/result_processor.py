@@ -231,8 +231,11 @@ class BatchResultProcessor:
                     custom_id,
                 )
 
+        action_name = (
+            ctx.agent_config.get("action_name", "unknown") if ctx.agent_config else "unknown"
+        )
         structured_items = DataTransformer.transform_structure(
-            [{original_source_guid: generated_list}]
+            [{original_source_guid: generated_list}], action_name
         )
 
         # Batch items inherit target_id from the original input row.
