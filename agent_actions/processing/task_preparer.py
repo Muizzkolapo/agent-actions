@@ -11,6 +11,7 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
+from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class TaskPreparer:
             return PreparedTask(
                 target_id=target_id,
                 source_guid=source_guid,
-                original_content=item.get("content", item) if isinstance(item, dict) else item,
+                original_content=get_existing_content(item) if isinstance(item, dict) else item,
                 guard_status=GuardStatus.UPSTREAM_UNPROCESSED,
             )
 
