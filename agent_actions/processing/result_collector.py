@@ -60,8 +60,8 @@ class CollectionStats:
         automatically makes this return False until the new field is
         accounted for — no manual update needed.
         """
-        total = sum(getattr(self, f.name) for f in fields(self))
-        return (self.skipped + self.filtered) == total
+        total: int = sum(getattr(self, f.name) for f in fields(self))
+        return bool((self.skipped + self.filtered) == total)
 
 
 def _safe_set_disposition(
