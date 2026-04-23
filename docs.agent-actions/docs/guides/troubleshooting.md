@@ -262,6 +262,10 @@ reprompt:
 
 When an LLM action produces unexpected output, the fastest path to understanding "why" is inspecting the compiled prompt and raw response. Agent Actions captures both automatically.
 
+:::warning
+Prompt traces only exist for **LLM actions**. Tool (UDF) actions do not generate prompt traces. If a tool action produces empty or wrong output, debug the tool function directly — check the input data it receives, not prompt_trace.
+:::
+
 ### Using the Data Explorer
 
 1. Run `agac docs` to generate the documentation catalog
@@ -281,10 +285,10 @@ When an LLM action produces unexpected output, the fastest path to understanding
 
 ### Querying Traces Directly
 
-For bulk analysis across many records:
+For bulk analysis across many records, you can query the storage backend directly. With the default SQLite backend:
 
 ```bash
-sqlite3 my_workflow/agent_io/outputs.db \
+sqlite3 my_workflow/agent_io/store/my_workflow.db \
   "SELECT record_id, response_text FROM prompt_trace WHERE action_name = 'classify_issue' LIMIT 10"
 ```
 
