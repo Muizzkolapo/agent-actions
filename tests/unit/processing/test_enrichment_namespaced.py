@@ -5,6 +5,8 @@ PassthroughEnricher must merge into content[action_name], not top-level.
 Other enrichers must NOT modify content internals — they work at record level.
 """
 
+import pytest
+
 from agent_actions.processing.enrichment import (
     EnrichmentPipeline,
     LineageEnricher,
@@ -157,108 +159,73 @@ class TestPassthroughEnricherNamespaced:
         assert ns["pt_c"] == "c"
         assert ns["llm_field"] == "val"
 
+    def test_passthrough_field_overwrites_llm_field_with_same_key(self):
+        """Passthrough field with same key as LLM output overwrites it."""
+        content = {**_namespaced_content(), "action_c": {"shared_key": "llm_value"}}
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"content": content}],
+            passthrough_fields={"shared_key": "passthrough_value"},
+        )
+        context = _make_context("action_c")
+        enriched = PassthroughEnricher().enrich(result, context)
+
+        assert enriched.data[0]["content"]["action_c"]["shared_key"] == "passthrough_value"
+
 
 # ---------------------------------------------------------------------------
 # Other enrichers — verify they don't touch content internals
 # ---------------------------------------------------------------------------
 
 
-class TestLineageEnricherNamespaced:
-    """LineageEnricher works at record level — content untouched."""
-
-    def test_content_untouched(self):
-        content = _namespaced_content()
-        original_keys = set(content.keys())
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": content, "source_guid": "sg-1"}],
-            source_guid="sg-1",
-        )
-        context = _make_context("action_c", is_first_stage=True)
-        enriched = LineageEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert "lineage" in item
-        assert "node_id" in item
-        assert set(item["content"].keys()) == original_keys
+_RECOVERY_META = RecoveryMetadata(
+    retry=RetryMetadata(attempts=2, failures=1, succeeded=True, reason="timeout")
+)
 
 
-class TestMetadataEnricherNamespaced:
-    """MetadataEnricher works at record level — content untouched."""
+@pytest.mark.parametrize(
+    "enricher_cls,extra_result_kwargs,extra_context_kwargs",
+    [
+        pytest.param(
+            LineageEnricher,
+            {"source_guid": "sg-1"},
+            {"is_first_stage": True},
+            id="lineage",
+        ),
+        pytest.param(
+            MetadataEnricher,
+            {"pre_extracted_metadata": {"model": "gpt-4", "tokens": 100}},
+            {},
+            id="metadata",
+        ),
+        pytest.param(VersionIdEnricher, {}, {}, id="version_id"),
+        pytest.param(
+            RequiredFieldsEnricher, {"source_guid": "sg-1"}, {}, id="required_fields"
+        ),
+        pytest.param(
+            RecoveryEnricher, {"recovery_metadata": _RECOVERY_META}, {}, id="recovery"
+        ),
+    ],
+)
+def test_enricher_does_not_touch_content(enricher_cls, extra_result_kwargs, extra_context_kwargs):
+    """Each non-passthrough enricher works at record level — content keys unchanged."""
+    content = _namespaced_content()
+    original_keys = set(content.keys())
 
-    def test_content_untouched(self):
-        content = _namespaced_content()
-        original_keys = set(content.keys())
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": content}],
-            pre_extracted_metadata={"model": "gpt-4", "tokens": 100},
-        )
-        context = _make_context("action_c")
-        enriched = MetadataEnricher().enrich(result, context)
+    data_item = {"content": content}
+    if "source_guid" in extra_result_kwargs:
+        data_item["source_guid"] = extra_result_kwargs["source_guid"]
 
-        item = enriched.data[0]
-        assert "metadata" in item
-        assert set(item["content"].keys()) == original_keys
+    result = ProcessingResult(
+        status=ProcessingStatus.SUCCESS,
+        data=[data_item],
+        **extra_result_kwargs,
+    )
+    context = _make_context("action_c", **extra_context_kwargs)
 
+    enriched = enricher_cls().enrich(result, context)
 
-class TestVersionIdEnricherNamespaced:
-    """VersionIdEnricher works at record level — content untouched."""
-
-    def test_content_untouched(self):
-        content = _namespaced_content()
-        original_keys = set(content.keys())
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": content}],
-        )
-        context = _make_context("action_c")
-        context.agent_config["version_id"] = True
-        enriched = VersionIdEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert set(item["content"].keys()) == original_keys
-
-
-class TestRequiredFieldsEnricherNamespaced:
-    """RequiredFieldsEnricher works at record level — content untouched."""
-
-    def test_content_untouched(self):
-        content = _namespaced_content()
-        original_keys = set(content.keys())
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": content, "source_guid": "sg-1"}],
-            source_guid="sg-1",
-        )
-        context = _make_context("action_c")
-        enriched = RequiredFieldsEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert "source_guid" in item
-        assert "target_id" in item
-        assert set(item["content"].keys()) == original_keys
-
-
-class TestRecoveryEnricherNamespaced:
-    """RecoveryEnricher works at record level — content untouched."""
-
-    def test_content_untouched(self):
-        content = _namespaced_content()
-        original_keys = set(content.keys())
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": content}],
-            recovery_metadata=RecoveryMetadata(
-                retry=RetryMetadata(attempts=2, failures=1, succeeded=True, reason="timeout")
-            ),
-        )
-        context = _make_context("action_c")
-        enriched = RecoveryEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert "_recovery" in item
-        assert set(item["content"].keys()) == original_keys
+    assert set(enriched.data[0]["content"].keys()) == original_keys
 
 
 # ---------------------------------------------------------------------------
