@@ -593,6 +593,7 @@ class ProcessingPipeline:
             and stats.failed == 0
             and stats.exhausted == 0
             and stats.deferred == 0
+            and stats.unprocessed == 0
             and not output
         ):
             storage_backend = self.config.storage_backend

@@ -249,6 +249,31 @@ class TestInitialPipelineGuardSkipAndToolAction:
             reason="All records filtered — no output produced",
         )
 
+    def test_unprocessed_empty_data_does_not_write_skip_disposition(self, online_ctx):
+        """Bug #10: UNPROCESSED with empty data → empty output, must NOT trigger SKIPPED.
+
+        Records were unprocessed (not filtered). The disposition condition must
+        check stats.unprocessed to avoid falsely writing SKIPPED.
+        """
+        ctx, base, output, input_file = online_ctx
+        data_chunk = [{"id": "1"}, {"id": "2"}]
+
+        with (
+            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.FileWriter"),
+        ):
+            MockProc.return_value.process_batch.return_value = []
+            MockCollector.collect_results.return_value = (
+                [],
+                CollectionStats(unprocessed=2),
+            )
+
+            result = _call_online(data_chunk, ctx, input_file, base, output)
+
+        assert isinstance(result, str)
+        ctx.storage_backend.set_disposition.assert_not_called()
+
     def test_empty_input_does_not_raise(self, online_ctx):
         """Empty input -> no failure check fires."""
         ctx, base, output, input_file = online_ctx

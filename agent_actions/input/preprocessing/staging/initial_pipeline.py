@@ -681,6 +681,7 @@ def _process_online_mode_with_record_processor(
         and stats.failed == 0
         and stats.exhausted == 0
         and stats.deferred == 0
+        and stats.unprocessed == 0
         and not processed_items
     ):
         if ctx.storage_backend is not None:
