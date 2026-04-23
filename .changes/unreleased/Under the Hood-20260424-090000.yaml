@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove dead code from replacement content model — delete _detect_version_namespaces and _load_historical_node from scope_namespace.py, clean up stale patches in repro script"
+time: 2026-04-24T09:30:00.000000Z
