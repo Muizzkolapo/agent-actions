@@ -12,7 +12,7 @@ Usage::
     record["content"] = wrap_content(
         action_name="summarize",
         action_output={"summary": "..."},
-        existing_content=input_record.get("content", {}),
+        existing_content=input_record["content"],
     )
 
     # Reading: access a specific action's output
@@ -50,7 +50,9 @@ def read_namespace(
 
     If *field* is ``None``, returns the entire namespace dict.
     """
-    content = record.get("content", {})
+    content = record.get("content")
+    if not isinstance(content, dict):
+        return default
     ns = content.get(action_name)
     if ns is None:
         return default
@@ -61,13 +63,17 @@ def read_namespace(
 
 def has_namespace(record: dict[str, Any], action_name: str) -> bool:
     """Return True if the record has output from *action_name*."""
-    content = record.get("content", {})
+    content = record.get("content")
+    if not isinstance(content, dict):
+        return False
     return action_name in content
 
 
 def get_all_namespaces(record: dict[str, Any]) -> list[str]:
     """Return the list of action names that have output on this record."""
-    content = record.get("content", {})
+    content = record.get("content")
+    if not isinstance(content, dict):
+        return []
     return list(content.keys())
 
 

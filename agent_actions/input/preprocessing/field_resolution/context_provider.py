@@ -83,7 +83,7 @@ class EvaluationContextProvider:
         self, current_item: dict[str, Any], config: ContextBuildConfig
     ) -> EvaluationContext:
         """Build rich evaluation context for item-level operations."""
-        current_content = current_item.get("content", {})
+        current_content = current_item.get("content")
         if not isinstance(current_content, dict):
             current_content = {}
 

@@ -57,7 +57,7 @@ class BatchClientResolver:
                 f"Batch service received incomplete config (missing: {', '.join(missing)})",
                 context={
                     "missing_fields": missing,
-                    "agent_type": agent_config.get("agent_type", "unknown"),
+                    "agent_type": agent_config.get("agent_type") or "NOT_SET",
                     "hint": (
                         "Caller must resolve config hierarchy "
                         "(project → workflow → action) before calling batch service"

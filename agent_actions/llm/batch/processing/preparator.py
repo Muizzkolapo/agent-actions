@@ -214,7 +214,7 @@ class BatchTaskPreparator:
             raise ConfigurationError(
                 "Schema is required for batch processing when json_mode is enabled",
                 context={
-                    "agent_config": agent_config.get("agent_type", "unknown"),
+                    "agent_config": agent_config["agent_type"],
                     "json_mode": json_mode,
                     "hint": "Either provide a schema or set json_mode: false",
                 },
