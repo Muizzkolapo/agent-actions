@@ -144,15 +144,16 @@ def _reattach_source_guid(
 def _resolve_input_record(input_idx: int, original_data: list[dict]) -> dict[str, Any] | None:
     """Resolve the input record for namespace carry-forward.
 
-    Falls back to the first record in *original_data* when the index is
-    out of bounds — all records in a FILE batch share the same upstream
-    namespaces.
+    Raises ``IndexError`` if *input_idx* is out of bounds — an invalid
+    ``source_index`` is a tool bug, not something to silently default.
     """
-    if isinstance(input_idx, int) and 0 <= input_idx < len(original_data):
-        return original_data[input_idx]
-    if original_data:
-        return original_data[0]
-    return None
+    if not original_data:
+        return None
+    if not isinstance(input_idx, int) or input_idx < 0 or input_idx >= len(original_data):
+        raise IndexError(
+            f"source_index {input_idx} is out of bounds for {len(original_data)} input records"
+        )
+    return original_data[input_idx]
 
 
 def _extract_business_fields(record: dict, agent_config: dict) -> dict:
@@ -193,7 +194,99 @@ def _extract_business_fields(record: dict, agent_config: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Public API — standalone helpers for testing / simulation
+# ---------------------------------------------------------------------------
+
+
+def framework_prepare_input(
+    records: list[dict],
+    observe_refs: list[str] | None = None,
+) -> list[TrackedItem]:
+    """Strip framework fields and wrap in TrackedItem for tool input.
+
+    Called by ``process_file_mode_tool`` and available standalone for
+    design tests and simulations.
+    """
+    config: dict[str, Any] = {"context_scope": {"observe": observe_refs}} if observe_refs else {}
+    clean: list[TrackedItem] = []
+    for i, record in enumerate(records):
+        business = _extract_business_fields(record, config)
+        clean.append(TrackedItem(business, source_index=i))
+    return clean
+
+
+def framework_reconcile(
+    raw_response: Any,
+    action_name: str,
+    original_data: list[dict],
+) -> list[dict[str, Any]]:
+    """Reconcile tool output to input records via provenance.
+
+    Handles ``TrackedItem`` list returns (N→N passthrough/filter) and
+    ``FileUDFResult`` (N→M merge/expand/dedup).  Plain dicts in list
+    returns are an error.
+
+    Called by ``process_file_mode_tool`` for the non-version-merge path
+    and available standalone for design tests and simulations.
+    """
+    from agent_actions.record.envelope import RecordEnvelope
+    from agent_actions.utils.udf_management.registry import FileUDFResult
+
+    source_mapping: dict[int, int | list[int]] = {}
+    structured_data: list[dict[str, Any]] = []
+
+    if isinstance(raw_response, FileUDFResult):
+        for i, out in enumerate(raw_response.outputs):
+            src_idx = out["source_index"]
+            data_fields = out["data"]
+            if isinstance(src_idx, list):
+                input_idx = src_idx[0]
+                source_mapping[i] = src_idx
+            else:
+                input_idx = src_idx
+                source_mapping[i] = src_idx
+
+            matched = _resolve_input_record(input_idx, original_data)
+            record = RecordEnvelope.build(action_name, data_fields, matched)
+            record.pop("source_guid", None)
+            structured_data.append(record)
+
+    elif isinstance(raw_response, list):
+        for i, item in enumerate(raw_response):
+            if isinstance(item, TrackedItem):
+                input_idx = item._source_index
+                source_mapping[i] = input_idx
+                data_fields = dict(item)
+
+                matched = _resolve_input_record(input_idx, original_data)
+                record = RecordEnvelope.build(action_name, data_fields, matched)
+                record.pop("source_guid", None)
+                structured_data.append(record)
+            elif isinstance(item, dict):
+                raise ValueError(
+                    f"FILE tool '{action_name}' returned plain dict at "
+                    f"output[{i}]. Tool created a new dict instead of returning "
+                    f"an input item. For merge/expand, use FileUDFResult with "
+                    f"source_index."
+                )
+            else:
+                raise ValueError(
+                    f"FILE tool '{action_name}' output[{i}] is "
+                    f"{type(item).__name__}, expected TrackedItem. "
+                    f"For N→M transforms, use FileUDFResult."
+                )
+    else:
+        raise ValueError(
+            f"FILE tool '{action_name}' must return list or FileUDFResult, "
+            f"got {type(raw_response).__name__}"
+        )
+
+    _reattach_source_guid(structured_data, source_mapping, original_data)
+    return structured_data
+
+
+# ---------------------------------------------------------------------------
+# Pipeline integration
 # ---------------------------------------------------------------------------
 
 
