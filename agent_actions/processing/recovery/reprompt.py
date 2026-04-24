@@ -245,7 +245,7 @@ class RepromptService:
         )
         fire_event(
             RepromptValidationFailedEvent(
-                action_name=context or "unknown",
+                action_name=context or "NOT_SET",
                 attempt=attempts,
                 error=f"Validation '{self.validation_name}' failed after {attempts} attempts",
             )

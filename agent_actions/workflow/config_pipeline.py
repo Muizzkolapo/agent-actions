@@ -148,7 +148,7 @@ def _inject_upstream_virtual_actions(
         from agent_actions.workflow.orchestrator import WorkflowOrchestrator
 
         orchestrator = WorkflowOrchestrator(manager.project_root)
-        orchestrator.validate_upstream_refs(manager.agent_name or "unknown", parsed_refs)
+        orchestrator.validate_upstream_refs(manager.agent_name or "NOT_SET", parsed_refs)
 
     virtual_actions: dict[str, VirtualAction] = {}
     for ref in parsed_refs:

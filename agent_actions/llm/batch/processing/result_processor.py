@@ -287,9 +287,11 @@ class BatchResultProcessor:
         stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
         if stored_passthrough:
-            from agent_actions.prompt.context.scope_application import merge_passthrough_fields
-
-            generated_list = merge_passthrough_fields(generated_list, stored_passthrough)
+            # generated_list contains flat LLM output dicts (no "content" wrapper yet)
+            generated_list = [
+                {**item, **stored_passthrough} if isinstance(item, dict) else item
+                for item in generated_list
+            ]
 
         elif ctx.agent_config and ctx.agent_config.get("context_scope", {}).get("passthrough"):
             passthrough_refs = ctx.agent_config.get("context_scope", {}).get("passthrough", [])
@@ -302,10 +304,9 @@ class BatchResultProcessor:
                     _, field_name = parse_field_reference(field_ref)
                     passthrough_fields.append(field_name)
                 except ValueError:
-                    # If parsing fails, use the whole string as field name
                     passthrough_fields.append(field_ref)
 
-            original_content = original_row.get("content", original_row)
+            original_content = original_row.get("content", {})
 
             generated_list = [
                 (
@@ -335,7 +336,7 @@ class BatchResultProcessor:
                 "BatchProcessingContext.reconciler is None; "
                 "reconciler must be initialized before creating error items"
             )
-        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
+        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
 
         error_item: dict[str, Any] = {
             "source_guid": source_guid,
@@ -366,7 +367,7 @@ class BatchResultProcessor:
             )
         from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 
-        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
+        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
 
         return ExhaustedRecordBuilder.build_exhausted_item(
             source_guid=source_guid,
@@ -400,7 +401,7 @@ class BatchResultProcessor:
 
                 record_index = ctx.reconciler.get_record_index(custom_id)
                 source_guid = ctx.reconciler.get_source_guid(
-                    custom_id, fallback=custom_id or "unknown"
+                    custom_id, fallback=custom_id or "NOT_SET"
                 )
 
                 if not ctx.agent_config or "action_name" not in ctx.agent_config:

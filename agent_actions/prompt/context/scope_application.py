@@ -31,7 +31,6 @@ FRAMEWORK_NAMESPACES = frozenset({"version", "seed", "workflow", "loop"})
 __all__ = [
     "apply_context_scope",
     "format_llm_context",
-    "merge_passthrough_fields",
 ]
 
 
@@ -302,26 +301,3 @@ def format_llm_context(llm_context: dict) -> str:
             lines.append(f"{ns_name}.{field}: {value_str}")
 
     return "\n".join(lines)
-
-
-def merge_passthrough_fields(llm_response: list[dict], passthrough_fields: dict) -> list[dict]:
-    """Merge passthrough fields into LLM response.
-
-    Returns a new structure -- the caller's original is never mutated.
-    """
-    if not passthrough_fields:
-        return llm_response
-
-    # Handle list of items
-    result = []
-    for item in llm_response:
-        if isinstance(item, dict):
-            item_copy = dict(item)
-            if "content" in item_copy and isinstance(item_copy["content"], dict):
-                item_copy["content"] = {**item_copy["content"], **passthrough_fields}
-            else:
-                item_copy.update(passthrough_fields)
-            result.append(item_copy)
-        else:
-            result.append(item)  # type: ignore[unreachable]
-    return result
