@@ -255,6 +255,6 @@ class AgacClient(BaseClient):
                 "json_mode=false but schema was compiled for action '%s'. "
                 "The schema will not be sent to the LLM. "
                 "Set json_mode=true to enable schema enforcement.",
-                agent_config.get("agent_type", "unknown"),
+                agent_config["agent_type"],
             )
         return cls.call_non_json(None, agent_config, prompt_config, context_data)

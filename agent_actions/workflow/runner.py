@@ -425,9 +425,7 @@ class ActionRunner:
         dependencies = action_config.get("dependencies", [])
 
         if not dependencies and not previous_action_type:
-            upstream_data_dirs = self._resolve_start_node_directories(
-                agent_folder_path, action_config.get("agent_type", "unknown")
-            )
+            upstream_data_dirs = self._resolve_start_node_directories(agent_folder_path, agent_type)
         elif dependencies and hasattr(self, "action_indices") and self.action_indices:
             upstream_data_dirs = self._resolve_dependency_directories(
                 agent_folder_path,

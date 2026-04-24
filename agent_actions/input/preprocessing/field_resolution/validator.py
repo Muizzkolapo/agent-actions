@@ -31,7 +31,7 @@ class ReferenceValidator:
         errors = []
 
         if current_agent_name is None:
-            current_agent_name = agent_config.get("agent_type", "unknown")
+            current_agent_name = agent_config["agent_type"]
 
         current_idx = agent_indices.get(current_agent_name, 999)
 
@@ -103,7 +103,7 @@ class ReferenceValidator:
         )
 
         if errors:
-            agent_name = current_agent_name or agent_config.get("agent_type", "unknown")
+            agent_name = current_agent_name or agent_config["agent_type"]
             raise DependencyValidationError(
                 f"Invalid guard references in '{agent_name}':\n"
                 + "\n".join(f"  - {e}" for e in errors)

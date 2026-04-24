@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove silent fallbacks for content and agent_type access — fail loud on malformed records and missing config"
+time: 2026-04-24T10:03:00.000000Z

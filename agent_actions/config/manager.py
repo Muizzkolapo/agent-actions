@@ -250,7 +250,7 @@ class ConfigManager:
                 raise ConfigurationError(
                     "Invalid agent configuration",
                     context={
-                        "agent_type": agent.get("agent_type", "unknown"),
+                        "agent_type": agent.get("agent_type") or "NOT_SET",
                         "operation": "merge_agent_configs",
                     },
                     cause=e,
