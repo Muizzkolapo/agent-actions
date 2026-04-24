@@ -571,7 +571,6 @@ class ProcessingPipeline:
 
                 results.extend(_build_skipped_results(skipped))
         else:
-            # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
 
         # Collect success results
