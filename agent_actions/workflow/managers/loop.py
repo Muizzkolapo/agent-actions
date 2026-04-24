@@ -357,7 +357,7 @@ class VersionOutputCorrelator:
                 "merged record will have source_guid=None"
             )
         version_namespaces = self._merge_with_pattern(agent_records)
-        merged = RecordEnvelope.build_version_merge(version_namespaces)
+        merged = RecordEnvelope.build_version_merge(version_namespaces, base_record)
         merged_record = {
             "source_guid": source_guid,
             "target_id": base_record.get("target_id"),
