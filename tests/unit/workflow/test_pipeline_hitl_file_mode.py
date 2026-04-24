@@ -44,9 +44,13 @@ def test_file_mode_hitl_applies_file_decision_to_each_input_record():
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 2
-    assert result.data[0]["content"]["hitl_status"] == "approved"
-    assert result.data[1]["content"]["hitl_status"] == "approved"
+    # HITL output is namespaced under the action name
+    assert result.data[0]["content"]["review_data"]["hitl_status"] == "approved"
+    assert result.data[1]["content"]["review_data"]["hitl_status"] == "approved"
+    # Upstream content fields preserved alongside the HITL namespace
+    assert result.data[0]["content"]["id"] == 1
     assert result.data[0]["content"]["question"] == "Q1"
+    assert result.data[1]["content"]["id"] == 2
     assert result.data[1]["content"]["question"] == "Q2"
     assert result.data[0]["source_guid"] == "sg-1"
     assert result.data[1]["source_guid"] == "sg-2"
@@ -91,10 +95,11 @@ def test_file_mode_hitl_applies_per_record_decisions_when_provided():
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 2
-    assert result.data[0]["content"]["hitl_status"] == "approved"
-    assert result.data[0]["content"]["user_comment"] == "Looks good"
-    assert result.data[1]["content"]["hitl_status"] == "rejected"
-    assert result.data[1]["content"]["user_comment"] == "Needs revision"
+    # Per-record review fields are under the action namespace
+    assert result.data[0]["content"]["review_data"]["hitl_status"] == "approved"
+    assert result.data[0]["content"]["review_data"]["user_comment"] == "Looks good"
+    assert result.data[1]["content"]["review_data"]["hitl_status"] == "rejected"
+    assert result.data[1]["content"]["review_data"]["user_comment"] == "Needs revision"
 
 
 def test_file_mode_hitl_preserves_existing_status_field():
@@ -132,8 +137,10 @@ def test_file_mode_hitl_preserves_existing_status_field():
     assert len(results) == 1
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
+    # Upstream 'status' field is preserved in existing content
     assert result.data[0]["content"]["status"] == "pending"
-    assert result.data[0]["content"]["hitl_status"] == "approved"
+    # HITL decision is under the action namespace — no collision
+    assert result.data[0]["content"]["review_data"]["hitl_status"] == "approved"
 
 
 def test_file_mode_hitl_empty_input_returns_empty_output():
@@ -383,10 +390,12 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 2
+    # Upstream content fields preserved
     assert result.data[0]["content"]["question"] == "What is X?"
     assert result.data[0]["content"]["selectedAnswerer"] == "Alice"
     assert result.data[0]["content"]["validity"] == "valid"
-    assert result.data[0]["content"]["hitl_status"] == "approved"
+    # HITL decision under the action namespace
+    assert result.data[0]["content"]["review_data"]["hitl_status"] == "approved"
     assert result.data[1]["content"]["answer"] == "Z is W"
     assert result.data[1]["content"]["selectedAnswerer"] == "Bob"
 
