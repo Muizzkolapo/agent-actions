@@ -1,6 +1,6 @@
 """Passthrough transformation strategies."""
 
-from .base import IPassthroughTransformStrategy
+from .base import IPassthroughTransformStrategy, ensure_dict_output
 from .context_scope import (
     ContextScopeStructuredStrategy,
     ContextScopeUnstructuredStrategy,
@@ -10,6 +10,7 @@ from .context_scope import (
 from .precomputed import PrecomputedStructuredStrategy, PrecomputedUnstructuredStrategy
 
 __all__ = [
+    "ensure_dict_output",
     "IPassthroughTransformStrategy",
     "PrecomputedStructuredStrategy",
     "PrecomputedUnstructuredStrategy",
