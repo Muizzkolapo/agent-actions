@@ -238,7 +238,7 @@ class BatchResultProcessor:
 
         action_name = ctx.agent_config["action_name"]
         version_merge = is_version_merge(ctx.agent_config)
-        existing_content = get_existing_content(original_row) or None
+        existing_content = get_existing_content(original_row)
 
         structured_items = []
         for item in generated_list:
@@ -250,7 +250,6 @@ class BatchResultProcessor:
             structured_items.append({"source_guid": original_source_guid, "content": content})
 
         # Batch items inherit target_id from the original input row.
-        # transform_structure() doesn't carry it over, so set it before enrichment.
         original_target_id = original_row.get("target_id")
         if original_target_id:
             for item in structured_items:
