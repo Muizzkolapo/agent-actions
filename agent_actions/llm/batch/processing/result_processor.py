@@ -16,6 +16,7 @@ from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.types import ProcessingResult, RecoveryMetadata
+from agent_actions.record.envelope import RecordEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -233,17 +234,22 @@ class BatchResultProcessor:
 
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
-        from agent_actions.utils.content import is_version_merge
+        from agent_actions.utils.content import get_existing_content, is_version_merge
 
         action_name = ctx.agent_config["action_name"]
-        structured_items = DataTransformer.transform_structure(
-            [{original_source_guid: generated_list}],
-            action_name,
-            version_merge=is_version_merge(ctx.agent_config),
-        )
+        version_merge = is_version_merge(ctx.agent_config)
+        existing_content = get_existing_content(original_row)
+
+        structured_items = []
+        for item in generated_list:
+            item_dict = item if isinstance(item, dict) else {}
+            if version_merge:
+                content = {**(existing_content or {}), **item_dict}
+            else:
+                content = RecordEnvelope.build_content(action_name, item_dict, existing_content)
+            structured_items.append({"source_guid": original_source_guid, "content": content})
 
         # Batch items inherit target_id from the original input row.
-        # transform_structure() doesn't carry it over, so set it before enrichment.
         original_target_id = original_row.get("target_id")
         if original_target_id:
             for item in structured_items:
@@ -397,6 +403,12 @@ class BatchResultProcessor:
                     custom_id, fallback=custom_id or "unknown"
                 )
 
+                if not ctx.agent_config or "action_name" not in ctx.agent_config:
+                    raise ValueError(
+                        "agent_config must contain 'action_name' for content namespacing"
+                    )
+                stage6_action_name = ctx.agent_config["action_name"]
+
                 if is_exhausted:
                     if ctx.exhausted_recovery is None:
                         raise RuntimeError(
@@ -427,19 +439,16 @@ class BatchResultProcessor:
                             "RecoveryMetadata.retry is None for exhausted record "
                             f"custom_id={custom_id}; expected retry metadata with attempt count"
                         )
-                    from agent_actions.utils.content import get_existing_content, wrap_content
+                    from agent_actions.utils.content import get_existing_content
 
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         ctx.agent_config or {}
                     )
                     existing = get_existing_content(original_row)
-                    if not ctx.agent_config or "action_name" not in ctx.agent_config:
-                        raise ValueError(
-                            "agent_config must contain 'action_name' for content namespacing"
-                        )
-                    stage6_action_name = ctx.agent_config["action_name"]
                     exhausted_item = {
-                        "content": wrap_content(stage6_action_name, empty_content, existing),
+                        "content": RecordEnvelope.build_content(
+                            stage6_action_name, empty_content, existing
+                        ),
                         "source_guid": source_guid,
                         "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
                         "_unprocessed": True,
@@ -476,17 +485,15 @@ class BatchResultProcessor:
                     else:
                         reason = "batch_not_returned"
 
-                    from agent_actions.utils.content import get_existing_content
-
-                    passthrough_item = {
-                        "content": get_existing_content(original_row),
-                        "source_guid": source_guid,
-                        "metadata": {
-                            "reason": reason,
-                            "agent_type": "tombstone",
-                        },
-                        "_unprocessed": True,
+                    passthrough_item = RecordEnvelope.build_skipped(
+                        stage6_action_name, original_row
+                    )
+                    passthrough_item["source_guid"] = source_guid
+                    passthrough_item["metadata"] = {
+                        "reason": reason,
+                        "agent_type": "tombstone",
                     }
+                    passthrough_item["_unprocessed"] = True
                     if original_row.get("target_id"):
                         passthrough_item["target_id"] = original_row["target_id"]
 

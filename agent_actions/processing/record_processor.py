@@ -23,7 +23,9 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
+from agent_actions.utils.content import get_existing_content
 
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
@@ -172,6 +174,7 @@ class RecordProcessor:
                 source_guid,
                 f"guard_{prepared.guard_behavior}",
                 input_record,
+                context.action_name,
             )
             result = ProcessingResult.skipped(
                 passthrough_data=tombstone,
@@ -219,6 +222,7 @@ class RecordProcessor:
                         source_guid,
                         "retry_exhausted",
                         input_record,
+                        context.action_name,
                         extra_metadata={"retry_exhausted": True},
                     )
                     result = ProcessingResult.exhausted(
@@ -257,6 +261,7 @@ class RecordProcessor:
                     source_guid,
                     "guard_skip",
                     input_record,
+                    context.action_name,
                 )
                 result = ProcessingResult.unprocessed(
                     data=[tombstone],
@@ -293,8 +298,14 @@ class RecordProcessor:
                     },
                 )
 
+        item_existing_content = get_existing_content(item) if isinstance(item, dict) else None
         transformed = self._transform_response(
-            response, content, source_guid or "", passthrough_fields, context
+            response,
+            content,
+            source_guid or "",
+            passthrough_fields,
+            context,
+            existing_content=item_existing_content,
         )
 
         input_size = 1 if not isinstance(response, list) else len(response)
@@ -416,16 +427,19 @@ class RecordProcessor:
         source_guid: str | None,
         reason: str,
         input_record: dict[str, Any] | None,
+        action_name: str,
         *,
         extra_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build a tombstone item for guard-skipped, exhausted, or unprocessed records."""
-        item: dict[str, Any] = {
-            "content": content,
-            "source_guid": source_guid,
-            "metadata": {"reason": reason, "agent_type": "tombstone"},
-            "_unprocessed": True,
-        }
+        if reason.startswith("guard_"):
+            item = RecordEnvelope.build_skipped(action_name, input_record)
+        else:
+            action_output = content if isinstance(content, dict) else {"value": content}
+            item = RecordEnvelope.build(action_name, action_output, input_record)
+        item["source_guid"] = source_guid
+        item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
+        item["_unprocessed"] = True
         if extra_metadata:
             item["metadata"].update(extra_metadata)
         if input_record and isinstance(input_record, dict) and "target_id" in input_record:
@@ -457,6 +471,7 @@ class RecordProcessor:
         source_guid: str,
         passthrough_fields: dict[str, Any],
         context: ProcessingContext,
+        existing_content: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Transform LLM response to output format."""
         from agent_actions.processing.helpers import (
@@ -470,6 +485,7 @@ class RecordProcessor:
             cast(dict[str, Any], context.agent_config),
             action_name=context.action_name,
             passthrough_fields=passthrough_fields,
+            existing_content=existing_content,
         )
 
     @staticmethod

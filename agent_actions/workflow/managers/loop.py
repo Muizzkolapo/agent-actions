@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
+from agent_actions.record.envelope import RecordEnvelope
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -355,13 +356,15 @@ class VersionOutputCorrelator:
                 "Missing 'source_guid' in base record during version output correlation; "
                 "merged record will have source_guid=None"
             )
+        version_namespaces = self._merge_with_pattern(agent_records)
+        merged = RecordEnvelope.build_version_merge(version_namespaces)
         merged_record = {
             "source_guid": source_guid,
             "target_id": base_record.get("target_id"),
             "node_id": base_record.get("node_id"),
             "lineage": merged_lineage,
             "version_correlation_id": base_record.get("version_correlation_id"),
-            "content": self._merge_with_pattern(agent_records),
+            "content": merged["content"],
             "_correlation_sources": list(agent_records.keys()),
         }
         all_expected_versions = set(version_outputs.keys())

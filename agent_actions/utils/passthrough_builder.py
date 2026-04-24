@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.field_management.manager import FieldManager
 from agent_actions.utils.id_generation.generator import IDGenerator
 from agent_actions.utils.lineage.builder import LineageBuilder
@@ -42,7 +43,8 @@ class PassthroughItemBuilder:
         node_id = IDGenerator.generate_node_id(action_name)
 
         lineage = LineageBuilder.build_lineage(row, node_id)
-        content = row.get("content", {})
+        skipped_record = RecordEnvelope.build_skipped(action_name, row)
+        content = skipped_record["content"]
 
         processed_item = FieldManager().create_processed_item(
             source_guid=resolved_source_guid,
