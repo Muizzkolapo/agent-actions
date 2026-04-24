@@ -138,7 +138,6 @@ class TestBuildItemBatchMode:
             item = PassthroughItemBuilder.build_item(
                 row=row, reason="where_clause_not_matched", action_name="a"
             )
-        # build_skipped preserves upstream + adds null namespace for skipped action
         assert item["content"]["text"] == "payload"
         assert item["content"]["a"] is None
 

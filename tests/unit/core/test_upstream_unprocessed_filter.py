@@ -305,7 +305,6 @@ class TestBatchPathReasonDetection:
         assert item["metadata"]["reason"] == "upstream_unprocessed"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
-        # build_skipped adds null namespace for this action, preserves upstream
         assert item["content"]["test_batch"] is None
         assert item["content"]["upstream_action"] == {"field": "value"}
 

@@ -234,12 +234,11 @@ class BatchResultProcessor:
 
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
-        from agent_actions.utils.content import is_version_merge
+        from agent_actions.utils.content import get_existing_content, is_version_merge
 
         action_name = ctx.agent_config["action_name"]
         version_merge = is_version_merge(ctx.agent_config)
-        existing = original_row.get("content") if isinstance(original_row, dict) else None
-        existing_content = existing if isinstance(existing, dict) else None
+        existing_content = get_existing_content(original_row) or None
 
         structured_items = []
         for item in generated_list:
@@ -405,6 +404,12 @@ class BatchResultProcessor:
                     custom_id, fallback=custom_id or "unknown"
                 )
 
+                if not ctx.agent_config or "action_name" not in ctx.agent_config:
+                    raise ValueError(
+                        "agent_config must contain 'action_name' for content namespacing"
+                    )
+                stage6_action_name = ctx.agent_config["action_name"]
+
                 if is_exhausted:
                     if ctx.exhausted_recovery is None:
                         raise RuntimeError(
@@ -441,11 +446,6 @@ class BatchResultProcessor:
                         ctx.agent_config or {}
                     )
                     existing = get_existing_content(original_row)
-                    if not ctx.agent_config or "action_name" not in ctx.agent_config:
-                        raise ValueError(
-                            "agent_config must contain 'action_name' for content namespacing"
-                        )
-                    stage6_action_name = ctx.agent_config["action_name"]
                     exhausted_item = {
                         "content": RecordEnvelope.build_content(
                             stage6_action_name, empty_content, existing
@@ -486,13 +486,8 @@ class BatchResultProcessor:
                     else:
                         reason = "batch_not_returned"
 
-                    if not ctx.agent_config or "action_name" not in ctx.agent_config:
-                        raise ValueError(
-                            "agent_config must contain 'action_name' for content namespacing"
-                        )
-                    passthrough_action_name = ctx.agent_config["action_name"]
                     passthrough_item = RecordEnvelope.build_skipped(
-                        passthrough_action_name, original_row
+                        stage6_action_name, original_row
                     )
                     passthrough_item["source_guid"] = source_guid
                     passthrough_item["metadata"] = {
