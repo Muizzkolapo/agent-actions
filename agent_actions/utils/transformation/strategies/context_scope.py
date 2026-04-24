@@ -170,8 +170,12 @@ class NoOpStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Return data unchanged."""
-        return data
+        """Wrap content under action namespace (no passthrough merging needed)."""
+        action_name = agent_config["agent_type"]
+        version_merge = is_version_merge(agent_config)
+        return DataTransformer.transform_structure(
+            [{source_guid: data}], action_name, version_merge=version_merge
+        )
 
 
 class DefaultStructureStrategy(IPassthroughTransformStrategy):
