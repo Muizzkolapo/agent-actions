@@ -355,7 +355,7 @@ class CatalogGenerator:
         if runs_data:
             for wf_data in runs_data.values():
                 for evt in wf_data.get("runtime_warnings", []):
-                    target = evt.get("action_name") or evt.get("event_type") or "unknown"
+                    target = evt.get("action_name") or evt.get("event_type") or "NOT_SET"
                     entry = {
                         "target": target,
                         "message": evt.get("message", ""),
@@ -375,7 +375,7 @@ class CatalogGenerator:
                         {
                             "target": exec_rec.get("workflow_name")
                             or exec_rec.get("workflow_id")
-                            or "unknown",
+                            or "NOT_SET",
                             "message": exec_rec.get("error_message")
                             or f"Run {exec_rec.get('id', '?')} failed",
                             "timestamp": exec_rec.get("ended_at")

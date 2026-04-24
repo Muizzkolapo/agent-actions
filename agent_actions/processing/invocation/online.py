@@ -114,7 +114,7 @@ class OnlineStrategy(InvocationStrategy):
                 attempts=retry_result.attempts,
                 failures=failures,
                 succeeded=succeeded,
-                reason=retry_result.reason or "unknown",
+                reason=retry_result.reason or "NOT_SET",
                 timestamp=datetime.now(UTC).isoformat(),
             )
 

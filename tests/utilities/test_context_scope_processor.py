@@ -6,7 +6,6 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope,
     format_llm_context,
-    merge_passthrough_fields,
 )
 from agent_actions.prompt.context.scope_namespace import (
     _extract_allowed_fields_per_dependency,
@@ -131,53 +130,6 @@ class TestContextScopeProcessor:
         # llm_context should have observe fields but NOT seed data
         assert llm_context["source"]["page_content"] == "text"
         assert "exam_syllabus" not in llm_context.get("seed", {})
-
-    def test_merge_passthrough_fields(self):
-        """Test merging passthrough fields into LLM response."""
-        # Test with structured response (with 'content' key)
-        structured_response = [
-            {
-                "source_guid": "guid-abc-123",
-                "node_id": "node_1_classifier",
-                "content": {"classification": "positive", "confidence": 0.92},
-            },
-            {
-                "source_guid": "guid-def-456",
-                "node_id": "node_1_classifier",
-                "content": {"classification": "negative", "confidence": 0.88},
-            },
-        ]
-
-        passthrough_fields = {"document_id": "doc-123", "original_filename": "report.pdf"}
-
-        # Execute
-        result = merge_passthrough_fields(structured_response, passthrough_fields)
-
-        # Validate - passthrough fields merged into content
-        assert result[0]["content"]["classification"] == "positive"
-        assert result[0]["content"]["confidence"] == 0.92
-        assert result[0]["content"]["document_id"] == "doc-123"
-        assert result[0]["content"]["original_filename"] == "report.pdf"
-
-        assert result[1]["content"]["classification"] == "negative"
-        assert result[1]["content"]["confidence"] == 0.88
-        assert result[1]["content"]["document_id"] == "doc-123"
-        assert result[1]["content"]["original_filename"] == "report.pdf"
-
-        # Test with flat response (no 'content' key)
-        flat_response = [{"classification": "positive", "confidence": 0.95}]
-
-        flat_result = merge_passthrough_fields(flat_response, passthrough_fields)
-
-        # Validate - passthrough fields merged directly
-        assert flat_result[0]["classification"] == "positive"
-        assert flat_result[0]["confidence"] == 0.95
-        assert flat_result[0]["document_id"] == "doc-123"
-        assert flat_result[0]["original_filename"] == "report.pdf"
-
-        # Test with empty passthrough returns response unchanged
-        unchanged = merge_passthrough_fields(structured_response, {})
-        assert unchanged == structured_response
 
     def test_apply_context_scope_observe_wildcard(self):
         """Test wildcard expansion for observe directive in apply_context_scope."""

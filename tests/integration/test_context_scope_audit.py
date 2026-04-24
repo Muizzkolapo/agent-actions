@@ -21,7 +21,6 @@ from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
     apply_context_scope,
     format_llm_context,
-    merge_passthrough_fields,
 )
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.prompt.context.scope_inference import infer_dependencies
@@ -124,13 +123,6 @@ class TestPassthroughDirective:
         _, llm_ctx, pt = apply_context_scope(field_context, scope, action_name="act")
         assert "score" not in llm_ctx.get("dep", {})
         assert pt["dep"]["score"] == 0.8
-
-    def test_passthrough_appears_in_output_via_merge(self):
-        """passthrough fields get merged into LLM response output."""
-        llm_response = [{"content": {"answer": "42"}}]
-        passthrough = {"dep": {"original_id": "abc"}}
-        result = merge_passthrough_fields(llm_response, passthrough)
-        assert result[0]["content"]["dep"] == {"original_id": "abc"}
 
     def test_passthrough_wildcard(self):
         field_context = _fc(dep={"a": 1, "b": 2})
@@ -525,7 +517,7 @@ class TestFieldParsing:
 
 
 class TestFormatAndMerge:
-    """format_llm_context and merge_passthrough_fields utilities."""
+    """format_llm_context utility."""
 
     def test_format_empty_returns_empty(self):
         assert format_llm_context({}) == ""
@@ -535,24 +527,6 @@ class TestFormatAndMerge:
         result = format_llm_context(llm_ctx)
         assert "dep.summary" in result
         assert "hello world" in result
-
-    def test_merge_passthrough_into_content(self):
-        response = [{"content": {"answer": "42"}}]
-        pt = {"dep": {"original_id": "abc"}}
-        result = merge_passthrough_fields(response, pt)
-        assert result[0]["content"]["dep"] == {"original_id": "abc"}
-        assert result[0]["content"]["answer"] == "42"
-
-    def test_merge_passthrough_empty_noop(self):
-        response = [{"content": {"answer": "42"}}]
-        result = merge_passthrough_fields(response, {})
-        assert result == response
-
-    def test_merge_does_not_mutate_original(self):
-        response = [{"content": {"answer": "42"}}]
-        pt = {"dep": {"id": "x"}}
-        merge_passthrough_fields(response, pt)
-        assert "dep" not in response[0]["content"]
 
 
 # ---------------------------------------------------------------------------
