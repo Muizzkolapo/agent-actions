@@ -533,6 +533,9 @@ class ProcessingPipeline:
         )
 
         # Process via RecordProcessor
+        # Filter out upstream tombstones — preserved for lineage but not for re-processing.
+        data = [d for d in data if not (isinstance(d, dict) and d.get("_unprocessed") is True)]
+
         if self.granularity == "file" and (self.is_tool_action or self.is_hitl_action):
             # For FILE mode, use the input data as source for parent lookup
             # (not source_data which points to original source folder)
@@ -571,7 +574,6 @@ class ProcessingPipeline:
 
                 results.extend(_build_skipped_results(skipped))
         else:
-            # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
 
         # Collect success results
