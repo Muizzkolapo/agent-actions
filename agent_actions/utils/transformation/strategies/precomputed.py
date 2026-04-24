@@ -1,7 +1,6 @@
 """Passthrough strategies for pre-computed passthrough_fields."""
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.utils.content import is_version_merge
 
 from .base import IPassthroughTransformStrategy
 
@@ -32,12 +31,16 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Merge passthrough fields into each item's content."""
+        """Merge passthrough fields into content, then wrap under action namespace."""
+        from agent_actions.utils.content import wrap_content
+
+        action_name = agent_config["agent_type"]
+
         result = []
         for item in data:
             if isinstance(item, dict) and "content" in item and isinstance(item["content"], dict):
-                merged = {**item, "content": {**item["content"], **(passthrough_fields or {})}}
-                result.append(merged)
+                merged_content = {**item["content"], **(passthrough_fields or {})}
+                result.append({**item, "content": wrap_content(action_name, merged_content)})
             else:
                 result.append(item)
         return result
@@ -78,7 +81,4 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
             else:
                 merged.append(item)
         action_name = agent_config["agent_type"]
-        version_merge = is_version_merge(agent_config)
-        return DataTransformer.transform_structure(
-            [{source_guid: merged}], action_name, version_merge=version_merge
-        )
+        return DataTransformer.transform_structure([{source_guid: merged}], action_name)

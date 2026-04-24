@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "NoOp and PrecomputedStructured strategies now wrap content under action namespace instead of returning flat"
+time: 2026-04-24T02:90:00.000000Z

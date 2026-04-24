@@ -1,7 +1,6 @@
 """Passthrough strategies that extract fields from context_scope.passthrough config."""
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.utils.content import is_version_merge
 
 from .base import IPassthroughTransformStrategy
 
@@ -60,10 +59,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
                     )
                 )
         action_name = agent_config["agent_type"]
-        version_merge = is_version_merge(agent_config)
-        return DataTransformer.transform_structure(
-            [{source_guid: updated}], action_name, version_merge=version_merge
-        )
+        return DataTransformer.transform_structure([{source_guid: updated}], action_name)
 
     @staticmethod
     def has_passthrough_config(agent_config: dict) -> bool:
@@ -138,10 +134,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
                     )
                 )
         action_name = agent_config["agent_type"]
-        version_merge = is_version_merge(agent_config)
-        return DataTransformer.transform_structure(
-            [{source_guid: updated}], action_name, version_merge=version_merge
-        )
+        return DataTransformer.transform_structure([{source_guid: updated}], action_name)
 
 
 class NoOpStrategy(IPassthroughTransformStrategy):
@@ -170,8 +163,9 @@ class NoOpStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Return data unchanged."""
-        return data
+        """Wrap content under action namespace (no passthrough merging needed)."""
+        action_name = agent_config["agent_type"]
+        return DataTransformer.transform_structure([{source_guid: data}], action_name)
 
 
 class DefaultStructureStrategy(IPassthroughTransformStrategy):
@@ -197,7 +191,4 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
     ) -> list:
         """Structure data without passthrough."""
         action_name = agent_config["agent_type"]
-        version_merge = is_version_merge(agent_config)
-        return DataTransformer.transform_structure(
-            [{source_guid: data}], action_name, version_merge=version_merge
-        )
+        return DataTransformer.transform_structure([{source_guid: data}], action_name)
