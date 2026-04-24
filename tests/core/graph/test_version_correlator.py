@@ -307,17 +307,19 @@ class TestVersionOutputCorrelator:
         result = correlator._correlate_by_source_record(version_outputs)
         assert len(result) == 2
         rec_a = next(r for r in result if r["source_guid"] == "guid-a")
-        # Content is now nested by agent name (not flattened)
-        assert rec_a["content"] == {
-            "loop_1": {"f1": "v1"},
-            "loop_2": {"f2": "v3"},
-            "loop_3": {"f3": "v5"},
-        }
+        # Version namespaces + upstream from base_record (first version's content)
+        # Base record loop_1 has content {"f1": "v1"}, so "f1" appears as upstream
+        assert rec_a["content"]["loop_1"] == {"f1": "v1"}
+        assert rec_a["content"]["loop_2"] == {"f2": "v3"}
+        assert rec_a["content"]["loop_3"] == {"f3": "v5"}
+        # Verify no unexpected keys leaked (upstream + 3 versions)
+        expected_a = {"f1", "loop_1", "loop_2", "loop_3"}
+        assert set(rec_a["content"].keys()) == expected_a
         rec_b = next(r for r in result if r["source_guid"] == "guid-b")
-        assert rec_b["content"] == {
-            "loop_1": {"f1": "v2"},
-            "loop_2": {"f2": "v4"},
-        }
+        assert rec_b["content"]["loop_1"] == {"f1": "v2"}
+        assert rec_b["content"]["loop_2"] == {"f2": "v4"}
+        expected_b = {"f1", "loop_1", "loop_2"}
+        assert set(rec_b["content"].keys()) == expected_b
 
     def test_error_handling_in_correlation(self, correlator, temp_agent_folder):
         """Test error handling during correlation."""

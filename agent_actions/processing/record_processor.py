@@ -23,7 +23,7 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
 from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
 from agent_actions.utils.content import get_existing_content
 
@@ -299,6 +299,10 @@ class RecordProcessor:
                 )
 
         item_existing_content = get_existing_content(item) if isinstance(item, dict) else None
+        if not item_existing_content and isinstance(item, dict) and context.is_first_stage:
+            raw = {k: v for k, v in item.items() if k not in RECORD_FRAMEWORK_FIELDS}
+            if raw:
+                item_existing_content = {"source": raw}
         transformed = self._transform_response(
             response,
             content,
