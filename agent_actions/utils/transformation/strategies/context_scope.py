@@ -31,7 +31,10 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Extract and merge context_scope passthrough fields."""
+        """Extract and merge context_scope passthrough fields.
+
+        Returns flat action output dicts — RecordEnvelope handles wrapping.
+        """
         fields_to_merge = self.extract_context_scope_fields(agent_config)
 
         context_for_passthrough = context_data
@@ -58,8 +61,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
                         context_for_passthrough, content_dict, fields_to_merge
                     )
                 )
-        action_name = agent_config["agent_type"]
-        return DataTransformer.transform_structure([{source_guid: updated}], action_name)
+        return updated
 
     @staticmethod
     def has_passthrough_config(agent_config: dict) -> bool:
@@ -107,7 +109,10 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Extract and merge context_scope passthrough fields."""
+        """Extract and merge context_scope passthrough fields.
+
+        Returns flat action output dicts — RecordEnvelope handles wrapping.
+        """
         fields_to_merge = ContextScopeStructuredStrategy.extract_context_scope_fields(agent_config)
 
         context_for_passthrough = context_data
@@ -133,12 +138,11 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
                         context_for_passthrough, item_dict, fields_to_merge
                     )
                 )
-        action_name = agent_config["agent_type"]
-        return DataTransformer.transform_structure([{source_guid: updated}], action_name)
+        return updated
 
 
 class NoOpStrategy(IPassthroughTransformStrategy):
-    """No-op strategy: returns structured data as-is when no passthrough is needed."""
+    """No-op strategy: extracts content from structured data when no passthrough is needed."""
 
     def can_handle(
         self,
@@ -163,13 +167,27 @@ class NoOpStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Wrap content under action namespace (no passthrough merging needed)."""
-        action_name = agent_config["agent_type"]
-        return DataTransformer.transform_structure([{source_guid: data}], action_name)
+        """Extract content from structured items, return flat action output.
+
+        Returns flat action output dicts — RecordEnvelope handles wrapping.
+        """
+        results = []
+        for item in data:
+            if isinstance(item, dict) and "content" in item:
+                content = item["content"]
+                if isinstance(content, dict):
+                    results.append(content)
+                else:
+                    results.append({"value": content})
+            elif isinstance(item, dict):
+                results.append(item)
+            else:
+                results.append({"value": item})
+        return results
 
 
 class DefaultStructureStrategy(IPassthroughTransformStrategy):
-    """Default strategy: structures unstructured data without passthrough merging."""
+    """Default strategy: returns unstructured data as flat action output dicts."""
 
     def can_handle(
         self,
@@ -189,6 +207,14 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Structure data without passthrough."""
-        action_name = agent_config["agent_type"]
-        return DataTransformer.transform_structure([{source_guid: data}], action_name)
+        """Return data as flat action output dicts.
+
+        Returns flat action output dicts — RecordEnvelope handles wrapping.
+        """
+        results = []
+        for item in data:
+            if isinstance(item, dict):
+                results.append(item)
+            else:
+                results.append({"value": item})
+        return results

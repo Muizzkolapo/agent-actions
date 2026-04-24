@@ -15,5 +15,5 @@ into generated data and ensure outputs remain structured.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `passthrough.py` | Module | `PassthroughTransformer` orchestrates context_scope.passthrough + structured vs unstructured data using the strategy list. | `field_management`, `preprocessing` |
-| `PassthroughTransformer` | Class | Applies the first matching strategy, normalizes data to lists, and ensures each item has required IDs/metadata. | `field_management`, `lineage` |
+| `passthrough.py` | Module | `PassthroughTransformer` orchestrates context_scope.passthrough + structured vs unstructured data using the strategy list. Wraps strategy output via `RecordEnvelope.build()`. | `field_management`, `record.envelope` |
+| `PassthroughTransformer` | Class | Applies the first matching strategy (which returns flat action output dicts), wraps each via `RecordEnvelope.build()` to namespace and preserve upstream, and ensures each item has required IDs/metadata. | `field_management`, `record.envelope` |
