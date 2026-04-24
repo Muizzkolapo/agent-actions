@@ -27,18 +27,18 @@ agac render -a my_workflow           # Compiled YAML (schemas inlined, versions 
 ```
 Source record
   → Framework adds source_guid, node_id, lineage
-    → observe resolves fields via lineage (historical lookup)
-      → LLM/tool receives observed fields (namespaced for tools, Jinja-accessible for prompts)
+    → observe selects which namespaces the action can read from the record
+      → LLM/tool receives observed fields (namespaced by action name)
         → Tool processes and returns result
           → passthrough fields merge into output
-            → Output stored with extended lineage
-              → Next action's observe resolves via this lineage
+            → Output stored under this action's namespace
+              → Next action's observe selects from the record's namespaces
 ```
 
 Once you understand this chain, most issues become obvious:
-- UDF gets None for a field? In RECORD mode, check for field name collisions — use `data.get("action.field")` when two upstreams share a field name. In FILE mode, read from `record["content"]["field"]`
-- Downstream can't see a field? It wasn't in `passthrough` — only `observe` fields reach the LLM, `passthrough` fields reach the output
-- Historical lookup fails? Lineage is broken — check the upstream action's output for correct `lineage` arrays
+- UDF gets None for a field? Fields are namespaced — access with `data["action_name"]["field"]`, not `data.get("field")`. In FILE mode, read from `record["content"]["action_name"]["field"]`
+- Downstream can't see a field? It wasn't in `observe` or `passthrough` — only `observe` namespaces reach the LLM, `passthrough` namespaces reach the output
+- Missing namespace? Check that the upstream action is listed in `observe` — the action name is the namespace key
 
 ## Project Layout
 
@@ -140,7 +140,7 @@ Every action falls into one of three roles. Mixing them causes bugs:
 
 ## Writing UDFs
 
-Observed fields arrive **flat** in RECORD mode tools. The framework resolves namespaces and delivers fields directly. When multiple upstream actions share a field name, the framework qualifies them as `"action.field"` to prevent collisions.
+Observed fields arrive **namespaced by action name** in RECORD mode tools. Each upstream action's fields are nested under its name as a key.
 
 ```python
 from typing import Any
@@ -148,27 +148,27 @@ from agent_actions import udf_tool
 
 @udf_tool()
 def enrich_listing(data: dict[str, Any]) -> list[dict[str, Any]]:
-    # RECORD mode: fields are flat — access directly
-    title = data.get("listing_title", "")
+    # RECORD mode: fields are namespaced by upstream action
+    title = data["extract_listing"]["listing_title"]
 
-    # Seed data is flattened like any other namespace
-    rules = data.get("marketplace_rules", {})
+    # Seed data is under the "seed" namespace
+    rules = data["seed"]["marketplace_rules"]
 
     return [{"enriched_title": f"{title} — {rules.get('brand', '')}"}]
 ```
 
 A few things to remember:
-- **RECORD mode**: Fields are flat — access with `data.get("field")` directly
-- **Collision handling**: When two upstream actions share a field name, access with `data.get("action_name.field")` (dot-qualified)
-- **FILE mode**: Access fields via `record["content"]["field"]`
-- Seed data: `data.get("key", {})` (seed namespace is flattened like any other; requires `observe: [seed.*]`)
+- **RECORD mode**: Fields are namespaced — access with `data["action_name"]["field"]`
+- **No collisions**: Each action's fields are isolated under its namespace, so field name conflicts cannot occur
+- **FILE mode**: Access fields via `record["content"]["action_name"]["field"]`
+- Seed data: `data["seed"]["key"]` (requires `observe: [seed.*]`)
 - Return `list[dict]` — or `dict` when the YAML uses `passthrough`
 
 ## Guards
 
 Guards filter records based on upstream output. The key insight: guards check **input** to the action, not its own output. So you place the guard on the action that *consumes* the data, not the one that *produces* it.
 
-Guard conditions evaluate against **flattened** field names from the action's observed data. If you observe `extract_claims.*`, the guard sees `claims` and `confidence` directly — not `extract_claims.claims`.
+Guard conditions evaluate against **dotted namespace paths** from the action's observed data. If you observe `extract_claims.*`, the guard references fields as `extract_claims.claims`, `extract_claims.confidence`, etc.
 
 ```yaml
 - name: extract_claims              # Produces claims — no guard here
@@ -176,7 +176,7 @@ Guard conditions evaluate against **flattened** field names from the action's ob
 - name: validate_claims
   dependencies: [extract_claims]
   guard:
-    condition: 'len(claims) >= 1 and confidence >= 0.7'
+    condition: 'len(extract_claims.claims) >= 1 and extract_claims.confidence >= 0.7'
     on_false: "filter"              # filter = remove record | skip = pass through
   context_scope:
     observe: [extract_claims.*]
@@ -202,20 +202,20 @@ When you need consensus (multiple independent judgments on the same data), use v
     observe: [score_quality.*]
 ```
 
-**RECORD mode** — the merge tool receives dot-qualified flat keys (because version fields like `score` collide across namespaces):
+**RECORD mode** — each version is a separate namespace:
 ```python
-score_1 = data.get("score_quality_1.score")  # 8
-score_2 = data.get("score_quality_2.score")  # 7
+score_1 = data["score_quality_1"]["score"]  # 8
+score_2 = data["score_quality_2"]["score"]  # 7
 
 # Iterate all versions:
-scores = [v for k, v in data.items() if k.endswith(".score")]
+scores = [ns["score"] for name, ns in data.items() if name.startswith("score_quality_")]
 ```
 
-**FILE mode** — each record's `content` has both nested dicts and qualified flat keys:
+**FILE mode** — version namespaces are nested dicts inside `content`:
 ```python
 # Nested dict access:
-scorer_1 = record["content"].get("score_quality_1", {})
-score = scorer_1.get("score")
+scorer_1 = record["content"]["score_quality_1"]
+score = scorer_1["score"]
 
 # Or iterate dynamically:
 for key, val in record["content"].items():
@@ -236,7 +236,7 @@ defaults:
       rubric: $file:evaluation_rubric.json
 ```
 
-In prompts: `{{ seed.rubric.min_score }}`. In UDFs (RECORD mode): `data.get("rubric", {})` — the seed namespace is flattened like any other. Requires `observe: [seed.*]` or `observe: [seed.rubric]` in the action config. The config key is `seed_path:` but the prompt prefix is `seed.` — using `seed_data.` is a common mistake that silently resolves to empty.
+In prompts: `{{ seed.rubric.min_score }}`. In UDFs (RECORD mode): `data["seed"]["rubric"]` — seed data is under the `seed` namespace. Requires `observe: [seed.*]` or `observe: [seed.rubric]` in the action config. The config key is `seed_path:` but the prompt prefix is `seed.` — using `seed_data.` is a common mistake that silently resolves to empty.
 
 **Prompt templates** — defined in `prompt_store/workflow_name.md`:
 ```markdown
@@ -266,8 +266,11 @@ import json, sys; data = json.load(sys.stdin)
 print(f'{len(data)} records')
 if data:
     rec = data[0]
-    content = rec.get('content', rec)
-    print('content keys:', list(content.keys())[:10])
+    content = rec['content']
+    print('namespaces:', list(content.keys())[:10])
+    for ns, fields in content.items():
+        if isinstance(fields, dict):
+            print(f'  {ns}: {list(fields.keys())[:5]}')
     print('record keys:', [k for k in rec if k != 'content'][:10])
 "
 ```
@@ -284,7 +287,7 @@ Read these when you need depth beyond what's covered above:
 - **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough, output_field, seed data details
 
 ### Building
-- **[UDF Reference](references/udf-reference.md)** — @udf_tool decorator, record/file mode, flat field access, passthrough, version merge
+- **[UDF Reference](references/udf-reference.md)** — @udf_tool decorator, record/file mode, namespaced field access, passthrough, version merge
 - **[Action Anatomy](references/action-anatomy.md)** — action structure, pre-creation checklist, data lineage, record matching
 - **[Prompt Patterns](references/prompt-patterns.md)** — Jinja2 templates, variable access, max_tokens/temperature, anti-patterns
 - **[Dynamic Content Injection](references/dynamic-content-injection.md)** — tool action injection pattern for randomized/computed prompt content

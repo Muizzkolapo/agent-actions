@@ -71,7 +71,7 @@ flowchart LR
   
   # CONDITIONAL EXECUTION
   guard:                                  # When to run/skip
-    condition: 'validation_status == "PASS"'
+    condition: 'validate_data.validation_status == "PASS"'
     on_false: "filter"
   
   # INSTRUCTIONS
@@ -98,7 +98,7 @@ flowchart LR
   
   # CONDITIONAL EXECUTION  
   guard:
-    condition: 'status == "valid"'
+    condition: 'extract_content.status == "valid"'
     on_false: "filter"
 ```
 
@@ -182,7 +182,7 @@ def my_processing_function(data):
 
 ```yaml
 guard:
-  condition: 'status == "PASS" and score >= 8'
+  condition: 'upstream_action.status == "PASS" and upstream_action.score >= 8'
   on_false: "filter"
 ```
 
@@ -222,11 +222,11 @@ cat agent_io/target/<parent>/sample.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 if data:
-    content = data[0].get('content', data[0])
-    print('Fields:', list(content.keys()))
-    print('Sample values:')
-    for k, v in list(content.items())[:5]:
-        print(f'  {k}: {str(v)[:50]}...')
+    content = data[0]['content']
+    print('Namespaces:', list(content.keys()))
+    for ns, fields in content.items():
+        if isinstance(fields, dict):
+            print(f'  {ns}:', list(fields.keys())[:5])
 "
 ```
 
@@ -255,7 +255,7 @@ grep "observe:" -A20 agent_config/*.yml | grep "my_field"
 - name: use_validated
   dependencies: [validate_data]
   guard:
-    condition: 'validation_status == "PASS"'
+    condition: 'validate_data.validation_status == "PASS"'
 ```
 
 ### Merge Pattern

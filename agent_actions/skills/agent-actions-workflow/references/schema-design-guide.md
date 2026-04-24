@@ -253,13 +253,19 @@ agac render -a my_workflow
 # Check what an action actually produced
 cat agent_io/target/<action>/sample.json | python3 -c "
 import json, sys; data = json.load(sys.stdin)
-if data: print(json.dumps(list(data[0].get('content', data[0]).keys()), indent=2))
+if data:
+    content = data[0]['content']
+    for ns, fields in content.items():
+        if isinstance(fields, dict):
+            print(f'{ns}: {list(fields.keys())}')
 "
 
-# Compare schema field names with actual output
+# Compare schema field names with actual output (check the action's own namespace)
 diff <(grep 'id:' schema/my_schema.yml | awk '{print $3}') \
      <(cat agent_io/target/my_action/sample.json | python3 -c "
 import json, sys; data = json.load(sys.stdin)
-if data: [print(k) for k in data[0].get('content', data[0]).keys()]
+if data:
+    fields = data[0]['content'].get('my_action', {})
+    for k in fields: print(k)
 ")
 ```

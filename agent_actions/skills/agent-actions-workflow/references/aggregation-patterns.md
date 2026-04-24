@@ -109,15 +109,15 @@ The aggregating action receives one merged record per unique key value, with all
 
 ## UDF for Aggregated Data
 
-The merge tool receives flat fields. Unique field names are bare; collisions get dot-qualified:
+The merge tool receives fields namespaced by action name:
 
 ```python
 @udf_tool()
 def aggregate_reviews(data: dict[str, Any]) -> list[dict[str, Any]]:
-    # These field names are unique across upstreams → bare access
-    text_score = data.get("text_score", 0)
-    image_score = data.get("image_score", 0)
-    audio_score = data.get("audio_score", 0)
+    # Each upstream action's fields are under its namespace
+    text_score = data["validate_text"]["text_score"]
+    image_score = data["validate_image"]["image_score"]
+    audio_score = data["validate_audio"]["audio_score"]
 
     scores = [text_score, image_score, audio_score]
     avg = sum(scores) / len(scores) if scores else 0
