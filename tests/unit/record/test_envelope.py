@@ -159,6 +159,10 @@ class TestBuildVersionMerge:
         with pytest.raises(RecordEnvelopeError, match="empty"):
             RecordEnvelope.build_version_merge({})
 
+    def test_non_dict_version_value_raises(self):
+        with pytest.raises(RecordEnvelopeError, match="must be a dict"):
+            RecordEnvelope.build_version_merge({"v1": "not a dict"})
+
 
 # ── Cross-method interaction ─────────────────────────────────────────────────
 

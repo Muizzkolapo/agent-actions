@@ -76,6 +76,12 @@ class RecordEnvelope:
         """Build a record merging multiple version namespaces."""
         if not version_contents:
             raise RecordEnvelopeError("version_contents is empty -- nothing to merge")
+        for key, value in version_contents.items():
+            if not isinstance(value, dict):
+                raise RecordEnvelopeError(
+                    f"version_contents['{key}'] must be a dict, "
+                    f"got {type(value).__name__}"
+                )
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, **version_contents}}
         return _carry_source_guid(result, input_record)
