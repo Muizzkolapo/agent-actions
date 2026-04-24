@@ -1,9 +1,8 @@
-"""Regression tests for bugfixes introduced in PR #1108.
+"""Batch processing and LLM provider edge cases.
 
-Covers three fixes:
-1. _create_exhausted_item() — missing action_name argument
-2. _submit_to_provider() — ExternalServiceError constructor fix
-3. Cohere/Mistral token extraction — nullable token values default to 0
+1. _create_exhausted_item() — action_name validation
+2. _submit_to_provider() — ExternalServiceError wrapping
+3. Cohere/Mistral token extraction — nullable token values
 """
 
 from unittest.mock import MagicMock, patch
@@ -56,12 +55,13 @@ class TestCreateExhaustedItemActionName:
         assert item["metadata"]["retry_exhausted"] is True
         assert item["_unprocessed"] is True
 
-    def test_action_name_defaults_to_empty_when_missing(self):
-        """When agent_config has no action_name, defaults to empty string (no crash)."""
+    def test_action_name_missing_raises(self):
+        """When agent_config has no action_name, RecordEnvelopeError is raised (empty names are banned)."""
         from agent_actions.llm.batch.processing.result_processor import (
             BatchProcessingContext,
             BatchResultProcessor,
         )
+        from agent_actions.record.envelope import RecordEnvelopeError
 
         ctx = BatchProcessingContext(
             batch_results=[],
@@ -77,17 +77,16 @@ class TestCreateExhaustedItemActionName:
         )
         processor = BatchResultProcessor()
 
-        item = processor._create_exhausted_item(ctx, "custom-2", {"text": "world"}, recovery)
+        with pytest.raises(RecordEnvelopeError, match="action_name is required"):
+            processor._create_exhausted_item(ctx, "custom-2", {"text": "world"}, recovery)
 
-        assert item["source_guid"] == "sg-456"
-        assert "_recovery" in item
-
-    def test_action_name_defaults_when_agent_config_is_none(self):
-        """When agent_config is None, action_name defaults to '' (no crash)."""
+    def test_action_name_missing_when_agent_config_is_none_raises(self):
+        """When agent_config is None, RecordEnvelopeError is raised (empty names are banned)."""
         from agent_actions.llm.batch.processing.result_processor import (
             BatchProcessingContext,
             BatchResultProcessor,
         )
+        from agent_actions.record.envelope import RecordEnvelopeError
 
         ctx = BatchProcessingContext(
             batch_results=[],
@@ -103,10 +102,8 @@ class TestCreateExhaustedItemActionName:
         )
         processor = BatchResultProcessor()
 
-        # agent_config is None — the or {} fallback and ternary must handle it
-        item = processor._create_exhausted_item(ctx, "custom-3", {"text": "data"}, recovery)
-
-        assert item["source_guid"] == "sg-789"
+        with pytest.raises(RecordEnvelopeError, match="action_name is required"):
+            processor._create_exhausted_item(ctx, "custom-3", {"text": "data"}, recovery)
 
 
 # =============================================================================
