@@ -233,17 +233,16 @@ def process_file_mode_tool(
                 input_idx = source_mapping.get(idx) if source_mapping else None
                 if isinstance(input_idx, list):
                     input_idx = input_idx[0]
+                input_record: dict[str, Any] | None = None
                 if isinstance(input_idx, int) and input_idx < len(original_data):
                     input_record = original_data[input_idx]
                 elif original_data:
                     input_record = original_data[0]
-                else:
-                    input_record = None
 
                 if version_merge:
-                    # Version merge tools return flat business data to be
-                    # spread alongside existing version namespaces — not
-                    # namespace dicts, so build_version_merge is wrong here.
+                    # build_version_merge validates all values are dicts,
+                    # but version merge tools return flat business data
+                    # (strings, ints) to spread alongside version namespaces.
                     existing = get_existing_content(input_record) if input_record else {}
                     record: dict[str, Any] = {"content": {**existing, **data_fields}}
                 else:
@@ -398,21 +397,12 @@ def process_file_mode_hitl(
                             if key in review_payload:
                                 hitl_output[key] = review_payload[key]
 
-                if isinstance(item, dict):
-                    record = RecordEnvelope.build(context.agent_name, hitl_output, item)
-                else:
-                    record = RecordEnvelope.build(context.agent_name, hitl_output)
+                record = RecordEnvelope.build(context.agent_name, hitl_output, item)
 
                 # Carry framework fields that RecordEnvelope doesn't manage.
-                if isinstance(item, dict):
-                    for field in (
-                        "target_id",
-                        "_unprocessed",
-                        "_recovery",
-                        "metadata",
-                    ):
-                        if field in item:
-                            record[field] = item[field]
+                for field in ("target_id", "_unprocessed", "_recovery", "metadata"):
+                    if field in item:
+                        record[field] = item[field]
                 structured_data.append(record)
 
         # HITL FILE mode is always 1:1 — identity source_mapping ensures the
