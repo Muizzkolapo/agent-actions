@@ -1,6 +1,7 @@
 """Passthrough strategies for pre-computed passthrough_fields."""
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
+from agent_actions.utils.content import is_version_merge
 
 from .base import IPassthroughTransformStrategy
 
@@ -77,4 +78,7 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
             else:
                 merged.append(item)
         action_name = agent_config["agent_type"]
-        return DataTransformer.transform_structure([{source_guid: merged}], action_name)
+        version_merge = is_version_merge(agent_config)
+        return DataTransformer.transform_structure(
+            [{source_guid: merged}], action_name, version_merge=version_merge
+        )

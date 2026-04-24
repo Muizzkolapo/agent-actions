@@ -233,9 +233,13 @@ class BatchResultProcessor:
 
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
+        from agent_actions.utils.content import is_version_merge
+
         action_name = ctx.agent_config["action_name"]
         structured_items = DataTransformer.transform_structure(
-            [{original_source_guid: generated_list}], action_name
+            [{original_source_guid: generated_list}],
+            action_name,
+            version_merge=is_version_merge(ctx.agent_config),
         )
 
         # Batch items inherit target_id from the original input row.

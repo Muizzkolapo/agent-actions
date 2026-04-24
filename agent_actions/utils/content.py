@@ -21,6 +21,7 @@ Usage::
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -67,6 +68,11 @@ def get_all_namespaces(record: dict[str, Any]) -> list[str]:
     """Return the list of action names that have output on this record."""
     content = record.get("content", {})
     return list(content.keys())
+
+
+def is_version_merge(agent_config: Mapping[str, Any]) -> bool:
+    """True when the action consumes version output (content is pre-namespaced)."""
+    return bool(agent_config.get("version_consumption_config"))
 
 
 def get_existing_content(record: dict[str, Any]) -> dict[str, Any]:
