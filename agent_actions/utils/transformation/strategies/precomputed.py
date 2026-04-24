@@ -1,6 +1,6 @@
 """Passthrough strategies for pre-computed passthrough_fields."""
 
-from .base import IPassthroughTransformStrategy
+from .base import IPassthroughTransformStrategy, ensure_dict_output
 
 
 class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
@@ -41,7 +41,7 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
             elif isinstance(item, dict):
                 result.append({**item, **(passthrough_fields or {})})
             else:
-                result.append(item)
+                result.append(ensure_dict_output(item))
         return result
 
 
@@ -81,5 +81,5 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
                 merged_item = {**item, **(passthrough_fields or {})}
                 merged.append(merged_item)
             else:
-                merged.append(item)
+                merged.append(ensure_dict_output(item))
         return merged

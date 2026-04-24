@@ -2,7 +2,7 @@
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 
-from .base import IPassthroughTransformStrategy
+from .base import IPassthroughTransformStrategy, ensure_dict_output
 
 
 class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
@@ -174,15 +174,9 @@ class NoOpStrategy(IPassthroughTransformStrategy):
         results = []
         for item in data:
             if isinstance(item, dict) and "content" in item:
-                content = item["content"]
-                if isinstance(content, dict):
-                    results.append(content)
-                else:
-                    results.append({"value": content})
-            elif isinstance(item, dict):
-                results.append(item)
+                results.append(ensure_dict_output(item["content"]))
             else:
-                results.append({"value": item})
+                results.append(ensure_dict_output(item))
         return results
 
 
@@ -211,10 +205,4 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
 
         Returns flat action output dicts — RecordEnvelope handles wrapping.
         """
-        results = []
-        for item in data:
-            if isinstance(item, dict):
-                results.append(item)
-            else:
-                results.append({"value": item})
-        return results
+        return [ensure_dict_output(item) for item in data]

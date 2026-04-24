@@ -7,6 +7,7 @@ preserve upstream namespaces.
 """
 
 from agent_actions.utils.transformation.passthrough import PassthroughTransformer
+from agent_actions.utils.transformation.strategies.base import ensure_dict_output
 from agent_actions.utils.transformation.strategies.context_scope import (
     ContextScopeStructuredStrategy,
     ContextScopeUnstructuredStrategy,
@@ -24,6 +25,30 @@ def _agent_config(action_name="test_action", passthrough=None):
     if passthrough:
         config["context_scope"] = {"passthrough": passthrough}
     return config
+
+
+# ---------------------------------------------------------------------------
+# ensure_dict_output helper
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureDictOutput:
+    """ensure_dict_output normalizes items to dicts."""
+
+    def test_dict_passes_through(self):
+        assert ensure_dict_output({"x": 1}) == {"x": 1}
+
+    def test_string_wrapped(self):
+        assert ensure_dict_output("text") == {"value": "text"}
+
+    def test_int_wrapped(self):
+        assert ensure_dict_output(42) == {"value": 42}
+
+    def test_none_wrapped(self):
+        assert ensure_dict_output(None) == {"value": None}
+
+    def test_list_wrapped(self):
+        assert ensure_dict_output([1, 2]) == {"value": [1, 2]}
 
 
 # ---------------------------------------------------------------------------
@@ -230,10 +255,10 @@ class TestPrecomputedUnstructuredStrategy:
         assert result[0] == {"vote": "keep", "extra": "value"}
         assert "source_guid" not in result[0]
 
-    def test_non_dict_items_passed_through(self):
+    def test_non_dict_items_normalized(self):
         strategy = PrecomputedUnstructuredStrategy()
         result = strategy.transform(["text"], {}, "g1", _agent_config(), {"k": "v"})
-        assert result[0] == "text"
+        assert result[0] == {"value": "text"}
 
 
 # ---------------------------------------------------------------------------

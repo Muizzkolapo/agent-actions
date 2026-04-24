@@ -11,6 +11,7 @@ from .strategies import (
     PrecomputedStructuredStrategy,
     PrecomputedUnstructuredStrategy,
 )
+from .strategies.base import ensure_dict_output
 
 
 class PassthroughTransformer:
@@ -89,12 +90,10 @@ class PassthroughTransformer:
         # Build records via RecordEnvelope — wraps under namespace,
         # preserves upstream content.
         input_record = {"source_guid": source_guid, "content": existing_content or {}}
-        output = []
-        for fields in action_outputs:
-            if not isinstance(fields, dict):
-                fields = {"value": fields}
-            record = RecordEnvelope.build(action_name, fields, input_record)
-            output.append(record)
+        output = [
+            RecordEnvelope.build(action_name, ensure_dict_output(fields), input_record)
+            for fields in action_outputs
+        ]
 
         return [
             self.field_manager.ensure_required_fields(
