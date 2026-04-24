@@ -230,12 +230,18 @@ def process_file_mode_tool(
                     data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
 
                 # Carry forward existing namespaces from the input record.
+                # For N→M tools (dedup, filter), source_mapping may not resolve.
+                # Fall back to the first input record — all records in a FILE
+                # batch share the same upstream namespaces.
                 input_idx = source_mapping.get(idx) if source_mapping else None
                 if isinstance(input_idx, list):
                     input_idx = input_idx[0]
-                existing = {}
                 if isinstance(input_idx, int) and input_idx < len(original_data):
                     existing = get_existing_content(original_data[input_idx])
+                elif original_data:
+                    existing = get_existing_content(original_data[0])
+                else:
+                    existing = {}
 
                 if version_merge:
                     content = {**existing, **data_fields}
