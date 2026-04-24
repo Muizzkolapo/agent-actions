@@ -38,6 +38,7 @@ class PassthroughTransformer:
         action_name: str = "unknown_action",
         passthrough_fields: dict | None = None,
         metadata: dict | None = None,
+        existing_content: dict | None = None,
     ) -> list:
         """Apply context_scope.passthrough logic to generated data.
 
@@ -53,6 +54,9 @@ class PassthroughTransformer:
             passthrough_fields: Optional pre-computed passthrough fields
                 from field_context (enables passthrough from any ancestor).
             metadata: Optional LLM response metadata to add to output items.
+            existing_content: Existing namespaced content from the input
+                record.  Merged into each output item so that upstream
+                action namespaces are carried forward.
 
         Returns:
             Transformed data list with passthrough fields merged.
@@ -72,6 +76,12 @@ class PassthroughTransformer:
 
         if output is None:
             output = []
+
+        # Carry forward upstream namespaces from the input record.
+        if existing_content:
+            for obj in output:
+                if isinstance(obj, dict) and "content" in obj and isinstance(obj["content"], dict):
+                    obj["content"] = {**existing_content, **obj["content"]}
 
         return [
             self.field_manager.ensure_required_fields(
