@@ -79,8 +79,7 @@ class RecordEnvelope:
         for key, value in version_contents.items():
             if not isinstance(value, dict):
                 raise RecordEnvelopeError(
-                    f"version_contents['{key}'] must be a dict, "
-                    f"got {type(value).__name__}"
+                    f"version_contents['{key}'] must be a dict, got {type(value).__name__}"
                 )
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, **version_contents}}
