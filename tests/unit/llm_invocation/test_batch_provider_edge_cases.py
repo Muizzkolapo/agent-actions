@@ -1,9 +1,8 @@
-"""Regression tests for bugfixes introduced in PR #1108.
+"""Batch processing and LLM provider edge cases.
 
-Covers three fixes:
-1. _create_exhausted_item() — missing action_name argument
-2. _submit_to_provider() — ExternalServiceError constructor fix
-3. Cohere/Mistral token extraction — nullable token values default to 0
+1. _create_exhausted_item() — action_name validation
+2. _submit_to_provider() — ExternalServiceError wrapping
+3. Cohere/Mistral token extraction — nullable token values
 """
 
 from unittest.mock import MagicMock, patch

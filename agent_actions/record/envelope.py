@@ -12,10 +12,7 @@ class RecordEnvelopeError(Exception):
 
 
 class RecordEnvelope:
-    """Builds record content dicts. The ONLY place this happens.
-
-    Every action type, every granularity, every strategy calls this.
-    """
+    """Single authority for record content assembly."""
 
     @staticmethod
     def build(
@@ -23,30 +20,13 @@ class RecordEnvelope:
         action_output: dict[str, Any],
         input_record: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Build a complete record with action output under its namespace.
+        """Build a record wrapping *action_output* under *action_name*.
 
-        This is the primary entry point. Every code path that produces
-        a record with action output calls this.
-
-        When input_record is None (first action in pipeline, or test setup),
-        returns ``{"content": {action_name: action_output}}`` with no
-        source_guid.
-
-        When input_record is provided, returns::
-
-            {
-                "source_guid": <from input_record>,
-                "content": {
-                    <...all upstream namespaces from input_record...>,
-                    <action_name>: <action_output>
-                }
-            }
-
-        If action_name already exists in content (retry/reprocessing),
-        the new output overwrites the previous. This is intentional.
+        Preserves upstream namespaces from *input_record* and carries
+        ``source_guid``.  Collision on *action_name* overwrites.
         """
         if not action_name:
-            raise RecordEnvelopeError("action_name is required -- cannot build record without it")
+            raise RecordEnvelopeError("action_name is required")
         if not isinstance(action_output, dict):
             raise RecordEnvelopeError(
                 f"action_output must be a dict, got {type(action_output).__name__} "
@@ -55,9 +35,7 @@ class RecordEnvelope:
 
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: action_output}}
-        if input_record and "source_guid" in input_record:
-            result["source_guid"] = input_record["source_guid"]
-        return result
+        return _carry_source_guid(result, input_record)
 
     @staticmethod
     def build_content(
@@ -65,12 +43,9 @@ class RecordEnvelope:
         action_output: dict[str, Any],
         existing_content: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Build just the content dict (no source_guid, no record wrapper).
+        """Return a content dict with *action_output* under *action_name*.
 
-        For callers that already extracted existing_content from the record
-        and operate at the content-dict level.
-
-        Returns: ``{**existing_content, action_name: action_output}``
+        No record wrapper or ``source_guid`` -- content level only.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -83,40 +58,36 @@ class RecordEnvelope:
         action_name: str,
         input_record: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Build a record for a guard-skipped action.
+        """Build a record with a null namespace for a guard-skipped action.
 
-        Null-valued namespace: ``content[action_name] = None``.
-        All upstream namespaces preserved.
-
-        Does NOT set ``_unprocessed`` or ``metadata`` -- those are framework
-        concerns. Callers that need tombstone behavior add those fields
-        after this call.
+        Does NOT set ``_unprocessed`` or ``metadata`` -- callers add those.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: None}}
-        if input_record and "source_guid" in input_record:
-            result["source_guid"] = input_record["source_guid"]
-        return result
+        return _carry_source_guid(result, input_record)
 
     @staticmethod
     def build_version_merge(
         version_contents: dict[str, dict[str, Any]],
         input_record: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Build a record for version fan-in merge.
-
-        Each key in version_contents becomes a namespace, each value
-        becomes that namespace's output.
-        """
+        """Build a record merging multiple version namespaces."""
         if not version_contents:
             raise RecordEnvelopeError("version_contents is empty -- nothing to merge")
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, **version_contents}}
-        if input_record and "source_guid" in input_record:
-            result["source_guid"] = input_record["source_guid"]
-        return result
+        return _carry_source_guid(result, input_record)
+
+
+def _carry_source_guid(
+    result: dict[str, Any], input_record: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Copy source_guid from input_record to result if present."""
+    if input_record and "source_guid" in input_record:
+        result["source_guid"] = input_record["source_guid"]
+    return result
 
 
 def _extract_existing(input_record: dict[str, Any] | None) -> dict[str, Any]:
