@@ -193,43 +193,39 @@ def _extract_business_fields(record: dict, agent_config: dict) -> dict:
     return business
 
 
-# ---------------------------------------------------------------------------
-# Public API — standalone helpers for testing / simulation
-# ---------------------------------------------------------------------------
+def _build_record(
+    action_name: str,
+    data_fields: dict,
+    matched: dict[str, Any] | None,
+    version_merge: bool,
+) -> dict[str, Any]:
+    """Build a single output record, either namespaced or version-merge spread."""
+    if version_merge:
+        from agent_actions.utils.content import get_existing_content
+
+        existing = get_existing_content(matched) if matched else {}
+        record: dict[str, Any] = {"content": {**existing, **data_fields}}
+    else:
+        from agent_actions.record.envelope import RecordEnvelope
+
+        record = RecordEnvelope.build(action_name, data_fields, matched)
+    record.pop("source_guid", None)
+    return record
 
 
-def framework_prepare_input(
-    records: list[dict],
-    observe_refs: list[str] | None = None,
-) -> list[TrackedItem]:
-    """Strip framework fields and wrap in TrackedItem for tool input.
-
-    Called by ``process_file_mode_tool`` and available standalone for
-    design tests and simulations.
-    """
-    config: dict[str, Any] = {"context_scope": {"observe": observe_refs}} if observe_refs else {}
-    clean: list[TrackedItem] = []
-    for i, record in enumerate(records):
-        business = _extract_business_fields(record, config)
-        clean.append(TrackedItem(business, source_index=i))
-    return clean
-
-
-def framework_reconcile(
+def _reconcile_outputs(
     raw_response: Any,
     action_name: str,
     original_data: list[dict],
-) -> list[dict[str, Any]]:
-    """Reconcile tool output to input records via provenance.
+    version_merge: bool = False,
+) -> tuple[list[dict[str, Any]], dict[int, int | list[int]]]:
+    """Core reconciliation of tool output to input records.
 
-    Handles ``TrackedItem`` list returns (N→N passthrough/filter) and
-    ``FileUDFResult`` (N→M merge/expand/dedup).  Plain dicts in list
-    returns are an error.
+    Dispatches on response type (``FileUDFResult`` vs ``TrackedItem`` list),
+    builds records, and reattaches ``source_guid``.
 
-    Called by ``process_file_mode_tool`` for the non-version-merge path
-    and available standalone for design tests and simulations.
+    Returns ``(structured_data, source_mapping)``.
     """
-    from agent_actions.record.envelope import RecordEnvelope
     from agent_actions.utils.udf_management.registry import FileUDFResult
 
     source_mapping: dict[int, int | list[int]] = {}
@@ -238,30 +234,20 @@ def framework_reconcile(
     if isinstance(raw_response, FileUDFResult):
         for i, out in enumerate(raw_response.outputs):
             src_idx = out["source_index"]
-            data_fields = out["data"]
-            if isinstance(src_idx, list):
-                input_idx = src_idx[0]
-                source_mapping[i] = src_idx
-            else:
-                input_idx = src_idx
-                source_mapping[i] = src_idx
+            input_idx = src_idx[0] if isinstance(src_idx, list) else src_idx
+            source_mapping[i] = src_idx
 
             matched = _resolve_input_record(input_idx, original_data)
-            record = RecordEnvelope.build(action_name, data_fields, matched)
-            record.pop("source_guid", None)
-            structured_data.append(record)
+            structured_data.append(_build_record(action_name, out["data"], matched, version_merge))
 
     elif isinstance(raw_response, list):
         for i, item in enumerate(raw_response):
             if isinstance(item, TrackedItem):
-                input_idx = item._source_index
-                source_mapping[i] = input_idx
-                data_fields = dict(item)
-
-                matched = _resolve_input_record(input_idx, original_data)
-                record = RecordEnvelope.build(action_name, data_fields, matched)
-                record.pop("source_guid", None)
-                structured_data.append(record)
+                source_mapping[i] = item._source_index
+                matched = _resolve_input_record(item._source_index, original_data)
+                structured_data.append(
+                    _build_record(action_name, dict(item), matched, version_merge)
+                )
             elif isinstance(item, dict):
                 raise ValueError(
                     f"FILE tool '{action_name}' returned plain dict at "
@@ -282,12 +268,54 @@ def framework_reconcile(
         )
 
     _reattach_source_guid(structured_data, source_mapping, original_data)
-    return structured_data
+    return structured_data, source_mapping
+
+
+# ---------------------------------------------------------------------------
+# Public API — standalone helpers for testing / simulation
+# ---------------------------------------------------------------------------
+
+
+def framework_prepare_input(
+    records: list[dict],
+    observe_refs: list[str] | None = None,
+) -> list[TrackedItem]:
+    """Strip framework fields and wrap in TrackedItem for tool input."""
+    config: dict[str, Any] = {"context_scope": {"observe": observe_refs}} if observe_refs else {}
+    return [
+        TrackedItem(_extract_business_fields(record, config), source_index=i)
+        for i, record in enumerate(records)
+    ]
+
+
+def framework_reconcile(
+    raw_response: Any,
+    action_name: str,
+    original_data: list[dict],
+) -> list[dict[str, Any]]:
+    """Reconcile tool output to input records via provenance.
+
+    Standalone wrapper over ``_reconcile_outputs`` for design tests and
+    simulations.
+    """
+    data, _ = _reconcile_outputs(raw_response, action_name, original_data)
+    return data
 
 
 # ---------------------------------------------------------------------------
 # Pipeline integration
 # ---------------------------------------------------------------------------
+
+
+def _is_empty_response(raw_response: Any) -> bool:
+    """Check if tool returned an empty response."""
+    from agent_actions.utils.udf_management.registry import FileUDFResult
+
+    if isinstance(raw_response, FileUDFResult):
+        return not raw_response.outputs
+    if isinstance(raw_response, list):
+        return not raw_response
+    return False
 
 
 def process_file_mode_tool(
@@ -303,20 +331,8 @@ def process_file_mode_tool(
     framework reconciles output to input via ``TrackedItem._source_index``
     (for N→N list returns) or ``FileUDFResult.source_index`` (for N→M
     transforms).  Plain dicts in list returns are an error.
-
-    Args:
-        pipeline: The parent ``ProcessingPipeline`` instance.
-        data: Observe-filtered records (framework fields stripped before tool).
-        original_data: Unfiltered records (used for namespace carry-forward).
-        context: Processing context.
-
-    Returns:
-        List with single ProcessingResult containing all outputs.
     """
     try:
-        tools_path = context.agent_config.get("tools_path")
-
-        # Strip framework fields, wrap in TrackedItem for provenance tracking.
         clean_input: list[TrackedItem] = []
         for i, record in enumerate(data):
             business = _extract_business_fields(record, context.agent_config)
@@ -327,96 +343,27 @@ def process_file_mode_tool(
             agent_name=context.agent_name,
             context=clean_input,
             formatted_prompt="",
-            tools_path=tools_path,
+            tools_path=context.agent_config.get("tools_path"),
         )
 
-        from agent_actions.record.envelope import RecordEnvelope
-        from agent_actions.utils.content import get_existing_content, is_version_merge
-        from agent_actions.utils.udf_management.registry import FileUDFResult
+        if _is_empty_response(raw_response) and data:
+            return [
+                ProcessingResult.failed(
+                    error=(
+                        f"Tool '{context.agent_name}' returned empty result "
+                        f"from {len(data)} input record(s)"
+                    ),
+                )
+            ]
 
-        version_merge = is_version_merge(context.agent_config)
-        source_mapping: dict[int, int | list[int]] = {}
-        structured_data: list[dict[str, Any]] = []
+        from agent_actions.utils.content import is_version_merge
 
-        if isinstance(raw_response, FileUDFResult):
-            # Explicit provenance — tool declared source_index for each output.
-            if not raw_response.outputs and data:
-                return [
-                    ProcessingResult.failed(
-                        error=(
-                            f"Tool '{context.agent_name}' returned empty result "
-                            f"from {len(data)} input record(s)"
-                        ),
-                    )
-                ]
-
-            for i, out in enumerate(raw_response.outputs):
-                src_idx = out["source_index"]
-                data_fields = out["data"]
-                if isinstance(src_idx, list):
-                    input_idx = src_idx[0]
-                    source_mapping[i] = src_idx
-                else:
-                    input_idx = src_idx
-                    source_mapping[i] = src_idx
-
-                matched = _resolve_input_record(input_idx, original_data)
-
-                if version_merge:
-                    existing = get_existing_content(matched) if matched else {}
-                    record: dict[str, Any] = {"content": {**existing, **data_fields}}
-                else:
-                    record = RecordEnvelope.build(context.agent_name, data_fields, matched)
-                record.pop("source_guid", None)
-                structured_data.append(record)
-
-        elif isinstance(raw_response, list):
-            if not raw_response and data:
-                return [
-                    ProcessingResult.failed(
-                        error=(
-                            f"Tool '{context.agent_name}' returned empty result "
-                            f"from {len(data)} input record(s)"
-                        ),
-                    )
-                ]
-
-            for i, item in enumerate(raw_response):
-                if isinstance(item, TrackedItem):
-                    input_idx = item._source_index
-                    source_mapping[i] = input_idx
-                    data_fields = dict(item)
-
-                    matched = _resolve_input_record(input_idx, original_data)
-
-                    if version_merge:
-                        existing = get_existing_content(matched) if matched else {}
-                        record = {"content": {**existing, **data_fields}}
-                    else:
-                        record = RecordEnvelope.build(context.agent_name, data_fields, matched)
-                    record.pop("source_guid", None)
-                    structured_data.append(record)
-                elif isinstance(item, dict):
-                    raise ValueError(
-                        f"FILE tool '{context.agent_name}' returned plain dict at "
-                        f"output[{i}]. Tool created a new dict instead of returning "
-                        f"an input item. For merge/expand, use FileUDFResult with "
-                        f"source_index."
-                    )
-                else:
-                    raise ValueError(
-                        f"FILE tool '{context.agent_name}' output[{i}] is "
-                        f"{type(item).__name__}, expected TrackedItem. "
-                        f"For N→M transforms, use FileUDFResult."
-                    )
-        else:
-            raise ValueError(
-                f"FILE tool '{context.agent_name}' must return list or FileUDFResult, "
-                f"got {type(raw_response).__name__}"
-            )
-
-        # Reattach source_guid from input records.
-        _reattach_source_guid(structured_data, source_mapping, original_data)
+        structured_data, source_mapping = _reconcile_outputs(
+            raw_response,
+            context.agent_name,
+            original_data,
+            version_merge=is_version_merge(context.agent_config),
+        )
 
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
