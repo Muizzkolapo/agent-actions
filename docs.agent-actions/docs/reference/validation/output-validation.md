@@ -189,7 +189,7 @@ Guards validate semantic and business logic after schema passes:
 - name: generate_final
   dependencies: score_quality  # Input source
   guard:
-    condition: 'score >= 85'  # Semantic: only high quality
+    condition: 'score_quality.score >= 85'  # Semantic: only high quality
     on_false: filter
 ```
 
@@ -199,13 +199,13 @@ Guards validate semantic and business logic after schema passes:
 # Filter out responses with unwanted status
 - name: next_action
   guard:
-    condition: 'status != "invalid"'
+    condition: 'upstream_action.status != "invalid"'
     on_false: filter
 
 # Filter based on category
 - name: process_technical
   guard:
-    condition: 'category IN ["technical", "implementation"]'
+    condition: 'classify.category IN ["technical", "implementation"]'
     on_false: filter
 ```
 
@@ -221,12 +221,12 @@ Consider what happens when a guard fails. You have two choices, and they have ve
 ```yaml
 # Filter: Record stops here
 guard:
-  condition: 'quality >= 50'
+  condition: 'score_quality.quality >= 50'
   on_false: filter
 
 # Skip: Record continues without this action
 guard:
-  condition: 'needs_enhancement == true'
+  condition: 'analyze_content.needs_enhancement == true'
   on_false: skip
 ```
 
@@ -250,7 +250,7 @@ actions:
   - name: validate_facts
     dependencies: extract_facts  # Input source
     guard:
-      condition: 'candidate_facts_list != []'
+      condition: 'extract_facts.candidate_facts_list != []'
       on_false: filter
 
   # Step 3: Score quality with schema
@@ -265,7 +265,7 @@ actions:
   - name: generate_output
     dependencies: score_quality  # Input source
     guard:
-      condition: 'score >= 85'
+      condition: 'score_quality.score >= 85'
       on_false: filter
 ```
 
@@ -299,7 +299,7 @@ actions:
   - name: publish_content
     dependencies: validate_content  # Input source
     guard:
-      condition: 'is_valid == true'
+      condition: 'validate_content.is_valid == true'
       on_false: filter
 ```
 
@@ -328,7 +328,7 @@ properties:
 - name: process_valid
   dependencies: classify_content  # Input source
   guard:
-    condition: 'category != "invalid"'  # Filter "invalid" category
+    condition: 'classify_content.category != "invalid"'  # Filter "invalid" category
     on_false: filter
 ```
 
@@ -362,7 +362,7 @@ properties:
 - name: proceed_if_confident
   dependencies: assess_confidence  # Input source
   guard:
-    condition: 'confidence_score >= 70'
+    condition: 'assess_confidence.confidence_score >= 70'
     on_false: filter
 ```
 
@@ -388,26 +388,27 @@ actions:
   - name: next_step
     dependencies: custom_validate  # Input source
     guard:
-      condition: 'validation_passed == true'
+      condition: 'custom_validate.validation_passed == true'
       on_false: filter
 ```
 
 ```python
 # tools/validate_content.py
 @udf_tool()
-def validate_content(content: dict) -> dict:
+def validate_content(data: dict) -> dict:
     """Custom validation logic."""
     issues = []
+    content = data["generate_content"]
 
     # Check for prohibited words
     prohibited = ["todo", "placeholder", "tbd"]
-    text = content.get("text", "").lower()
+    text = content["text"].lower()
     for word in prohibited:
         if word in text:
             issues.append(f"Contains prohibited word: {word}")
 
     # Check minimum quality
-    if len(content.get("summary", "")) < 50:
+    if len(content["summary"]) < 50:
         issues.append("Summary too short")
 
     return {
@@ -470,7 +471,7 @@ The limitation here: reprompting costs API tokens. Guards are free. If you're fi
 # Layer 3: Guard for quality
 - name: process
   guard:
-    condition: 'quality >= threshold'
+    condition: 'upstream_action.quality >= threshold'
     on_false: filter
 ```
 
@@ -520,7 +521,7 @@ This is important: guards prevent downstream work. Place guards as early as poss
 - name: extract  # Cheap
 - name: validate  # Cheap
   guard:
-    condition: 'facts != []'
+    condition: 'extract.facts != []'
     on_false: filter
 - name: expensive_llm_call  # Only runs on valid data
   dependencies: validate  # Input source

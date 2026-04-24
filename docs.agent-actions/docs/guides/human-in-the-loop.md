@@ -188,13 +188,13 @@ HITL decision fields (`hitl_status`, `user_comment`, `timestamp`) are merged dir
 
 #### Guards
 
-Guards evaluate against the item's content fields directly — **do not prefix with the action name**:
+Guards evaluate against namespaced fields — use the HITL action name as the namespace prefix:
 
 ```yaml
 - name: process_approved_data
   dependencies: [review_data]
   guard:
-    condition: "hitl_status == 'approved'"
+    condition: "review_data.hitl_status == 'approved'"
     on_false: skip  # Skip processing if HITL rejected
   prompt: |
     Process the approved data:
@@ -203,36 +203,22 @@ Guards evaluate against the item's content fields directly — **do not prefix w
     Reviewer comment: {{ review_data.user_comment }}
 ```
 
-:::warning Guard field resolution
-Guards evaluate against the **flattened item content**. The HITL fields (`hitl_status`, `user_comment`) are top-level keys in each record, not nested under the action name.
-
-```yaml
-# Correct - field is at the top level of each item
-condition: "hitl_status == 'approved'"
-
-# Wrong - tries to look up data["review_data"]["hitl_status"], which doesn't exist
-condition: "review_data.hitl_status == 'approved'"
-```
-
-Note: Prompt templates (`{{ review_data.user_comment }}`) use a different resolution mechanism (context scope) and **do** use the action name prefix. Guards do not.
-:::
-
 **Common guard patterns:**
 
 ```yaml
 # Only process approved items (filter out rejected/timeout)
 guard:
-  condition: "hitl_status == 'approved'"
+  condition: "review_action.hitl_status == 'approved'"
   on_false: filter
 
 # Skip downstream if rejected (passthrough original content)
 guard:
-  condition: "hitl_status == 'approved'"
+  condition: "review_action.hitl_status == 'approved'"
   on_false: skip
 
 # Handle timeout
 guard:
-  condition: "hitl_status != 'timeout'"
+  condition: "review_action.hitl_status != 'timeout'"
   on_false: skip
 ```
 
@@ -262,7 +248,7 @@ actions:
     dependencies: [review_summary]
     intent: "Publish approved summary"
     guard:
-      condition: "hitl_status == 'approved'"
+      condition: "review_summary.hitl_status == 'approved'"
       on_false: skip
     prompt: "Publish the summary..."
 ```
@@ -290,7 +276,7 @@ actions:
     dependencies: [review_candidates]
     intent: "Process only approved candidates"
     guard:
-      condition: "hitl_status == 'approved'"
+      condition: "review_candidates.hitl_status == 'approved'"
       on_false: filter
 ```
 
@@ -316,7 +302,7 @@ actions:
   - name: stage_2_enrichment
     dependencies: [checkpoint_review]
     guard:
-      condition: "hitl_status == 'approved'"
+      condition: "checkpoint_review.hitl_status == 'approved'"
       on_false: filter  # Exclude items if stage 1 was rejected
 ```
 
@@ -334,7 +320,7 @@ actions:
     kind: hitl
     dependencies: [auto_review_quality]
     guard:
-      condition: 'decision == "review"'
+      condition: 'auto_review_quality.decision == "review"'
       on_false: skip  # Auto-approved records skip HITL, preserve original content
     hitl:
       instructions: "Review items flagged by auto-review"
@@ -351,17 +337,17 @@ The guard runs per-record before the HITL UI launches. Only records where `decis
 
 If your downstream guard filters/skips **every** item (even approved ones), the most common causes are:
 
-**1. Using action name prefix in the guard condition**
+**1. Missing action name prefix in the guard condition**
 
 ```yaml
-# Wrong - guard evaluates against flattened item content, not namespaced context
-condition: "review_data.hitl_status == 'approved'"
-
-# Correct - hitl_status is a top-level field in each item
+# Wrong - hitl_status must be namespaced under the HITL action
 condition: "hitl_status == 'approved'"
+
+# Correct - use the HITL action name as namespace prefix
+condition: "review_data.hitl_status == 'approved'"
 ```
 
-The guard evaluator flattens the item's `content` dict into a top-level namespace. Fields like `hitl_status` are accessed directly, not under the action name. See the [guard field resolution warning](#guards) above.
+Guard conditions use dotted namespace paths. Fields like `hitl_status` are accessed under the HITL action name, just like any other upstream field.
 
 **2. Wrong field name**
 
@@ -450,7 +436,7 @@ After timeout:
 
 ```yaml
 guard:
-  condition: "hitl_status != 'timeout'"
+  condition: "review_action.hitl_status != 'timeout'"
   on_false: filter
 ```
 

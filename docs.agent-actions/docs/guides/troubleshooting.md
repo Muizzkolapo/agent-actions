@@ -185,7 +185,7 @@ field: Union[int, str]
 
 **Fix:** Normalize in your tool:
 ```python
-answer_text = data.get('answer_text')
+answer_text = data["upstream_action"]["answer_text"]
 if isinstance(answer_text, str):
     answer_text = [answer_text]
 ```
@@ -246,7 +246,7 @@ target_word_counts: dict
 @udf_tool()
 def my_function(data: dict) -> dict:
     return {
-        'question': data.get('question', ''),  # Always include
+        'question': data["upstream_action"]["question"],
         'processed': True
     }
 ```
@@ -425,13 +425,13 @@ metadata: dict  # Not Dict[str, int]
 answer_text: Union[str, List[str]]
 ```
 
-### Always Use `.get()` with Defaults
+### Access Namespaced Fields
 
 ```python
 @udf_tool()
 def safe_function(data: dict) -> dict:
-    value = data.get('field', '')  # Never KeyError
-    items = data.get('items', [])
+    value = data["upstream_action"]["field"]
+    items = data["upstream_action"]["items"]
     return {'result': value}
 ```
 

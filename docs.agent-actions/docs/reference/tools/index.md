@@ -16,7 +16,7 @@ from agent_actions import udf_tool
 
 @udf_tool()
 def process_text(data: dict, **kwargs) -> dict:
-    return {"result": data["text"].upper()}
+    return {"result": data["source"]["text"].upper()}
 ```
 
 ```yaml
@@ -63,7 +63,7 @@ def simple_transform(data: dict, **kwargs) -> dict:
 ```python
 @udf_tool()
 def filter_questions_by_score(data: dict, **kwargs) -> dict:
-    score = data.get('syllabus_alignment_score', 0)
+    score = data["upstream_action"]["syllabus_alignment_score"]
     if score >= 85:
         data['question_status'] = "KEEP"
     else:
@@ -86,7 +86,7 @@ def run_dedup(data: list[dict], **kwargs) -> list[dict]:
     unique = []
     for record in data:
         content = record["content"]
-        fact = content.get("fact", "")
+        fact = content["extract_facts"]["fact"]
         if fact not in seen:
             seen.add(fact)
             unique.append(record)  # return the full record
@@ -100,7 +100,7 @@ File granularity is exclusively supported for tool actions. LLM actions must use
 ### File Granularity Constraints
 
 - **Input is an array of full records** — each record has `content`, `node_id`, `source_guid`, `lineage`
-- **Read business data from `record["content"]["field"]`** — not `record["field"]`
+- **Read business data from `record["content"]["action_name"]["field"]`** — not `record["field"]`
 - **Return the original record for passthrough** (filter, dedup, sort, transform) — preserves `node_id` and lineage
 - **Return a new dict for aggregation** (no `node_id`) — framework creates fresh lineage
 - **Output flexibility** — return an array of any size (N→M transformation)
@@ -122,7 +122,7 @@ def dedup_tool(data: list[dict], **kwargs) -> list[dict]:
 
     for record in data:
         content = record["content"]
-        fact = content.get("fact", "")
+        fact = content["extract_facts"]["fact"]
         if fact not in seen:
             seen[fact] = True
             outputs.append(record)  # full record → lineage extended
@@ -132,7 +132,7 @@ def dedup_tool(data: list[dict], **kwargs) -> list[dict]:
 
 @udf_tool(granularity=Granularity.FILE)
 def aggregate_tool(data: list[dict], **kwargs) -> list[dict]:
-    total = sum(r.get("content", r).get("score", 0) for r in data)
+    total = sum(r["content"]["score_action"]["score"] for r in data)
     return [{"summary": f"Total: {total}", "count": len(data)}]  # new dict → fresh lineage
 ```
 
@@ -224,7 +224,7 @@ If you need shared logic across multiple tool files, extract it into an installa
 ```python
 @udf_tool()
 def safe_function(data: dict, **kwargs) -> dict:
-    score = data.get('score', 0)  # Use .get() with defaults
+    score = data["upstream_action"]["score"]
     return {'result': score}
 ```
 

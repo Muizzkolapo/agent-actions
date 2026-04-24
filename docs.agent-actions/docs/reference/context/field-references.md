@@ -117,7 +117,7 @@ actions:
 - name: canonicalize_facts
   dependencies: fact_extractor
   guard:
-    condition: "candidate_facts_list != []"
+    condition: "fact_extractor.candidate_facts_list != []"
     on_false: filter
 ```
 

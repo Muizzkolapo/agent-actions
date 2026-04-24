@@ -97,7 +97,7 @@ Guards evaluate upstream field values the same way regardless of JSON mode:
   - name: draft_response
     output_field: suggested_response
     guard:
-      condition: 'severity != "low"'  # Skip for low-severity → save tokens
+      condition: 'classify_issue.severity != "low"'  # Skip for low-severity → save tokens
       on_false: "skip"
 ```
 

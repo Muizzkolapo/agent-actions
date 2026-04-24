@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Context Scope
 
-Context Scope controls data visibility and flow between actions—what the LLM sees, what passes through to output, and what gets excluded.
+Context Scope controls data visibility and flow between actions—selecting which upstream namespaces an action can read from the record, what passes through to output, and what gets excluded.
 
 :::warning Required
 `context_scope` is **required** on every action. Omitting it raises a `ConfigurationError`. Every action must declare its data dependencies explicitly via `observe`, `passthrough`, or `drop`.
@@ -36,7 +36,7 @@ context_scope:
 
 ## Observe Directive
 
-The `observe` directive explicitly includes fields in the LLM context. When specified, only listed fields are visible to the LLM.
+The `observe` directive selects which upstream namespaces and fields are visible to the action. When specified, only listed namespaces are included in the LLM context.
 
 ```yaml
 - name: Cluster_Validation_Agent
