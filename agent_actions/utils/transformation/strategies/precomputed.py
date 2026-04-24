@@ -1,8 +1,6 @@
 """Passthrough strategies for pre-computed passthrough_fields."""
 
-from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-
-from .base import IPassthroughTransformStrategy
+from .base import IPassthroughTransformStrategy, ensure_dict_output
 
 
 class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
@@ -31,23 +29,24 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Merge passthrough fields into content, then wrap under action namespace."""
-        from agent_actions.utils.content import wrap_content
+        """Merge passthrough fields into content, return flat action output.
 
-        action_name = agent_config["agent_type"]
-
+        Returns flat action output dicts — RecordEnvelope handles wrapping.
+        """
         result = []
         for item in data:
             if isinstance(item, dict) and "content" in item and isinstance(item["content"], dict):
                 merged_content = {**item["content"], **(passthrough_fields or {})}
-                result.append({**item, "content": wrap_content(action_name, merged_content)})
+                result.append(merged_content)
+            elif isinstance(item, dict):
+                result.append({**item, **(passthrough_fields or {})})
             else:
-                result.append(item)
+                result.append(ensure_dict_output(item))
         return result
 
 
 class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
-    """Merge precomputed passthrough fields into unstructured data, then structure."""
+    """Merge precomputed passthrough fields into unstructured data."""
 
     def can_handle(
         self,
@@ -72,13 +71,15 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Merge passthrough fields directly into items."""
+        """Merge passthrough fields directly into items, return flat action output.
+
+        Returns flat action output dicts — RecordEnvelope handles wrapping.
+        """
         merged = []
         for item in data:
             if isinstance(item, dict):
                 merged_item = {**item, **(passthrough_fields or {})}
                 merged.append(merged_item)
             else:
-                merged.append(item)
-        action_name = agent_config["agent_type"]
-        return DataTransformer.transform_structure([{source_guid: merged}], action_name)
+                merged.append(ensure_dict_output(item))
+        return merged

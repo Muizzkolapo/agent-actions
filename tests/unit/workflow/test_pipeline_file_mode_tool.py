@@ -1169,3 +1169,201 @@ def test_file_tool_copy_pattern_preserves_lineage():
         lineage = item.get("lineage", [])
         # Parent lineage had 2 entries; enrichment appends new node_id → at least 3
         assert len(lineage) >= 3, f"item[{i}] lineage not extended from parent: {lineage}"
+
+
+# --- FILE HITL RecordEnvelope tests ---
+
+
+def _make_hitl_pipeline_and_context():
+    """Create a minimal pipeline and context for FILE-mode HITL tests."""
+    pipeline = ProcessingPipeline(
+        config=PipelineConfig(
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_answers",
+            idx=0,
+        ),
+        processor_factory=object(),
+    )
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_answers",
+    )
+    return pipeline, context
+
+
+def test_file_hitl_namespaces_output_under_action():
+    """FILE HITL wraps output under action namespace, not flat into content."""
+    pipeline, context = _make_hitl_pipeline_and_context()
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "content": {
+                "source": {"page_content": "..."},
+                "extract": {"question_text": "Why?"},
+            },
+        },
+    ]
+
+    decision = {"hitl_status": "approved", "user_comment": "Looks good", "timestamp": "2026-01-01"}
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([decision], True),
+    ):
+        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+
+    result = results[0]
+    assert result.status == ProcessingStatus.SUCCESS
+    content = result.data[0]["content"]
+
+    # HITL output is under the action namespace
+    assert "review_answers" in content
+    ns = content["review_answers"]
+    assert ns["hitl_status"] == "approved"
+    assert ns["user_comment"] == "Looks good"
+
+    # HITL fields are NOT flat in content
+    assert "hitl_status" not in content
+    assert "user_comment" not in content
+
+
+def test_file_hitl_preserves_upstream_namespaces():
+    """FILE HITL preserves all upstream namespaces from input records."""
+    pipeline, context = _make_hitl_pipeline_and_context()
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "content": {
+                "source": {"page_content": "doc text"},
+                "extract": {"question_text": "Why?"},
+                "summarize": {"summary": "short version"},
+            },
+        },
+    ]
+
+    decision = {"hitl_status": "approved"}
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([decision], True),
+    ):
+        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+
+    content = results[0].data[0]["content"]
+    assert "source" in content
+    assert "extract" in content
+    assert "summarize" in content
+    assert content["source"]["page_content"] == "doc text"
+    assert content["extract"]["question_text"] == "Why?"
+    assert content["summarize"]["summary"] == "short version"
+
+
+def test_file_hitl_per_record_review_in_namespace():
+    """Per-record review fields go under the action namespace, not flat."""
+    pipeline, context = _make_hitl_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"source": {"a": 1}}},
+        {"source_guid": "sg-2", "content": {"source": {"a": 2}}},
+    ]
+
+    decision = {
+        "hitl_status": "approved",
+        "record_reviews": [
+            {"hitl_status": "approved", "user_comment": "Good"},
+            {"hitl_status": "rejected", "user_comment": "Bad"},
+        ],
+    }
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([decision], True),
+    ):
+        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+
+    result = results[0]
+    # Per-record review overrides file-level decision within the namespace
+    ns0 = result.data[0]["content"]["review_answers"]
+    assert ns0["hitl_status"] == "approved"
+    assert ns0["user_comment"] == "Good"
+
+    ns1 = result.data[1]["content"]["review_answers"]
+    assert ns1["hitl_status"] == "rejected"
+    assert ns1["user_comment"] == "Bad"
+
+
+def test_file_hitl_carries_framework_fields():
+    """Framework fields (source_guid, target_id, _unprocessed) are preserved from input."""
+    pipeline, context = _make_hitl_pipeline_and_context()
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "target_id": "tid-1",
+            "_unprocessed": True,
+            "_recovery": {"reason": "tombstone"},
+            "content": {"source": {"a": 1}},
+        },
+    ]
+
+    decision = {"hitl_status": "approved"}
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([decision], True),
+    ):
+        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+
+    item = results[0].data[0]
+    assert item["source_guid"] == "sg-1"
+    assert item["target_id"] == "tid-1"
+    assert item["_unprocessed"] is True
+    assert item["_recovery"] == {"reason": "tombstone"}
+
+
+def test_file_tool_version_merge_spreads_not_wraps():
+    """Version merge tool output is spread flat, not wrapped under action name."""
+    pipeline = ProcessingPipeline(
+        config=PipelineConfig(
+            action_config={
+                "kind": "tool",
+                "granularity": "file",
+                "version_consumption_config": {"source": "extract", "pattern": "merge"},
+            },
+            action_name="aggregate",
+            idx=0,
+        ),
+        processor_factory=object(),
+    )
+    context = ProcessingContext(
+        agent_config=pipeline.config.action_config,
+        agent_name="aggregate",
+    )
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "node_id": "n1",
+            "content": {
+                "extract_1": {"vote": "keep"},
+                "extract_2": {"vote": "drop"},
+            },
+        }
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([{"consensus": "keep", "score": 11, "node_id": "n1"}], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    content = results[0].data[0]["content"]
+    # Flat spread, NOT wrapped under action name
+    assert "aggregate" not in content
+    assert content["consensus"] == "keep"
+    assert content["score"] == 11
+    # Existing version namespaces preserved
+    assert content["extract_1"]["vote"] == "keep"
+    assert content["extract_2"]["vote"] == "drop"

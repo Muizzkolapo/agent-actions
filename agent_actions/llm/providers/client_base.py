@@ -89,7 +89,7 @@ class BaseClient(ABC):
             raise ConfigurationError(
                 "API key configuration is missing",
                 context={
-                    "agent": agent_config.get("agent_type", "unknown"),
+                    "agent": agent_config["agent_type"],
                     "field": API_KEY_KEY,
                     "operation": "get_api_key",
                     "hint": "Add api_key to agent_actions.yml, workflow defaults, or action config",
@@ -103,7 +103,7 @@ class BaseClient(ABC):
             raise ConfigurationError(
                 f"Environment variable '{env_var_name}' is not set",
                 context={
-                    "agent": agent_config.get("agent_type", "unknown"),
+                    "agent": agent_config["agent_type"],
                     "env_var": env_var_name,
                     "config_value": key_name,
                     "operation": "get_api_key",
@@ -115,7 +115,7 @@ class BaseClient(ABC):
             raise ConfigurationError(
                 f"Environment variable '{env_var_name}' is set but empty",
                 context={
-                    "agent": agent_config.get("agent_type", "unknown"),
+                    "agent": agent_config["agent_type"],
                     "env_var": env_var_name,
                     "config_value": key_name,
                     "operation": "get_api_key",
@@ -186,6 +186,6 @@ class BaseClient(ABC):
                 "json_mode=false but schema was compiled for action '%s'. "
                 "The schema will not be sent to the LLM. "
                 "Set json_mode=true to enable schema enforcement.",
-                agent_config.get("agent_type", "unknown"),
+                agent_config["agent_type"],
             )
         return cls.call_non_json(api_key, agent_config, prompt_config, context_data)

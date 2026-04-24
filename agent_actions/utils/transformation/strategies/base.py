@@ -1,10 +1,26 @@
 """Interface for passthrough transformation strategies."""
 
 from abc import ABC, abstractmethod
+from typing import Any
+
+
+def ensure_dict_output(item: Any) -> dict:
+    """Normalize a strategy output item to a dict.
+
+    Non-dict values are wrapped as ``{"value": item}`` so that
+    ``RecordEnvelope.build()`` always receives a dict.
+    """
+    return item if isinstance(item, dict) else {"value": item}
 
 
 class IPassthroughTransformStrategy(ABC):
-    """Interface for passthrough transformation strategies."""
+    """Interface for passthrough transformation strategies.
+
+    All strategies return ``list[dict]`` — flat action output dicts
+    containing only the fields belonging to the action's namespace.
+    ``PassthroughTransformer`` handles namespace wrapping and upstream
+    preservation via ``RecordEnvelope.build()``.
+    """
 
     @abstractmethod
     def can_handle(
@@ -25,4 +41,4 @@ class IPassthroughTransformStrategy(ABC):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Execute the transformation and return the transformed data list."""
+        """Execute the transformation and return flat action output dicts."""

@@ -49,7 +49,7 @@ def compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None
         return
 
     # Build unified schema format
-    agent_name = agent.get("agent_type", "unknown")
+    agent_name = agent["agent_type"]
 
     # Handle list of fields format: [{id: 'field', type: 'string'}, ...]
     if isinstance(schema_fields, list):

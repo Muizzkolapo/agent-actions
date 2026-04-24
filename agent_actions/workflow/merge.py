@@ -82,7 +82,7 @@ def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> 
     for key_name in key_candidates:
         correlation_value = record.get(key_name)
         if not correlation_value:
-            content = record.get("content", {})
+            content = record.get("content")
             if isinstance(content, dict):
                 correlation_value = content.get(key_name)
         if correlation_value:

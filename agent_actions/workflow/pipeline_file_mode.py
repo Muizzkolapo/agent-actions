@@ -213,11 +213,8 @@ def process_file_mode_tool(
         # existing namespaces from the input record.
         # Version merge: version namespaces are already the correct additive
         # format — spread instead of wrapping under the action name.
-        from agent_actions.utils.content import (
-            get_existing_content,
-            is_version_merge,
-            wrap_content,
-        )
+        from agent_actions.record.envelope import RecordEnvelope
+        from agent_actions.utils.content import get_existing_content, is_version_merge
 
         version_merge = is_version_merge(context.agent_config)
 
@@ -229,42 +226,39 @@ def process_file_mode_tool(
                 else:
                     data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
 
-                # Carry forward existing namespaces from the input record.
+                # Resolve the input record for namespace carry-forward.
                 # For N→M tools (dedup, filter), source_mapping may not resolve.
                 # Fall back to the first input record — all records in a FILE
                 # batch share the same upstream namespaces.
                 input_idx = source_mapping.get(idx) if source_mapping else None
                 if isinstance(input_idx, list):
                     input_idx = input_idx[0]
+                input_record: dict[str, Any] | None = None
                 if isinstance(input_idx, int) and input_idx < len(original_data):
-                    existing = get_existing_content(original_data[input_idx])
+                    input_record = original_data[input_idx]
                 elif original_data:
-                    existing = get_existing_content(original_data[0])
-                else:
-                    existing = {}
+                    input_record = original_data[0]
 
                 if version_merge:
-                    content = {**existing, **data_fields}
+                    # build_version_merge validates all values are dicts,
+                    # but version merge tools return flat business data
+                    # (strings, ints) to spread alongside version namespaces.
+                    existing = get_existing_content(input_record) if input_record else {}
+                    record: dict[str, Any] = {"content": {**existing, **data_fields}}
                 else:
-                    content = wrap_content(context.agent_name, data_fields, existing)
+                    record = RecordEnvelope.build(context.agent_name, data_fields, input_record)
 
-                if version_merge:
-                    content = {**existing, **data_fields}
-                else:
-                    content = wrap_content(context.agent_name, data_fields, existing)
-
-                structured_item: dict[str, Any] = {
-                    "content": content,
-                }
+                # Source_guid is managed by _reattach_source_guid below, not
+                # RecordEnvelope.  Remove it here so the existing handling
+                # works: tool explicit value first, then mapping-based.
+                record.pop("source_guid", None)
 
                 if "source_guid" in item:
-                    structured_item["source_guid"] = item["source_guid"]
+                    record["source_guid"] = item["source_guid"]
 
-                structured_data.append(structured_item)
+                structured_data.append(record)
             else:
-                structured_data.append(
-                    {"content": wrap_content(context.agent_name, {"value": item})}
-                )
+                structured_data.append(RecordEnvelope.build(context.agent_name, {"value": item}))
 
         # Reattach source_guid from input records — authoritative for FILE mode.
         # LineageBuilder._propagate_ancestry_chain and RequiredFieldsEnricher
@@ -390,55 +384,26 @@ def process_file_mode_hitl(
         # Propagate one file-level decision across all input records so
         # downstream processing keeps record cardinality intact.
         # Use original_data for the merge to preserve all upstream fields.
+        from agent_actions.record.envelope import RecordEnvelope
+
         structured_data = []
         if original_data:
-            reserved_fields = {
-                "source_guid",
-                "target_id",
-                "node_id",
-                "lineage",
-                "metadata",
-                "content",
-                "_unprocessed",
-                "_recovery",
-            }
             for idx, item in enumerate(original_data):
-                if isinstance(item, dict):
-                    if isinstance(item.get("content"), dict):
-                        base_content = dict(item["content"])
-                    else:
-                        base_content = {
-                            key: value for key, value in item.items() if key not in reserved_fields
-                        }
-                        raw_content = item.get("content")
-                        if not base_content and raw_content is not None:
-                            base_content = {"value": raw_content}
-                else:
-                    base_content = {"value": item}  # type: ignore[unreachable]
-
-                merged_content = dict(base_content)
-                merged_content.update(decision_common)
+                hitl_output = dict(decision_common)
                 if record_reviews and idx < len(record_reviews):
                     review_payload = record_reviews[idx]
                     if isinstance(review_payload, dict):
-                        normalized_review_payload = {
-                            key: value
-                            for key, value in review_payload.items()
-                            if key in {"hitl_status", "user_comment"}
-                        }
-                        merged_content.update(normalized_review_payload)
-                structured_item = {"content": merged_content}
-                if isinstance(item, dict):
-                    for field in (
-                        "source_guid",
-                        "target_id",
-                        "_unprocessed",
-                        "_recovery",
-                        "metadata",
-                    ):
-                        if field in item:
-                            structured_item[field] = item[field]
-                structured_data.append(structured_item)
+                        for key in ("hitl_status", "user_comment"):
+                            if key in review_payload:
+                                hitl_output[key] = review_payload[key]
+
+                record = RecordEnvelope.build(context.agent_name, hitl_output, item)
+
+                # Carry framework fields that RecordEnvelope doesn't manage.
+                for field in ("target_id", "_unprocessed", "_recovery", "metadata"):
+                    if field in item:
+                        record[field] = item[field]
+                structured_data.append(record)
 
         # HITL FILE mode is always 1:1 — identity source_mapping ensures the
         # enricher extends parent lineage rather than truncating to [node_id].

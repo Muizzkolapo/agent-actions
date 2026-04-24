@@ -44,7 +44,7 @@ class SkipConditionStrategy(SkipStrategy):
         if not skip_condition:
             return False
 
-        agent_name = agent_config.get("agent_type", "unknown")
+        agent_name = agent_config["agent_type"]
 
         try:
             context = {"previous_outputs": previous_outputs or {}, "agent_config": agent_config}
@@ -130,7 +130,7 @@ class GuardStrategy(SkipStrategy):
         if not guard_config or guard_config.get("scope") != "action":
             return False
 
-        agent_name = agent_config.get("agent_type", "unknown")
+        agent_name = agent_config["agent_type"]
         guard_clause = guard_config["clause"]
         passthrough_on_error = guard_config.get("passthrough_on_error", True)
 
@@ -233,7 +233,7 @@ class LegacySkipIfStrategy(SkipStrategy):
         if not skip_if:
             return False
 
-        agent_name = agent_config.get("agent_type", "unknown")
+        agent_name = agent_config["agent_type"]
 
         try:
             context = {"previous_outputs": previous_outputs or {}, "agent_config": agent_config}
@@ -315,7 +315,7 @@ class SkipEvaluator:
                 if strategy.should_skip(agent_config, previous_outputs):
                     return True
             except (ValueError, KeyError, TypeError, AttributeError) as e:
-                agent_name = agent_config.get("agent_type", "unknown")
+                agent_name = agent_config.get("agent_type") or "NOT_SET"
                 logger.exception(
                     "Unexpected error in skip strategy %s for %s: %s",
                     strategy.get_strategy_name(),
