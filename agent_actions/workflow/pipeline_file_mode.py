@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -156,7 +157,7 @@ def _resolve_input_record(input_idx: int, original_data: list[dict]) -> dict[str
     return original_data[input_idx]
 
 
-def _extract_business_fields(record: dict, agent_config: dict) -> dict:
+def _extract_business_fields(record: dict, agent_config: Mapping[str, Any]) -> dict:
     """Extract observe-filtered business fields from a record for tool input.
 
     Strips all framework fields.  Returns only business data from observed

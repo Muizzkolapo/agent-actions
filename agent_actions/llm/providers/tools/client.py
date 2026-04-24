@@ -46,7 +46,7 @@ class ToolClient:
         if isinstance(data, list):
             from agent_actions.record.tracking import TrackedItem
 
-            result = []
+            result: list[Any] = []
             for item in data:
                 if isinstance(item, TrackedItem):
                     # Preserve TrackedItem type — provenance must survive stripping
