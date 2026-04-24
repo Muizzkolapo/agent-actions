@@ -7,6 +7,7 @@ import pytest
 from agent_actions.errors import AgentActionsError
 from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
+from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.udf_management.registry import FileUDFResult
 from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
@@ -28,20 +29,98 @@ def _make_pipeline_and_context():
     return pipeline, context
 
 
-# --- FileUDFResult unwrapping ---
+# --- TrackedItem list return ---
 
 
-def test_file_udf_result_unwrapped():
-    """FILE tool returning FileUDFResult should have .outputs extracted."""
+def test_tracked_item_list_works():
+    """FILE tool returning TrackedItem list wraps output under action namespace."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(
+            [
+                TrackedItem({"name": "alice"}, source_index=0),
+                TrackedItem({"name": "bob"}, source_index=1),
+            ],
+            True,
+        ),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.status == ProcessingStatus.SUCCESS
+    assert len(result.data) == 2
+    assert result.data[0]["content"]["my_file_tool"]["name"] == "alice"
+    assert result.data[1]["content"]["my_file_tool"]["name"] == "bob"
+
+
+def test_tracked_item_source_mapping():
+    """TrackedItem list return derives source_mapping from _source_index."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([TrackedItem({"score": 0.9}, source_index=0)], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert results[0].source_mapping == {0: 0}
+
+
+def test_tracked_item_preserves_upstream_namespaces():
+    """TrackedItem output preserves upstream namespaces from input record."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "content": {
+                "source": {"page_content": "doc text"},
+                "extract": {"question_text": "Why?"},
+            },
+        },
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=([TrackedItem({"score": 0.95}, source_index=0)], True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    content = results[0].data[0]["content"]
+    # Upstream namespaces preserved
+    assert content["source"]["page_content"] == "doc text"
+    assert content["extract"]["question_text"] == "Why?"
+    # Tool output under action namespace
+    assert content["my_file_tool"]["score"] == 0.95
+
+
+# --- FileUDFResult reconciliation ---
+
+
+def test_file_udf_result_reconciled():
+    """FILE tool returning FileUDFResult reconciles via source_index."""
     pipeline, context = _make_pipeline_and_context()
 
     udf_result = FileUDFResult(
-        outputs=[{"name": "alice"}, {"name": "bob"}],
+        outputs=[
+            {"source_index": 0, "data": {"name": "alice"}},
+            {"source_index": 1, "data": {"name": "bob"}},
+        ],
     )
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
 
     with patch(
@@ -58,17 +137,20 @@ def test_file_udf_result_unwrapped():
     assert result.data[1]["content"]["my_file_tool"]["name"] == "bob"
 
 
-def test_file_udf_result_source_mapping_auto_inferred():
-    """Framework resolves source_mapping by node_id — tools never provide it."""
+def test_file_udf_result_source_mapping():
+    """FileUDFResult source_mapping derived from source_index declarations."""
     pipeline, context = _make_pipeline_and_context()
 
     udf_result = FileUDFResult(
-        outputs=[{"name": "alice", "node_id": "n1"}, {"name": "bob", "node_id": "n2"}],
+        outputs=[
+            {"source_index": 0, "data": {"name": "alice"}},
+            {"source_index": 1, "data": {"name": "bob"}},
+        ],
     )
 
     input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
 
     with patch(
@@ -77,33 +159,23 @@ def test_file_udf_result_source_mapping_auto_inferred():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Framework resolved mapping via node_id
     assert results[0].source_mapping == {0: 0, 1: 1}
 
 
-def test_file_tool_plain_list_auto_infers_identity_mapping():
-    """Plain list return with node_id resolves source_mapping via node_id match."""
+def test_file_udf_result_list_source_index():
+    """FileUDFResult with list source_index (many-to-one merge)."""
     pipeline, context = _make_pipeline_and_context()
 
-    input_data = [{"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}}]
+    udf_result = FileUDFResult(
+        outputs=[
+            {"source_index": [0, 1], "data": {"merged": True}},
+        ],
+    )
 
-    with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"score": 0.9, "node_id": "n1"}], True),
-    ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
-
-    # Resolved mapping via node_id
-    assert results[0].source_mapping == {0: 0}
-
-
-def test_file_udf_result_mapping_always_inferred():
-    """FileUDFResult resolves mapping via node_id like plain lists."""
-    pipeline, context = _make_pipeline_and_context()
-
-    udf_result = FileUDFResult(outputs=[{"name": "alice", "node_id": "n1"}])
-
-    input_data = [{"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}}]
+    input_data = [
+        {"source_guid": "sg-1", "content": {"prev": {"q": "A"}}},
+        {"source_guid": "sg-2", "content": {"prev": {"q": "B"}}},
+    ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
@@ -111,25 +183,53 @@ def test_file_udf_result_mapping_always_inferred():
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Framework resolved mapping via node_id
-    assert results[0].source_mapping == {0: 0}
+    assert results[0].source_mapping == {0: [0, 1]}
+    assert results[0].data[0]["content"]["my_file_tool"]["merged"] is True
 
 
-def test_file_tool_plain_list_still_works():
-    """FILE tool returning a plain list should still work (backwards compat)."""
+# --- Plain dict rejection ---
+
+
+def test_file_tool_plain_dict_rejected():
+    """FILE tool returning plain dicts (not TrackedItem) raises ValueError."""
     pipeline, context = _make_pipeline_and_context()
 
-    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([{"score": 0.9}], True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        with pytest.raises(AgentActionsError, match="plain dict"):
+            pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    assert len(results) == 1
-    assert results[0].status == ProcessingStatus.SUCCESS
-    assert results[0].data[0]["content"]["my_file_tool"]["score"] == 0.9
+
+def test_file_tool_non_dict_rejected():
+    """FILE tool returning non-dict items raises ValueError."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(["just a string"], True),
+    ):
+        with pytest.raises(AgentActionsError, match="expected TrackedItem"):
+            pipeline._process_file_mode_tool(input_data, input_data, context)
+
+
+def test_file_tool_non_list_non_fileudfresult_rejected():
+    """FILE tool returning non-list, non-FileUDFResult raises ValueError."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=({"single": "dict"}, True),
+    ):
+        with pytest.raises(AgentActionsError, match="must return list or FileUDFResult"):
+            pipeline._process_file_mode_tool(input_data, input_data, context)
 
 
 # --- Empty tool output detection ---
@@ -140,8 +240,8 @@ def test_file_tool_empty_response_with_input_returns_failed():
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
 
     with patch(
@@ -176,7 +276,10 @@ def test_file_tool_empty_response_feeds_existing_failure_check():
     from agent_actions.processing.result_collector import ResultCollector
 
     pipeline, context = _make_pipeline_and_context()
-    input_data = [{"content": {"a": 1}}, {"content": {"b": 2}}]
+    input_data = [
+        {"content": {"prev": {"a": 1}}},
+        {"content": {"prev": {"b": 2}}},
+    ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
@@ -196,6 +299,22 @@ def test_file_tool_empty_response_feeds_existing_failure_check():
     assert output == []
 
 
+def test_file_udf_result_empty_with_input_returns_failed():
+    """FileUDFResult with empty outputs and non-empty input returns FAILED."""
+    pipeline, context = _make_pipeline_and_context()
+
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(FileUDFResult(outputs=[]), True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert results[0].status == ProcessingStatus.FAILED
+    assert "returned empty result" in results[0].error
+
+
 # --- Error surfacing ---
 
 
@@ -203,7 +322,7 @@ def test_file_mode_error_surfaces():
     """FILE tool raising exception should propagate, not produce empty output."""
     pipeline, context = _make_pipeline_and_context()
 
-    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
@@ -217,7 +336,10 @@ def test_file_mode_error_includes_context():
     """The surfaced error should include agent_name and record_count."""
     pipeline, context = _make_pipeline_and_context()
 
-    input_data = [{"content": {"a": 1}}, {"content": {"b": 2}}]
+    input_data = [
+        {"content": {"prev": {"a": 1}}},
+        {"content": {"prev": {"b": 2}}},
+    ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
@@ -277,6 +399,23 @@ def test_strip_internal_fields_str_unchanged():
     assert "alice" in result
 
 
+def test_strip_internal_fields_preserves_tracked_item():
+    """TrackedItem should survive _strip_internal_fields with provenance intact."""
+    data = [
+        TrackedItem({"name": "alice", "_batch_filter_status": "included"}, source_index=0),
+        TrackedItem({"name": "bob"}, source_index=1),
+    ]
+
+    result = ToolClient._strip_internal_fields(data)
+
+    assert isinstance(result[0], TrackedItem)
+    assert result[0]._source_index == 0
+    assert "_batch_filter_status" not in result[0]
+    assert result[0]["name"] == "alice"
+    assert isinstance(result[1], TrackedItem)
+    assert result[1]._source_index == 1
+
+
 # --- _validate_udf_output list handling across granularities ---
 
 
@@ -298,14 +437,17 @@ def test_validate_udf_output_handles_list_for_record_granularity():
 
 
 def test_validate_udf_output_handles_list_for_file_granularity():
-    """FILE UDF returning a FileUDFResult with list validates each item (regression)."""
+    """FILE UDF returning a FileUDFResult validates data field of each output."""
     from agent_actions.utils.udf_management.tooling import _validate_udf_output
 
     result = FileUDFResult(
-        outputs=[{"name": "alice"}, {"name": "bob"}],
+        outputs=[
+            {"source_index": 0, "data": {"name": "alice"}},
+            {"source_index": 1, "data": {"name": "bob"}},
+        ],
     )
 
-    # Should not raise — FileUDFResult.outputs unwrapped, each item validated
+    # Should not raise — each output's data is valid against the schema
     _validate_udf_output("my_tool", result, _SIMPLE_SCHEMA)
 
 
@@ -545,22 +687,27 @@ def test_result_collector_does_not_raise_when_all_filtered():
     assert output == []
 
 
-# --- FILE-mode source_guid metadata sovereignty ---
+# --- FILE-mode source_guid via TrackedItem ---
 
 
-def test_file_tool_plain_list_preserves_source_guid():
-    """Plain list tool output gets source_guid from input via node_id mapping."""
+def test_tracked_item_preserves_source_guid():
+    """TrackedItem output gets source_guid from input via source_index mapping."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
 
-    # Tool returns plain list with node_id — no source_guid, no FileUDFResult
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"score": 0.9, "node_id": "n1"}, {"score": 0.8, "node_id": "n2"}], True),
+        return_value=(
+            [
+                TrackedItem({"score": 0.9}, source_index=0),
+                TrackedItem({"score": 0.8}, source_index=1),
+            ],
+            True,
+        ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -569,73 +716,61 @@ def test_file_tool_plain_list_preserves_source_guid():
     assert result.data[1]["source_guid"] == "sg-2"
 
 
-def test_file_tool_filter_fewer_outputs_with_node_id():
-    """When tool filters N→fewer, outputs with node_id get correct source_guid."""
+def test_tracked_item_filter_fewer_outputs():
+    """When tool filters N→fewer, TrackedItem._source_index resolves correct source_guid."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
-        {"source_guid": "sg-3", "node_id": "n3", "content": {"id": 3}},
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
+        {"source_guid": "sg-3", "content": {"prev": {"id": 3}}},
     ]
 
-    # Tool filters 3→2, passes through node_id for matched records
+    # Tool filters 3→2, keeping items 0 and 2
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
-            [{"name": "alice", "node_id": "n1"}, {"name": "charlie", "node_id": "n3"}],
+            [
+                TrackedItem({"name": "alice"}, source_index=0),
+                TrackedItem({"name": "charlie"}, source_index=2),
+            ],
             True,
         ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
-    # node_id-based mapping resolves correct source_guids
     assert result.data[0]["source_guid"] == "sg-1"
     assert result.data[1]["source_guid"] == "sg-3"
+    assert result.source_mapping == {0: 0, 1: 2}
 
 
-def test_file_tool_new_records_without_node_id_get_no_source_guid():
-    """Tool outputs without node_id are new records — no source_guid reattached."""
+def test_file_udf_result_preserves_source_guid():
+    """FileUDFResult outputs get source_guid from input via source_index."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-shared", "node_id": "n1", "content": {"q": "A"}},
-        {"source_guid": "sg-shared", "node_id": "n2", "content": {"q": "B"}},
+        {"source_guid": "sg-1", "content": {"prev": {"q": "A"}}},
+        {"source_guid": "sg-2", "content": {"prev": {"q": "B"}}},
     ]
 
-    # Tool returns new records (no node_id) — these are new, not passthrough
+    udf_result = FileUDFResult(
+        outputs=[
+            {"source_index": 1, "data": {"q": "B_modified"}},
+            {"source_index": 0, "data": {"q": "A_modified"}},
+        ],
+    )
+
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"q": "A1"}, {"q": "A2"}, {"q": "B1"}], True),
+        return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # No node_id in outputs → empty mapping (new records, no parent)
-    assert results[0].source_mapping == {}
-    # Enrichment pipeline sets source_guid="" on new records (no parent to inherit from)
-    for item in results[0].data:
-        assert item.get("source_guid") == ""
-
-
-def test_file_tool_cardinality_change_new_records_get_empty_mapping():
-    """N→M with new records (no node_id) produces empty source_mapping."""
-    pipeline, context = _make_pipeline_and_context()
-
-    input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"q": "A"}},
-        {"source_guid": "sg-2", "node_id": "n2", "content": {"q": "B"}},
-    ]
-
-    # Tool returns different count, no node_id → all new records
-    with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"q": "X"}, {"q": "Y"}, {"q": "Z"}], True),
-    ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
-
-    # No node_id → empty mapping (new records, no parent)
-    assert results[0].source_mapping == {}
+    result = results[0]
+    # Reordered outputs map to correct source_guid
+    assert result.data[0]["source_guid"] == "sg-2"
+    assert result.data[1]["source_guid"] == "sg-1"
 
 
 def test_file_tool_source_guid_never_empty_string():
@@ -643,12 +778,12 @@ def test_file_tool_source_guid_never_empty_string():
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
     ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"result": "ok", "node_id": "n1"}], True),
+        return_value=([TrackedItem({"result": "ok"}, source_index=0)], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -657,59 +792,7 @@ def test_file_tool_source_guid_never_empty_string():
         assert item.get("source_guid") == "sg-1"
 
 
-def test_file_tool_tool_explicit_source_guid_respected():
-    """If tool explicitly returns source_guid, framework respects it."""
-    pipeline, context = _make_pipeline_and_context()
-
-    input_data = [
-        {"source_guid": "sg-input", "content": {"id": 1}},
-    ]
-
-    # Tool explicitly sets source_guid in its output
-    with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"result": "ok", "source_guid": "sg-tool-set"}], True),
-    ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
-
-    # Tool's explicit value wins over framework reattachment
-    assert results[0].data[0]["source_guid"] == "sg-tool-set"
-
-
-# --- Hardening: edge cases that must never break source_guid ---
-
-
-def test_file_tool_mixed_source_guid_some_set_some_not():
-    """Tool returns mix of items with and without source_guid — framework fills gaps via node_id."""
-    pipeline, context = _make_pipeline_and_context()
-
-    input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "node_id": "n2", "content": {"id": 2}},
-        {"source_guid": "sg-3", "node_id": "n3", "content": {"id": 3}},
-    ]
-
-    # Tool sets source_guid on item[1] but not on [0] or [2]; node_id on [0] and [2]
-    with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=(
-            [
-                {"val": "a", "node_id": "n1"},
-                {"val": "b", "source_guid": "sg-tool-explicit"},
-                {"val": "c", "node_id": "n3"},
-            ],
-            True,
-        ),
-    ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
-
-    result = results[0]
-    # Item 0: no explicit source_guid, node_id matched → framework reattaches from input[0]
-    assert result.data[0]["source_guid"] == "sg-1"
-    # Item 1: tool explicitly set it → respected (no node_id, so not in mapping)
-    assert result.data[1]["source_guid"] == "sg-tool-explicit"
-    # Item 2: no explicit source_guid, node_id matched → framework reattaches from input[2]
-    assert result.data[2]["source_guid"] == "sg-3"
+# --- Hardening: edge cases ---
 
 
 def test_file_tool_empty_input_empty_output():
@@ -727,87 +810,81 @@ def test_file_tool_empty_input_empty_output():
 
 
 def test_file_tool_input_without_source_guid():
-    """Input records missing source_guid entirely — no crash, outputs have empty/absent source_guid."""
+    """Input records missing source_guid — no crash, outputs have absent source_guid."""
     pipeline, context = _make_pipeline_and_context()
 
-    # Input records with no source_guid at all (possible in edge cases)
     input_data = [
-        {"content": {"id": 1}},
-        {"content": {"id": 2}},
+        {"content": {"prev": {"id": 1}}},
+        {"content": {"prev": {"id": 2}}},
     ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"score": 0.9}, {"score": 0.8}], True),
+        return_value=(
+            [
+                TrackedItem({"score": 0.9}, source_index=0),
+                TrackedItem({"score": 0.8}, source_index=1),
+            ],
+            True,
+        ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # Should not crash — source_guid just won't be set by reattachment
     assert results[0].status == ProcessingStatus.SUCCESS
     assert len(results[0].data) == 2
 
 
-def test_file_tool_non_dict_output_items():
-    """Non-dict items in tool output don't crash source_guid reattachment."""
+def test_file_udf_result_merge_reduces_to_fewer():
+    """N→fewer merge via FileUDFResult: each output maps to its declared source."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"id": 1}},
+        {"source_guid": "sg-1", "content": {"prev": {"q": "A"}}},
+        {"source_guid": "sg-2", "content": {"prev": {"q": "B"}}},
+        {"source_guid": "sg-3", "content": {"prev": {"q": "C"}}},
     ]
 
-    # Tool returns a non-dict item (string) — no node_id possible, treated as new record
+    # Tool merges 3→2
+    udf_result = FileUDFResult(
+        outputs=[
+            {"source_index": [0, 1], "data": {"merged": "AB"}},
+            {"source_index": 2, "data": {"single": "C"}},
+        ],
+    )
+
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=(["just a string"], True),
-    ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
-
-    # Non-dict wrapped as {"content": {"value": ...}} — no node_id, so no mapping
-    assert results[0].data[0]["content"]["my_file_tool"]["value"] == "just a string"
-    # Same cardinality (1:1) — positional fallback propagates source_guid from input
-    assert results[0].data[0].get("source_guid") == "sg-1"
-
-
-def test_file_tool_merge_reduces_to_fewer_outputs():
-    """N→fewer merge: new records (no node_id) get empty mapping."""
-    pipeline, context = _make_pipeline_and_context()
-
-    input_data = [
-        {"source_guid": "sg-1", "node_id": "n1", "content": {"q": "A"}},
-        {"source_guid": "sg-2", "node_id": "n2", "content": {"q": "B"}},
-        {"source_guid": "sg-3", "node_id": "n3", "content": {"q": "C"}},
-    ]
-
-    # Tool merges 3→2 — new records with no node_id (aggregation results)
-    with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"merged": "AB"}, {"single": "C"}], True),
+        return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
-    # New records — no node_id → empty mapping, no source_guid reattached
-    assert result.source_mapping == {}
+    assert result.source_mapping == {0: [0, 1], 1: 2}
+    assert len(result.data) == 2
 
 
-def test_file_tool_large_cardinality_expansion():
-    """1→N expansion: outputs with node_id inherit source_guid, others are new."""
+def test_file_udf_result_expansion():
+    """1→N expansion via FileUDFResult: each output traces to source."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
-        {"source_guid": "sg-only", "node_id": "n1", "content": {"nested": [1, 2, 3, 4, 5]}},
+        {"source_guid": "sg-only", "content": {"prev": {"nested": [1, 2, 3, 4, 5]}}},
     ]
 
-    # Tool explodes 1 input into 5 new outputs (no node_id — aggregation/expansion)
+    udf_result = FileUDFResult(
+        outputs=[{"source_index": 0, "data": {"val": i}} for i in range(5)],
+    )
+
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"val": i} for i in range(5)], True),
+        return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
-    # No node_id on outputs → empty mapping (new records)
-    assert results[0].source_mapping == {}
     assert len(results[0].data) == 5
+    for i, item in enumerate(results[0].data):
+        assert item["content"]["my_file_tool"]["val"] == i
+        assert results[0].source_mapping[i] == 0
 
 
 # --- Hardening: _resolve_source_mapping unit tests ---
@@ -1007,51 +1084,118 @@ class TestReattachSourceGuid:
             assert "source_guid" not in item
 
 
-# --- Bug 1: Content preservation when tool returns full records ---
+# --- _extract_business_fields unit tests ---
 
 
-def test_file_tool_full_record_content_preserved():
-    """FILE tool returning records with node_id + populated content must preserve content.
+class TestExtractBusinessFields:
+    """Direct unit tests for _extract_business_fields logic."""
 
-    Regression test for content stripping bug: framework must not replace
-    the tool's content dict with {} when re-wrapping the record.
-    """
+    def test_flattens_all_namespaces_no_observe(self):
+        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+
+        record = {
+            "source_guid": "sg-1",
+            "node_id": "n1",
+            "content": {
+                "extract": {"question_text": "What?", "answer_text": "Yes."},
+                "summarize": {"summary": "Short version"},
+            },
+        }
+        result = _extract_business_fields(record, {})
+        assert result == {
+            "question_text": "What?",
+            "answer_text": "Yes.",
+            "summary": "Short version",
+        }
+
+    def test_extracts_observed_fields_only(self):
+        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+
+        record = {
+            "content": {
+                "extract": {"question_text": "What?", "answer_text": "Yes."},
+                "summarize": {"summary": "Short version"},
+            }
+        }
+        config = {"context_scope": {"observe": ["extract.question_text"]}}
+        result = _extract_business_fields(record, config)
+        assert result == {"question_text": "What?"}
+
+    def test_wildcard_observe(self):
+        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+
+        record = {
+            "content": {
+                "extract": {"q": "Q1", "a": "A1"},
+                "other": {"x": 99},
+            }
+        }
+        config = {"context_scope": {"observe": ["extract.*"]}}
+        result = _extract_business_fields(record, config)
+        assert result == {"q": "Q1", "a": "A1"}
+
+    def test_no_content_returns_empty(self):
+        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+
+        record = {"source_guid": "sg-1"}
+        result = _extract_business_fields(record, {})
+        assert result == {}
+
+    def test_non_dict_content_returns_empty(self):
+        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+
+        record = {"content": "string_content"}
+        result = _extract_business_fields(record, {})
+        assert result == {}
+
+    def test_skips_non_dict_namespace_values(self):
+        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+
+        record = {
+            "content": {
+                "extract": {"q": "Q1"},
+                "skipped_action": None,  # guard-skipped action
+            }
+        }
+        result = _extract_business_fields(record, {})
+        assert result == {"q": "Q1"}
+
+
+# --- Content preservation regression ---
+
+
+def test_file_tool_content_preserved_via_tracked_item():
+    """FILE tool content is correctly preserved when using TrackedItem reconciliation."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
         {
             "source_guid": "sg-1",
-            "node_id": "flatten_q_0",
-            "lineage": ["extract_abc_0", "flatten_q_0"],
-            "content": {"question_text": "What is X?", "answer_text": "X is Y."},
+            "content": {
+                "extract": {"question_text": "What is X?", "answer_text": "X is Y."},
+            },
         },
         {
             "source_guid": "sg-1",
-            "node_id": "flatten_q_1",
-            "lineage": ["extract_abc_0", "flatten_q_1"],
-            "content": {"question_text": "What is Z?", "answer_text": "Z is W."},
-        },
-    ]
-
-    # Tool returns original records (passthrough/filter pattern) — content populated
-    tool_output = [
-        {
-            "node_id": "flatten_q_0",
-            "source_guid": "sg-1",
-            "lineage": ["extract_abc_0", "flatten_q_0"],
-            "content": {"question_text": "What is X?", "answer_text": "X is Y."},
-        },
-        {
-            "node_id": "flatten_q_1",
-            "source_guid": "sg-1",
-            "lineage": ["extract_abc_0", "flatten_q_1"],
-            "content": {"question_text": "What is Z?", "answer_text": "Z is W."},
+            "content": {
+                "extract": {"question_text": "What is Z?", "answer_text": "Z is W."},
+            },
         },
     ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=(tool_output, True),
+        return_value=(
+            [
+                TrackedItem(
+                    {"question_text": "What is X?", "answer_text": "X is Y."}, source_index=0
+                ),
+                TrackedItem(
+                    {"question_text": "What is Z?", "answer_text": "Z is W."}, source_index=1
+                ),
+            ],
+            True,
+        ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -1065,34 +1209,29 @@ def test_file_tool_full_record_content_preserved():
     assert result.data[1]["content"]["my_file_tool"]["answer_text"] == "Z is W."
 
 
-# --- Bug 2: Lineage collision with shared source_guid ---
+# --- Shared source_guid lineage ---
 
 
 def test_file_tool_shared_source_guid_each_output_gets_correct_mapping():
-    """When inputs share source_guid, node_id-based mapping must resolve each correctly.
-
-    Regression test for lineage collision: shared source_guid must NOT cause
-    all outputs to inherit the first input's lineage.
-    """
+    """When inputs share source_guid, TrackedItem._source_index resolves each correctly."""
     pipeline, context = _make_pipeline_and_context()
 
-    # 5 inputs from same source page (shared source_guid), each with unique node_id
     input_data = [
-        {"source_guid": "sg-shared", "node_id": f"flatten_q_{i}", "content": {"q": f"Q{i}"}}
-        for i in range(5)
+        {"source_guid": "sg-shared", "content": {"prev": {"q": f"Q{i}"}}} for i in range(5)
     ]
 
-    # Tool deduplicates 5→4, returns records with original node_ids
-    tool_output = [
-        {"node_id": "flatten_q_0", "source_guid": "sg-shared", "content": {"q": "Q0"}},
-        {"node_id": "flatten_q_1", "source_guid": "sg-shared", "content": {"q": "Q1"}},
-        {"node_id": "flatten_q_3", "source_guid": "sg-shared", "content": {"q": "Q3"}},
-        {"node_id": "flatten_q_4", "source_guid": "sg-shared", "content": {"q": "Q4"}},
-    ]
-
+    # Tool deduplicates 5→4, returns TrackedItems skipping index 2
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=(tool_output, True),
+        return_value=(
+            [
+                TrackedItem({"q": "Q0"}, source_index=0),
+                TrackedItem({"q": "Q1"}, source_index=1),
+                TrackedItem({"q": "Q3"}, source_index=3),
+                TrackedItem({"q": "Q4"}, source_index=4),
+            ],
+            True,
+        ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -1103,16 +1242,11 @@ def test_file_tool_shared_source_guid_each_output_gets_correct_mapping():
         assert item["source_guid"] == "sg-shared"
 
 
-# --- Bug 3: Synthesis lineage via copy pattern ---
+# --- Lineage extension via TrackedItem ---
 
 
-def test_file_tool_copy_pattern_preserves_lineage():
-    """Tool using copy pattern (copy record + replace content) must extend lineage.
-
-    The copy pattern preserves node_id from the input record, so the framework
-    matches the output to its input and extends the lineage chain. This is the
-    recommended approach for mid-pipeline FILE tools that transform data.
-    """
+def test_file_tool_tracked_item_extends_lineage():
+    """TrackedItem-based reconciliation extends parent lineage correctly."""
     pipeline, context = _make_pipeline_and_context()
 
     input_data = [
@@ -1120,42 +1254,32 @@ def test_file_tool_copy_pattern_preserves_lineage():
             "source_guid": "sg-1",
             "node_id": "extract_abc_0",
             "lineage": ["ingest_xyz_0", "extract_abc_0"],
-            "content": {"raw_text": "original content"},
+            "content": {"extract": {"raw_text": "original content"}},
         },
         {
             "source_guid": "sg-2",
             "node_id": "extract_abc_1",
             "lineage": ["ingest_xyz_1", "extract_abc_1"],
-            "content": {"raw_text": "other content"},
+            "content": {"extract": {"raw_text": "other content"}},
         },
     ]
 
-    # Enrichment needs source_data for parent lookup (set by pipeline.py in real flow)
     context.source_data = input_data
-
-    # Tool copies input records and replaces content (synthesis-via-copy pattern)
-    tool_output = [
-        {
-            "node_id": "extract_abc_0",  # preserved from input
-            "source_guid": "sg-1",
-            "content": {"transformed": "new value from original"},  # replaced content
-        },
-        {
-            "node_id": "extract_abc_1",  # preserved from input
-            "source_guid": "sg-2",
-            "content": {"transformed": "new value from other"},  # replaced content
-        },
-    ]
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=(tool_output, True),
+        return_value=(
+            [
+                TrackedItem({"transformed": "new value from original"}, source_index=0),
+                TrackedItem({"transformed": "new value from other"}, source_index=1),
+            ],
+            True,
+        ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
-
     assert result.source_mapping == {0: 0, 1: 1}
 
     assert result.data[0]["content"]["my_file_tool"]["transformed"] == "new value from original"
@@ -1167,7 +1291,6 @@ def test_file_tool_copy_pattern_preserves_lineage():
     # Lineage must be extended from parent, not truncated to just [self]
     for i, item in enumerate(result.data):
         lineage = item.get("lineage", [])
-        # Parent lineage had 2 entries; enrichment appends new node_id → at least 3
         assert len(lineage) >= 3, f"item[{i}] lineage not extended from parent: {lineage}"
 
 
@@ -1345,7 +1468,6 @@ def test_file_tool_version_merge_spreads_not_wraps():
     input_data = [
         {
             "source_guid": "sg-1",
-            "node_id": "n1",
             "content": {
                 "extract_1": {"vote": "keep"},
                 "extract_2": {"vote": "drop"},
@@ -1355,7 +1477,10 @@ def test_file_tool_version_merge_spreads_not_wraps():
 
     with patch(
         "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-        return_value=([{"consensus": "keep", "score": 11, "node_id": "n1"}], True),
+        return_value=(
+            [TrackedItem({"consensus": "keep", "score": 11}, source_index=0)],
+            True,
+        ),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
