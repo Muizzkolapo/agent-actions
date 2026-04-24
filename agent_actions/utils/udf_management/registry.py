@@ -4,23 +4,38 @@ import inspect
 import sys
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any, cast
 
 from agent_actions.config.types import Granularity
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
 
 
-@dataclass
 class FileUDFResult:
-    """Result type for FILE-level UDFs.
+    """Explicit provenance for N→M FILE tools.
 
     Tools return business data only.  The framework handles all metadata
     propagation (``source_guid``, lineage, ``node_id``) automatically —
     tools never need to think about it.
+
+    Each output must declare ``source_index`` (which input produced it)
+    and ``data`` (the business fields).
     """
 
-    outputs: list[dict]
+    def __init__(self, outputs: list[dict[str, Any]]):
+        for i, out in enumerate(outputs):
+            if not isinstance(out, dict):
+                raise ValueError(f"FileUDFResult output[{i}] must be a dict")
+            if "source_index" not in out:
+                raise ValueError(
+                    f"FileUDFResult output[{i}] missing 'source_index'. "
+                    f"Every output must declare which input produced it."
+                )
+            if "data" not in out or not isinstance(out["data"], dict):
+                raise ValueError(
+                    f"FileUDFResult output[{i}] missing 'data' dict. "
+                    f"Every output must have a 'data' dict with business fields."
+                )
+        self.outputs = outputs
 
 
 # Thread safety

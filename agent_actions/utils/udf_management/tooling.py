@@ -102,7 +102,8 @@ def _validate_udf_output(udf_name: str, result: Any, json_output_schema: dict[st
     """Validate UDF output against a per-item JSON Schema."""
     from agent_actions.utils.udf_management.registry import FileUDFResult
 
-    items = result.outputs if isinstance(result, FileUDFResult) else result
+    # FileUDFResult outputs carry source_index + data; validate data only.
+    items = [out["data"] for out in result.outputs] if isinstance(result, FileUDFResult) else result
 
     if isinstance(items, list):
         for idx, item in enumerate(items):

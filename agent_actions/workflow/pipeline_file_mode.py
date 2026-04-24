@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -24,6 +25,7 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
+from agent_actions.record.tracking import TrackedItem
 
 if TYPE_CHECKING:
     from agent_actions.workflow.pipeline import ProcessingPipeline
@@ -140,9 +142,181 @@ def _reattach_source_guid(
                 item["source_guid"] = parent_guid
 
 
+def _resolve_input_record(input_idx: int, original_data: list[dict]) -> dict[str, Any] | None:
+    """Resolve the input record for namespace carry-forward.
+
+    Raises ``IndexError`` if *input_idx* is out of bounds — an invalid
+    ``source_index`` is a tool bug, not something to silently default.
+    """
+    if not original_data:
+        return None
+    if not isinstance(input_idx, int) or input_idx < 0 or input_idx >= len(original_data):
+        raise IndexError(
+            f"source_index {input_idx} is out of bounds for {len(original_data)} input records"
+        )
+    return original_data[input_idx]
+
+
+def _extract_business_fields(record: dict, agent_config: Mapping[str, Any]) -> dict:
+    """Extract observe-filtered business fields from a record for tool input.
+
+    Strips all framework fields.  Returns only business data from observed
+    namespaces.  When no observe is configured, flattens all content namespaces.
+    """
+    content = record.get("content")
+    if not isinstance(content, dict):
+        return {}
+
+    context_scope = agent_config.get("context_scope") or {}
+    observe_refs = context_scope.get("observe", [])
+
+    if not observe_refs:
+        # No observe declared — flatten all content namespaces
+        business: dict = {}
+        for ns_data in content.values():
+            if isinstance(ns_data, dict):
+                business.update(ns_data)
+        return business
+
+    # Extract only observed fields
+    business = {}
+    for ref in observe_refs:
+        if "." not in ref:
+            continue
+        ns, field = ref.split(".", 1)
+        if ns not in content or not isinstance(content[ns], dict):
+            continue
+        if field == "*":
+            business.update(content[ns])
+        elif field in content[ns]:
+            business[field] = content[ns][field]
+
+    return business
+
+
+def _build_record(
+    action_name: str,
+    data_fields: dict,
+    matched: dict[str, Any] | None,
+    version_merge: bool,
+) -> dict[str, Any]:
+    """Build a single output record, either namespaced or version-merge spread."""
+    if version_merge:
+        from agent_actions.utils.content import get_existing_content
+
+        existing = get_existing_content(matched) if matched else {}
+        record: dict[str, Any] = {"content": {**existing, **data_fields}}
+    else:
+        from agent_actions.record.envelope import RecordEnvelope
+
+        record = RecordEnvelope.build(action_name, data_fields, matched)
+    record.pop("source_guid", None)
+    return record
+
+
+def _reconcile_outputs(
+    raw_response: Any,
+    action_name: str,
+    original_data: list[dict],
+    version_merge: bool = False,
+) -> tuple[list[dict[str, Any]], dict[int, int | list[int]]]:
+    """Core reconciliation of tool output to input records.
+
+    Dispatches on response type (``FileUDFResult`` vs ``TrackedItem`` list),
+    builds records, and reattaches ``source_guid``.
+
+    Returns ``(structured_data, source_mapping)``.
+    """
+    from agent_actions.utils.udf_management.registry import FileUDFResult
+
+    source_mapping: dict[int, int | list[int]] = {}
+    structured_data: list[dict[str, Any]] = []
+
+    if isinstance(raw_response, FileUDFResult):
+        for i, out in enumerate(raw_response.outputs):
+            src_idx = out["source_index"]
+            input_idx = src_idx[0] if isinstance(src_idx, list) else src_idx
+            source_mapping[i] = src_idx
+
+            matched = _resolve_input_record(input_idx, original_data)
+            structured_data.append(_build_record(action_name, out["data"], matched, version_merge))
+
+    elif isinstance(raw_response, list):
+        for i, item in enumerate(raw_response):
+            if isinstance(item, TrackedItem):
+                source_mapping[i] = item._source_index
+                matched = _resolve_input_record(item._source_index, original_data)
+                structured_data.append(
+                    _build_record(action_name, dict(item), matched, version_merge)
+                )
+            elif isinstance(item, dict):
+                raise ValueError(
+                    f"FILE tool '{action_name}' returned plain dict at "
+                    f"output[{i}]. Tool created a new dict instead of returning "
+                    f"an input item. For merge/expand, use FileUDFResult with "
+                    f"source_index."
+                )
+            else:
+                raise ValueError(
+                    f"FILE tool '{action_name}' output[{i}] is "
+                    f"{type(item).__name__}, expected TrackedItem. "
+                    f"For N→M transforms, use FileUDFResult."
+                )
+    else:
+        raise ValueError(
+            f"FILE tool '{action_name}' must return list or FileUDFResult, "
+            f"got {type(raw_response).__name__}"
+        )
+
+    _reattach_source_guid(structured_data, source_mapping, original_data)
+    return structured_data, source_mapping
+
+
 # ---------------------------------------------------------------------------
-# Public API
+# Public API — standalone helpers for testing / simulation
 # ---------------------------------------------------------------------------
+
+
+def framework_prepare_input(
+    records: list[dict],
+    observe_refs: list[str] | None = None,
+) -> list[TrackedItem]:
+    """Strip framework fields and wrap in TrackedItem for tool input."""
+    config: dict[str, Any] = {"context_scope": {"observe": observe_refs}} if observe_refs else {}
+    return [
+        TrackedItem(_extract_business_fields(record, config), source_index=i)
+        for i, record in enumerate(records)
+    ]
+
+
+def framework_reconcile(
+    raw_response: Any,
+    action_name: str,
+    original_data: list[dict],
+) -> list[dict[str, Any]]:
+    """Reconcile tool output to input records via provenance.
+
+    Standalone wrapper over ``_reconcile_outputs`` for design tests and
+    simulations.
+    """
+    data, _ = _reconcile_outputs(raw_response, action_name, original_data)
+    return data
+
+
+# ---------------------------------------------------------------------------
+# Pipeline integration
+# ---------------------------------------------------------------------------
+
+
+def _is_empty_response(raw_response: Any) -> bool:
+    """Check if tool returned an empty response."""
+    from agent_actions.utils.udf_management.registry import FileUDFResult
+
+    if isinstance(raw_response, FileUDFResult):
+        return not raw_response.outputs
+    if isinstance(raw_response, list):
+        return not raw_response
+    return False
 
 
 def process_file_mode_tool(
@@ -153,43 +327,27 @@ def process_file_mode_tool(
 ) -> list:
     """Process tool in FILE granularity mode.
 
-    Invokes tool once with full array instead of looping per-record.
-    Tool receives array WITH existing IDs/lineage.
-    Tool returns array of outputs (N→M transformation allowed).
-    Enrichment assigns new IDs/lineage to each output.
-
-    Args:
-        pipeline: The parent ``ProcessingPipeline`` instance.
-        data: Observe-filtered records (passed to tool).
-        original_data: Unfiltered records (available for enrichment).
-        context: Processing context.
-
-    Returns:
-        List with single ProcessingResult containing all outputs.
+    Tools receive clean business data wrapped in ``TrackedItem`` — no
+    framework fields leak into user code.  After the tool returns, the
+    framework reconciles output to input via ``TrackedItem._source_index``
+    (for N→N list returns) or ``FileUDFResult.source_index`` (for N→M
+    transforms).  Plain dicts in list returns are an error.
     """
     try:
-        tools_path = context.agent_config.get("tools_path")
+        clean_input: list[TrackedItem] = []
+        for i, record in enumerate(data):
+            business = _extract_business_fields(record, context.agent_config)
+            clean_input.append(TrackedItem(business, source_index=i))
 
         raw_response, executed = run_dynamic_agent(
             agent_config=cast(dict[str, Any], context.agent_config),
             agent_name=context.agent_name,
-            context=data,
+            context=clean_input,
             formatted_prompt="",
-            tools_path=tools_path,
+            tools_path=context.agent_config.get("tools_path"),
         )
 
-        from agent_actions.utils.udf_management.registry import FileUDFResult
-
-        if isinstance(raw_response, FileUDFResult):
-            raw_response = raw_response.outputs
-
-        if not isinstance(raw_response, list):
-            raise ValueError(
-                f"FILE mode tool must return a list (or FileUDFResult), "
-                f"got {type(raw_response).__name__}"
-            )
-
-        if not raw_response and data:
+        if _is_empty_response(raw_response) and data:
             return [
                 ProcessingResult.failed(
                     error=(
@@ -199,71 +357,14 @@ def process_file_mode_tool(
                 )
             ]
 
-        # Framework-managed: resolve which input produced each output by node_id.
-        source_mapping: dict[int, int | list[int]] | None = None
-        if original_data:
-            source_mapping = _resolve_source_mapping(
-                raw_outputs=raw_response,
-                input_data=original_data,
-                action_name=context.agent_name,
-            )
+        from agent_actions.utils.content import is_version_merge
 
-        # Separate business data from framework fields in tool output.
-        # Additive model: wrap tool output under action namespace, preserve
-        # existing namespaces from the input record.
-        # Version merge: version namespaces are already the correct additive
-        # format — spread instead of wrapping under the action name.
-        from agent_actions.record.envelope import RecordEnvelope
-        from agent_actions.utils.content import get_existing_content, is_version_merge
-
-        version_merge = is_version_merge(context.agent_config)
-
-        structured_data = []
-        for idx, item in enumerate(raw_response):
-            if isinstance(item, dict):
-                if isinstance(item.get("content"), dict):
-                    data_fields = item["content"]
-                else:
-                    data_fields = {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
-
-                # Resolve the input record for namespace carry-forward.
-                # For N→M tools (dedup, filter), source_mapping may not resolve.
-                # Fall back to the first input record — all records in a FILE
-                # batch share the same upstream namespaces.
-                input_idx = source_mapping.get(idx) if source_mapping else None
-                if isinstance(input_idx, list):
-                    input_idx = input_idx[0]
-                input_record: dict[str, Any] | None = None
-                if isinstance(input_idx, int) and input_idx < len(original_data):
-                    input_record = original_data[input_idx]
-                elif original_data:
-                    input_record = original_data[0]
-
-                if version_merge:
-                    # build_version_merge validates all values are dicts,
-                    # but version merge tools return flat business data
-                    # (strings, ints) to spread alongside version namespaces.
-                    existing = get_existing_content(input_record) if input_record else {}
-                    record: dict[str, Any] = {"content": {**existing, **data_fields}}
-                else:
-                    record = RecordEnvelope.build(context.agent_name, data_fields, input_record)
-
-                # Source_guid is managed by _reattach_source_guid below, not
-                # RecordEnvelope.  Remove it here so the existing handling
-                # works: tool explicit value first, then mapping-based.
-                record.pop("source_guid", None)
-
-                if "source_guid" in item:
-                    record["source_guid"] = item["source_guid"]
-
-                structured_data.append(record)
-            else:
-                structured_data.append(RecordEnvelope.build(context.agent_name, {"value": item}))
-
-        # Reattach source_guid from input records — authoritative for FILE mode.
-        # LineageBuilder._propagate_ancestry_chain and RequiredFieldsEnricher
-        # also set source_guid but are idempotent backstops; this is the primary setter.
-        _reattach_source_guid(structured_data, source_mapping, original_data)
+        structured_data, source_mapping = _reconcile_outputs(
+            raw_response,
+            context.agent_name,
+            original_data,
+            version_merge=is_version_merge(context.agent_config),
+        )
 
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
@@ -280,9 +381,6 @@ def process_file_mode_tool(
         return [result]
 
     except Exception as e:
-        # NOTE: Intentional behavioral change — FILE mode tool errors now raise
-        # instead of returning FAILED silently. Workflows relying on partial-failure
-        # tolerance should use try/except or error handling at the caller level.
         logger.error("FILE mode tool '%s' failed: %s", context.agent_name, e)
         raise AgentActionsError(
             f"FILE mode tool '{context.agent_name}' failed: {e}",

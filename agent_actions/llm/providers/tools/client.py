@@ -44,7 +44,19 @@ class ToolClient:
         strip = BatchContextMetadata.strip_internal_fields
 
         if isinstance(data, list):
-            return [strip(item) if isinstance(item, dict) else item for item in data]
+            from agent_actions.record.tracking import TrackedItem
+
+            result: list[Any] = []
+            for item in data:
+                if isinstance(item, TrackedItem):
+                    # Preserve TrackedItem type — provenance must survive stripping
+                    stripped = strip(item)
+                    result.append(TrackedItem(stripped, source_index=item._source_index))
+                elif isinstance(item, dict):
+                    result.append(strip(item))
+                else:
+                    result.append(item)
+            return result
 
         if isinstance(data, str):
             try:

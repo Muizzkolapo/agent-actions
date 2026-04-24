@@ -14,6 +14,7 @@ from agent_actions.input.preprocessing.transformation.transformer import (
     DataTransformer,
 )
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
+from agent_actions.record.tracking import TrackedItem
 from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
 # ---------------------------------------------------------------------------
@@ -84,12 +85,13 @@ class TestFileModePipelineVersionMerge:
             }
         ]
 
-        # Tool returns aggregated output
-        tool_output = [{"consensus": "keep", "total_score": 11, "node_id": "n1"}]
-
+        # Tool returns aggregated output via TrackedItem
         with patch(
             "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-            return_value=(tool_output, True),
+            return_value=(
+                [TrackedItem({"consensus": "keep", "total_score": 11}, source_index=0)],
+                True,
+            ),
         ):
             results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -123,11 +125,12 @@ class TestFileModePipelineVersionMerge:
             }
         ]
 
-        tool_output = [{"summary": "2/3 keep", "node_id": "n1"}]
-
         with patch(
             "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-            return_value=(tool_output, True),
+            return_value=(
+                [TrackedItem({"summary": "2/3 keep"}, source_index=0)],
+                True,
+            ),
         ):
             results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -147,11 +150,12 @@ class TestFileModePipelineVersionMerge:
             }
         ]
 
-        tool_output = [{"summary": "world", "node_id": "n1"}]
-
         with patch(
             "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-            return_value=(tool_output, True),
+            return_value=(
+                [TrackedItem({"summary": "world"}, source_index=0)],
+                True,
+            ),
         ):
             results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
@@ -177,12 +181,13 @@ class TestFileModePipelineVersionMerge:
             }
         ]
 
-        # Tool returns output nested under "content" key
-        tool_output = [{"content": {"consensus": "keep"}, "node_id": "n1"}]
-
+        # Tool returns output via TrackedItem
         with patch(
             "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
-            return_value=(tool_output, True),
+            return_value=(
+                [TrackedItem({"consensus": "keep"}, source_index=0)],
+                True,
+            ),
         ):
             results = pipeline._process_file_mode_tool(input_data, input_data, context)
 
