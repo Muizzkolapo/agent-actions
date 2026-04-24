@@ -281,7 +281,7 @@ class TestBatchPathReasonDetection:
             batch_results=[],
             context_map={},
             output_directory=None,
-            agent_config={"agent_type": "test_batch"},
+            agent_config={"agent_type": "test_batch", "action_name": "test_batch"},
             reconciler=reconciler,
             exhausted_recovery=None,
         )
@@ -292,7 +292,7 @@ class TestBatchPathReasonDetection:
         from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
 
         row = {
-            "content": "stale",
+            "content": {"upstream_action": {"field": "value"}},
             "source_guid": "sg_batch_1",
             ContextMetaKeys.FILTER_PHASE: "upstream_unprocessed",
         }
@@ -305,6 +305,9 @@ class TestBatchPathReasonDetection:
         assert item["metadata"]["reason"] == "upstream_unprocessed"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
+        # build_skipped adds null namespace for this action, preserves upstream
+        assert item["content"]["test_batch"] is None
+        assert item["content"]["upstream_action"] == {"field": "value"}
 
     def test_guard_skipped_reason(self):
         """Records with SKIPPED filter status get reason=guard_skipped."""
@@ -312,7 +315,7 @@ class TestBatchPathReasonDetection:
         from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
         from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
 
-        row = {"content": "data", "source_guid": "sg_batch_2"}
+        row = {"content": {"prev": {"x": 1}}, "source_guid": "sg_batch_2"}
         BatchContextMetadata.set_filter_status(row, FilterStatus.SKIPPED)
         ctx = self._make_ctx(passthrough_records=[("cid_2", row)])
         processor = BatchResultProcessor()
@@ -323,12 +326,13 @@ class TestBatchPathReasonDetection:
         assert item["metadata"]["reason"] == "guard_skipped"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
+        assert item["content"]["test_batch"] is None
 
     def test_batch_not_returned_reason(self):
         """Records without filter metadata get reason=batch_not_returned."""
         from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
 
-        row = {"content": "data", "source_guid": "sg_batch_3"}
+        row = {"content": {"prev": {"x": 1}}, "source_guid": "sg_batch_3"}
         ctx = self._make_ctx(passthrough_records=[("cid_3", row)])
         processor = BatchResultProcessor()
         result_ctx = processor._stage_6_merge_passthroughs(ctx)
@@ -338,6 +342,7 @@ class TestBatchPathReasonDetection:
         assert item["metadata"]["reason"] == "batch_not_returned"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
+        assert item["content"]["test_batch"] is None
 
     def test_upstream_unprocessed_uses_unprocessed_status(self):
         """upstream_unprocessed records should use ProcessingResult.unprocessed(), not .skipped()."""
@@ -345,7 +350,7 @@ class TestBatchPathReasonDetection:
         from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
 
         row = {
-            "content": "stale",
+            "content": {"upstream": {"data": "stale"}},
             "source_guid": "sg_batch_4",
             ContextMetaKeys.FILTER_PHASE: "upstream_unprocessed",
         }
@@ -370,7 +375,7 @@ class TestBatchPathReasonDetection:
         """batch_not_returned records should use ProcessingResult.unprocessed(), not .skipped()."""
         from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
 
-        row = {"content": "data", "source_guid": "sg_batch_5"}
+        row = {"content": {"prev": {"x": 1}}, "source_guid": "sg_batch_5"}
         ctx = self._make_ctx(passthrough_records=[("cid_5", row)])
         processor = BatchResultProcessor()
 

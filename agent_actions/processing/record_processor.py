@@ -23,6 +23,7 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
 
 from .enrichment import EnrichmentPipeline
@@ -172,6 +173,7 @@ class RecordProcessor:
                 source_guid,
                 f"guard_{prepared.guard_behavior}",
                 input_record,
+                context.action_name,
             )
             result = ProcessingResult.skipped(
                 passthrough_data=tombstone,
@@ -219,6 +221,7 @@ class RecordProcessor:
                         source_guid,
                         "retry_exhausted",
                         input_record,
+                        context.action_name,
                         extra_metadata={"retry_exhausted": True},
                     )
                     result = ProcessingResult.exhausted(
@@ -257,6 +260,7 @@ class RecordProcessor:
                     source_guid,
                     "guard_skip",
                     input_record,
+                    context.action_name,
                 )
                 result = ProcessingResult.unprocessed(
                     data=[tombstone],
@@ -416,16 +420,19 @@ class RecordProcessor:
         source_guid: str | None,
         reason: str,
         input_record: dict[str, Any] | None,
+        action_name: str,
         *,
         extra_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build a tombstone item for guard-skipped, exhausted, or unprocessed records."""
-        item: dict[str, Any] = {
-            "content": content,
-            "source_guid": source_guid,
-            "metadata": {"reason": reason, "agent_type": "tombstone"},
-            "_unprocessed": True,
-        }
+        if reason.startswith("guard_"):
+            item = RecordEnvelope.build_skipped(action_name, input_record)
+        else:
+            action_output = content if isinstance(content, dict) else {"value": content}
+            item = RecordEnvelope.build(action_name, action_output, input_record)
+        item["source_guid"] = source_guid
+        item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
+        item["_unprocessed"] = True
         if extra_metadata:
             item["metadata"].update(extra_metadata)
         if input_record and isinstance(input_record, dict) and "target_id" in input_record:

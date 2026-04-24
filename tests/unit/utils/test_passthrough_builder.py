@@ -131,33 +131,37 @@ class TestBuildItemBatchMode:
         assert item["source_guid"] == "tid-fallback"
 
     def test_content_extracted_from_row(self):
-        """When row has a 'content' key, that value is used as content."""
+        """When row has a 'content' key, upstream content is preserved plus null namespace."""
         inner = {"text": "payload"}
         row = {"content": inner}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
                 row=row, reason="where_clause_not_matched", action_name="a"
             )
-        assert item["content"] == inner
+        # build_skipped preserves upstream + adds null namespace for skipped action
+        assert item["content"]["text"] == "payload"
+        assert item["content"]["a"] is None
 
     def test_namespaced_content_preserved(self):
-        """Namespaced content is preserved in the tombstone item."""
+        """Namespaced content is preserved in the tombstone item with null namespace added."""
         namespaced = {"action_a": {"field_a": "val_a"}, "action_b": {"field_b": "val_b"}}
         row = {"content": namespaced, "target_id": "tid-1", "source_guid": "sg-1"}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
                 row=row, reason="where_clause_not_matched", action_name="action_c"
             )
-        assert item["content"] == namespaced
+        assert item["content"]["action_a"] == {"field_a": "val_a"}
+        assert item["content"]["action_b"] == {"field_b": "val_b"}
+        assert item["content"]["action_c"] is None
 
-    def test_content_defaults_to_empty_dict_when_missing(self):
-        """When row has no 'content' key, content defaults to empty dict."""
+    def test_content_defaults_to_empty_with_null_namespace(self):
+        """When row has no 'content' key, content has only the null namespace."""
         row = {"field1": "val1", "field2": "val2"}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
                 row=row, reason="where_clause_not_matched", action_name="a"
             )
-        assert item["content"] == {}
+        assert item["content"] == {"a": None}
 
     def test_conditional_clause_flag_in_batch(self):
         """Batch mode with conditional_clause_failed sets the right flag."""
@@ -265,7 +269,7 @@ class TestBuildItemEdgeCases:
     """Edge cases: empty rows, falsy target_ids, etc."""
 
     def test_empty_row(self):
-        """An empty row still produces a valid passthrough item with empty content."""
+        """An empty row still produces a valid passthrough item with null namespace."""
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
                 row={}, reason="where_clause_not_matched", action_name="a"
@@ -273,7 +277,7 @@ class TestBuildItemEdgeCases:
         assert item["_unprocessed"] is True
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item["target_id"] == FIXED_TARGET_ID
-        assert item["content"] == {}
+        assert item["content"] == {"a": None}
 
     def test_falsy_target_id_in_row(self):
         """A falsy (empty string) target_id in the row is treated as missing."""
