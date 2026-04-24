@@ -15,6 +15,7 @@
 | [output](output/_MANIFEST.md) | Output serialization, schema loading, and response helpers. |
 | [processing](processing/_MANIFEST.md) | Shared processing helpers (enrichment, error handling, recovery). |
 | [prompt](prompt/_MANIFEST.md) | Prompt rendering, context building, and formatting helpers. |
+| [record](record/_MANIFEST.md) | Single authority for record content assembly. |
 | [skills](skills/_MANIFEST.md) | Reusable skills and templates for agent workflows. |
 | [storage](storage/_MANIFEST.md) | Extensible storage backend module for workflow data persistence. |
 | [tooling](tooling/_MANIFEST.md) | Documentation generation and IDE tooling (docs site + LSP). |

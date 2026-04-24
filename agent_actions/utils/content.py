@@ -32,11 +32,12 @@ def wrap_content(
 ) -> dict[str, Any]:
     """Add *action_output* under *action_name*, preserving existing namespaces.
 
-    Returns a new dict — does not mutate *existing_content*.
+    Alias for ``RecordEnvelope.build_content()``.  Prefer
+    ``RecordEnvelope`` directly for new code.
     """
-    content = dict(existing_content) if existing_content else {}
-    content[action_name] = action_output
-    return content
+    from agent_actions.record.envelope import RecordEnvelope
+
+    return RecordEnvelope.build_content(action_name, action_output, existing_content)
 
 
 def read_namespace(
