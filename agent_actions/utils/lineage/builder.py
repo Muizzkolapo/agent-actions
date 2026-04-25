@@ -37,6 +37,24 @@ class LineageBuilder:
             obj["lineage_sources"] = parent_item["lineage_sources"].copy()
 
     @staticmethod
+    def resolve_source_guid(
+        explicit: str | None, item: dict | None, fallback: str = "unknown"
+    ) -> str:
+        """Resolve source GUID: *explicit* value → item's ``source_guid`` → *fallback*."""
+        if explicit is not None:
+            return explicit
+        if isinstance(item, dict):
+            guid = item.get("source_guid")
+            if guid is not None:
+                return guid
+        return fallback
+
+    @staticmethod
+    def set_parent_tracking(obj: dict, parent_item: dict) -> None:
+        """Set parent_target_id, root_target_id, and source_guid on *obj* from *parent_item*."""
+        LineageBuilder._propagate_ancestry_chain(obj, parent_item)
+
+    @staticmethod
     def filter_node_lineage(lineage: list[Any]) -> list[str]:
         """Filter lineage to only include valid node IDs."""
         if not isinstance(lineage, list):
