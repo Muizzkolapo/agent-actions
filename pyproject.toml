@@ -191,7 +191,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["LOG", "G", "T201"]
-"agent_actions/skills/agent-actions-workflow/scripts/*" = ["T201"]
+"agent_actions/skills/agac-agent-skills/scripts/*" = ["T201"]
 "agent_actions/logging/core/handlers/*" = ["T201"]
 ".claude/*" = ["T201"]
 "examples/*" = ["T201"]

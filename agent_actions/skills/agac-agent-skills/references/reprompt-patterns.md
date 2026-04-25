@@ -141,15 +141,7 @@ When both reprompt and guard are configured on the same action:
 2. If guard skips/filters → reprompt is bypassed entirely (nothing to validate)
 3. If guard passes → LLM executes → reprompt validation runs on output
 
-Guards and reprompt operate on different data: guards check input, reprompt checks output. Note that `on_exhausted` only applies when reprompt actually runs — guard-skipped records bypass it entirely.
-
-## Reprompt + Retry Interaction
-
-When both retry and reprompt are configured, retry runs inside each reprompt attempt. If retry exhausts during a reprompt cycle:
-
-- The attempt is marked `exhausted=True, passed=False`
-- `on_exhausted` is respected: `"raise"` fails the action, `"return_last"` accepts the last valid response from a prior attempt (if one exists)
-- Recovery metadata captures both retry and reprompt state
+Guards and reprompt operate on different data: guards check input, reprompt checks output.
 
 ## Reprompt in Batch Mode
 

@@ -367,9 +367,9 @@ with open('target/format_triage_output/result.json') as f:
 ## Resources
 
 - [Agent Actions Docs](https://github.com/yourusername/agent-actions)
-- [Workflow Patterns Reference](../../.claude/skills/agent-actions-workflow/references/workflow-patterns.md)
-- [UDF Patterns Reference](../../.claude/skills/agent-actions-workflow/references/udf-patterns.md)
-- [Dynamic Content Injection](../../.claude/skills/agent-actions-workflow/references/dynamic-content-injection.md)
+- [Workflow Patterns Reference](../../.claude/skills/agac-agent-skills/references/workflow-patterns.md)
+- [UDF Patterns Reference](../../.claude/skills/agac-agent-skills/references/udf-patterns.md)
+- [Dynamic Content Injection](../../.claude/skills/agac-agent-skills/references/dynamic-content-injection.md)
 
 ## Contributing
 
