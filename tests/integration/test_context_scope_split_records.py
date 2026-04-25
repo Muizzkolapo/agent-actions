@@ -163,17 +163,12 @@ class TestContextScopeSplitRecordsEdgeCases:
             },
         }
 
-        file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
-        )
-
         # Should not crash
         field_context = build_field_context_with_history(
             agent_name="downstream",
             agent_config=agent_config,
             agent_indices=agent_indices_split,
             current_item=current_item,
-            file_path=file_path,
             context_scope=agent_config["context_scope"],
         )
 
@@ -211,17 +206,12 @@ class TestContextScopeSplitRecordsEdgeCases:
             },
         }
 
-        file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
-        )
-
         # No storage_backend provided — loader will return None
         field_context = build_field_context_with_history(
             agent_name="downstream",
             agent_config=agent_config,
             agent_indices=agent_indices_split,
             current_item=caller,
-            file_path=file_path,
             context_scope=agent_config["context_scope"],
         )
 

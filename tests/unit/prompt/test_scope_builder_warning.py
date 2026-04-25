@@ -51,7 +51,6 @@ class TestMissingNamespaceLogging:
                 agent_config=agent_config,
                 agent_indices={"extract": 0, "classify": 1, "summarize": 2},
                 current_item=current_item,
-                file_path="/tmp/test.json",
                 context_scope=agent_config["context_scope"],
             )
 
@@ -89,7 +88,6 @@ class TestMissingNamespaceLogging:
                 agent_config=agent_config,
                 agent_indices={"extract": 0, "classify": 1, "summarize": 2},
                 current_item=current_item,
-                file_path="/tmp/test.json",
                 context_scope=agent_config["context_scope"],
             )
 
