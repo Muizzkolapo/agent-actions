@@ -20,9 +20,9 @@ defaults:
   granularity: Record
   is_operational: true
   run_mode: online
-  model_vendor: openai
-  model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
+  model_vendor: gemini
+  model_name: gemini-flash-lite-latest
+  api_key: GEMINI_API_KEY
   record_limit: 2      # Remove for full processing
   context_scope:
     seed_path:
@@ -122,6 +122,21 @@ actions:
     context_scope:
       observe:
         - aggregate_risk_summary.*
-      drop:
-        - analyze_clause.*                    # Keep summary high-level
-        - split_into_clauses.*
+      drop:                                   # Keep summary high-level
+        - analyze_clause.clause_number
+        - analyze_clause.clause_text
+        - analyze_clause.clause_title
+        - analyze_clause.deadlines
+        - analyze_clause.obligations
+        - analyze_clause.reasoning
+        - analyze_clause.recommended_action
+        - analyze_clause.risk_criteria
+        - analyze_clause.risk_indicators
+        - analyze_clause.risk_level
+        - analyze_clause.risk_score
+        - split_into_clauses.clause_number
+        - split_into_clauses.clause_text
+        - split_into_clauses.clause_title
+        - split_into_clauses.contract_id
+        - split_into_clauses.full_text
+        - split_into_clauses.title

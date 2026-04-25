@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Switch contract_reviewer example to gemini-flash-lite-latest and fix tool UDFs to use namespaced content access"
+time: 2026-04-25T10:40:00.000000Z
