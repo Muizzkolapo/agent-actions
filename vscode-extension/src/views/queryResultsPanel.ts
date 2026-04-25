@@ -197,6 +197,9 @@ export class QueryResultsPanel implements vscode.Disposable {
         function isSourceQuote(k) { return k.toLowerCase().indexOf('source_quote') >= 0; }
         function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 
+        var MAX_TREE_DEPTH = 5;
+        var MAX_ARRAY_ITEMS = 20;
+
         function highlightJson(raw) {
             var parsed; try { parsed = JSON.parse(raw); } catch(e) { return esc(raw); }
             var s = esc(JSON.stringify(parsed, null, 2));
@@ -235,14 +238,33 @@ export class QueryResultsPanel implements vscode.Disposable {
             if (typeof value === 'number') return '<span class="t-val">' + value.toLocaleString() + '</span>';
             if (isInlineArray(value)) return value.map(function(x) { return '<span class="pill">' + esc(String(x)) + '</span>'; }).join(' ');
             if (isArrayOfObjects(value)) return renderArrayOfObjects(key, value);
-            if (typeof value === 'object') return '<pre class="code-block">' + esc(JSON.stringify(value, null, 2)) + '</pre>';
+            if (typeof value === 'object') return '<pre class="code-block json-highlight">' + highlightJson(JSON.stringify(value, null, 2)) + '</pre>';
             var str = String(value);
             if (isSourceQuote(key)) return '<div class="source-quote">' + esc(str) + '</div>';
             if (str.length > 80 || isLongForm(key)) return '<div class="tree-prose">' + esc(str) + '</div>';
             return '<span class="t-val">' + esc(str) + '</span>';
         }
 
-        function renderTreeField(key, value, defaultOpen) {
+        function renderTreeField(key, value, defaultOpen, depth) {
+            if (depth === undefined) depth = 0;
+            if (typeof value === 'object' && value !== null && !Array.isArray(value) && depth < MAX_TREE_DEPTH) {
+                var keys = Object.keys(value);
+                var childHtml = '';
+                for (var i = 0; i < keys.length; i++) {
+                    var ck = keys[i], cv = value[keys[i]];
+                    if (isArrayOfObjects(cv)) childHtml += renderArrayOfObjects(ck, cv, depth + 1);
+                    else childHtml += renderTreeField(ck, cv, false, depth + 1);
+                }
+                var valStr = JSON.stringify(value);
+                var preview = valStr.length > 60 ? valStr.slice(0, 60) + '\u2026' : valStr;
+                return '<div class="tree-field"><button class="tree-toggle" data-tree-toggle>'
+                    + '<span class="tree-chevron">' + (defaultOpen ? '&#9660;' : '&#9654;') + '</span>'
+                    + '<span class="t-key">' + esc(key) + '</span>'
+                    + '<span class="t-type">' + esc(plural(keys.length, 'field')) + '</span>'
+                    + (!defaultOpen ? '<span class="t-preview">' + esc(preview) + '</span>' : '')
+                    + '</button><div class="tree-children"' + (defaultOpen ? '' : ' hidden') + '>'
+                    + childHtml + '</div></div>';
+            }
             var valStr = typeof value === 'string' ? value : typeof value === 'object' ? JSON.stringify(value) : String(value != null ? value : '');
             var preview = valStr.length > 60 ? valStr.slice(0, 60) + '\u2026' : valStr;
             return '<div class="tree-field"><button class="tree-toggle" data-tree-toggle>'
@@ -262,17 +284,23 @@ export class QueryResultsPanel implements vscode.Disposable {
                 + childrenHtml + '</div></div>';
         }
 
-        function renderArrayOfObjects(fieldKey, items) {
+        function renderArrayOfObjects(fieldKey, items, depth) {
+            if (depth === undefined) depth = 0;
+            var maxItems = MAX_ARRAY_ITEMS;
+            var displayItems = items.length > maxItems ? items.slice(0, maxItems) : items;
             var ch = '';
-            for (var i = 0; i < items.length; i++) {
-                var item = items[i], itemOpen = (i === 0), pText = plural(Object.keys(item).length, 'field');
+            for (var i = 0; i < displayItems.length; i++) {
+                var item = displayItems[i], itemOpen = (i === 0), pText = plural(Object.keys(item).length, 'field');
                 for (var ek of Object.keys(item)) { var ev = item[ek]; if (typeof ev === 'string' && ev.length > 10) { pText = ev.length > 80 ? ev.slice(0, 80) + '\u2026' : ev; break; } }
-                var fh = ''; for (var fk of Object.keys(item)) fh += renderTreeField(fk, item[fk], true);
+                var fh = ''; for (var fk of Object.keys(item)) fh += renderTreeField(fk, item[fk], true, depth + 1);
                 ch += '<div class="array-item"><button class="tree-toggle" data-tree-toggle>'
                     + '<span class="tree-chevron">' + (itemOpen ? '&#9660;' : '&#9654;') + '</span>'
                     + '<span class="t-idx">[' + i + ']</span><span class="t-type">object</span>'
                     + (!itemOpen ? '<span class="t-preview">' + esc(pText) + '</span>' : '')
                     + '</button><div class="tree-children"' + (itemOpen ? '' : ' hidden') + '>' + fh + '</div></div>';
+            }
+            if (items.length > maxItems) {
+                ch += '<div class="tree-more">' + (items.length - maxItems) + ' more items\u2026</div>';
             }
             return renderTreeNode(fieldKey, 'array[' + items.length + ']', true, ch);
         }
@@ -513,7 +541,10 @@ function escapeHtml(value: string): string {
 
 function formatCell(value: unknown): string {
     if (value === null || value === undefined) return '';
-    if (typeof value === 'object') return JSON.stringify(value);
+    if (typeof value === 'object') {
+        const str = JSON.stringify(value);
+        return str.length > 80 ? str.slice(0, 80) + '\u2026' : str;
+    }
     return String(value);
 }
 
@@ -687,6 +718,7 @@ function allStyles(): string {
         .tree-children[hidden] { display: none; }
         .tree-field-value { padding: 2px 8px 4px 48px; }
         .tree-field-value[hidden] { display: none; }
+        .tree-more { font-size: 11px; color: var(--vscode-descriptionForeground); font-style: italic; padding: 4px 16px; opacity: 0.6; }
 
         /* Token colors */
         .t-ns { color: #c084fc; font-family: var(--vscode-editor-font-family); font-weight: 600; font-size: 12px; }
