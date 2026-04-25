@@ -106,7 +106,7 @@ See [Version Actions](../execution/versions) for complete documentation.
 
 ## Auto-Inferred Context Dependencies
 
-Actions referenced in `context_scope` but **not** in `dependencies` are automatically treated as **context dependencies**. These are loaded via the historical loader with lineage matching.
+Actions referenced in `context_scope` but **not** in `dependencies` are automatically treated as **context dependencies**. These are loaded from record namespaces with lineage matching.
 
 ```yaml
 - name: generate_report
@@ -114,14 +114,14 @@ Actions referenced in `context_scope` but **not** in `dependencies` are automati
   context_scope:
     observe:
       - extract_data.*         # From input files
-      - enrich_data.*          # Auto-inferred: loaded via historical loader
-      - validate_data.*        # Auto-inferred: loaded via historical loader
+      - enrich_data.*          # Auto-inferred: loaded from record namespaces
+      - validate_data.*        # Auto-inferred: loaded from record namespaces
 ```
 
 **How it works:**
 1. `extract_data` is in `dependencies` → its output files are processed as input
 2. `enrich_data` and `validate_data` are only in `context_scope` → auto-inferred as context dependencies
-3. Context dependencies are loaded via the historical loader, matched by **lineage** to ensure data from the same record flow
+3. Context dependencies are loaded from record namespaces, matched by **lineage** to ensure data from the same record flow
 
 This is especially useful for **fan-in patterns** where multiple upstream actions feed into one action:
 

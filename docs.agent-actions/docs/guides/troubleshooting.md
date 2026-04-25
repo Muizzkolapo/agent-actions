@@ -578,8 +578,8 @@ reduce_key: parent_id
   context_scope:
     observe:
       - extract.*
-      - enrich.*     # Now loaded via historical loader
-      - validate.*   # Now loaded via historical loader
+      - enrich.*     # Loaded from record namespaces
+      - validate.*   # Loaded from record namespaces
 ```
 
 ### Unexpected Execution Count
