@@ -83,17 +83,35 @@ class TestCheckUpstreamHealth:
         result = executor._check_upstream_health("agent_b", config)
         assert result == "agent_a"
 
-    def test_dep_failed_via_disposition(self, executor, mock_deps):
-        """One dep has DISPOSITION_FAILED in storage returns dep name."""
+    def test_dep_failed_disposition_cleared_when_upstream_has_output(self, executor, mock_deps):
+        """Stale FAILED disposition on upstream with output is cleared — downstream proceeds."""
         mock_deps.state_manager.is_failed.return_value = False
         mock_deps.state_manager.is_skipped.return_value = False
         storage = MagicMock()
         storage.has_disposition.side_effect = lambda dep, disp, **kw: disp == DISPOSITION_FAILED
+        storage.list_target_files.return_value = ["batch_0.json"]
+        mock_deps.action_runner.storage_backend = storage
+
+        config = {"dependencies": ["agent_a"]}
+        result = executor._check_upstream_health("agent_b", config)
+        assert result is None
+        storage.clear_disposition.assert_called_once_with(
+            "agent_a", DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+        )
+
+    def test_dep_failed_disposition_blocks_when_no_output(self, executor, mock_deps):
+        """FAILED disposition with no output is a legitimate failure — downstream blocked."""
+        mock_deps.state_manager.is_failed.return_value = False
+        mock_deps.state_manager.is_skipped.return_value = False
+        storage = MagicMock()
+        storage.has_disposition.side_effect = lambda dep, disp, **kw: disp == DISPOSITION_FAILED
+        storage.list_target_files.return_value = []
         mock_deps.action_runner.storage_backend = storage
 
         config = {"dependencies": ["agent_a"]}
         result = executor._check_upstream_health("agent_b", config)
         assert result == "agent_a"
+        storage.clear_disposition.assert_not_called()
 
     def test_dep_skipped_via_disposition(self, executor, mock_deps):
         """One dep has DISPOSITION_SKIPPED in storage and no output returns dep name."""
