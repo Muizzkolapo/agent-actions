@@ -1,9 +1,10 @@
 """Data-oriented scan functions: prompts, schemas, workflow DBs, runs, logs."""
 
-import itertools
+import json
 import logging
 import re
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -398,10 +399,21 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
     return runs_data
 
 
+def _iter_events(path: Path) -> Iterator[dict[str, Any]]:
+    """Yield parsed JSON events from a JSONL file, skipping malformed lines."""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+
 def scan_logs(project_root: Path) -> dict[str, Any]:
     """Scan project directory for global CLI and validation logs."""
-    import json
-
     logs_data: dict[str, Any] = {
         "events_path": None,
         "recent_invocations": [],
@@ -419,70 +431,52 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
     logs_data["events_path"] = str(events_path)
 
-    _LOG_LINE_LIMIT = 100_000
     try:
-        with open(events_path, encoding="utf-8") as f:
-            invocations = {}
-            line_count = 0
-            for line in itertools.islice(f, _LOG_LINE_LIMIT):
-                line_count += 1
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+        invocations: dict[str, dict[str, Any]] = {}
+        for event in _iter_events(events_path):
+            event_type = event.get("event_type")
+            meta = event.get("meta", {})
+            data = event.get("data", {})
 
-                event_type = event.get("event_type")
-                meta = event.get("meta", {})
-                data = event.get("data", {})
+            # Track invocations
+            invocation_id = meta.get("invocation_id")
+            if invocation_id and invocation_id not in invocations:
+                invocations[invocation_id] = {
+                    "invocation_id": invocation_id,
+                    "timestamp": meta.get("timestamp"),
+                    "workflow_name": meta.get("workflow_name"),
+                    "command": None,
+                }
 
-                # Track invocations
-                invocation_id = meta.get("invocation_id")
-                if invocation_id and invocation_id not in invocations:
-                    invocations[invocation_id] = {
-                        "invocation_id": invocation_id,
+            # Extract CLI command
+            if event_type == "CLIArgumentParsingEvent":
+                if invocation_id and invocation_id in invocations:
+                    invocations[invocation_id]["command"] = data.get("command")
+
+            # Collect validation errors
+            if event_type == "ValidationErrorEvent":
+                logs_data["validation_errors"].append(
+                    {
+                        "target": data.get("target"),
+                        "error": data.get("error"),
+                        "field": data.get("field"),
                         "timestamp": meta.get("timestamp"),
-                        "workflow_name": meta.get("workflow_name"),
-                        "command": None,
                     }
-
-                # Extract CLI command
-                if event_type == "CLIArgumentParsingEvent":
-                    if invocation_id and invocation_id in invocations:
-                        invocations[invocation_id]["command"] = data.get("command")
-
-                # Collect validation errors
-                if event_type == "ValidationErrorEvent":
-                    logs_data["validation_errors"].append(
-                        {
-                            "target": data.get("target"),
-                            "error": data.get("error"),
-                            "field": data.get("field"),
-                            "timestamp": meta.get("timestamp"),
-                        }
-                    )
-
-                # Collect validation warnings
-                if event_type == "ValidationWarningEvent":
-                    logs_data["validation_warnings"].append(
-                        {
-                            "target": data.get("target"),
-                            "warning": data.get("warning"),
-                            "field": data.get("field"),
-                            "timestamp": meta.get("timestamp"),
-                        }
-                    )
-
-            if line_count >= _LOG_LINE_LIMIT:
-                logger.warning(
-                    "scan_logs: line limit (%d) reached for %s; some events may be omitted",
-                    _LOG_LINE_LIMIT,
-                    events_path,
                 )
-            # Get recent invocations (last 10)
-            logs_data["recent_invocations"] = list(invocations.values())[-10:]
+
+            # Collect validation warnings
+            if event_type == "ValidationWarningEvent":
+                logs_data["validation_warnings"].append(
+                    {
+                        "target": data.get("target"),
+                        "warning": data.get("warning"),
+                        "field": data.get("field"),
+                        "timestamp": meta.get("timestamp"),
+                    }
+                )
+
+        # Get recent invocations (last 10)
+        logs_data["recent_invocations"] = list(invocations.values())[-10:]
 
     except OSError as e:
         logger.debug("Could not read events log from %s: %s", events_path, e)
@@ -497,47 +491,25 @@ def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
     (e.g., "All N records filtered by guard") that the docs site should
     surface alongside static validation events.
     """
-    import json
-
     warnings: list[dict[str, Any]] = []
 
-    _LOG_LINE_LIMIT = 100_000
     try:
-        with open(events_path, encoding="utf-8") as f:
-            line_count = 0
-            for line in itertools.islice(f, _LOG_LINE_LIMIT):
-                line_count += 1
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+        for event in _iter_events(events_path):
+            level = event.get("level")
+            if level not in ("warn", "error"):
+                continue
 
-                level = event.get("level")
-                if level not in ("warn", "error"):
-                    continue
-
-                meta = event.get("meta", {})
-                warnings.append(
-                    {
-                        "level": level,
-                        "message": event.get("message", ""),
-                        "action_name": meta.get("action_name"),
-                        "timestamp": meta.get("timestamp"),
-                        "event_type": event.get("event_type"),
-                        "code": event.get("code"),
-                    }
-                )
-
-            if line_count >= _LOG_LINE_LIMIT:
-                logger.warning(
-                    "extract_runtime_warnings: line limit (%d) reached for %s; "
-                    "some events may be omitted",
-                    _LOG_LINE_LIMIT,
-                    events_path,
-                )
+            meta = event.get("meta", {})
+            warnings.append(
+                {
+                    "level": level,
+                    "message": event.get("message", ""),
+                    "action_name": meta.get("action_name"),
+                    "timestamp": meta.get("timestamp"),
+                    "event_type": event.get("event_type"),
+                    "code": event.get("code"),
+                }
+            )
 
     except OSError as e:
         logger.debug("Could not read runtime warnings from %s: %s", events_path, e)
@@ -547,92 +519,70 @@ def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
 
 def extract_action_metrics(events_path: Path) -> dict[str, Any]:
     """Extract per-action metrics from events.json file."""
-    import json
-
     action_metrics: dict[str, Any] = {}
 
-    _LOG_LINE_LIMIT = 100_000
     try:
-        with open(events_path, encoding="utf-8") as f:
-            line_count = 0
-            for line in itertools.islice(f, _LOG_LINE_LIMIT):
-                line_count += 1
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+        for event in _iter_events(events_path):
+            event_type = event.get("event_type")
+            meta = event.get("meta", {})
+            data = event.get("data", {})
+            agent_name = meta.get("action_name") or data.get("action_name")
 
-                event_type = event.get("event_type")
-                meta = event.get("meta", {})
-                data = event.get("data", {})
-                agent_name = meta.get("action_name") or data.get("action_name")
+            if not agent_name:
+                continue
 
-                if not agent_name:
-                    continue
+            if agent_name not in action_metrics:
+                action_metrics[agent_name] = {
+                    "execution_time": None,
+                    "tokens": {},
+                    "record_count": 0,
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "filtered_count": 0,
+                    "skipped_count": 0,
+                    "exhausted_count": 0,
+                    "latency_ms": 0.0,
+                    "llm_request_count": 0,
+                    "provider": None,
+                    "model": None,
+                    "cache_miss_count": 0,
+                }
 
-                if agent_name not in action_metrics:
-                    action_metrics[agent_name] = {
-                        "execution_time": None,
-                        "tokens": {},
-                        "record_count": 0,
-                        "success_count": 0,
-                        "failed_count": 0,
-                        "filtered_count": 0,
-                        "skipped_count": 0,
-                        "exhausted_count": 0,
-                        "latency_ms": 0.0,
-                        "llm_request_count": 0,
-                        "provider": None,
-                        "model": None,
-                        "cache_miss_count": 0,
-                    }
+            # Extract from ActionCompleteEvent
+            if event_type == "ActionCompleteEvent":
+                action_metrics[agent_name]["execution_time"] = data.get("execution_time")
+                action_metrics[agent_name]["record_count"] = data.get("record_count", 0)
+                if data.get("tokens"):
+                    action_metrics[agent_name]["tokens"] = data["tokens"]
 
-                # Extract from ActionCompleteEvent
-                if event_type == "ActionCompleteEvent":
-                    action_metrics[agent_name]["execution_time"] = data.get("execution_time")
-                    action_metrics[agent_name]["record_count"] = data.get("record_count", 0)
-                    if data.get("tokens"):
-                        action_metrics[agent_name]["tokens"] = data["tokens"]
+            # Extract from ResultCollectionCompleteEvent
+            elif event_type == "ResultCollectionCompleteEvent":
+                action_metrics[agent_name]["success_count"] = data.get("total_success", 0)
+                action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
+                action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
+                action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
+                action_metrics[agent_name]["exhausted_count"] = data.get("total_exhausted", 0)
 
-                # Extract from ResultCollectionCompleteEvent
-                elif event_type == "ResultCollectionCompleteEvent":
-                    action_metrics[agent_name]["success_count"] = data.get("total_success", 0)
-                    action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
-                    action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
-                    action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
-                    action_metrics[agent_name]["exhausted_count"] = data.get("total_exhausted", 0)
-
-                # Extract from LLMResponseEvent for token counts, latency, provider
-                elif event_type == "LLMResponseEvent":
-                    tokens = action_metrics[agent_name]["tokens"]
-                    tokens["prompt_tokens"] = tokens.get("prompt_tokens", 0) + data.get(
-                        "prompt_tokens", 0
-                    )
-                    tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
-                        "completion_tokens", 0
-                    )
-                    # Accumulate latency for averaging later
-                    action_metrics[agent_name]["latency_ms"] += data.get("latency_ms", 0.0)
-                    action_metrics[agent_name]["llm_request_count"] += 1
-                    # Capture provider/model from first LLM event
-                    if action_metrics[agent_name]["provider"] is None:
-                        action_metrics[agent_name]["provider"] = data.get("provider") or None
-                        action_metrics[agent_name]["model"] = data.get("model") or None
-
-                # Extract from CacheMissEvent
-                elif event_type == "CacheMissEvent":
-                    action_metrics[agent_name]["cache_miss_count"] += 1
-
-            if line_count >= _LOG_LINE_LIMIT:
-                logger.warning(
-                    "extract_action_metrics: line limit (%d) reached for %s; "
-                    "some events may be omitted",
-                    _LOG_LINE_LIMIT,
-                    events_path,
+            # Extract from LLMResponseEvent for token counts, latency, provider
+            elif event_type == "LLMResponseEvent":
+                tokens = action_metrics[agent_name]["tokens"]
+                tokens["prompt_tokens"] = tokens.get("prompt_tokens", 0) + data.get(
+                    "prompt_tokens", 0
                 )
+                tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
+                    "completion_tokens", 0
+                )
+                # Accumulate latency for averaging later
+                action_metrics[agent_name]["latency_ms"] += data.get("latency_ms", 0.0)
+                action_metrics[agent_name]["llm_request_count"] += 1
+                # Capture provider/model from first LLM event
+                if action_metrics[agent_name]["provider"] is None:
+                    action_metrics[agent_name]["provider"] = data.get("provider") or None
+                    action_metrics[agent_name]["model"] = data.get("model") or None
+
+            # Extract from CacheMissEvent
+            elif event_type == "CacheMissEvent":
+                action_metrics[agent_name]["cache_miss_count"] += 1
 
     except OSError as e:
         logger.debug("Could not read action metrics from %s: %s", events_path, e)
