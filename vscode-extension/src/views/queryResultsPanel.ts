@@ -254,7 +254,15 @@ export class QueryResultsPanel implements vscode.Disposable {
                     if (isArrayOfObjects(cv)) childHtml += renderArrayOfObjects(ck, cv, depth + 1);
                     else childHtml += renderTreeField(ck, cv, false, depth + 1);
                 }
-                return renderTreeNode(key, plural(keys.length, 'field'), defaultOpen, childHtml);
+                var valStr = JSON.stringify(value);
+                var preview = valStr.length > 60 ? valStr.slice(0, 60) + '\u2026' : valStr;
+                return '<div class="tree-field"><button class="tree-toggle" data-tree-toggle>'
+                    + '<span class="tree-chevron">' + (defaultOpen ? '&#9660;' : '&#9654;') + '</span>'
+                    + '<span class="t-key">' + esc(key) + '</span>'
+                    + '<span class="t-type">' + esc(plural(keys.length, 'field')) + '</span>'
+                    + (!defaultOpen ? '<span class="t-preview">' + esc(preview) + '</span>' : '')
+                    + '</button><div class="tree-children"' + (defaultOpen ? '' : ' hidden') + '>'
+                    + childHtml + '</div></div>';
             }
             var valStr = typeof value === 'string' ? value : typeof value === 'object' ? JSON.stringify(value) : String(value != null ? value : '');
             var preview = valStr.length > 60 ? valStr.slice(0, 60) + '\u2026' : valStr;
