@@ -181,6 +181,7 @@ export class QueryResultsPanel implements vscode.Disposable {
         var vscode = acquireVsCodeApi();
         var records = JSON.parse(${JSON.stringify(recordsJson)});
         var offset = ${offset};
+        var actionName = ${JSON.stringify(actionName)};
         var copyTexts = [];
 
         var METADATA_KEYS = new Set(['source_guid','lineage','node_id','metadata','target_id','parent_target_id','root_target_id','chunk_info','_recovery','_unprocessed','_file','_trace']);
@@ -291,9 +292,30 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         function buildCard(record, index) {
             var identity = [], meta = [], outputFields = [];
-            var dr = record; if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) dr = record.content;
+            var dr = record;
+            var guardSkipped = false;
+            var nsExtracted = false;
+            if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) {
+                var content = record.content;
+                if (actionName && actionName in content) {
+                    var actionNs = content[actionName];
+                    if (actionNs == null) {
+                        dr = {};
+                        guardSkipped = true;
+                    } else if (typeof actionNs === 'object' && !Array.isArray(actionNs)) {
+                        dr = actionNs;
+                        nsExtracted = true;
+                    } else {
+                        dr = {};
+                        dr[actionName] = actionNs;
+                        nsExtracted = true;
+                    }
+                } else {
+                    dr = content;
+                }
+            }
             for (var k of Object.keys(record)) { var r = classifyField(k); if (r === 'identity') identity.push({key:k,value:record[k]}); else if (r === 'metadata') meta.push({key:k,value:record[k]}); }
-            for (var k of Object.keys(dr)) { if (classifyField(k) === 'content') outputFields.push({key:k,value:dr[k]}); }
+            for (var k of Object.keys(dr)) { if (nsExtracted || classifyField(k) === 'content') outputFields.push({key:k,value:dr[k]}); }
             var trace = record._trace && typeof record._trace === 'object' && !Array.isArray(record._trace) ? record._trace : null;
             var recOpen = (index === offset);
             var inputData = null;
@@ -302,7 +324,7 @@ export class QueryResultsPanel implements vscode.Disposable {
             var hdr = '<span class="rec-chevron">' + (recOpen ? '&#9660;' : '&#9654;') + '</span><span class="card-index">#' + (index + 1) + '</span>';
             for (var f of identity) hdr += ' <span class="card-id" title="' + esc(fmt(f.value, 0)) + '">' + esc(fmt(f.value, 24)) + '</span>';
             if (typeof record._file === 'string') hdr += ' <span class="card-id">' + esc(record._file) + '</span>';
-            if (!recOpen) hdr += '<span class="rec-preview">' + (trace ? 'trace + ' : '') + plural(outputFields.length, 'field') + '</span>';
+            if (!recOpen) hdr += '<span class="rec-preview">' + (trace ? 'trace + ' : '') + (guardSkipped ? 'guard skipped' : plural(outputFields.length, 'field')) + '</span>';
 
             var s1 = ''; if (trace && trace.compiled_prompt) { var b = ''; if (trace.model_name) b += '<span class="trace-badge trace-model">' + esc(String(trace.model_name)) + '</span>'; if (trace.run_mode) b += '<span class="trace-badge trace-mode' + (trace.run_mode === 'batch' ? ' batch' : '') + '">' + esc(String(trace.run_mode)) + '</span>'; var ptBody; try { ptBody = renderMarkdown(String(trace.compiled_prompt)); } catch(e) { ptBody = esc(String(trace.compiled_prompt)); } s1 = renderSection('Prompt Trace', trace.prompt_length ? trace.prompt_length.toLocaleString() + ' chars' : '', trace.compiled_prompt, false, '<div class="trace-panel-body md-body">' + ptBody + '</div>', '<span class="section-badges">' + b + '</span>'); }
             var s2 = ''; if (inputData && Object.keys(inputData).length > 0) { var ih = ''; for (var ns of Object.keys(inputData)) { var nd = inputData[ns]; if (typeof nd !== 'object' || nd === null) ih += renderTreeField(ns, nd, true); else { var fh = ''; for (var fk of Object.keys(nd)) fh += renderTreeField(fk, nd[fk], true); ih += renderTreeNode(ns, plural(Object.keys(nd).length, 'field'), false, fh); } } s2 = renderSection('Input Data', plural(Object.keys(inputData).length, 'namespace'), JSON.stringify(inputData, null, 2), false, ih, ''); }
@@ -310,7 +332,7 @@ export class QueryResultsPanel implements vscode.Disposable {
             var s4 = ''; if (outputFields.length > 0) { var oh = ''; for (var f of outputFields) { if (isArrayOfObjects(f.value)) oh += renderArrayOfObjects(f.key, f.value); else oh += renderTreeField(f.key, f.value, true); } s4 = renderSection('Action Output', plural(outputFields.length, 'field'), JSON.stringify(dr, null, 2), true, oh, ''); }
             var s5 = ''; if (meta.length > 0) { var mh = ''; for (var f of meta) mh += '<div class="meta-row"><span class="meta-key">' + esc(f.key) + '</span><span class="meta-val">' + esc(fmt(f.value, 120)) + '</span></div>'; s5 = renderSection('Metadata', plural(meta.length, 'field'), JSON.stringify(Object.fromEntries(meta.map(function(f){return[f.key,f.value]})), null, 2), false, mh, ''); }
 
-            return '<div class="card" data-record-open="' + (recOpen ? 'true' : 'false') + '"><div class="card-header" data-rec-toggle>' + hdr + '</div><div class="card-body-wrap"' + (recOpen ? '' : ' hidden') + '>' + s1 + s2 + s3 + s4 + s5 + (outputFields.length === 0 ? '<div class="card-empty">No content fields</div>' : '') + '</div></div>';
+            return '<div class="card" data-record-open="' + (recOpen ? 'true' : 'false') + '"><div class="card-header" data-rec-toggle>' + hdr + '</div><div class="card-body-wrap"' + (recOpen ? '' : ' hidden') + '>' + s1 + s2 + s3 + s4 + s5 + (guardSkipped ? '<div class="card-empty">Guard skipped \u2014 no output produced</div>' : (outputFields.length === 0 ? '<div class="card-empty">No content fields</div>' : '')) + '</div></div>';
         }
 
         var container = document.getElementById('cardsContainer');
