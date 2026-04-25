@@ -11,7 +11,6 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope,
     format_llm_context,
-    merge_passthrough_fields,
 )
 
 
@@ -418,7 +417,7 @@ class TestPassthroughNamespacing:
 
 
 class TestFormatAndMerge:
-    """format_llm_context and merge_passthrough_fields."""
+    """format_llm_context utility."""
 
     def test_format_namespaced(self):
         lc = {"dep_1": {"score": 8}, "dep_2": {"score": 7}}
@@ -433,24 +432,6 @@ class TestFormatAndMerge:
     def test_format_single_namespace(self):
         text = format_llm_context({"dep": {"name": "test"}})
         assert "dep.name:" in text
-
-    def test_merge_namespaced_into_content(self):
-        response = [{"content": {"result": "ok"}}]
-        pt = {"dep": {"id": "rec-1"}}
-        merged = merge_passthrough_fields(response, pt)
-        assert merged[0]["content"]["dep"] == {"id": "rec-1"}
-        assert merged[0]["content"]["result"] == "ok"
-
-    def test_merge_empty_passthrough_unchanged(self):
-        response = [{"content": {"r": 1}}]
-        assert merge_passthrough_fields(response, {}) == response
-
-    def test_merge_into_flat_response(self):
-        response = [{"result": "ok"}]
-        pt = {"dep": {"id": "rec-1"}}
-        merged = merge_passthrough_fields(response, pt)
-        assert merged[0]["dep"] == {"id": "rec-1"}
-        assert merged[0]["result"] == "ok"
 
 
 class TestDropVersioned:

@@ -98,7 +98,7 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
     key_candidates = []
     if reduce_key:
         key_candidates.append(reduce_key)
-    key_candidates.extend(["parent_target_id", "source_guid"])
+    key_candidates.extend(["root_target_id", "parent_target_id", "source_guid"])
 
     for record in records:
         if not isinstance(record, dict):

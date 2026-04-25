@@ -237,10 +237,11 @@ class TestResolvePromptFiles:
         assert len(result) == 1
         assert result[0].name == "my_workflow.md"
 
-    def test_workflow_name_missing_file_returns_empty(self, tmp_path):
+    def test_workflow_name_missing_file_falls_back_to_all(self, tmp_path):
         (tmp_path / "other.md").write_text("other")
         result = PromptValidator._resolve_prompt_files(tmp_path, "missing_workflow")
-        assert result == []
+        assert len(result) == 1
+        assert result[0].name == "other.md"
 
     def test_empty_string_workflow_name_returns_all(self, tmp_path):
         (tmp_path / "a.md").write_text("a")
@@ -331,9 +332,10 @@ class TestValidateWorkflowScoping:
         assert result is True
         assert not validator.has_errors()
 
-    def test_workflow_file_missing_warns(self, validator, tmp_path):
-        """When the workflow's prompt file does not exist, emit a warning."""
-        (tmp_path / "other.md").write_text("irrelevant")
+    def test_workflow_file_missing_falls_back_to_all(self, validator, tmp_path):
+        """When the workflow's prompt file does not exist, fall back to all .md files."""
+        (tmp_path / "other.md").write_text("# Title\n{prompt p1}\ncontent\n{end_prompt}")
         result = validator.validate(tmp_path, config={"workflow_name": "nonexistent"})
         assert result is True
-        assert any("nonexistent.md" in w and "not found" in w for w in validator.get_warnings())
+        # Should not warn about missing workflow-named file
+        assert not any("nonexistent.md" in w for w in validator.get_warnings())

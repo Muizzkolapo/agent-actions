@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Version merge preserves upstream namespaces; first-stage records wrap raw input under source namespace"
+time: 2026-04-24T03:48:00.000000Z

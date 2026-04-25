@@ -75,7 +75,7 @@ class DataTransformer:
         if not action_name and not version_merge:
             raise ValueError("action_name is required for namespaced content wrapping")
 
-        from agent_actions.utils.content import wrap_content
+        from agent_actions.record.envelope import RecordEnvelope
 
         result = []
 
@@ -89,7 +89,7 @@ class DataTransformer:
                                     "source_guid": source_guid,
                                     "content": content
                                     if version_merge
-                                    else wrap_content(action_name, content),
+                                    else RecordEnvelope.build_content(action_name, content),
                                 }
                             )
                     else:
@@ -97,7 +97,7 @@ class DataTransformer:
                             wrapped = contents
                         else:
                             wrapped = (
-                                wrap_content(action_name, contents)
+                                RecordEnvelope.build_content(action_name, contents)
                                 if isinstance(contents, dict)
                                 else contents
                             )

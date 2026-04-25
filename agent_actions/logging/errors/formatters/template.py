@@ -17,7 +17,7 @@ class TemplateErrorFormatter(ErrorFormatter):
     def format(
         self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
-        agent_name = context.get("agent") or context.get("agent_name") or "unknown"
+        agent_name = context.get("agent") or context.get("agent_name") or "NOT_SET"
         missing = context.get("missing_variables", [])
         available = context.get("available_variables", [])
 

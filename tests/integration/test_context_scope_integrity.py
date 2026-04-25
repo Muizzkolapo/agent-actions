@@ -13,7 +13,6 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
     apply_context_scope,
-    merge_passthrough_fields,
 )
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
@@ -591,29 +590,6 @@ class TestPassthroughIntegrity:
 
         assert "secret_field" not in llm_context.get("dep", {})
         assert passthrough["dep"]["secret_field"] == "hidden_value"
-
-    def test_passthrough_merged_into_output(self):
-        """passthrough fields merged into output record via merge_passthrough_fields()."""
-        llm_response = [{"content": {"result": "processed", "score": 0.9}}]
-        passthrough_fields = {"dep": {"record_id": "rec-42", "source": "api"}}
-
-        merged = merge_passthrough_fields(llm_response, passthrough_fields)
-
-        assert merged[0]["content"]["result"] == "processed"
-        assert merged[0]["content"]["score"] == 0.9
-        assert merged[0]["content"]["dep"] == {"record_id": "rec-42", "source": "api"}
-
-    def test_passthrough_does_not_overwrite_output_fields(self):
-        """If output already has a field with same key as passthrough namespace,
-        passthrough overwrites it (last-writer wins via dict.update)."""
-        llm_response = [{"content": {"result": "ok", "dep": {"old": "data"}}}]
-        passthrough_fields = {"dep": {"new_field": "new_value"}}
-
-        merged = merge_passthrough_fields(llm_response, passthrough_fields)
-
-        # Passthrough overwrites the dep key in content (dict.update semantics)
-        assert merged[0]["content"]["dep"] == {"new_field": "new_value"}
-        assert merged[0]["content"]["result"] == "ok"
 
     def test_passthrough_and_observe_same_namespace(self):
         """observe: ['dep.public'], passthrough: ['dep.internal'] ->

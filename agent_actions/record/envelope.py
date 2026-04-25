@@ -4,6 +4,26 @@ from __future__ import annotations
 
 from typing import Any
 
+# Canonical set of framework fields that are NOT user business data.
+# Used by record_processor (first-stage source wrapping), pipeline_file_mode
+# (tool input stripping), and scope_namespace (metadata exclusion).
+RECORD_FRAMEWORK_FIELDS: frozenset[str] = frozenset(
+    {
+        "source_guid",
+        "target_id",
+        "node_id",
+        "lineage",
+        "metadata",
+        "content",
+        "_unprocessed",
+        "_recovery",
+        "parent_target_id",
+        "root_target_id",
+        "chunk_info",
+        "version_correlation_id",
+    }
+)
+
 
 class RecordEnvelopeError(Exception):
     """Raised when a record envelope contract is violated."""
