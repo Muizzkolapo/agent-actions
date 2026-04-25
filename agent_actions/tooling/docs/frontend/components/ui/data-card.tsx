@@ -440,6 +440,9 @@ function useSectionState(nodeKey: string) {
 
 // ── DataCard ──────────────────────────────────────────────────────────────
 
+/** Sentinel returned by getDisplayFields when the action was guard-skipped (namespace is null). */
+const GUARD_SKIPPED: Record<string, unknown> = Object.freeze({})
+
 export interface ActionInfo {
   name: string
   kind: string
@@ -465,15 +468,13 @@ export function getDisplayFields(record: Record<string, unknown>, actionName?: s
     if (actionName && actionName in content) {
       const ns = content[actionName]
       if (ns === null) {
-        return {}  // Guard-skipped — no output produced
+        return GUARD_SKIPPED
       }
       if (typeof ns === "object" && !Array.isArray(ns)) {
         return ns as Record<string, unknown>
       }
-      // Scalar or array — wrap for display
       return { [actionName]: ns }
     }
-    // actionName not in content — legacy data, show as-is
     return content
   }
   return record
@@ -482,14 +483,7 @@ export function getDisplayFields(record: Record<string, unknown>, actionName?: s
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record, actionInfo?.name)
-  const guardSkipped = !!(
-    actionInfo?.name &&
-    record.content &&
-    typeof record.content === "object" &&
-    !Array.isArray(record.content) &&
-    actionInfo.name in (record.content as Record<string, unknown>) &&
-    (record.content as Record<string, unknown>)[actionInfo.name] === null
-  )
+  const guardSkipped = displayRecord === GUARD_SKIPPED
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)
@@ -561,7 +555,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         )}
         {!recordOpen && (
           <span className="text-[10px] text-foreground/50 ml-auto">
-            {guardSkipped ? "guard skipped" : <>{trace ? "trace + " : ""}{plural(outputFields.length, "field")}</>}
+            {guardSkipped ? "guard skipped" : `${trace ? "trace + " : ""}${plural(outputFields.length, "field")}`}
           </span>
         )}
       </button>
