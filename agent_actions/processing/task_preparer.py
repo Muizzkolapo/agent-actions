@@ -292,10 +292,20 @@ class TaskPreparer:
 
     @staticmethod
     def _is_upstream_unprocessed(item: Any) -> bool:
-        """Return True if item["_unprocessed"] is exactly True (strict identity check)."""
+        """Return True only for cascade-failure tombstones, not guard-skip tombstones.
+
+        Guard-skipped records (reason=guard_skip) are valid pipeline data — the
+        action was intentionally skipped but downstream should still process.
+        Only upstream_unprocessed cascades should propagate as unprocessed.
+        """
         if not isinstance(item, dict):
             return False
-        return item.get("_unprocessed") is True
+        if item.get("_unprocessed") is not True:
+            return False
+        metadata = item.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("reason") == "guard_skip":
+            return False
+        return True
 
     def _generate_target_id(self) -> str:
         """Generate a new target_id."""
