@@ -533,9 +533,9 @@ class ProcessingPipeline:
         )
 
         # Process via RecordProcessor
-        # Filter out upstream tombstones — preserved for lineage but not for re-processing.
-        data = [d for d in data if not (isinstance(d, dict) and d.get("_unprocessed") is True)]
-
+        # NOTE: Do NOT filter _unprocessed records here. Guard-skipped records
+        # (on_false: skip) produce _unprocessed tombstones that are valid pipeline
+        # data. task_preparer._is_upstream_unprocessed() handles them per-record.
         if self.granularity == "file" and (self.is_tool_action or self.is_hitl_action):
             # For FILE mode, use the input data as source for parent lookup
             # (not source_data which points to original source folder)
