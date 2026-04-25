@@ -122,13 +122,18 @@ def _unwrap_record_content(record: dict, action_name: str) -> dict:
     specific action's fields so consumers see actual output data.
     """
     content = record.get("content")
-    if (
-        isinstance(content, dict)
-        and action_name in content
-        and isinstance(content[action_name], dict)
-    ):
-        return {**record, "content": content[action_name]}
-    return record
+    if not isinstance(content, dict):
+        return record
+    if action_name in content:
+        ns = content[action_name]
+        if ns is None:
+            # Guard-skipped — null namespace
+            return {**record, "content": {}}
+        if isinstance(ns, dict):
+            return {**record, "content": ns}
+        return {**record, "content": {action_name: ns}}
+    # Action namespace not in content — record passed through without output
+    return {**record, "content": {}}
 
 
 def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | None:
