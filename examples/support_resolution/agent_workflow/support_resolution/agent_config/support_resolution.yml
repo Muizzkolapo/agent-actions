@@ -27,7 +27,7 @@ defaults:
   json_mode: false                    # ← Plain text responses, no JSON required
   granularity: Record
   is_operational: true
-  run_mode: batch
+  run_mode: online
   model_vendor: gemini
   model_name: gemini-flash-lite-latest
   api_key: GEMINI_API_KEY
@@ -161,4 +161,4 @@ actions:
         - identify_area.product_area
         - assign_team.assigned_team
         - summarize_issue.summary
-        - draft_response.suggested_response
+        - draft_response.*
