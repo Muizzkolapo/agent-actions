@@ -51,7 +51,7 @@ class LineageBuilder:
 
     @staticmethod
     def set_parent_tracking(obj: dict, parent_item: dict) -> None:
-        """Set parent_target_id, root_target_id, and source_guid on *obj* from *parent_item*."""
+        """Propagate parent_target_id, root_target_id, source_guid, and lineage_sources from *parent_item* to *obj*."""
         LineageBuilder._propagate_ancestry_chain(obj, parent_item)
 
     @staticmethod
