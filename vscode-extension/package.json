@@ -39,8 +39,7 @@
     "workspaceContains:**/agent_actions.yml",
     "workspaceContains:**/agent_config/*.yml",
     "workspaceContains:**/agent_config/*.yaml",
-    "workspaceContains:**/prompt_store/*.md",
-    "workspaceContains:**/agent_io/target/.manifest.json"
+    "workspaceContains:**/prompt_store/*.md"
   ],
   "main": "./out/extension.js",
   "contributes": {
