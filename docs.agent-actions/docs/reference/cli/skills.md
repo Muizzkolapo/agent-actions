@@ -66,7 +66,7 @@ agac skills install --claude --force
 Each skill includes:
 
 ```
-.claude/skills/agent-actions-workflow/
+.claude/skills/agac-agent-skills/
 ├── SKILL.md           # Main skill documentation
 ├── references/        # Syntax reference, examples
 ├── scripts/           # Helper scripts for common tasks
