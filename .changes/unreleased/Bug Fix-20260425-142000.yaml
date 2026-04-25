@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "CLI preview now shows [guard-skipped] for null-namespace actions instead of the full record bus"
+time: 2026-04-25T14:20:00.000000Z

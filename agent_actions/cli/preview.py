@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape as rich_escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -157,6 +158,11 @@ class PreviewCommand:
         With the additive model, record["content"] is
         {"action_a": {...}, "action_b": {...}, ...}. When previewing a
         specific action, unwrap so all formats show that action's fields.
+
+        Guard-skipped actions have ``content[action] = None`` and carry
+        ``_unprocessed: True`` with ``metadata.reason``.  Content is set
+        to ``{}`` so json/raw formats show the real record structure
+        (empty content + metadata) rather than an invented sentinel.
         """
         if not self.action:
             return records
@@ -166,12 +172,14 @@ class PreviewCommand:
                 out.append(record)
                 continue
             content = record.get("content")
-            if (
-                isinstance(content, dict)
-                and self.action in content
-                and isinstance(content[self.action], dict)
-            ):
-                out.append({**record, "content": content[self.action]})
+            if not isinstance(content, dict) or self.action not in content:
+                out.append(record)
+                continue
+            action_ns = content[self.action]
+            if action_ns is None:
+                out.append({**record, "content": {}})
+            elif isinstance(action_ns, dict):
+                out.append({**record, "content": action_ns})
             else:
                 out.append(record)
         return out
@@ -182,7 +190,7 @@ class PreviewCommand:
 
         all_keys: set[str] = set()
         for record in records:
-            if isinstance(record, dict):
+            if isinstance(record, dict) and not record.get("_unprocessed"):
                 if "content" in record and isinstance(record["content"], dict):
                     all_keys.update(record["content"].keys())
                 else:
@@ -203,11 +211,14 @@ class PreviewCommand:
 
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):
-                data = (
-                    record.get("content", record)
-                    if isinstance(record.get("content"), dict)
-                    else record
-                )
+                if record.get("_unprocessed"):
+                    reason = record.get("metadata", {}).get("reason", "skipped")
+                    label = f"[{reason.replace('_', '-')}]"
+                    values = [str(idx), rich_escape(label)]
+                    values.extend("" for _ in display_keys[1:])
+                    table.add_row(*values)
+                    continue
+                data = record["content"] if isinstance(record.get("content"), dict) else record
                 values = [str(idx)]
                 for key in display_keys:
                     val = data.get(key, "")
@@ -216,10 +227,10 @@ class PreviewCommand:
                         val = serialized[:100] + "..." if len(serialized) > 100 else serialized
                     else:
                         val = str(val)[:100] + "..." if len(str(val)) > 100 else str(val)
-                    values.append(val)
+                    values.append(rich_escape(val))
                 table.add_row(*values)
             else:
-                table.add_row(str(idx), str(record)[:100])
+                table.add_row(str(idx), rich_escape(str(record)[:100]))
 
         self.console.print(table)
 
