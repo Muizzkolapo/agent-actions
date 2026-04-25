@@ -6,6 +6,7 @@ from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
+from agent_actions.utils.lineage.builder import LineageBuilder
 
 
 class ExhaustedRecordBuilder:
@@ -41,11 +42,7 @@ class ExhaustedRecordBuilder:
         action_name: str,
     ) -> dict[str, Any]:
         """Build an exhausted retry record with empty content and recovery metadata."""
-        resolved_source_guid = source_guid
-        if resolved_source_guid is None and isinstance(original_row, dict):
-            resolved_source_guid = original_row.get("source_guid")
-        if resolved_source_guid is None:
-            resolved_source_guid = "unknown"
+        resolved_source_guid = LineageBuilder.resolve_source_guid(source_guid, original_row)
 
         empty_content = ExhaustedRecordBuilder.build_empty_content(agent_config)
         existing = get_existing_content(original_row) if isinstance(original_row, dict) else {}
@@ -61,17 +58,10 @@ class ExhaustedRecordBuilder:
         }
 
         if isinstance(original_row, dict):
-            if original_row.get("target_id"):
+            if "target_id" in original_row and original_row["target_id"]:
                 exhausted_item["target_id"] = original_row["target_id"]
-                exhausted_item["parent_target_id"] = original_row["target_id"]
-                if original_row.get("root_target_id"):
-                    exhausted_item["root_target_id"] = original_row["root_target_id"]
-                else:
-                    exhausted_item["root_target_id"] = original_row["target_id"]
-            if original_row.get("lineage"):
-                exhausted_item["lineage"] = original_row["lineage"] + [node_id]
-            else:
-                exhausted_item["lineage"] = [node_id]
+            exhausted_item["lineage"] = LineageBuilder.build_lineage(original_row, node_id)
+            LineageBuilder.set_parent_tracking(exhausted_item, original_row)
         else:
             exhausted_item["lineage"] = [node_id]
 
