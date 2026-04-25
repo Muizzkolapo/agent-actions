@@ -1,6 +1,7 @@
 """Filtering submodule - Dataset filtering logic."""
 
 from agent_actions.input.preprocessing.filtering.evaluator import (
+    GuardBehavior,
     GuardEvaluator,
     GuardResult,
     get_guard_evaluator,
@@ -16,6 +17,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
 
 __all__ = [
     # Primary API (unified evaluator)
+    "GuardBehavior",
     "GuardEvaluator",
     "GuardResult",
     "get_guard_evaluator",

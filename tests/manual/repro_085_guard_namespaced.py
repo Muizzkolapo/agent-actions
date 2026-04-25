@@ -33,7 +33,7 @@ def test_scenario_1_dotted_path_pass_true():
         "behavior": "skip",
     }
 
-    result = evaluator.evaluate_early(record, guard_config)
+    result = evaluator.evaluate(record, guard_config)
 
     # pass is True, condition says == false → not matched → should NOT execute
     assert result.should_execute is False
@@ -59,7 +59,7 @@ def test_scenario_2_dotted_path_pass_false():
         "behavior": "skip",
     }
 
-    result = evaluator.evaluate_early(record, guard_config)
+    result = evaluator.evaluate(record, guard_config)
 
     # pass is False, condition says == false → matched → should execute
     assert result.should_execute is True
@@ -81,7 +81,7 @@ def test_scenario_3_cross_namespace_field():
         "behavior": "skip",
     }
 
-    result = evaluator.evaluate_early(record, guard_config)
+    result = evaluator.evaluate(record, guard_config)
 
     # question_type is "scenario" → matched → should execute
     assert result.should_execute is True
@@ -103,7 +103,7 @@ def test_scenario_4_missing_namespace_no_crash():
         "passthrough_on_error": False,
     }
 
-    result = evaluator.evaluate_early(record, guard_config)
+    result = evaluator.evaluate(record, guard_config)
 
     # Field doesn't exist → should not crash, should not execute
     assert result.should_execute is False
@@ -126,7 +126,7 @@ def test_scenario_5_multiple_namespaces():
         "behavior": "filter",
     }
 
-    result = evaluator.evaluate_early(record, guard_config)
+    result = evaluator.evaluate(record, guard_config)
 
     # topic is "science" → matched → should execute
     assert result.should_execute is True
