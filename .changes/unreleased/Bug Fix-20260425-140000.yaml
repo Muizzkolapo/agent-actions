@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Action Output now shows only the current action's fields, not the entire data bus"
+time: 2026-04-25T14:00:00.000000Z
