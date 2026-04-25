@@ -50,7 +50,7 @@ Extract and structure key information needed for incident triage:
 {end_prompt}
 
 {prompt Classify_Severity}
-You are classifier {{ i }} of {{ version.length }} in a severity classification ensemble.
+You are classifier {{ version.i }} of {{ version.length }} in a severity classification ensemble.
 
 {% if version.first %}
 **Your role**: Be CONSERVATIVE. When in doubt, classify higher severity.
@@ -211,13 +211,13 @@ Generate an initial incident response plan with actionable steps.
 
 **Description**: {{ extract_incident_details.description }}
 
-**Severity**: {{ assign_response_team.final_severity }}
+**Severity**: {{ aggregate_severity.final_severity }}
 
 **Assigned Teams**: {{ assign_response_team.assigned_teams }}
 
 **Customer Impact**: {{ assess_customer_impact.customer_impact_level }}
 
-**Affected Systems**: {{ assign_response_team.affected_services }}
+**Affected Systems**: {{ assess_system_impact.affected_services }}
 
 **Urgency**: {{ assign_response_team.urgency_level }}
 

@@ -149,6 +149,8 @@ actions:
         - assign_response_team.*
         - extract_incident_details.*
         - assess_customer_impact.customer_impact_level
+        - aggregate_severity.final_severity
+        - assess_system_impact.affected_services
 
   # ==========================================================================
   # STAGE 7: EXECUTIVE NOTIFICATION (SEV1/SEV2 only)
