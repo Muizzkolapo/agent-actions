@@ -23,7 +23,7 @@ defaults:
   model_vendor: gemini
   model_name: gemini-flash-lite-latest
   api_key: GEMINI_API_KEY
-  record_limit: 2      # Remove for full processing
+
   context_scope:
     seed_path:
       risk_criteria: $file:risk_criteria.json
