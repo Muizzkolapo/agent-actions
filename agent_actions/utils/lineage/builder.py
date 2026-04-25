@@ -46,7 +46,7 @@ class LineageBuilder:
         if isinstance(item, dict):
             guid = item.get("source_guid")
             if guid is not None:
-                return guid
+                return str(guid)
         return fallback
 
     @staticmethod
