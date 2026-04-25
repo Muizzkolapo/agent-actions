@@ -542,7 +542,7 @@ def prefilter_by_guard(
 
     evaluator = get_guard_evaluator()
     # The config expander normalizes user-facing "on_false" into "behavior"
-    behavior = GuardBehavior(str(guard_config.get("behavior", "filter")).lower())
+    behavior = GuardBehavior(guard_config.get("behavior", "filter"))
 
     passing: list[dict] = []
     skipped: list[dict] = []
