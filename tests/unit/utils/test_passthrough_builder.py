@@ -319,6 +319,40 @@ class TestBuildItemEdgeCases:
         assert item["metadata"]["reason"] == "totally_new_reason"
         assert item["metadata"]["skipped_by_where_clause"] is True
 
+    def test_parent_tracking_propagated_from_row(self):
+        """parent_target_id and root_target_id are propagated from the source row."""
+        row = {
+            "target_id": "tid-parent",
+            "root_target_id": "tid-root",
+            "source_guid": "sg-1",
+        }
+        with _patch_id_gen():
+            item = PassthroughItemBuilder.build_item(
+                row=row, reason="where_clause_not_matched", action_name="a"
+            )
+        assert item["parent_target_id"] == "tid-parent"
+        assert item["root_target_id"] == "tid-root"
+
+    def test_parent_tracking_root_defaults_to_target_id(self):
+        """When row has target_id but no root_target_id, root defaults to target_id."""
+        row = {"target_id": "tid-only", "source_guid": "sg-2"}
+        with _patch_id_gen():
+            item = PassthroughItemBuilder.build_item(
+                row=row, reason="where_clause_not_matched", action_name="a"
+            )
+        assert item["parent_target_id"] == "tid-only"
+        assert item["root_target_id"] == "tid-only"
+
+    def test_parent_tracking_absent_when_row_has_no_target_id(self):
+        """When row has no target_id, parent tracking fields are not set."""
+        row = {}
+        with _patch_id_gen():
+            item = PassthroughItemBuilder.build_item(
+                row=row, reason="where_clause_not_matched", action_name="a"
+            )
+        assert "parent_target_id" not in item
+        assert "root_target_id" not in item
+
     def test_row_with_existing_lineage_invalid_entries(self):
         """Invalid lineage entries in the row are filtered out."""
         row = {"lineage": ["valid_action_abc-123", "not valid!", 42]}
