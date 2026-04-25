@@ -162,53 +162,18 @@ class ActionRunner:
             DependencyError: If any input source directory is not found.
         """
         from agent_actions.errors import DependencyError
-        from agent_actions.prompt.context.scope_inference import (
-            _is_parallel_branches,
-            _resolve_input_sources_for_fan_in,
-        )
 
         target_dir = agent_folder / "target"
 
-        # Detect fan-in pattern: multiple DIFFERENT dependencies
-        # For fan-in, only resolve the primary dependency directories
-        # Non-primary dependencies are loaded via historical loader (context sources)
-        #
-        # Exception: If reduce_key is set, it's an aggregation pattern - merge all dependencies
-        #
-        # Versioned primary handling: If primary_dependency is a base name (e.g., "research")
-        # that matches version branches (research_1, research_2), ALL matching branches
-        # become input sources.
+        # Multiple dependencies: all become input sources and merge by root_target_id.
+        # With the additive content model (bus), records carry all namespaces —
+        # fan-in just needs to merge records from different branches so the
+        # downstream action sees combined content.
         if len(dependencies) > 1:
-            has_reduce_key = action_config.get("reduce_key") is not None
-            is_parallel = _is_parallel_branches(dependencies)
-
-            if has_reduce_key:
-                # Aggregation pattern with reduce_key - merge all dependencies
-                # Note: This applies regardless of whether deps are parallel branches
-                # (parallel branches merge by default, reduce_key just adds grouping)
-                logger.debug(
-                    f"Action '{agent_name}': Aggregation pattern (reduce_key set). "
-                    f"Merging all {len(dependencies)} dependencies: {dependencies}"
-                )
-            elif not is_parallel:
-                # Fan-in pattern - use shared helper
-                primary_dep = action_config.get("primary_dependency")
-                try:
-                    input_deps, non_primary = _resolve_input_sources_for_fan_in(
-                        dependencies, primary_dep
-                    )
-                except ValueError as e:
-                    raise DependencyError(
-                        f"Action '{agent_name}': {e}",
-                        context={"action": agent_name, "dependencies": dependencies},
-                    ) from e
-
-                logger.debug(
-                    f"Action '{agent_name}': Fan-in pattern detected. "
-                    f"Input sources: {input_deps}. "
-                    f"Context sources (loaded via historical loader): {non_primary}"
-                )
-                dependencies = input_deps
+            logger.debug(
+                f"Action '{agent_name}': Merging all {len(dependencies)} "
+                f"dependency input sources: {dependencies}"
+            )
 
         # Resolve all input source directories
         resolved_dirs = []

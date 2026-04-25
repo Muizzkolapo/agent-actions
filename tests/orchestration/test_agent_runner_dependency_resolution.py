@@ -185,7 +185,7 @@ class TestDependencyPatterns:
                 - analyze_entities.*
                 - analyze_topics.*
 
-        Result: First is primary input, others available via lineage-matched context
+        Result: All dependencies are input sources — records merge by root_target_id
         """
         for action in ["analyze_sentiment", "analyze_entities", "analyze_topics"]:
             (temp_folder / "target" / action).mkdir()
@@ -202,37 +202,13 @@ class TestDependencyPatterns:
             "generate_report",
         )
 
-        # Only primary (first) returned - others via historical loader
-        assert len(result) == 1
-        assert result[0].name == "analyze_sentiment"
-
-    def test_pattern_3_fan_in_with_primary_override(self, agent_runner, temp_folder):
-        """
-        Pattern 3: Fan-in with primary_dependency override
-
-        Config:
-          - name: generate_report
-            dependencies: [analyze_sentiment, analyze_entities, analyze_topics]
-            primary_dependency: analyze_entities
-
-        Result: analyze_entities is primary input
-        """
-        for action in ["analyze_sentiment", "analyze_entities", "analyze_topics"]:
-            (temp_folder / "target" / action).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-            {
-                "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-                "primary_dependency": "analyze_entities",
-            },
-            "generate_report",
-        )
-
-        # Explicit primary returned
-        assert len(result) == 1
-        assert result[0].name == "analyze_entities"
+        # All dependencies returned — bus model merges records by root_target_id
+        assert len(result) == 3
+        assert {r.name for r in result} == {
+            "analyze_sentiment",
+            "analyze_entities",
+            "analyze_topics",
+        }
 
     def test_pattern_4_aggregation(self, agent_runner, temp_folder):
         """
@@ -298,30 +274,30 @@ class TestDependencyPatterns:
         assert len(result) == 3
         assert {r.name for r in result} == {"classify_1", "classify_2", "classify_3"}
 
-    def test_invalid_primary_dependency_raises_error(self, agent_runner, temp_folder):
-        """primary_dependency must be in dependencies list."""
+    def test_fan_in_primary_dependency_ignored(self, agent_runner, temp_folder):
+        """primary_dependency is ignored — all deps are input sources in bus model."""
         for action in ["action_a", "action_b"]:
             (temp_folder / "target" / action).mkdir()
 
-        with pytest.raises(DependencyError) as exc_info:
-            agent_runner._resolve_dependency_directories(
-                temp_folder,
-                ["action_a", "action_b"],
-                {
-                    "dependencies": ["action_a", "action_b"],
-                    "primary_dependency": "action_c",  # Not in list!
-                },
-                "test_action",
-            )
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["action_a", "action_b"],
+            {
+                "dependencies": ["action_a", "action_b"],
+                "primary_dependency": "action_c",  # Ignored — not used in bus model
+            },
+            "test_action",
+        )
 
-        assert "primary_dependency" in str(exc_info.value)
-        assert "action_c" in str(exc_info.value)
+        # All dependencies are input sources regardless of primary_dependency
+        assert len(result) == 2
+        assert {r.name for r in result} == {"action_a", "action_b"}
 
-    def test_versioned_primary_with_fan_in(self, agent_runner, temp_folder):
+    def test_versioned_with_fan_in_all_input(self, agent_runner, temp_folder):
         """
-        Fan-in with versioned primary: research_1, research_2, research_3 + summarize
+        Fan-in with versioned + non-versioned: all are input sources.
 
-        When primary is a version branch, ALL sibling branches become input sources.
+        Bus model: all dependencies become input sources, merged by root_target_id.
         """
         for action in ["research_1", "research_2", "research_3", "summarize"]:
             (temp_folder / "target" / action).mkdir()
@@ -333,17 +309,38 @@ class TestDependencyPatterns:
             "final_report",
         )
 
-        # All research branches should be input sources (3 dirs), summarize is context
+        # All dependencies are input sources in bus model
+        assert len(result) == 4
+        assert {r.name for r in result} == {"research_1", "research_2", "research_3", "summarize"}
+
+    def test_versioned_primary_base_name_all_input(self, agent_runner, temp_folder):
+        """
+        All dependencies are input sources regardless of primary_dependency.
+
+        Bus model: primary_dependency is ignored at the runner level.
+        """
+        for action in ["research_1", "research_2", "summarize"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "summarize"],
+            {
+                "dependencies": ["research_1", "research_2", "summarize"],
+                "primary_dependency": "research",
+            },
+            "final_report",
+        )
+
+        # All dependencies are input sources
         assert len(result) == 3
-        assert {r.name for r in result} == {"research_1", "research_2", "research_3"}
+        assert {r.name for r in result} == {"research_1", "research_2", "summarize"}
 
-    def test_versioned_primary_base_name_expansion(self, agent_runner, temp_folder):
+    def test_versioned_primary_explicit_branch_all_input(self, agent_runner, temp_folder):
         """
-        primary_dependency as base name expands to all version branches.
+        All dependencies are input sources regardless of explicit primary_dependency.
 
-        Config: primary_dependency: research (base name)
-        Deps: [research_1, research_2, summarize]
-        Result: research_1, research_2 are inputs, summarize is context
+        Bus model: primary_dependency is ignored at the runner level.
         """
         for action in ["research_1", "research_2", "summarize"]:
             (temp_folder / "target" / action).mkdir()
@@ -353,39 +350,14 @@ class TestDependencyPatterns:
             ["research_1", "research_2", "summarize"],
             {
                 "dependencies": ["research_1", "research_2", "summarize"],
-                "primary_dependency": "research",  # Base name, not in list directly
+                "primary_dependency": "research_1",
             },
             "final_report",
         )
 
-        # research expands to research_1, research_2 as inputs
-        assert len(result) == 2
-        assert {r.name for r in result} == {"research_1", "research_2"}
-
-    def test_versioned_primary_explicit_branch(self, agent_runner, temp_folder):
-        """
-        Explicit primary_dependency pointing to a version branch includes all siblings.
-
-        Config: primary_dependency: research_1
-        Deps: [research_1, research_2, summarize]
-        Result: research_1, research_2 are inputs (siblings), summarize is context
-        """
-        for action in ["research_1", "research_2", "summarize"]:
-            (temp_folder / "target" / action).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["research_1", "research_2", "summarize"],
-            {
-                "dependencies": ["research_1", "research_2", "summarize"],
-                "primary_dependency": "research_1",  # Explicit branch
-            },
-            "final_report",
-        )
-
-        # research_1's siblings (research_2) also become inputs
-        assert len(result) == 2
-        assert {r.name for r in result} == {"research_1", "research_2"}
+        # All dependencies are input sources
+        assert len(result) == 3
+        assert {r.name for r in result} == {"research_1", "research_2", "summarize"}
 
 
 class TestResolveDependencyDirectories:
@@ -430,10 +402,8 @@ class TestResolveDependencyDirectories:
         assert len(result) == 1
         assert result[0] == temp_agent_folder / "target" / "action_A"
 
-    def test_multiple_dependencies_fan_in_returns_primary_only(
-        self, agent_runner, temp_agent_folder
-    ):
-        """Test fan-in pattern: multiple different dependencies returns only primary."""
+    def test_multiple_dependencies_fan_in_returns_all(self, agent_runner, temp_agent_folder):
+        """Test fan-in pattern: all dependencies are input sources (bus model)."""
         dependencies = ["action_A", "action_B", "action_C"]
         agent_config = {"dependencies": dependencies}
 
@@ -441,10 +411,9 @@ class TestResolveDependencyDirectories:
             temp_agent_folder, dependencies, agent_config, "test_action"
         )
 
-        # Fan-in: only primary (first) dependency returned
-        # Non-primary deps are loaded via historical loader as context sources
-        assert len(result) == 1
-        assert result[0] == temp_agent_folder / "target" / "action_A"
+        # Bus model: all dependencies are input sources, merged by root_target_id
+        assert len(result) == 3
+        assert {r.name for r in result} == {"action_A", "action_B", "action_C"}
 
     def test_multiple_dependencies_parallel_returns_all_directories(
         self, agent_runner, temp_agent_folder
@@ -504,21 +473,21 @@ class TestResolveDependencyDirectories:
         assert "action_A" in str(exc_info.value)
         assert "not found" in str(exc_info.value)
 
-    def test_primary_dependency_selects_primary_in_fan_in(self, agent_runner, temp_agent_folder):
-        """Test primary_dependency field selects which dep is primary in fan-in."""
+    def test_primary_dependency_ignored_all_input(self, agent_runner, temp_agent_folder):
+        """Test primary_dependency is ignored — all deps are input sources in bus model."""
         dependencies = ["action_A", "action_B", "action_C"]
         agent_config = {
             "dependencies": dependencies,
-            "primary_dependency": "action_B",  # Explicit primary selection
+            "primary_dependency": "action_B",  # Ignored in bus model
         }
 
         result = agent_runner._resolve_dependency_directories(
             temp_agent_folder, dependencies, agent_config, "test_action"
         )
 
-        # Fan-in with explicit primary: only action_B returned
-        assert len(result) == 1
-        assert result[0] == temp_agent_folder / "target" / "action_B"
+        # Bus model: all dependencies are input sources
+        assert len(result) == 3
+        assert {r.name for r in result} == {"action_A", "action_B", "action_C"}
 
     def test_empty_dependencies_returns_empty_list(self, agent_runner, temp_agent_folder):
         """Test empty dependencies returns empty list."""
