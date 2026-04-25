@@ -583,7 +583,8 @@ def prefilter_by_guard(
             passing.append(item)
             original_passing.append(originals[idx])
         elif behavior == "skip":
-            skipped.append(item)
+            # Use pre-observe original so skipped tombstones keep namespaced content.
+            skipped.append(originals[idx])
         # behavior == "filter": record excluded from both lists
 
     logger.info(
