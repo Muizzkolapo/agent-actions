@@ -463,9 +463,6 @@ function useSectionState(nodeKey: string) {
 
 // ── DataCard ──────────────────────────────────────────────────────────────
 
-/** Sentinel returned by getDisplayFields when the action was guard-skipped (namespace is null). */
-const GUARD_SKIPPED: Record<string, unknown> = Object.freeze({})
-
 export interface ActionInfo {
   name: string
   kind: string
@@ -480,38 +477,22 @@ export interface DataCardProps {
   fontSize?: number
   defaultOpen?: boolean
   actionInfo?: ActionInfo
-  actionName?: string
 }
 
-export function getDisplayFields(record: Record<string, unknown>, actionName?: string): Record<string, unknown> {
+export function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
+  // Scanner already unwraps namespaced content to action-specific fields.
+  // This function just extracts the content dict for display.
   const contentVal = record.content
   if (contentVal && typeof contentVal === "object" && !Array.isArray(contentVal)) {
-    const content = contentVal as Record<string, unknown>
-    // Unwrap namespace: with the additive model, content is
-    // { action_a: {...}, action_b: {...} }. Show only this action's fields.
-    if (actionName && actionName in content) {
-      const ns = content[actionName]
-      if (ns === null) {
-        return GUARD_SKIPPED
-      }
-      if (typeof ns === "object" && !Array.isArray(ns)) {
-        return ns as Record<string, unknown>
-      }
-      return { [actionName]: ns }
-    }
-    // Action namespace not in content — record passed through without output
-    if (actionName) {
-      return GUARD_SKIPPED
-    }
-    return content
+    return contentVal as Record<string, unknown>
   }
   return record
 }
 
-export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo, actionName: actionNameProp }: DataCardProps) {
+export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
-  const displayRecord = getDisplayFields(record, actionNameProp || actionInfo?.name)
-  const guardSkipped = displayRecord === GUARD_SKIPPED
+  const displayRecord = getDisplayFields(record)
+  const guardSkipped = Object.keys(displayRecord).filter(k => classifyField(k) === "content").length === 0
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)

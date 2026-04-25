@@ -443,7 +443,7 @@ function NodeDetail({
     if (node.preview.length === 0) return []
     const colSet = new Set<string>()
     for (const row of node.preview) {
-      const fields = getDisplayFields(row, actionName)
+      const fields = getDisplayFields(row)
       for (const key of Object.keys(fields)) {
         if (classifyField(key) === "content") {
           colSet.add(key)
@@ -551,7 +551,7 @@ function NodeDetail({
               </thead>
               <tbody>
                 {pageRecords.map((row, i) => {
-                  const fields = getDisplayFields(row, actionName)
+                  const fields = getDisplayFields(row)
                   return (
                     <tr key={page * RECORDS_PER_PAGE + i} className="hover:bg-accent/20 transition-colors">
                       <td className="font-mono text-muted-foreground tabular-nums">
@@ -591,7 +591,6 @@ function NodeDetail({
                   fontSize={typo.fontSize}
                   defaultOpen={i === 0}
                   actionInfo={actionInfo}
-                  actionName={actionName}
                 />
               )
             })}
