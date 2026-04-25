@@ -146,7 +146,6 @@ class ProcessingPipeline:
                 },
             )
 
-        # Initialize RecordProcessor through factory
         self.record_processor = RecordProcessor.create(
             agent_config=cast(dict[str, Any], config.action_config),
             agent_name=config.action_name,

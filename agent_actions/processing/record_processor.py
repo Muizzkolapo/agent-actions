@@ -61,7 +61,7 @@ class RecordProcessor:
         *,
         strategy: InvocationStrategy | None = None,
         mode: RunMode = RunMode.ONLINE,
-        provider: Optional["BatchProvider"] = None,
+        provider: "BatchProvider | None" = None,
     ) -> "RecordProcessor":
         """Factory method for RecordProcessor creation.
 
