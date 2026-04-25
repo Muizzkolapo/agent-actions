@@ -196,6 +196,9 @@ export class QueryResultsPanel implements vscode.Disposable {
         function isSourceQuote(k) { return k.toLowerCase().indexOf('source_quote') >= 0; }
         function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 
+        var MAX_TREE_DEPTH = 5;
+        var MAX_ARRAY_ITEMS = 20;
+
         function highlightJson(raw) {
             var parsed; try { parsed = JSON.parse(raw); } catch(e) { return esc(raw); }
             var s = esc(JSON.stringify(parsed, null, 2));
@@ -243,7 +246,7 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         function renderTreeField(key, value, defaultOpen, depth) {
             if (depth === undefined) depth = 0;
-            if (typeof value === 'object' && value !== null && !Array.isArray(value) && depth < 5) {
+            if (typeof value === 'object' && value !== null && !Array.isArray(value) && depth < MAX_TREE_DEPTH) {
                 var keys = Object.keys(value);
                 var childHtml = '';
                 for (var i = 0; i < keys.length; i++) {
@@ -274,7 +277,7 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         function renderArrayOfObjects(fieldKey, items, depth) {
             if (depth === undefined) depth = 0;
-            var maxItems = 20;
+            var maxItems = MAX_ARRAY_ITEMS;
             var displayItems = items.length > maxItems ? items.slice(0, maxItems) : items;
             var ch = '';
             for (var i = 0; i < displayItems.length; i++) {
