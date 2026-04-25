@@ -206,7 +206,6 @@ class TestRunnerVirtualActionResolution:
         result = runner._resolve_dependency_directories(
             local_io,
             ["extract"],
-            {"dependencies": ["extract"]},
             "enrich_text",
         )
 

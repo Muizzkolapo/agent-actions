@@ -95,8 +95,7 @@ def _resolve_input_sources_for_fan_in(
     """
     Resolve which dependencies are input sources vs context sources for fan-in pattern.
 
-    This is the shared logic used by both infer_dependencies() and
-    _resolve_dependency_directories() to avoid duplication.
+    Used by infer_dependencies() for prompt context classification.
 
     Args:
         dependencies: List of all dependency action names

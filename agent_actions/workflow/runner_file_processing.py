@@ -403,12 +403,10 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
                 warn_no_files_found(params)
             return
         else:
-            # Fan-in pattern: multiple different dependencies
-            # This should have been resolved to primary dependency in _resolve_dependency_directories()
-            # If we reach here, it means all directories should be merged (aggregation pattern)
+            # Multiple dependencies: merge all inputs by root_target_id
             logger.info(
-                f"Multiple dependency directories detected: {dep_names}. "
-                f"Merging all inputs (aggregation pattern)."
+                "Multiple dependency directories detected: %s. Merging all inputs.",
+                dep_names,
             )
             files_processed_count = process_merged_files(runner, params)
             if files_processed_count == 0:

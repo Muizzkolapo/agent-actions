@@ -154,9 +154,12 @@ class ActionRunner:
         return result.directories
 
     def _resolve_dependency_directories(
-        self, agent_folder: Path, dependencies: list[str], action_config: dict, agent_name: str
+        self, agent_folder: Path, dependencies: list[str], agent_name: str
     ) -> list[Path]:
         """Resolve upstream directories from dependencies (input sources).
+
+        All dependencies become input sources. Records from different branches
+        are merged by root_target_id downstream (additive content / bus model).
 
         Raises:
             DependencyError: If any input source directory is not found.
@@ -164,16 +167,6 @@ class ActionRunner:
         from agent_actions.errors import DependencyError
 
         target_dir = agent_folder / "target"
-
-        # Multiple dependencies: all become input sources and merge by root_target_id.
-        # With the additive content model (bus), records carry all namespaces —
-        # fan-in just needs to merge records from different branches so the
-        # downstream action sees combined content.
-        if len(dependencies) > 1:
-            logger.debug(
-                f"Action '{agent_name}': Merging all {len(dependencies)} "
-                f"dependency input sources: {dependencies}"
-            )
 
         # Resolve all input source directories
         resolved_dirs = []
@@ -395,7 +388,6 @@ class ActionRunner:
             upstream_data_dirs = self._resolve_dependency_directories(
                 agent_folder_path,
                 dependencies,
-                action_config,
                 agent_type,  # action_name
             )
         elif previous_action_type:

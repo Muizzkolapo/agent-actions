@@ -1,16 +1,12 @@
 """
 Tests for _resolve_dependency_directories() in ActionRunner.
 
-Tests the 4 dependency patterns:
-1. Single - One dependency, output becomes input
-2. Parallel Branches - Same base name (e.g., classify_1, classify_2), outputs merged
-3. Fan-in - Different actions, first is primary, others via context
-4. Aggregation - Different actions with reduce_key, all merged
+With the additive content (bus) model, all dependencies become input sources.
+Records from different branches are merged by root_target_id downstream.
 
 Also tests:
-- _is_parallel_branches() detection logic
-- Context sources auto-inferred from context_scope
-- primary_dependency override for fan-in
+- _is_parallel_branches() detection logic (used by scope_inference)
+- _resolve_input_sources_for_fan_in() (used by scope_inference)
 """
 
 import shutil
@@ -85,8 +81,7 @@ class TestGetVersionBranches:
 class TestResolveInputSourcesForFanIn:
     """Test _resolve_input_sources_for_fan_in() shared helper.
 
-    This helper is used by both infer_dependencies() and _resolve_dependency_directories()
-    to resolve which dependencies are input sources vs context sources for fan-in patterns.
+    Used by infer_dependencies() for prompt context classification.
     """
 
     def test_base_name_primary_expands_to_all_versions(self):
@@ -137,7 +132,7 @@ class TestDependencyPatterns:
         (temp_folder / "target" / "extract_data").mkdir()
 
         result = agent_runner._resolve_dependency_directories(
-            temp_folder, ["extract_data"], {"dependencies": ["extract_data"]}, "validate_data"
+            temp_folder, ["extract_data"], "validate_data"
         )
 
         assert len(result) == 1
@@ -164,7 +159,6 @@ class TestDependencyPatterns:
         result = agent_runner._resolve_dependency_directories(
             temp_folder,
             ["research_1", "research_2", "research_3"],
-            {"dependencies": ["research_1", "research_2", "research_3"]},
             "synthesize",
         )
 
@@ -193,12 +187,6 @@ class TestDependencyPatterns:
         result = agent_runner._resolve_dependency_directories(
             temp_folder,
             ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-            {
-                "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-                "context_scope": {
-                    "observe": ["analyze_sentiment.*", "analyze_entities.*", "analyze_topics.*"]
-                },
-            },
             "generate_report",
         )
 
@@ -227,10 +215,6 @@ class TestDependencyPatterns:
         result = agent_runner._resolve_dependency_directories(
             temp_folder,
             ["validator_grammar", "validator_accuracy", "validator_style"],
-            {
-                "dependencies": ["validator_grammar", "validator_accuracy", "validator_style"],
-                "reduce_key": "content_id",
-            },
             "aggregate_validations",
         )
 
@@ -263,10 +247,6 @@ class TestDependencyPatterns:
         result = agent_runner._resolve_dependency_directories(
             temp_folder,
             ["classify_1", "classify_2", "classify_3"],
-            {
-                "dependencies": ["classify_1", "classify_2", "classify_3"],
-                "reduce_key": "content_id",
-            },
             "aggregate_classifications",
         )
 
@@ -282,10 +262,6 @@ class TestDependencyPatterns:
         result = agent_runner._resolve_dependency_directories(
             temp_folder,
             ["action_a", "action_b"],
-            {
-                "dependencies": ["action_a", "action_b"],
-                "primary_dependency": "action_c",  # Ignored — not used in bus model
-            },
             "test_action",
         )
 
@@ -305,7 +281,6 @@ class TestDependencyPatterns:
         result = agent_runner._resolve_dependency_directories(
             temp_folder,
             ["research_1", "research_2", "research_3", "summarize"],
-            {"dependencies": ["research_1", "research_2", "research_3", "summarize"]},
             "final_report",
         )
 
@@ -325,33 +300,6 @@ class TestDependencyPatterns:
         result = agent_runner._resolve_dependency_directories(
             temp_folder,
             ["research_1", "research_2", "summarize"],
-            {
-                "dependencies": ["research_1", "research_2", "summarize"],
-                "primary_dependency": "research",
-            },
-            "final_report",
-        )
-
-        # All dependencies are input sources
-        assert len(result) == 3
-        assert {r.name for r in result} == {"research_1", "research_2", "summarize"}
-
-    def test_versioned_primary_explicit_branch_all_input(self, agent_runner, temp_folder):
-        """
-        All dependencies are input sources regardless of explicit primary_dependency.
-
-        Bus model: primary_dependency is ignored at the runner level.
-        """
-        for action in ["research_1", "research_2", "summarize"]:
-            (temp_folder / "target" / action).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["research_1", "research_2", "summarize"],
-            {
-                "dependencies": ["research_1", "research_2", "summarize"],
-                "primary_dependency": "research_1",
-            },
             "final_report",
         )
 
@@ -393,10 +341,9 @@ class TestResolveDependencyDirectories:
     def test_single_dependency_returns_single_directory(self, agent_runner, temp_agent_folder):
         """Test single dependency returns its directory."""
         dependencies = ["action_A"]
-        agent_config = {"dependencies": dependencies}
 
         result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, agent_config, "test_action"
+            temp_agent_folder, dependencies, "test_action"
         )
 
         assert len(result) == 1
@@ -405,10 +352,9 @@ class TestResolveDependencyDirectories:
     def test_multiple_dependencies_fan_in_returns_all(self, agent_runner, temp_agent_folder):
         """Test fan-in pattern: all dependencies are input sources (bus model)."""
         dependencies = ["action_A", "action_B", "action_C"]
-        agent_config = {"dependencies": dependencies}
 
         result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, agent_config, "test_action"
+            temp_agent_folder, dependencies, "test_action"
         )
 
         # Bus model: all dependencies are input sources, merged by root_target_id
@@ -424,10 +370,9 @@ class TestResolveDependencyDirectories:
             (temp_agent_folder / "target" / f"classify_{suffix}").mkdir(parents=True, exist_ok=True)
 
         dependencies = ["classify_1", "classify_2", "classify_3"]
-        agent_config = {"dependencies": dependencies}
 
         result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, agent_config, "test_action"
+            temp_agent_folder, dependencies, "test_action"
         )
 
         # Parallel branches: all directories returned for merging
@@ -441,10 +386,8 @@ class TestResolveDependencyDirectories:
     ):
         """Test aggregation pattern: reduce_key set returns all dependencies."""
         dependencies = ["action_A", "action_B", "action_C"]
-        agent_config = {"dependencies": dependencies, "reduce_key": "parent_id"}
-
         result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, agent_config, "test_action"
+            temp_agent_folder, dependencies, "test_action"
         )
 
         # Aggregation with reduce_key: all directories returned for merging
@@ -463,11 +406,10 @@ class TestResolveDependencyDirectories:
             action_a_dir.rmdir()
 
         dependencies = ["action_A", "action_B"]
-        agent_config = {"dependencies": dependencies}
 
         with pytest.raises(DependencyError) as exc_info:
             agent_runner._resolve_dependency_directories(
-                temp_agent_folder, dependencies, agent_config, "test_action"
+                temp_agent_folder, dependencies, "test_action"
             )
 
         assert "action_A" in str(exc_info.value)
@@ -476,13 +418,9 @@ class TestResolveDependencyDirectories:
     def test_primary_dependency_ignored_all_input(self, agent_runner, temp_agent_folder):
         """Test primary_dependency is ignored — all deps are input sources in bus model."""
         dependencies = ["action_A", "action_B", "action_C"]
-        agent_config = {
-            "dependencies": dependencies,
-            "primary_dependency": "action_B",  # Ignored in bus model
-        }
 
         result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, agent_config, "test_action"
+            temp_agent_folder, dependencies, "test_action"
         )
 
         # Bus model: all dependencies are input sources
@@ -492,10 +430,9 @@ class TestResolveDependencyDirectories:
     def test_empty_dependencies_returns_empty_list(self, agent_runner, temp_agent_folder):
         """Test empty dependencies returns empty list."""
         dependencies = []
-        agent_config = {"dependencies": dependencies}
 
         result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, agent_config, "test_action"
+            temp_agent_folder, dependencies, "test_action"
         )
 
         assert result == []
@@ -559,11 +496,10 @@ class TestResolveDependencyDirectoriesIntegration:
         - dependencies: add_answer_text (single input)
         - Context deps (suggest_distractor_counts, write_scenario_question) auto-inferred
         """
-        dependencies = ["add_answer_text"]  # Only input source
-        agent_config = {"dependencies": dependencies}
+        dependencies = ["add_answer_text"]
 
         result = agent_runner_with_workflow._resolve_dependency_directories(
-            temp_workflow_folder, dependencies, agent_config, "generate_distractor_1"
+            temp_workflow_folder, dependencies, "generate_distractor_1"
         )
 
         # Should only return add_answer_text directory
@@ -589,10 +525,8 @@ class TestResolveDependencyDirectoriesIntegration:
         runner.virtual_actions = {}
 
         dependencies = ["validate_1", "validate_2", "validate_3"]
-        agent_config = {"dependencies": dependencies, "reduce_key": "parent_id"}
-
         result = runner._resolve_dependency_directories(
-            temp_workflow_folder, dependencies, agent_config, "aggregate"
+            temp_workflow_folder, dependencies, "aggregate"
         )
 
         # Should return all 3 directories for merging
@@ -607,24 +541,13 @@ class TestResolveDependencyDirectoriesIntegration:
         New: dependencies: get_authoring_prompt (single input)
         Context deps (flatten_raw_questions, classify_question_type) auto-inferred from context_scope.
         """
-        dependencies = ["get_authoring_prompt"]  # Single input after migration
-        agent_config = {
-            "dependencies": dependencies,
-            "context_scope": {
-                "observe": [
-                    "flatten_raw_questions.question_text",
-                    "classify_question_type.quiz_type",
-                    "get_authoring_prompt.authoring_prompt",
-                ]
-            },
-        }
+        dependencies = ["get_authoring_prompt"]
 
         result = agent_runner_with_workflow._resolve_dependency_directories(
-            temp_workflow_folder, dependencies, agent_config, "write_scenario_question"
+            temp_workflow_folder, dependencies, "write_scenario_question"
         )
 
-        # Should only return get_authoring_prompt directory (input source)
-        # Context deps are NOT returned here - they're loaded via historical loader
+        # Single dependency: returns its directory
         assert len(result) == 1
         assert result[0] == temp_workflow_folder / "target" / "get_authoring_prompt"
 
