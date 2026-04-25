@@ -131,42 +131,6 @@ class TestGuardEvaluator:
         assert result.should_execute is False
         assert result.behavior == "skip"
 
-    def test_should_skip_with_skip_behavior(self, evaluator, mock_guard_filter):
-        """should_skip returns True when guard fails with skip behavior."""
-        mock_guard_filter.filter_item.return_value = FilterResult(success=True, matched=False)
-        agent_config = {"guard": {"clause": "x > 10", "scope": "item", "behavior": "skip"}}
-
-        result = evaluator.should_skip(agent_config, {"x": 5})
-
-        assert result is True
-
-    def test_should_skip_with_filter_behavior(self, evaluator, mock_guard_filter):
-        """should_skip returns False for filter behavior (not a skip)."""
-        agent_config = {"guard": {"clause": "x > 10", "scope": "item", "behavior": "filter"}}
-
-        result = evaluator.should_skip(agent_config, {"x": 5})
-
-        assert result is False  # Not skip behavior
-        mock_guard_filter.filter_item.assert_not_called()
-
-    def test_should_filter_with_filter_behavior(self, evaluator, mock_guard_filter):
-        """should_filter returns True when guard fails with filter behavior."""
-        mock_guard_filter.filter_item.return_value = FilterResult(success=True, matched=False)
-        agent_config = {"guard": {"clause": "x > 10", "scope": "item", "behavior": "filter"}}
-
-        result = evaluator.should_filter(agent_config, {"x": 5})
-
-        assert result is True
-
-    def test_should_filter_with_skip_behavior(self, evaluator, mock_guard_filter):
-        """should_filter returns False for skip behavior (not a filter)."""
-        agent_config = {"guard": {"clause": "x > 10", "scope": "item", "behavior": "skip"}}
-
-        result = evaluator.should_filter(agent_config, {"x": 5})
-
-        assert result is False  # Not filter behavior
-        mock_guard_filter.filter_item.assert_not_called()
-
     def test_prepare_eval_context_with_nested_content(self, evaluator):
         """Nested content structure is properly extracted with ALL top-level metadata."""
         context = {
@@ -803,61 +767,3 @@ class TestNamespacedContentGuardEvaluation:
         # First clause matches, but second field is missing → whole condition not matched
         assert result.should_execute is False
         assert result.behavior == "skip"
-
-    def test_should_skip_with_namespaced_content(self, evaluator):
-        """should_skip applies guard behavior on namespaced content with dotted paths."""
-        record = {
-            "content": {"validate": {"pass": True}},
-            "source_guid": "sg-1",
-        }
-        agent_config = {
-            "guard": {
-                "clause": "validate.pass == false",
-                "scope": "item",
-                "behavior": "skip",
-            }
-        }
-
-        result = evaluator.should_skip(agent_config, record)
-
-        # pass is True, condition says == false → not matched → should skip
-        assert result is True
-
-    def test_should_filter_with_namespaced_content(self, evaluator):
-        """should_filter applies guard behavior on namespaced content with dotted paths."""
-        record = {
-            "content": {"classify": {"topic": "science"}},
-            "source_guid": "sg-1",
-        }
-        agent_config = {
-            "guard": {
-                "clause": 'classify.topic == "math"',
-                "scope": "item",
-                "behavior": "filter",
-            }
-        }
-
-        result = evaluator.should_filter(agent_config, record)
-
-        # topic is "science", condition says == "math" → not matched → should filter
-        assert result is True
-
-
-class TestHelpersIntegration:
-    """Tests for integration with processing/helpers.py."""
-
-    def test_should_skip_guard_delegates_to_evaluator(self):
-        """_should_skip_guard uses GuardEvaluator internally."""
-        from agent_actions.processing.helpers import _should_skip_guard
-
-        # No guard config should not skip
-        result = _should_skip_guard({}, {"field": "value"})
-        assert result is False
-
-    def test_should_filter_guard_delegates_to_evaluator(self):
-        """_should_filter_guard uses GuardEvaluator internally."""
-        from agent_actions.processing.helpers import _should_filter_guard
-
-        # No guard config should not filter
-        result = _should_filter_guard({}, {"field": "value"})
-        assert result is False

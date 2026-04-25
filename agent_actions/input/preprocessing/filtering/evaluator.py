@@ -300,24 +300,6 @@ class GuardEvaluator:
 
         return eval_data
 
-    def should_skip(self, agent_config: dict[str, Any], context: Any) -> bool:
-        """Check if agent should be skipped based on guard with skip behavior."""
-        guard_config = agent_config.get("guard")
-        if not guard_config or guard_config.get("behavior") != GuardBehavior.SKIP:
-            return False
-
-        result = self._evaluate_guard(context, guard_config)
-        return not result.should_execute
-
-    def should_filter(self, agent_config: dict[str, Any], context: Any) -> bool:
-        """Check if item should be filtered based on guard with filter behavior."""
-        guard_config = agent_config.get("guard")
-        if not guard_config or guard_config.get("behavior") != GuardBehavior.FILTER:
-            return False
-
-        result = self._evaluate_guard(context, guard_config)
-        return not result.should_execute
-
 
 # Thread-safe singleton
 _GLOBAL_GUARD_EVALUATOR: GuardEvaluator | None = None
