@@ -591,6 +591,7 @@ function NodeDetail({
                   fontSize={typo.fontSize}
                   defaultOpen={i === 0}
                   actionInfo={actionInfo}
+                  actionName={actionName}
                 />
               )
             })}

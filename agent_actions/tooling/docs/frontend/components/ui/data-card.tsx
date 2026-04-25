@@ -480,6 +480,7 @@ export interface DataCardProps {
   fontSize?: number
   defaultOpen?: boolean
   actionInfo?: ActionInfo
+  actionName?: string
 }
 
 export function getDisplayFields(record: Record<string, unknown>, actionName?: string): Record<string, unknown> {
@@ -507,9 +508,9 @@ export function getDisplayFields(record: Record<string, unknown>, actionName?: s
   return record
 }
 
-export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
+export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo, actionName: actionNameProp }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
-  const displayRecord = getDisplayFields(record, actionInfo?.name)
+  const displayRecord = getDisplayFields(record, actionNameProp || actionInfo?.name)
   const guardSkipped = displayRecord === GUARD_SKIPPED
   const { identity, metadata } = classifyRecord(record)
 
