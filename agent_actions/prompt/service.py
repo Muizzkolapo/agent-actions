@@ -203,7 +203,6 @@ class PromptPreparationService:
 
         context_scope = request.agent_config.get("context_scope", {})
 
-        field_context_metadata: dict[str, Any] = {}
         field_context = build_field_context_with_history(
             agent_name=request.agent_name,
             agent_config=request.agent_config,
@@ -212,12 +211,9 @@ class PromptPreparationService:
             version_context=request.version_context,
             workflow_metadata=request.workflow_metadata,
             current_item=request.current_item,
-            file_path=request.file_path,
             context_scope=context_scope,
-            output_directory=request.output_directory,
-            storage_backend=request.storage_backend,
-            metadata_collector=field_context_metadata,
         )
+        field_context_metadata: dict[str, Any] = field_context.pop("_dependency_metadata", {})
         logger.debug("Built field context with %d top-level keys", len(field_context))
 
         static_data = PromptPreparationService._load_seed_data(

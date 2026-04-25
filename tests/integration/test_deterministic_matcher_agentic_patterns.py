@@ -165,7 +165,6 @@ class TestContractReviewerPattern:
             },
             agent_indices=contract_indices,
             current_item=current_item,
-            file_path="/mock/batch_001.json",
             context_scope={
                 "observe": [
                     "aggregate_risk.overall_risk",
@@ -363,7 +362,6 @@ class TestProductListingPattern:
             },
             agent_indices=product_indices,
             current_item=current_item,
-            file_path="/mock/batch_001.json",
             context_scope={
                 "observe": [
                     "generate_description.product_description",
@@ -526,7 +524,6 @@ class TestVersionedClassifierPattern:
             },
             agent_indices=versioned_indices,
             current_item=current_item,
-            file_path="/mock/batch_001.json",
             context_scope={
                 "observe": [
                     "aggregate_classifications.consensus_label",
@@ -690,7 +687,6 @@ class TestHITLCrossGatePattern:
             },
             agent_indices=hitl_indices,
             current_item=current_item,
-            file_path="/mock/batch_001.json",
             context_scope={"observe": ["consolidate.answer", "consolidate.source_page"]},
         )
 
@@ -731,7 +727,6 @@ class TestHITLCrossGatePattern:
             },
             agent_indices=hitl_indices,
             current_item=current_item,
-            file_path="/mock/batch_001.json",
             context_scope={"observe": ["consolidate.answer", "consolidate.source_page"]},
         )
 
@@ -852,7 +847,6 @@ class TestDiamondMergePattern:
             },
             agent_indices=diamond_indices,
             current_item=merged_item,
-            file_path="/mock/batch_001.json",
             context_scope={
                 "observe": [
                     "branch_seo.seo_title",
@@ -909,7 +903,6 @@ class TestDiamondMergePattern:
             },
             agent_indices=diamond_indices,
             current_item=merged_item,
-            file_path="/mock/batch_001.json",
             context_scope={
                 "observe": [
                     "branch_seo.seo_title",
@@ -957,7 +950,6 @@ class TestDiamondMergePattern:
             },
             agent_indices=diamond_indices,
             current_item=merged_item,
-            file_path="/mock/batch_001.json",
             context_scope={
                 "observe": ["branch_seo.*", "branch_recommendations.*"],
             },
@@ -999,7 +991,6 @@ class TestDiamondMergePattern:
             },
             agent_indices=diamond_indices,
             current_item=single_dep_item,
-            file_path="/mock/batch_001.json",
             context_scope={"observe": ["branch_seo.seo_title"]},
         )
 

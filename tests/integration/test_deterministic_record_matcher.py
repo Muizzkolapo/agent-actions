@@ -164,7 +164,6 @@ class TestAncestorMode:
             },
             agent_indices={"source": 0, "extract": 1, "transform": 2, "classify": 3},
             current_item=current_item,
-            file_path="/mock/test.json",
             context_scope={"observe": ["extract.answer_text"]},
         )
 
@@ -290,7 +289,6 @@ class TestMergeParentMode:
             },
             agent_indices={"source": 0, "branch_a": 1, "branch_b": 2, "merge_action": 3},
             current_item=merged_item,
-            file_path="/mock/test.json",
             context_scope={"observe": ["branch_b.score", "branch_b.label"]},
         )
 

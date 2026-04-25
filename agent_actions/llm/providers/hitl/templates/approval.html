@@ -1250,10 +1250,10 @@
             /* field_order contains qualified refs like "action.field_name".
                Strip only the leading action namespace (first dot) so nested
                paths like "dep.nested.inner" resolve to "nested.inner", matching
-               the keys produced by _apply_observe_filter / parse_field_reference. */
+               the keys produced by apply_observe_for_file_mode / parse_field_reference. */
             var entries; /* [{key, label}] */
             if (fieldOrder.length > 0) {
-                /* Match each ref to its data key. When _apply_observe_filter
+                /* Match each ref to its data key. When apply_observe_for_file_mode
                    detects bare-key collisions (e.g. dep_a.title & dep_b.title),
                    it uses the full qualified ref as the data key so both values
                    are preserved. Non-colliding keys stay bare for compat. */

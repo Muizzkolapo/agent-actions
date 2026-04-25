@@ -215,11 +215,9 @@ class TaskPreparer:
             version_context=context.version_context,
             workflow_metadata=context.workflow_metadata,
             current_item=current_item,
-            file_path=context.file_path,
             context_scope=context.agent_config.get("context_scope"),
-            output_directory=context.output_directory,
-            storage_backend=context.storage_backend,
         )
+        field_context.pop("_dependency_metadata", None)
 
         # Promote output_field values to top-level so guards can reference them directly.
         # E.g., if action "assess_severity" has output_field="severity", then
