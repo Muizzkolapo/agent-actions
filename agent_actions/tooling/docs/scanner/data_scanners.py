@@ -122,12 +122,23 @@ def _unwrap_record_content(record: dict, action_name: str) -> dict:
     specific action's fields so consumers see actual output data.
     """
     content = record.get("content")
-    if (
-        isinstance(content, dict)
-        and action_name in content
-        and isinstance(content[action_name], dict)
-    ):
-        return {**record, "content": content[action_name]}
+    if not isinstance(content, dict):
+        return record
+    if action_name in content:
+        ns = content[action_name]
+        if ns is None:
+            # Guard-skipped — null namespace
+            return {**record, "content": {}}
+        if isinstance(ns, dict):
+            return {**record, "content": ns}
+        return {**record, "content": {action_name: ns}}
+    # Check if content looks namespaced (values are dicts/None = bus model)
+    # vs flat (values are strings/numbers = legacy or pre-namespace data)
+    looks_namespaced = any(isinstance(v, (dict, type(None))) for v in content.values())
+    if looks_namespaced:
+        # Namespaced but this action missing — guard-skipped without null marker
+        return {**record, "content": {}}
+    # Flat legacy content — pass through as-is
     return record
 
 

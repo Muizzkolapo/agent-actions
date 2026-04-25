@@ -148,26 +148,34 @@ Setting `granularity: record` on a HITL action raises a `ConfigurationError`. Re
       - extract_data.*
 ```
 
-**Output**: Each record gets its own `hitl_status`, `user_comment`, and `timestamp` based on per-record review decisions in the UI.
+**Output**: Each record gets its own `hitl_status`, `user_comment`, and `timestamp` under the HITL action's namespace, based on per-record review decisions in the UI.
 
 ```json
 [
   {
-    "id": 1,
-    "name": "Alice",
-    "hitl_status": "approved",
-    "user_comment": "",
-    "timestamp": "2026-02-12T10:00:00Z"
+    "content": {
+      "extract_data": { "id": 1, "name": "Alice" },
+      "review_data": {
+        "hitl_status": "approved",
+        "user_comment": "",
+        "timestamp": "2026-02-12T10:00:00Z"
+      }
+    }
   },
   {
-    "id": 2,
-    "name": "Bob",
-    "hitl_status": "rejected",
-    "user_comment": "Invalid email",
-    "timestamp": "2026-02-12T10:00:00Z"
+    "content": {
+      "extract_data": { "id": 2, "name": "Bob" },
+      "review_data": {
+        "hitl_status": "rejected",
+        "user_comment": "Invalid email",
+        "timestamp": "2026-02-12T10:00:00Z"
+      }
+    }
   }
 ]
 ```
+
+Downstream actions access HITL fields via the namespace: `review_data.hitl_status`, `review_data.user_comment`.
 
 ## Output Schema
 
@@ -184,7 +192,7 @@ HITL actions return decisions in a standardized format:
 
 ### Accessing HITL Decisions Downstream
 
-HITL decision fields (`hitl_status`, `user_comment`, `timestamp`) are merged directly into each record's content. Downstream actions receive these fields at the **top level** of each item.
+HITL decision fields (`hitl_status`, `user_comment`, `timestamp`) are stored under the HITL action's namespace in the record content. Downstream actions access them using the action name as a namespace prefix (e.g., `review_data.hitl_status`).
 
 #### Guards
 

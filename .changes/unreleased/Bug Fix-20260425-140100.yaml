@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "VS Code extension Action Output now shows only the current action's namespace fields, not the entire data bus; guard-skipped actions show a clear indicator"
+time: 2026-04-25T14:01:00.000000Z

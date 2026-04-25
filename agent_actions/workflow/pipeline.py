@@ -561,7 +561,7 @@ class ProcessingPipeline:
             context.source_data = original_passing
 
             if not passing:
-                results = _build_skipped_results(skipped)
+                results = _build_skipped_results(skipped, self.config.action_name)
             else:
                 if self.is_tool_action:
                     results = self._process_file_mode_tool(passing, original_passing, context)
@@ -627,16 +627,29 @@ class ProcessingPipeline:
         return process_file_mode_hitl(self, data, original_data, context)
 
 
-def _build_skipped_results(skipped: list[dict]) -> list[ProcessingResult]:
-    """Convert guard-skipped items into UNPROCESSED ProcessingResults."""
-    return [
-        ProcessingResult.unprocessed(
-            data=[item],
-            reason="guard_prefilter_skip",
-            source_guid=item.get("source_guid"),
+def _build_skipped_results(
+    skipped: list[dict], action_name: str | None = None
+) -> list[ProcessingResult]:
+    """Convert guard-skipped items into UNPROCESSED ProcessingResults.
+
+    When action_name is provided, adds a null namespace to the record's
+    content so downstream UI and processing see an explicit skip marker
+    rather than a missing namespace.
+    """
+    results = []
+    for item in skipped:
+        if action_name and isinstance(item, dict):
+            content = item.get("content")
+            if isinstance(content, dict) and action_name not in content:
+                item = {**item, "content": {**content, action_name: None}}
+        results.append(
+            ProcessingResult.unprocessed(
+                data=[item],
+                reason="guard_prefilter_skip",
+                source_guid=item.get("source_guid"),
+            )
         )
-        for item in skipped
-    ]
+    return results
 
 
 def create_processing_pipeline(

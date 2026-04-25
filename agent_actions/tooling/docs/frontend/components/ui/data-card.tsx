@@ -47,9 +47,8 @@ export function CellValue({ value }: { value: unknown }) {
     return <span className="font-mono tabular-nums text-foreground">{value.toLocaleString()}</span>
   }
   if (typeof value === "object") {
-    const str = JSON.stringify(value)
     return (
-      <span className="font-mono text-muted-foreground break-all">{str}</span>
+      <span className="font-mono text-muted-foreground break-all">{formatValue(value, 80)}</span>
     )
   }
   const str = String(value)
@@ -260,14 +259,6 @@ function InlinePills({ items }: { items: (string | number)[] }) {
   )
 }
 
-function CodeBlock({ value }: { value: unknown }) {
-  return (
-    <pre className="rounded-md bg-secondary/40 border border-border/30 px-3 py-2 text-[0.8em] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  )
-}
-
 function isArrayOfObjects(value: unknown): value is Record<string, unknown>[] {
   if (!Array.isArray(value) || value.length === 0) return false
   return value.every((v) => typeof v === "object" && v !== null && !Array.isArray(v))
@@ -278,7 +269,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
     return <InlinePills items={value as (string | number)[]} />
   }
   if (getValueType(value) === "object" && !isArrayOfObjects(value)) {
-    return <CodeBlock value={value} />
+    return <JsonHighlighter text={JSON.stringify(value, null, 2)} />
   }
   // Source quote — blockquote treatment
   if (isSourceQuoteField(fieldKey) && typeof value === "string") {
@@ -293,8 +284,38 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
 
 // ── Tree components ────────────────────────────────────────────────────────
 
-function TreeField({ fieldKey, value, defaultOpen = true }: { fieldKey: string; value: unknown; defaultOpen?: boolean }) {
+const TREE_MAX_DEPTH = 5
+
+function TreeField({ fieldKey, value, defaultOpen = true, depth = 0 }: { fieldKey: string; value: unknown; defaultOpen?: boolean; depth?: number }) {
   const [open, setOpen] = useState(defaultOpen)
+
+  if (typeof value === "object" && value !== null && !Array.isArray(value) && depth < TREE_MAX_DEPTH) {
+    const entries = Object.entries(value as Record<string, unknown>)
+    return (
+      <TreeNode label={fieldKey} badge={`${entries.length} fields`} defaultOpen={defaultOpen}>
+        {entries.map(([k, v]) => (
+          <TreeField key={k} fieldKey={k} value={v} defaultOpen={false} depth={depth + 1} />
+        ))}
+      </TreeNode>
+    )
+  }
+
+  if (isArrayOfObjects(value) && depth < TREE_MAX_DEPTH) {
+    const items = value as Record<string, unknown>[]
+    return (
+      <TreeNode label={fieldKey} badge={`array[${items.length}]`} defaultOpen={defaultOpen}>
+        {items.slice(0, 20).map((item, i) => (
+          <ArrayItemNode key={i} item={item} index={i} defaultOpen={i === 0} depth={depth + 1} />
+        ))}
+        {items.length > 20 && (
+          <span className="text-[0.75em] text-muted-foreground/50 pl-4 py-1 block italic">
+            + {items.length - 20} more items
+          </span>
+        )}
+      </TreeNode>
+    )
+  }
+
   const valStr = typeof value === "string" ? value : typeof value === "object" ? JSON.stringify(value) : String(value ?? "")
   const preview = valStr.length > 60 ? valStr.slice(0, 60) + "\u2026" : valStr
 
@@ -357,10 +378,12 @@ function ArrayItemNode({
   item,
   index,
   defaultOpen = false,
+  depth = 0,
 }: {
   item: Record<string, unknown>
   index: number
   defaultOpen?: boolean
+  depth?: number
 }) {
   const [open, setOpen] = useState(defaultOpen)
 
@@ -392,7 +415,7 @@ function ArrayItemNode({
       <div className="data-card-drawer" data-open={open}>
         <div className="pl-4">
           {Object.entries(item).map(([k, v]) => (
-            <TreeField key={k} fieldKey={k} value={v} />
+            <TreeField key={k} fieldKey={k} value={v} depth={depth} />
           ))}
         </div>
       </div>
@@ -456,26 +479,20 @@ export interface DataCardProps {
   actionInfo?: ActionInfo
 }
 
-export function getDisplayFields(record: Record<string, unknown>, actionName?: string): Record<string, unknown> {
+export function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
+  // Scanner already unwraps namespaced content to action-specific fields.
+  // This function just extracts the content dict for display.
   const contentVal = record.content
   if (contentVal && typeof contentVal === "object" && !Array.isArray(contentVal)) {
-    const content = contentVal as Record<string, unknown>
-    // Unwrap namespace: with the additive model, content is
-    // { action_a: {...}, action_b: {...} }. Show only this action's fields.
-    if (actionName && actionName in content) {
-      const ns = content[actionName]
-      if (ns && typeof ns === "object" && !Array.isArray(ns)) {
-        return ns as Record<string, unknown>
-      }
-    }
-    return content
+    return contentVal as Record<string, unknown>
   }
   return record
 }
 
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
-  const displayRecord = getDisplayFields(record, actionInfo?.name)
+  const displayRecord = getDisplayFields(record)
+  const guardSkipped = Object.keys(displayRecord).filter(k => classifyField(k) === "content").length === 0
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)
@@ -547,7 +564,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         )}
         {!recordOpen && (
           <span className="text-[10px] text-foreground/50 ml-auto">
-            {trace ? "trace + " : ""}{plural(outputFields.length, "field")}
+            {guardSkipped ? "guard skipped" : `${trace ? "trace + " : ""}${plural(outputFields.length, "field")}`}
           </span>
         )}
       </button>
@@ -661,44 +678,50 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
       )}
 
       {/* Section 3: Action Output */}
-      {outputFields.length > 0 && (
+      {(outputFields.length > 0 || guardSkipped) && (
         <CollapsibleSection
           label="Action Output"
 
-          hint={plural(outputFields.length, "field")}
+          hint={guardSkipped ? "guard skipped" : plural(outputFields.length, "field")}
           open={sec.actionOutput}
           onToggle={() => toggle("actionOutput")}
-          copyText={outputJson}
+          copyText={guardSkipped ? undefined : outputJson}
         >
           <div className="pb-2 pl-4">
-            {outputFields.map((f) => {
-              if (isArrayOfObjects(f.value)) {
-                const items = f.value as Record<string, unknown>[]
-                return (
-                  <TreeNode
-                    key={f.key}
-                    label={f.key}
-                    badge={`array[${items.length}]`}
-                    defaultOpen={true}
-                  >
-                    {items.map((item, i) => (
-                      <ArrayItemNode
-                        key={i}
-                        item={item}
-                        index={i}
-                        defaultOpen={i === 0}
-                      />
-                    ))}
-                  </TreeNode>
-                )
-              }
-              return <TreeField key={f.key} fieldKey={f.key} value={f.value} />
-            })}
+            {guardSkipped ? (
+              <div className="px-4 pb-3 text-xs text-muted-foreground italic">
+                Guard skipped — no output produced
+              </div>
+            ) : (
+              outputFields.map((f) => {
+                if (isArrayOfObjects(f.value)) {
+                  const items = f.value as Record<string, unknown>[]
+                  return (
+                    <TreeNode
+                      key={f.key}
+                      label={f.key}
+                      badge={`array[${items.length}]`}
+                      defaultOpen={true}
+                    >
+                      {items.map((item, i) => (
+                        <ArrayItemNode
+                          key={i}
+                          item={item}
+                          index={i}
+                          defaultOpen={i === 0}
+                        />
+                      ))}
+                    </TreeNode>
+                  )
+                }
+                return <TreeField key={f.key} fieldKey={f.key} value={f.value} />
+              })
+            )}
           </div>
         </CollapsibleSection>
       )}
 
-      {outputFields.length === 0 && (
+      {outputFields.length === 0 && !guardSkipped && (
         <div className="px-4 pb-3 text-xs text-muted-foreground italic">No content fields</div>
       )}
 
