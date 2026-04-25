@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fan-in dependencies now merge all branches by root_target_id instead of narrowing to primary — aligns with additive content (bus) model"
+time: 2026-04-25T03:55:00.000000Z
