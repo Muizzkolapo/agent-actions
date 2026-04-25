@@ -6,32 +6,31 @@
 #              all fields are assembled into a complete triage record.
 #
 # Showcases:
-#   - json_mode: false — works with ANY model including Ollama / local LLMs
+#   - json_mode: false — works with ANY model
 #   - output_field: each action names its output field (no schema needed)
 #   - Progressive context: later steps see earlier fields, not raw ticket
 #   - Guard as cost control: skip response drafting for low-severity tickets
 #   - Seed data for routing rules (works in non-JSON mode too)
-#   - Per-action model override: use a stronger model only where it matters
 #
 # Why not JSON mode?
-#   Small / local models often can't produce valid JSON reliably.
+#   Some models can't produce valid JSON reliably.
 #   By asking for ONE answer per step, any model that can follow a simple
 #   instruction becomes usable. output_field names the result;
 #   the model just needs to produce the value as plain text.
 ################################################################################
 
 name: support_resolution
-description: "Triage support tickets using field-by-field construction — works with any model including Ollama"
+description: "Triage support tickets using field-by-field construction"
 version: "1.0.0"
 
 defaults:
   json_mode: false                    # ← Plain text responses, no JSON required
   granularity: Record
   is_operational: true
-  run_mode: batch                    # Ollama doesn't support batch mode
-  model_vendor: ollama                # Works with local models out of the box
-  model_name: llama3.2:latest
-  api_key: OLLAMA_API_KEY
+  run_mode: batch
+  model_vendor: gemini
+  model_name: gemini-flash-lite-latest
+  api_key: GEMINI_API_KEY
   record_limit: 2      # Remove for full processing
   data_source:
     type: local
@@ -124,16 +123,12 @@ actions:
   # ==========================================================================
   # STEP 6: Draft response (guarded — skip for low severity)
   # output_field → suggested_response
-  # Overrides model: uses a stronger model for customer-facing text
   # ==========================================================================
   - name: draft_response
     dependencies: [summarize_issue, assign_team]
     intent: "Draft a customer response — skipped for low-severity tickets"
     output_field: suggested_response
     prompt: $support_resolution.Draft_Response
-    # model_vendor: openai              # ← Override: use a stronger model here
-    # model_name: gpt-4o-mini
-    # api_key: OPENAI_API_KEY
     guard:
       condition: 'severity != "low"'
       on_false: "skip"
