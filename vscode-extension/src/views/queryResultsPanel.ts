@@ -338,6 +338,10 @@ export class QueryResultsPanel implements vscode.Disposable {
                         dr[actionName] = actionNs;
                         nsExtracted = true;
                     }
+                } else if (actionName) {
+                    // Action namespace not in content — record passed through without this action producing output
+                    dr = {};
+                    guardSkipped = true;
                 } else {
                     dr = content;
                 }

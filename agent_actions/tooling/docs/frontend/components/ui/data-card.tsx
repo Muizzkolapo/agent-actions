@@ -498,6 +498,10 @@ export function getDisplayFields(record: Record<string, unknown>, actionName?: s
       }
       return { [actionName]: ns }
     }
+    // Action namespace not in content — record passed through without output
+    if (actionName) {
+      return GUARD_SKIPPED
+    }
     return content
   }
   return record
