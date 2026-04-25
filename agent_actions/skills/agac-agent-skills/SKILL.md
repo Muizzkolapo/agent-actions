@@ -96,9 +96,24 @@ def deduplicate(data: list[dict]) -> list[dict]:
 
 | Directive | LLM sees? | In output? | Use for |
 |-----------|:---------:|:----------:|---------|
-| `observe` | Yes | No | Data the action processes |
-| `passthrough` | No | Yes | Fields downstream needs (zero tokens) |
+| `observe` | Yes | Yes (processed) | Data the action transforms |
+| `passthrough` | No | Yes (forwarded) | Fields downstream needs (zero tokens) |
 | `drop` | No | No | Noise reduction (data stays on bus) |
+
+**What ends up in the output record:**
+- Action's own output → `content[action_name] = {schema fields}`
+- All upstream namespaces → carried forward on the bus
+- Passthrough fields → forwarded without LLM processing
+- Dropped fields → excluded from this action's context, but still on the bus for downstream
+- Seed data → not in output (prompt-only)
+- Guard-skipped → `content[action_name] = null`
+
+**Wildcard vs specific fields:**
+- `upstream.*` — use when aggregating branches or during early development
+- `upstream.field1, upstream.field2` — use for cost optimization (fewer tokens) and clarity
+- Nested array access (`upstream.array.*`) is not supported — observe the whole field
+
+**Drop + passthrough on the same field:** Drop excludes from LLM context. Passthrough forwards to output. Both can coexist — field is hidden from the LLM but available downstream.
 
 ## Guards
 
@@ -117,6 +132,8 @@ guard:
 
 ## Versions (Parallel Voting)
 
+Run the same action N times independently, then merge results.
+
 ```yaml
 - name: score_quality
   versions: { param: scorer_id, range: [1, 2, 3], mode: parallel }
@@ -130,7 +147,24 @@ guard:
     observe: [score_quality.*]   # resolver expands to _1, _2, _3
 ```
 
-In prompts, version context is under `{{ version.i }}`, `{{ version.length }}`, `{{ version.first }}`, `{{ version.last }}`.
+**How cardinality works:**
+```
+Input:           1 record
+After versions:  3 actions created (score_quality_1, score_quality_2, score_quality_3)
+                 Each processes the same record independently
+After merge:     1 record with version namespaces combined:
+                   content["score_quality_1"] = {voter 1 output}
+                   content["score_quality_2"] = {voter 2 output}
+                   content["score_quality_3"] = {voter 3 output}
+```
+
+The merge tool receives all version namespaces. Access each voter's data:
+```python
+score_1 = data["score_quality_1"]["score_quality_1"]["helpfulness_score"]
+score_2 = data["score_quality_2"]["score_quality_2"]["helpfulness_score"]
+```
+
+In versioned action prompts: `{{ version.i }}` (current index), `{{ version.length }}` (total), `{{ version.first }}` / `{{ version.last }}` (booleans).
 
 ## Fan-In Pattern
 
@@ -294,13 +328,21 @@ agac run -a workflow --fresh  # Clear state and re-run
 agac render -a workflow       # Compiled YAML (resolve Jinja/schemas/versions)
 ```
 
-Check errors: `events.json`. Use `record_limit: 2` to test cheaply.
+Check errors: `events.json`. Use `record_limit: 2` to test cheaply (processes first 2 records only).
 
 Full reset:
 ```bash
 rm -rf agent_io/target agent_io/.agent_status.json agent_io/source agent_io/store
 mkdir -p agent_io/target
 ```
+
+**Silent data issues checklist** (output looks wrong but didn't crash):
+1. All namespace names match exactly? (typos in observe/guard cause empty data, not errors)
+2. Guard condition references existing field? (missing field evaluates to None — may silently filter)
+3. Tool accessing `data["namespace"]["field"]` not `data["field"]`? (flat access gets wrong data)
+4. Version merge tool unwrapping double nesting? (`data["action_1"]["action_1"]["field"]`)
+5. `agac render` shows expected expanded config? (wildcards, versions resolved correctly)
+6. Schema fields match what the LLM/tool actually returns? (extra fields silently dropped)
 
 ## Agentic Patterns
 

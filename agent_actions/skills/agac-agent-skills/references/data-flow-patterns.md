@@ -58,14 +58,14 @@ UDF receives one record, `content` wrapper stripped:
 Access: `data["extract_claims"]["claims"]`
 
 ### File mode
-UDF receives ALL records as list, `content` wrapper retained:
+UDF receives ALL records as a clean list — no framework fields (`source_guid`, `lineage`, `content` wrapper` are stripped). Each item is a `TrackedItem` (dict subclass with hidden provenance). Treat as normal dicts:
 ```json
 [
-  {"content": {"extract_claims": {"claims": ["claim 1"]}}, "source_guid": "abc-123", "lineage": [...]},
-  {"content": {"extract_claims": {"claims": ["claim 2"]}}, "source_guid": "abc-123", "lineage": [...]}
+  {"extract_claims": {"claims": ["claim 1"]}, "source": {"url": "..."}},
+  {"extract_claims": {"claims": ["claim 2"]}, "source": {"url": "..."}}
 ]
 ```
-Access: `record["content"]["extract_claims"]["claims"]`
+Access: `item["extract_claims"]["claims"]`
 
 ### Version merge
 After `version_consumption: {pattern: merge}`, namespaced by expanded action name:
