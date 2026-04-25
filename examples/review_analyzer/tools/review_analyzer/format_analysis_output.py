@@ -18,27 +18,32 @@ def format_analysis_output(data: dict[str, Any]) -> dict[str, Any]:
     """
     content = data.get("content", data)
 
-    # Source metadata (passthrough fields arrive flat)
+    # Namespaced data model: fields are at content[namespace][field]
+    source_ns = content.get("source", {})
+    extract_ns = content.get("extract_claims", {})
+    agg_ns = content.get("aggregate_scores", {})
+    response_ns = content.get("generate_response", {})
+    insights_ns = content.get("extract_product_insights", {})
+
     source = {
-        "review_id": content.get("review_id", ""),
-        "product_name": content.get("product_name", ""),
-        "product_category": content.get("product_category", ""),
-        "reviewer_name": content.get("reviewer_name", ""),
-        "review_date": content.get("review_date", ""),
+        "review_id": source_ns.get("review_id", ""),
+        "product_name": source_ns.get("product_name", ""),
+        "product_category": source_ns.get("product_category", ""),
+        "reviewer_name": source_ns.get("reviewer_name", ""),
+        "review_date": source_ns.get("review_date", ""),
     }
 
-    # Analysis — fields from extract_claims and aggregate_scores arrive flat
     analysis = {
-        "quality_score": content.get("consensus_score", 0),
-        "is_split_decision": content.get("is_split_decision", False),
-        "claims_extracted": len(content.get("factual_claims", [])),
-        "aspects_covered": content.get("product_aspects", []),
+        "quality_score": agg_ns.get("consensus_score", 0),
+        "is_split_decision": agg_ns.get("is_split_decision", False),
+        "claims_extracted": len(extract_ns.get("factual_claims", [])),
+        "aspects_covered": extract_ns.get("product_aspects", []),
         "sentiment": (
-            content.get("sentiment_signals", {}).get("overall_tone", "unknown")
-            if isinstance(content.get("sentiment_signals"), dict)
+            extract_ns.get("sentiment_signals", {}).get("overall_tone", "unknown")
+            if isinstance(extract_ns.get("sentiment_signals"), dict)
             else "unknown"
         ),
-        "red_flags": content.get("red_flags", []),
+        "red_flags": agg_ns.get("red_flags", []),
     }
 
     result = {
@@ -47,20 +52,20 @@ def format_analysis_output(data: dict[str, Any]) -> dict[str, Any]:
     }
 
     # Only include merchant_response if the guard passed
-    response_text = content.get("response_text")
+    response_text = response_ns.get("response_text") if isinstance(response_ns, dict) else None
     if response_text:
         result["merchant_response"] = {
             "response_text": response_text,
-            "response_tone": content.get("response_tone", ""),
+            "response_tone": response_ns.get("response_tone", ""),
         }
 
     # Only include product_insights if the guard passed
-    feedback_items = content.get("feedback_items")
+    feedback_items = insights_ns.get("feedback_items") if isinstance(insights_ns, dict) else None
     if feedback_items:
         result["product_insights"] = {
             "feedback_items": feedback_items,
-            "improvement_priority": content.get("improvement_priority", ""),
-            "positive_differentiators": content.get("positive_differentiators", []),
+            "improvement_priority": insights_ns.get("improvement_priority", ""),
+            "positive_differentiators": insights_ns.get("positive_differentiators", []),
         }
 
     return result
