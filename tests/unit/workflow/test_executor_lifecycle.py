@@ -334,7 +334,7 @@ class TestHandleRunSuccess:
             call for call in mock_fire.call_args_list if isinstance(call[0][0], ActionSkipEvent)
         ]
         assert len(skip_events) == 1
-        assert skip_events[0][0][0].skip_reason == "All records guard-skipped"
+        assert skip_events[0][0][0].skip_reason == "All records guard-filtered — no output produced"
         assert skip_events[0][0][0].action_index == 0
         assert skip_events[0][0][0].total_actions == 2  # from execution_order fixture
 
@@ -354,7 +354,7 @@ class TestHandleRunSuccess:
         call_kwargs = executor.run_tracker.record_action_complete.call_args
         config = call_kwargs[1]["config"] if "config" in call_kwargs[1] else call_kwargs[0][0]
         assert config.status == "skipped"
-        assert config.skip_reason == "All records guard-skipped"
+        assert config.skip_reason == "All records guard-filtered — no output produced"
 
 
 # ── _handle_run_failure ────────────────────────────────────────────────

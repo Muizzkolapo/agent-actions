@@ -362,7 +362,7 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
-        # Normal completion — check for guard-all-skipped or partial item failures
+        # Normal completion — check for guard-all-filtered or partial item failures
         final_status = self._resolve_completion_status(params.action_name)
 
         if final_status == ActionStatus.SKIPPED:
@@ -370,7 +370,7 @@ class ActionExecutor:
                 params.action_name,
                 ActionStatus.SKIPPED,
                 execution_time=duration,
-                skip_reason="All records guard-skipped",
+                skip_reason="All records guard-filtered — no output produced",
             )
             total_actions = (
                 len(self.deps.action_runner.execution_order)
@@ -382,7 +382,7 @@ class ActionExecutor:
                     action_name=params.action_name,
                     action_index=params.action_idx,
                     total_actions=total_actions,
-                    skip_reason="All records guard-skipped",
+                    skip_reason="All records guard-filtered — no output produced",
                     mode=params.action_config.get("run_mode", ""),
                 )
             )
@@ -392,7 +392,7 @@ class ActionExecutor:
                     action_name=params.action_name,
                     status="skipped",
                     duration_seconds=duration,
-                    skip_reason="All records guard-skipped",
+                    skip_reason="All records guard-filtered — no output produced",
                 )
                 self.run_tracker.record_action_complete(config=config)
             return ActionExecutionResult(
@@ -472,7 +472,7 @@ class ActionExecutor:
                 )
 
     def _resolve_completion_status(self, action_name: str) -> ActionStatus:
-        """Return SKIPPED if all records guard-skipped, COMPLETED_WITH_FAILURES if item-level failures exist, else COMPLETED."""
+        """Return SKIPPED if all records guard-filtered, COMPLETED_WITH_FAILURES if item-level failures exist, else COMPLETED."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return ActionStatus.COMPLETED
@@ -483,7 +483,7 @@ class ActionExecutor:
                 target_files = storage_backend.list_target_files(action_name)
                 if not target_files:
                     logger.info(
-                        "Action '%s' had all records guard-skipped — marking as skipped",
+                        "Action '%s' had all records guard-filtered — marking as skipped",
                         action_name,
                     )
                     return ActionStatus.SKIPPED
