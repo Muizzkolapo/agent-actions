@@ -510,10 +510,10 @@ class TestUnwrapRecordContent:
         assert result is record
 
     def test_action_value_not_dict(self):
-        """When content[action_name] is not a dict, don't unwrap."""
+        """When content[action_name] is not a dict, wrap as {action_name: value}."""
         record = {"content": {"classify": "not-a-dict"}}
         result = _unwrap_record_content(record, "classify")
-        assert result is record
+        assert result["content"] == {"classify": "not-a-dict"}
 
     def test_does_not_mutate_original(self):
         """Unwrapping returns a new dict; the original is untouched."""

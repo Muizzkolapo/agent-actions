@@ -132,8 +132,14 @@ def _unwrap_record_content(record: dict, action_name: str) -> dict:
         if isinstance(ns, dict):
             return {**record, "content": ns}
         return {**record, "content": {action_name: ns}}
-    # Action namespace not in content — record passed through without output
-    return {**record, "content": {}}
+    # Check if content looks namespaced (values are dicts/None = bus model)
+    # vs flat (values are strings/numbers = legacy or pre-namespace data)
+    looks_namespaced = any(isinstance(v, (dict, type(None))) for v in content.values())
+    if looks_namespaced:
+        # Namespaced but this action missing — guard-skipped without null marker
+        return {**record, "content": {}}
+    # Flat legacy content — pass through as-is
+    return record
 
 
 def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | None:
