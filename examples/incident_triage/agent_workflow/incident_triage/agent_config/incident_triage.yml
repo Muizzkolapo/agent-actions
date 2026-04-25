@@ -21,9 +21,9 @@ defaults:
   granularity: Record
   is_operational: true
   run_mode: online
-  model_vendor: openai
-  model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
+  model_name: gemini-flash-lite-latest
+  model_vendor: gemini
+  api_key: GEMINI_API_KEY
   record_limit: 2      # Remove for full processing
   context_scope:
     seed_path:
@@ -43,9 +43,6 @@ actions:
     intent: "Extract structured information from raw incident report"
     schema: extract_incident_details
     prompt: $incident_triage.Extract_Incident_Details
-    model_vendor: groq
-    model_name: llama-3.1-8b-instant
-    api_key: GROQ_API_KEY
     reprompt:
       validation: check_required_fields
       max_attempts: 2
@@ -67,8 +64,6 @@ actions:
       mode: parallel
     schema: classify_severity
     prompt: $incident_triage.Classify_Severity
-    model_vendor: ollama                          # Classification from fixed categories — parallel voting compensates
-    model_name: llama3.2:latest
     reprompt:
       validation: check_required_fields
       max_attempts: 2
