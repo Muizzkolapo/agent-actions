@@ -47,10 +47,8 @@ export function CellValue({ value }: { value: unknown }) {
     return <span className="font-mono tabular-nums text-foreground">{value.toLocaleString()}</span>
   }
   if (typeof value === "object") {
-    const str = JSON.stringify(value)
-    const preview = str.length > 80 ? str.slice(0, 80) + "\u2026" : str
     return (
-      <span className="font-mono text-muted-foreground break-all">{preview}</span>
+      <span className="font-mono text-muted-foreground break-all">{formatValue(value, 80)}</span>
     )
   }
   const str = String(value)
@@ -261,14 +259,6 @@ function InlinePills({ items }: { items: (string | number)[] }) {
   )
 }
 
-function CodeBlock({ value }: { value: unknown }) {
-  return (
-    <pre className="rounded-md bg-secondary/40 border border-border/30 px-3 py-2 text-[0.8em] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  )
-}
-
 function isArrayOfObjects(value: unknown): value is Record<string, unknown>[] {
   if (!Array.isArray(value) || value.length === 0) return false
   return value.every((v) => typeof v === "object" && v !== null && !Array.isArray(v))
@@ -294,12 +284,12 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
 
 // ── Tree components ────────────────────────────────────────────────────────
 
+const TREE_MAX_DEPTH = 5
+
 function TreeField({ fieldKey, value, defaultOpen = true, depth = 0 }: { fieldKey: string; value: unknown; defaultOpen?: boolean; depth?: number }) {
   const [open, setOpen] = useState(defaultOpen)
-  const MAX_DEPTH = 5
 
-  // Nested object — render as expandable tree
-  if (typeof value === "object" && value !== null && !Array.isArray(value) && depth < MAX_DEPTH) {
+  if (typeof value === "object" && value !== null && !Array.isArray(value) && depth < TREE_MAX_DEPTH) {
     const entries = Object.entries(value as Record<string, unknown>)
     return (
       <TreeNode label={fieldKey} badge={`${entries.length} fields`} defaultOpen={defaultOpen}>
@@ -310,8 +300,7 @@ function TreeField({ fieldKey, value, defaultOpen = true, depth = 0 }: { fieldKe
     )
   }
 
-  // Array of objects — render with expandable items
-  if (isArrayOfObjects(value) && depth < MAX_DEPTH) {
+  if (isArrayOfObjects(value) && depth < TREE_MAX_DEPTH) {
     const items = value as Record<string, unknown>[]
     return (
       <TreeNode label={fieldKey} badge={`array[${items.length}]`} defaultOpen={defaultOpen}>
@@ -327,7 +316,6 @@ function TreeField({ fieldKey, value, defaultOpen = true, depth = 0 }: { fieldKe
     )
   }
 
-  // Simple values or max depth reached
   const valStr = typeof value === "string" ? value : typeof value === "object" ? JSON.stringify(value) : String(value ?? "")
   const preview = valStr.length > 60 ? valStr.slice(0, 60) + "\u2026" : valStr
 
