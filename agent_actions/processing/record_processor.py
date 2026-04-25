@@ -53,6 +53,29 @@ def _is_empty_output(response: Any) -> bool:
 class RecordProcessor:
     """Unified processor for first-stage and subsequent-stage record processing."""
 
+    @classmethod
+    def create(
+        cls,
+        agent_config: dict[str, Any],
+        agent_name: str,
+        *,
+        strategy: InvocationStrategy | None = None,
+        mode: RunMode = RunMode.ONLINE,
+        provider: Optional["BatchProvider"] = None,
+    ) -> "RecordProcessor":
+        """Factory method for RecordProcessor creation.
+
+        All non-test instantiation should go through this method so that
+        initialization changes only need to be made in one place.
+        """
+        return cls(
+            agent_config=agent_config,
+            agent_name=agent_name,
+            strategy=strategy,
+            mode=mode,
+            provider=provider,
+        )
+
     def __init__(
         self,
         agent_config: dict[str, Any],

@@ -24,7 +24,7 @@ class BatchProcessor:
         mode: RunMode = RunMode.ONLINE,
         provider: Optional["BatchProvider"] = None,
     ):
-        self._processor = RecordProcessor(
+        self._processor = RecordProcessor.create(
             agent_config=agent_config,
             agent_name=agent_name,
             strategy=strategy,
