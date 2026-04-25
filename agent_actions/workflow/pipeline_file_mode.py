@@ -583,8 +583,7 @@ def prefilter_by_guard(
             passing.append(item)
             original_passing.append(originals[idx])
         elif behavior == "skip":
-            # Use original (pre-observe) record so skipped tombstones
-            # keep namespaced content, not observe-flattened fields.
+            # Use pre-observe original so skipped tombstones keep namespaced content.
             skipped.append(originals[idx])
         # behavior == "filter": record excluded from both lists
 
