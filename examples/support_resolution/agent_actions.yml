@@ -2,7 +2,8 @@ default_agent_config:
   chunk_config:
     overlap: 500
     chunk_size: 4000
-  model_name: llama3
+  api_key: GEMINI_API_KEY
+  model_name: gemini-flash-lite-latest
   prompt_debug: false
 schema_path: schema
 tool_path: ["tools"]
