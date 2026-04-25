@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class GuardBehavior(StrEnum):
-    """Guard evaluation behavior when condition is not met."""
+    """Evaluation-valid guard behaviors; see also guards.consolidated_guard.GuardBehavior for config-layer."""
 
     SKIP = "skip"
     FILTER = "filter"
