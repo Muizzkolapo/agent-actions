@@ -1,6 +1,6 @@
 default_agent_config:
-  api_key: OPENAI_API_KEY
-  model_name: gpt-4o-mini
+  api_key: GEMINI_API_KEY
+  model_name: gemini-flash-lite-latest
   chunk_config:
     overlap: 500
     chunk_size: 4000

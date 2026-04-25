@@ -28,9 +28,9 @@ defaults:
   json_mode: true
   granularity: Record
   run_mode: online
-  model_vendor: openai
-  model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
+  model_name: gemini-flash-lite-latest
+  model_vendor: gemini
+  api_key: GEMINI_API_KEY
   is_operational: true
   prompt_debug: false
   record_limit: 2      # Remove for full processing
@@ -60,9 +60,6 @@ actions:
     intent: "Generate a structured product description from raw technical specs and image context"
     schema: generate_description
     prompt: $product_listing_enrichment.Generate_Product_Description
-    model_vendor: gemini                          # Cheap extraction — Gemini Flash for simple tasks
-    model_name: gemini-2.5-flash
-    api_key: GEMINI_API_KEY
     reprompt:
       validation: check_required_fields
       max_attempts: 2
@@ -162,7 +159,7 @@ actions:
     schema: optimize_seo
     prompt: $product_listing_enrichment.Optimize_SEO
     guard:
-      condition: 'compliance_passed == true'
+      condition: 'validate_compliance.compliance_passed == true'
       on_false: "skip"
     context_scope:
       observe:
