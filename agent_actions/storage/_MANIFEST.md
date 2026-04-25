@@ -32,9 +32,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 - **output/writer.py**: Uses backend for `write_target()` operations
 - **output/saver.py**: Uses backend for `write_source()` operations
 - **input/loaders/source_data.py**: Falls back to backend for `read_source()` operations
-- **input/context/historical.py**: Queries backend for historical node data lookups
-- **prompt/context/scope.py**: Passes `output_directory` for backend data resolution
-- **processing/processor.py**: Threads `output_directory` through prompt preparation
+- **processing/task_preparer.py**: Passes backend for prompt trace writes
 
 ## Project Surface
 
