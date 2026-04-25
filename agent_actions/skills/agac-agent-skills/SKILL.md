@@ -302,27 +302,233 @@ rm -rf agent_io/target agent_io/.agent_status.json agent_io/source agent_io/stor
 mkdir -p agent_io/target
 ```
 
-## 15 Agentic Patterns
+## Agentic Patterns
 
-All driven by the same data model: `RecordEnvelope` builds the bus, `context_scope` controls access.
+All driven by the same data model: `RecordEnvelope` builds the bus, `context_scope` controls access. Here's how to configure each pattern.
 
-| # | Pattern | Mechanism |
-|---|---------|-----------|
-| 1 | Linear chain | Each action adds namespace, observes previous |
-| 2 | Map-Reduce | 1→N split (Record tool) + N→1 aggregate (FILE tool) |
-| 3 | Parallel voting | `versions` + `version_consumption: merge` + aggregate tool |
-| 4 | Parallel generation | Same as voting, consumer picks best |
-| 5 | Fan-out / Fan-in | Bus has all namespaces, converging action observes both |
-| 6 | LLM/Tool alternation | Same namespace rules, tool grounds next LLM |
-| 7 | Grounded retrieval | LLM → Tool → LLM, each observes previous |
-| 8 | Guard gates | `filter` removes, `skip` adds null namespace |
-| 9 | HITL | Human decision under action namespace |
-| 10 | Cross-workflow | All namespaces cross boundary |
-| 11 | Context isolation | `drop` excludes from prompt, data stays on bus |
-| 12 | Reprompt validation | UDF check + re-prompt, final output under namespace |
-| 13 | Non-JSON field-by-field | `output_field` for weak models |
-| 14 | 1→N flatten | Record tool returns `list[dict]`, each inherits upstream |
-| 15 | Passthrough routing | Zero-token data forwarding |
+### Linear Chain
+
+Each action observes the previous. Content accumulates on the bus.
+
+```yaml
+  - name: extract
+    prompt: $workflow.Extract
+
+  - name: analyze
+    dependencies: [extract]
+    context_scope:
+      observe: [extract.key_facts]
+    prompt: $workflow.Analyze
+
+  - name: summarize
+    dependencies: [analyze]
+    context_scope:
+      observe: [extract.key_facts, analyze.analysis]
+    prompt: $workflow.Summarize
+```
+
+### Map-Reduce
+
+1→N split (Record tool) then N→1 aggregate (FILE tool).
+
+```yaml
+  - name: split_into_chunks          # 1 record → N records
+    kind: tool
+    impl: split_document
+    granularity: Record
+
+  - name: analyze_chunk              # process each independently
+    dependencies: [split_into_chunks]
+    context_scope:
+      observe: [split_into_chunks.*]
+    prompt: $workflow.Analyze_Chunk
+
+  - name: aggregate_results          # see ALL chunks at once
+    dependencies: [analyze_chunk]
+    kind: tool
+    impl: aggregate_analyses
+    granularity: File                 # ← FILE mode: receives entire array
+    context_scope:
+      observe: [analyze_chunk.*]
+```
+
+### Parallel Voting (Consensus)
+
+Multiple LLM evaluations merged into one. Each voter gets the same input but responds independently.
+
+```yaml
+  - name: score_quality
+    dependencies: [previous_action]
+    versions: { param: voter_id, range: [1, 2, 3], mode: parallel }
+    prompt: $workflow.Score_Quality
+    context_scope:
+      observe: [previous_action.*]
+
+  - name: aggregate_scores
+    dependencies: [score_quality]
+    kind: tool
+    impl: aggregate_votes
+    version_consumption: { source: score_quality, pattern: merge }
+    context_scope:
+      observe: [score_quality.*]      # resolver expands to _1, _2, _3
+```
+
+### Fan-Out / Fan-In
+
+Parallel branches that rejoin. The bus carries everything — the converging action just observes both.
+
+```yaml
+  # Two branches from same parent
+  - name: branch_a
+    dependencies: [shared_parent]
+    context_scope:
+      observe: [shared_parent.*]
+
+  - name: branch_b
+    dependencies: [shared_parent]
+    context_scope:
+      observe: [shared_parent.*]
+
+  # Convergence point — observes from both branches
+  - name: combine
+    dependencies: [branch_a, branch_b]
+    context_scope:
+      observe:
+        - branch_a.result
+        - branch_b.result
+```
+
+### Grounded Retrieval (LLM → Tool → LLM)
+
+LLM generates search criteria, tool retrieves candidates, LLM ranks results.
+
+```yaml
+  - name: generate_search
+    prompt: $workflow.Generate_Search
+    schema: { search_query: string, filters: array }
+
+  - name: retrieve_candidates
+    dependencies: [generate_search]
+    kind: tool
+    impl: search_database
+    context_scope:
+      observe: [generate_search.*]
+
+  - name: rank_results
+    dependencies: [retrieve_candidates]
+    context_scope:
+      observe:
+        - generate_search.search_query
+        - retrieve_candidates.candidates
+    prompt: $workflow.Rank_Results
+```
+
+### Guard Gates (Conditional Execution)
+
+```yaml
+  - name: generate_response
+    dependencies: [score_quality]
+    guard:
+      condition: 'aggregate_scores.consensus_score >= 6'
+      on_false: filter              # filter = remove record entirely
+    context_scope:
+      observe: [aggregate_scores.*]
+    prompt: $workflow.Generate_Response
+
+  - name: rewrite_if_needed
+    dependencies: [validate]
+    guard:
+      condition: 'validate.pass == false'
+      on_false: skip                # skip = null namespace, record continues
+    context_scope:
+      observe: [validate.violations, original_draft.*]
+    prompt: $workflow.Rewrite
+```
+
+### HITL (Human-in-the-Loop)
+
+Human reviews AI output. Decision stored under the HITL action's namespace.
+
+```yaml
+  - name: ai_assessment
+    prompt: $workflow.AI_Assessment
+
+  - name: human_review
+    dependencies: [ai_assessment]
+    kind: hitl
+    granularity: file
+    hitl:
+      port: 3001
+      timeout: 3600
+    context_scope:
+      observe: [ai_assessment.*]
+
+  - name: next_step
+    dependencies: [human_review]
+    context_scope:
+      observe: [human_review.decision]
+```
+
+### Reprompt Validation
+
+LLM output checked by a UDF. If validation fails, LLM is re-prompted with the error.
+
+```yaml
+  - name: write_description
+    dependencies: [previous_action]
+    reprompt:
+      validation: check_word_count   # tools/{workflow}/check_word_count.py
+      max_attempts: 3
+      on_exhausted: return_last      # return_last | raise
+    prompt: $workflow.Write_Description
+```
+
+The validation UDF returns `{"valid": true}` or `{"valid": false, "feedback": "Too short"}`.
+
+### Cross-Workflow Chaining
+
+Workflow B consumes output from Workflow A. All namespaces cross the boundary.
+
+```yaml
+# In workflow B's config:
+upstream_workflows:
+  - workflow: workflow_a
+    actions: [final_action]          # which actions to import
+```
+
+### Passthrough Routing (Zero-Token Forwarding)
+
+Carry fields downstream without putting them in the prompt (saves tokens).
+
+```yaml
+  context_scope:
+    observe:
+      - extract.key_facts             # LLM sees this (costs tokens)
+    passthrough:
+      - extract.raw_source            # forwarded but NOT in prompt (free)
+    drop:
+      - extract.debug_info            # excluded from everything
+```
+
+### Summary Table
+
+| # | Pattern | Key Config |
+|---|---------|------------|
+| 1 | Linear chain | `dependencies` + `observe` previous |
+| 2 | Map-Reduce | Record tool (1→N) + `granularity: File` tool (N→1) |
+| 3 | Parallel voting | `versions` + `version_consumption: merge` |
+| 4 | Parallel generation | Same as voting, pick best in consumer |
+| 5 | Fan-out / Fan-in | Multiple `dependencies`, observe from all branches |
+| 6 | LLM/Tool alternation | Alternate `kind: tool` and LLM actions |
+| 7 | Grounded retrieval | LLM → tool search → LLM rank |
+| 8 | Guard gates | `guard.on_false: filter` or `skip` |
+| 9 | HITL | `kind: hitl`, `granularity: file` |
+| 10 | Cross-workflow | `upstream_workflows` config |
+| 11 | Context isolation | `drop` directive in context_scope |
+| 12 | Reprompt validation | `reprompt.validation` UDF |
+| 13 | Non-JSON field-by-field | `json_mode: false`, `output_field` |
+| 14 | 1→N flatten | Record tool returns `list[dict]` |
+| 15 | Passthrough routing | `passthrough` in context_scope |
 
 ## References
 
