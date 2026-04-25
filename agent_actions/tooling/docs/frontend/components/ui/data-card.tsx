@@ -463,6 +463,9 @@ function useSectionState(nodeKey: string) {
 
 // ── DataCard ──────────────────────────────────────────────────────────────
 
+/** Sentinel returned by getDisplayFields when the action was guard-skipped (namespace is null). */
+const GUARD_SKIPPED: Record<string, unknown> = Object.freeze({})
+
 export interface ActionInfo {
   name: string
   kind: string
@@ -487,9 +490,13 @@ export function getDisplayFields(record: Record<string, unknown>, actionName?: s
     // { action_a: {...}, action_b: {...} }. Show only this action's fields.
     if (actionName && actionName in content) {
       const ns = content[actionName]
-      if (ns && typeof ns === "object" && !Array.isArray(ns)) {
+      if (ns === null) {
+        return GUARD_SKIPPED
+      }
+      if (typeof ns === "object" && !Array.isArray(ns)) {
         return ns as Record<string, unknown>
       }
+      return { [actionName]: ns }
     }
     return content
   }
@@ -499,6 +506,7 @@ export function getDisplayFields(record: Record<string, unknown>, actionName?: s
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record, actionInfo?.name)
+  const guardSkipped = displayRecord === GUARD_SKIPPED
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)
@@ -570,7 +578,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         )}
         {!recordOpen && (
           <span className="text-[10px] text-foreground/50 ml-auto">
-            {trace ? "trace + " : ""}{plural(outputFields.length, "field")}
+            {guardSkipped ? "guard skipped" : `${trace ? "trace + " : ""}${plural(outputFields.length, "field")}`}
           </span>
         )}
       </button>
@@ -684,44 +692,50 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
       )}
 
       {/* Section 3: Action Output */}
-      {outputFields.length > 0 && (
+      {(outputFields.length > 0 || guardSkipped) && (
         <CollapsibleSection
           label="Action Output"
 
-          hint={plural(outputFields.length, "field")}
+          hint={guardSkipped ? "guard skipped" : plural(outputFields.length, "field")}
           open={sec.actionOutput}
           onToggle={() => toggle("actionOutput")}
-          copyText={outputJson}
+          copyText={guardSkipped ? undefined : outputJson}
         >
           <div className="pb-2 pl-4">
-            {outputFields.map((f) => {
-              if (isArrayOfObjects(f.value)) {
-                const items = f.value as Record<string, unknown>[]
-                return (
-                  <TreeNode
-                    key={f.key}
-                    label={f.key}
-                    badge={`array[${items.length}]`}
-                    defaultOpen={true}
-                  >
-                    {items.map((item, i) => (
-                      <ArrayItemNode
-                        key={i}
-                        item={item}
-                        index={i}
-                        defaultOpen={i === 0}
-                      />
-                    ))}
-                  </TreeNode>
-                )
-              }
-              return <TreeField key={f.key} fieldKey={f.key} value={f.value} />
-            })}
+            {guardSkipped ? (
+              <div className="px-4 pb-3 text-xs text-muted-foreground italic">
+                Guard skipped — no output produced
+              </div>
+            ) : (
+              outputFields.map((f) => {
+                if (isArrayOfObjects(f.value)) {
+                  const items = f.value as Record<string, unknown>[]
+                  return (
+                    <TreeNode
+                      key={f.key}
+                      label={f.key}
+                      badge={`array[${items.length}]`}
+                      defaultOpen={true}
+                    >
+                      {items.map((item, i) => (
+                        <ArrayItemNode
+                          key={i}
+                          item={item}
+                          index={i}
+                          defaultOpen={i === 0}
+                        />
+                      ))}
+                    </TreeNode>
+                  )
+                }
+                return <TreeField key={f.key} fieldKey={f.key} value={f.value} />
+              })
+            )}
           </div>
         </CollapsibleSection>
       )}
 
-      {outputFields.length === 0 && (
+      {outputFields.length === 0 && !guardSkipped && (
         <div className="px-4 pb-3 text-xs text-muted-foreground italic">No content fields</div>
       )}
 

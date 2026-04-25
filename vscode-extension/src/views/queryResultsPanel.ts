@@ -181,6 +181,7 @@ export class QueryResultsPanel implements vscode.Disposable {
         var vscode = acquireVsCodeApi();
         var records = JSON.parse(${JSON.stringify(recordsJson)});
         var offset = ${offset};
+        var actionName = ${JSON.stringify(actionName)};
         var copyTexts = [];
 
         var METADATA_KEYS = new Set(['source_guid','lineage','node_id','metadata','target_id','parent_target_id','root_target_id','chunk_info','_recovery','_unprocessed','_file','_trace']);
@@ -195,6 +196,9 @@ export class QueryResultsPanel implements vscode.Disposable {
         function isArrayOfObjects(v) { if (!Array.isArray(v) || v.length === 0) return false; return v.every(function(x) { return typeof x === 'object' && x !== null && !Array.isArray(x); }); }
         function isSourceQuote(k) { return k.toLowerCase().indexOf('source_quote') >= 0; }
         function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+        var MAX_TREE_DEPTH = 5;
+        var MAX_ARRAY_ITEMS = 20;
 
         function highlightJson(raw) {
             var parsed; try { parsed = JSON.parse(raw); } catch(e) { return esc(raw); }
@@ -234,14 +238,33 @@ export class QueryResultsPanel implements vscode.Disposable {
             if (typeof value === 'number') return '<span class="t-val">' + value.toLocaleString() + '</span>';
             if (isInlineArray(value)) return value.map(function(x) { return '<span class="pill">' + esc(String(x)) + '</span>'; }).join(' ');
             if (isArrayOfObjects(value)) return renderArrayOfObjects(key, value);
-            if (typeof value === 'object') return '<pre class="code-block">' + esc(JSON.stringify(value, null, 2)) + '</pre>';
+            if (typeof value === 'object') return '<pre class="code-block json-highlight">' + highlightJson(JSON.stringify(value, null, 2)) + '</pre>';
             var str = String(value);
             if (isSourceQuote(key)) return '<div class="source-quote">' + esc(str) + '</div>';
             if (str.length > 80 || isLongForm(key)) return '<div class="tree-prose">' + esc(str) + '</div>';
             return '<span class="t-val">' + esc(str) + '</span>';
         }
 
-        function renderTreeField(key, value, defaultOpen) {
+        function renderTreeField(key, value, defaultOpen, depth) {
+            if (depth === undefined) depth = 0;
+            if (typeof value === 'object' && value !== null && !Array.isArray(value) && depth < MAX_TREE_DEPTH) {
+                var keys = Object.keys(value);
+                var childHtml = '';
+                for (var i = 0; i < keys.length; i++) {
+                    var ck = keys[i], cv = value[keys[i]];
+                    if (isArrayOfObjects(cv)) childHtml += renderArrayOfObjects(ck, cv, depth + 1);
+                    else childHtml += renderTreeField(ck, cv, false, depth + 1);
+                }
+                var valStr = JSON.stringify(value);
+                var preview = valStr.length > 60 ? valStr.slice(0, 60) + '\u2026' : valStr;
+                return '<div class="tree-field"><button class="tree-toggle" data-tree-toggle>'
+                    + '<span class="tree-chevron">' + (defaultOpen ? '&#9660;' : '&#9654;') + '</span>'
+                    + '<span class="t-key">' + esc(key) + '</span>'
+                    + '<span class="t-type">' + esc(plural(keys.length, 'field')) + '</span>'
+                    + (!defaultOpen ? '<span class="t-preview">' + esc(preview) + '</span>' : '')
+                    + '</button><div class="tree-children"' + (defaultOpen ? '' : ' hidden') + '>'
+                    + childHtml + '</div></div>';
+            }
             var valStr = typeof value === 'string' ? value : typeof value === 'object' ? JSON.stringify(value) : String(value != null ? value : '');
             var preview = valStr.length > 60 ? valStr.slice(0, 60) + '\u2026' : valStr;
             return '<div class="tree-field"><button class="tree-toggle" data-tree-toggle>'
@@ -261,17 +284,23 @@ export class QueryResultsPanel implements vscode.Disposable {
                 + childrenHtml + '</div></div>';
         }
 
-        function renderArrayOfObjects(fieldKey, items) {
+        function renderArrayOfObjects(fieldKey, items, depth) {
+            if (depth === undefined) depth = 0;
+            var maxItems = MAX_ARRAY_ITEMS;
+            var displayItems = items.length > maxItems ? items.slice(0, maxItems) : items;
             var ch = '';
-            for (var i = 0; i < items.length; i++) {
-                var item = items[i], itemOpen = (i === 0), pText = plural(Object.keys(item).length, 'field');
+            for (var i = 0; i < displayItems.length; i++) {
+                var item = displayItems[i], itemOpen = (i === 0), pText = plural(Object.keys(item).length, 'field');
                 for (var ek of Object.keys(item)) { var ev = item[ek]; if (typeof ev === 'string' && ev.length > 10) { pText = ev.length > 80 ? ev.slice(0, 80) + '\u2026' : ev; break; } }
-                var fh = ''; for (var fk of Object.keys(item)) fh += renderTreeField(fk, item[fk], true);
+                var fh = ''; for (var fk of Object.keys(item)) fh += renderTreeField(fk, item[fk], true, depth + 1);
                 ch += '<div class="array-item"><button class="tree-toggle" data-tree-toggle>'
                     + '<span class="tree-chevron">' + (itemOpen ? '&#9660;' : '&#9654;') + '</span>'
                     + '<span class="t-idx">[' + i + ']</span><span class="t-type">object</span>'
                     + (!itemOpen ? '<span class="t-preview">' + esc(pText) + '</span>' : '')
                     + '</button><div class="tree-children"' + (itemOpen ? '' : ' hidden') + '>' + fh + '</div></div>';
+            }
+            if (items.length > maxItems) {
+                ch += '<div class="tree-more">' + (items.length - maxItems) + ' more items\u2026</div>';
             }
             return renderTreeNode(fieldKey, 'array[' + items.length + ']', true, ch);
         }
@@ -291,9 +320,30 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         function buildCard(record, index) {
             var identity = [], meta = [], outputFields = [];
-            var dr = record; if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) dr = record.content;
+            var dr = record;
+            var guardSkipped = false;
+            var nsExtracted = false;
+            if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) {
+                var content = record.content;
+                if (actionName && actionName in content) {
+                    var actionNs = content[actionName];
+                    if (actionNs == null) {
+                        dr = {};
+                        guardSkipped = true;
+                    } else if (typeof actionNs === 'object' && !Array.isArray(actionNs)) {
+                        dr = actionNs;
+                        nsExtracted = true;
+                    } else {
+                        dr = {};
+                        dr[actionName] = actionNs;
+                        nsExtracted = true;
+                    }
+                } else {
+                    dr = content;
+                }
+            }
             for (var k of Object.keys(record)) { var r = classifyField(k); if (r === 'identity') identity.push({key:k,value:record[k]}); else if (r === 'metadata') meta.push({key:k,value:record[k]}); }
-            for (var k of Object.keys(dr)) { if (classifyField(k) === 'content') outputFields.push({key:k,value:dr[k]}); }
+            for (var k of Object.keys(dr)) { if (nsExtracted || classifyField(k) === 'content') outputFields.push({key:k,value:dr[k]}); }
             var trace = record._trace && typeof record._trace === 'object' && !Array.isArray(record._trace) ? record._trace : null;
             var recOpen = (index === offset);
             var inputData = null;
@@ -302,7 +352,7 @@ export class QueryResultsPanel implements vscode.Disposable {
             var hdr = '<span class="rec-chevron">' + (recOpen ? '&#9660;' : '&#9654;') + '</span><span class="card-index">#' + (index + 1) + '</span>';
             for (var f of identity) hdr += ' <span class="card-id" title="' + esc(fmt(f.value, 0)) + '">' + esc(fmt(f.value, 24)) + '</span>';
             if (typeof record._file === 'string') hdr += ' <span class="card-id">' + esc(record._file) + '</span>';
-            if (!recOpen) hdr += '<span class="rec-preview">' + (trace ? 'trace + ' : '') + plural(outputFields.length, 'field') + '</span>';
+            if (!recOpen) hdr += '<span class="rec-preview">' + (trace ? 'trace + ' : '') + (guardSkipped ? 'guard skipped' : plural(outputFields.length, 'field')) + '</span>';
 
             var s1 = ''; if (trace && trace.compiled_prompt) { var b = ''; if (trace.model_name) b += '<span class="trace-badge trace-model">' + esc(String(trace.model_name)) + '</span>'; if (trace.run_mode) b += '<span class="trace-badge trace-mode' + (trace.run_mode === 'batch' ? ' batch' : '') + '">' + esc(String(trace.run_mode)) + '</span>'; var ptBody; try { ptBody = renderMarkdown(String(trace.compiled_prompt)); } catch(e) { ptBody = esc(String(trace.compiled_prompt)); } s1 = renderSection('Prompt Trace', trace.prompt_length ? trace.prompt_length.toLocaleString() + ' chars' : '', trace.compiled_prompt, false, '<div class="trace-panel-body md-body">' + ptBody + '</div>', '<span class="section-badges">' + b + '</span>'); }
             var s2 = ''; if (inputData && Object.keys(inputData).length > 0) { var ih = ''; for (var ns of Object.keys(inputData)) { var nd = inputData[ns]; if (typeof nd !== 'object' || nd === null) ih += renderTreeField(ns, nd, true); else { var fh = ''; for (var fk of Object.keys(nd)) fh += renderTreeField(fk, nd[fk], true); ih += renderTreeNode(ns, plural(Object.keys(nd).length, 'field'), false, fh); } } s2 = renderSection('Input Data', plural(Object.keys(inputData).length, 'namespace'), JSON.stringify(inputData, null, 2), false, ih, ''); }
@@ -310,7 +360,7 @@ export class QueryResultsPanel implements vscode.Disposable {
             var s4 = ''; if (outputFields.length > 0) { var oh = ''; for (var f of outputFields) { if (isArrayOfObjects(f.value)) oh += renderArrayOfObjects(f.key, f.value); else oh += renderTreeField(f.key, f.value, true); } s4 = renderSection('Action Output', plural(outputFields.length, 'field'), JSON.stringify(dr, null, 2), true, oh, ''); }
             var s5 = ''; if (meta.length > 0) { var mh = ''; for (var f of meta) mh += '<div class="meta-row"><span class="meta-key">' + esc(f.key) + '</span><span class="meta-val">' + esc(fmt(f.value, 120)) + '</span></div>'; s5 = renderSection('Metadata', plural(meta.length, 'field'), JSON.stringify(Object.fromEntries(meta.map(function(f){return[f.key,f.value]})), null, 2), false, mh, ''); }
 
-            return '<div class="card" data-record-open="' + (recOpen ? 'true' : 'false') + '"><div class="card-header" data-rec-toggle>' + hdr + '</div><div class="card-body-wrap"' + (recOpen ? '' : ' hidden') + '>' + s1 + s2 + s3 + s4 + s5 + (outputFields.length === 0 ? '<div class="card-empty">No content fields</div>' : '') + '</div></div>';
+            return '<div class="card" data-record-open="' + (recOpen ? 'true' : 'false') + '"><div class="card-header" data-rec-toggle>' + hdr + '</div><div class="card-body-wrap"' + (recOpen ? '' : ' hidden') + '>' + s1 + s2 + s3 + s4 + s5 + (guardSkipped ? '<div class="card-empty">Guard skipped \u2014 no output produced</div>' : (outputFields.length === 0 ? '<div class="card-empty">No content fields</div>' : '')) + '</div></div>';
         }
 
         var container = document.getElementById('cardsContainer');
@@ -491,7 +541,10 @@ function escapeHtml(value: string): string {
 
 function formatCell(value: unknown): string {
     if (value === null || value === undefined) return '';
-    if (typeof value === 'object') return JSON.stringify(value);
+    if (typeof value === 'object') {
+        const str = JSON.stringify(value);
+        return str.length > 80 ? str.slice(0, 80) + '\u2026' : str;
+    }
     return String(value);
 }
 
@@ -665,6 +718,7 @@ function allStyles(): string {
         .tree-children[hidden] { display: none; }
         .tree-field-value { padding: 2px 8px 4px 48px; }
         .tree-field-value[hidden] { display: none; }
+        .tree-more { font-size: 11px; color: var(--vscode-descriptionForeground); font-style: italic; padding: 4px 16px; opacity: 0.6; }
 
         /* Token colors */
         .t-ns { color: #c084fc; font-family: var(--vscode-editor-font-family); font-weight: 600; font-size: 12px; }
