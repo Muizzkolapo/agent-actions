@@ -13,18 +13,6 @@ from agent_actions.utils.udf_management.tooling import execute_user_defined_func
 logger = logging.getLogger(__name__)
 
 
-def evaluate_guard_condition(agent_config: dict[str, Any], context: Any) -> tuple[bool, str | None]:
-    """Evaluate guard conditions, returning (should_execute, skip_behavior)."""
-    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
-
-    evaluator = get_guard_evaluator()
-    return evaluator.evaluate(
-        item=context,
-        guard_config=agent_config.get("guard"),
-        conditional_clause=agent_config.get("conditional_clause"),
-    )
-
-
 def run_dynamic_agent(
     agent_config: dict[str, Any],
     agent_name: str,

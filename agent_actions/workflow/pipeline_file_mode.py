@@ -535,11 +535,14 @@ def prefilter_by_guard(
     if not guard_config:
         return data, [], originals
 
-    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+    from agent_actions.input.preprocessing.filtering.evaluator import (
+        GuardBehavior,
+        get_guard_evaluator,
+    )
 
     evaluator = get_guard_evaluator()
     # The config expander normalizes user-facing "on_false" into "behavior"
-    behavior = str(guard_config.get("behavior", "filter")).lower()
+    behavior = GuardBehavior(str(guard_config.get("behavior", "filter")).lower())
 
     passing: list[dict] = []
     skipped: list[dict] = []
@@ -549,20 +552,19 @@ def prefilter_by_guard(
         eval_item = content if isinstance(content, dict) else {"_raw": content}
 
         # context={} — see Note in docstring.
-        result = evaluator.evaluate_with_context(
+        result = evaluator.evaluate(
             item=eval_item,
             guard_config=guard_config,
             context={},
-            conditional_clause=None,
         )
 
         if result.should_execute:
             passing.append(item)
             original_passing.append(originals[idx])
-        elif behavior == "skip":
+        elif behavior == GuardBehavior.SKIP:
             # Use pre-observe original so skipped tombstones keep namespaced content.
             skipped.append(originals[idx])
-        # behavior == "filter": record excluded from both lists
+        # behavior == GuardBehavior.FILTER: record excluded from both lists
 
     logger.info(
         "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered of %d total",

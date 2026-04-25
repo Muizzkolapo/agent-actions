@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from agent_actions.input.preprocessing.filtering.evaluator import GuardBehavior
 from agent_actions.processing.prepared_task import (
     GuardStatus,
     PreparationContext,
@@ -81,12 +82,12 @@ class TaskPreparer:
                     source_content=source_content,
                     source_snapshot=source_snapshot,
                     guard_status=GuardStatus.SKIPPED
-                    if guard_result.behavior == "skip"
+                    if guard_result.behavior == GuardBehavior.SKIP
                     else GuardStatus.FILTERED,
                     guard_behavior=guard_result.behavior,
                     prompt_context=field_context,
                 )
-            if guard_result.behavior == "warn":
+            if guard_result.behavior == GuardBehavior.WARN:
                 guard_clause = (
                     (guard_config.get("clause", "") if isinstance(guard_config, dict) else "")
                     or conditional_clause
@@ -263,7 +264,7 @@ class TaskPreparer:
 
         if not isinstance(content, dict):
             logger.debug("Wrapping non-dict content as {'_raw': ...} for guard evaluation")
-        return evaluator.evaluate_with_context(
+        return evaluator.evaluate(
             item=content if isinstance(content, dict) else {"_raw": content},
             guard_config=guard_config,
             context=field_context,

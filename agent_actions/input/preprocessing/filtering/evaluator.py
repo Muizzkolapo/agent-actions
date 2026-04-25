@@ -3,6 +3,7 @@
 import logging
 import threading
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from agent_actions.errors.configuration import ConfigValidationError
@@ -20,12 +21,20 @@ _UNSUPPORTED_BEHAVIORS = frozenset({"write_to", "reprocess"})
 logger = logging.getLogger(__name__)
 
 
+class GuardBehavior(StrEnum):
+    """Guard evaluation behavior when condition is not met."""
+
+    SKIP = "skip"
+    FILTER = "filter"
+    WARN = "warn"
+
+
 @dataclass
 class GuardResult:
     """Result of guard evaluation."""
 
     should_execute: bool
-    behavior: str | None = None  # 'skip' | 'filter' | 'warn' | None
+    behavior: GuardBehavior | None = None
     error: str | None = None
     matched: bool = True
 
@@ -37,21 +46,21 @@ class GuardResult:
     @classmethod
     def skipped(cls, error: str | None = None) -> "GuardResult":
         """Guard failed with skip behavior - use passthrough."""
-        return cls(should_execute=False, behavior="skip", matched=False, error=error)
+        return cls(should_execute=False, behavior=GuardBehavior.SKIP, matched=False, error=error)
 
     @classmethod
     def filtered(cls, error: str | None = None) -> "GuardResult":
         """Guard failed with filter behavior - exclude entirely."""
-        return cls(should_execute=False, behavior="filter", matched=False, error=error)
+        return cls(should_execute=False, behavior=GuardBehavior.FILTER, matched=False, error=error)
 
     @classmethod
     def warned(cls) -> "GuardResult":
         """Guard failed with warn behavior - proceed but flag for logging."""
-        return cls(should_execute=True, behavior="warn", matched=False)
+        return cls(should_execute=True, behavior=GuardBehavior.WARN, matched=False)
 
     @classmethod
     def from_filter_result(
-        cls, filter_result: FilterResult, behavior: str, passthrough_on_error: bool
+        cls, filter_result: FilterResult, behavior: GuardBehavior, passthrough_on_error: bool
     ) -> "GuardResult":
         """Create GuardResult from FilterResult."""
         if not filter_result.success:
@@ -62,9 +71,9 @@ class GuardResult:
                     behavior,
                     filter_result.error,
                 )
-                if behavior == "warn":
+                if behavior == GuardBehavior.WARN:
                     return cls.warned()
-                if behavior == "skip":
+                if behavior == GuardBehavior.SKIP:
                     return cls.skipped(error=filter_result.error)
                 return cls.filtered(error=filter_result.error)
 
@@ -80,17 +89,17 @@ class GuardResult:
                 behavior,
                 filter_result.error,
             )
-            if behavior == "warn":
+            if behavior == GuardBehavior.WARN:
                 return cls.warned()
-            if behavior == "skip":
+            if behavior == GuardBehavior.SKIP:
                 return cls.skipped(error=filter_result.error)
             return cls.filtered(error=filter_result.error)
 
         if not filter_result.matched:
             logger.debug("Guard: condition not matched, behavior='%s'", behavior)
-            if behavior == "warn":
+            if behavior == GuardBehavior.WARN:
                 return cls.warned()
-            if behavior == "skip":
+            if behavior == GuardBehavior.SKIP:
                 return cls.skipped()
             return cls.filtered()
 
@@ -98,38 +107,29 @@ class GuardResult:
 
 
 class GuardEvaluator:
-    """Unified guard evaluation with two-phase support (early and with-context)."""
+    """Unified guard evaluation for batch and online modes."""
 
     def __init__(self, guard_filter: GuardFilter | None = None):
         """Initialize GuardEvaluator."""
         self._filter = guard_filter or get_global_guard_filter()
 
-    def evaluate_early(
+    def evaluate(
         self,
         item: Any,
         guard_config: dict[str, Any] | None,
+        context: dict[str, Any] | None = None,
         conditional_clause: str | None = None,
     ) -> GuardResult:
-        """Phase 1: Evaluate guards on raw content before prompt preparation.
+        """Evaluate guard conditions, optionally with full context.
 
-        Cannot access passthrough fields or {source.*} references (not resolved yet).
+        When *context* is provided, item content is merged with context data
+        (passthrough fields, source data) before evaluation.  When *context*
+        is ``None``, evaluation uses the item directly.
         """
-        if conditional_clause:
-            result = self._evaluate_conditional_clause(item, conditional_clause)
-            if result is not None:
-                return result
-
-        return self._evaluate_guard(item, guard_config)
-
-    def evaluate_with_context(
-        self,
-        item: Any,
-        guard_config: dict[str, Any] | None,
-        context: dict[str, Any],
-        conditional_clause: str | None = None,
-    ) -> GuardResult:
-        """Phase 2: Evaluate guards with full context (passthrough fields, source data)."""
-        eval_data = self._build_evaluation_context(item, context)
+        if context is not None:
+            eval_data = self._build_evaluation_context(item, context)
+        else:
+            eval_data = item
 
         if conditional_clause:
             result = self._evaluate_conditional_clause(eval_data, conditional_clause)
@@ -137,16 +137,6 @@ class GuardEvaluator:
                 return result
 
         return self._evaluate_guard(eval_data, guard_config)
-
-    def evaluate(
-        self,
-        item: Any,
-        guard_config: dict[str, Any] | None,
-        conditional_clause: str | None = None,
-    ) -> tuple[bool, str | None]:
-        """Backward-compatible evaluation returning (should_execute, behavior) tuple."""
-        result = self.evaluate_early(item, guard_config, conditional_clause)
-        return (result.should_execute, result.behavior)
 
     def _evaluate_conditional_clause(
         self, context: Any, conditional_clause: str
@@ -179,14 +169,15 @@ class GuardEvaluator:
         if not clause:
             return GuardResult.passed()
 
-        behavior = guard_config.get("behavior", "filter")
-        if behavior in _UNSUPPORTED_BEHAVIORS:
+        behavior_str = guard_config.get("behavior", "filter")
+        if behavior_str in _UNSUPPORTED_BEHAVIORS:
             raise ConfigValidationError(
                 "behavior",
-                f"Guard behavior '{behavior}' is not supported in guard evaluation. "
+                f"Guard behavior '{behavior_str}' is not supported in guard evaluation. "
                 f"Only 'skip', 'filter', and 'warn' are valid on_false values for guards.",
-                context={"behavior": behavior},
+                context={"behavior": behavior_str},
             )
+        behavior = GuardBehavior(behavior_str)
         passthrough_on_error = guard_config.get("passthrough_on_error", True)
 
         try:
@@ -203,9 +194,9 @@ class GuardEvaluator:
             logger.warning("Guard: guard condition evaluation exception: %s", e)
             if passthrough_on_error:
                 return GuardResult.passed()
-            if behavior == "warn":
+            if behavior == GuardBehavior.WARN:
                 return GuardResult.warned()
-            if behavior == "skip":
+            if behavior == GuardBehavior.SKIP:
                 return GuardResult.skipped(error=str(e))
             return GuardResult.filtered(error=str(e))
 
@@ -312,7 +303,7 @@ class GuardEvaluator:
     def should_skip(self, agent_config: dict[str, Any], context: Any) -> bool:
         """Check if agent should be skipped based on guard with skip behavior."""
         guard_config = agent_config.get("guard")
-        if not guard_config or guard_config.get("behavior") != "skip":
+        if not guard_config or guard_config.get("behavior") != GuardBehavior.SKIP:
             return False
 
         result = self._evaluate_guard(context, guard_config)
@@ -321,7 +312,7 @@ class GuardEvaluator:
     def should_filter(self, agent_config: dict[str, Any], context: Any) -> bool:
         """Check if item should be filtered based on guard with filter behavior."""
         guard_config = agent_config.get("guard")
-        if not guard_config or guard_config.get("behavior") != "filter":
+        if not guard_config or guard_config.get("behavior") != GuardBehavior.FILTER:
             return False
 
         result = self._evaluate_guard(context, guard_config)
