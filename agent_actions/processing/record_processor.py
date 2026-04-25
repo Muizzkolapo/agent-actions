@@ -58,23 +58,13 @@ class RecordProcessor:
         cls,
         agent_config: dict[str, Any],
         agent_name: str,
-        *,
-        strategy: InvocationStrategy | None = None,
-        mode: RunMode = RunMode.ONLINE,
-        provider: "BatchProvider | None" = None,
     ) -> "RecordProcessor":
-        """Factory method for RecordProcessor creation.
+        """Create a RecordProcessor with standard online-mode defaults.
 
-        All non-test instantiation should go through this method so that
-        initialization changes only need to be made in one place.
+        Production code that needs custom strategy/mode/provider should
+        use the constructor directly.
         """
-        return cls(
-            agent_config=agent_config,
-            agent_name=agent_name,
-            strategy=strategy,
-            mode=mode,
-            provider=provider,
-        )
+        return cls(agent_config=agent_config, agent_name=agent_name)
 
     def __init__(
         self,
