@@ -599,7 +599,20 @@ class ActionExecutor:
             if storage_backend.has_disposition(
                 dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
             ):
-                return dep
+                target_files = storage_backend.list_target_files(dep)
+                if not target_files:
+                    return dep
+                storage_backend.clear_disposition(
+                    dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
+                )
+                logger.warning(
+                    "Stale upstream FAILED disposition on '%s' — "
+                    "upstream has %d target file(s). "
+                    "Clearing disposition; downstream '%s' will proceed.",
+                    dep,
+                    len(target_files),
+                    action_name,
+                )
             if not storage_backend.has_disposition(
                 dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
             ):
