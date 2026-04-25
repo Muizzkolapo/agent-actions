@@ -42,8 +42,8 @@ def split_contract_by_clause(data: dict[str, Any]) -> list[dict[str, Any]]:
       - clause_title: str (e.g., "DEFINITIONS")
       - clause_text: str (full clause body including sub-sections)
     """
-    content = data.get("content", data)
-    full_text = content.get("full_text", "")
+    source = data.get("source", {})
+    full_text = source.get("full_text", "")
 
     if not full_text:
         return [

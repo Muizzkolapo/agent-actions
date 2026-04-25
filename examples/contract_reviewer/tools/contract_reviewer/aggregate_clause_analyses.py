@@ -48,11 +48,12 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
             }
         ]
 
-    # Extract contract metadata from the first record
-    first = data[0].get("content", data[0])
-    contract_id = first.get("contract_id", "unknown")
-    contract_title = first.get("title", "unknown")
-    parties = first.get("parties", [])
+    # Extract contract metadata from the first record's source namespace
+    first_content = data[0].get("content", data[0])
+    first_source = first_content.get("source", {})
+    contract_id = first_source.get("contract_id", "unknown")
+    contract_title = first_source.get("title", "unknown")
+    parties = first_source.get("parties", [])
 
     # Collect analyses from all clause records
     risk_counts = {"high": 0, "medium": 0, "low": 0}
@@ -64,11 +65,13 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
 
     for record in data:
         content = record.get("content", record)
+        analysis = content.get("analyze_clause", {})
+        clause_meta = content.get("split_into_clauses", {})
 
-        risk_level = content.get("risk_level", "low")
-        risk_score = content.get("risk_score", 0.0)
-        clause_number = content.get("clause_number", 0)
-        clause_title = content.get("clause_title", "Unknown")
+        risk_level = analysis.get("risk_level", "low")
+        risk_score = analysis.get("risk_score", 0.0)
+        clause_number = clause_meta.get("clause_number", 0)
+        clause_title = clause_meta.get("clause_title", "Unknown")
 
         # Count risk levels
         if risk_level in risk_counts:
@@ -82,14 +85,14 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
                     "clause_number": clause_number,
                     "clause_title": clause_title,
                     "risk_score": risk_score,
-                    "risk_indicators": content.get("risk_indicators", []),
-                    "recommended_action": content.get("recommended_action", "flag_for_legal"),
-                    "reasoning": content.get("reasoning", ""),
+                    "risk_indicators": analysis.get("risk_indicators", []),
+                    "recommended_action": analysis.get("recommended_action", "flag_for_legal"),
+                    "reasoning": analysis.get("reasoning", ""),
                 }
             )
 
         # Collect obligations with clause reference
-        for obligation in content.get("obligations", []):
+        for obligation in analysis.get("obligations", []):
             all_obligations.append(
                 {
                     "clause_number": clause_number,
@@ -99,7 +102,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
             )
 
         # Collect deadlines with clause reference
-        for deadline in content.get("deadlines", []):
+        for deadline in analysis.get("deadlines", []):
             all_deadlines.append(
                 {
                     "clause_number": clause_number,
@@ -109,7 +112,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
             )
 
         # Track items that need negotiation
-        action = content.get("recommended_action", "accept")
+        action = analysis.get("recommended_action", "accept")
         if action in ("negotiate", "reject", "flag_for_legal"):
             negotiation_items.append(
                 {
