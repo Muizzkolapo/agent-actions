@@ -31,9 +31,9 @@ defaults:
   granularity: Record
   is_operational: true
   run_mode: online
-  model_vendor: openai
-  model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
+  model_name: gemini-flash-lite-latest
+  model_vendor: gemini
+  api_key: GEMINI_API_KEY
   is_operational: true
   record_limit: 2      # Remove for full processing
   context_scope:
@@ -60,9 +60,6 @@ actions:
     intent: "Extract factual claims, product aspects, and sentiment signals from review text"
     schema: extract_claims
     prompt: $review_analyzer.Extract_Claims
-    model_vendor: groq
-    model_name: llama-3.1-8b-instant
-    api_key: GROQ_API_KEY
     context_scope:
       observe:
         - source.review_text                    # ← LLM sees only the review body
@@ -93,8 +90,6 @@ actions:
     intent: "Independently score review quality against rubric criteria"
     schema: score_quality
     prompt: $review_analyzer.Score_Quality
-    model_vendor: ollama                          # Numeric scoring — parallel voting compensates for weaker model
-    model_name: llama3.2:latest
     reprompt:
       validation: check_required_fields
       max_attempts: 2
@@ -157,7 +152,7 @@ actions:
     # model_name: claude-sonnet-4-20250514
     # api_key: ANTHROPIC_API_KEY
     guard:
-      condition: 'consensus_score >= 6'         # ← Pre-check gate: skip low quality
+      condition: 'aggregate_scores.consensus_score >= 6'         # ← Pre-check gate: skip low quality
       on_false: "filter"                        #    LLM never fires for junk reviews
     context_scope:
       observe:
@@ -192,7 +187,7 @@ actions:
     schema: extract_product_insights
     prompt: $review_analyzer.Extract_Product_Insights
     guard:
-      condition: 'consensus_score >= 6'         # ← Same gate — skip junk
+      condition: 'aggregate_scores.consensus_score >= 6'         # ← Same gate — skip junk
       on_false: "filter"
     context_scope:
       observe:

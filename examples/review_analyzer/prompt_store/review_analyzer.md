@@ -26,7 +26,7 @@ Focus on what the reviewer actually said — do not infer or assume claims not p
 {end_prompt}
 
 {prompt Score_Quality}
-You are quality scorer {{ i }} of {{ version.length }} in an independent review quality assessment.
+You are quality scorer {{ version.i }} of {{ version.length }} in an independent review quality assessment.
 
 {% if version.first %}
 **Your focus**: Prioritize HELPFULNESS. Would a potential buyer learn something useful from this review?
