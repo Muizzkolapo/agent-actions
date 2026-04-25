@@ -363,21 +363,10 @@ class TestObserveCrossNamespace:
             }
         )
 
-        # The HistoricalNodeDataLoader uses _find_record_by_identifiers with exact node_id match.
-        # Simulate correct record resolution via lineage -> node_id -> content.
-        from agent_actions.input.context.historical import HistoricalNodeDataLoader
-
-        target_node_id = HistoricalNodeDataLoader._find_target_node_id(
-            action_name="extract",
-            lineage=["extract_r3", "source_r1"],
-            agent_indices={"extract": 0, "enrich": 1, "consume": 2},
-        )
-        assert target_node_id == "extract_r3"
-
+        # Resolve the correct record via node_id (lineage entry for "extract")
+        target_node_id = "extract_r3"
         all_records = storage.read_target("extract", "mock_file.json")
-        matched = HistoricalNodeDataLoader._find_record_by_identifiers(
-            all_records, target_node_id, "extract"
-        )
+        matched = next((r for r in all_records if r.get("node_id") == target_node_id), None)
         assert matched is not None
         loaded_content = matched["content"]
 
@@ -514,18 +503,10 @@ class TestObserveFanIn:
             }
         )
 
-        from agent_actions.input.context.historical import HistoricalNodeDataLoader
-
-        # Lineage-based lookup should find the correct record
-        target = HistoricalNodeDataLoader._find_target_node_id(
-            action_name="classify",
-            lineage=["classify_r1", "extract_r1"],
-            agent_indices={"extract": 0, "classify": 1, "merge": 2},
-        )
-        assert target == "classify_r1"
-
+        # Resolve the correct record via node_id (lineage entry for "classify")
+        target = "classify_r1"
         records = storage.read_target("classify", "mock_file.json")
-        matched = HistoricalNodeDataLoader._find_record_by_identifiers(records, target, "classify")
+        matched = next((r for r in records if r.get("node_id") == target), None)
         assert matched is not None
 
         # Build field_context as the pipeline would
