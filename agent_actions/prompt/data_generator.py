@@ -41,7 +41,7 @@ class DataGenerator(IGenerator):
         self.agent_indices = agent_indices or {}
         self.storage_backend = storage_backend
 
-        self._record_processor = RecordProcessor(
+        self._record_processor = RecordProcessor.create(
             agent_config=cast(dict[str, Any], self.agent_config),
             agent_name=self.agent_name,
         )

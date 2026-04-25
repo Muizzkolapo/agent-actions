@@ -9,18 +9,18 @@ from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 
 def _make_evaluator(pass_fn):
-    """Create a mock evaluator whose evaluate_with_context delegates to pass_fn.
+    """Create a mock evaluator whose evaluate delegates to pass_fn.
 
     pass_fn receives the eval_item dict and returns True if the item should pass.
     """
     evaluator = MagicMock()
 
-    def side_effect(*, item, guard_config, context, conditional_clause):
+    def side_effect(*, item, guard_config, context=None, conditional_clause=None):
         if pass_fn(item):
             return GuardResult.passed()
         return GuardResult.filtered()
 
-    evaluator.evaluate_with_context.side_effect = side_effect
+    evaluator.evaluate.side_effect = side_effect
     return evaluator
 
 

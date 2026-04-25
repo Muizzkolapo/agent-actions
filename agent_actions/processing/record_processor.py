@@ -53,6 +53,19 @@ def _is_empty_output(response: Any) -> bool:
 class RecordProcessor:
     """Unified processor for first-stage and subsequent-stage record processing."""
 
+    @classmethod
+    def create(
+        cls,
+        agent_config: dict[str, Any],
+        agent_name: str,
+    ) -> "RecordProcessor":
+        """Create a RecordProcessor with standard online-mode defaults.
+
+        Production code that needs custom strategy/mode/provider should
+        use the constructor directly.
+        """
+        return cls(agent_config=agent_config, agent_name=agent_name)
+
     def __init__(
         self,
         agent_config: dict[str, Any],

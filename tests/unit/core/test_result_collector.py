@@ -153,7 +153,7 @@ def test_result_collector_handles_none_data():
 def test_exhausted_record_builder_preserves_lineage(monkeypatch):
     monkeypatch.setattr(IDGenerator, "generate_node_id", lambda _: "action_node")
     agent_config: dict[str, Any] = {"agent_type": "builder_action"}
-    original_row = {"lineage": ["root"], "target_id": "t-7"}
+    original_row = {"lineage": ["root_abc123"], "target_id": "t-7"}
 
     exhausted_item = ExhaustedRecordBuilder.build_exhausted_item(
         source_guid="src-7",
@@ -164,7 +164,7 @@ def test_exhausted_record_builder_preserves_lineage(monkeypatch):
     )
 
     assert exhausted_item["target_id"] == "t-7"
-    assert exhausted_item["lineage"] == ["root", "action_node"]
+    assert exhausted_item["lineage"] == ["root_abc123", "action_node"]
 
 
 def test_exhausted_record_builder_build_empty_content():

@@ -96,9 +96,9 @@ class EvaluationContextProvider:
             version_context=config.version_context,
             workflow_metadata=config.workflow_metadata,
             current_item=current_item,
-            file_path=config.file_path,
             context_scope=context_scope,
         )
+        field_context.pop("_dependency_metadata", None)
 
         return EvaluationContext(
             current_content=current_content,

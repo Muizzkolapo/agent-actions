@@ -11,4 +11,4 @@ lineage_sources tracking.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `builder.py` | Module | `LineageBuilder` helpers that validate node IDs, append lineage, propagate ancestry chain IDs, and merge multi-source traces. | `preprocessing`, `lineage` |
-| `LineageBuilder` | Class | Static helpers like `build_lineage`, `add_lineage_tracking`, `add_lineage_tracking_from_sources`, and `add_unified_lineage`. | `preprocessing`, `logging` |
+| `LineageBuilder` | Class | Static helpers: `build_lineage`, `add_lineage_tracking`, `add_lineage_tracking_from_sources`, `add_unified_lineage`, `resolve_source_guid`, and `set_parent_tracking`. | `preprocessing`, `logging` |

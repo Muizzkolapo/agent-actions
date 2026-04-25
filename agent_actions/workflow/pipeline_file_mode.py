@@ -8,47 +8,24 @@ looping per-record.
 from __future__ import annotations
 
 import logging
-import warnings
 from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import AgentActionsError
-from agent_actions.logging.core.manager import fire_event
-from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
     ProcessingStatus,
 )
-from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from agent_actions.record.tracking import TrackedItem
 
 if TYPE_CHECKING:
     from agent_actions.workflow.pipeline import ProcessingPipeline
 
 logger = logging.getLogger(__name__)
-
-
-# Framework fields that live at the top level of structured records, not inside content.
-_TOOL_RESERVED_FIELDS = frozenset(
-    {
-        "source_guid",
-        "target_id",
-        "node_id",
-        "lineage",
-        "metadata",
-        "content",
-        "parent_target_id",
-        "root_target_id",
-        "chunk_info",
-        "_recovery",
-        "_unprocessed",
-    }
-)
 
 
 # ---------------------------------------------------------------------------
@@ -558,11 +535,14 @@ def prefilter_by_guard(
     if not guard_config:
         return data, [], originals
 
-    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+    from agent_actions.input.preprocessing.filtering.evaluator import (
+        GuardBehavior,
+        get_guard_evaluator,
+    )
 
     evaluator = get_guard_evaluator()
     # The config expander normalizes user-facing "on_false" into "behavior"
-    behavior = str(guard_config.get("behavior", "filter")).lower()
+    behavior = GuardBehavior(guard_config.get("behavior", "filter"))
 
     passing: list[dict] = []
     skipped: list[dict] = []
@@ -572,20 +552,19 @@ def prefilter_by_guard(
         eval_item = content if isinstance(content, dict) else {"_raw": content}
 
         # context={} — see Note in docstring.
-        result = evaluator.evaluate_with_context(
+        result = evaluator.evaluate(
             item=eval_item,
             guard_config=guard_config,
             context={},
-            conditional_clause=None,
         )
 
         if result.should_execute:
             passing.append(item)
             original_passing.append(originals[idx])
-        elif behavior == "skip":
+        elif behavior == GuardBehavior.SKIP:
             # Use pre-observe original so skipped tombstones keep namespaced content.
             skipped.append(originals[idx])
-        # behavior == "filter": record excluded from both lists
+        # behavior == GuardBehavior.FILTER: record excluded from both lists
 
     logger.info(
         "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered of %d total",
@@ -597,87 +576,3 @@ def prefilter_by_guard(
     )
 
     return passing, skipped, original_passing
-
-
-def apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:
-    """Filter records to context_scope.observe fields in defined order.
-
-    Returns filtered copy; original data is unchanged.
-    If no observe is configured, returns data as-is.
-
-    .. deprecated::
-        Use ``apply_observe_for_file_mode`` instead.
-        This method strips namespaces and performs bare-key lookup only,
-        which silently fails for cross-namespace references.
-    """
-    warnings.warn(
-        "_apply_observe_filter is deprecated. Use apply_observe_for_file_mode instead.",
-        DeprecationWarning,
-        stacklevel=3,  # caller → delegator stub → this function
-    )
-    context_scope = agent_config.get("context_scope") or {}
-    observe_refs = context_scope.get("observe")
-    if not observe_refs:
-        return data
-
-    # Parse refs in lockstep so invalid entries don't misalign the two lists.
-    valid_pairs = []  # [(original_ref, bare_field_name), ...]
-    for ref in observe_refs:
-        try:
-            _, field_name = parse_field_reference(ref)
-            valid_pairs.append((ref, field_name))
-        except ValueError as e:
-            fire_event(
-                ContextFieldSkippedEvent(
-                    action_name=agent_config.get("name", "unknown"),
-                    field_ref=ref,
-                    reason=str(e),
-                    directive="observe_filter",
-                )
-            )
-            continue
-
-    if not valid_pairs:
-        return data
-
-    # Wildcard or prefix pattern → no filtering needed
-    if any(bare in ("*", "_") for _, bare in valid_pairs):
-        return data
-
-    # Detect bare-key collisions so we can namespace them.
-    # e.g. ["dep_a.title", "dep_b.title", "dep_a.body"] → collisions = {"title"}
-    from collections import Counter
-
-    bare_counts = Counter(bare for _, bare in valid_pairs)
-    collisions = {k for k, v in bare_counts.items() if v > 1}
-
-    # Build (output_key, bare_key) pairs preserving observe order.
-    # Colliding bare keys use the full qualified ref as the output key;
-    # unique bare keys stay bare for backwards compatibility.
-    key_pairs = []  # [(output_key, bare_key), ...]
-    for ref, bare in valid_pairs:
-        output_key = ref if bare in collisions else bare
-        key_pairs.append((output_key, bare))
-
-    filtered = []
-    for item in data:
-        if not isinstance(item, dict):
-            filtered.append(item)  # type: ignore[unreachable]
-            continue
-        content_val = item.get("content")
-        content = (
-            content_val
-            if isinstance(content_val, dict) and content_val
-            else {k: v for k, v in item.items() if k not in _TOOL_RESERVED_FIELDS}
-        )
-        ordered = {ok: content[bk] for ok, bk in key_pairs if bk in content}
-        missing = [bk for _, bk in key_pairs if bk not in content]
-        if missing:
-            logger.warning(
-                "[OBSERVE FILTER] Fields %s not found in record. "
-                "Available: %s. Check that observe field names match the actual data.",
-                list(set(missing)),
-                list(content.keys()),
-            )
-        filtered.append(ordered)
-    return filtered

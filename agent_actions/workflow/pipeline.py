@@ -29,9 +29,6 @@ from agent_actions.storage.backend import (
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.workflow.pipeline_file_mode import (
-    apply_observe_filter as _apply_observe_filter_impl,
-)
-from agent_actions.workflow.pipeline_file_mode import (
     prefilter_by_guard,
     process_file_mode_hitl,
     process_file_mode_tool,
@@ -146,8 +143,7 @@ class ProcessingPipeline:
                 },
             )
 
-        # Initialize RecordProcessor directly
-        self.record_processor = RecordProcessor(
+        self.record_processor = RecordProcessor.create(
             agent_config=cast(dict[str, Any], config.action_config),
             agent_name=config.action_name,
         )
@@ -617,11 +613,6 @@ class ProcessingPipeline:
             )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
-
-    @staticmethod
-    def _apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:
-        """Delegator stub — see :func:`pipeline_file_mode.apply_observe_filter`."""
-        return _apply_observe_filter_impl(data, agent_config)
 
     def _process_file_mode_tool(
         self, data: list[dict], original_data: list[dict], context: ProcessingContext

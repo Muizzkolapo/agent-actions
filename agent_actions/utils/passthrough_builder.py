@@ -39,7 +39,9 @@ class PassthroughItemBuilder:
             Passthrough item dict.
         """
         target_id = row.get("target_id") or custom_id or IDGenerator.generate_target_id()
-        resolved_source_guid = source_guid or row.get("source_guid", target_id)
+        resolved_source_guid = LineageBuilder.resolve_source_guid(
+            source_guid, row, fallback=target_id
+        )
         node_id = IDGenerator.generate_node_id(action_name)
 
         lineage = LineageBuilder.build_lineage(row, node_id)
@@ -53,6 +55,8 @@ class PassthroughItemBuilder:
             lineage=lineage,
             target_id=target_id,
         )
+
+        LineageBuilder.set_parent_tracking(processed_item, row)
 
         if "metadata" not in processed_item:
             processed_item["metadata"] = {}
