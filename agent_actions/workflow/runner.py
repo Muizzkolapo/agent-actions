@@ -319,8 +319,8 @@ class ActionRunner:
     def _sync_virtual_action_to_local_backend(self, dep_name: str, upstream_target: Path) -> None:
         """Copy virtual action data into the downstream's storage backend.
 
-        The historical loader queries ``self.storage_backend`` (the downstream's
-        database).  Without this sync, virtual action records only exist in
+        The downstream's storage backend must contain records for observe
+        resolution.  Without this sync, virtual action records only exist in
         the upstream's storage, so observe resolution finds nothing.
         """
         if self.storage_backend is None:
