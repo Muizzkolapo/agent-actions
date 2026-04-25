@@ -39,13 +39,13 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `ExhaustedRecordBuilder.build_empty_content()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
 | `ProcessorErrorHandlerMixin.load_file()` | `agent_io/staging/` | Reads | — |
 
-**Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `RepromptMetadata`, `RecoveryMetadata`, `CollectionStats`, `BatchProcessor` -- no direct project surface.
+**Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `RepromptMetadata`, `RecoveryMetadata`, `CollectionStats` -- no direct project surface.
 
 ## Dependencies
 
 | Package | Direction | Why |
 |---------|-----------|-----|
-| `llm` | inbound | Batch and online runners delegate to RecordProcessor and BatchProcessor |
+| `llm` | inbound | Batch and online runners delegate to RecordProcessor |
 | `prompt` | inbound | DataGenerator creates RecordProcessor for subsequent-stage processing |
 | `workflow` | inbound | Pipeline orchestrator calls processing for each action stage |
 | `prompt` | outbound | TaskPreparer uses PromptPreparationService for context and prompt rendering |
