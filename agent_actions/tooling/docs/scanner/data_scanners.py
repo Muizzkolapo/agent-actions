@@ -1,6 +1,5 @@
 """Data-oriented scan functions: prompts, schemas, workflow DBs, runs, logs."""
 
-import itertools
 import logging
 import re
 import sqlite3
@@ -419,13 +418,10 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
     logs_data["events_path"] = str(events_path)
 
-    _LOG_LINE_LIMIT = 100_000
     try:
         with open(events_path, encoding="utf-8") as f:
             invocations = {}
-            line_count = 0
-            for line in itertools.islice(f, _LOG_LINE_LIMIT):
-                line_count += 1
+            for line in f:
                 line = line.strip()
                 if not line:
                     continue
@@ -475,12 +471,6 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
                         }
                     )
 
-            if line_count >= _LOG_LINE_LIMIT:
-                logger.warning(
-                    "scan_logs: line limit (%d) reached for %s; some events may be omitted",
-                    _LOG_LINE_LIMIT,
-                    events_path,
-                )
             # Get recent invocations (last 10)
             logs_data["recent_invocations"] = list(invocations.values())[-10:]
 
@@ -501,12 +491,9 @@ def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
 
     warnings: list[dict[str, Any]] = []
 
-    _LOG_LINE_LIMIT = 100_000
     try:
         with open(events_path, encoding="utf-8") as f:
-            line_count = 0
-            for line in itertools.islice(f, _LOG_LINE_LIMIT):
-                line_count += 1
+            for line in f:
                 line = line.strip()
                 if not line:
                     continue
@@ -531,14 +518,6 @@ def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
                     }
                 )
 
-            if line_count >= _LOG_LINE_LIMIT:
-                logger.warning(
-                    "extract_runtime_warnings: line limit (%d) reached for %s; "
-                    "some events may be omitted",
-                    _LOG_LINE_LIMIT,
-                    events_path,
-                )
-
     except OSError as e:
         logger.debug("Could not read runtime warnings from %s: %s", events_path, e)
 
@@ -551,12 +530,9 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
 
     action_metrics: dict[str, Any] = {}
 
-    _LOG_LINE_LIMIT = 100_000
     try:
         with open(events_path, encoding="utf-8") as f:
-            line_count = 0
-            for line in itertools.islice(f, _LOG_LINE_LIMIT):
-                line_count += 1
+            for line in f:
                 line = line.strip()
                 if not line:
                     continue
@@ -625,14 +601,6 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                 # Extract from CacheMissEvent
                 elif event_type == "CacheMissEvent":
                     action_metrics[agent_name]["cache_miss_count"] += 1
-
-            if line_count >= _LOG_LINE_LIMIT:
-                logger.warning(
-                    "extract_action_metrics: line limit (%d) reached for %s; "
-                    "some events may be omitted",
-                    _LOG_LINE_LIMIT,
-                    events_path,
-                )
 
     except OSError as e:
         logger.debug("Could not read action metrics from %s: %s", events_path, e)

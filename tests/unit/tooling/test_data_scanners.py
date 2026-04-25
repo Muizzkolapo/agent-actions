@@ -1,4 +1,4 @@
-"""Regression tests for I-5: scan_logs() and extract_action_metrics() 100k-line cap.
+"""Tests for data scanners: scan_logs, extract_action_metrics, extract_runtime_warnings.
 
 Also covers scan_sqlite_readonly prompt trace attachment (spec 015)
 and namespace unwrapping (spec 092).
@@ -48,9 +48,9 @@ def _action_event(action_name: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class TestScanLogsLineCap:
-    def test_scan_logs_returns_data_within_limit(self, tmp_path):
-        """scan_logs returns correct data when under the line limit."""
+class TestScanLogs:
+    def test_scan_logs_returns_recent_invocations(self, tmp_path):
+        """scan_logs returns correct data and caps recent invocations at 10."""
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
         events_path = logs_dir / "events.json"
@@ -59,28 +59,16 @@ class TestScanLogsLineCap:
         assert isinstance(result["recent_invocations"], list)
         assert len(result["recent_invocations"]) <= 10  # capped at last 10
 
-    def test_scan_logs_emits_warning_at_limit(self, tmp_path, capfd):
-        """scan_logs emits a warning when the 100k-line cap is hit."""
+    def test_scan_logs_reads_all_events(self, tmp_path):
+        """scan_logs reads the entire file with no line cap."""
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
         events_path = logs_dir / "events.json"
-        # Write 100_001 lines so islice stops at 100_000 and the cap warning fires
-        _write_events(events_path, 100_001)
-        scan_logs(tmp_path)
-        captured = capfd.readouterr()
-        assert "line limit" in captured.err, (
-            "Expected a 'line limit' warning on stderr when 100k-line cap is reached"
-        )
-
-    def test_scan_logs_no_warning_below_limit(self, tmp_path, capfd):
-        """scan_logs does NOT emit a line-limit warning for small files."""
-        logs_dir = tmp_path / "logs"
-        logs_dir.mkdir()
-        events_path = logs_dir / "events.json"
-        _write_events(events_path, 10)
-        scan_logs(tmp_path)
-        captured = capfd.readouterr()
-        assert "line limit" not in captured.err
+        # Write enough events that the old 100k cap would have truncated
+        _write_events(events_path, 200)
+        result = scan_logs(tmp_path)
+        # All 200 unique invocations were seen, last 10 returned
+        assert len(result["recent_invocations"]) == 10
 
     def test_scan_logs_missing_logs_dir(self, tmp_path):
         """scan_logs returns empty structure when logs/ does not exist."""
@@ -100,7 +88,7 @@ class TestScanLogsLineCap:
 # ---------------------------------------------------------------------------
 
 
-class TestExtractActionMetricsLineCap:
+class TestExtractActionMetrics:
     def test_returns_metrics_for_known_events(self, tmp_path):
         """extract_action_metrics parses ActionCompleteEvent correctly."""
         events_path = tmp_path / "events.json"
@@ -109,25 +97,6 @@ class TestExtractActionMetricsLineCap:
         result = extract_action_metrics(events_path)
         assert "my_action" in result
         assert result["my_action"]["execution_time"] == 1.0
-
-    def test_emits_warning_at_limit(self, tmp_path, capfd):
-        """extract_action_metrics emits a warning when the 100k-line cap is hit."""
-        events_path = tmp_path / "events.json"
-        with open(events_path, "w") as f:
-            for i in range(100_001):
-                f.write(json.dumps(_action_event(f"action_{i}")) + "\n")
-        extract_action_metrics(events_path)
-        captured = capfd.readouterr()
-        assert "line limit" in captured.err
-
-    def test_no_warning_below_limit(self, tmp_path, capfd):
-        """extract_action_metrics does NOT warn for small files."""
-        events_path = tmp_path / "events.json"
-        with open(events_path, "w") as f:
-            f.write(json.dumps(_action_event("act")) + "\n")
-        extract_action_metrics(events_path)
-        captured = capfd.readouterr()
-        assert "line limit" not in captured.err
 
 
 # ---------------------------------------------------------------------------
@@ -228,17 +197,6 @@ class TestExtractRuntimeWarnings:
         result = extract_runtime_warnings(events_path)
 
         assert len(result) == 1
-
-    def test_emits_warning_at_line_limit(self, tmp_path, capfd):
-        """Logs a warning when the 100k line cap is reached."""
-        events_path = tmp_path / "events.json"
-        with open(events_path, "w") as f:
-            for i in range(100_001):
-                f.write(json.dumps(_warn_event(f"a_{i}", f"warn {i}")) + "\n")
-
-        extract_runtime_warnings(events_path)
-        captured = capfd.readouterr()
-        assert "line limit" in captured.err
 
 
 class TestExtractActionMetricsEnrichment:
