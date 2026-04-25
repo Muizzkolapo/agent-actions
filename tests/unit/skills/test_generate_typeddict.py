@@ -9,7 +9,7 @@ _SCRIPT_PATH = (
     Path(__file__).parents[3]
     / "agent_actions"
     / "skills"
-    / "agent-actions-workflow"
+    / "agac-agent-skills"
     / "scripts"
     / "generate_typeddict.py"
 )

@@ -648,7 +648,7 @@ def _process_online_mode_with_record_processor(
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
 
-    processor = RecordProcessor(ctx.agent_config, ctx.agent_name)
+    processor = RecordProcessor.create(ctx.agent_config, ctx.agent_name)
 
     processing_context = ProcessingContext(
         agent_config=cast("ActionConfigDict", ctx.agent_config),

@@ -168,7 +168,7 @@ def infer_dependencies(
     Returns:
         Tuple of (input_sources, context_sources):
         - input_sources: List of actions that provide input files
-        - context_sources: List of actions that provide context only (loaded via historical loader)
+        - context_sources: List of actions that provide context only (loaded from record namespaces)
 
     Raises:
         ConfigurationError: If a referenced action doesn't exist in workflow
@@ -201,7 +201,7 @@ def infer_dependencies(
 
     # 1b. Handle fan-in pattern: multiple DIFFERENT dependencies
     # For fan-in, only the primary dependency is an input source
-    # The rest become context sources (loaded via historical loader with lineage matching)
+    # The rest become context sources (loaded from record namespaces via additive content model)
     #
     # Exception: If reduce_key is set, it's an aggregation pattern - all are input sources
     #

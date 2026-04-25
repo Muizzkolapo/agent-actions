@@ -1,0 +1,20 @@
+"""{{TOOL_TITLE}}"""
+
+from typing import Any
+from agent_actions import udf_tool
+
+
+@udf_tool()
+def {{tool_function_name}}(data: dict[str, Any]) -> dict[str, Any]:
+    """{{Brief description of what this tool does.}}
+
+    Access fields by namespace: data["upstream_action"]["field_name"]
+    """
+    # Access upstream data by namespace
+    upstream = data["{{upstream_action_name}}"]
+    input_value = upstream["input_field"]
+
+    # Your processing logic here
+    result = input_value
+
+    return {"output_field": result}

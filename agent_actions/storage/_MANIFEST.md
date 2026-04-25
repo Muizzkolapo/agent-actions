@@ -59,7 +59,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 |---------|-----------|-----|
 | `config` | outbound | Reads storage_backend type and defaults from project config |
 | `output` | inbound | FileWriter and UnifiedSourceDataSaver delegate writes to StorageBackend |
-| `input` | inbound | SourceDataLoader and HistoricalNodeDataLoader read from StorageBackend |
+| `input` | inbound | SourceDataLoader reads from StorageBackend |
 | `workflow` | inbound | Coordinator initializes backend; runner and executor query target/disposition state |
 | `processing` | inbound | Processor threads storage_backend through the processing pipeline |
 | `prompt` | inbound | Context scope passes output_directory for backend data resolution |

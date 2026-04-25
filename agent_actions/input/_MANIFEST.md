@@ -10,7 +10,7 @@ and chunking/lineage support).
 
 | Sub-Module | Description |
 |------------|-------------|
-| [context](context/_MANIFEST.md) | Context normalization, historical node retrieval, and context_scope expansion helpers. |
+| [context](context/_MANIFEST.md) | Context normalization and context_scope expansion helpers. |
 | [loaders](loaders/_MANIFEST.md) | File loaders for JSON/XML/text/tabular/UDF discovery and asynchronous base classes. |
 | [preprocessing](preprocessing/_MANIFEST.md) | Chunking, filter parsing, field resolution, stage bootstrapping, and transformation helper packages. |
 
@@ -26,7 +26,6 @@ and chunking/lineage support).
 | `validate_udf_references()` | `tools/{workflow}/*.py` | Validates | `impl` |
 | `normalize_context_scope()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `normalize_all_agent_configs()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
-| `HistoricalNodeDataLoader.load_historical_node_data()` | `agent_io/target/{action}/` | Reads | — |
 | `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config` |
 | `GuardFilter.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
 | `GuardEvaluator.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard` |
@@ -37,7 +36,7 @@ and chunking/lineage support).
 
 | Package | Direction | Why |
 |---------|-----------|-----|
-| `storage` | outbound | Uses StorageBackend for source/target reads via SourceDataLoader and HistoricalNodeDataLoader |
+| `storage` | outbound | Uses StorageBackend for source/target reads via SourceDataLoader |
 | `output` | outbound | Uses FileWriter and UnifiedSourceDataSaver for initial-stage writes |
 | `config` | outbound | Reads workflow configuration, data_source settings, and schema paths |
 | `processing` | outbound | Delegates record processing to RecordProcessor |
