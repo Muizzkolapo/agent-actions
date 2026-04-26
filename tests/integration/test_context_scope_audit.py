@@ -307,7 +307,6 @@ class TestFileModeObserve:
             data,
             agent_config,
             agent_name="act",
-            agent_indices={"dep": 0, "act": 1},
         )
         assert len(result) == 2
         # Observed fields extracted from namespace
@@ -334,7 +333,6 @@ class TestFileModeObserve:
             data,
             agent_config,
             agent_name="act",
-            agent_indices={"dep": 0, "act": 1},
         )
         assert len(result) == 2
         assert result[0]["content"]["q"] == "What?"
@@ -362,7 +360,6 @@ class TestFileModeObserve:
             data,
             agent_config,
             agent_name="act",
-            agent_indices={"dep_a": 0, "dep_b": 1, "act": 2},
         )
         assert len(result) == 1
         # dep_a wildcard extracts all fields (qualified because 2 wildcards? no, only 1)

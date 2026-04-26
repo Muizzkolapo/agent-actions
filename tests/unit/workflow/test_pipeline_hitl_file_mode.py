@@ -437,9 +437,8 @@ def test_new_observe_wildcard_returns_all_content_fields():
 def test_new_observe_collision_uses_qualified_keys():
     """When two refs share the same bare key with NiFi enrichment.
 
-    NOTE: No agent_indices/file_path provided, so dep_b cannot load
-    historically and falls through to content lookup. With NiFi enrichment,
-    the original content fields are preserved as-is (no qualified key
+    With namespaced content, observe reads directly from record namespaces.
+    The original content fields are preserved as-is (no qualified key
     renaming for input-source fields). The original 'title' and 'body'
     remain in content.
     """

@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove unused agent_indices and file_path params from apply_observe_for_file_mode"
+time: 2026-04-26T17:30:00.000000Z
