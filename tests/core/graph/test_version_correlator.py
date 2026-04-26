@@ -698,27 +698,19 @@ class TestVersionCorrelationFailureError:
             )
             output_manager = AgentOutputManager(config)
 
-            # Get the correlation wrapper for consumer (idx=2)
-            correlation_wrapper = output_manager.setup_correlation_wrapper(
-                idx=2,
-            )
-
-            # The wrapper should exist since consumer has version_consumption_config
-            assert correlation_wrapper is not None
-
-            # Calling the wrapper when no version outputs exist should raise ConfigurationError
+            # Resolve correlated input for consumer (idx=2) — no version
+            # outputs exist so this should raise ConfigurationError
             with pytest.raises(ConfigurationError) as exc_info:
-                correlation_wrapper(
-                    agent_folder=str(agent_folder),
-                    agent_config=agent_configs["consumer"],
-                    previous_agent_type="action_2",
-                    agent_idx=2,
-                )
+                output_manager.resolve_correlated_input(idx=2)
 
             # Verify error message contains helpful context
             error_msg = str(exc_info.value)
             assert "consumer" in error_msg
             assert "Version correlation failed" in error_msg
+
+            # Non-consumer should return None
+            result = output_manager.resolve_correlated_input(idx=0)
+            assert result is None
 
 
 if __name__ == "__main__":

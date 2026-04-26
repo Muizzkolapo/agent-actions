@@ -95,6 +95,7 @@ class ProcessGenerateParams:
     strategy: ActionStrategy
     previous_action_type: str | None
     idx: int
+    input_directories_override: list[str] | None = None
 
 
 class ActionRunner:
@@ -478,9 +479,15 @@ class ActionRunner:
     def process_and_generate_for_action(self, params: ProcessGenerateParams) -> str:
         """Process and generate data for an action using the provided strategy."""
         agent_folder: str = self.get_action_folder(params.action_name)
-        input_directories, output_directory = self.setup_directories(
-            agent_folder, params.action_config, params.previous_action_type, params.idx
-        )
+
+        if params.input_directories_override is not None:
+            input_directories = params.input_directories_override
+            agent_type = params.action_config["agent_type"]
+            output_directory = str(Path(agent_folder) / "target" / agent_type)
+        else:
+            input_directories, output_directory = self.setup_directories(
+                agent_folder, params.action_config, params.previous_action_type, params.idx
+            )
 
         # Resolve file_type_filter for start nodes
         file_type_filter = None
@@ -510,6 +517,8 @@ class ActionRunner:
         action_name: str,
         previous_action_type: str | None,
         idx: int,
+        *,
+        input_directories_override: list[str] | None = None,
     ) -> str:
         """Run an action with the appropriate strategy based on its position in the workflow."""
         dependencies = action_config.get("dependencies", [])
@@ -526,6 +535,7 @@ class ActionRunner:
                 strategy=strategy,
                 previous_action_type=previous_action_type,
                 idx=idx,
+                input_directories_override=input_directories_override,
             )
         )
         return output_folder

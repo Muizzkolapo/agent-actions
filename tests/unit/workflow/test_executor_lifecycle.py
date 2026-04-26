@@ -84,7 +84,7 @@ class TestExecuteAgentSync:
 
         mock_deps.skip_evaluator.should_skip_action.return_value = False
         mock_deps.action_runner.run_action.return_value = "/output"
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
         with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
@@ -110,7 +110,7 @@ class TestExecuteAgentSync:
 
         mock_deps.skip_evaluator.should_skip_action.return_value = False
         mock_deps.action_runner.run_action.return_value = "/output"
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
         with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
@@ -201,7 +201,7 @@ class TestExecuteAgentSync:
         mock_deps.state_manager.get_status.return_value = ActionStatus.PENDING
         mock_deps.skip_evaluator.should_skip_action.return_value = False
         mock_deps.action_runner.run_action.return_value = "/output"
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
         with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
@@ -218,7 +218,7 @@ class TestExecuteAgentSync:
         mock_deps.state_manager.get_status.return_value = ActionStatus.PENDING
         mock_deps.skip_evaluator.should_skip_action.return_value = False
         mock_deps.action_runner.run_action.side_effect = RuntimeError("agent crashed")
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
 
         result = executor.execute_action_sync(
             "agent_a", action_idx=0, action_config={}, is_last_action=False
@@ -409,7 +409,7 @@ class TestExecuteAgentRun:
     def test_status_transitions_running_to_completed(self, executor, mock_deps):
         """Should transition from running → completed on success."""
         mock_deps.action_runner.run_action.return_value = "/output"
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
         params = ActionRunParams(
             action_name="agent_a",
@@ -428,7 +428,7 @@ class TestExecuteAgentRun:
     def test_failure_calls_handle_run_failure(self, executor, mock_deps):
         """Exception should result in _handle_run_failure path."""
         mock_deps.action_runner.run_action.side_effect = RuntimeError("boom")
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
         params = ActionRunParams(
             action_name="agent_a",
             action_idx=0,
@@ -442,12 +442,10 @@ class TestExecuteAgentRun:
         assert result.success is False
         assert result.status == ActionStatus.FAILED
 
-    def test_correlation_setup_and_cleanup(self, executor, mock_deps):
-        """Correlation wrapper should be set up and cleaned up."""
-        original_fn = MagicMock()
-        mock_deps.action_runner.setup_directories = original_fn
-        wrapper = MagicMock()
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = wrapper
+    def test_correlated_input_passed_to_run_action(self, executor, mock_deps):
+        """Correlated input directories should be passed to run_action, not monkey-patched."""
+        correlated_dirs = ["/correlated/dir"]
+        mock_deps.output_manager.resolve_correlated_input.return_value = correlated_dirs
         mock_deps.action_runner.run_action.return_value = "/output"
         mock_deps.batch_manager.check_batch_submission.return_value = None
         params = ActionRunParams(
@@ -461,8 +459,14 @@ class TestExecuteAgentRun:
         with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
             executor._execute_action_run(params)
 
-        # Correlation wrapper was installed, then original restored
-        assert mock_deps.action_runner.setup_directories == original_fn
+        # Correlated input passed as keyword arg, not via monkey-patching
+        mock_deps.action_runner.run_action.assert_called_once_with(
+            params.action_config,
+            params.action_name,
+            None,
+            params.action_idx,
+            input_directories_override=correlated_dirs,
+        )
 
 
 # ── _verify_completion_status ──────────────────────────────────────────

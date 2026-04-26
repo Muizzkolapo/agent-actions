@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -539,22 +538,9 @@ class ActionExecutor:
             metrics=ExecutionMetrics(duration=duration),
         )
 
-    def _cleanup_correlation(
-        self, params: ActionRunParams, original_setup: Callable | None
-    ) -> None:
-        """Restore original setup_directories after correlation setup."""
-        if original_setup:
-            try:
-                self.deps.action_runner.setup_directories = original_setup
-            except (AttributeError, TypeError) as cleanup_error:
-                logger.warning(
-                    "Failed to restore original setup_directories",
-                    extra={
-                        "operation": "action_cleanup",
-                        "action_name": params.action_name,
-                        "error": str(cleanup_error),
-                    },
-                )
+    def _resolve_correlated_input(self, action_idx: int) -> list[str] | None:
+        """Return correlated input directories for version consumers, or None."""
+        return self.deps.output_manager.resolve_correlated_input(action_idx)
 
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
@@ -997,7 +983,7 @@ class ActionExecutor:
         """Execute action run (synchronous)."""
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
-        original_setup = self._setup_correlation(params.action_idx)
+        correlated_input = self._resolve_correlated_input(params.action_idx)
 
         try:
             output_folder = self.deps.action_runner.run_action(
@@ -1005,6 +991,7 @@ class ActionExecutor:
                 params.action_name,
                 None,
                 params.action_idx,
+                input_directories_override=correlated_input,
             )
             duration = (datetime.now() - params.start_time).total_seconds()
             batch_status = self._check_batch_submission(
@@ -1017,14 +1004,11 @@ class ActionExecutor:
         except Exception as e:
             return self._handle_run_failure(params, e)
 
-        finally:
-            self._cleanup_correlation(params, original_setup)
-
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
-        original_setup = self._setup_correlation(params.action_idx)
+        correlated_input = self._resolve_correlated_input(params.action_idx)
 
         try:
             output_folder = await asyncio.to_thread(
@@ -1033,6 +1017,7 @@ class ActionExecutor:
                 params.action_name,
                 None,
                 params.action_idx,
+                input_directories_override=correlated_input,
             )
             duration = (datetime.now() - params.start_time).total_seconds()
             batch_status = self._check_batch_submission(
@@ -1045,22 +1030,8 @@ class ActionExecutor:
         except Exception as e:
             return self._handle_run_failure(params, e)
 
-        finally:
-            self._cleanup_correlation(params, original_setup)
-
     def __repr__(self):
         return f"ActionExecutor(deps={self.deps})"
-
-    def _setup_correlation(self, action_idx: int) -> Callable | None:
-        """Setup loop correlation if needed, return original setup function."""
-        correlation_wrapper = self.deps.output_manager.setup_correlation_wrapper(action_idx)
-
-        if correlation_wrapper:
-            original = self.deps.action_runner.setup_directories
-            self.deps.action_runner.setup_directories = correlation_wrapper
-            return cast(Callable, original)
-
-        return None
 
     def _check_batch_submission(
         self,

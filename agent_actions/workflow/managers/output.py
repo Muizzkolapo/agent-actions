@@ -3,7 +3,6 @@
 import json
 import logging
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -185,8 +184,14 @@ class ActionOutputManager:
                 )
         return outputs, list(target_files)
 
-    def setup_correlation_wrapper(self, idx: int) -> Callable | None:
-        """Create a correlation-aware setup_directories wrapper if needed."""
+    def resolve_correlated_input(self, idx: int) -> list[str] | None:
+        """Return correlated input directories for version consumers, or None.
+
+        Unlike the old ``setup_correlation_wrapper`` approach, this method does
+        **not** monkey-patch ``runner.setup_directories``.  The caller passes
+        the returned directories to ``run_action`` as an override, which is
+        safe for parallel execution.
+        """
         current_agent = self.execution_order[idx]
 
         if self._version_consumption_map is None:
@@ -205,39 +210,29 @@ class ActionOutputManager:
         version_sources = consumption_config["version_agents"]
         pattern = consumption_config["pattern"]
 
-        def correlation_setup_directories(
-            agent_folder, agent_config, previous_agent_type, agent_idx
-        ):
-            """Wrapper that uses correlated input for version consumers."""
-            correlated_dir = self.version_correlator.prepare_correlated_input(
-                current_agent, version_sources, agent_idx
+        correlated_dir = self.version_correlator.prepare_correlated_input(
+            current_agent, version_sources, idx
+        )
+
+        if correlated_dir:
+            self.console.print(
+                f"[blue]🔗 Using correlated input for {current_agent} from "
+                f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
             )
+            return [str(correlated_dir)]
 
-            if correlated_dir:
-                self.console.print(
-                    f"[blue]🔗 Using correlated input for {current_agent} from "
-                    f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
-                )
-                input_directory = correlated_dir
-                # Setup output directory (simple name, no index prefix)
-                agent_type = agent_config["agent_type"]
-                output_directory = Path(agent_folder) / "target" / agent_type
-                return ([str(input_directory)], str(output_directory))
+        from agent_actions.errors import ConfigurationError
 
-            from agent_actions.errors import ConfigurationError
-
-            raise ConfigurationError(
-                f"Version correlation failed for '{current_agent}'. "
-                f"Could not load outputs from version sources: {version_sources}. "
-                f"Check that all version agents completed successfully.",
-                context={
-                    "agent": current_agent,
-                    "version_sources": version_sources,
-                    "pattern": pattern,
-                },
-            )
-
-        return correlation_setup_directories
+        raise ConfigurationError(
+            f"Version correlation failed for '{current_agent}'. "
+            f"Could not load outputs from version sources: {version_sources}. "
+            f"Check that all version agents completed successfully.",
+            context={
+                "agent": current_agent,
+                "version_sources": version_sources,
+                "pattern": pattern,
+            },
+        )
 
 
 # Backward-compatible alias
