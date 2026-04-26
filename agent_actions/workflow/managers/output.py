@@ -187,10 +187,8 @@ class ActionOutputManager:
     def resolve_correlated_input(self, idx: int) -> list[str] | None:
         """Return correlated input directories for version consumers, or None.
 
-        Unlike the old ``setup_correlation_wrapper`` approach, this method does
-        **not** monkey-patch ``runner.setup_directories``.  The caller passes
-        the returned directories to ``run_action`` as an override, which is
-        safe for parallel execution.
+        Safe for parallel execution — the caller passes the returned
+        directories to ``run_action`` as an override parameter.
         """
         current_agent = self.execution_order[idx]
 

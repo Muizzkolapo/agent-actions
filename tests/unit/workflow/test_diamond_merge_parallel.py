@@ -98,11 +98,9 @@ class TestParallelCorrelationIsolation:
             input_directories_override=correlated,
         )
 
-    def test_parallel_execution_no_shared_state_mutation(self, executor, mock_deps):
-        """Simulates parallel execution: runner.setup_directories must not be mutated."""
-        original_setup = mock_deps.action_runner.setup_directories
+    def test_each_action_gets_its_own_override(self, executor, mock_deps):
+        """Consumer and non-consumer executed sequentially get independent overrides."""
 
-        # Version consumer gets correlated input
         def resolve_side_effect(idx):
             if idx == 4:  # merge_code_alternatives
                 return ["/correlated"]
@@ -129,10 +127,6 @@ class TestParallelCorrelationIsolation:
             executor._execute_action_run(consumer_params)
             executor._execute_action_run(non_consumer_params)
 
-        # runner.setup_directories was never replaced
-        assert mock_deps.action_runner.setup_directories is original_setup
-
-        # Each action got the right override
         calls = mock_deps.action_runner.run_action.call_args_list
         assert calls[0].kwargs["input_directories_override"] == ["/correlated"]
         assert calls[1].kwargs["input_directories_override"] is None

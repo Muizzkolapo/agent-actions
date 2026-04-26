@@ -538,10 +538,6 @@ class ActionExecutor:
             metrics=ExecutionMetrics(duration=duration),
         )
 
-    def _resolve_correlated_input(self, action_idx: int) -> list[str] | None:
-        """Return correlated input directories for version consumers, or None."""
-        return self.deps.output_manager.resolve_correlated_input(action_idx)
-
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
     ) -> str | None:
@@ -983,7 +979,7 @@ class ActionExecutor:
         """Execute action run (synchronous)."""
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
-        correlated_input = self._resolve_correlated_input(params.action_idx)
+        correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
 
         try:
             output_folder = self.deps.action_runner.run_action(
@@ -1008,7 +1004,7 @@ class ActionExecutor:
         """Execute action run (asynchronous)."""
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
-        correlated_input = self._resolve_correlated_input(params.action_idx)
+        correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
 
         try:
             output_folder = await asyncio.to_thread(
