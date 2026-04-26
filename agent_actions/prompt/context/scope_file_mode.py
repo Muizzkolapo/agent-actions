@@ -62,8 +62,6 @@ def apply_observe_for_file_mode(
     data: list[dict],
     agent_config: dict,
     agent_name: str,
-    agent_indices: dict[str, int] | None = None,
-    file_path: str | None = None,
     source_data: list[dict] | None = None,
 ) -> list[dict]:
     """Namespace-aware observe filter for file-mode (array-level) data.

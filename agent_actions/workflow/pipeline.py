@@ -541,8 +541,6 @@ class ProcessingPipeline:
                 data=data,
                 agent_config=cast(dict[str, Any], self.config.action_config),
                 agent_name=self.config.action_name,
-                agent_indices=agent_indices,
-                file_path=file_path,
                 source_data=source_data,
             )
 

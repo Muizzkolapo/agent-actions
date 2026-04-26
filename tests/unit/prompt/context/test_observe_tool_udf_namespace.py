@@ -134,8 +134,6 @@ class TestFileModeObserveToolUdf:
             data=data,
             agent_config=agent_config,
             agent_name="tool_b",
-            agent_indices={"upstream": 0, "tool_b": 1},
-            file_path="/tmp/test.json",
         )
 
         content = filtered[0].get("content", filtered[0])

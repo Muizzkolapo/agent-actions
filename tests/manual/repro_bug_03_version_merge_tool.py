@@ -47,20 +47,10 @@ def test_version_wildcard_expansion():
         },
     }
 
-    agent_indices = {
-        "source": 0,
-        "gen_code_1": 1,
-        "gen_code_2": 2,
-        "gen_code_3": 3,
-        "aggregate": 4,
-    }
-
     result = apply_observe_for_file_mode(
         data=data,
         agent_config=agent_config,
         agent_name="aggregate",
-        agent_indices=agent_indices,
-        file_path="/tmp/test.json",
     )
 
     content = result[0].get("content", result[0])
@@ -102,19 +92,10 @@ def test_version_specific_field_resolution():
         },
     }
 
-    agent_indices = {
-        "source": 0,
-        "gen_code_1": 1,
-        "gen_code_2": 2,
-        "aggregate": 3,
-    }
-
     result = apply_observe_for_file_mode(
         data=data,
         agent_config=agent_config,
         agent_name="aggregate",
-        agent_indices=agent_indices,
-        file_path="/tmp/test.json",
     )
 
     content = result[0].get("content", result[0])
@@ -173,14 +154,10 @@ def test_content_empty_fallback_trap():
         },
     }
 
-    agent_indices = {"source": 0, "upstream": 1, "downstream": 2}
-
     result = apply_observe_for_file_mode(
         data=data,
         agent_config=agent_config,
         agent_name="downstream",
-        agent_indices=agent_indices,
-        file_path="/tmp/test.json",
         source_data=source_data,
     )
 

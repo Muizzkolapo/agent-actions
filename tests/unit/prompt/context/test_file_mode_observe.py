@@ -274,8 +274,7 @@ class TestApplyObserveForFileMode:
     def test_no_storage_lookup(self):
         """With namespaced content, no historical storage lookup is needed.
 
-        All dependency data is on the record. This test verifies the function
-        works without agent_indices or file_path.
+        All dependency data is on the record.
         """
         data = [
             {
@@ -290,8 +289,6 @@ class TestApplyObserveForFileMode:
             data=data,
             agent_config=config,
             agent_name="summarize",
-            agent_indices=None,
-            file_path=None,
         )
         assert result[0]["content"]["text"] == "hello"
         assert result[0]["content"]["topic"] == "science"
