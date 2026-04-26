@@ -171,26 +171,34 @@ class WhereClauseParser:
         )
 
         comparison_ops = self._build_comparison_operators()
+        unary_postfix_ops = self._build_unary_postfix_operators()
 
-        where_expr = infix_notation(
-            operand,
+        precedence_levels = [
+            (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
+        ]
+        if unary_postfix_ops:
+            precedence_levels.append(
+                (unary_postfix_ops, 1, OpAssoc.LEFT, self._parse_comparison),
+            )
+        precedence_levels.extend(
             [
-                (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
-            ],
+            ]
         )
+
+        where_expr = infix_notation(operand, precedence_levels)
 
         self._grammar = where_expr
         ParserElement.enable_packrat()
 
     def _collect_comparison_operators(self):
-        """Collect comparison operators sorted longest-first to avoid partial matches."""
+        """Collect binary comparison operators sorted longest-first to avoid partial matches."""
         comparison_ops = [
             (info.symbol, info.name)
             for info in list_operators()
-            if info.operator_type.value == "comparison" and info.arity in (1, 2)
+            if info.operator_type.value == "comparison" and info.arity == 2
         ]
         comparison_ops.sort(key=lambda x: len(x[0]), reverse=True)
         return comparison_ops
@@ -208,12 +216,36 @@ class WhereClauseParser:
         return op_literal
 
     def _build_comparison_operators(self):
-        """Build comparison operators from the registry."""
+        """Build binary comparison operators from the registry."""
         comparison_ops = self._collect_comparison_operators()
         op_literals = [self._create_operator_literal(symbol) for symbol, _name in comparison_ops]
 
         if not op_literals:
             return Literal("==")  # Fallback
+
+        result = op_literals[0]
+        for op in op_literals[1:]:
+            result = result | op
+        return result
+
+    def _build_unary_postfix_operators(self):
+        """Build unary postfix comparison operators (IS NULL, IS NOT NULL).
+
+        These must be separate from binary operators because pyparsing's
+        infix_notation requires arity=1 + OpAssoc.LEFT for postfix unary,
+        while binary operators use arity=2.
+        """
+        unary_ops = [
+            (info.symbol, info.name)
+            for info in list_operators()
+            if info.operator_type.value == "comparison" and info.arity == 1
+        ]
+        # Longest first so IS NOT NULL matches before IS NULL
+        unary_ops.sort(key=lambda x: len(x[0]), reverse=True)
+        op_literals = [self._create_operator_literal(symbol) for symbol, _name in unary_ops]
+
+        if not op_literals:
+            return None
 
         result = op_literals[0]
         for op in op_literals[1:]:

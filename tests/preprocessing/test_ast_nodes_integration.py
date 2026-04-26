@@ -505,3 +505,118 @@ class TestParserOperatorMapping:
         # All 6 operators must be distinct enum members
         values = list(seen_ops.values())
         assert len(values) == len(set(values)), f"Operators are not distinct: {seen_ops}"
+
+
+class TestIsNullDottedPaths:
+    """Regression tests: IS NULL / IS NOT NULL must work with dotted namespace paths.
+
+    Before the fix, IS NULL and IS NOT NULL were registered as binary operators
+    (arity=2) in pyparsing's infix_notation. pyparsing expected a right operand
+    after the operator, found none, failed to match, and left "IS NULL" as
+    unconsumed text → "Expected end of text".
+
+    Fix: separate IS NULL / IS NOT NULL into a postfix unary operator group
+    (arity=1, OpAssoc.LEFT) in infix_notation.
+    """
+
+    @pytest.fixture
+    def parser(self):
+        return WhereClauseParser()
+
+    @pytest.fixture
+    def data(self):
+        return {
+            "action": {"status": "done", "score": None},
+            "meta": {"nested": {"deep": 42, "empty": None}},
+            "top_level": None,
+            "present": "value",
+        }
+
+    # --- Dotted path IS NULL ---
+
+    def test_dotted_is_null_on_null_value(self, parser, data):
+        result = parser.parse("action.score IS NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    def test_dotted_is_null_on_non_null_value(self, parser, data):
+        result = parser.parse("action.status IS NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is False
+
+    def test_dotted_is_null_on_missing_field(self, parser, data):
+        """Missing field is conceptually null → IS NULL returns True."""
+        result = parser.parse("action.nonexistent IS NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    # --- Dotted path IS NOT NULL ---
+
+    def test_dotted_is_not_null_on_non_null_value(self, parser, data):
+        result = parser.parse("action.status IS NOT NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    def test_dotted_is_not_null_on_null_value(self, parser, data):
+        result = parser.parse("action.score IS NOT NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is False
+
+    def test_dotted_is_not_null_on_missing_field(self, parser, data):
+        result = parser.parse("action.nonexistent IS NOT NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is False
+
+    # --- Deep nesting ---
+
+    def test_deeply_nested_is_null(self, parser, data):
+        result = parser.parse("meta.nested.empty IS NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    def test_deeply_nested_is_not_null(self, parser, data):
+        result = parser.parse("meta.nested.deep IS NOT NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    # --- Non-dotted still works ---
+
+    def test_simple_is_null(self, parser, data):
+        result = parser.parse("top_level IS NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    def test_simple_is_not_null(self, parser, data):
+        result = parser.parse("present IS NOT NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    # --- Combined with AND / OR ---
+
+    def test_dotted_is_null_and_binary_comparison(self, parser, data):
+        result = parser.parse('action.score IS NULL AND action.status == "done"')
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    def test_dotted_is_not_null_or_dotted_is_null(self, parser, data):
+        result = parser.parse("action.status IS NOT NULL OR action.score IS NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is True
+
+    def test_both_sides_false(self, parser, data):
+        """IS NULL on non-null AND IS NOT NULL on null → both False → result False."""
+        result = parser.parse("action.status IS NULL AND action.score IS NOT NULL")
+        assert result.success, f"Parse failed: {result.error}"
+        assert result.ast.evaluate(data) is False
+
+    # --- AST round-trip ---
+
+    def test_dotted_is_null_ast_string_roundtrip(self, parser):
+        result = parser.parse("action.field IS NULL")
+        assert result.success
+        assert str(result.ast) == "action.field IS NULL"
+
+    def test_dotted_is_not_null_ast_string_roundtrip(self, parser):
+        result = parser.parse("ns.sub.field IS NOT NULL")
+        assert result.success
+        assert str(result.ast) == "ns.sub.field IS NOT NULL"
