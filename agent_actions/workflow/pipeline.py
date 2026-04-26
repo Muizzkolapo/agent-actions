@@ -565,7 +565,7 @@ class ProcessingPipeline:
                 else:
                     results = self._process_file_mode_hitl(passing, original_passing, context)
 
-                results.extend(_build_skipped_results(skipped))
+                results.extend(_build_skipped_results(skipped, self.config.action_name))
         else:
             results = self.record_processor.process_batch(data, context)
 
