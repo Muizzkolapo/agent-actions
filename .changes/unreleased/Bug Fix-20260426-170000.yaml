@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Batch passthrough Path B now extracts values namespace-aware, matching Path A's merge structure"
+time: 2026-04-26T17:00:00.000000Z
