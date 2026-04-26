@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "HITL guard-skipped records now get null namespace marker when mixed with passing records"
+time: 2026-04-26T19:00:00.000000Z

@@ -354,3 +354,28 @@ class TestBuildSkippedResults:
         results = _build_skipped_results([original])
 
         assert results[0].data[0] is original
+
+    def test_mixed_pass_skip_skipped_records_get_null_namespace(self):
+        """When some records pass and some are skipped, skipped get null namespace.
+
+        This exercises the pipeline path at line 568 where _build_skipped_results
+        is called with action_name for records skipped alongside passing records.
+        """
+        skipped = [
+            {"content": {"prev_action": {"key": "other"}}, "source_guid": "sg-2"},
+            {"content": {"prev_action": {"key": "third"}}, "source_guid": "sg-3"},
+        ]
+
+        # Simulate the pipeline call at line 568: _build_skipped_results(skipped, action_name)
+        results = _build_skipped_results(skipped, action_name="review_action")
+
+        assert len(results) == 2
+        for i, result in enumerate(results):
+            assert result.status == ProcessingStatus.UNPROCESSED
+            item = result.data[0]
+            # Null namespace marker present
+            assert "review_action" in item["content"]
+            assert item["content"]["review_action"] is None
+            # Previous content preserved
+            assert item["content"]["prev_action"] == skipped[i]["content"]["prev_action"]
+            assert item["source_guid"] == skipped[i]["source_guid"]
