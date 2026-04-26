@@ -85,13 +85,14 @@ def _resolve_source_mapping(
 
 def _reattach_source_guid(
     structured_data: list[dict],
-    source_mapping: dict[int, int | list[int]] | None,
+    source_mapping: dict[int, int | list[int] | None] | None,
     original_data: list[dict],
 ) -> None:
     """Reattach source_guid from input records to output items using mapping.
 
     Mutates structured_data in place.  Only sets source_guid when the output
     item does not already carry a truthy value (explicit tool values win).
+    Entries with ``None`` source index (synthetic records) are skipped.
     """
     if source_mapping is None or not original_data:
         return
@@ -105,11 +106,15 @@ def _reattach_source_guid(
             # and cardinalities match (1:1 passthrough by tools that don't preserve node_id).
             # When mapping has entries, unmapped outputs are genuinely new records.
             if not source_mapping and len(structured_data) == len(original_data):
-                source_idx: int | list[int] = i
+                source_idx: int | list[int] | None = i
             else:
                 continue  # Unmapped output — new record, no parent to inherit from
         else:
             source_idx = source_mapping[i]
+
+        if source_idx is None:
+            continue  # Synthetic record — no parent GUID to inherit
+
         if isinstance(source_idx, list):
             source_idx = source_idx[0]  # Many-to-one: use first parent
 
@@ -119,14 +124,19 @@ def _reattach_source_guid(
                 item["source_guid"] = parent_guid
 
 
-def _resolve_input_record(input_idx: int, original_data: list[dict]) -> dict[str, Any] | None:
+def _resolve_input_record(
+    input_idx: int | None, original_data: list[dict]
+) -> dict[str, Any] | None:
     """Resolve the input record for namespace carry-forward.
 
-    Raises ``IndexError`` if *input_idx* is out of bounds — an invalid
-    ``source_index`` is a tool bug, not something to silently default.
+    When *input_idx* is ``None`` (synthetic record), falls back to
+    ``original_data[0]`` — all records in a batch share upstream namespaces.
+    Raises ``IndexError`` for out-of-bounds non-None indices.
     """
     if not original_data:
         return None
+    if input_idx is None:
+        return original_data[0]
     if not isinstance(input_idx, int) or input_idx < 0 or input_idx >= len(original_data):
         raise IndexError(
             f"source_index {input_idx} is out of bounds for {len(original_data)} input records"
@@ -212,7 +222,12 @@ def _reconcile_outputs(
     if isinstance(raw_response, FileUDFResult):
         for i, out in enumerate(raw_response.outputs):
             src_idx = out["source_index"]
-            input_idx = src_idx[0] if isinstance(src_idx, list) else src_idx
+            if src_idx is None:
+                input_idx = None
+            elif isinstance(src_idx, list):
+                input_idx = src_idx[0]
+            else:
+                input_idx = src_idx
             source_mapping[i] = src_idx
 
             matched = _resolve_input_record(input_idx, original_data)

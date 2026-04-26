@@ -77,6 +77,9 @@ class LineageEnricher(Enricher):
                         node_id=node_id,
                     )
                     continue
+                elif source_idx is None:
+                    # Synthetic record — no parent, gets fresh lineage
+                    parent_item = None
                 else:
                     # One-to-one: single input record
                     if source_idx < source_data_len:
