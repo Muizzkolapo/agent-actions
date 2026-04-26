@@ -7,7 +7,11 @@ import pytest
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.result_collector import CollectionStats, ResultCollector
+from agent_actions.processing.result_collector import (
+    CollectionStats,
+    ResultCollector,
+    _data_has_parse_error,
+)
 from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
@@ -292,16 +296,18 @@ def test_result_collector_on_exhausted_return_last_does_not_raise():
 # ---------------------------------------------------------------------------
 
 
+def _make_backend():
+    """Create a mock StorageBackend with a mocked set_disposition method."""
+    backend = MagicMock()
+    backend.set_disposition = MagicMock()
+    return backend
+
+
 class TestResultCollectorDispositions:
     """Tests for per-record disposition writes in ResultCollector."""
 
-    def _make_backend(self):
-        backend = MagicMock()
-        backend.set_disposition = MagicMock()
-        return backend
-
     def test_filtered_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         filtered = ProcessingResult.filtered(source_guid="src-f1")
         filtered.skip_reason = "low_confidence"
 
@@ -321,7 +327,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_filtered_result_default_reason(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         filtered = ProcessingResult.filtered(source_guid="src-f2")
 
         ResultCollector.collect_results(
@@ -340,7 +346,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_failed_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         failed = ProcessingResult.failed(error="timeout", source_guid="src-fail")
 
         ResultCollector.collect_results(
@@ -362,7 +368,7 @@ class TestResultCollectorDispositions:
 
     def test_failed_result_default_reason(self):
         """When error field is empty string, falls back to 'processing_error'."""
-        backend = self._make_backend()
+        backend = _make_backend()
         failed = ProcessingResult(
             status=ProcessingStatus.FAILED,
             data=[],
@@ -389,7 +395,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_skipped_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         skipped = ProcessingResult.skipped(
             passthrough_data={"content": {}},
             reason="guard_skip",
@@ -412,7 +418,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_exhausted_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         exhausted = ProcessingResult.exhausted(
             error="Retry exhausted",
             source_guid="src-ex",
@@ -437,7 +443,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_unprocessed_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         unprocessed = ProcessingResult(
             status=ProcessingStatus.UNPROCESSED,
             source_guid="src-un",
@@ -461,7 +467,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_success_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         success = ProcessingResult.success(
             data=[{"content": {"v": 1}}],
             source_guid="src-ok",
@@ -498,7 +504,7 @@ class TestResultCollectorDispositions:
 
     def test_no_source_guid_no_disposition(self):
         """Records without source_guid should not attempt disposition writes."""
-        backend = self._make_backend()
+        backend = _make_backend()
         filtered = ProcessingResult.filtered(source_guid=None)
 
         ResultCollector.collect_results(
@@ -513,7 +519,7 @@ class TestResultCollectorDispositions:
 
     def test_deferred_result_writes_disposition(self):
         """DEFERRED records write a disposition with source_guid as record_id."""
-        backend = self._make_backend()
+        backend = _make_backend()
         deferred = ProcessingResult.deferred(
             task_id="task-123",
             source_guid="src-def",
@@ -536,7 +542,7 @@ class TestResultCollectorDispositions:
 
     def test_deferred_result_no_source_guid_no_disposition(self):
         """DEFERRED records without source_guid skip the disposition write."""
-        backend = self._make_backend()
+        backend = _make_backend()
         deferred = ProcessingResult.deferred(
             task_id="task-456",
             source_guid=None,
@@ -571,7 +577,7 @@ class TestResultCollectorDispositions:
 
     def test_mixed_statuses_write_correct_dispositions(self):
         """Multiple statuses in one batch write the right dispositions."""
-        backend = self._make_backend()
+        backend = _make_backend()
 
         results = [
             ProcessingResult.success(data=[{"content": {}}], source_guid="ok"),
@@ -598,7 +604,7 @@ class TestResultCollectorDispositions:
 
     def test_mixed_with_deferred_writes_all_dispositions(self):
         """DEFERRED + other statuses each write their own disposition."""
-        backend = self._make_backend()
+        backend = _make_backend()
 
         results = [
             ProcessingResult.deferred(task_id="t-1", source_guid="src-d"),
@@ -661,3 +667,225 @@ class TestCollectionStatsOnlyGuardOutcomes:
 
     def test_mixed_skipped_with_success_blocks(self):
         assert CollectionStats(skipped=2, success=1).only_guard_outcomes is False
+
+
+# ---------------------------------------------------------------------------
+# _data_has_parse_error helper tests
+# ---------------------------------------------------------------------------
+
+
+class TestDataHasParseError:
+    """Tests for _data_has_parse_error detection helper."""
+
+    def test_detects_parse_error_in_content_namespace(self):
+        data = [
+            {
+                "content": {
+                    "my_action": {
+                        "_parse_error": "Extra data: line 15",
+                        "raw_response": "bad json",
+                    }
+                }
+            }
+        ]
+        assert _data_has_parse_error(data) is True
+
+    def test_detects_parse_error_at_top_level(self):
+        data = [{"_parse_error": "Expecting value", "raw_response": "not json"}]
+        assert _data_has_parse_error(data) is True
+
+    def test_normal_record_no_false_positive(self):
+        data = [{"content": {"my_action": {"question": "What is X?", "answer": "Y"}}}]
+        assert _data_has_parse_error(data) is False
+
+    def test_empty_data_returns_false(self):
+        assert _data_has_parse_error([]) is False
+
+    def test_content_with_non_dict_namespace_skipped(self):
+        data = [{"content": {"action": "just a string"}}]
+        assert _data_has_parse_error(data) is False
+
+    def test_multiple_items_one_has_error(self):
+        data = [
+            {"content": {"action": {"field": "ok"}}},
+            {"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}},
+        ]
+        assert _data_has_parse_error(data) is True
+
+    def test_no_content_key(self):
+        data = [{"source_guid": "abc", "metadata": {}}]
+        assert _data_has_parse_error(data) is False
+
+
+# ---------------------------------------------------------------------------
+# Parse error disposition tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseErrorDisposition:
+    """Tests for parse error detection in the SUCCESS branch of ResultCollector."""
+
+    def test_parse_error_record_gets_failed_disposition(self):
+        """SUCCESS result with _parse_error in content gets DISPOSITION_FAILED."""
+        backend = _make_backend()
+        result = ProcessingResult.success(
+            data=[
+                {
+                    "source_guid": "guid-pe",
+                    "content": {
+                        "my_action": {
+                            "_parse_error": "Expecting value: line 1",
+                            "raw_response": "not json",
+                        }
+                    },
+                }
+            ],
+            source_guid="guid-pe",
+        )
+
+        output, stats = ResultCollector.collect_results(
+            [result],
+            {},
+            "my_action",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "my_action",
+            "guid-pe",
+            "failed",
+            reason="parse_error",
+        )
+
+    def test_parse_error_record_marked_unprocessed(self):
+        """Parse error items get _unprocessed=True so downstream guards skip them."""
+        result = ProcessingResult.success(
+            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            source_guid="guid-pe",
+        )
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "action",
+            is_first_stage=False,
+        )
+
+        assert len(output) == 1
+        assert output[0]["_unprocessed"] is True
+
+    def test_parse_error_stats_counted_as_failed(self):
+        """Parse error reclassifies from success to failed in stats."""
+        result = ProcessingResult.success(
+            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            source_guid="guid-pe",
+        )
+
+        _, stats = ResultCollector.collect_results(
+            [result],
+            {},
+            "action",
+            is_first_stage=False,
+        )
+
+        assert stats.failed == 1
+        assert stats.success == 0
+
+    def test_normal_success_not_affected(self):
+        """Normal SUCCESS records are not reclassified by parse error detection."""
+        backend = _make_backend()
+        result = ProcessingResult.success(
+            data=[{"content": {"action": {"question": "What?", "answer": "42"}}}],
+            source_guid="guid-ok",
+        )
+
+        output, stats = ResultCollector.collect_results(
+            [result],
+            {},
+            "action",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        assert stats.success == 1
+        assert stats.failed == 0
+        assert "_unprocessed" not in output[0]
+        # Normal SUCCESS writes DISPOSITION_SUCCESS, not FAILED
+        backend.set_disposition.assert_called_once_with(
+            "action",
+            "guid-ok",
+            "success",
+        )
+
+    def test_mixed_parse_error_and_normal(self):
+        """Batch with both parse error and normal records handles each correctly."""
+        backend = _make_backend()
+        results = [
+            ProcessingResult.success(
+                data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+                source_guid="guid-pe",
+            ),
+            ProcessingResult.success(
+                data=[{"content": {"action": {"field": "ok"}}}],
+                source_guid="guid-ok",
+            ),
+        ]
+
+        output, stats = ResultCollector.collect_results(
+            results,
+            {},
+            "action",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        assert stats.failed == 1
+        assert stats.success == 1
+        assert len(output) == 2
+        # Parse error item is marked, normal is not
+        assert output[0]["_unprocessed"] is True
+        assert "_unprocessed" not in output[1]
+        # Parse error gets FAILED disposition, normal gets SUCCESS disposition
+        assert backend.set_disposition.call_count == 2
+        calls = backend.set_disposition.call_args_list
+        assert calls[0] == (("action", "guid-pe", "failed"), {"reason": "parse_error"})
+        assert calls[1] == (("action", "guid-ok", "success"), {})
+
+    def test_parse_error_no_source_guid_no_disposition(self):
+        """Parse error without source_guid marks items but skips disposition write."""
+        backend = _make_backend()
+        result = ProcessingResult.success(
+            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            source_guid=None,
+        )
+
+        output, stats = ResultCollector.collect_results(
+            [result],
+            {},
+            "action",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        assert stats.failed == 1
+        assert output[0]["_unprocessed"] is True
+        backend.set_disposition.assert_not_called()
+
+    def test_parse_error_no_backend_no_crash(self):
+        """Parse error detection works gracefully without storage backend."""
+        result = ProcessingResult.success(
+            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            source_guid="guid-pe",
+        )
+
+        output, stats = ResultCollector.collect_results(
+            [result],
+            {},
+            "action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert stats.failed == 1
+        assert output[0]["_unprocessed"] is True

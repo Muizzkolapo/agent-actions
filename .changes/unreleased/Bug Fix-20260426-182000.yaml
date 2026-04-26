@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Records with _parse_error from LLM JSON parse failures now get DISPOSITION_FAILED instead of flowing downstream as SUCCESS"
+time: 2026-04-26T18:20:00.000000Z
