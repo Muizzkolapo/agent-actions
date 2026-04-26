@@ -23,8 +23,6 @@ def aggregate_quality_scores(data: dict[str, Any]) -> dict[str, Any]:
     Accesses versioned outputs: score_quality_1, score_quality_2, score_quality_3.
     Returns consensus score, spread, and combined insights.
     """
-    content = data.get("content", data)
-
     # Collect scores from all scorers
     scores = []
     all_reasoning = []
@@ -32,9 +30,9 @@ def aggregate_quality_scores(data: dict[str, Any]) -> dict[str, Any]:
 
     for i in range(1, 4):
         scorer_key = f"score_quality_{i}"
-        scorer_ns = content.get(scorer_key, {})
+        scorer_ns = data.get(scorer_key, {})
 
-        # Namespaced data model: scorer fields are at content[scorer_key][scorer_key]
+        # Namespaced data model: scorer fields are at data[scorer_key][scorer_key]
         scorer_data = scorer_ns.get(scorer_key, scorer_ns) if isinstance(scorer_ns, dict) else {}
 
         if not isinstance(scorer_data, dict):

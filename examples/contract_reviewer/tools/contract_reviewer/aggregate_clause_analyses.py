@@ -1,8 +1,8 @@
 """
 Aggregate all clause-level risk analyses into a unified contract risk report.
 
-FILE granularity — receives ALL clause records at once (full records with
-content, node_id, lineage) and emits a single aggregated summary. This is
+FILE granularity — receives ALL clause records at once and emits a single
+aggregated summary. This is
 the REDUCE step of the Map-Reduce pattern.
 
 Since this tool creates a NEW record (not derived from a single input),
@@ -49,8 +49,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
         ]
 
     # Extract contract metadata from the first record's source namespace
-    first_content = data[0].get("content", data[0])
-    first_source = first_content.get("source", {})
+    first_source = data[0].get("source", {})
     contract_id = first_source.get("contract_id", "unknown")
     contract_title = first_source.get("title", "unknown")
     parties = first_source.get("parties", [])
@@ -64,9 +63,8 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
     negotiation_items: list[dict[str, Any]] = []
 
     for record in data:
-        content = record.get("content", record)
-        analysis = content.get("analyze_clause", {})
-        clause_meta = content.get("split_into_clauses", {})
+        analysis = record.get("analyze_clause", {})
+        clause_meta = record.get("split_into_clauses", {})
 
         risk_level = analysis.get("risk_level", "low")
         risk_score = analysis.get("risk_score", 0.0)

@@ -53,15 +53,13 @@ def assign_team_based_on_impact(data: dict[str, Any]) -> dict[str, Any]:
     Pattern: Content injection with passthrough + seed data enrichment
     Returns: Dict with ONLY new fields (passthrough handles the rest)
     """
-    content = data.get("content", data)
-
     # Extract context
-    severity = content.get("final_severity", "SEV3")
-    affected_services = content.get("affected_services", [])
+    severity = data.get("final_severity", "SEV3")
+    affected_services = data.get("affected_services", [])
 
     # Get seed data for enrichment
-    team_roster = content.get("team_roster", {}).get("oncall_teams", {})
-    service_catalog = content.get("service_catalog", {}).get("services", {})
+    team_roster = data.get("team_roster", {}).get("oncall_teams", {})
+    service_catalog = data.get("service_catalog", {}).get("services", {})
 
     # Initialize variables with defaults to avoid unbound errors
     primary_team = None

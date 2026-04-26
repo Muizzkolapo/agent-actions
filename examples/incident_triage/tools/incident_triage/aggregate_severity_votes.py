@@ -24,13 +24,11 @@ def aggregate_severity_votes(data: dict[str, Any]) -> dict[str, Any]:
     Pattern: Version consumption with merge pattern
     Returns: Dict (not list) when using passthrough
     """
-    content = data.get("content", data)
-
     # Collect votes from all classifiers
     votes = []
     for i in range(1, 4):
         classifier_key = f"classify_severity_{i}"
-        classifier_data = content.get(classifier_key, {})
+        classifier_data = data.get(classifier_key, {})
 
         if isinstance(classifier_data, dict):
             severity = classifier_data.get("severity", "SEV5")
