@@ -554,6 +554,7 @@ def prefilter_by_guard(
         GuardBehavior,
         get_guard_evaluator,
     )
+    from agent_actions.utils.content import get_existing_content
 
     evaluator = get_guard_evaluator()
     # The config expander normalizes user-facing "on_false" into "behavior"
@@ -563,8 +564,7 @@ def prefilter_by_guard(
     skipped: list[dict] = []
     original_passing: list[dict] = []
     for idx, item in enumerate(data):
-        content = item.get("content", item)
-        eval_item = content if isinstance(content, dict) else {"_raw": content}
+        eval_item = get_existing_content(item)
 
         # context={} — see Note in docstring.
         result = evaluator.evaluate(
