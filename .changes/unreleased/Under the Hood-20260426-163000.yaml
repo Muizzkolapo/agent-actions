@@ -1,3 +1,3 @@
 kind: Under the Hood
-body: "Migrate 10 example tool scripts from banned data.get(\"content\", data) pattern to direct field access"
+body: "Migrate 11 example tool scripts across 6 projects from banned get(\"content\", data) pattern to direct field access"
 time: 2026-04-26T16:30:00.000000Z

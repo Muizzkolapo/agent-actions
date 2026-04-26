@@ -13,7 +13,7 @@ from agent_actions import udf_tool
 def format_analysis_output(data: dict[str, Any]) -> dict[str, Any]:
     """Package review analysis, merchant response, and product insights.
 
-    Fields arrive flat in content from context_scope.observe — not nested
+    Fields arrive flat in data from context_scope.observe — not nested
     under action names.
     """
     # Namespaced data model: fields are at data[namespace][field]

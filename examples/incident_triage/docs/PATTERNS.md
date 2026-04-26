@@ -37,12 +37,10 @@ These workflows showcase **production-ready patterns** inspired by [Incident.io]
 ```python
 @udf_tool()
 def aggregate_severity_votes(data: Dict[str, Any]) -> Dict[str, Any]:
-    content = data.get('content', data)
-
     # Collect from all versions
     votes = []
     for i in range(1, 4):
-        classifier_data = content.get(f'classify_severity_{i}', {})
+        classifier_data = data.get(f'classify_severity_{i}', {})
         votes.append({
             'severity': classifier_data.get('severity'),
             'confidence': classifier_data.get('confidence')
@@ -96,11 +94,9 @@ def assign_team_based_on_impact(data: Dict) -> Dict:
     """
     With passthrough: Return dict (not list) with ONLY new fields
     """
-    content = data.get('content', data)
-
     # Extract what you need
-    severity = content.get('final_severity')
-    affected = content.get('affected_services')
+    severity = data.get('final_severity')
+    affected = data.get('affected_services')
 
     # Compute dynamic values
     teams = route_to_teams(severity, affected)
@@ -245,18 +241,16 @@ version_consumption:
 @udf_tool()
 def format_incident_triage(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Format complete triage output"""
-    content = data.get('content', data)
-
     # Build structured output
     result = {
-        "triage_id": content.get('source_guid'),
+        "triage_id": data.get('source_guid'),
         "incident": {
-            "title": content.get('title'),
-            "severity": content.get('final_severity')
+            "title": data.get('title'),
+            "severity": data.get('final_severity')
         },
         "teams": {
-            "assigned_teams": content.get('assigned_teams'),
-            "urgency_level": content.get('urgency_level')
+            "assigned_teams": data.get('assigned_teams'),
+            "urgency_level": data.get('urgency_level')
         }
     }
 
