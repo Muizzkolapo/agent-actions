@@ -11,6 +11,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_FILTERED,
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
+    DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     VALID_DISPOSITIONS,
     Disposition,
@@ -75,6 +76,7 @@ class TestDispositionEnum:
         assert Disposition.EXHAUSTED.value == DISPOSITION_EXHAUSTED
         assert Disposition.FAILED.value == DISPOSITION_FAILED
         assert Disposition.UNPROCESSED.value == DISPOSITION_UNPROCESSED
+        assert Disposition.SUCCESS.value == DISPOSITION_SUCCESS
 
     def test_valid_dispositions_contains_all_enum_values(self):
         for member in Disposition:
@@ -102,6 +104,39 @@ class TestDispositionEnum:
         )
         rows = backend.get_disposition("action_b", "rec_002")
         assert rows[0]["disposition"] == "filtered"
+
+    def test_set_disposition_stores_detail(self, backend):
+        backend.set_disposition(
+            action_name="action_c",
+            record_id="rec_003",
+            disposition="failed",
+            reason="processing_error",
+            detail="ValueError: invalid input format",
+        )
+        rows = backend.get_disposition("action_c", "rec_003")
+        assert len(rows) == 1
+        assert rows[0]["detail"] == "ValueError: invalid input format"
+        assert rows[0]["reason"] == "processing_error"
+
+    def test_set_disposition_detail_defaults_to_none(self, backend):
+        backend.set_disposition(
+            action_name="action_d",
+            record_id="rec_004",
+            disposition="success",
+        )
+        rows = backend.get_disposition("action_d", "rec_004")
+        assert len(rows) == 1
+        assert rows[0]["detail"] is None
+
+    def test_set_disposition_success_value(self, backend):
+        backend.set_disposition(
+            action_name="action_e",
+            record_id="rec_005",
+            disposition=Disposition.SUCCESS,
+        )
+        rows = backend.get_disposition("action_e", "rec_005")
+        assert len(rows) == 1
+        assert rows[0]["disposition"] == "success"
 
 
 # ── T2-3: write_source executemany dedup ────────────────────────────────────

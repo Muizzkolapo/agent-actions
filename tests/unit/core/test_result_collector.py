@@ -250,6 +250,7 @@ def test_result_collector_on_exhausted_raise_writes_disposition_before_raising()
         "src-raise",
         "exhausted",
         reason="exhausted_after_2_attempts",
+        detail="Retry exhausted",
     )
 
 
@@ -356,6 +357,7 @@ class TestResultCollectorDispositions:
             "failed",
             reason="timeout",
             input_snapshot=None,
+            detail="timeout",
         )
 
     def test_failed_result_default_reason(self):
@@ -383,6 +385,7 @@ class TestResultCollectorDispositions:
             "failed",
             reason="processing_error",
             input_snapshot=None,
+            detail="",
         )
 
     def test_skipped_result_writes_disposition(self):
@@ -430,6 +433,7 @@ class TestResultCollectorDispositions:
             "src-ex",
             "exhausted",
             reason="exhausted_after_2_attempts",
+            detail="Retry exhausted",
         )
 
     def test_unprocessed_result_writes_disposition(self):
@@ -456,7 +460,7 @@ class TestResultCollectorDispositions:
             reason="where_clause",
         )
 
-    def test_success_result_no_disposition(self):
+    def test_success_result_writes_disposition(self):
         backend = self._make_backend()
         success = ProcessingResult.success(
             data=[{"content": {"v": 1}}],
@@ -471,7 +475,11 @@ class TestResultCollectorDispositions:
             storage_backend=backend,
         )
 
-        backend.set_disposition.assert_not_called()
+        backend.set_disposition.assert_called_once_with(
+            "agent",
+            "src-ok",
+            "success",
+        )
 
     def test_no_storage_backend_no_crash(self):
         """Dispositions are skipped gracefully when storage_backend is None."""
@@ -579,10 +587,14 @@ class TestResultCollectorDispositions:
             storage_backend=backend,
         )
 
-        assert backend.set_disposition.call_count == 2
+        assert backend.set_disposition.call_count == 3
         calls = backend.set_disposition.call_args_list
-        assert calls[0] == (("agent", "filt", "filtered"), {"reason": "guard_filter"})
-        assert calls[1] == (("agent", "fail", "failed"), {"reason": "err", "input_snapshot": None})
+        assert calls[0] == (("agent", "ok", "success"), {})
+        assert calls[1] == (("agent", "filt", "filtered"), {"reason": "guard_filter"})
+        assert calls[2] == (
+            ("agent", "fail", "failed"),
+            {"reason": "err", "input_snapshot": None, "detail": "err"},
+        )
 
     def test_mixed_with_deferred_writes_all_dispositions(self):
         """DEFERRED + other statuses each write their own disposition."""
