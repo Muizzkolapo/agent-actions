@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Add comprehensive test coverage for Jinja dot-access on namespaced fields in prompt templates"
+time: 2026-04-26T18:10:00.000000Z
