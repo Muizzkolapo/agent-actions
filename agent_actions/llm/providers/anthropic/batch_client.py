@@ -282,7 +282,7 @@ class AnthropicBatchClient(BaseBatchClient):
         """Write tasks to JSON file for Anthropic."""
         file_name = f"{Path(batch_name).stem}_anthropic_batch_input.json"
         file_path = batch_dir / file_name
-        atomic_json_write(file_path, {"requests": tasks}, indent=2)
+        atomic_json_write(file_path, {"requests": tasks}, indent=2, fsync=False)
         logger.info("Anthropic batch input saved at: %s", file_path)
         return file_path
 

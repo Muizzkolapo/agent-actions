@@ -490,7 +490,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write catalog.json (atomic write to prevent corruption on crash)
+    # Write catalog.json
     catalog_path = output_dir / "catalog.json"
     atomic_json_write(catalog_path, catalog, indent=2, fsync=False)
 

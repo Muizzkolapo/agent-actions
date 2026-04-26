@@ -226,7 +226,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 
         parsed = json.loads(data)
 
-        atomic_json_write(cache_file, parsed)
+        atomic_json_write(cache_file, parsed, fsync=False)
 
         logger.info("Fetched and cached API data: %s -> %s", config.url, cache_file)
 
