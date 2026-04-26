@@ -296,29 +296,31 @@ class BatchResultProcessor:
 
         elif ctx.agent_config and ctx.agent_config.get("context_scope", {}).get("passthrough"):
             passthrough_refs = ctx.agent_config.get("context_scope", {}).get("passthrough", [])
-            passthrough_fields = []
+            original_content = get_existing_content(original_row)
 
+            # Re-extract passthrough values from namespaced content,
+            # matching Path A's {ns_name: {field: value}} structure.
+            passthrough_data: dict[str, Any] = {}
             for field_ref in passthrough_refs:
                 try:
                     from agent_actions.prompt.context.scope_parsing import parse_field_reference
 
-                    _, field_name = parse_field_reference(field_ref)
-                    passthrough_fields.append(field_name)
+                    ns_name, field_name = parse_field_reference(field_ref)
+                    ns_data = original_content.get(ns_name)
+                    if not isinstance(ns_data, dict) or not ns_data:
+                        continue
+                    if field_name == "*":
+                        passthrough_data.setdefault(ns_name, {}).update(ns_data)
+                    elif field_name in ns_data:
+                        passthrough_data.setdefault(ns_name, {})[field_name] = ns_data[field_name]
                 except ValueError:
-                    passthrough_fields.append(field_ref)
+                    continue
 
-            original_content = get_existing_content(original_row)
-
-            generated_list = [
-                (
-                    DataTransformer.update_schema_objects(
-                        original_content, item, passthrough_fields
-                    )
-                    if isinstance(item, dict)
-                    else item
-                )
-                for item in generated_list
-            ]
+            if passthrough_data:
+                generated_list = [
+                    {**item, **passthrough_data} if isinstance(item, dict) else item
+                    for item in generated_list
+                ]
 
         return generated_list
 
