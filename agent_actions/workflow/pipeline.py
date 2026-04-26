@@ -543,7 +543,6 @@ class ProcessingPipeline:
                 agent_indices=agent_indices,
                 file_path=file_path,
                 source_data=source_data,
-                storage_backend=self.config.storage_backend,
             )
 
             # Guards must run before FILE-mode processing because FILE mode

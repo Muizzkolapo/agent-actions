@@ -2,10 +2,6 @@
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
@@ -69,7 +65,6 @@ def apply_observe_for_file_mode(
     agent_indices: dict[str, int] | None = None,
     file_path: str | None = None,
     source_data: list[dict] | None = None,
-    storage_backend: Optional["StorageBackend"] = None,
 ) -> list[dict]:
     """Namespace-aware observe filter for file-mode (array-level) data.
 
