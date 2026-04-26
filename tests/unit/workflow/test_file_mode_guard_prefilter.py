@@ -308,3 +308,50 @@ class TestBuildSkippedResults:
         assert len(results) == 1
         assert results[0].source_guid is None
         assert results[0].status == ProcessingStatus.UNPROCESSED
+
+    def test_action_name_adds_null_namespace(self):
+        """With action_name, adds null namespace via RecordEnvelope."""
+        skipped = [{"content": {"prev_action": {"key": "val"}}, "source_guid": "sg-1"}]
+        results = _build_skipped_results(skipped, action_name="my_action")
+
+        assert len(results) == 1
+        item = results[0].data[0]
+        assert item["content"]["my_action"] is None
+        assert item["content"]["prev_action"] == {"key": "val"}
+        assert item["source_guid"] == "sg-1"
+
+    def test_action_name_preserves_framework_fields(self):
+        """Framework fields (target_id, _unprocessed, metadata, batch_id) survive the envelope merge."""
+        skipped = [
+            {
+                "content": {"prev": {}},
+                "source_guid": "sg-1",
+                "target_id": "t-1",
+                "_unprocessed": True,
+                "metadata": {"key": "val"},
+                "batch_id": "b-1",
+            }
+        ]
+        results = _build_skipped_results(skipped, action_name="act")
+
+        item = results[0].data[0]
+        assert item["content"]["act"] is None
+        assert item["target_id"] == "t-1"
+        assert item["_unprocessed"] is True
+        assert item["metadata"] == {"key": "val"}
+        assert item["batch_id"] == "b-1"
+
+    def test_action_name_skips_when_already_present(self):
+        """If action_name already in content, no mutation occurs."""
+        skipped = [{"content": {"my_action": {"existing": True}}, "source_guid": "sg-1"}]
+        results = _build_skipped_results(skipped, action_name="my_action")
+
+        item = results[0].data[0]
+        assert item["content"]["my_action"] == {"existing": True}
+
+    def test_no_action_name_no_mutation(self):
+        """Without action_name, items pass through unmodified."""
+        original = {"content": {"score": 40}, "source_guid": "sg-1"}
+        results = _build_skipped_results([original])
+
+        assert results[0].data[0] is original
