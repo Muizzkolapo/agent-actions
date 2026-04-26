@@ -20,7 +20,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
-    DISPOSITION_SKIPPED,
+    DISPOSITION_PASSTHROUGH,
     DISPOSITION_UNPROCESSED,
 )
 
@@ -162,7 +162,7 @@ class ResultCollector:
                         storage_backend,
                         agent_name,
                         result.source_guid,
-                        DISPOSITION_SKIPPED,
+                        DISPOSITION_PASSTHROUGH,
                         reason=result.skip_reason or "guard_skip",
                     )
 

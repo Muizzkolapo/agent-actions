@@ -30,7 +30,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
-    DISPOSITION_SKIPPED,
+    DISPOSITION_PASSTHROUGH,
 )
 
 if TYPE_CHECKING:
@@ -605,7 +605,7 @@ def write_record_dispositions(
                 if metadata.get("skipped_by_where_clause"):
                     disposition = DISPOSITION_FILTERED
                 else:
-                    disposition = DISPOSITION_SKIPPED
+                    disposition = DISPOSITION_PASSTHROUGH
                 service._storage_backend.set_disposition(
                     action_name,
                     source_guid,
