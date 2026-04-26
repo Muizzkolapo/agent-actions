@@ -295,16 +295,18 @@ def test_result_collector_on_exhausted_return_last_does_not_raise():
 # ---------------------------------------------------------------------------
 
 
+def _make_backend():
+    """Create a mock StorageBackend with a mocked set_disposition method."""
+    backend = MagicMock()
+    backend.set_disposition = MagicMock()
+    return backend
+
+
 class TestResultCollectorDispositions:
     """Tests for per-record disposition writes in ResultCollector."""
 
-    def _make_backend(self):
-        backend = MagicMock()
-        backend.set_disposition = MagicMock()
-        return backend
-
     def test_filtered_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         filtered = ProcessingResult.filtered(source_guid="src-f1")
         filtered.skip_reason = "low_confidence"
 
@@ -324,7 +326,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_filtered_result_default_reason(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         filtered = ProcessingResult.filtered(source_guid="src-f2")
 
         ResultCollector.collect_results(
@@ -343,7 +345,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_failed_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         failed = ProcessingResult.failed(error="timeout", source_guid="src-fail")
 
         ResultCollector.collect_results(
@@ -364,7 +366,7 @@ class TestResultCollectorDispositions:
 
     def test_failed_result_default_reason(self):
         """When error field is empty string, falls back to 'processing_error'."""
-        backend = self._make_backend()
+        backend = _make_backend()
         failed = ProcessingResult(
             status=ProcessingStatus.FAILED,
             data=[],
@@ -390,7 +392,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_skipped_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         skipped = ProcessingResult.skipped(
             passthrough_data={"content": {}},
             reason="guard_skip",
@@ -413,7 +415,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_exhausted_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         exhausted = ProcessingResult.exhausted(
             error="Retry exhausted",
             source_guid="src-ex",
@@ -437,7 +439,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_unprocessed_result_writes_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         unprocessed = ProcessingResult(
             status=ProcessingStatus.UNPROCESSED,
             source_guid="src-un",
@@ -461,7 +463,7 @@ class TestResultCollectorDispositions:
         )
 
     def test_success_result_no_disposition(self):
-        backend = self._make_backend()
+        backend = _make_backend()
         success = ProcessingResult.success(
             data=[{"content": {"v": 1}}],
             source_guid="src-ok",
@@ -494,7 +496,7 @@ class TestResultCollectorDispositions:
 
     def test_no_source_guid_no_disposition(self):
         """Records without source_guid should not attempt disposition writes."""
-        backend = self._make_backend()
+        backend = _make_backend()
         filtered = ProcessingResult.filtered(source_guid=None)
 
         ResultCollector.collect_results(
@@ -509,7 +511,7 @@ class TestResultCollectorDispositions:
 
     def test_deferred_result_writes_disposition(self):
         """DEFERRED records write a disposition with source_guid as record_id."""
-        backend = self._make_backend()
+        backend = _make_backend()
         deferred = ProcessingResult.deferred(
             task_id="task-123",
             source_guid="src-def",
@@ -532,7 +534,7 @@ class TestResultCollectorDispositions:
 
     def test_deferred_result_no_source_guid_no_disposition(self):
         """DEFERRED records without source_guid skip the disposition write."""
-        backend = self._make_backend()
+        backend = _make_backend()
         deferred = ProcessingResult.deferred(
             task_id="task-456",
             source_guid=None,
@@ -567,7 +569,7 @@ class TestResultCollectorDispositions:
 
     def test_mixed_statuses_write_correct_dispositions(self):
         """Multiple statuses in one batch write the right dispositions."""
-        backend = self._make_backend()
+        backend = _make_backend()
 
         results = [
             ProcessingResult.success(data=[{"content": {}}], source_guid="ok"),
@@ -590,7 +592,7 @@ class TestResultCollectorDispositions:
 
     def test_mixed_with_deferred_writes_all_dispositions(self):
         """DEFERRED + other statuses each write their own disposition."""
-        backend = self._make_backend()
+        backend = _make_backend()
 
         results = [
             ProcessingResult.deferred(task_id="t-1", source_guid="src-d"),
@@ -714,14 +716,9 @@ class TestDataHasParseError:
 class TestParseErrorDisposition:
     """Tests for parse error detection in the SUCCESS branch of ResultCollector."""
 
-    def _make_backend(self):
-        backend = MagicMock()
-        backend.set_disposition = MagicMock()
-        return backend
-
     def test_parse_error_record_gets_failed_disposition(self):
         """SUCCESS result with _parse_error in content gets DISPOSITION_FAILED."""
-        backend = self._make_backend()
+        backend = _make_backend()
         result = ProcessingResult.success(
             data=[
                 {
@@ -788,7 +785,7 @@ class TestParseErrorDisposition:
 
     def test_normal_success_not_affected(self):
         """Normal SUCCESS records are not reclassified by parse error detection."""
-        backend = self._make_backend()
+        backend = _make_backend()
         result = ProcessingResult.success(
             data=[{"content": {"action": {"question": "What?", "answer": "42"}}}],
             source_guid="guid-ok",
@@ -809,7 +806,7 @@ class TestParseErrorDisposition:
 
     def test_mixed_parse_error_and_normal(self):
         """Batch with both parse error and normal records handles each correctly."""
-        backend = self._make_backend()
+        backend = _make_backend()
         results = [
             ProcessingResult.success(
                 data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
@@ -845,7 +842,7 @@ class TestParseErrorDisposition:
 
     def test_parse_error_no_source_guid_no_disposition(self):
         """Parse error without source_guid marks items but skips disposition write."""
-        backend = self._make_backend()
+        backend = _make_backend()
         result = ProcessingResult.success(
             data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
             source_guid=None,
