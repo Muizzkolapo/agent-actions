@@ -19,32 +19,30 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     Reads write_marketing_copy output and seed_data.marketplace_rules.
     Returns per-field results and overall compliance status.
     """
-    content = data.get("content", data)
-
     # Extract marketing copy fields
-    # Fields from observe: write_marketing_copy.* are flattened into content
+    # Fields from observe: write_marketing_copy.* are flattened into data
     # Try nested first (action namespace), then flat (direct fields)
-    write_marketing_copy = content.get("write_marketing_copy", {})
+    write_marketing_copy = data.get("write_marketing_copy", {})
     if isinstance(write_marketing_copy, dict) and write_marketing_copy:
         listing_title = write_marketing_copy.get("listing_title", "")
         listing_description = write_marketing_copy.get("listing_description", "")
         bullet_points = write_marketing_copy.get("bullet_points", [])
         search_keywords = write_marketing_copy.get("search_keywords", [])
     else:
-        listing_title = content.get("listing_title", "")
-        listing_description = content.get("listing_description", "")
-        bullet_points = content.get("bullet_points", [])
-        search_keywords = content.get("search_keywords", [])
+        listing_title = data.get("listing_title", "")
+        listing_description = data.get("listing_description", "")
+        bullet_points = data.get("bullet_points", [])
+        search_keywords = data.get("search_keywords", [])
 
     # Extract marketplace rules (seed data arrives under "seed" namespace)
-    seed = content.get("seed", {})
+    seed = data.get("seed", {})
     if isinstance(seed, dict):
         marketplace_rules = seed.get("marketplace_rules", {})
     else:
         marketplace_rules = {}
     # Fallback: try top-level for backwards compatibility
     if not marketplace_rules:
-        marketplace_rules = content.get("marketplace_rules", {})
+        marketplace_rules = data.get("marketplace_rules", {})
     if not isinstance(marketplace_rules, dict):
         marketplace_rules = {}
 
@@ -53,7 +51,6 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     bullet_rules = marketplace_rules.get("bullet_points", {})
     keyword_rules = marketplace_rules.get("search_keywords", {})
     required_fields = marketplace_rules.get("required_fields", [])
-    prohibited_content = marketplace_rules.get("prohibited_content", [])
 
     field_results = []
     violations = []
@@ -207,8 +204,22 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     all_text_lower = all_text.lower()
 
     prohibited_patterns = {
-        "unsubstantiated superlatives": ["best", "#1", "top-rated", "number one", "world's best", "industry-leading"],
-        "pricing or discount language": ["% off", "discount", "sale", "limited time", "free shipping", "buy now"],
+        "unsubstantiated superlatives": [
+            "best",
+            "#1",
+            "top-rated",
+            "number one",
+            "world's best",
+            "industry-leading",
+        ],
+        "pricing or discount language": [
+            "% off",
+            "discount",
+            "sale",
+            "limited time",
+            "free shipping",
+            "buy now",
+        ],
         "contact information or external URLs": ["http://", "https://", "www.", ".com", "@"],
     }
 
@@ -217,40 +228,46 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
             if pattern.lower() in all_text_lower:
                 all_passed = False
                 violations.append(f"Prohibited content ({category}): found '{pattern}'")
-                field_results.append({
-                    "field_name": "prohibited_content",
-                    "passed": False,
-                    "actual_length": 0,
-                    "max_allowed": 0,
-                    "message": f"Prohibited content: '{pattern}' found ({category})",
-                })
+                field_results.append(
+                    {
+                        "field_name": "prohibited_content",
+                        "passed": False,
+                        "actual_length": 0,
+                        "max_allowed": 0,
+                        "message": f"Prohibited content: '{pattern}' found ({category})",
+                    }
+                )
                 break  # one violation per category is enough
 
     # --- Brand name in title check ---
-    brand = content.get("brand", "") or content.get("write_marketing_copy", {}).get("brand", "")
+    brand = data.get("brand", "") or write_marketing_copy.get("brand", "")
     if brand and brand.lower() not in listing_title.lower():
         all_passed = False
         violations.append(f"Title must include brand name '{brand}'")
-        field_results.append({
-            "field_name": "title_brand_name",
-            "passed": False,
-            "actual_length": 0,
-            "max_allowed": 0,
-            "message": f"Brand name '{brand}' not found in title",
-        })
+        field_results.append(
+            {
+                "field_name": "title_brand_name",
+                "passed": False,
+                "actual_length": 0,
+                "max_allowed": 0,
+                "message": f"Brand name '{brand}' not found in title",
+            }
+        )
 
     # --- Bullet capitalization check ---
     for idx, bullet in enumerate(bullet_points):
         if bullet and not bullet[0].isupper():
             all_passed = False
             violations.append(f"Bullet {idx + 1} must start with a capitalized keyword")
-            field_results.append({
-                "field_name": f"bullet_{idx + 1}_capitalization",
-                "passed": False,
-                "actual_length": 0,
-                "max_allowed": 0,
-                "message": f"Bullet {idx + 1} does not start with a capital letter",
-            })
+            field_results.append(
+                {
+                    "field_name": f"bullet_{idx + 1}_capitalization",
+                    "passed": False,
+                    "actual_length": 0,
+                    "max_allowed": 0,
+                    "message": f"Bullet {idx + 1} does not start with a capital letter",
+                }
+            )
 
     # --- Required fields check ---
     present_fields = set()

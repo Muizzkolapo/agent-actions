@@ -21,6 +21,7 @@ from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
@@ -543,7 +544,6 @@ class ProcessingPipeline:
                 agent_indices=agent_indices,
                 file_path=file_path,
                 source_data=source_data,
-                storage_backend=self.config.storage_backend,
             )
 
             # Guards must run before FILE-mode processing because FILE mode
@@ -641,7 +641,11 @@ def _build_skipped_results(
         if action_name and isinstance(item, dict):
             content = item.get("content")
             if isinstance(content, dict) and action_name not in content:
-                item = {**item, "content": {**content, action_name: None}}
+                skipped_record = RecordEnvelope.build_skipped(action_name, item)
+                for key in item:
+                    if key not in skipped_record:
+                        skipped_record[key] = item[key]
+                item = skipped_record
         results.append(
             ProcessingResult.unprocessed(
                 data=[item],

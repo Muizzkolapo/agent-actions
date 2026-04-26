@@ -275,7 +275,7 @@ class TestApplyObserveForFileMode:
         """With namespaced content, no historical storage lookup is needed.
 
         All dependency data is on the record. This test verifies the function
-        works without agent_indices, file_path, or storage_backend.
+        works without agent_indices or file_path.
         """
         data = [
             {
@@ -292,7 +292,6 @@ class TestApplyObserveForFileMode:
             agent_name="summarize",
             agent_indices=None,
             file_path=None,
-            storage_backend=None,
         )
         assert result[0]["content"]["text"] == "hello"
         assert result[0]["content"]["topic"] == "science"

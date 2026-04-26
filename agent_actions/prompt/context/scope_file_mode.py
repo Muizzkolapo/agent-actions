@@ -2,10 +2,6 @@
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
@@ -69,13 +65,12 @@ def apply_observe_for_file_mode(
     agent_indices: dict[str, int] | None = None,
     file_path: str | None = None,
     source_data: list[dict] | None = None,
-    storage_backend: Optional["StorageBackend"] = None,
 ) -> list[dict]:
     """Namespace-aware observe filter for file-mode (array-level) data.
 
     With the additive content model, every previous action's output is
     stored under its namespace on each record.  Observe refs select
-    fields from these namespaces — no storage backend lookup required.
+    fields from these namespaces directly.
 
     The ``source`` namespace is the only cross-record reference: it is
     resolved from *source_data* (the original input file records).

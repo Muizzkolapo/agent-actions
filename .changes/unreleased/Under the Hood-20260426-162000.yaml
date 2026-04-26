@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove unused storage_backend parameter from apply_observe_for_file_mode — additive model reads from record content, no storage lookup needed"
+time: 2026-04-26T16:20:00.000000Z
