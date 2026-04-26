@@ -11,7 +11,7 @@ from agent_actions.logging.events.data_pipeline_events import (
     RecordProcessingStartedEvent,
     RecordTransformedEvent,
 )
-from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.types import ProcessingContext
 
 

@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Removed processor.py re-export shim; all callers now import RecordProcessor from record_processor.py directly"
+time: 2026-04-26T17:40:00.000000Z

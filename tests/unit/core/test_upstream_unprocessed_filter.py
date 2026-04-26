@@ -16,7 +16,7 @@ import pytest
 from agent_actions.config.types import RunMode
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
-from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.processing.types import (

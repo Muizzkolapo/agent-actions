@@ -13,7 +13,7 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
-from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.prompt.formatter import PromptFormatter

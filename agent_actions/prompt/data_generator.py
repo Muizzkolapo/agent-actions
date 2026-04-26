@@ -13,7 +13,7 @@ from agent_actions.config.di.container import registry
 from agent_actions.config.interfaces import IGenerator, ProcessingMode
 from agent_actions.config.types import RunMode
 from agent_actions.errors import GenerationError
-from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingStatus,

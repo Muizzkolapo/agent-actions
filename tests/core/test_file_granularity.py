@@ -3,7 +3,7 @@
 import pytest
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.record_processor import RecordProcessor
 
 
 class TestFileGranularityValidation:
