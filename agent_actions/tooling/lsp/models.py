@@ -155,6 +155,10 @@ class ProjectIndex:
     # Per-file duplicate action names: file_path → {duplicate action name}
     duplicate_actions_by_file: dict[Path, set[str]] = field(default_factory=dict)
 
+    # Upstream action index: workflow_name → {action_name → Location}
+    # Actions declared in upstream: blocks, resolvable only within the declaring workflow.
+    upstream_actions: dict[str, dict[str, Location]] = field(default_factory=dict)
+
     def workflow_for_file(self, file_path: Path) -> str | None:
         """Derive the workflow name from a file path.
 
@@ -168,27 +172,34 @@ class ProjectIndex:
         return None
 
     def get_action(self, name: str, current_file: Path | None = None) -> Location | None:
-        """Get action location: per-file → per-workflow → global (flat layout only)."""
+        """Get action location: per-file → per-workflow → upstream → global (flat layout only)."""
         # 1. Same file (most specific)
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
                 return self.file_actions[current_file][name].location
 
-        # 2. Same workflow — if file belongs to a workflow, stop here (no cross-workflow leakage)
+        # 2. Same workflow — if file belongs to a workflow, check local then upstream
         if current_file:
             workflow = self.workflow_for_file(current_file)
             if workflow:
                 if workflow in self.workflow_actions:
-                    return self.workflow_actions[workflow].get(name)
+                    local = self.workflow_actions[workflow].get(name)
+                    if local:
+                        return local
+                # 3. Upstream actions declared by this workflow
+                if workflow in self.upstream_actions:
+                    upstream = self.upstream_actions[workflow].get(name)
+                    if upstream:
+                        return upstream
                 return None
 
-        # 3. Global fallback (flat layout or no current_file)
+        # 4. Global fallback (flat layout or no current_file)
         return self.actions.get(name)
 
     def get_action_metadata(
         self, name: str, current_file: Path | None = None
     ) -> ActionMetadata | None:
-        """Get action metadata: per-file → same-workflow files → any file (flat layout only)."""
+        """Get action metadata: per-file → same-workflow files → upstream → any file (flat layout only)."""
         # 1. Same file
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
@@ -203,9 +214,12 @@ class ProjectIndex:
                 for file_path, actions in self.file_actions.items():
                     if self.file_to_workflow.get(file_path) == workflow and name in actions:
                         return actions[name]
+                # 3. Upstream — return minimal metadata (no schema/hover info)
+                if workflow in self.upstream_actions and name in self.upstream_actions[workflow]:
+                    return ActionMetadata(name=name, location=self.upstream_actions[workflow][name])
                 return None
 
-        # 3. Any file (flat layout or no current_file)
+        # 4. Any file (flat layout or no current_file)
         for actions in self.file_actions.values():
             if name in actions:
                 return actions[name]
