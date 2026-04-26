@@ -173,22 +173,22 @@ class WhereClauseParser:
         comparison_ops = self._build_comparison_operators()
         unary_postfix_ops = self._build_unary_postfix_operators()
 
-        precedence_levels = [
-            (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
-        ]
-        if unary_postfix_ops:
-            precedence_levels.append(
-                (unary_postfix_ops, 1, OpAssoc.LEFT, self._parse_comparison),
-            )
-        precedence_levels.extend(
+        unary_level = (
+            [(unary_postfix_ops, 1, OpAssoc.LEFT, self._parse_comparison)]
+            if unary_postfix_ops
+            else []
+        )
+
+        where_expr = infix_notation(
+            operand,
             [
+                (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
+                *unary_level,
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
-            ]
+            ],
         )
-
-        where_expr = infix_notation(operand, precedence_levels)
 
         self._grammar = where_expr
         ParserElement.enable_packrat()
