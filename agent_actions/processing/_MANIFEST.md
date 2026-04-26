@@ -21,7 +21,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `error_handling.py` | Module | `ProcessorErrorHandlerMixin` for wrapping file loading/processing logic. | `logging` |
 | `exhausted_builder.py` | Module | Builds reports once a workflow’s retries are exhausted. | `validation`, `logging` |
 | `helpers.py` | Module | Shared helpers (UUID construction, tuple flattening) for processors. | `processing` |
-| `processor.py` | Module | Base processor that glues loaders, transformers, and error handling. | `input`, `processing` |
+| `record_processor.py` | Module | Base processor that glues loaders, transformers, and error handling. | `input`, `processing` |
 | `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. | `output` |
 | `prepared_task.py` | Module | `GuardStatus` enum (PASSED, SKIPPED, FILTERED, UPSTREAM_UNPROCESSED), `PreparedTask` dataclass, and `PreparationContext` (carries `mode: RunMode` directly). | `typing` |
 | `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. Short-circuits upstream-unprocessed records before context loading. | `input`, `prompt` |

@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_actions.config.types import RunMode
-from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,

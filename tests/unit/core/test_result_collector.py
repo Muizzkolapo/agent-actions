@@ -48,7 +48,7 @@ def test_result_collector_aggregates_statuses_first_stage():
         passthrough_data={"content": {"value": 2}}, reason="guard_skip", source_guid="src-2"
     )
 
-    # EXHAUSTED results now arrive pre-enriched from processor.py
+    # EXHAUSTED results now arrive pre-enriched from record_processor.py
     exhausted_data = {
         "source_guid": "src-3",
         "target_id": "t-1",
@@ -106,7 +106,7 @@ def test_result_collector_uses_input_record_downstream():
     """Downstream stages: EXHAUSTED results arrive pre-enriched with correct lineage."""
     agent_config = {"agent_type": "downstream"}
 
-    # Pre-enriched exhausted data (as processor.py would produce)
+    # Pre-enriched exhausted data (as record_processor.py would produce)
     exhausted_data = {
         "source_guid": "src-9",
         "target_id": "t-input",

@@ -384,7 +384,7 @@ class TestRecordProcessorModeWiring:
 
     def test_batch_mode_without_provider_raises(self):
         """RecordProcessor with mode=BATCH but no provider raises ValueError."""
-        from agent_actions.processing.processor import RecordProcessor
+        from agent_actions.processing.record_processor import RecordProcessor
 
         with pytest.raises(ValueError, match="BatchProvider required"):
             RecordProcessor(
@@ -412,7 +412,7 @@ class TestDeferredResultInProcessor:
         branch, discarding queued batch tasks.
         """
         from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
-        from agent_actions.processing.processor import RecordProcessor
+        from agent_actions.processing.record_processor import RecordProcessor
         from agent_actions.processing.types import (
             ProcessingContext,
             ProcessingStatus,

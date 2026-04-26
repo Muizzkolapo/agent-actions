@@ -676,7 +676,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
         → ResultCollector.collect_results() extends output  — 3 items total
     """
     from agent_actions.processing.invocation.result import InvocationResult
-    from agent_actions.processing.processor import RecordProcessor
+    from agent_actions.processing.record_processor import RecordProcessor
     from agent_actions.processing.result_collector import ResultCollector
     from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 
@@ -741,7 +741,7 @@ def test_process_batch_reraises_schema_validation_error():
     """SchemaValidationError from process() should propagate through process_batch."""
     from agent_actions.errors import SchemaValidationError
     from agent_actions.processing.invocation.result import InvocationResult
-    from agent_actions.processing.processor import RecordProcessor
+    from agent_actions.processing.record_processor import RecordProcessor
 
     agent_config = {"kind": "tool", "granularity": "record"}
     agent_name = "schema_test_tool"

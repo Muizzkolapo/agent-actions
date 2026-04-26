@@ -17,7 +17,7 @@ from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
-from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
