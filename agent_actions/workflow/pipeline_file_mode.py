@@ -206,7 +206,7 @@ def _reconcile_outputs(
     action_name: str,
     original_data: list[dict],
     version_merge: bool = False,
-) -> tuple[list[dict[str, Any]], dict[int, int | list[int]]]:
+) -> tuple[list[dict[str, Any]], dict[int, int | list[int] | None]]:
     """Core reconciliation of tool output to input records.
 
     Dispatches on response type (``FileUDFResult`` vs ``TrackedItem`` list),
@@ -216,7 +216,7 @@ def _reconcile_outputs(
     """
     from agent_actions.utils.udf_management.registry import FileUDFResult
 
-    source_mapping: dict[int, int | list[int]] = {}
+    source_mapping: dict[int, int | list[int] | None] = {}
     structured_data: list[dict[str, Any]] = []
 
     if isinstance(raw_response, FileUDFResult):

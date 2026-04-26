@@ -249,9 +249,6 @@ def test_synthetic_record_empty_original_data():
     ):
         results = pipeline._process_file_mode_tool([], [], context)
 
-    # Empty input → tool returned empty result → failed
-    # (the _is_empty_response check fires before reconciliation for empty data)
-    # But with non-empty udf_result and empty original_data, reconciliation proceeds
     assert len(results) == 1
     result = results[0]
     content = result.data[0]["content"]
@@ -299,11 +296,9 @@ def test_synthetic_mixed_with_sourced_records():
     # Synthetic record does NOT inherit parent's source_guid
     assert result.data[1].get("source_guid") not in ("sg-1", "sg-2")
 
-    # All records have upstream namespaces
+    # All records have both upstream and action namespaces
     for item in result.data:
         assert "prev" in item["content"]
-    # All records have action namespace
-    for item in result.data:
         assert "my_file_tool" in item["content"]
 
 
