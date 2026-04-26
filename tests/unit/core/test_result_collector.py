@@ -689,9 +689,6 @@ class TestDataHasParseError:
     def test_empty_data_returns_false(self):
         assert _data_has_parse_error([]) is False
 
-    def test_non_dict_items_skipped(self):
-        assert _data_has_parse_error(["string_item", 42]) is False  # type: ignore[list-item]
-
     def test_content_with_non_dict_namespace_skipped(self):
         data = [{"content": {"action": "just a string"}}]
         assert _data_has_parse_error(data) is False

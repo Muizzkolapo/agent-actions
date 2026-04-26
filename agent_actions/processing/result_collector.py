@@ -71,9 +71,6 @@ def _data_has_parse_error(data: list[dict[str, Any]]) -> bool:
     pipeline and lands inside ``content.{action_namespace}._parse_error``.
     """
     for item in data:
-        if not isinstance(item, dict):
-            continue
-        # Check inside content namespaces (post-transform shape)
         content = item.get("content")
         if isinstance(content, dict):
             for ns_value in content.values():
