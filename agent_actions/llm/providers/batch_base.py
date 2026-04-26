@@ -94,10 +94,15 @@ class BaseBatchClient(ABC):
         schema = agent_config.get("compiled_schema") if json_mode else None
 
         for row in data:
+            if "content" not in row:
+                raise ValueError(
+                    f"Record {row.get('target_id', row.get('id', '?'))} missing 'content' key. "
+                    "Every record must have namespaced content in the additive model."
+                )
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=json.dumps(row.get("content", {})),
+                user_content=json.dumps(row["content"]),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),
