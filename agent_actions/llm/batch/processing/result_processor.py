@@ -307,7 +307,7 @@ class BatchResultProcessor:
 
                     ns_name, field_name = parse_field_reference(field_ref)
                     ns_data = original_content.get(ns_name)
-                    if not isinstance(ns_data, dict):
+                    if not isinstance(ns_data, dict) or not ns_data:
                         continue
                     if field_name == "*":
                         passthrough_data.setdefault(ns_name, {}).update(ns_data)

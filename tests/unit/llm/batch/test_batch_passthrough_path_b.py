@@ -258,6 +258,42 @@ class TestPathBEdgeCases:
 
         assert result == [{"summary": "test"}]
 
+    def test_malformed_field_ref_skipped(self):
+        """Malformed refs (no dot) are skipped; valid sibling refs still merge."""
+        entry = _make_context_map_entry(content={"classify": {"category": "tech"}})
+        ctx = _make_context(
+            context_map={"rec_001": entry},
+            agent_config={
+                "context_scope": {
+                    "passthrough": ["no_dot_here", "classify.category", ""],
+                },
+            },
+        )
+        generated = [{"summary": "test"}]
+        processor = BatchResultProcessor()
+
+        result = processor._apply_context_passthrough(ctx, "rec_001", generated, entry)
+
+        assert result[0]["classify"] == {"category": "tech"}
+        assert result[0]["summary"] == "test"
+
+    def test_wildcard_on_empty_namespace_skipped(self):
+        """Wildcard on an empty namespace produces no merge."""
+        entry = _make_context_map_entry(content={"source": {}})
+        ctx = _make_context(
+            context_map={"rec_001": entry},
+            agent_config={
+                "context_scope": {"passthrough": ["source.*"]},
+            },
+        )
+        generated = [{"output": "result"}]
+        processor = BatchResultProcessor()
+
+        result = processor._apply_context_passthrough(ctx, "rec_001", generated, entry)
+
+        # Empty namespace produces empty passthrough_data → no merge
+        assert result == [{"output": "result"}]
+
 
 # ── Path A takes precedence over Path B ──────────────────────────────
 
