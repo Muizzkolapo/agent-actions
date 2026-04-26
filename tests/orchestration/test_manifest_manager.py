@@ -426,7 +426,7 @@ class TestPersistence:
         manifest_manager.mark_action_completed("extract")
 
         final_files = set(manifest_manager.target_dir.glob("*"))
-        temp_files = [f for f in final_files if ".manifest_tmp_" in f.name]
+        temp_files = [f for f in final_files if f.suffix == ".tmp"]
 
         assert len(temp_files) == 0, "Temp files should be cleaned up"
 
