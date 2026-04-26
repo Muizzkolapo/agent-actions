@@ -125,6 +125,11 @@ def _index_workflow_file(index: ProjectIndex, yaml_file: Path, yaml: YAML) -> No
 
         _index_workflow_lines(index, yaml_file, lines, action_data_map)
 
+        # Index upstream action declarations (reuse workflow name from line scanner)
+        workflow_name = index.workflow_for_file(yaml_file)
+        if workflow_name:
+            _index_upstream(index, yaml_file, data, workflow_name)
+
     except Exception as e:
         logger.warning("Error indexing %s: %s", yaml_file, e)
 
@@ -402,6 +407,27 @@ def _index_workflow_lines(
                 file_match.end(1),
                 file_match.group(0),
             )
+
+
+def _index_upstream(index: ProjectIndex, yaml_file: Path, data: dict, workflow_name: str) -> None:
+    """Register upstream action names so cross-workflow refs resolve."""
+    upstream = data.get("upstream")
+    if not upstream or not isinstance(upstream, list):
+        return
+
+    upstream_map = index.upstream_actions.setdefault(workflow_name, {})
+    # All upstream actions in one file share the same declaration location
+    file_location = Location(file_path=yaml_file, line=0, column=0)
+
+    for entry in upstream:
+        if not isinstance(entry, dict):
+            continue
+        actions = entry.get("actions", [])
+        if not isinstance(actions, list):
+            continue
+        for action_name in actions:
+            if isinstance(action_name, str):
+                upstream_map[action_name] = file_location
 
 
 def _add_reference(
