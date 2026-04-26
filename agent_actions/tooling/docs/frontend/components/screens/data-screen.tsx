@@ -17,7 +17,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { CellValue, DataCard, getDisplayFields, type ActionInfo } from "@/components/ui/data-card"
-import { classifyField } from "@/lib/data-card-utils"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { DataNode, WorkflowDataSummary } from "@/lib/mock-data"
 
@@ -445,9 +444,7 @@ function NodeDetail({
     for (const row of node.preview) {
       const fields = getDisplayFields(row)
       for (const key of Object.keys(fields)) {
-        if (classifyField(key) === "content") {
-          colSet.add(key)
-        }
+        colSet.add(key)
       }
     }
     return Array.from(colSet)

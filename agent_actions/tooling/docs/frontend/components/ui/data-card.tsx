@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm"
 import { ChevronRight, Copy, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
-  classifyField,
+  METADATA_KEYS,
   classifyRecord,
   humanizeKey,
   isInlineArray,
@@ -486,17 +486,26 @@ export function getDisplayFields(record: Record<string, unknown>): Record<string
   if (contentVal && typeof contentVal === "object" && !Array.isArray(contentVal)) {
     return contentVal as Record<string, unknown>
   }
-  return record
+  // Fallback: record has no namespaced content dict. Strip framework keys so only
+  // user content fields are returned — downstream no longer applies classifyField.
+  const result: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(record)) {
+    if (!METADATA_KEYS.has(k)) {
+      result[k] = v
+    }
+  }
+  return result
 }
 
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record)
-  const guardSkipped = Object.keys(displayRecord).filter(k => classifyField(k) === "content").length === 0
+  // After namespace unwrap, all displayRecord keys are user content — classifyField
+  // is not used here because a user field named "metadata" is content, not framework metadata.
+  const guardSkipped = Object.values(displayRecord).every(v => v === null)
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)
-    .filter(([key]) => classifyField(key) === "content")
     .map(([key, value]) => ({ key, value }))
 
   const trace =
