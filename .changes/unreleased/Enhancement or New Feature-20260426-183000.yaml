@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "record_disposition tracks all outcomes (success, failure detail, exhausted) with new detail column"
+time: 2026-04-26T18:30:00.000000Z
