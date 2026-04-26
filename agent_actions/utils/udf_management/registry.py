@@ -28,7 +28,14 @@ class FileUDFResult:
             if "source_index" not in out:
                 raise ValueError(
                     f"FileUDFResult output[{i}] missing 'source_index'. "
-                    f"Every output must declare which input produced it."
+                    f"Every output must declare which input produced it. "
+                    f"Use None for synthetic records (aggregations, dedup results)."
+                )
+            src = out["source_index"]
+            if src is not None and not isinstance(src, (int, list)):
+                raise ValueError(
+                    f"FileUDFResult output[{i}] source_index must be int, list[int], or None. "
+                    f"Got {type(src).__name__}."
                 )
             if "data" not in out or not isinstance(out["data"], dict):
                 raise ValueError(
