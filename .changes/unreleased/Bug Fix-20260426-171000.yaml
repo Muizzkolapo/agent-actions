@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "User output fields named metadata/node_id no longer hidden in data explorer after namespace unwrap"
+time: 2026-04-26T17:10:00.000000Z
