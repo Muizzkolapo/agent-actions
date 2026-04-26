@@ -70,7 +70,7 @@ def apply_observe_for_file_mode(
 
     With the additive content model, every previous action's output is
     stored under its namespace on each record.  Observe refs select
-    fields from these namespaces — no storage backend lookup required.
+    fields from these namespaces directly.
 
     The ``source`` namespace is the only cross-record reference: it is
     resolved from *source_data* (the original input file records).
