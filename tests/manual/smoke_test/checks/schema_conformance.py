@@ -5,7 +5,11 @@ import sqlite3
 
 import yaml
 
-from agent_actions.storage.backend import DISPOSITION_SKIPPED, DISPOSITION_UNPROCESSED
+from agent_actions.storage.backend import (
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
+    DISPOSITION_UNPROCESSED,
+)
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
 
@@ -75,8 +79,8 @@ class SchemaConformance(Check):
             skipped_actions = {
                 r[0]
                 for r in conn.execute(
-                    "SELECT DISTINCT action_name FROM record_disposition WHERE disposition IN (?, ?)",
-                    (DISPOSITION_SKIPPED, DISPOSITION_UNPROCESSED),
+                    "SELECT DISTINCT action_name FROM record_disposition WHERE disposition IN (?, ?, ?)",
+                    (DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED, DISPOSITION_UNPROCESSED),
                 ).fetchall()
             }
 
