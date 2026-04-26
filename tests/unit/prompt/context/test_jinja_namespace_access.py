@@ -11,6 +11,7 @@ access these fields via dot notation: {{ write_scenario_question.question }}.
 
 import pytest
 
+from agent_actions.errors import TemplateVariableError
 from agent_actions.prompt.context.scope_application import apply_context_scope
 from agent_actions.prompt.service import PromptPreparationService
 
@@ -66,7 +67,6 @@ class TestSimpleDotAccess:
         assert result == "Pass: True"
 
     def test_specific_field_observe(self):
-        """Only the declared field is accessible when using specific (non-wildcard) observe."""
         result = _scope_and_render(
             "{{ dep.question }}",
             {"dep": {"question": "Why?", "answer": "Because."}},
@@ -226,9 +226,6 @@ class TestDropInteraction:
     """Dropped fields are NOT accessible in Jinja templates."""
 
     def test_dropped_field_raises_on_access(self):
-        """Accessing a dropped field raises UndefinedError."""
-        from agent_actions.errors import TemplateVariableError
-
         with pytest.raises(TemplateVariableError):
             _scope_and_render(
                 "Secret: {{ dep.api_key }}",
@@ -249,7 +246,6 @@ class TestEdgeCases:
     """Edge cases for Jinja namespace access."""
 
     def test_none_value_renders(self):
-        """None values render as 'None' (Jinja default behavior)."""
         result = _scope_and_render(
             "Value: {{ dep.field }}",
             {"dep": {"field": None}},
@@ -282,9 +278,6 @@ class TestEdgeCases:
         assert result == "Results: []"
 
     def test_undeclared_namespace_raises(self):
-        """Referencing a namespace not in observe/passthrough raises."""
-        from agent_actions.errors import TemplateVariableError
-
         with pytest.raises(TemplateVariableError):
             _scope_and_render(
                 "{{ unknown_action.field }}",
@@ -293,9 +286,6 @@ class TestEdgeCases:
             )
 
     def test_undeclared_field_in_namespace_raises(self):
-        """Referencing a field not declared in observe (specific, not wildcard) raises."""
-        from agent_actions.errors import TemplateVariableError
-
         with pytest.raises(TemplateVariableError):
             _scope_and_render(
                 "{{ dep.undeclared }}",
@@ -304,7 +294,6 @@ class TestEdgeCases:
             )
 
     def test_conditional_on_namespace_field(self):
-        """Jinja conditionals work with namespace fields."""
         template = "{% if dep.score > 5 %}HIGH{% else %}LOW{% endif %}"
         result = _scope_and_render(
             template,
@@ -314,7 +303,6 @@ class TestEdgeCases:
         assert result == "HIGH"
 
     def test_filter_on_namespace_field(self):
-        """Jinja filters work on namespace fields."""
         result = _scope_and_render(
             "{{ dep.name | upper }}",
             {"dep": {"name": "alice"}},
@@ -323,7 +311,6 @@ class TestEdgeCases:
         assert result == "ALICE"
 
     def test_json_serialization_in_template(self):
-        """tojson filter works on namespace dict fields."""
         result = _scope_and_render(
             "{{ dep.data | tojson }}",
             {"dep": {"data": {"key": "value"}}},
