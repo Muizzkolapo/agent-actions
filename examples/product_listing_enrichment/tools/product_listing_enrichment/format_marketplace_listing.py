@@ -29,8 +29,8 @@ def format_marketplace_listing(data: dict[str, Any]) -> dict[str, Any]:
     current_price = data.get("current_price", 0)
     category = data.get("product_category", "")
 
-    # Helper: the framework flattens observed fields into content directly.
-    # content["listing_title"] not content["write_marketing_copy"]["listing_title"].
+    # Helper: the framework flattens observed fields into data directly.
+    # data["listing_title"] not data["write_marketing_copy"]["listing_title"].
     # Try nested (action namespace) first, fall back to flat (direct fields).
     def _ns(action_name: str, field: str, default=None):
         nested = data.get(action_name, {})

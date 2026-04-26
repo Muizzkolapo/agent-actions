@@ -20,7 +20,7 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     Returns per-field results and overall compliance status.
     """
     # Extract marketing copy fields
-    # Fields from observe: write_marketing_copy.* are flattened into content
+    # Fields from observe: write_marketing_copy.* are flattened into data
     # Try nested first (action namespace), then flat (direct fields)
     write_marketing_copy = data.get("write_marketing_copy", {})
     if isinstance(write_marketing_copy, dict) and write_marketing_copy:
@@ -240,7 +240,7 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
                 break  # one violation per category is enough
 
     # --- Brand name in title check ---
-    brand = data.get("brand", "") or data.get("write_marketing_copy", {}).get("brand", "")
+    brand = data.get("brand", "") or write_marketing_copy.get("brand", "")
     if brand and brand.lower() not in listing_title.lower():
         all_passed = False
         violations.append(f"Title must include brand name '{brand}'")
