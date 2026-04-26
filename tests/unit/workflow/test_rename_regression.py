@@ -149,7 +149,7 @@ class TestExecutorCallsRunAction:
     def test_sync_run_calls_run_action(self, executor, mock_deps):
         """_execute_action_run must call action_runner.run_action, not run_agent."""
         mock_deps.action_runner.run_action.return_value = "/output"
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
         params = ActionRunParams(
@@ -171,7 +171,7 @@ class TestExecutorCallsRunAction:
     def test_async_run_calls_run_action(self, executor, mock_deps):
         """_execute_action_run_async must call action_runner.run_action, not run_agent."""
         mock_deps.action_runner.run_action.return_value = "/output"
-        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
         params = ActionRunParams(
