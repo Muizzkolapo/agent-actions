@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "LSP resolves cross-workflow action references declared in upstream: blocks"
+time: 2026-04-26T153000.000000Z

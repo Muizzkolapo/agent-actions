@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Literal
 
-from agent_actions.storage.backend import DISPOSITION_FILTERED, DISPOSITION_SKIPPED
+from agent_actions.storage.backend import DISPOSITION_FILTERED, DISPOSITION_PASSTHROUGH
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
 
@@ -66,9 +66,9 @@ class GuardCheck(Check):
                 )
 
             elif self.behavior == "skip":
-                skip_count = conn.execute(
+                passthrough_count = conn.execute(
                     "SELECT COUNT(*) FROM record_disposition WHERE action_name = ? AND disposition = ?",
-                    (self.action, DISPOSITION_SKIPPED),
+                    (self.action, DISPOSITION_PASSTHROUGH),
                 ).fetchone()[0]
 
                 target_count = conn.execute(
@@ -78,9 +78,9 @@ class GuardCheck(Check):
 
                 results.append(
                     CheckResult(
-                        passed=skip_count > 0 or target_count == 0,
+                        passed=passthrough_count > 0 or target_count == 0,
                         name=f"guard({self.action}): skip guard evaluated",
-                        message=f"{skip_count} skip dispositions, {target_count} output rows",
+                        message=f"{passthrough_count} passthrough dispositions, {target_count} output rows",
                     )
                 )
 

@@ -35,7 +35,7 @@ from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
-    DISPOSITION_SKIPPED,
+    DISPOSITION_PASSTHROUGH,
 )
 
 # ======================================================================
@@ -449,19 +449,19 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
 
     write_record_dispositions(mock_service, output_items, "my_action")
 
-    # Verify: 3 SKIPPED dispositions
-    skipped_records = storage.get_dispositions_by_type("my_action", DISPOSITION_SKIPPED)
+    # Verify: 3 PASSTHROUGH dispositions (guard-skipped records forward data unchanged)
+    passthrough_records = storage.get_dispositions_by_type("my_action", DISPOSITION_PASSTHROUGH)
     check(
-        len(skipped_records) == 3,
-        f"3 records have SKIPPED disposition: {skipped_records}",
-        f"Expected 3 SKIPPED, got {len(skipped_records)}: {skipped_records}",
+        len(passthrough_records) == 3,
+        f"3 records have PASSTHROUGH disposition: {passthrough_records}",
+        f"Expected 3 PASSTHROUGH, got {len(passthrough_records)}: {passthrough_records}",
     )
 
-    expected_skipped_guids = {"sg-002", "sg-005", "sg-008"}
+    expected_passthrough_guids = {"sg-002", "sg-005", "sg-008"}
     check(
-        set(skipped_records) == expected_skipped_guids,
-        "Correct source_guids are SKIPPED",
-        f"Expected {expected_skipped_guids}, got {set(skipped_records)}",
+        set(passthrough_records) == expected_passthrough_guids,
+        "Correct source_guids are PASSTHROUGH",
+        f"Expected {expected_passthrough_guids}, got {set(passthrough_records)}",
     )
 
     # Verify: no FAILED or FILTERED dispositions
@@ -480,8 +480,8 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
     )
 
     # Verify: reasons are set correctly
-    for sg in expected_skipped_guids:
-        reason = storage._dispositions.get(("my_action", sg, DISPOSITION_SKIPPED))
+    for sg in expected_passthrough_guids:
+        reason = storage._dispositions.get(("my_action", sg, DISPOSITION_PASSTHROUGH))
         check(
             reason == "guard_skipped",
             f"{sg} disposition reason is 'guard_skipped'",

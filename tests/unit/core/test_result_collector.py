@@ -404,7 +404,7 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "agent",
             "src-sk",
-            "skipped",
+            "passthrough",
             reason="guard_skip",
         )
 

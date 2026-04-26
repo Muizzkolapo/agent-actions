@@ -187,6 +187,133 @@ def test_file_udf_result_list_source_index():
     assert results[0].data[0]["content"]["my_file_tool"]["merged"] is True
 
 
+# --- FileUDFResult synthetic records (source_index=None) ---
+
+
+def test_synthetic_record_carries_forward_namespaces():
+    """FileUDFResult with source_index=None gets namespaces from first input."""
+    pipeline, context = _make_pipeline_and_context()
+
+    udf_result = FileUDFResult(
+        outputs=[
+            {"source_index": None, "data": {"summary": "Combined result"}},
+        ],
+    )
+
+    input_data = [
+        {
+            "source_guid": "guid-1",
+            "content": {"upstream_action": {"question": "What is X?"}},
+        },
+        {
+            "source_guid": "guid-2",
+            "content": {"upstream_action": {"question": "What is Y?"}},
+        },
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(udf_result, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.status == ProcessingStatus.SUCCESS
+    assert len(result.data) == 1
+    content = result.data[0]["content"]
+    # Upstream namespace carried forward from original_data[0]
+    assert "upstream_action" in content
+    assert content["upstream_action"]["question"] == "What is X?"
+    # Current action's namespace present
+    assert "my_file_tool" in content
+    assert content["my_file_tool"]["summary"] == "Combined result"
+    # Synthetic record does NOT inherit parent's source_guid
+    assert result.data[0].get("source_guid") != "guid-1"
+    assert result.data[0].get("source_guid") != "guid-2"
+
+
+def test_synthetic_record_empty_original_data():
+    """FileUDFResult with source_index=None and empty original_data does not crash."""
+    pipeline, context = _make_pipeline_and_context()
+
+    udf_result = FileUDFResult(
+        outputs=[
+            {"source_index": None, "data": {"summary": "Generated"}},
+        ],
+    )
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(udf_result, True),
+    ):
+        results = pipeline._process_file_mode_tool([], [], context)
+
+    assert len(results) == 1
+    result = results[0]
+    content = result.data[0]["content"]
+    # No upstream namespaces (nothing to carry forward)
+    assert "my_file_tool" in content
+    assert content["my_file_tool"]["summary"] == "Generated"
+
+
+def test_synthetic_mixed_with_sourced_records():
+    """FileUDFResult with both sourced and synthetic records in same batch."""
+    pipeline, context = _make_pipeline_and_context()
+
+    udf_result = FileUDFResult(
+        outputs=[
+            {"source_index": 0, "data": {"kept": True}},
+            {"source_index": None, "data": {"summary": "Aggregated"}},
+            {"source_index": 1, "data": {"kept": True}},
+        ],
+    )
+
+    input_data = [
+        {
+            "source_guid": "sg-1",
+            "content": {"prev": {"q": "Q1"}},
+        },
+        {
+            "source_guid": "sg-2",
+            "content": {"prev": {"q": "Q2"}},
+        },
+    ]
+
+    with patch(
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        return_value=(udf_result, True),
+    ):
+        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+
+    result = results[0]
+    assert len(result.data) == 3
+    assert result.source_mapping == {0: 0, 1: None, 2: 1}
+
+    # Sourced records inherit source_guid (via _reattach_source_guid)
+    assert result.data[0].get("source_guid") == "sg-1"
+    assert result.data[2].get("source_guid") == "sg-2"
+    # Synthetic record does NOT inherit parent's source_guid
+    assert result.data[1].get("source_guid") not in ("sg-1", "sg-2")
+
+    # All records have both upstream and action namespaces
+    for item in result.data:
+        assert "prev" in item["content"]
+        assert "my_file_tool" in item["content"]
+
+
+def test_file_udf_result_validates_source_index_type():
+    """FileUDFResult rejects non-int/non-list/non-None source_index."""
+    with pytest.raises(ValueError, match="must be int, list"):
+        FileUDFResult(outputs=[{"source_index": "bad", "data": {"x": 1}}])
+
+
+def test_file_udf_result_accepts_none_source_index():
+    """FileUDFResult accepts source_index=None without error."""
+    result = FileUDFResult(outputs=[{"source_index": None, "data": {"x": 1}}])
+    assert result.outputs[0]["source_index"] is None
+
+
 # --- Plain dict rejection ---
 
 
@@ -1082,6 +1209,24 @@ class TestReattachSourceGuid:
         # Cardinality mismatch (3 vs 2): no safe positional fallback
         for item in structured:
             assert "source_guid" not in item
+
+    def test_none_source_index_skips_guid_attachment(self):
+        """Synthetic records (source_index=None) do not inherit source_guid."""
+        from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
+
+        structured = [
+            {"content": {"val": 1}},  # mapped to input 0
+            {"content": {"val": 2}},  # synthetic (None)
+            {"content": {"val": 3}},  # mapped to input 1
+        ]
+        mapping = {0: 0, 1: None, 2: 1}
+        original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
+
+        _reattach_source_guid(structured, mapping, original)
+
+        assert structured[0]["source_guid"] == "sg-a"
+        assert "source_guid" not in structured[1]  # Synthetic — skipped
+        assert structured[2]["source_guid"] == "sg-b"
 
 
 # --- _extract_business_fields unit tests ---

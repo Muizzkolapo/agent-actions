@@ -2,7 +2,7 @@
 
 When a guard evaluates to false with on_false=skip, the record must
 get ProcessingStatus.SKIPPED (not UNPROCESSED) and storage must receive
-DISPOSITION_SKIPPED.
+DISPOSITION_PASSTHROUGH (the data is forwarded unchanged).
 
 Bug: specs/new/037-guard-skip-disposition-fix.md
 """
@@ -14,7 +14,7 @@ import pytest
 from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
-from agent_actions.storage.backend import DISPOSITION_SKIPPED
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 
 
 @pytest.fixture
@@ -85,10 +85,10 @@ class TestGuardSkipProducesSkippedStatus:
 
 
 class TestGuardSkipDisposition:
-    """Storage backend receives DISPOSITION_SKIPPED for guard-skipped records."""
+    """Storage backend receives DISPOSITION_PASSTHROUGH for guard-skipped records."""
 
-    def test_skipped_result_gets_disposition_skipped(self):
-        """ResultCollector writes DISPOSITION_SKIPPED for SKIPPED results."""
+    def test_skipped_result_gets_disposition_passthrough(self):
+        """ResultCollector writes DISPOSITION_PASSTHROUGH for SKIPPED results."""
         result = ProcessingResult.skipped(
             passthrough_data={"content": {}, "source_guid": "guid-1", "_unprocessed": True},
             reason="guard_skip",
@@ -107,7 +107,7 @@ class TestGuardSkipDisposition:
         backend.set_disposition.assert_called_once_with(
             "test_action",
             "guid-1",
-            DISPOSITION_SKIPPED,
+            DISPOSITION_PASSTHROUGH,
             reason="guard_skip",
         )
 
