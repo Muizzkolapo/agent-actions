@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.utils.atomic_write import atomic_json_write
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -429,8 +430,7 @@ class VersionOutputCorrelator:
                 )
         else:
             output_file = output_dir / filename
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(cleaned_data, f, indent=2)
+            atomic_json_write(output_file, cleaned_data, indent=2)
             self._create_correlation_source_data(output_file, cleaned_data)
 
     def _create_correlation_source_data(
@@ -472,8 +472,7 @@ class VersionOutputCorrelator:
                 )
                 return
 
-            with open(source_path, "w", encoding="utf-8") as f:
-                json.dump(source_records, f, indent=2)
+            atomic_json_write(source_path, source_records, indent=2)
         except (OSError, ValueError) as e:
             logger.warning("Could not create correlation source data: %s", e)
 

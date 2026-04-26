@@ -1,6 +1,5 @@
 """Module for orchestrating data processing pipelines through configured agents."""
 
-import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +26,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
 )
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.workflow.pipeline_file_mode import (
@@ -261,8 +261,7 @@ class ProcessingPipeline:
             "status": "submitted",
             "agent": params.pipeline_action_name,
         }
-        with open(output_file_path, "w", encoding="utf-8") as f:
-            json.dump(placeholder, f)
+        atomic_json_write(output_file_path, placeholder)
         return str(output_file_path)
 
     @staticmethod

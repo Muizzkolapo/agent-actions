@@ -2,10 +2,8 @@
 
 import json
 import logging
-import os
 import re
 import shutil
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -14,6 +12,7 @@ import click
 
 from agent_actions.config.path_config import get_tool_dirs
 from agent_actions.models.action_schema import ActionSchema, FieldInfo, FieldSource
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -493,25 +492,13 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
 
     # Write catalog.json (atomic write to prevent corruption on crash)
     catalog_path = output_dir / "catalog.json"
-    dir_path = str(output_dir)
-    fd, tmp = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(catalog, f, indent=2)
-        os.replace(tmp, str(catalog_path))
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    atomic_json_write(catalog_path, catalog, indent=2, fsync=False)
 
     # Initialize runs.json only if it doesn't exist
     # (RunTracker manages all updates to this file during workflow execution)
     runs_path = output_dir / "runs.json"
     if not runs_path.exists():
-        with open(runs_path, "w", encoding="utf-8") as f:
-            json.dump(_empty_runs_data(), f, indent=2)
+        atomic_json_write(runs_path, _empty_runs_data(), indent=2, fsync=False)
 
     # Print summary
     stats = catalog["stats"]

@@ -22,6 +22,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
 )
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 
 if TYPE_CHECKING:
@@ -594,8 +595,7 @@ def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_nam
         "status": "submitted",
         "agent": agent_name,
     }
-    with open(output_file_path, "w", encoding="utf-8") as f:
-        json.dump(placeholder, f)
+    atomic_json_write(output_file_path, placeholder)
 
 
 def _process_batch_mode(ctx: BatchProcessingContext):

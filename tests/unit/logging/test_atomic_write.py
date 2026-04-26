@@ -1,9 +1,9 @@
 """Tests for atomic write exception-path (F-6 / I-7): temp-file cleanup on failure.
 
-Both run_results.py and generator.py use mkstemp+os.replace with a BaseException
-cleanup block. These tests verify that when the write fails:
+run_results.py and generator.py use atomic_json_write (temp file + rename).
+These tests verify that when the write fails:
   - the temp file is deleted (no orphans left on disk)
-  - the original exception propagates unchanged
+  - the error propagates
 """
 
 from __future__ import annotations
@@ -37,17 +37,15 @@ class TestRunResultsAtomicWrite:
         assert "metadata" in data
 
     def test_flush_cleans_up_tmp_on_write_failure(self, tmp_path):
-        """If json.dump raises, the .tmp file must be deleted and the error re-raised."""
+        """If json.dump raises inside atomic_json_write, temp file is cleaned up."""
         handler = self._make_handler(tmp_path)
         (tmp_path / "target").mkdir(parents=True, exist_ok=True)
-
-        _original_dump = json.dump
 
         def boom(*args, **kwargs):
             raise TypeError("unserializable sentinel")
 
-        with patch("agent_actions.logging.events.handlers.run_results.json.dump", boom):
-            with pytest.raises(TypeError, match="unserializable sentinel"):
+        with patch("agent_actions.utils.atomic_write.json.dump", boom):
+            with pytest.raises(OSError, match="unserializable sentinel"):
                 handler.flush()
 
         # No orphaned .tmp files should remain in the target dir
@@ -55,15 +53,19 @@ class TestRunResultsAtomicWrite:
         tmp_files = list(target.glob("*.tmp"))
         assert tmp_files == [], f"Orphaned temp files found: {tmp_files}"
 
-    def test_flush_cleans_up_tmp_on_os_replace_failure(self, tmp_path):
-        """If os.replace raises, the .tmp file must be deleted and the error re-raised."""
+    def test_flush_cleans_up_tmp_on_rename_failure(self, tmp_path):
+        """If rename raises inside atomic_json_write, temp file is cleaned up."""
         handler = self._make_handler(tmp_path)
         (tmp_path / "target").mkdir(parents=True, exist_ok=True)
 
-        def failing_replace(src, dst):
-            raise OSError("disk full")
+        _orig = Path.replace
 
-        with patch("agent_actions.logging.events.handlers.run_results.os.replace", failing_replace):
+        def failing_replace(self_path, target):
+            if str(self_path).endswith(".json.tmp"):
+                raise OSError("disk full")
+            return _orig(self_path, target)
+
+        with patch.object(Path, "replace", failing_replace):
             with pytest.raises(OSError, match="disk full"):
                 handler.flush()
 

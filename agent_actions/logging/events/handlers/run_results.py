@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from agent_actions.utils.atomic_write import atomic_json_write
 
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
@@ -136,17 +135,7 @@ class RunResultsCollector:
         }
 
         output_path = target_dir / "run_results.json"
-        fd, tmp = tempfile.mkstemp(dir=str(target_dir), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(output, f, indent=2, default=str)
-            os.replace(tmp, str(output_path))
-        except BaseException:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+        atomic_json_write(output_path, output, indent=2, default=str)
 
     def _handle_workflow_start(self, event: BaseEvent) -> None:
         self._metadata["workflow_name"] = event.data.get("workflow_name", "")

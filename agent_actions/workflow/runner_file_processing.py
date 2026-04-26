@@ -8,12 +8,12 @@ in tests (e.g. test_runner_merge.py) continues to work.
 
 from __future__ import annotations
 
-import json
 import logging
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
@@ -205,8 +205,7 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
             with tempfile.TemporaryDirectory() as td:
                 tmp_file = Path(td) / relative_path
                 tmp_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(tmp_file, "w", encoding="utf-8") as f:
-                    json.dump(merged_data, f)
+                atomic_json_write(tmp_file, merged_data, fsync=False)
 
                 runner._process_single_file(
                     SingleFileProcessParams(
