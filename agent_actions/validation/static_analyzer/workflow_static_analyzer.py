@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.guards.consolidated_guard import GuardBehavior
 from agent_actions.input.context.normalizer import (
     SEED_CONFIG_KEYS,
     detect_orphaned_directives,
@@ -122,6 +123,10 @@ class WorkflowStaticAnalyzer:
                     action.get("context_scope"), version_base_map={}
                 )
 
+        # Guard-skip observe warnings must be computed before wildcard expansion
+        # because expansion turns safe wildcards into specific refs (false positives).
+        guard_skip_observe_warnings = self._check_guard_skipped_observe_refs()
+
         # Step 1: Build data flow graph
         self._build_graph()
 
@@ -171,6 +176,9 @@ class WorkflowStaticAnalyzer:
 
         # Step 2g: Detect guard-nullable fields flowing into tool schemas
         for warning in self._check_guard_nullable_fields():
+            result.add_warning(warning)
+
+        for warning in guard_skip_observe_warnings:
             result.add_warning(warning)
 
         # Step 3: Check for unused dependencies (add as warnings)
@@ -1118,6 +1126,88 @@ class WorkflowStaticAnalyzer:
                             ),
                         )
                     )
+
+        return warnings
+
+    def _check_guard_skipped_observe_refs(self) -> list[StaticTypeWarning]:
+        """Warn when observe refs target specific fields from skip-guarded actions.
+
+        When an action has ``guard.on_false`` set to ``"skip"``, the entire
+        action namespace is ``None`` at runtime (``{action_name: None}``).
+        Observing a specific field like ``action.field`` will crash because
+        ``None["field"]`` doesn't exist.  Wildcards (``action.*``) resolve to
+        empty when skipped and are safe.
+
+        Only ``on_false: "skip"`` is checked — ``"filter"`` removes individual
+        records but the namespace still exists for remaining records.
+        """
+        warnings: list[StaticTypeWarning] = []
+        actions = self.workflow_config.get("actions", [])
+
+        skip_guarded: set[str] = set()
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "")
+            guard = action.get("guard")
+            if not guard:
+                continue
+            if isinstance(guard, dict):
+                behavior = guard.get("on_false", GuardBehavior.FILTER)
+            elif isinstance(guard, str):
+                behavior = GuardBehavior.FILTER
+            else:
+                continue
+            if behavior == GuardBehavior.SKIP:
+                skip_guarded.add(name)
+
+        if not skip_guarded:
+            return warnings
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            consumer_name = action.get("name", "unknown")
+            context_scope = action.get("context_scope", {})
+            if not isinstance(context_scope, dict):
+                continue
+            observe_refs = context_scope.get("observe", [])
+            if not isinstance(observe_refs, list):
+                continue
+
+            for ref in observe_refs:
+                if not isinstance(ref, str) or "." not in ref:
+                    continue
+                source_name, field_name = ref.split(".", 1)
+                if field_name == "*":
+                    continue  # wildcards handle null gracefully
+                if source_name not in skip_guarded:
+                    continue
+
+                warnings.append(
+                    StaticTypeWarning(
+                        message=(
+                            f"'{source_name}.{field_name}' may be null at runtime. "
+                            f"Action '{source_name}' has guard with on_false: \"skip\" "
+                            f"— when the guard evaluates to false, the action's "
+                            f"namespace is null. Use wildcard '{source_name}.*' to "
+                            f"handle gracefully, or add null handling in the "
+                            f"downstream prompt/tool."
+                        ),
+                        location=FieldLocation(
+                            agent_name=consumer_name,
+                            config_field="context_scope.observe",
+                            raw_reference=ref,
+                        ),
+                        referenced_agent=source_name,
+                        referenced_field=field_name,
+                        hint=(
+                            f"Use '{source_name}.*' instead of "
+                            f"'{source_name}.{field_name}' to handle the case "
+                            f"when the guard skips."
+                        ),
+                    )
+                )
 
         return warnings
 

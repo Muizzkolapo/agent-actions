@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Preflight now warns when context_scope.observe references a specific field from an action with guard.on_false: skip, since the namespace is null when the guard skips"
+time: 2026-04-26T17:50:00.000000Z
