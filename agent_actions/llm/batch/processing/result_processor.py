@@ -235,7 +235,7 @@ class BatchResultProcessor:
 
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
-        from agent_actions.utils.content import get_existing_content, is_version_merge
+        from agent_actions.utils.content import is_version_merge
 
         action_name = ctx.agent_config["action_name"]
         version_merge = is_version_merge(ctx.agent_config)
@@ -441,8 +441,6 @@ class BatchResultProcessor:
                             "RecoveryMetadata.retry is None for exhausted record "
                             f"custom_id={custom_id}; expected retry metadata with attempt count"
                         )
-                    from agent_actions.utils.content import get_existing_content
-
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         ctx.agent_config or {}
                     )
