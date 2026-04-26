@@ -64,6 +64,27 @@ class CollectionStats:
         return bool((self.skipped + self.filtered) == total)
 
 
+def _data_has_parse_error(data: list[dict[str, Any]]) -> bool:
+    """Check if any data item contains a ``_parse_error`` from the LLM provider.
+
+    The error dict produced by ``JSONResponseMixin`` flows through the transform
+    pipeline and lands inside ``content.{action_namespace}._parse_error``.
+    """
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        # Check inside content namespaces (post-transform shape)
+        content = item.get("content")
+        if isinstance(content, dict):
+            for ns_value in content.values():
+                if isinstance(ns_value, dict) and "_parse_error" in ns_value:
+                    return True
+        # Check top-level (raw shape before transform)
+        if "_parse_error" in item:
+            return True
+    return False
+
+
 def _safe_set_disposition(
     backend: "StorageBackend",
     action_name: str,
@@ -126,6 +147,41 @@ class ResultCollector:
 
             if status == ProcessingStatus.SUCCESS:
                 data = result.data or []
+
+                # Detect parse-error records masquerading as SUCCESS.
+                # The LLM provider returns {"_parse_error": ...} on JSON
+                # parse failure, which flows through as SUCCESS data.
+                # Reprompt has already had its chance to repair (it runs
+                # during invocation, before result collection).
+                if data and _data_has_parse_error(data):
+                    for d in data:
+                        d["_unprocessed"] = True
+                    output.extend(data)
+                    stats[status_key] -= 1
+                    stats["failed"] += 1
+                    logger.warning(
+                        "[%s] SUCCESS result source_guid=%s contains _parse_error "
+                        "— dispositioned as FAILED",
+                        agent_name,
+                        result.source_guid,
+                    )
+                    fire_event(
+                        ResultCollectedEvent(
+                            action_name=agent_name,
+                            result_index=idx,
+                            status="failed",
+                        )
+                    )
+                    if storage_backend and result.source_guid:
+                        _safe_set_disposition(
+                            storage_backend,
+                            agent_name,
+                            result.source_guid,
+                            DISPOSITION_FAILED,
+                            reason="parse_error",
+                        )
+                    continue
+
                 if data:
                     output.extend(data)
                 logger.debug(
