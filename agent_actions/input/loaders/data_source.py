@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.project_root import find_project_root
 
 
@@ -225,8 +226,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 
         parsed = json.loads(data)
 
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(parsed, f)
+        atomic_json_write(cache_file, parsed, fsync=False)
 
         logger.info("Fetched and cached API data: %s -> %s", config.url, cache_file)
 

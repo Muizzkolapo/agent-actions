@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import csv
 import json
-import os
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,6 +15,7 @@ from agent_actions.logging.events import (
     FileWriteStartedEvent,
 )
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utils.atomic_write import atomic_json_write
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -84,18 +83,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         def do_write() -> int:
             Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
             if self.file_type == ".json":
-                dir_path = os.path.dirname(self.file_path) or "."
-                fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
-                try:
-                    with os.fdopen(fd, "w", encoding="utf-8") as file:
-                        json.dump(data, file, indent=4)
-                    os.replace(tmp_path, self.file_path)
-                except BaseException:
-                    try:
-                        os.unlink(tmp_path)
-                    except OSError:
-                        pass
-                    raise
+                atomic_json_write(Path(self.file_path), data, indent=4)
             elif self.file_type == ".txt":
                 with open(self.file_path, "w", encoding="utf-8") as file:
                     if isinstance(data, list):
@@ -147,15 +135,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
 
         def do_write() -> int:
             Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
-            dir_path = os.path.dirname(self.file_path) or "."
-            fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as file:
-                    json.dump(data, file, indent=4)
-                os.replace(tmp_path, self.file_path)
-            except BaseException:
-                os.unlink(tmp_path)
-                raise
+            atomic_json_write(Path(self.file_path), data, indent=4)
             return Path(self.file_path).stat().st_size
 
         self._execute_write("Write source file", do_write)

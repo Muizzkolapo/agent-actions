@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
 logger = logging.getLogger(__name__)
@@ -150,18 +149,7 @@ class ManifestManager:
 
         self.target_dir.mkdir(parents=True, exist_ok=True)
 
-        # Atomic write using temp file + rename
-        fd, tmp_path = tempfile.mkstemp(dir=str(self.target_dir), prefix=".manifest_tmp_")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(self._manifest, f, indent=2)
-            Path(tmp_path).replace(self.manifest_path)
-        except Exception:
-            try:
-                os.unlink(tmp_path)
-            except OSError as cleanup_err:
-                logger.debug("Failed to clean up temp file %s: %s", tmp_path, cleanup_err)
-            raise
+        atomic_json_write(self.manifest_path, self._manifest, indent=2)
 
     def get_output_directory(self, action_name: str) -> Path:
         """Return the output directory path for an action.

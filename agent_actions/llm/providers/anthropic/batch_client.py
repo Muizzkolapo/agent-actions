@@ -9,6 +9,7 @@ from typing import Any
 
 from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER
 from agent_actions.prompt.message_builder import MessageBuilder
+from agent_actions.utils.atomic_write import atomic_json_write
 
 from ..batch_base import BaseBatchClient, BatchResult, BatchTask
 
@@ -281,8 +282,7 @@ class AnthropicBatchClient(BaseBatchClient):
         """Write tasks to JSON file for Anthropic."""
         file_name = f"{Path(batch_name).stem}_anthropic_batch_input.json"
         file_path = batch_dir / file_name
-        with open(file_path, "w", encoding="utf-8") as file:
-            json.dump({"requests": tasks}, file, indent=2)
+        atomic_json_write(file_path, {"requests": tasks}, indent=2, fsync=False)
         logger.info("Anthropic batch input saved at: %s", file_path)
         return file_path
 
