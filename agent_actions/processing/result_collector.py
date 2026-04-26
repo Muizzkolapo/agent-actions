@@ -21,6 +21,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
     DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
 )
 
@@ -140,6 +141,13 @@ class ResultCollector:
                         status="success",
                     )
                 )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_SUCCESS,
+                    )
 
             elif status == ProcessingStatus.SKIPPED:
                 data = result.data or []
@@ -191,6 +199,7 @@ class ResultCollector:
                         result.source_guid,
                         DISPOSITION_EXHAUSTED,
                         reason=f"exhausted_after_{attempts}_attempts",
+                        detail=result.error,
                     )
 
             elif status == ProcessingStatus.FAILED:
@@ -229,6 +238,7 @@ class ResultCollector:
                         DISPOSITION_FAILED,
                         reason=result.error or "processing_error",
                         input_snapshot=input_snapshot_str,
+                        detail=result.error,
                     )
 
             elif status == ProcessingStatus.FILTERED:
@@ -385,6 +395,7 @@ class ResultCollector:
                         er.source_guid,
                         DISPOSITION_EXHAUSTED,
                         reason=f"exhausted_after_{_get_retry_attempts(er)}_attempts",
+                        detail=er.error,
                     )
 
         first = exhausted_results[0]

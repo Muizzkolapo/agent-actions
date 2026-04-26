@@ -203,6 +203,12 @@ class SQLiteBackend(StorageBackend):
                     logger.debug("Added input_snapshot column to record_disposition")
                 except sqlite3.OperationalError:
                     logger.debug("input_snapshot column already exists in record_disposition")
+                # Migration: add detail column for error messages and context
+                try:
+                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN detail TEXT")
+                    logger.debug("Added detail column to record_disposition")
+                except sqlite3.OperationalError:
+                    logger.debug("detail column already exists in record_disposition")
                 # Migration: add run_mode column for existing prompt_trace tables
                 try:
                     cursor.execute("ALTER TABLE prompt_trace ADD COLUMN run_mode TEXT")
@@ -549,6 +555,7 @@ class SQLiteBackend(StorageBackend):
         reason: str | None = None,
         relative_path: str | None = None,
         input_snapshot: str | None = None,
+        detail: str | None = None,
     ) -> None:
         """Write a disposition record (INSERT OR REPLACE)."""
         action_name = self._validate_identifier(action_name, "action_name")
@@ -573,10 +580,18 @@ class SQLiteBackend(StorageBackend):
                     """
                     INSERT OR REPLACE INTO record_disposition
                     (action_name, record_id, disposition, reason, relative_path,
-                     input_snapshot, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     input_snapshot, detail, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    (action_name, record_id, disposition, reason, relative_path, input_snapshot),
+                    (
+                        action_name,
+                        record_id,
+                        disposition,
+                        reason,
+                        relative_path,
+                        input_snapshot,
+                        detail,
+                    ),
                 )
                 self.connection.commit()
                 logger.debug(
@@ -611,7 +626,7 @@ class SQLiteBackend(StorageBackend):
 
         query = (
             "SELECT action_name, record_id, disposition, reason, relative_path,"
-            " input_snapshot, created_at"
+            " input_snapshot, detail, created_at"
             " FROM record_disposition WHERE action_name = ?"
         )
         params: list[str] = [action_name]

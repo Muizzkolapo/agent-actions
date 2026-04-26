@@ -14,6 +14,7 @@ DISPOSITION_EXHAUSTED = "exhausted"
 DISPOSITION_FAILED = "failed"
 DISPOSITION_DEFERRED = "deferred"
 DISPOSITION_UNPROCESSED = "unprocessed"
+DISPOSITION_SUCCESS = "success"
 
 
 class Disposition(str, Enum):
@@ -26,6 +27,7 @@ class Disposition(str, Enum):
     FAILED = DISPOSITION_FAILED
     DEFERRED = DISPOSITION_DEFERRED
     UNPROCESSED = DISPOSITION_UNPROCESSED
+    SUCCESS = DISPOSITION_SUCCESS
 
 
 VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
@@ -121,12 +123,14 @@ class StorageBackend(ABC):
         reason: str | None = None,
         relative_path: str | None = None,
         input_snapshot: str | None = None,
+        detail: str | None = None,
     ) -> None:
         """Write a disposition record (use NODE_LEVEL_RECORD_ID for node-level signals).
 
         Args:
             input_snapshot: JSON-serialized input record for failed items.
                 Implementations SHOULD truncate to a reasonable limit (recommended 10KB).
+            detail: Extended error message or context for the disposition.
         """
         # No-op: subclass must override to persist dispositions.
 
