@@ -22,23 +22,21 @@ def format_marketplace_listing(data: dict[str, Any]) -> dict[str, Any]:
     Combines outputs from all upstream actions into a single structured
     listing ready for marketplace upload.
     """
-    content = data.get("content", data)
-
     # Source metadata (via passthrough)
-    product_id = content.get("product_id", "")
-    product_name = content.get("product_name", "")
-    brand = content.get("brand", "")
-    current_price = content.get("current_price", 0)
-    category = content.get("product_category", "")
+    product_id = data.get("product_id", "")
+    product_name = data.get("product_name", "")
+    brand = data.get("brand", "")
+    current_price = data.get("current_price", 0)
+    category = data.get("product_category", "")
 
     # Helper: the framework flattens observed fields into content directly.
     # content["listing_title"] not content["write_marketing_copy"]["listing_title"].
     # Try nested (action namespace) first, fall back to flat (direct fields).
     def _ns(action_name: str, field: str, default=None):
-        nested = content.get(action_name, {})
+        nested = data.get(action_name, {})
         if isinstance(nested, dict) and field in nested:
             return nested[field]
-        return content.get(field, default)
+        return data.get(field, default)
 
     # Marketing copy from write_marketing_copy
     listing_title = _ns("write_marketing_copy", "listing_title", "")

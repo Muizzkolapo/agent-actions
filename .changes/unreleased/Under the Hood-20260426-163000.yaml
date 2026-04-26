@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Migrate 10 example tool scripts from banned data.get(\"content\", data) pattern to direct field access"
+time: 2026-04-26T16:30:00.000000Z

@@ -16,14 +16,12 @@ def format_analysis_output(data: dict[str, Any]) -> dict[str, Any]:
     Fields arrive flat in content from context_scope.observe — not nested
     under action names.
     """
-    content = data.get("content", data)
-
     # Namespaced data model: fields are at content[namespace][field]
-    source_ns = content.get("source", {})
-    extract_ns = content.get("extract_claims", {})
-    agg_ns = content.get("aggregate_scores", {})
-    response_ns = content.get("generate_response", {})
-    insights_ns = content.get("extract_product_insights", {})
+    source_ns = data.get("source", {})
+    extract_ns = data.get("extract_claims", {})
+    agg_ns = data.get("aggregate_scores", {})
+    response_ns = data.get("generate_response", {})
+    insights_ns = data.get("extract_product_insights", {})
 
     source = {
         "review_id": source_ns.get("review_id", ""),
