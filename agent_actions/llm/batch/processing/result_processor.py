@@ -17,6 +17,7 @@ from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.types import ProcessingResult, RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +307,7 @@ class BatchResultProcessor:
                 except ValueError:
                     passthrough_fields.append(field_ref)
 
-            original_content = original_row.get("content", {})
+            original_content = get_existing_content(original_row)
 
             generated_list = [
                 (

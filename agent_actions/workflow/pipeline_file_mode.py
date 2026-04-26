@@ -563,8 +563,8 @@ def prefilter_by_guard(
     skipped: list[dict] = []
     original_passing: list[dict] = []
     for idx, item in enumerate(data):
-        content = item.get("content", item)
-        eval_item = content if isinstance(content, dict) else {"_raw": content}
+        content = item.get("content", {})
+        eval_item = content if isinstance(content, dict) else {}
 
         # context={} — see Note in docstring.
         result = evaluator.evaluate(

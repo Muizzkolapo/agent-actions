@@ -97,7 +97,7 @@ class BaseBatchClient(ABC):
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=json.dumps(row.get("content", row)),
+                user_content=json.dumps(row.get("content", {})),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),

@@ -249,10 +249,10 @@ class TestPrefilterByGuard:
         assert original_passing == []
 
     def test_non_dict_content(self):
-        """Non-dict content wraps as {_raw: content} for evaluation."""
+        """Non-dict content yields empty eval_item — guard cannot match."""
         data = [{"content": "plain-text-value"}]
         config = {"guard": {"clause": "always_true", "behavior": "filter"}}
-        evaluator = _make_evaluator(lambda item: "_raw" in item)
+        evaluator = _make_evaluator(lambda item: bool(item))
 
         with patch(
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
@@ -260,11 +260,10 @@ class TestPrefilterByGuard:
         ):
             passing, skipped, original_passing = prefilter_by_guard(data, config, "test")
 
-        assert len(passing) == 1
-        assert passing[0]["content"] == "plain-text-value"
+        assert len(passing) == 0
 
     def test_missing_content_key(self):
-        """Item without content key -> item itself used as eval_item."""
+        """Item without content key yields empty eval_item — guard cannot match."""
         data = [{"score": 90, "name": "Alice"}]
         config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
@@ -275,7 +274,7 @@ class TestPrefilterByGuard:
         ):
             passing, skipped, original_passing = prefilter_by_guard(data, config, "test")
 
-        assert len(passing) == 1
+        assert len(passing) == 0
 
 
 class TestBuildSkippedResults:
