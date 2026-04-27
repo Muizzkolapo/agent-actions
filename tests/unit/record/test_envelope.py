@@ -127,43 +127,6 @@ class TestBuildSkipped:
             RecordEnvelope.build_skipped("")
 
 
-# ── build_version_merge() ───────────────────────────────────────────────────
-
-
-class TestBuildVersionMerge:
-    def test_all_versions_present(self):
-        versions = {
-            "score_1": {"s": 8},
-            "score_2": {"s": 9},
-            "score_3": {"s": 7},
-        }
-        result = RecordEnvelope.build_version_merge(versions)
-        assert result["content"]["score_1"] == {"s": 8}
-        assert result["content"]["score_2"] == {"s": 9}
-        assert result["content"]["score_3"] == {"s": 7}
-
-    def test_preserves_upstream(self):
-        inp = {
-            "source_guid": "g1",
-            "content": {"source": {"x": 1}, "summarize": {"y": 2}},
-        }
-        versions = {"action_1": {"q": "Q1"}, "action_2": {"q": "Q2"}}
-        result = RecordEnvelope.build_version_merge(versions, inp)
-        assert result["content"]["source"] == {"x": 1}
-        assert result["content"]["summarize"] == {"y": 2}
-        assert result["content"]["action_1"] == {"q": "Q1"}
-        assert result["content"]["action_2"] == {"q": "Q2"}
-        assert result["source_guid"] == "g1"
-
-    def test_empty_raises(self):
-        with pytest.raises(RecordEnvelopeError, match="empty"):
-            RecordEnvelope.build_version_merge({})
-
-    def test_non_dict_version_value_raises(self):
-        with pytest.raises(RecordEnvelopeError, match="must be a dict"):
-            RecordEnvelope.build_version_merge({"v1": "not a dict"})
-
-
 # ── Cross-method interaction ─────────────────────────────────────────────────
 
 
@@ -184,18 +147,3 @@ class TestInteractions:
         assert r3["content"]["source"] == {"raw": "data"}
         assert r3["content"]["summarize"] == {"summary": "short"}
         assert r3["content"]["review"] == {"score": 9}
-
-    def test_version_merge_preserves_upstream_from_build(self):
-        """The critical test from the spec: version merge must preserve
-        upstream namespaces from the base record."""
-        base = RecordEnvelope.build("summarize", {"text": "sum"})
-        base["source_guid"] = "g1"
-        base["content"]["source"] = {"raw": "data"}
-
-        versions = {"extract_1": {"q": "Q1"}, "extract_2": {"q": "Q2"}}
-        result = RecordEnvelope.build_version_merge(versions, base)
-
-        assert "source" in result["content"]
-        assert "summarize" in result["content"]
-        assert "extract_1" in result["content"]
-        assert "extract_2" in result["content"]
