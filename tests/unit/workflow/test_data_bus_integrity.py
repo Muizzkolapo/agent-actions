@@ -65,34 +65,12 @@ class TestLinearPipelineBus:
 
     def test_linear_accumulation(self):
         """Each action adds its own namespace; upstream stays flat."""
-        # Stage 1: extract produces initial record
-        _record_after_extract = {
-            "source_guid": "sg-1",
-            "content": {
-                "extract": {"facts": "important stuff"},
-            },
+        # After 3 stages (extract → analyze → write), the bus has one namespace per action.
+        content = {
+            "extract": {"facts": "important stuff"},
+            "analyze": {"depth": "deep", "score": 9},
+            "write": {"question": "What is X?", "options": ["A", "B"]},
         }
-
-        # Stage 2: analyze reads extract, adds its own namespace
-        _record_after_analyze = {
-            "source_guid": "sg-1",
-            "content": {
-                "extract": {"facts": "important stuff"},
-                "analyze": {"depth": "deep", "score": 9},
-            },
-        }
-
-        # Stage 3: write reads both, adds its own namespace
-        record_after_write = {
-            "source_guid": "sg-1",
-            "content": {
-                "extract": {"facts": "important stuff"},
-                "analyze": {"depth": "deep", "score": 9},
-                "write": {"question": "What is X?", "options": ["A", "B"]},
-            },
-        }
-
-        content = record_after_write["content"]
         assert set(content.keys()) == {"extract", "analyze", "write"}
         assert _count_key_occurrences(content, "extract") == 1
         assert _count_key_occurrences(content, "analyze") == 1
@@ -128,18 +106,14 @@ class TestFanInDiamondBus:
             },
         }
 
-        # deep_merge_record merges C into B's record
         merged = dict(record_from_b)
         merged["content"] = dict(merged["content"])
         deep_merge_record(merged, record_from_c)
 
         content = merged["content"]
 
-        # extract appears exactly once at top level (not duplicated)
         assert set(content.keys()) == {"extract", "enrich", "validate"}
         assert _count_key_occurrences(content, "extract") == 1
-
-        # Values preserved
         assert content["extract"]["facts"] == "shared upstream"
         assert content["enrich"]["enriched"] is True
         assert content["validate"]["valid"] is True
@@ -296,22 +270,15 @@ class TestVersionMergeBus:
         merged = correlator._create_merged_record(records, version_outputs)
 
         content = merged["content"]
-
-        # Upstream at top level (from base record's existing content)
         assert "extract_info" in content
         assert "analyze_depth" in content
 
-        # Version namespaces present
         for i in range(1, 4):
             vname = f"write_question_{i}"
             assert vname in content
             vdata = content[vname]
-
-            # Version namespace has ONLY its own fields
             assert set(vdata.keys()) == {"question", "options"}
             assert vdata["question"] == f"Question {i}?"
-
-            # No upstream leaked into version namespace
             assert "extract_info" not in vdata
             assert "analyze_depth" not in vdata
 
