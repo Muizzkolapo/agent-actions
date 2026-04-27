@@ -104,7 +104,9 @@ class TestVersionOutputCorrelator:
                     "source_guid": "test-guid-1",
                     "version_correlation_id": "test-corr-1",
                     "target_id": "target-1",
-                    "content": {f"distractor_{i}": f"Wrong answer {i}"},
+                    "content": {
+                        f"generate_distractors_{i}": {f"distractor_{i}": f"Wrong answer {i}"}
+                    },
                 }
             ]
             with open(loop_dir / test_filename, "w") as f:
@@ -131,7 +133,7 @@ class TestVersionOutputCorrelator:
                     "target_id": "tid-1",
                     "node_id": f"node_{i}_abc",
                     "lineage": ["node_0_root", f"node_{i}_abc"],
-                    "content": {f"score_{i}": 8},
+                    "content": {f"scorer_{i}": {f"score_{i}": 8}},
                 }
             ]
             with open(loop_dir / "data.json", "w") as f:
@@ -162,36 +164,36 @@ class TestVersionOutputCorrelator:
             {
                 "source_guid": "guid-1",
                 "version_correlation_id": "corr-1",
-                "content": {"field_1": "value1"},
+                "content": {"distractor_1": {"field_1": "value1"}},
             },
             {
                 "source_guid": "guid-2",
                 "version_correlation_id": "corr-2",
-                "content": {"field_1": "value2"},
+                "content": {"distractor_1": {"field_1": "value2"}},
             },
             {
                 "source_guid": "guid-3",
                 "version_correlation_id": "corr-3",
-                "content": {"field_1": "value3"},
+                "content": {"distractor_1": {"field_1": "value3"}},
             },
         ]
         data_loop2 = [
             {
                 "source_guid": "guid-1",
                 "version_correlation_id": "corr-1",
-                "content": {"field_2": "value1"},
+                "content": {"distractor_2": {"field_2": "value1"}},
             },
             {
                 "source_guid": "guid-2",
                 "version_correlation_id": "corr-2",
-                "content": {"field_2": "value2"},
+                "content": {"distractor_2": {"field_2": "value2"}},
             },
         ]
         data_loop3 = [
             {
                 "source_guid": "guid-1",
                 "version_correlation_id": "corr-1",
-                "content": {"field_3": "value1"},
+                "content": {"distractor_3": {"field_3": "value1"}},
             }
         ]
         with open(loop1_dir / "data.json", "w") as f:
@@ -240,7 +242,7 @@ class TestVersionOutputCorrelator:
                 {
                     "source_guid": f"{filename}-guid-1",
                     "version_correlation_id": f"{filename}-corr-1",
-                    "content": {"loop1_data": f"data_from_{filename}"},
+                    "content": {"processor_1": {"loop1_data": f"data_from_{filename}"}},
                 }
             ]
             with open(loop1_dir / filename, "w") as f:
@@ -249,7 +251,7 @@ class TestVersionOutputCorrelator:
                 {
                     "source_guid": f"{filename}-guid-1",
                     "version_correlation_id": f"{filename}-corr-1",
-                    "content": {"loop2_data": f"data_from_{filename}"},
+                    "content": {"processor_2": {"loop2_data": f"data_from_{filename}"}},
                 }
             ]
             with open(loop2_dir / filename, "w") as f:
@@ -276,49 +278,47 @@ class TestVersionOutputCorrelator:
                 {
                     "source_guid": "guid-a",
                     "version_correlation_id": "corr-1",
-                    "content": {"f1": "v1"},
+                    "content": {"loop_1": {"f1": "v1"}},
                 },
                 {
                     "source_guid": "guid-b",
                     "version_correlation_id": "corr-2",
-                    "content": {"f1": "v2"},
+                    "content": {"loop_1": {"f1": "v2"}},
                 },
             ],
             "loop_2": [
                 {
                     "source_guid": "guid-a",
                     "version_correlation_id": "corr-1",
-                    "content": {"f2": "v3"},
+                    "content": {"loop_2": {"f2": "v3"}},
                 },
                 {
                     "source_guid": "guid-b",
                     "version_correlation_id": "corr-2",
-                    "content": {"f2": "v4"},
+                    "content": {"loop_2": {"f2": "v4"}},
                 },
             ],
             "loop_3": [
                 {
                     "source_guid": "guid-a",
                     "version_correlation_id": "corr-1",
-                    "content": {"f3": "v5"},
+                    "content": {"loop_3": {"f3": "v5"}},
                 }
             ],
         }
         result = correlator._correlate_by_source_record(version_outputs)
         assert len(result) == 2
         rec_a = next(r for r in result if r["source_guid"] == "guid-a")
-        # Version namespaces + upstream from base_record (first version's content)
-        # Base record loop_1 has content {"f1": "v1"}, so "f1" appears as upstream
         assert rec_a["content"]["loop_1"] == {"f1": "v1"}
         assert rec_a["content"]["loop_2"] == {"f2": "v3"}
         assert rec_a["content"]["loop_3"] == {"f3": "v5"}
-        # Verify no unexpected keys leaked (upstream + 3 versions)
-        expected_a = {"f1", "loop_1", "loop_2", "loop_3"}
+        # Only version namespaces — no leaked upstream flat fields
+        expected_a = {"loop_1", "loop_2", "loop_3"}
         assert set(rec_a["content"].keys()) == expected_a
         rec_b = next(r for r in result if r["source_guid"] == "guid-b")
         assert rec_b["content"]["loop_1"] == {"f1": "v2"}
         assert rec_b["content"]["loop_2"] == {"f2": "v4"}
-        expected_b = {"f1", "loop_1", "loop_2"}
+        expected_b = {"loop_1", "loop_2"}
         assert set(rec_b["content"].keys()) == expected_b
 
     def test_error_handling_in_correlation(self, correlator, temp_agent_folder):
@@ -374,7 +374,7 @@ class TestVersionOutputCorrelatorIntegration:
                 {
                     "source_guid": "test-guid",
                     "version_correlation_id": "test-corr",
-                    "content": {f"field_{i}": f"value_{i}"},
+                    "content": {f"loop_{i}": {f"field_{i}": f"value_{i}"}},
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
@@ -416,7 +416,7 @@ class TestLoopCorrelatorWithSequentialMode:
                 {
                     "source_guid": f"test-{i}",
                     "version_correlation_id": f"test-corr-{i}",
-                    "content": {"iteration": i, "data": f"refined_data_{i}"},
+                    "content": {f"refine_{i}": {"iteration": i, "data": f"refined_data_{i}"}},
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
@@ -448,7 +448,7 @@ class TestLoopCorrelatorWithSequentialMode:
                 {
                     "source_guid": "test-guid",
                     "version_correlation_id": "test-corr",
-                    "content": {f"field_{i}": f"value_{i}"},
+                    "content": {f"process_{i}": {f"field_{i}": f"value_{i}"}},
                 }
             ]
             with open(loop_dir / "result.json", "w") as f:
@@ -479,7 +479,7 @@ class TestLoopCorrelatorWithSequentialMode:
                     "version_correlation_id": "test-corr",
                     "loop_mode": "sequential",
                     "version_number": i,
-                    "content": {"step": i, "result": f"step_{i}_result"},
+                    "content": {f"step_{i}": {"step": i, "result": f"step_{i}_result"}},
                 }
             ]
             with open(loop_dir / "data.json", "w") as f:
@@ -510,7 +510,7 @@ class TestLoopCorrelatorWithSequentialMode:
                     "source_guid": "guid-1",
                     "version_correlation_id": "corr-1",
                     "loop_mode": "sequential",
-                    "content": {f"seq_field_{i}": f"seq_value_{i}"},
+                    "content": {f"seq_{i}": {f"seq_field_{i}": f"seq_value_{i}"}},
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
@@ -523,7 +523,7 @@ class TestLoopCorrelatorWithSequentialMode:
                     "source_guid": "guid-2",
                     "version_correlation_id": "corr-2",
                     "loop_mode": "parallel",
-                    "content": {f"par_field_{i - 2}": f"par_value_{i - 2}"},
+                    "content": {f"par_{i - 2}": {f"par_field_{i - 2}": f"par_value_{i - 2}"}},
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
@@ -594,7 +594,7 @@ class TestVersionCorrelatorSourceProtection:
                     "node_id": "node-1",
                     "version_correlation_id": "corr-1",
                     "lineage": [],
-                    "content": {"result": "v1"},
+                    "content": {"action_1": {"result": "v1"}},
                 }
             ]
             (version1_dir / "data.json").write_text(json.dumps(version1_output))
@@ -608,7 +608,7 @@ class TestVersionCorrelatorSourceProtection:
                     "node_id": "node-1",
                     "version_correlation_id": "corr-1",
                     "lineage": [],
-                    "content": {"result": "v2"},
+                    "content": {"action_2": {"result": "v2"}},
                 }
             ]
             (version2_dir / "data.json").write_text(json.dumps(version2_output))
