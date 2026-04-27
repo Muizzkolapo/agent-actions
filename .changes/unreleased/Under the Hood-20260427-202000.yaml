@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Delete scope_file_mode.py — FILE mode migrated to unified apply_context_scope_for_records; RECORD callers verified unchanged; scope_builder confirmed clean"
+time: 2026-04-27T20:20:00.000000Z

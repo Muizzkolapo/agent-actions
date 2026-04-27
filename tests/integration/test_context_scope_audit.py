@@ -356,7 +356,7 @@ class TestFileModeObserve:
             action_name="act",
         )
         assert len(result) == 1
-        # dep_a wildcard extracts all fields (qualified because 2 wildcards? no, only 1)
+        # dep_a wildcard extracts all fields
         assert result[0]["content"]["text"] == "hello"
         assert result[0]["content"]["score"] == 0.9
         # dep_b specific field also extracted

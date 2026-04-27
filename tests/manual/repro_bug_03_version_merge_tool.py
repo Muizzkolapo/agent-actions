@@ -1,6 +1,6 @@
 """Reproduction script for version_consumption merge bug in FILE mode tools.
 
-Bug 1: apply_observe_for_file_mode failed to expand version namespace fields
+Bug 1: apply_context_scope_for_records failed to expand version namespace fields
        because it either took the fast path (skipping wildcard expansion) or
        tried historical lookup (which failed — version keys aren't ancestors).
        Fixed: unified apply_context_scope_for_records reads from record namespaces directly.
