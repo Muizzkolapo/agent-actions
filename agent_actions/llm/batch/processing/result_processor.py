@@ -238,7 +238,11 @@ class BatchResultProcessor:
         from agent_actions.utils.content import is_version_merge
 
         action_name = ctx.agent_config["action_name"]
-        version_merge = is_version_merge(ctx.agent_config)
+        # Version merge spread only applies to TOOL actions that merge pre-namespaced
+        # version data (e.g., aggregate_votes). LLM actions with version_consumption
+        # produce their OWN output that must be wrapped under their namespace.
+        is_tool = ctx.agent_config.get("kind") == "tool"
+        version_merge = is_version_merge(ctx.agent_config) and is_tool
         existing_content = get_existing_content(original_row)
 
         structured_items = []

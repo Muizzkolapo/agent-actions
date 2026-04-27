@@ -13,6 +13,7 @@ from agent_actions.processing.prepared_task import (
     PreparedTask,
 )
 from agent_actions.utils.content import get_existing_content
+from agent_actions.utils.id_generation import IDGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +139,6 @@ class TaskPreparer:
     ) -> tuple[Any, str | None, Any | None]:
         """Normalize input to (content, source_guid, source_snapshot)."""
         if context.is_first_stage:
-            from agent_actions.utils.id_generation import IDGenerator
-
             source_guid: str | None
             if self._id_generator:
                 source_guid = self._id_generator(item)
@@ -150,7 +149,15 @@ class TaskPreparer:
             return item, source_guid, snapshot
         else:
             if isinstance(item, dict):
-                content = item["content"]
+                content = item.get("content")
+                if content is None:
+                    # First-stage batch records may not have content wrapper yet —
+                    # treat them like first-stage by extracting raw fields
+                    source_guid = item.get("source_guid")
+                    if not source_guid:
+                        source_guid = IDGenerator.generate_deterministic_source_guid(item)
+                    snapshot = self._prepare_source_snapshot(item)
+                    return item, source_guid, snapshot
                 source_guid = item.get("source_guid")
                 if source_guid == "":
                     source_guid = None  # Preserve None for fallback lineage/recovery
@@ -308,8 +315,6 @@ class TaskPreparer:
 
     def _generate_target_id(self) -> str:
         """Generate a new target_id."""
-        from agent_actions.utils.id_generation import IDGenerator
-
         return IDGenerator.generate_target_id()
 
 

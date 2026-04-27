@@ -821,6 +821,11 @@ class ActionExecutor:
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         output_directory = str(agent_io_path / "target" / action_name)
 
+        # Ensure action_name is on the config dict — batch result processor needs it
+        # for RecordEnvelope.build_content() namespacing. The config system uses
+        # "agent_type" as the key, but the additive model needs "action_name".
+        action_config["action_name"] = action_name
+
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
             action_name, output_directory, action_config
         )
@@ -902,6 +907,10 @@ class ActionExecutor:
         workflow_name = self.deps.action_runner.workflow_name
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         output_directory = str(agent_io_path / "target" / action_name)
+
+        # Ensure action_name is on the config dict — batch result processor needs it
+        # for RecordEnvelope.build_content() namespacing.
+        action_config["action_name"] = action_name
 
         output_folder, batch_status = await asyncio.to_thread(
             self.deps.batch_manager.handle_batch_agent,

@@ -10,6 +10,8 @@ Validates that:
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchTask
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
@@ -324,3 +326,41 @@ class TestRuntimeBatchWarning:
         mock_logger.warning.assert_not_called()
         # Schema IS forwarded when json_mode=true
         assert tasks[0]["schema"] == {"type": "object"}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Runtime: BaseBatchClient.prepare_tasks() content key enforcement
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestPrepareTasksContentKeyRequired:
+    """prepare_tasks() raises ValueError when a record lacks 'content'."""
+
+    def test_missing_content_key_raises(self):
+        """Record without 'content' key raises ValueError with target_id in message."""
+        config = {"json_mode": False, "model_name": "gpt-4"}
+        data = [{"target_id": "row-1", "score": 90}]
+
+        client = ConcreteBatchClient()
+        with pytest.raises(ValueError, match="row-1") as exc_info:
+            client.prepare_tasks(data, config)
+
+        assert "missing 'content' key" in str(exc_info.value)
+
+    def test_missing_content_key_falls_back_to_id(self):
+        """Error message uses 'id' when 'target_id' absent."""
+        config = {"json_mode": False, "model_name": "gpt-4"}
+        data = [{"id": "rec-42", "score": 90}]
+
+        client = ConcreteBatchClient()
+        with pytest.raises(ValueError, match="rec-42"):
+            client.prepare_tasks(data, config)
+
+    def test_missing_content_key_no_identifier(self):
+        """Error message shows '?' when record has no target_id or id."""
+        config = {"json_mode": False, "model_name": "gpt-4"}
+        data = [{"score": 90}]
+
+        client = ConcreteBatchClient()
+        with pytest.raises(ValueError, match=r"\?"):
+            client.prepare_tasks(data, config)
