@@ -34,7 +34,6 @@ _VENDOR_CONFIG_MAP: dict[str, type[BaseModel]] | None = None
 _NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
 
 
-
 def _get_vendor_config_map() -> dict[str, type[BaseModel]]:
     """Build vendor → config class map on first call (lazy)."""
     global _VENDOR_CONFIG_MAP  # noqa: PLW0603
