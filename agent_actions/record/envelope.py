@@ -89,7 +89,6 @@ class RecordEnvelope:
         return _carry_source_guid(result, input_record)
 
 
-
 def _carry_source_guid(
     result: dict[str, Any], input_record: dict[str, Any] | None
 ) -> dict[str, Any]:
