@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.content import get_existing_content
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,6 +77,47 @@ def _populate_lineage_sources(existing: dict[str, Any], new_record: dict[str, An
             existing["lineage_sources"].append(new_node_id)
     else:
         existing["lineage_sources"] = [existing_node_id, new_node_id]
+
+
+def merge_branch_records(
+    branch_records: dict[str, dict[str, Any]],
+    base_record: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Merge N branch records into one, each contributing only its own namespace.
+
+    Args:
+        branch_records: {branch_name: record} — each record has accumulated bus
+        base_record: Optional base for upstream content. If None, uses first branch.
+
+    Returns:
+        Merged record with upstream namespaces once + each branch's own namespace.
+        Lineage is deduplicated across all branches.
+    """
+    if not branch_records:
+        return base_record or {}
+
+    base = base_record or next(iter(branch_records.values()))
+    merged_content = dict(get_existing_content(base))
+
+    for branch_name, branch_record in branch_records.items():
+        branch_content = get_existing_content(branch_record)
+        if branch_name not in branch_content:
+            logger.warning(
+                "Branch '%s' missing own namespace in content. Keys: %s",
+                branch_name,
+                sorted(branch_content.keys()),
+            )
+        else:
+            merged_content[branch_name] = branch_content[branch_name]
+
+    result = {**base, "content": merged_content}
+    # Copy lineage list so _merge_lineage doesn't mutate the input base_record
+    if "lineage" in result and isinstance(result["lineage"], list):
+        result["lineage"] = list(result["lineage"])
+    for branch_record in branch_records.values():
+        _merge_lineage(result, branch_record.get("lineage", []))
+
+    return result
 
 
 def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> str | None:
