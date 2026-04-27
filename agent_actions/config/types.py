@@ -108,6 +108,7 @@ class ActionConfigDict(TypedDict, total=False):
 
     # Identity
     agent_type: str
+    action_name: str  # runtime-injected by executor for batch namespacing
     name: str
     kind: str  # "llm" | "tool" | "hitl"
 
