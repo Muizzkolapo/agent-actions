@@ -36,7 +36,7 @@ class _StubProcessorWithAttrs(ProcessorErrorHandlerMixin):
 
     def __init__(self):
         self.agent_name = "my_agent"
-        self.agent_config = {"type": "llm"}
+        self.agent_config = {"kind": "llm"}
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix action type tracking reading wrong config key (\"type\" instead of \"kind\"), causing empty/default values in execution events and error context"
+time: 2026-04-27T04:10:00.000000Z
