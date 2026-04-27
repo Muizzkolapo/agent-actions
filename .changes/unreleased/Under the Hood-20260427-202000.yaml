@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "RECORD-mode context_scope callers verified unchanged after Phase 1 unification; scope_builder.py confirmed clean; prompt.context __init__.py exports unified API"
+time: 2026-04-27T20:20:00.000000Z
