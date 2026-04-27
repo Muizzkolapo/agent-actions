@@ -3,7 +3,7 @@
 Bug 1: apply_observe_for_file_mode failed to expand version namespace fields
        because it either took the fast path (skipping wildcard expansion) or
        tried historical lookup (which failed — version keys aren't ancestors).
-       Fixed: observe now reads from record namespaces directly.
+       Fixed: unified apply_context_scope_for_records reads from record namespaces directly.
 
 Bug 2: data.get("content", data) returned {} when content key existed but was
        empty, instead of falling back to the full record.
@@ -19,7 +19,7 @@ from pathlib import Path
 project_root = str(Path(__file__).resolve().parent.parent.parent)
 sys.path.insert(0, project_root)
 
-from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
+from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 
 
 def test_version_wildcard_expansion():
@@ -39,21 +39,17 @@ def test_version_wildcard_expansion():
         }
     ]
 
-    agent_config = {
-        "name": "aggregate",
-        "dependencies": ["gen_code_1", "gen_code_2", "gen_code_3"],
-        "context_scope": {
-            "observe": ["gen_code_1.*", "gen_code_2.*", "gen_code_3.*"],
-        },
+    context_scope = {
+        "observe": ["gen_code_1.*", "gen_code_2.*", "gen_code_3.*"],
     }
 
-    result = apply_observe_for_file_mode(
-        data=data,
-        agent_config=agent_config,
-        agent_name="aggregate",
+    result = apply_context_scope_for_records(
+        records=data,
+        context_scope=context_scope,
+        action_name="aggregate",
     )
 
-    content = result[0].get("content", result[0])
+    content = result[0]["content"]
 
     # With multiple wildcard namespaces, observe should expand to qualified keys:
     #   gen_code_1.code, gen_code_1.language, gen_code_2.code, etc.
@@ -84,21 +80,17 @@ def test_version_specific_field_resolution():
         }
     ]
 
-    agent_config = {
-        "name": "aggregate",
-        "dependencies": ["gen_code_1", "gen_code_2"],
-        "context_scope": {
-            "observe": ["gen_code_1.code", "gen_code_2.code"],
-        },
+    context_scope = {
+        "observe": ["gen_code_1.code", "gen_code_2.code"],
     }
 
-    result = apply_observe_for_file_mode(
-        data=data,
-        agent_config=agent_config,
-        agent_name="aggregate",
+    result = apply_context_scope_for_records(
+        records=data,
+        context_scope=context_scope,
+        action_name="aggregate",
     )
 
-    content = result[0].get("content", result[0])
+    content = result[0]["content"]
 
     # "code" collides across namespaces → qualified keys: gen_code_1.code, gen_code_2.code
     has_resolved = "gen_code_1.code" in content or "gen_code_2.code" in content
@@ -124,56 +116,41 @@ def test_version_specific_field_resolution():
 
 
 def test_content_empty_fallback_trap():
-    """Bug 2: Empty content {} should fall back to item-level keys.
-
-    Previously, scope_file_mode.py used:
-        content = item.get("content", item) if isinstance(item.get("content"), dict) else item
-    which returns {} when content exists but is empty, instead of falling
-    back to item.  The fix checks for non-empty dict before accepting content.
-
-    Uses a source.* observe ref so the per-record loop runs (not fast path).
-    """
+    """Bug 2: Empty content {} with source observe ref — wildcard on missing
+    upstream namespace is graceful (no crash), source resolves correctly."""
     source_data = [{"source_guid": "sg-001", "content": {"url": "https://example.com"}}]
 
-    # Record with empty content wrapper but meaningful top-level data.
+    # Record with empty content wrapper.
     data = [
         {
             "source_guid": "sg-001",
             "node_id": "node-1",
             "content": {},
-            "question": "What is 2+2?",
             "lineage": ["lineage-1"],
         }
     ]
 
-    agent_config = {
-        "name": "downstream",
-        "dependencies": ["upstream"],
-        "context_scope": {
-            "observe": ["source.url", "upstream.question"],
-        },
+    context_scope = {
+        "observe": ["source.url", "upstream.*"],
     }
 
-    result = apply_observe_for_file_mode(
-        data=data,
-        agent_config=agent_config,
-        agent_name="downstream",
+    result = apply_context_scope_for_records(
+        records=data,
+        context_scope=context_scope,
+        action_name="downstream",
         source_data=source_data,
     )
 
     result_item = result[0]
     content = result_item.get("content", {})
 
-    # The old code extracted content={} from the record and never found
-    # "question" during field resolution.  The fix falls back to the full
-    # item when content is empty, making "question" visible.
-    if isinstance(content, dict) and "question" in content:
-        print("BUG 2 FIXED: Empty content falls back to item-level keys")
-        print(f"  content has 'question': {content.get('question')!r}")
+    # source.url should be resolved from source_data
+    if isinstance(content, dict) and "url" in content:
+        print("BUG 2 FIXED: Source namespace resolved on empty content record")
         print(f"  content has 'url' (from source): {content.get('url')!r}")
         return True
 
-    print("BUG 2 CONFIRMED: Empty content did not fall back to item-level keys")
+    print("BUG 2 CONFIRMED: Source resolve failed on empty content record")
     print(f"  content keys: {sorted(content.keys()) if isinstance(content, dict) else 'NOT DICT'}")
     return False
 

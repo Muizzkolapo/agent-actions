@@ -13,8 +13,8 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
     apply_context_scope,
+    apply_context_scope_for_records,
 )
-from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from tests.integration.conftest import MockStorageBackend
 
@@ -396,9 +396,13 @@ class TestObserveCollision:
         # The collision detection happens in _resolve_observe_refs regardless of
         # record data. Two namespaces with the same bare field name trigger
         # qualified output keys.
-        from agent_actions.prompt.context.scope_file_mode import _resolve_observe_refs
+        from agent_actions.prompt.context.scope_application import (
+            _resolve_observe_refs_for_flat_keys,
+        )
 
-        resolved = _resolve_observe_refs(["dep_a.title", "dep_b.title"], action_name="test")
+        resolved, _ = _resolve_observe_refs_for_flat_keys(
+            ["dep_a.title", "dep_b.title"], action_name="test"
+        )
 
         # Both "title" refs should be qualified since bare key "title" collides
         output_keys = [output_key for _, _, output_key in resolved]
@@ -427,9 +431,11 @@ class TestObserveCollision:
 
     def test_no_collision_preserves_bare_keys(self):
         """When field names are unique across namespaces, bare keys used (no qualification)."""
-        from agent_actions.prompt.context.scope_file_mode import _resolve_observe_refs
+        from agent_actions.prompt.context.scope_application import (
+            _resolve_observe_refs_for_flat_keys,
+        )
 
-        resolved = _resolve_observe_refs(
+        resolved, _ = _resolve_observe_refs_for_flat_keys(
             ["dep_a.unique_field_x", "dep_b.unique_field_y"], action_name="test"
         )
 
@@ -825,10 +831,10 @@ class TestFileModeObserve:
             "dependencies": "dep",
         }
 
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="consumer",
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=agent_config["context_scope"],
+            action_name="consumer",
         )
 
         assert len(result) == 3
@@ -860,10 +866,10 @@ class TestFileModeObserve:
             "dependencies": "dep",
         }
 
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="consumer",
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=agent_config["context_scope"],
+            action_name="consumer",
         )
 
         assert len(result) == 3
@@ -892,10 +898,10 @@ class TestFileModeObserve:
             "dependencies": "extract",
         }
 
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="enrich",
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=agent_config["context_scope"],
+            action_name="enrich",
         )
 
         assert len(result) == 1
@@ -906,9 +912,9 @@ class TestFileModeObserve:
         assert result[0]["content"]["extract"]["length"] == 500
         assert result[0]["source_guid"] == "sg1"
 
-    def test_file_mode_missing_field_warns(self):
-        """FILE-mode: observe references missing field -> field absent from output,
-        but all original content preserved."""
+    def test_file_mode_missing_field_raises(self):
+        """FILE-mode: explicit observe ref to missing field raises ConfigurationError
+        (unified behavior — same as RECORD mode)."""
         data = [
             {
                 "content": {
@@ -917,24 +923,39 @@ class TestFileModeObserve:
                 "source_guid": "sg1",
             },
         ]
-        agent_config = {
-            "context_scope": {"observe": ["dep.title", "dep.nonexistent_field"]},
-            "dependencies": "dep",
-        }
+        context_scope = {"observe": ["dep.title", "dep.nonexistent_field"]}
 
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="consumer",
+        with pytest.raises(ConfigurationError):
+            apply_context_scope_for_records(
+                records=data,
+                context_scope=context_scope,
+                action_name="consumer",
+            )
+
+    def test_file_mode_wildcard_on_partial_namespace_graceful(self):
+        """FILE-mode: wildcard on namespace with missing fields is graceful."""
+        data = [
+            {
+                "content": {
+                    "dep": {"title": "Exists", "body": "Also exists", "extra": "here too"},
+                },
+                "source_guid": "sg1",
+            },
+        ]
+        context_scope = {"observe": ["dep.*"]}
+
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="consumer",
         )
 
         assert len(result) == 1
         assert result[0]["content"]["title"] == "Exists"
-        # nonexistent_field is simply absent (not injected)
-        assert "nonexistent_field" not in result[0]["content"]
+        assert result[0]["content"]["body"] == "Also exists"
+        assert result[0]["content"]["extra"] == "here too"
         # Original namespace preserved
         assert result[0]["content"]["dep"]["body"] == "Also exists"
-        assert result[0]["content"]["dep"]["extra"] == "here too"
 
 
 # ---------------------------------------------------------------------------

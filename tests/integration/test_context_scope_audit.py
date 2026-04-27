@@ -20,9 +20,9 @@ from agent_actions.input.context.normalizer import (
 from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
     apply_context_scope,
+    apply_context_scope_for_records,
     format_llm_context,
 )
-from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_parsing import (
     extract_action_names_from_context_scope,
@@ -303,10 +303,10 @@ class TestFileModeObserve:
             "dependencies": "dep",
             "context_scope": {"observe": ["dep.question", "dep.answer"]},
         }
-        result = apply_observe_for_file_mode(
-            data,
-            agent_config,
-            agent_name="act",
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=agent_config["context_scope"],
+            action_name="act",
         )
         assert len(result) == 2
         # Observed fields extracted from namespace
@@ -325,14 +325,11 @@ class TestFileModeObserve:
             {"q": "What?", "a": "42"},
             {"q": "Why?", "a": "because"},
         )
-        agent_config = {
-            "dependencies": "dep",
-            "context_scope": {"observe": ["dep.*"]},
-        }
-        result = apply_observe_for_file_mode(
-            data,
-            agent_config,
-            agent_name="act",
+        context_scope = {"observe": ["dep.*"]}
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="act",
         )
         assert len(result) == 2
         assert result[0]["content"]["q"] == "What?"
@@ -352,14 +349,11 @@ class TestFileModeObserve:
                 "source_guid": "sg_0",
             }
         ]
-        agent_config = {
-            "dependencies": "dep_a",
-            "context_scope": {"observe": ["dep_a.*", "dep_b.extra"]},
-        }
-        result = apply_observe_for_file_mode(
-            data,
-            agent_config,
-            agent_name="act",
+        context_scope = {"observe": ["dep_a.*", "dep_b.extra"]}
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="act",
         )
         assert len(result) == 1
         # dep_a wildcard extracts all fields (qualified because 2 wildcards? no, only 1)
@@ -371,8 +365,7 @@ class TestFileModeObserve:
     def test_file_mode_no_observe_returns_data_unchanged(self):
         """No observe refs -> data returned as-is."""
         data = [{"content": {"dep": {"a": 1}}, "source_guid": "sg_0"}]
-        agent_config = {"dependencies": "dep", "context_scope": {}}
-        result = apply_observe_for_file_mode(data, agent_config, agent_name="act")
+        result = apply_context_scope_for_records(records=data, context_scope={}, action_name="act")
         assert result == data
 
 

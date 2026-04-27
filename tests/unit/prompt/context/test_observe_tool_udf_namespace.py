@@ -109,35 +109,34 @@ class TestCrossActionToolFeedsLlm:
 
 
 class TestFileModeObserveToolUdf:
-    """apply_observe_for_file_mode handles normalized tool output."""
+    """apply_context_scope_for_records handles normalized tool output."""
 
-    def test_file_mode_observe_flat_content(self):
-        """File-mode observe filter already produces flat content — verify."""
-        from agent_actions.prompt.context.scope_file_mode import (
-            apply_observe_for_file_mode,
+    def test_file_mode_observe_namespaced_content(self):
+        """File-mode observe extracts fields from namespaced content as flat keys."""
+        from agent_actions.prompt.context.scope_application import (
+            apply_context_scope_for_records,
         )
 
         data = [
             {
-                "content": {"question_type": "yes_no", "confidence": 0.95},
+                "content": {
+                    "upstream": {"question_type": "yes_no", "confidence": 0.95},
+                },
                 "source_guid": "sg-1",
                 "node_id": "upstream_abc",
                 "lineage": ["upstream_abc"],
             },
         ]
-        agent_config = {
-            "dependencies": "upstream",
-            "context_scope": {"observe": ["upstream.question_type"]},
-        }
+        context_scope = {"observe": ["upstream.question_type"]}
 
-        filtered = apply_observe_for_file_mode(
-            data=data,
-            agent_config=agent_config,
-            agent_name="tool_b",
+        filtered = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="tool_b",
         )
 
-        content = filtered[0].get("content", filtered[0])
-        # Field is flat in content, not nested under a namespace key
+        content = filtered[0]["content"]
+        # Field extracted as flat key from namespace
         assert "question_type" in content
         assert content["question_type"] == "yes_no"
 

@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
-from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
+from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
 
@@ -333,35 +333,40 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
         {
             "source_guid": "sg-1",
             "content": {
-                "question": "What is X?",
-                "answer": "X is Y",
-                "selectedAnswerer": "Alice",
-                "validity": "valid",
+                "upstream": {
+                    "question": "What is X?",
+                    "answer": "X is Y",
+                    "selectedAnswerer": "Alice",
+                    "validity": "valid",
+                },
             },
         },
         {
             "source_guid": "sg-2",
             "content": {
-                "question": "What is Z?",
-                "answer": "Z is W",
-                "selectedAnswerer": "Bob",
-                "validity": "invalid",
+                "upstream": {
+                    "question": "What is Z?",
+                    "answer": "Z is W",
+                    "selectedAnswerer": "Bob",
+                    "validity": "invalid",
+                },
             },
         },
     ]
 
-    # Apply the filter as _process_by_strategy would (using new namespace-aware method)
-    filtered = apply_observe_for_file_mode(
-        data=original_data,
-        agent_config=pipeline.config.action_config,
-        agent_name="review_data",
+    # Apply the filter using unified context_scope
+    context_scope = pipeline.config.action_config.get("context_scope", {})
+    filtered = apply_context_scope_for_records(
+        records=original_data,
+        context_scope=context_scope,
+        action_name="review_data",
     )
 
-    # NiFi enrichment: filtered records are full records with all content preserved
+    # Enrichment: flat observed keys injected, all namespaces preserved
     assert filtered[0]["content"]["question"] == "What is X?"
     assert filtered[0]["content"]["answer"] == "X is Y"
-    # All original content fields preserved (no stripping)
-    assert filtered[0]["content"]["selectedAnswerer"] == "Alice"
+    # Non-observed fields preserved in namespace (not as flat keys)
+    assert filtered[0]["content"]["upstream"]["selectedAnswerer"] == "Alice"
     assert filtered[0]["source_guid"] == "sg-1"
     assert filtered[1]["content"]["answer"] == "Z is W"
 
@@ -389,90 +394,112 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 2
-    # Upstream content fields preserved
-    assert result.data[0]["content"]["question"] == "What is X?"
-    assert result.data[0]["content"]["selectedAnswerer"] == "Alice"
-    assert result.data[0]["content"]["validity"] == "valid"
+    # Upstream content fields preserved in namespace
+    assert result.data[0]["content"]["upstream"]["question"] == "What is X?"
+    assert result.data[0]["content"]["upstream"]["selectedAnswerer"] == "Alice"
+    assert result.data[0]["content"]["upstream"]["validity"] == "valid"
     # HITL decision under the action namespace
     assert result.data[0]["content"]["review_data"]["hitl_status"] == "approved"
-    assert result.data[1]["content"]["answer"] == "Z is W"
-    assert result.data[1]["content"]["selectedAnswerer"] == "Bob"
+    assert result.data[1]["content"]["upstream"]["answer"] == "Z is W"
+    assert result.data[1]["content"]["upstream"]["selectedAnswerer"] == "Bob"
 
 
-# --- Tests for apply_observe_for_file_mode ---
+# --- Tests for apply_context_scope_for_records ---
 
 
-def test_new_observe_no_observe_returns_data_as_is():
-    """Without observe config, apply_observe_for_file_mode returns data unchanged."""
+def test_no_observe_returns_data_as_is():
+    """Without observe config, apply_context_scope_for_records returns data unchanged."""
     data = [{"content": {"a": 1, "b": 2}}]
-    result = apply_observe_for_file_mode(
-        data=data, agent_config={"kind": "hitl"}, agent_name="test"
-    )
+    result = apply_context_scope_for_records(records=data, context_scope={}, action_name="test")
     assert result is data
 
 
-def test_new_observe_handles_flat_records():
-    """Records without content wrapper: no cross-ns refs → fast path returns as-is."""
-    data = [{"question": "Q1", "answer": "A1", "extra": "keep"}]
-    config = {"context_scope": {"observe": ["upstream.answer", "upstream.question"]}}
-    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    # No cross-namespace refs → fast path returns data unmodified
-    assert result[0]["answer"] == "A1"
-    assert result[0]["question"] == "Q1"
-    assert result[0]["extra"] == "keep"
-
-
-def test_new_observe_wildcard_returns_all_content_fields():
-    """observe: ['upstream.*'] should return full records with all content preserved."""
+def test_observe_extracts_from_namespace():
+    """Observe refs extract fields from namespaced content as flat keys."""
     data = [
-        {"content": {"question": "Q1", "answer": "A1", "extra": "keep"}},
-        {"content": {"question": "Q2", "answer": "A2", "extra": "also keep"}},
-    ]
-    config = {"context_scope": {"observe": ["upstream.*"]}}
-    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    assert result[0]["content"] == {"question": "Q1", "answer": "A1", "extra": "keep"}
-    assert result[1]["content"] == {"question": "Q2", "answer": "A2", "extra": "also keep"}
-
-
-def test_new_observe_collision_uses_qualified_keys():
-    """When two refs share the same bare key with NiFi enrichment.
-
-    With namespaced content, observe reads directly from record namespaces.
-    The original content fields are preserved as-is (no qualified key
-    renaming for input-source fields). The original 'title' and 'body'
-    remain in content.
-    """
-    data = [{"content": {"title": "My Title", "body": "My Body"}}]
-    config = {
-        "context_scope": {
-            "observe": ["dep_a.title", "dep_b.title", "dep_a.body"],
+        {
+            "content": {
+                "upstream": {"question": "Q1", "answer": "A1", "extra": "keep"},
+            },
         },
-    }
-    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    # NiFi enrichment: full record with original content preserved
-    assert result[0]["content"]["title"] == "My Title"
-    assert result[0]["content"]["body"] == "My Body"
+    ]
+    context_scope = {"observe": ["upstream.question", "upstream.answer"]}
+    result = apply_context_scope_for_records(
+        records=data, context_scope=context_scope, action_name="test"
+    )
+    assert result[0]["content"]["question"] == "Q1"
+    assert result[0]["content"]["answer"] == "A1"
+    # Original namespace preserved
+    assert result[0]["content"]["upstream"]["extra"] == "keep"
 
 
-def test_new_observe_no_collision_stays_bare():
-    """When all refs have unique bare keys, content fields are preserved."""
-    data = [{"content": {"question": "Q1", "answer": "A1"}}]
-    config = {"context_scope": {"observe": ["upstream.question", "upstream.answer"]}}
-    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    # NiFi enrichment: full record returned with content preserved
+def test_wildcard_observe_preserves_all_content():
+    """observe: ['upstream.*'] extracts all fields as flat keys."""
+    data = [
+        {"content": {"upstream": {"question": "Q1", "answer": "A1", "extra": "keep"}}},
+        {"content": {"upstream": {"question": "Q2", "answer": "A2", "extra": "also keep"}}},
+    ]
+    context_scope = {"observe": ["upstream.*"]}
+    result = apply_context_scope_for_records(
+        records=data, context_scope=context_scope, action_name="test"
+    )
+    assert result[0]["content"]["question"] == "Q1"
+    assert result[0]["content"]["answer"] == "A1"
+    assert result[1]["content"]["question"] == "Q2"
+    assert result[1]["content"]["answer"] == "A2"
+
+
+def test_collision_uses_qualified_keys():
+    """When two namespaces have same field name, keys are namespace-qualified."""
+    data = [
+        {
+            "content": {
+                "dep_a": {"title": "Title from A", "body": "Body A"},
+                "dep_b": {"title": "Title from B"},
+            },
+        },
+    ]
+    context_scope = {"observe": ["dep_a.title", "dep_b.title", "dep_a.body"]}
+    result = apply_context_scope_for_records(
+        records=data, context_scope=context_scope, action_name="test"
+    )
+    assert result[0]["content"]["dep_a.title"] == "Title from A"
+    assert result[0]["content"]["dep_b.title"] == "Title from B"
+    assert result[0]["content"]["body"] == "Body A"
+
+
+def test_no_collision_stays_bare():
+    """When all refs have unique bare keys, flat keys are unqualified."""
+    data = [
+        {
+            "content": {
+                "upstream": {"question": "Q1", "answer": "A1"},
+            },
+        },
+    ]
+    context_scope = {"observe": ["upstream.question", "upstream.answer"]}
+    result = apply_context_scope_for_records(
+        records=data, context_scope=context_scope, action_name="test"
+    )
     assert result[0]["content"]["question"] == "Q1"
     assert result[0]["content"]["answer"] == "A1"
 
 
-def test_new_observe_invalid_ref_does_not_misalign_pairs():
+def test_invalid_ref_does_not_misalign_pairs():
     """Invalid refs between valid ones must not shift collision pairing."""
-    data = [{"content": {"title": "T", "body": "B"}}]
-    config = {
-        "context_scope": {
-            "observe": ["dep_a.title", "bad_ref_no_dot", "dep_b.title", "dep_a.body"],
+    data = [
+        {
+            "content": {
+                "dep_a": {"title": "T", "body": "B"},
+                "dep_b": {"title": "T2"},
+            },
         },
-    }
-    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-    # NiFi enrichment: full record with original content preserved
-    assert result[0]["content"]["title"] == "T"
+    ]
+    context_scope = {"observe": ["dep_a.title", "bad_ref_no_dot", "dep_b.title", "dep_a.body"]}
+    result = apply_context_scope_for_records(
+        records=data, context_scope=context_scope, action_name="test"
+    )
+    # "title" collides → qualified
+    assert result[0]["content"]["dep_a.title"] == "T"
+    assert result[0]["content"]["dep_b.title"] == "T2"
     assert result[0]["content"]["body"] == "B"
