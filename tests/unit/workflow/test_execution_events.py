@@ -91,7 +91,7 @@ class TestLogWorkflowStart:
 class TestFireAgentStart:
     def test_fires_agent_start_event(self, event_logger):
         with patch(FIRE_EVENT_PATH) as mock_fire:
-            event_logger.fire_action_start(0, "agent_a", 2, {"type": "llm"})
+            event_logger.fire_action_start(0, "agent_a", 2, {"kind": "llm"})
 
         event = mock_fire.call_args[0][0]
         assert isinstance(event, ActionStartEvent)

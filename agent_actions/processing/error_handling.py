@@ -58,7 +58,7 @@ class ProcessorErrorHandlerMixin:
         if hasattr(self, "agent_name"):
             context["agent_name"] = self.agent_name
         if hasattr(self, "agent_config"):
-            context["agent_type"] = self.agent_config.get("type", "unknown")
+            context["agent_type"] = self.agent_config.get("kind", "unknown")
         context.update(kwargs)
         return context
 

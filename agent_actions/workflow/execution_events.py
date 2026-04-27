@@ -72,7 +72,7 @@ class WorkflowEventLogger:
                 action_name=action_name,
                 action_index=idx,
                 total_actions=total_actions,
-                action_type=action_config.get("type", ""),
+                action_type=action_config.get("kind", ""),
                 mode=action_config.get("run_mode", ""),
             )
         )
