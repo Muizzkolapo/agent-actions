@@ -6,68 +6,82 @@ Observe refs select fields from these namespaces — no storage lookup needed.
 The only cross-record reference is ``source.*`` (resolved from source_data).
 """
 
-from agent_actions.prompt.context.scope_file_mode import (
-    _resolve_observe_refs,
-    apply_observe_for_file_mode,
+import pytest
+
+from agent_actions.errors import ConfigurationError
+from agent_actions.prompt.context.scope_application import (
+    _resolve_observe_refs_for_flat_keys,
+    apply_context_scope_for_records,
 )
 
 # -----------------------------------------------------------------------
-# _resolve_observe_refs
+# _resolve_observe_refs_for_flat_keys
 # -----------------------------------------------------------------------
 
 
-class TestResolveObserveRefs:
-    """Unit tests for _resolve_observe_refs helper."""
+class TestResolveObserveRefsForFlatKeys:
+    """Unit tests for _resolve_observe_refs_for_flat_keys helper."""
 
     def test_simple_refs(self):
         refs = ["upstream.question", "upstream.answer"]
-        result = _resolve_observe_refs(refs)
+        result, qualify = _resolve_observe_refs_for_flat_keys(refs)
         assert result == [
             ("upstream", "question", "question"),
             ("upstream", "answer", "answer"),
         ]
+        assert qualify is False
 
     def test_collision_uses_qualified_keys(self):
         refs = ["dep_a.title", "dep_b.title", "dep_a.body"]
-        result = _resolve_observe_refs(refs)
+        result, qualify = _resolve_observe_refs_for_flat_keys(refs)
         assert result == [
             ("dep_a", "title", "dep_a.title"),
             ("dep_b", "title", "dep_b.title"),
             ("dep_a", "body", "body"),
         ]
+        assert qualify is False
 
     def test_wildcard_preserved(self):
         refs = ["upstream.*"]
-        result = _resolve_observe_refs(refs)
+        result, qualify = _resolve_observe_refs_for_flat_keys(refs)
         assert result == [("upstream", "*", "*")]
+        assert qualify is False
 
     def test_invalid_ref_skipped(self):
         refs = ["upstream.question", "bad_ref_no_dot", "upstream.answer"]
-        result = _resolve_observe_refs(refs)
+        result, _ = _resolve_observe_refs_for_flat_keys(refs)
         assert len(result) == 2
         assert result[0] == ("upstream", "question", "question")
         assert result[1] == ("upstream", "answer", "answer")
 
     def test_empty_refs(self):
-        assert _resolve_observe_refs([]) == []
+        result, qualify = _resolve_observe_refs_for_flat_keys([])
+        assert result == []
+        assert qualify is False
 
     def test_cross_namespace_no_collision(self):
         """Refs from different namespaces with unique bare keys stay bare."""
         refs = ["upstream.question", "source.url"]
-        result = _resolve_observe_refs(refs)
+        result, _ = _resolve_observe_refs_for_flat_keys(refs)
         assert result == [
             ("upstream", "question", "question"),
             ("source", "url", "url"),
         ]
 
+    def test_multiple_wildcards_qualify(self):
+        """Multiple wildcard namespaces set qualify_wildcards to True."""
+        refs = ["dep_a.*", "dep_b.*"]
+        _, qualify = _resolve_observe_refs_for_flat_keys(refs)
+        assert qualify is True
+
 
 # -----------------------------------------------------------------------
-# apply_observe_for_file_mode — namespaced content
+# apply_context_scope_for_records — namespaced content
 # -----------------------------------------------------------------------
 
 
-class TestApplyObserveForFileMode:
-    """Integration tests for file-mode observe with namespaced content."""
+class TestApplyContextScopeForRecords:
+    """Integration tests for file-mode context_scope with namespaced content."""
 
     def test_single_namespace_specific_fields(self):
         """observe: [extract.text] reads from content["extract"]["text"]."""
@@ -78,8 +92,10 @@ class TestApplyObserveForFileMode:
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["extract.text"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="classify")
+        context_scope = {"observe": ["extract.text"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="classify"
+        )
         assert result[0]["content"]["text"] == "article about physics"
         # Original namespace preserved
         assert result[0]["content"]["extract"]["text"] == "article about physics"
@@ -94,8 +110,10 @@ class TestApplyObserveForFileMode:
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["extract.text", "classify.topic"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="summarize")
+        context_scope = {"observe": ["extract.text", "classify.topic"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="summarize"
+        )
         assert result[0]["content"]["text"] == "physics article"
         assert result[0]["content"]["topic"] == "science"
 
@@ -109,8 +127,10 @@ class TestApplyObserveForFileMode:
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["extract.*"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="summarize")
+        context_scope = {"observe": ["extract.*"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="summarize"
+        )
         assert result[0]["content"]["text"] == "hello"
         assert result[0]["content"]["source_url"] == "example.com"
 
@@ -124,8 +144,10 @@ class TestApplyObserveForFileMode:
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["extract.*", "classify.*"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="summarize")
+        context_scope = {"observe": ["extract.*", "classify.*"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="summarize"
+        )
         # Qualified keys because multiple wildcards
         assert result[0]["content"]["extract.text"] == "hello"
         assert result[0]["content"]["classify.topic"] == "science"
@@ -143,11 +165,11 @@ class TestApplyObserveForFileMode:
         source_data = [
             {"source_guid": "sg-1", "content": {"url": "https://example.com", "title": "Ex"}},
         ]
-        config = {"context_scope": {"observe": ["extract.text", "source.url"]}}
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=config,
-            agent_name="classify",
+        context_scope = {"observe": ["extract.text", "source.url"]}
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="classify",
             source_data=source_data,
         )
         assert result[0]["content"]["text"] == "article"
@@ -163,11 +185,11 @@ class TestApplyObserveForFileMode:
             {"source_guid": "sg-A", "content": {"url": "https://a.com"}},
             {"source_guid": "sg-B", "content": {"url": "https://b.com"}},
         ]
-        config = {"context_scope": {"observe": ["extract.text", "source.url"]}}
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=config,
-            agent_name="classify",
+        context_scope = {"observe": ["extract.text", "source.url"]}
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="classify",
             source_data=source_data,
         )
         assert result[0]["content"]["text"] == "Q1"
@@ -183,11 +205,11 @@ class TestApplyObserveForFileMode:
         source_data = [
             {"source_guid": "sg-other", "content": {"url": "https://fallback.com"}},
         ]
-        config = {"context_scope": {"observe": ["extract.text", "source.url"]}}
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=config,
-            agent_name="classify",
+        context_scope = {"observe": ["extract.text", "source.url"]}
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="classify",
             source_data=source_data,
         )
         assert result[0]["content"]["text"] == "Q"
@@ -197,44 +219,54 @@ class TestApplyObserveForFileMode:
         """source_data in flat format (no content wrapper) still works."""
         data = [{"content": {"extract": {"text": "Q"}}}]
         source_data = [{"url": "https://example.com", "title": "Example"}]
-        config = {"context_scope": {"observe": ["extract.text", "source.url"]}}
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=config,
-            agent_name="classify",
+        context_scope = {"observe": ["extract.text", "source.url"]}
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="classify",
             source_data=source_data,
         )
         assert result[0]["content"]["text"] == "Q"
         assert result[0]["content"]["url"] == "https://example.com"
 
-    def test_missing_namespace_skipped_gracefully(self):
-        """Observing a field from a skipped action's namespace is graceful — no crash."""
+    def test_explicit_ref_to_missing_namespace_raises(self):
+        """Explicit ref to absent namespace raises ConfigurationError (unified behavior)."""
         data = [
             {
                 "content": {
                     "generate": {"question": "Q?"},
                     "validate": {"pass": True},
-                    # rewrite NOT present (guard-skipped)
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["rewrite.output", "generate.question"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="review")
+        context_scope = {"observe": ["rewrite.output", "generate.question"]}
+        with pytest.raises(ConfigurationError):
+            apply_context_scope_for_records(
+                records=data, context_scope=context_scope, action_name="review"
+            )
+
+    def test_wildcard_on_missing_namespace_graceful(self):
+        """Wildcard on absent namespace is graceful — no crash, no fields injected."""
+        data = [
+            {
+                "content": {
+                    "generate": {"question": "Q?"},
+                    "validate": {"pass": True},
+                }
+            },
+        ]
+        context_scope = {"observe": ["rewrite.*", "generate.question"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="review"
+        )
         assert result[0]["content"]["question"] == "Q?"
-        # rewrite namespace absent — field not injected
+        # rewrite namespace absent — no fields injected
         assert "output" not in result[0]["content"]
 
     def test_no_observe_returns_data_as_is(self):
         data = [{"content": {"extract": {"a": 1}}}]
-        result = apply_observe_for_file_mode(data=data, agent_config={}, agent_name="test")
+        result = apply_context_scope_for_records(records=data, context_scope={}, action_name="test")
         assert result is data
-
-    def test_non_dict_records_pass_through(self):
-        """Primitive entries (strings, ints) pass through unmodified."""
-        data = ["just a string", "another string"]
-        config = {"context_scope": {"observe": ["upstream.question"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-        assert result == ["just a string", "another string"]
 
     def test_no_mutation_of_input_data(self):
         """Observe enrichment must not mutate the caller's input data."""
@@ -248,8 +280,10 @@ class TestApplyObserveForFileMode:
         original_content = dict(data[0]["content"])
         original_keys = set(original_content.keys())
 
-        config = {"context_scope": {"observe": ["extract.*"]}}
-        apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
+        context_scope = {"observe": ["extract.*"]}
+        apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
 
         # Input data must not be mutated
         assert set(data[0]["content"].keys()) == original_keys
@@ -264,8 +298,10 @@ class TestApplyObserveForFileMode:
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["dep_a.title", "dep_b.title", "dep_a.body"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="merge")
+        context_scope = {"observe": ["dep_a.title", "dep_b.title", "dep_a.body"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="merge"
+        )
         # "title" collides → qualified keys
         assert result[0]["content"]["dep_a.title"] == "Title from A"
         assert result[0]["content"]["dep_b.title"] == "Title from B"
@@ -284,14 +320,68 @@ class TestApplyObserveForFileMode:
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["extract.text", "classify.topic"]}}
-        result = apply_observe_for_file_mode(
-            data=data,
-            agent_config=config,
-            agent_name="summarize",
+        context_scope = {"observe": ["extract.text", "classify.topic"]}
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="summarize",
         )
         assert result[0]["content"]["text"] == "hello"
         assert result[0]["content"]["topic"] == "science"
+
+    def test_drop_removes_field_from_enriched_records(self):
+        """drop directive removes fields from FILE mode enriched records."""
+        data = [
+            {
+                "content": {
+                    "extract": {"text": "hello", "secret": "s3cr3t"},
+                }
+            },
+        ]
+        context_scope = {"observe": ["extract.text"], "drop": ["extract.secret"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
+        assert result[0]["content"]["text"] == "hello"
+        assert "secret" not in result[0]["content"].get("extract", {})
+
+    def test_passthrough_with_observe(self):
+        """passthrough directive coexists with observe — no crash, content preserved."""
+        data = [
+            {
+                "content": {
+                    "extract": {"text": "hello", "metadata": "keep_me"},
+                }
+            },
+        ]
+        context_scope = {
+            "observe": ["extract.text"],
+            "passthrough": ["extract.metadata"],
+        }
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
+        assert result[0]["content"]["text"] == "hello"
+        # Original namespace still present
+        assert result[0]["content"]["extract"]["metadata"] == "keep_me"
+
+    def test_drop_plus_observe_wildcard_interaction(self):
+        """drop + observe wildcard: dropped field absent from enriched content."""
+        data = [
+            {
+                "content": {
+                    "action_a": {"field1": "keep", "secret": "remove_me"},
+                }
+            },
+        ]
+        context_scope = {"observe": ["action_a.*"], "drop": ["action_a.secret"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
+        assert result[0]["content"]["field1"] == "keep"
+        assert "secret" not in result[0]["content"].get("action_a", {})
+        # Flat key for secret not injected (drop applied before flat key injection)
+        assert "secret" not in result[0]["content"]
 
 
 # -----------------------------------------------------------------------
@@ -319,12 +409,12 @@ class TestVersionNamespaceObserve:
     def test_wildcard_expansion_from_version_namespaces(self):
         """Wildcards on version namespaces expand to qualified keys from content."""
         data = self._make_merged_data(3)
-        config = {
-            "context_scope": {
-                "observe": ["gen_code_1.*", "gen_code_2.*", "gen_code_3.*"],
-            },
+        context_scope = {
+            "observe": ["gen_code_1.*", "gen_code_2.*", "gen_code_3.*"],
         }
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="aggregate")
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="aggregate"
+        )
         content = result[0]["content"]
         # Multiple wildcard namespaces → qualified keys (ns.field)
         assert content["gen_code_1.code"] == "code_1"
@@ -335,12 +425,12 @@ class TestVersionNamespaceObserve:
     def test_specific_field_resolution_from_version_namespaces(self):
         """Specific field refs resolve from version namespace content."""
         data = self._make_merged_data(2)
-        config = {
-            "context_scope": {
-                "observe": ["gen_code_1.code", "gen_code_2.code"],
-            },
+        context_scope = {
+            "observe": ["gen_code_1.code", "gen_code_2.code"],
         }
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="aggregate")
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="aggregate"
+        )
         content = result[0]["content"]
         # "code" collides across namespaces → qualified keys
         assert content["gen_code_1.code"] == "code_1"
@@ -355,8 +445,10 @@ class TestVersionNamespaceObserve:
                 }
             },
         ]
-        config = {"context_scope": {"observe": ["gen_code_1.*"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="aggregate")
+        context_scope = {"observe": ["gen_code_1.*"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="aggregate"
+        )
         content = result[0]["content"]
         assert content["code"] == "code_1"
         assert content["language"] == "python"
@@ -377,12 +469,12 @@ class TestVersionNamespaceObserve:
                 }
             },
         ]
-        config = {
-            "context_scope": {
-                "observe": ["gen_code_1.code", "gen_code_2.code"],
-            },
+        context_scope = {
+            "observe": ["gen_code_1.code", "gen_code_2.code"],
         }
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="aggregate")
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="aggregate"
+        )
         assert result[0]["content"]["gen_code_1.code"] == "code_A1"
         assert result[0]["content"]["gen_code_2.code"] == "code_A2"
         assert result[1]["content"]["gen_code_1.code"] == "code_B1"
@@ -391,12 +483,12 @@ class TestVersionNamespaceObserve:
     def test_preserves_original_nested_dicts(self):
         """Original nested version namespace dicts are preserved in content."""
         data = self._make_merged_data(2)
-        config = {
-            "context_scope": {
-                "observe": ["gen_code_1.*", "gen_code_2.*"],
-            },
+        context_scope = {
+            "observe": ["gen_code_1.*", "gen_code_2.*"],
         }
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="aggregate")
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="aggregate"
+        )
         content = result[0]["content"]
         # Original nested dicts preserved alongside expanded keys
         assert isinstance(content["gen_code_1"], dict)
@@ -408,12 +500,12 @@ class TestVersionNamespaceObserve:
         data = self._make_merged_data(2)
         original_keys = set(data[0]["content"].keys())
 
-        config = {
-            "context_scope": {
-                "observe": ["gen_code_1.*", "gen_code_2.*"],
-            },
+        context_scope = {
+            "observe": ["gen_code_1.*", "gen_code_2.*"],
         }
-        apply_observe_for_file_mode(data=data, agent_config=config, agent_name="aggregate")
+        apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="aggregate"
+        )
         assert set(data[0]["content"].keys()) == original_keys
 
 
@@ -423,25 +515,58 @@ class TestVersionNamespaceObserve:
 
 
 class TestEdgeCases:
-    """Edge case tests for file-mode observe."""
+    """Edge case tests for file-mode context_scope."""
 
-    def test_empty_content_record(self):
-        """Record with empty content {} — no crash, no fields extracted."""
+    def test_empty_content_explicit_ref_raises(self):
+        """Record with empty content {} — explicit ref raises ConfigurationError."""
         data = [{"content": {}}]
-        config = {"context_scope": {"observe": ["extract.text"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
-        assert "text" not in result[0]["content"]
+        context_scope = {"observe": ["extract.text"]}
+        with pytest.raises(ConfigurationError):
+            apply_context_scope_for_records(
+                records=data, context_scope=context_scope, action_name="test"
+            )
 
-    def test_no_content_key(self):
-        """Record without content key — no crash."""
-        data = [{"source_guid": "sg-1"}]
-        config = {"context_scope": {"observe": ["extract.text"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
+    def test_empty_content_wildcard_graceful(self):
+        """Record with empty content {} — wildcard is graceful, no fields extracted."""
+        data = [{"content": {}}]
+        context_scope = {"observe": ["extract.*"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
         assert result[0]["content"] == {}
 
-    def test_namespace_is_not_dict(self):
-        """Namespace value is a string, not dict — treated as empty."""
+    def test_no_content_key_explicit_ref_raises(self):
+        """Record without content key — explicit ref raises ConfigurationError."""
+        data = [{"source_guid": "sg-1"}]
+        context_scope = {"observe": ["extract.text"]}
+        with pytest.raises(ConfigurationError):
+            apply_context_scope_for_records(
+                records=data, context_scope=context_scope, action_name="test"
+            )
+
+    def test_no_content_key_wildcard_graceful(self):
+        """Record without content key — wildcard is graceful."""
+        data = [{"source_guid": "sg-1"}]
+        context_scope = {"observe": ["extract.*"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
+        assert result[0]["content"] == {}
+
+    def test_namespace_is_not_dict_explicit_ref_raises(self):
+        """Namespace value is not a dict — explicit ref raises ConfigurationError."""
         data = [{"content": {"extract": "not_a_dict"}}]
-        config = {"context_scope": {"observe": ["extract.text"]}}
-        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
+        context_scope = {"observe": ["extract.text"]}
+        with pytest.raises(ConfigurationError):
+            apply_context_scope_for_records(
+                records=data, context_scope=context_scope, action_name="test"
+            )
+
+    def test_namespace_is_not_dict_wildcard_graceful(self):
+        """Namespace value is not a dict — wildcard is graceful."""
+        data = [{"content": {"extract": "not_a_dict"}}]
+        context_scope = {"observe": ["extract.*"]}
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
         assert "text" not in result[0]["content"]

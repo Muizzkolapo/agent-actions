@@ -17,5 +17,5 @@ loaders for cataloging prompts at documentation time.
 | `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. | `preprocessing` |
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. | `preprocessing` |
 | `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces. | `preprocessing` |
-| `scope_file_mode.py` | Module | File-mode observe filtering with cross-namespace resolution. | `preprocessing` |
+| ~~`scope_file_mode.py`~~ | Deleted | FILE-mode observe merged into `scope_application.py:apply_context_scope_for_records`. | — |
 | `static_loader.py` | Module | Static prompt loader used during docs generation to read prompt store files. | `tooling.docs`, `file_io` |

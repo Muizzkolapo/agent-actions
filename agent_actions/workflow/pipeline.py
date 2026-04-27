@@ -19,7 +19,7 @@ from agent_actions.output.writer import FileWriter
 from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
-from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
+from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
@@ -536,10 +536,12 @@ class ProcessingPipeline:
             # For FILE mode, use the input data as source for parent lookup
             # (not source_data which points to original source folder)
             context.source_data = data
-            filtered = apply_observe_for_file_mode(
-                data=data,
-                agent_config=cast(dict[str, Any], self.config.action_config),
-                agent_name=self.config.action_name,
+            filtered = apply_context_scope_for_records(
+                records=data,
+                context_scope=cast(dict[str, Any], self.config.action_config).get(
+                    "context_scope", {}
+                ),
+                action_name=self.config.action_name,
                 source_data=source_data,
             )
 
