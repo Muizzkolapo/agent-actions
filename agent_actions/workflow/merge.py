@@ -133,12 +133,64 @@ def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> 
     return None
 
 
+def _identify_branch_mapping(
+    group: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]] | None:
+    """Identify branch names for a group of fan-in records.
+
+    Returns ``{branch_name: record}`` where each branch_name is a content
+    namespace unique to that record.  Returns ``None`` when branches cannot
+    be distinguished (e.g. identical content schemas) — caller falls back to
+    ``deep_merge_record``.
+
+    When a record owns multiple unique namespaces (diamond dependency), each
+    namespace becomes its own entry pointing to the same record.
+    """
+    if not group:
+        return None
+
+    key_sets: list[set[str]] = []
+    for rec in group:
+        content = get_existing_content(rec)
+        if not content:
+            return None
+        key_sets.append(set(content.keys()))
+
+    shared_keys = key_sets[0].copy()
+    for ks in key_sets[1:]:
+        shared_keys &= ks
+
+    branch_records: dict[str, dict[str, Any]] = {}
+    for rec, ks in zip(group, key_sets, strict=True):
+        unique = ks - shared_keys
+        if not unique:
+            return None  # can't distinguish this record's branch
+        for ns_key in sorted(unique):
+            branch_records[ns_key] = rec
+
+    return branch_records
+
+
+def _merge_group_deep(group: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge a group of records using deep_merge_record (legacy/aggregation path)."""
+    merged: dict[str, Any] = {}
+    for record in group:
+        deep_merge_record(merged, record)
+    return merged
+
+
 def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> list[Any]:
-    """Merge records sharing the same correlation key (reduce_key -> parent_target_id -> source_guid)."""
-    records_by_key: dict[str, dict] = {}
+    """Merge records sharing the same correlation key.
+
+    For same-source fan-in (no ``reduce_key``), uses ``merge_branch_records``
+    so each branch contributes only its own namespace and upstream is preserved
+    from the base record.  For ``reduce_key`` aggregation (different sources
+    grouped together), uses ``deep_merge_record``.
+    """
+    groups_by_key: dict[str, list[dict[str, Any]]] = {}
     records_without_key: list[Any] = []
 
-    key_candidates = []
+    key_candidates: list[str] = []
     if reduce_key:
         key_candidates.append(reduce_key)
     key_candidates.extend(["root_target_id", "parent_target_id", "source_guid"])
@@ -149,15 +201,31 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
             continue
 
         correlation_value = get_correlation_value(record, key_candidates)
-
         if correlation_value:
-            if correlation_value not in records_by_key:
-                records_by_key[correlation_value] = {}
-            deep_merge_record(records_by_key[correlation_value], record)
+            groups_by_key.setdefault(correlation_value, []).append(record)
         else:
             records_without_key.append(record)
 
-    return list(records_by_key.values()) + records_without_key
+    merged_results: list[Any] = []
+    for group in groups_by_key.values():
+        if len(group) == 1:
+            merged_results.append(group[0])
+            continue
+
+        if reduce_key:
+            merged_results.append(_merge_group_deep(group))
+            continue
+
+        branch_mapping = _identify_branch_mapping(group)
+        if branch_mapping is not None:
+            merged = merge_branch_records(branch_mapping, base_record=group[0])
+            for rec in group[1:]:
+                _populate_lineage_sources(merged, rec)
+            merged_results.append(merged)
+        else:
+            merged_results.append(_merge_group_deep(group))
+
+    return merged_results + records_without_key
 
 
 def merge_json_files(file_paths: list[Path], reduce_key: str | None = None) -> list[Any]:

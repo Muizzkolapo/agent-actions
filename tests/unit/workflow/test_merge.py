@@ -5,6 +5,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from agent_actions.workflow.merge import (
+    _identify_branch_mapping,
+    _merge_group_deep,
     deep_merge_record,
     get_correlation_value,
     merge_json_files,
@@ -479,3 +481,281 @@ class TestMergeJsonFiles:
             assert len(result) == 1
             assert result[0]["a"] == 1
             assert result[0]["b"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Fan-in merge via merge_branch_records (spec 205)
+# ---------------------------------------------------------------------------
+
+
+class TestIdentifyBranchMapping:
+    """Tests for _identify_branch_mapping helper."""
+
+    def test_two_branches_with_unique_namespaces(self):
+        """Each record has one unique namespace — clean mapping."""
+        group = [
+            {
+                "content": {
+                    "source": {"url": "x"},
+                    "extract": {"text": "y"},
+                    "classify": {"topic": "z"},
+                }
+            },
+            {
+                "content": {
+                    "source": {"url": "x"},
+                    "extract": {"text": "y"},
+                    "enrich": {"summary": "w"},
+                }
+            },
+        ]
+        mapping = _identify_branch_mapping(group)
+
+        assert mapping is not None
+        assert set(mapping.keys()) == {"classify", "enrich"}
+        assert mapping["classify"] is group[0]
+        assert mapping["enrich"] is group[1]
+
+    def test_three_branches(self):
+        """Three-way fan-in — one unique namespace each."""
+        group = [
+            {"content": {"source": {}, "classify": {"c": 1}}},
+            {"content": {"source": {}, "enrich": {"e": 2}}},
+            {"content": {"source": {}, "sentiment": {"s": 3}}},
+        ]
+        mapping = _identify_branch_mapping(group)
+
+        assert mapping is not None
+        assert set(mapping.keys()) == {"classify", "enrich", "sentiment"}
+
+    def test_multi_namespace_record_diamond(self):
+        """Record with multiple unique namespaces — each becomes a branch entry."""
+        group = [
+            {"content": {"source": {}, "select_pattern": {"p": 1}}},
+            {
+                "content": {
+                    "source": {},
+                    "gen_alt_1": {"a": 2},
+                    "merge_alts": {"m": 3},
+                }
+            },
+        ]
+        mapping = _identify_branch_mapping(group)
+
+        assert mapping is not None
+        assert set(mapping.keys()) == {"select_pattern", "gen_alt_1", "merge_alts"}
+        assert mapping["select_pattern"] is group[0]
+        assert mapping["gen_alt_1"] is group[1]
+        assert mapping["merge_alts"] is group[1]
+
+    def test_identical_schemas_returns_none(self):
+        """Records with identical content keys — cannot identify branches."""
+        group = [
+            {"content": {"source": {}, "action": {"v": 1}}},
+            {"content": {"source": {}, "action": {"v": 2}}},
+        ]
+        result = _identify_branch_mapping(group)
+        assert result is None
+
+    def test_no_content_dict_returns_none(self):
+        """Records without content dicts — fallback."""
+        group = [{"field_a": "A"}, {"field_b": "B"}]
+        result = _identify_branch_mapping(group)
+        assert result is None
+
+    def test_non_dict_content_returns_none(self):
+        """Records with non-dict content — fallback."""
+        group = [{"content": "string"}, {"content": "other"}]
+        result = _identify_branch_mapping(group)
+        assert result is None
+
+    def test_one_record_no_unique_returns_none(self):
+        """If one record has no unique namespace, returns None even if others do."""
+        group = [
+            {"content": {"shared": {}, "unique_a": {}}},
+            {"content": {"shared": {}}},
+        ]
+        result = _identify_branch_mapping(group)
+        assert result is None
+
+
+class TestFanInViaPrimitive:
+    """Tests for merge_records_by_key routing fan-in through merge_branch_records."""
+
+    def test_fan_in_preserves_upstream_from_base(self):
+        """The silent overwrite bug: base upstream is canonical, branch upstream ignored."""
+        branch_a = {
+            "source_guid": "guid-1",
+            "node_id": "classify_abc",
+            "content": {
+                "source": {"url": "http://doc.com"},
+                "extract": {"text": "hello", "_retry_count": 1},
+                "classify": {"topic": "science"},
+            },
+        }
+        branch_b = {
+            "source_guid": "guid-1",
+            "node_id": "enrich_def",
+            "content": {
+                "source": {"url": "http://doc.com"},
+                "extract": {"text": "hello"},
+                "enrich": {"summary": "about science"},
+            },
+        }
+
+        result = merge_records_by_key([branch_a, branch_b])
+
+        assert len(result) == 1
+        content = result[0]["content"]
+        assert content["extract"]["_retry_count"] == 1, "Base upstream preserved"
+        assert content["classify"]["topic"] == "science"
+        assert content["enrich"]["summary"] == "about science"
+
+    def test_fan_in_diamond_all_namespaces(self):
+        """Diamond dependency — both branches' unique namespaces present."""
+        records = [
+            {
+                "source_guid": "sg-1",
+                "content": {
+                    "source": {"url": "x"},
+                    "generate": {"code": "pass"},
+                    "select_pattern": {"pattern": "scenario"},
+                },
+            },
+            {
+                "source_guid": "sg-1",
+                "content": {
+                    "source": {"url": "x"},
+                    "generate": {"code": "pass"},
+                    "gen_alt_1": {"alt": "A"},
+                    "merge_alts": {"merged": True},
+                },
+            },
+        ]
+
+        result = merge_records_by_key(records)
+        assert len(result) == 1
+
+        content = result[0]["content"]
+        assert set(content.keys()) == {
+            "source",
+            "generate",
+            "select_pattern",
+            "gen_alt_1",
+            "merge_alts",
+        }
+        assert content["select_pattern"]["pattern"] == "scenario"
+        assert content["gen_alt_1"]["alt"] == "A"
+        assert content["merge_alts"]["merged"] is True
+
+    def test_reduce_key_uses_deep_merge(self):
+        """reduce_key aggregation always uses deep_merge_record, not the primitive."""
+        records = [
+            {"custom_id": "123", "source_guid": "s1", "content": {"ns_a": {"v": 1}}},
+            {"custom_id": "123", "source_guid": "s2", "content": {"ns_b": {"v": 2}}},
+        ]
+
+        result = merge_records_by_key(records, reduce_key="custom_id")
+
+        assert len(result) == 1
+        content = result[0]["content"]
+        assert "ns_a" in content
+        assert "ns_b" in content
+
+    def test_identical_schemas_fallback(self):
+        """Records with identical content keys fall back to deep_merge_record."""
+        records = [
+            {
+                "source_guid": "sg-1",
+                "content": {"shared": {"a": 1}, "action": {"v": 1}},
+            },
+            {
+                "source_guid": "sg-1",
+                "content": {"shared": {"a": 1}, "action": {"v": 2}},
+            },
+        ]
+
+        result = merge_records_by_key(records)
+
+        assert len(result) == 1
+        # deep_merge_record: last-writer-wins on content.update
+        assert result[0]["content"]["action"]["v"] == 2
+
+    def test_single_record_group_returned_as_is(self):
+        """Single-record group needs no merge — returned directly."""
+        record = {"source_guid": "unique-1", "content": {"ns": {"v": 1}}}
+
+        result = merge_records_by_key([record])
+
+        assert len(result) == 1
+        assert result[0] is record
+
+    def test_fan_in_lineage_sources_populated(self):
+        """lineage_sources tracks leaf node_ids after merge_branch_records."""
+        records = [
+            {
+                "source_guid": "sg-1",
+                "node_id": "branch_a_001",
+                "lineage": ["root_0", "branch_a_001"],
+                "content": {"shared": {}, "field_a": {"a": 1}},
+            },
+            {
+                "source_guid": "sg-1",
+                "node_id": "branch_b_002",
+                "lineage": ["root_0", "branch_b_002"],
+                "content": {"shared": {}, "field_b": {"b": 2}},
+            },
+        ]
+
+        result = merge_records_by_key(records)
+
+        assert len(result) == 1
+        merged = result[0]
+        assert merged["lineage_sources"] == ["branch_a_001", "branch_b_002"]
+        assert "branch_a_001" in merged["lineage"]
+        assert "branch_b_002" in merged["lineage"]
+
+    def test_fan_in_three_way_lineage_sources(self):
+        """Three-way fan-in populates all leaf node_ids in lineage_sources."""
+        records = [
+            {
+                "source_guid": "sg-1",
+                "node_id": "node_a",
+                "content": {"upstream": {}, "branch_a": {"a": 1}},
+            },
+            {
+                "source_guid": "sg-1",
+                "node_id": "node_b",
+                "content": {"upstream": {}, "branch_b": {"b": 2}},
+            },
+            {
+                "source_guid": "sg-1",
+                "node_id": "node_c",
+                "content": {"upstream": {}, "branch_c": {"c": 3}},
+            },
+        ]
+
+        result = merge_records_by_key(records)
+
+        assert len(result) == 1
+        merged = result[0]
+        assert len(merged["lineage_sources"]) == 3
+        assert "node_a" in merged["lineage_sources"]
+        assert "node_b" in merged["lineage_sources"]
+        assert "node_c" in merged["lineage_sources"]
+
+
+class TestMergeGroupDeep:
+    """Tests for _merge_group_deep helper."""
+
+    def test_merges_group_into_single_record(self):
+        """Group of records merged via deep_merge_record."""
+        group = [
+            {"source_guid": "sg-1", "content": {"ns_a": {"a": 1}}},
+            {"source_guid": "sg-1", "content": {"ns_b": {"b": 2}}},
+        ]
+
+        result = _merge_group_deep(group)
+
+        assert result["content"]["ns_a"]["a"] == 1
+        assert result["content"]["ns_b"]["b"] == 2

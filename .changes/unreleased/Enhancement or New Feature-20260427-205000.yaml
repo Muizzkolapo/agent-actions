@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Fan-in merge uses merge_branch_records() — each branch contributes only its own namespace, eliminating silent upstream overwrite"
+time: 2026-04-27T20:50:00.000000Z
