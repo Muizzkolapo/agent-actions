@@ -328,7 +328,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
         agent_name="review_data",
     )
 
-    # Upstream data has extra fields (selectedAnswerer, validity) not in observe
+    # Upstream data with namespaced content (additive model)
     original_data = [
         {
             "source_guid": "sg-1",

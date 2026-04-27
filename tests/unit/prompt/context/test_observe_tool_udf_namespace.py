@@ -139,6 +139,8 @@ class TestFileModeObserveToolUdf:
         # Field extracted as flat key from namespace
         assert "question_type" in content
         assert content["question_type"] == "yes_no"
+        # Original namespace preserved
+        assert content["upstream"]["question_type"] == "yes_no"
 
 
 # ---------------------------------------------------------------------------

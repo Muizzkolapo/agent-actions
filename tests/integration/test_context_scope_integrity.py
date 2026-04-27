@@ -12,6 +12,7 @@ import pytest
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
+    _resolve_observe_refs_for_flat_keys,
     apply_context_scope,
     apply_context_scope_for_records,
 )
@@ -396,10 +397,6 @@ class TestObserveCollision:
         # The collision detection happens in _resolve_observe_refs regardless of
         # record data. Two namespaces with the same bare field name trigger
         # qualified output keys.
-        from agent_actions.prompt.context.scope_application import (
-            _resolve_observe_refs_for_flat_keys,
-        )
-
         resolved, _ = _resolve_observe_refs_for_flat_keys(
             ["dep_a.title", "dep_b.title"], action_name="test"
         )
@@ -431,10 +428,6 @@ class TestObserveCollision:
 
     def test_no_collision_preserves_bare_keys(self):
         """When field names are unique across namespaces, bare keys used (no qualification)."""
-        from agent_actions.prompt.context.scope_application import (
-            _resolve_observe_refs_for_flat_keys,
-        )
-
         resolved, _ = _resolve_observe_refs_for_flat_keys(
             ["dep_a.unique_field_x", "dep_b.unique_field_y"], action_name="test"
         )

@@ -263,6 +263,21 @@ class TestApplyContextScopeForRecords:
         # rewrite namespace absent — no fields injected
         assert "output" not in result[0]["content"]
 
+    def test_missing_namespace_explicit_ref_raises(self):
+        """Explicit ref to a guard-skipped action's namespace raises ConfigurationError."""
+        data = [
+            {
+                "content": {
+                    "generate": {"question": "Q?"},
+                }
+            },
+        ]
+        context_scope = {"observe": ["rewrite.output", "generate.question"]}
+        with pytest.raises(ConfigurationError):
+            apply_context_scope_for_records(
+                records=data, context_scope=context_scope, action_name="review"
+            )
+
     def test_no_observe_returns_data_as_is(self):
         data = [{"content": {"extract": {"a": 1}}}]
         result = apply_context_scope_for_records(records=data, context_scope={}, action_name="test")
@@ -308,10 +323,7 @@ class TestApplyContextScopeForRecords:
         assert result[0]["content"]["body"] == "Body A"
 
     def test_no_storage_lookup(self):
-        """With namespaced content, no historical storage lookup is needed.
-
-        All dependency data is on the record.
-        """
+        """With namespaced content, no historical storage lookup is needed."""
         data = [
             {
                 "content": {
