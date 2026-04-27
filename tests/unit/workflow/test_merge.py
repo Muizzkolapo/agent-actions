@@ -648,6 +648,34 @@ class TestFanInViaPrimitive:
         assert content["gen_alt_1"]["alt"] == "A"
         assert content["merge_alts"]["merged"] is True
 
+    def test_fan_in_first_record_upstream_is_canonical(self):
+        """First record's upstream is canonical — second record's upstream ignored."""
+        # Record B arrives second: its richer upstream (with _extra) is ignored
+        branch_a = {
+            "source_guid": "guid-1",
+            "content": {
+                "upstream": {"base": True},
+                "branch_a": {"a": 1},
+            },
+        }
+        branch_b = {
+            "source_guid": "guid-1",
+            "content": {
+                "upstream": {"base": True, "_extra": "from_b"},
+                "branch_b": {"b": 2},
+            },
+        }
+
+        result = merge_records_by_key([branch_a, branch_b])
+
+        assert len(result) == 1
+        content = result[0]["content"]
+        # A is first → its upstream is canonical
+        assert content["upstream"] == {"base": True}
+        assert "_extra" not in content["upstream"]
+        assert content["branch_a"]["a"] == 1
+        assert content["branch_b"]["b"] == 2
+
     def test_reduce_key_uses_deep_merge(self):
         """reduce_key aggregation always uses deep_merge_record, not the primitive."""
         records = [
@@ -659,8 +687,8 @@ class TestFanInViaPrimitive:
 
         assert len(result) == 1
         content = result[0]["content"]
-        assert "ns_a" in content
-        assert "ns_b" in content
+        assert content["ns_a"]["v"] == 1
+        assert content["ns_b"]["v"] == 2
 
     def test_identical_schemas_fallback(self):
         """Records with identical content keys fall back to deep_merge_record."""
@@ -688,7 +716,8 @@ class TestFanInViaPrimitive:
         result = merge_records_by_key([record])
 
         assert len(result) == 1
-        assert result[0] is record
+        assert result[0]["content"]["ns"]["v"] == 1
+        assert result[0]["source_guid"] == "unique-1"
 
     def test_fan_in_lineage_sources_populated(self):
         """lineage_sources tracks leaf node_ids after merge_branch_records."""

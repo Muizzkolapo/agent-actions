@@ -184,8 +184,12 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
 
     For same-source fan-in (no ``reduce_key``), uses ``merge_branch_records``
     so each branch contributes only its own namespace and upstream is preserved
-    from the base record.  For ``reduce_key`` aggregation (different sources
-    grouped together), uses ``deep_merge_record``.
+    from the base record (first record in the group).  For ``reduce_key``
+    aggregation (different sources grouped together), uses ``deep_merge_record``.
+
+    Note: When using the branch-records path, ``group[0]`` is the canonical
+    upstream source.  Its shared namespaces survive; other records' versions
+    of the same upstream namespaces are ignored.
     """
     groups_by_key: dict[str, list[dict[str, Any]]] = {}
     records_without_key: list[Any] = []
@@ -219,6 +223,8 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
         branch_mapping = _identify_branch_mapping(group)
         if branch_mapping is not None:
             merged = merge_branch_records(branch_mapping, base_record=group[0])
+            # merge_branch_records handles lineage dedup but not lineage_sources.
+            # merged["node_id"] == group[0]["node_id"] (from {**base, ...}).
             for rec in group[1:]:
                 _populate_lineage_sources(merged, rec)
             merged_results.append(merged)
