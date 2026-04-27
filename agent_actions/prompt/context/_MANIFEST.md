@@ -9,7 +9,7 @@ loaders for cataloging prompts at documentation time.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `__init__.py` | Module | Package init with public API re-exports: `apply_context_scope`, `apply_context_scope_for_records`, `build_field_context_with_history`, `format_llm_context`, `FRAMEWORK_NAMESPACES`. | — |
+| `__init__.py` | Module | Package init. Consumers import directly from submodules. | — |
 | `builder.py` | Module | `ContextBuilder` helpers that resolve field references into prompt context data. | `preprocessing`, `validation` |
 | ~~`scope.py`~~ | Deleted | Facade removed. Consumers import directly from the 6 `scope_*` modules. | — |
 | `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. | `preprocessing` |
