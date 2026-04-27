@@ -171,8 +171,8 @@ class TestRunDynamicAgentNamespaced:
 class TestTaskPreparerNormalizeNamespaced:
     """TaskPreparer._normalize_input extracts content without fallback."""
 
-    def test_subsequent_stage_missing_content_raises(self):
-        """Subsequent stage raises KeyError if 'content' key is missing."""
+    def test_subsequent_stage_missing_content_falls_back(self):
+        """Subsequent stage without 'content' key falls back to first-stage behavior."""
         from agent_actions.processing.prepared_task import PreparationContext
 
         preparer = TaskPreparer()
@@ -182,7 +182,8 @@ class TestTaskPreparerNormalizeNamespaced:
             is_first_stage=False,
         )
 
-        # Dict without "content" key — should raise, not silently use the whole dict
+        # Dict without "content" key — treated like first-stage record
         item = {"field": "value", "source_guid": "sg-1"}
-        with pytest.raises(KeyError, match="content"):
-            preparer._normalize_input(item, ctx)
+        content, source_guid, snapshot = preparer._normalize_input(item, ctx)
+        assert content is item
+        assert source_guid == "sg-1"
