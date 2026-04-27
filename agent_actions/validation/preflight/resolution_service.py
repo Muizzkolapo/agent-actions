@@ -2,7 +2,6 @@
 
 Performs a single comprehensive resolution pass across all actions:
 - API key environment variable presence
-- API key format validation (warns on suspicious patterns)
 - Seed file ($file:) reference existence
 - Provider capability / run_mode compatibility
 
@@ -11,7 +10,6 @@ Uses the same resolution utilities that runtime uses, ensuring no divergence.
 
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -35,12 +33,6 @@ _VENDOR_CONFIG_MAP: dict[str, type[BaseModel]] | None = None
 # Sentinel substrings in api_key_env_name that indicate no real key is needed.
 _NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
 
-# Vendor → compiled regex for expected API key format.
-# Based on client_base.py:redact_sensitive_data() and logging/filters.py,
-# widened where needed to match real key formats (e.g. OpenAI sk-proj-*).
-# Disabled: API key format validation is the provider's responsibility, not ours.
-# These patterns were too strict and caused false positives with valid keys.
-_VENDOR_KEY_PATTERNS: dict[str, re.Pattern[str]] = {}
 
 
 def _get_vendor_config_map() -> dict[str, type[BaseModel]]:
@@ -171,8 +163,6 @@ class WorkflowResolutionService:
         """
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
-        # Dedup format checks: multiple actions may share the same vendor+key.
-        format_checked: set[tuple[str, str]] = set()
         # Deduplicated vendor → resolved key value (first seen wins).
         vendor_keys: dict[str, str] = {}
 
@@ -228,35 +218,6 @@ class WorkflowResolutionService:
             # Track for downstream probing (first vendor occurrence wins).
             if vendor not in vendor_keys:
                 vendor_keys[vendor] = key_value
-
-            # Format check (warnings) — only for vendors with known patterns.
-            pattern = _VENDOR_KEY_PATTERNS.get(vendor)
-            if pattern is None:
-                continue
-
-            dedup_key = (vendor, key_value)
-            if dedup_key in format_checked:
-                continue
-            format_checked.add(dedup_key)
-
-            if not pattern.match(key_value):
-                ref = "(literal)" if is_literal else env_var_name
-                warnings.append(
-                    StaticTypeWarning(
-                        message=(
-                            f"API key for vendor '{vendor}' does not match "
-                            f"expected format (action '{action_name}')"
-                        ),
-                        location=FieldLocation(
-                            agent_name=action_name,
-                            config_field="api_key",
-                            raw_reference=ref,
-                        ),
-                        referenced_agent=action_name,
-                        referenced_field="api_key",
-                        hint=f"Expected pattern for {vendor}: {pattern.pattern}",
-                    )
-                )
 
         return errors, warnings, vendor_keys
 
