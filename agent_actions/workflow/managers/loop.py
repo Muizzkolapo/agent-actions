@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
-from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.content import get_existing_content
+from agent_actions.workflow.merge import merge_branch_records
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -340,34 +341,25 @@ class VersionOutputCorrelator:
         """Create a merged record from agent records."""
         base_record = next(iter(agent_records.values()))
 
-        merged_lineage = []
-        seen_lineage_entries: set = set()
-        for record in agent_records.values():
-            record_lineage = record.get("lineage", [])
-            if isinstance(record_lineage, list):
-                for entry in record_lineage:
-                    entry_key = entry if isinstance(entry, str) else entry.get("node_id")
-                    if entry_key and entry_key not in seen_lineage_entries:
-                        merged_lineage.append(entry)
-                        seen_lineage_entries.add(entry_key)
-
-        source_guid = base_record.get("source_guid")
-        if source_guid is None:
+        if base_record.get("source_guid") is None:
             logger.warning(
                 "Missing 'source_guid' in base record during version output correlation; "
                 "merged record will have source_guid=None"
             )
-        version_namespaces = self._merge_with_pattern(agent_records)
-        merged = RecordEnvelope.build_version_merge(version_namespaces, base_record)
-        merged_record = {
-            "source_guid": source_guid,
-            "target_id": base_record.get("target_id"),
-            "node_id": base_record.get("node_id"),
-            "lineage": merged_lineage,
-            "version_correlation_id": base_record.get("version_correlation_id"),
-            "content": merged["content"],
-            "_correlation_sources": list(agent_records.keys()),
-        }
+
+        # Version-specific invariant: every record must have its own namespace.
+        # merge_branch_records warns and skips; version merge requires strict enforcement.
+        for agent_name, record in agent_records.items():
+            content = get_existing_content(record)
+            if agent_name not in content:
+                raise DataValidationError(
+                    f"Version record missing own namespace '{agent_name}' in content",
+                    {"agent_name": agent_name, "content_keys": list(content.keys())},
+                )
+
+        merged_record = merge_branch_records(agent_records)
+        merged_record["_correlation_sources"] = list(agent_records.keys())
+
         all_expected_versions = set(version_outputs.keys())
         present_versions = set(agent_records.keys())
         missing_versions = all_expected_versions - present_versions
@@ -386,27 +378,6 @@ class VersionOutputCorrelator:
                 merged_record = self._create_merged_record(agent_records, version_outputs)
                 correlated_records.append(merged_record)
         return correlated_records
-
-    def _merge_with_pattern(self, agent_records: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        """Merge content into nested namespaces keyed by version agent name.
-
-        Each version record carries the full accumulated bus (all upstream
-        namespaces + its own output).  We extract only the version agent's
-        own output namespace — the upstream content is already preserved
-        once via ``existing`` in ``build_version_merge``.
-        """
-        from agent_actions.prompt.context.scope_namespace import _extract_content_data
-
-        merged_content = {}
-        for agent_name, record in agent_records.items():
-            content = _extract_content_data(record)
-            if agent_name not in content:
-                raise DataValidationError(
-                    f"Version record missing own namespace '{agent_name}' in content",
-                    {"agent_name": agent_name, "content_keys": list(content.keys())},
-                )
-            merged_content[agent_name] = content[agent_name]
-        return merged_content
 
     def _write_correlated_data(
         self,

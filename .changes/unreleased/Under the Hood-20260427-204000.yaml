@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Version merge now uses shared merge_branch_records() primitive instead of custom _merge_with_pattern + RecordEnvelope.build_version_merge"
+time: 2026-04-27T20:40:00.000000Z
