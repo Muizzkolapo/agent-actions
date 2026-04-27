@@ -150,7 +150,17 @@ class TaskPreparer:
             return item, source_guid, snapshot
         else:
             if isinstance(item, dict):
-                content = item["content"]
+                content = item.get("content")
+                if content is None:
+                    # First-stage batch records may not have content wrapper yet —
+                    # treat them like first-stage by extracting raw fields
+                    from agent_actions.utils.id_generation import IDGenerator
+
+                    source_guid = item.get("source_guid")
+                    if not source_guid:
+                        source_guid = IDGenerator.generate_deterministic_source_guid(item)
+                    snapshot = self._prepare_source_snapshot(item)
+                    return item, source_guid, snapshot
                 source_guid = item.get("source_guid")
                 if source_guid == "":
                     source_guid = None  # Preserve None for fallback lineage/recovery

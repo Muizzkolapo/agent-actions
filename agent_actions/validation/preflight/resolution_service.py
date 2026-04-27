@@ -38,13 +38,9 @@ _NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
 # Vendor → compiled regex for expected API key format.
 # Based on client_base.py:redact_sensitive_data() and logging/filters.py,
 # widened where needed to match real key formats (e.g. OpenAI sk-proj-*).
-_VENDOR_KEY_PATTERNS: dict[str, re.Pattern[str]] = {
-    "openai": re.compile(r"^sk-[a-zA-Z0-9-]{20,}$"),
-    "anthropic": re.compile(r"^(sk-ant-[a-zA-Z0-9-]{20,}|anthropic-[a-zA-Z0-9-]{20,})$"),
-    "gemini": re.compile(r"^AIza[a-zA-Z0-9_-]{35}$"),
-    "google": re.compile(r"^AIza[a-zA-Z0-9_-]{35}$"),
-    "groq": re.compile(r"^gsk_[a-zA-Z0-9]{20,}$"),
-}
+# Disabled: API key format validation is the provider's responsibility, not ours.
+# These patterns were too strict and caused false positives with valid keys.
+_VENDOR_KEY_PATTERNS: dict[str, re.Pattern[str]] = {}
 
 
 def _get_vendor_config_map() -> dict[str, type[BaseModel]]:

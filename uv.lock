@@ -10,7 +10,7 @@ resolution-markers = [
 
 [[package]]
 name = "agent-actions"
-version = "0.1.5"
+version = "0.1.13"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -90,15 +90,15 @@ requires-dist = [
     { name = "aiofiles", specifier = ">=24.0.0,<26" },
     { name = "anthropic", specifier = ">=0.30.0,<2" },
     { name = "beautifulsoup4", specifier = ">=4.12.3,<5" },
-    { name = "cohere", specifier = ">=5.0.0,<6" },
+    { name = "cohere", specifier = ">=5.0.0,<7" },
     { name = "defusedxml", specifier = ">=0.7.1,<1" },
     { name = "flask", specifier = ">=3.0.3,<4" },
-    { name = "flask-cors", specifier = ">=4.0.1,<5" },
+    { name = "flask-cors", specifier = ">=4.0.1,<7" },
     { name = "google-api-python-client", specifier = ">=2.130.0,<3" },
     { name = "google-genai", specifier = ">=1.0.0,<2" },
     { name = "groq", specifier = ">=0.1.0,<2" },
     { name = "ipdb", marker = "extra == 'dev'", specifier = ">=0.13.0,<1" },
-    { name = "ipython", marker = "extra == 'dev'", specifier = ">=8.0.0,<9" },
+    { name = "ipython", marker = "extra == 'dev'", specifier = ">=8.0.0,<10" },
     { name = "jinja2", specifier = ">=3.1.0,<4" },
     { name = "jsonschema", specifier = ">=4.23.0,<5" },
     { name = "lsprotocol", specifier = ">=2024.0.0,<2026" },
@@ -122,7 +122,7 @@ requires-dist = [
     { name = "python-docx", specifier = ">=1.1.2,<2" },
     { name = "python-dotenv", specifier = ">=1.0.1,<2" },
     { name = "pyyaml", specifier = ">=6.0.0,<7" },
-    { name = "rich", specifier = ">=13.0.0,<15" },
+    { name = "rich", specifier = ">=13.0.0,<16" },
     { name = "ruamel-yaml", specifier = ">=0.18.0,<1" },
     { name = "sentence-transformers", specifier = ">=2.2.2,<6" },
     { name = "spacy", marker = "extra == 'nlp'", specifier = ">=3.0.0,<4" },
@@ -137,7 +137,7 @@ provides-extras = ["dev", "nlp"]
 dev = [
     { name = "hypothesis", specifier = ">=6.139.2,<7" },
     { name = "ipdb", specifier = ">=0.13.0,<1" },
-    { name = "ipython", specifier = ">=8.0.0,<9" },
+    { name = "ipython", specifier = ">=8.0.0,<10" },
     { name = "mypy", specifier = ">=1.8.0,<2" },
     { name = "pandas-stubs", specifier = ">=2.0.3,<4" },
     { name = "pre-commit", specifier = ">=3.6.0,<4" },
