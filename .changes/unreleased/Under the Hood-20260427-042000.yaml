@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove dead `compiled_schema` field from ActionConfigDict — never populated by config expander"
+time: 2026-04-27T04:20:00.000000Z
