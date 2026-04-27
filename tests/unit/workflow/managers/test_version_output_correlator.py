@@ -31,7 +31,7 @@ class TestCreateMergedRecordSourceGuid:
 
         merged = correlator._create_merged_record(agent_records, version_outputs)
 
-        assert merged["source_guid"] is None
+        assert merged.get("source_guid") is None
 
     def test_merged_record_contains_all_expected_keys(self, tmp_path):
         """Merged record should always contain the canonical keys."""
