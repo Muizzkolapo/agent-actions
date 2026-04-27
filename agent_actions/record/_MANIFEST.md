@@ -17,7 +17,6 @@ Single authority for record content assembly. Every action type, granularity, an
 | `RecordEnvelope.build()` | `agent_io/target/{action}/` | Writes record with action output under namespace | - |
 | `RecordEnvelope.build_content()` | `agent_io/target/{action}/` | Writes content dict (no record wrapper) | - |
 | `RecordEnvelope.build_skipped()` | `agent_io/target/{action}/` | Writes record with null namespace for guard skip | - |
-| `RecordEnvelope.build_version_merge()` | `agent_io/target/{action}/` | Writes record merging version namespaces | `version_consumption` |
 | `TrackedItem` | `tools/{workflow}/*.py` | FILE tool input: dict subclass with hidden `_source_index` provenance | - |
 
 ## Dependencies
