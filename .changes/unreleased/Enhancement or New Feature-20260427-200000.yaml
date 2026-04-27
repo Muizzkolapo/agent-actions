@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Unified context_scope processing: FILE mode now enforces drop and passthrough directives via apply_context_scope_for_records()"
+time: 2026-04-27T20:00:00.000000Z
