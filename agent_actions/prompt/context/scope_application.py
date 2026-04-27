@@ -461,8 +461,11 @@ def apply_context_scope_for_records(
         return records
 
     # Check if any directive references the source namespace
-    all_refs = observe_refs + passthrough_refs + drop_refs
-    has_source_refs = any(ref.startswith("source.") for ref in all_refs)
+    has_source_refs = (
+        any(ref.startswith("source.") for ref in observe_refs)
+        or any(ref.startswith("source.") for ref in passthrough_refs)
+        or any(ref.startswith("source.") for ref in drop_refs)
+    )
 
     source_index = _build_source_index(source_data) if has_source_refs else {}
     resolved_observe, qualify_wildcards = (
@@ -476,11 +479,11 @@ def apply_context_scope_for_records(
 
     for record in records:
         content = get_existing_content(record)
+        sguid = record.get("source_guid")
 
         # Build field_context with source namespace resolved
         field_context = dict(content)
         if has_source_refs:
-            sguid = record.get("source_guid")
             if sguid not in source_cache:
                 source_cache[sguid] = _resolve_source_content(sguid, source_index, source_data)
             source_content = source_cache[sguid]
@@ -492,8 +495,8 @@ def apply_context_scope_for_records(
 
         # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
         enriched_content = deepcopy(content)
-        if has_source_refs and source_cache.get(record.get("source_guid")):
-            enriched_content["source"] = deepcopy(source_cache[record.get("source_guid")])
+        if has_source_refs and source_cache.get(sguid):
+            enriched_content["source"] = deepcopy(source_cache[sguid])
         _apply_drops_to_content(enriched_content, drop_refs)
         _inject_flat_observed_keys(enriched_content, resolved_observe, qualify_wildcards)
 
