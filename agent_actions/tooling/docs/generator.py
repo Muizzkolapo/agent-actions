@@ -251,7 +251,7 @@ class CatalogGenerator:
                 enriched_action = self._enrich_action_with_fields(action, action_schema)
 
                 # Attach tool function details for tool actions
-                if action.get("type") == "tool" and tool_functions_data:
+                if action.get("kind") == "tool" and tool_functions_data:
                     impl_name = action.get("implementation")
                     if impl_name and impl_name in tool_functions_data:
                         enriched_action["tool_function"] = tool_functions_data[impl_name]
@@ -319,9 +319,9 @@ class CatalogGenerator:
 
             # Count action types, schemas, and prompts
             for action in workflow["actions"].values():
-                if action.get("type") == DEFAULT_ACTION_KIND:
+                if action.get("kind") == DEFAULT_ACTION_KIND:
                     catalog["stats"]["llm_actions"] += 1
-                elif action.get("type") == "tool":
+                elif action.get("kind") == "tool":
                     catalog["stats"]["tool_actions"] += 1
 
                 # Count unique schemas (only string references, not inline dicts)
@@ -331,7 +331,7 @@ class CatalogGenerator:
 
                 # Count actions with prompts (LLM actions typically have prompts)
                 if action.get("prompt") or (
-                    action.get("type") == DEFAULT_ACTION_KIND and action.get("intent")
+                    action.get("kind") == DEFAULT_ACTION_KIND and action.get("intent")
                 ):
                     actions_with_prompts += 1
 
