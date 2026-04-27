@@ -388,13 +388,24 @@ class VersionOutputCorrelator:
         return correlated_records
 
     def _merge_with_pattern(self, agent_records: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        """Merge content into nested namespaces keyed by version agent name."""
+        """Merge content into nested namespaces keyed by version agent name.
+
+        Each version record carries the full accumulated bus (all upstream
+        namespaces + its own output).  We extract only the version agent's
+        own output namespace — the upstream content is already preserved
+        once via ``existing`` in ``build_version_merge``.
+        """
         from agent_actions.prompt.context.scope_namespace import _extract_content_data
 
         merged_content = {}
         for agent_name, record in agent_records.items():
             content = _extract_content_data(record)
-            merged_content[agent_name] = content
+            if agent_name not in content:
+                raise DataValidationError(
+                    f"Version record missing own namespace '{agent_name}' in content",
+                    {"agent_name": agent_name, "content_keys": list(content.keys())},
+                )
+            merged_content[agent_name] = content[agent_name]
         return merged_content
 
     def _write_correlated_data(

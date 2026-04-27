@@ -13,7 +13,7 @@ class TestCreateMergedRecordSourceGuid:
         """source_guid in base record is propagated to merged record."""
         correlator = self._make_correlator(tmp_path)
         agent_records = {
-            "v1": {"source_guid": "sg-abc", "content": {"x": 1}},
+            "v1": {"source_guid": "sg-abc", "content": {"v1": {"x": 1}}},
         }
         version_outputs = {"v1": [agent_records["v1"]]}
 
@@ -25,7 +25,7 @@ class TestCreateMergedRecordSourceGuid:
         """Missing source_guid should not raise KeyError (was a bug)."""
         correlator = self._make_correlator(tmp_path)
         agent_records = {
-            "v1": {"content": {"x": 1}},  # no source_guid
+            "v1": {"content": {"v1": {"x": 1}}},  # no source_guid
         }
         version_outputs = {"v1": [agent_records["v1"]]}
 
@@ -42,7 +42,7 @@ class TestCreateMergedRecordSourceGuid:
                 "target_id": "tid-1",
                 "node_id": "nid-1",
                 "version_correlation_id": "vcid-1",
-                "content": {"val": 42},
+                "content": {"v1": {"val": 42}},
             },
         }
         version_outputs = {"v1": [agent_records["v1"]]}
@@ -70,17 +70,17 @@ class TestCreateMergedRecordLineage:
             "v1": {
                 "source_guid": "sg-1",
                 "lineage": ["node_0_aaa", "node_1_v1"],
-                "content": {"x": 1},
+                "content": {"v1": {"x": 1}},
             },
             "v2": {
                 "source_guid": "sg-1",
                 "lineage": ["node_0_aaa", "node_1_v2"],
-                "content": {"x": 2},
+                "content": {"v2": {"x": 2}},
             },
             "v3": {
                 "source_guid": "sg-1",
                 "lineage": ["node_0_aaa", "node_1_v3"],
-                "content": {"x": 3},
+                "content": {"v3": {"x": 3}},
             },
         }
         version_outputs = {k: [v] for k, v in agent_records.items()}
@@ -97,8 +97,8 @@ class TestCreateMergedRecordLineage:
         """Merged lineage is empty list when no version has lineage."""
         correlator = self._make_correlator(tmp_path)
         agent_records = {
-            "v1": {"source_guid": "sg-1", "content": {"x": 1}},
-            "v2": {"source_guid": "sg-1", "content": {"x": 2}},
+            "v1": {"source_guid": "sg-1", "content": {"v1": {"x": 1}}},
+            "v2": {"source_guid": "sg-1", "content": {"v2": {"x": 2}}},
         }
         version_outputs = {k: [v] for k, v in agent_records.items()}
 
@@ -113,12 +113,12 @@ class TestCreateMergedRecordLineage:
             "v1": {
                 "source_guid": "sg-1",
                 "lineage": ["root", "mid", "v1_leaf"],
-                "content": {"x": 1},
+                "content": {"v1": {"x": 1}},
             },
             "v2": {
                 "source_guid": "sg-1",
                 "lineage": ["root", "mid", "v2_leaf"],
-                "content": {"x": 2},
+                "content": {"v2": {"x": 2}},
             },
         }
         version_outputs = {k: [v] for k, v in agent_records.items()}
@@ -137,7 +137,7 @@ class TestCreateMergedRecordLineage:
             "v1": {
                 "source_guid": "sg-1",
                 "lineage": ["node_0", "node_v1"],
-                "content": {"x": 1},
+                "content": {"v1": {"x": 1}},
             },
             # v2 and v3 missing for this source_guid
         }
