@@ -14,7 +14,7 @@ loaders for cataloging prompts at documentation time.
 | ~~`scope.py`~~ | Deleted | Facade removed. Consumers import directly from the 6 `scope_*` modules. | — |
 | `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. | `preprocessing` |
 | `scope_inference.py` | Module | Dependency inference: fan-in detection, version branch expansion, input/context source resolution. | `preprocessing` |
-| `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering, LLM context formatting. | `preprocessing` |
+| `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. | `preprocessing` |
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. | `preprocessing` |
 | `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces. | `preprocessing` |
 | `scope_file_mode.py` | Module | File-mode observe filtering with cross-namespace resolution. | `preprocessing` |
