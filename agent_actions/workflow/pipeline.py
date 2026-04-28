@@ -152,10 +152,20 @@ class ProcessingPipeline:
                 },
             )
 
-        # Enrichment pipeline shared by FILE mode paths
+        # Shared enrichment pipeline (FILE mode paths use directly,
+        # RECORD mode passes to UnifiedProcessor to avoid double allocation)
         from agent_actions.processing.enrichment import EnrichmentPipeline
 
         self.enrichment_pipeline = EnrichmentPipeline()
+
+        # RECORD mode processor — created once, reused per file
+        self._online_strategy = OnlineLLMStrategy(
+            agent_config=cast(dict[str, Any], config.action_config),
+            agent_name=config.action_name,
+        )
+        self._unified_processor = UnifiedProcessor(
+            enrichment_pipeline=self.enrichment_pipeline,
+        )
 
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
@@ -587,12 +597,7 @@ class ProcessingPipeline:
             )
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
-            strategy = OnlineLLMStrategy(
-                agent_config=cast(dict[str, Any], self.config.action_config),
-                agent_name=self.config.action_name,
-            )
-            unified = UnifiedProcessor()
-            output, stats = unified.process(data, context, strategy)
+            output, stats = self._unified_processor.process(data, context, self._online_strategy)
 
         # Signal node-level SKIP only when output is truly empty and the
         # only outcomes were guard-skip / guard-filter.  Guard-skipped

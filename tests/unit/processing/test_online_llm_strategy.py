@@ -10,7 +10,6 @@ from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 from agent_actions.processing.strategies.online_llm import (
     OnlineLLMStrategy,
     _create_item_context,
-    _is_empty_output,
 )
 from agent_actions.processing.types import (
     ProcessingContext,
@@ -427,30 +426,6 @@ class TestInvokeBatchLoop:
         results = strategy.invoke([], context)
 
         assert results == []
-
-
-# ---------------------------------------------------------------------------
-# _is_empty_output helper
-# ---------------------------------------------------------------------------
-
-
-class TestIsEmptyOutput:
-    """Tests for the _is_empty_output helper."""
-
-    def test_none_is_empty(self):
-        assert _is_empty_output(None) is True
-
-    def test_empty_dict_is_empty(self):
-        assert _is_empty_output({}) is True
-
-    def test_empty_list_is_empty(self):
-        assert _is_empty_output([]) is True
-
-    def test_non_empty_dict_not_empty(self):
-        assert _is_empty_output({"key": "val"}) is False
-
-    def test_string_not_empty(self):
-        assert _is_empty_output("text") is False
 
 
 # ---------------------------------------------------------------------------

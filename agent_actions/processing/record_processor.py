@@ -7,7 +7,6 @@ migrate to UnifiedProcessor.
 """
 
 import logging
-from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -28,7 +27,7 @@ from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
 
 from .enrichment import EnrichmentPipeline
 from .invocation import BatchProvider, InvocationStrategy, InvocationStrategyFactory
-from .strategies.online_llm import OnlineLLMStrategy
+from .strategies.online_llm import OnlineLLMStrategy, _create_item_context
 from .task_preparer import TaskPreparer
 from .types import (
     ProcessingContext,
@@ -235,8 +234,4 @@ class RecordProcessor:
         base_context: ProcessingContext, index: int, item: Any
     ) -> ProcessingContext:
         """Create per-item context with updated record_index."""
-        return replace(
-            base_context,
-            record_index=index,
-            current_item=item if isinstance(item, dict) else None,
-        )
+        return _create_item_context(base_context, index, item)

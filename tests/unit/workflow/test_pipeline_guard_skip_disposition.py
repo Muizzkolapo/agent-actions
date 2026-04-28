@@ -5,7 +5,7 @@ no exhausted retries), the pipeline writes DISPOSITION_SKIPPED at node
 level so the executor can mark the action as skipped in the tally.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -38,6 +38,8 @@ def pipeline_and_mocks(tmp_path):
     pipeline.granularity = "record"
     pipeline.is_tool_action = False
     pipeline.is_hitl_action = False
+    pipeline._unified_processor = MagicMock()
+    pipeline._online_strategy = MagicMock()
 
     return pipeline, config, str(input_file), str(tmp_path), str(output_dir)
 
@@ -60,10 +62,8 @@ class TestGuardSkipDisposition:
         if output is None:
             output = data
 
-        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
-            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
-                MockProcessor.return_value.process.return_value = (output, stats)
-                pipeline.process(file_path, base_dir, output_dir, data=data)
+        pipeline._unified_processor.process.return_value = (output, stats)
+        pipeline.process(file_path, base_dir, output_dir, data=data)
 
     def test_no_disposition_when_all_guard_skipped_with_output(self, pipeline_and_mocks):
         """Guard-skipped records ARE in output — no node-level skip, downstream proceeds."""
@@ -205,11 +205,9 @@ class TestToolActionEmptyOutputUsesGenericPath:
         pipeline.is_tool_action = True
         stats = CollectionStats(failed=1)
 
-        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
-            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
-                MockProcessor.return_value.process.return_value = ([], stats)
-                with pytest.raises(RuntimeError, match="produced 0 successful records"):
-                    pipeline.process(fp, base, out, data=[{"id": "1"}])
+        pipeline._unified_processor.process.return_value = ([], stats)
+        with pytest.raises(RuntimeError, match="produced 0 successful records"):
+            pipeline.process(fp, base, out, data=[{"id": "1"}])
 
 
 class TestZeroSuccessFailure:
@@ -228,10 +226,8 @@ class TestZeroSuccessFailure:
         if output is None:
             output = data  # default: mock returns input as output
 
-        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
-            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
-                MockProcessor.return_value.process.return_value = (output, stats)
-                pipeline.process(fp, base, out, data=data)
+        pipeline._unified_processor.process.return_value = (output, stats)
+        pipeline.process(fp, base, out, data=data)
 
     def test_all_failed_raises(self, pipeline_and_mocks):
         """All records FAILED with zero output → RuntimeError."""
@@ -326,10 +322,8 @@ class TestZeroSuccessWithRealResults:
             config.action_name,
             is_first_stage=False,
         )
-        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
-            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
-                MockProcessor.return_value.process.return_value = (output, stats)
-                pipeline.process(fp, base, out, data=data)
+        pipeline._unified_processor.process.return_value = (output, stats)
+        pipeline.process(fp, base, out, data=data)
 
     def test_all_exhausted_real_results_raises(self, pipeline_and_mocks):
         """Real EXHAUSTED ProcessingResults through actual collect_results → RuntimeError."""
