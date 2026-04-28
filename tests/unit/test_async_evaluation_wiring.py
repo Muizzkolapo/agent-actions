@@ -390,11 +390,11 @@ class TestWriteRecordDispositionsEvaluationExhausted:
             }
         ]
 
-        from agent_actions.llm.batch.services.processing_recovery import (
+        from agent_actions.processing.result_collector import (
             write_record_dispositions,
         )
 
-        write_record_dispositions(service, items, "my_action")
+        write_record_dispositions(service._storage_backend, items, "my_action")
         service._storage_backend.set_disposition.assert_called_once_with(
             "my_action", "sg-1", DISPOSITION_EXHAUSTED, reason="evaluation_exhausted:check_schema"
         )
@@ -412,11 +412,11 @@ class TestWriteRecordDispositionsEvaluationExhausted:
             }
         ]
 
-        from agent_actions.llm.batch.services.processing_recovery import (
+        from agent_actions.processing.result_collector import (
             write_record_dispositions,
         )
 
-        write_record_dispositions(service, items, "my_action")
+        write_record_dispositions(service._storage_backend, items, "my_action")
         service._storage_backend.set_disposition.assert_called_once()
         reason = service._storage_backend.set_disposition.call_args.kwargs["reason"]
         assert reason == "evaluation_exhausted:check_output"
@@ -426,11 +426,11 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         service = _make_service()
         items = [{"source_guid": "sg-1", "metadata": {"retry_exhausted": True}}]
 
-        from agent_actions.llm.batch.services.processing_recovery import (
+        from agent_actions.processing.result_collector import (
             write_record_dispositions,
         )
 
-        write_record_dispositions(service, items, "my_action")
+        write_record_dispositions(service._storage_backend, items, "my_action")
         service._storage_backend.set_disposition.assert_called_once_with(
             "my_action", "sg-1", DISPOSITION_EXHAUSTED, reason="retry_exhausted"
         )
@@ -442,11 +442,11 @@ class TestWriteRecordDispositionsEvaluationExhausted:
             {"source_guid": "sg-1", "metadata": {}, "_recovery": {"reprompt": {"passed": False}}}
         ]
 
-        from agent_actions.llm.batch.services.processing_recovery import (
+        from agent_actions.processing.result_collector import (
             write_record_dispositions,
         )
 
-        write_record_dispositions(service, items, "my_action")
+        write_record_dispositions(service._storage_backend, items, "my_action")
         reason = service._storage_backend.set_disposition.call_args.kwargs["reason"]
         assert reason == "evaluation_exhausted:unknown"
 
@@ -461,9 +461,9 @@ class TestWriteRecordDispositionsEvaluationExhausted:
             }
         ]
 
-        from agent_actions.llm.batch.services.processing_recovery import (
+        from agent_actions.processing.result_collector import (
             write_record_dispositions,
         )
 
-        write_record_dispositions(service, items, "my_action")
+        write_record_dispositions(service._storage_backend, items, "my_action")
         service._storage_backend.set_disposition.assert_not_called()

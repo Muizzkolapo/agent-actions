@@ -39,13 +39,13 @@ from agent_actions.llm.batch.services.processing_recovery import (
 from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
 )
-from agent_actions.llm.batch.services.processing_recovery import (
-    write_record_dispositions as _write_record_dispositions_impl,
-)
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter
+from agent_actions.processing.result_collector import (
+    write_record_dispositions as _write_record_dispositions_impl,
+)
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.utils.path_utils import ensure_directory_exists
 
@@ -604,9 +604,9 @@ class BatchProcessingService:
     def _write_record_dispositions(self, items: list[dict[str, Any]], action_name: str) -> None:
         """Write dispositions for non-success records in batch output.
 
-        Delegates to processing_recovery.write_record_dispositions.
+        Delegates to result_collector.write_record_dispositions.
         """
-        _write_record_dispositions_impl(self, items, action_name)
+        _write_record_dispositions_impl(self._storage_backend, items, action_name)
 
     def _update_prompt_trace_responses(self, items: list[dict[str, Any]], action_name: str) -> None:
         """Update prompt traces with batch responses. Telemetry — non-fatal."""

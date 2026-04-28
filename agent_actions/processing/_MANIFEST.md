@@ -22,7 +22,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `exhausted_builder.py` | Module | Builds reports once a workflow’s retries are exhausted. | `validation`, `logging` |
 | `helpers.py` | Module | Shared helpers (UUID construction, tuple flattening) for processors. | `processing` |
 | `record_processor.py` | Module | Base processor that glues loaders, transformers, and error handling. | `input`, `processing` |
-| `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. | `output` |
+| `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. Exports `write_node_level_disposition` (node-level skip/passthrough) and `write_record_dispositions` (batch record dispositions). All `set_disposition` calls (except executor-level) are centralized here. | `output` |
 | `prepared_task.py` | Module | `GuardStatus` enum (PASSED, SKIPPED, FILTERED, UPSTREAM_UNPROCESSED), `PreparedTask` dataclass, and `PreparationContext` (carries `mode: RunMode` directly). | `typing` |
 | `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. Short-circuits upstream-unprocessed records before context loading. | `input`, `prompt` |
 | `types.py` | Module | `ProcessingStatus` enum (SUCCESS, SKIPPED, FILTERED, FAILED, EXHAUSTED, DEFERRED, UNPROCESSED), `ProcessingResult` factories, and `ProcessingContext` (uses `RunMode` for mode). | `typing` |

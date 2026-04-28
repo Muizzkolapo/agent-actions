@@ -14,14 +14,10 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.record_processor import RecordProcessor
-from agent_actions.processing.result_collector import ResultCollector
+from agent_actions.processing.result_collector import ResultCollector, write_node_level_disposition
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.storage.backend import (
-    DISPOSITION_PASSTHROUGH,
-    DISPOSITION_SKIPPED,
-    NODE_LEVEL_RECORD_ID,
-)
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 
@@ -579,11 +575,11 @@ def _write_passthrough_result(
         output_directory=output_directory,
     )
     file_writer.write_target(result_data)
-    storage_backend.set_disposition(
+    write_node_level_disposition(
+        storage_backend,
         action_name,
-        NODE_LEVEL_RECORD_ID,
         DISPOSITION_PASSTHROUGH,
-        reason="All records tombstoned (initial stage)",
+        "All records tombstoned (initial stage)",
     )
 
 
@@ -677,20 +673,12 @@ def _process_online_mode_with_record_processor(
     # `not processed_items` prevents cascade-blocking when passthrough
     # data exists.
     if data_chunk and stats.only_guard_outcomes and not processed_items:
-        if ctx.storage_backend is not None:
-            try:
-                ctx.storage_backend.set_disposition(
-                    ctx.agent_name,
-                    NODE_LEVEL_RECORD_ID,
-                    DISPOSITION_SKIPPED,
-                    reason="All records filtered — no output produced",
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to write guard-skip disposition for %s: %s",
-                    ctx.agent_name,
-                    e,
-                )
+        write_node_level_disposition(
+            ctx.storage_backend,
+            ctx.agent_name,
+            DISPOSITION_SKIPPED,
+            "All records filtered — no output produced",
+        )
 
     # Zero-success failure: raise so executor marks FAILED and circuit
     # breaker skips downstream.  See _MANIFEST.md design note for rationale.
