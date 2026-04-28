@@ -223,9 +223,7 @@ class BatchResultProcessor:
 
         if ctx.agent_config:
             if custom_id in ctx.context_map:
-                generated_list = self._apply_context_passthrough(
-                    ctx, custom_id, generated_list, original_row
-                )
+                generated_list = self._apply_context_passthrough(ctx, custom_id, generated_list)
             elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
                 # Passthrough configured but custom_id missing from context_map
                 logger.warning(
@@ -286,45 +284,15 @@ class BatchResultProcessor:
         ctx: BatchProcessingContext,
         custom_id: str,
         generated_list: list[Any],
-        original_row: dict[str, Any],
     ) -> list[Any]:
-        """Apply context_scope.passthrough fields to generated items."""
+        """Apply stored context_scope.passthrough fields to generated items."""
         stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
         if stored_passthrough:
-            # generated_list contains flat LLM output dicts (no "content" wrapper yet)
             generated_list = [
                 {**item, **stored_passthrough} if isinstance(item, dict) else item
                 for item in generated_list
             ]
-
-        elif ctx.agent_config and ctx.agent_config.get("context_scope", {}).get("passthrough"):
-            passthrough_refs = ctx.agent_config.get("context_scope", {}).get("passthrough", [])
-            original_content = get_existing_content(original_row)
-
-            # Re-extract passthrough values from namespaced content,
-            # matching Path A's {ns_name: {field: value}} structure.
-            passthrough_data: dict[str, Any] = {}
-            for field_ref in passthrough_refs:
-                try:
-                    from agent_actions.prompt.context.scope_parsing import parse_field_reference
-
-                    ns_name, field_name = parse_field_reference(field_ref)
-                    ns_data = original_content.get(ns_name)
-                    if not isinstance(ns_data, dict) or not ns_data:
-                        continue
-                    if field_name == "*":
-                        passthrough_data.setdefault(ns_name, {}).update(ns_data)
-                    elif field_name in ns_data:
-                        passthrough_data.setdefault(ns_name, {})[field_name] = ns_data[field_name]
-                except ValueError:
-                    continue
-
-            if passthrough_data:
-                generated_list = [
-                    {**item, **passthrough_data} if isinstance(item, dict) else item
-                    for item in generated_list
-                ]
 
         return generated_list
 
