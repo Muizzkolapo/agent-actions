@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.helpers import run_dynamic_agent
+from agent_actions.processing.record_helpers import carry_framework_fields
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
@@ -488,11 +489,7 @@ def process_file_mode_hitl(
                                 hitl_output[key] = review_payload[key]
 
                 record = RecordEnvelope.build(context.agent_name, hitl_output, item)
-
-                # Carry framework fields that RecordEnvelope doesn't manage.
-                for field in ("target_id", "_unprocessed", "_recovery", "metadata"):
-                    if field in item:
-                        record[field] = item[field]
+                carry_framework_fields(item, record)
                 structured_data.append(record)
 
         # HITL FILE mode is always 1:1 — identity source_mapping ensures the

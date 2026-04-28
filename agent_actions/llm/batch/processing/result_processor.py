@@ -15,8 +15,13 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+from agent_actions.processing.record_helpers import (
+    apply_version_merge,
+    build_exhausted_tombstone,
+    build_tombstone,
+    carry_framework_fields,
+)
 from agent_actions.processing.types import ProcessingResult, RecoveryMetadata
-from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -235,31 +240,18 @@ class BatchResultProcessor:
 
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
-        from agent_actions.utils.content import is_version_merge
 
-        action_name = ctx.agent_config["action_name"]
-        # Version merge spread only applies to TOOL actions that merge pre-namespaced
-        # version data (e.g., aggregate_votes). LLM actions with version_consumption
-        # produce their OWN output that must be wrapped under their namespace.
-        is_tool = ctx.agent_config.get("kind") == "tool"
-        version_merge = is_version_merge(ctx.agent_config) and is_tool
         existing_content = get_existing_content(original_row)
 
         structured_items = []
         for item in generated_list:
             item_dict = item if isinstance(item, dict) else {}
-            if version_merge:
-                content = {**(existing_content or {}), **item_dict}
-            else:
-                content = RecordEnvelope.build_content(action_name, item_dict, existing_content)
+            content = apply_version_merge(ctx.agent_config, item_dict, existing_content)
             structured_items.append({"source_guid": original_source_guid, "content": content})
 
         # Batch items inherit target_id from the original input row.
-        original_target_id = original_row.get("target_id")
-        if original_target_id:
-            for item in structured_items:
-                if "target_id" not in item or not item["target_id"]:
-                    item["target_id"] = original_target_id
+        for item in structured_items:
+            carry_framework_fields(original_row, item, fields=("target_id",))
 
         record_index = ctx.reconciler.get_record_index(custom_id)
 
@@ -450,17 +442,12 @@ class BatchResultProcessor:
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         ctx.agent_config or {}
                     )
-                    existing = get_existing_content(original_row)
-                    exhausted_item = {
-                        "content": RecordEnvelope.build_content(
-                            stage6_action_name, empty_content, existing
-                        ),
-                        "source_guid": source_guid,
-                        "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
-                        "_unprocessed": True,
-                    }
-                    if original_row.get("target_id"):
-                        exhausted_item["target_id"] = original_row["target_id"]
+                    exhausted_item = build_exhausted_tombstone(
+                        stage6_action_name,
+                        original_row,
+                        empty_content,
+                        source_guid=source_guid,
+                    )
 
                     processing_context = BatchContextAdapter.to_processing_context(
                         agent_config=ctx.agent_config or {},
@@ -491,17 +478,12 @@ class BatchResultProcessor:
                     else:
                         reason = "batch_not_returned"
 
-                    passthrough_item = RecordEnvelope.build_skipped(
-                        stage6_action_name, original_row
+                    passthrough_item = build_tombstone(
+                        stage6_action_name,
+                        original_row,
+                        reason,
+                        source_guid=source_guid,
                     )
-                    passthrough_item["source_guid"] = source_guid
-                    passthrough_item["metadata"] = {
-                        "reason": reason,
-                        "agent_type": "tombstone",
-                    }
-                    passthrough_item["_unprocessed"] = True
-                    if original_row.get("target_id"):
-                        passthrough_item["target_id"] = original_row["target_id"]
 
                     processing_context = BatchContextAdapter.to_processing_context(
                         agent_config=ctx.agent_config or {},

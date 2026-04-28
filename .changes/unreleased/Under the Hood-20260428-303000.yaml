@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Extract shared record assembly helpers (build_tombstone, carry_framework_fields, apply_version_merge, extract_existing_content) into processing/record_helpers.py — eliminates duplicated tombstone construction, framework field carry-forward, and version-merge logic across online, batch, and FILE processing paths"
+time: 2026-04-28T30:30:00.000000Z

@@ -21,6 +21,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `error_handling.py` | Module | `ProcessorErrorHandlerMixin` for wrapping file loading/processing logic. | `logging` |
 | `exhausted_builder.py` | Module | Builds reports once a workflow’s retries are exhausted. | `validation`, `logging` |
 | `helpers.py` | Module | Shared helpers (UUID construction, tuple flattening) for processors. | `processing` |
+| `record_helpers.py` | Module | Shared record assembly helpers: `build_tombstone`, `build_exhausted_tombstone`, `carry_framework_fields`, `apply_version_merge`, `extract_existing_content`. Used by all processing paths (online, batch, FILE). | `record`, `processing` |
 | `record_processor.py` | Module | Base processor that glues loaders, transformers, and error handling. | `input`, `processing` |
 | `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. | `output` |
 | `prepared_task.py` | Module | `GuardStatus` enum (PASSED, SKIPPED, FILTERED, UPSTREAM_UNPROCESSED), `PreparedTask` dataclass, and `PreparationContext` (carries `mode: RunMode` directly). | `typing` |
