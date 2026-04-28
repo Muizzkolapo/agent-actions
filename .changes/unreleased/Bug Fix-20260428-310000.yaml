@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Batch mode now resolves generic api_key from action config via BaseClient.get_api_key(), fixing dual-path divergence where online mode resolved correctly but batch mode only checked vendor-specific fields"
+time: 2026-04-28T310000.000000Z
