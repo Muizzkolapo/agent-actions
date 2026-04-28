@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Add 4 missing test gaps: batch action_name injection, LLM version_merge negative test, conflicting namespace in merge_branch_records, single-branch merge"
+time: 2026-04-28T30:50:00.000000Z

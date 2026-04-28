@@ -358,3 +358,124 @@ class TestMergeBranchRecordsBaseRecordPreservation:
 
         assert base == base_copy
         assert branch == branch_copy
+
+
+class TestMergeBranchRecordsConflictingNamespace:
+    """Branch name colliding with an upstream namespace — last-writer-wins."""
+
+    def test_branch_name_collides_with_upstream_namespace(self):
+        """Branch named 'source' overwrites the upstream 'source' namespace."""
+        base = {
+            "source_guid": "guid-1",
+            "content": {
+                "source": {"url": "http://original.com"},
+                "extract": {"text": "hello"},
+            },
+        }
+        branch_source = {
+            "source_guid": "guid-1",
+            "content": {
+                "source": {"url": "http://overwritten.com"},
+                "extract": {"text": "hello"},
+            },
+        }
+
+        result = merge_branch_records({"source": branch_source}, base_record=base)
+        content = result["content"]
+
+        # Last-writer-wins: branch's namespace replaces base's upstream
+        assert content["source"] == {"url": "http://overwritten.com"}
+        # Non-colliding upstream preserved from base
+        assert content["extract"] == {"text": "hello"}
+
+    def test_branch_with_extra_namespaces_only_contributes_own(self):
+        """Branch with extra namespaces beyond its own: only its own namespace extracted."""
+        base = {
+            "source_guid": "guid-1",
+            "content": {
+                "source": {"url": "http://doc.com"},
+            },
+        }
+        # classify branch accumulated enrich namespace from a prior step,
+        # but only "classify" should be extracted
+        branch_classify = {
+            "source_guid": "guid-1",
+            "content": {
+                "source": {"url": "http://doc.com"},
+                "classify": {"topic": "science"},
+                "enrich": {"summary": "stale data from branch accumulation"},
+            },
+        }
+
+        result = merge_branch_records({"classify": branch_classify}, base_record=base)
+        content = result["content"]
+
+        # Only the branch's own namespace is contributed
+        assert content["classify"] == {"topic": "science"}
+        # "enrich" from the branch is NOT included — it's not the branch's own namespace
+        assert "enrich" not in content
+
+
+class TestMergeBranchRecordsSingleBranch:
+    """Degenerate case: single branch with no base record."""
+
+    def test_single_branch_no_base_record(self):
+        """Single branch with no base_record uses branch as base, contributes own namespace."""
+        branch = {
+            "source_guid": "guid-1",
+            "node_id": "classify_abc",
+            "content": {
+                "source": {"url": "http://doc.com"},
+                "classify": {"topic": "science"},
+            },
+            "lineage": ["source_0", "classify_abc"],
+        }
+
+        result = merge_branch_records({"classify": branch})
+        content = result["content"]
+
+        # Upstream preserved (from branch used as base)
+        assert content["source"] == {"url": "http://doc.com"}
+        # Branch's own namespace present
+        assert content["classify"] == {"topic": "science"}
+        # Metadata preserved
+        assert result["source_guid"] == "guid-1"
+        assert result["node_id"] == "classify_abc"
+        # Lineage preserved
+        assert "source_0" in result["lineage"]
+        assert "classify_abc" in result["lineage"]
+
+    def test_single_branch_with_base_record(self):
+        """Single branch with explicit base_record — base provides upstream."""
+        base = {
+            "source_guid": "guid-1",
+            "target_id": "target-1",
+            "content": {
+                "source": {"url": "http://doc.com"},
+                "extract": {"text": "hello", "_retry_count": 2},
+            },
+            "lineage": ["source_0", "extract_1"],
+        }
+        branch = {
+            "source_guid": "guid-1",
+            "content": {
+                "source": {"url": "http://doc.com"},
+                "extract": {"text": "hello"},
+                "classify": {"topic": "science"},
+            },
+            "lineage": ["source_0", "extract_1", "classify_2"],
+        }
+
+        result = merge_branch_records({"classify": branch}, base_record=base)
+        content = result["content"]
+
+        # Upstream from base (not branch) — base has _retry_count
+        assert content["extract"] == {"text": "hello", "_retry_count": 2}
+        assert content["source"] == {"url": "http://doc.com"}
+        # Branch contributes its namespace
+        assert content["classify"] == {"topic": "science"}
+        # Metadata from base
+        assert result["target_id"] == "target-1"
+        # Lineage deduplicated
+        assert result["lineage"].count("source_0") == 1
+        assert "classify_2" in result["lineage"]
