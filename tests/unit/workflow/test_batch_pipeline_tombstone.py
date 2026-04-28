@@ -10,7 +10,6 @@ from agent_actions.processing.types import ProcessingContext
 from agent_actions.workflow.config_pipeline import discover_workflow_udfs
 from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 from agent_actions.workflow.pipeline import BatchPipelineParams, PipelineConfig, ProcessingPipeline
-from agent_actions.workflow.pipeline_file_mode import process_file_mode_hitl
 
 # ---------------------------------------------------------------------------
 # C-1  ·  _handle_batch_generation — tombstone passthrough path exercises
@@ -121,12 +120,12 @@ class TestHITLFileModePropagatesExceptions:
         )
         with (
             patch(
-                "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+                "agent_actions.processing.strategies.hitl.run_dynamic_agent",
                 side_effect=RuntimeError("infra failure"),
             ),
             pytest.raises(RuntimeError, match="infra failure"),
         ):
-            process_file_mode_hitl(pipeline, [{"source_guid": "sg-1", "content": {}}], [], context)
+            pipeline._process_file_mode_hitl([{"source_guid": "sg-1", "content": {}}], [], context)
 
     def test_non_agent_error_propagates_as_original_type(self):
         pipeline = _make_pipeline()
@@ -137,12 +136,12 @@ class TestHITLFileModePropagatesExceptions:
         original = ValueError("bad value")
         with (
             patch(
-                "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+                "agent_actions.processing.strategies.hitl.run_dynamic_agent",
                 side_effect=original,
             ),
             pytest.raises(ValueError) as exc_info,
         ):
-            process_file_mode_hitl(pipeline, [{"source_guid": "sg-1", "content": {}}], [], context)
+            pipeline._process_file_mode_hitl([{"source_guid": "sg-1", "content": {}}], [], context)
 
         assert exc_info.value is original
 
@@ -156,12 +155,12 @@ class TestHITLFileModePropagatesExceptions:
         original = AgentActionsError("original app error")
         with (
             patch(
-                "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+                "agent_actions.processing.strategies.hitl.run_dynamic_agent",
                 side_effect=original,
             ),
             pytest.raises(AgentActionsError) as exc_info,
         ):
-            process_file_mode_hitl(pipeline, [{"source_guid": "sg-1", "content": {}}], [], context)
+            pipeline._process_file_mode_hitl([{"source_guid": "sg-1", "content": {}}], [], context)
 
         assert exc_info.value is original
 

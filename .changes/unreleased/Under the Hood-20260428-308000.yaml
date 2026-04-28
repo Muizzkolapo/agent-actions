@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Extract FileToolStrategy and HITLStrategy from pipeline_file_mode.py into processing/strategies/ package"
+time: 2026-04-28T30:80:00.000000Z

@@ -10,6 +10,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 | Sub-Module | Description |
 |------------|-------------|
 | [invocation](invocation/) | LLM invocation strategies (online/batch) for unified execution. |
+| [strategies](strategies/) | Pipeline-level processing strategies for FILE-granularity modes (`FileToolStrategy`, `HITLStrategy`). |
 | [recovery](recovery/_MANIFEST.md) | Retry, checkpoint, and recovery helpers for failed batches. |
 
 ## Modules

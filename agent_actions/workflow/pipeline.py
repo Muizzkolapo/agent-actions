@@ -18,6 +18,7 @@ from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector, write_node_level_disposition
+from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.record.envelope import RecordEnvelope
@@ -25,11 +26,7 @@ from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_S
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
-from agent_actions.workflow.pipeline_file_mode import (
-    prefilter_by_guard,
-    process_file_mode_hitl,
-    process_file_mode_tool,
-)
+from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -602,14 +599,16 @@ class ProcessingPipeline:
     def _process_file_mode_tool(
         self, data: list[dict], original_data: list[dict], context: ProcessingContext
     ) -> list:
-        """Delegator stub — see :func:`pipeline_file_mode.process_file_mode_tool`."""
-        return process_file_mode_tool(self, data, original_data, context)
+        """Delegate to FileToolStrategy for FILE-mode tool invocation."""
+        strategy = FileToolStrategy(self.record_processor.enrichment_pipeline)
+        return strategy.invoke(data, original_data, context)
 
     def _process_file_mode_hitl(
         self, data: list[dict], original_data: list[dict], context: ProcessingContext
     ) -> list:
-        """Delegator stub — see :func:`pipeline_file_mode.process_file_mode_hitl`."""
-        return process_file_mode_hitl(self, data, original_data, context)
+        """Delegate to HITLStrategy for FILE-mode HITL invocation."""
+        strategy = HITLStrategy(self.record_processor.enrichment_pipeline)
+        return strategy.invoke(data, original_data, context)
 
 
 def _build_skipped_results(
