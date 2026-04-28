@@ -17,7 +17,8 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
 
 
 def _make_agent_config(
-    vendor: str, api_key_env_name: str = "MY_CUSTOM_KEY",
+    vendor: str,
+    api_key_env_name: str = "MY_CUSTOM_KEY",
 ) -> dict:
     """Build a minimal agent config with the generic api_key field."""
     return {
@@ -42,8 +43,7 @@ def resolver():
 
 
 _PATCH_TARGET = (
-    "agent_actions.llm.batch.infrastructure.batch_client_resolver"
-    ".BatchClientFactory.create_client"
+    "agent_actions.llm.batch.infrastructure.batch_client_resolver.BatchClientFactory.create_client"
 )
 
 
@@ -55,7 +55,10 @@ class TestBatchApiKeyResolution:
         ["openai", "gemini", "anthropic", "groq", "mistral"],
     )
     def test_generic_api_key_resolved_for_all_vendors(
-        self, vendor, resolver, monkeypatch,
+        self,
+        vendor,
+        resolver,
+        monkeypatch,
     ):
         """api_key env var in config is resolved and passed to factory."""
         monkeypatch.setenv("MY_CUSTOM_KEY", "sk-resolved-secret")
@@ -72,7 +75,9 @@ class TestBatchApiKeyResolution:
             assert client_config["api_key"] == "sk-resolved-secret"
 
     def test_env_var_interpolation_syntax(
-        self, resolver, monkeypatch,
+        self,
+        resolver,
+        monkeypatch,
     ):
         """api_key using ${VAR} syntax is resolved correctly."""
         monkeypatch.setenv("INTERP_KEY", "sk-interpolated")
@@ -82,7 +87,8 @@ class TestBatchApiKeyResolution:
 
         with patch(_PATCH_TARGET, return_value=mock_client) as mock_create:
             config = _make_agent_config(
-                "openai", api_key_env_name="${INTERP_KEY}",
+                "openai",
+                api_key_env_name="${INTERP_KEY}",
             )
             resolver.get_for_config(config)
 
@@ -90,19 +96,24 @@ class TestBatchApiKeyResolution:
             assert client_config["api_key"] == "sk-interpolated"
 
     def test_missing_env_var_raises_configuration_error(
-        self, resolver, monkeypatch,
+        self,
+        resolver,
+        monkeypatch,
     ):
         """Missing env var named in api_key raises ConfigurationError."""
         monkeypatch.delenv("NONEXISTENT_KEY", raising=False)
 
         config = _make_agent_config(
-            "openai", api_key_env_name="NONEXISTENT_KEY",
+            "openai",
+            api_key_env_name="NONEXISTENT_KEY",
         )
         with pytest.raises(ConfigurationError, match="not set"):
             resolver.get_for_config(config)
 
     def test_no_api_key_in_config_passes_empty_config(
-        self, resolver, monkeypatch,
+        self,
+        resolver,
+        monkeypatch,
     ):
         """No api_key in config -> factory gets empty config dict."""
         mock_client = MagicMock()
@@ -120,7 +131,9 @@ class TestBatchApiKeyResolution:
             assert client_config == {}
 
     def test_empty_api_key_string_passes_empty_config(
-        self, resolver, monkeypatch,
+        self,
+        resolver,
+        monkeypatch,
     ):
         """Empty string api_key -> factory gets empty config dict."""
         mock_client = MagicMock()
@@ -146,10 +159,12 @@ class TestBatchCacheKeyUsesGenericApiKey:
 
     def test_different_api_keys_produce_different_cache_keys(self):
         key_a = BatchClientResolver._build_cache_key(
-            "openai", {"api_key": "KEY_A"},
+            "openai",
+            {"api_key": "KEY_A"},
         )
         key_b = BatchClientResolver._build_cache_key(
-            "openai", {"api_key": "KEY_B"},
+            "openai",
+            {"api_key": "KEY_B"},
         )
         assert key_a != key_b
 
