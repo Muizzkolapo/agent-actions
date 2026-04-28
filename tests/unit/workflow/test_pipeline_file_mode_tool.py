@@ -1307,9 +1307,8 @@ class TestExtractToolInput:
         """Refs that str.split accepted but parse_field_reference rejects.
 
         The old _extract_business_fields used str.split(".", 1) which would
-        parse ".field" as ns="" field="field", then silently miss because
-        content[""] doesn't exist. But "ns." would parse as ns="ns" field=""
-        and could match content[ns][""] if such a key existed.
+        parse ".field" as ns="" field="field", then match content[""]["leaked"].
+        "ns." would parse as ns="ns" field="" and match content[ns][""].
         parse_field_reference rejects both outright.
         """
         from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
