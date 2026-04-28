@@ -234,6 +234,13 @@ class TestApplyVersionMerge:
         result = apply_version_merge(config, {"b": 2}, {"a": {"x": 1}})
         assert result == {"a": {"x": 1}, "act": {"b": 2}}
 
+    def test_missing_action_name_raises_key_error(self):
+        """action_name is required — callers must validate before calling."""
+        import pytest
+
+        with pytest.raises(KeyError, match="action_name"):
+            apply_version_merge({"kind": "llm"}, {"b": 2}, None)
+
 
 # ---------------------------------------------------------------------------
 # extract_existing_content
