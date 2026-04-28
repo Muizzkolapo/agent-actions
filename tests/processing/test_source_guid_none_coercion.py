@@ -30,7 +30,9 @@ def _make_processor_and_context(agent_config=None):
     mock_strategy.invoke.return_value = mock_result
 
     processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-    processor._transform_response = MagicMock(return_value=[{"content": {"field": "value"}}])
+    processor._online_strategy._transform_response = MagicMock(
+        return_value=[{"content": {"field": "value"}}]
+    )
 
     context = ProcessingContext(
         agent_config=agent_config,
@@ -46,14 +48,23 @@ class TestSourceGuidNoneCoercion:
     def test_events_receive_empty_string_when_source_guid_is_none(self):
         """All events emitted during process() get source_guid='' when prepared.source_guid is None."""
         fired_events = []
+        collector = lambda e: fired_events.append(e)  # noqa: E731
 
-        with patch(
-            "agent_actions.processing.record_processor.fire_event",
-            side_effect=lambda e: fired_events.append(e),
+        with (
+            patch(
+                "agent_actions.processing.strategies.online_llm.fire_event",
+                side_effect=collector,
+            ),
+            patch(
+                "agent_actions.processing.record_processor.fire_event",
+                side_effect=collector,
+            ),
         ):
             processor, context = _make_processor_and_context()
 
-            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
+            with patch(
+                "agent_actions.processing.strategies.online_llm.get_task_preparer"
+            ) as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = None  # The key scenario
                 mock_prepared.source_snapshot = None
@@ -81,10 +92,15 @@ class TestSourceGuidNoneCoercion:
 
     def test_transform_response_receives_empty_string(self):
         """_transform_response is called with source_guid='' when prepared.source_guid is None."""
-        with patch("agent_actions.processing.record_processor.fire_event"):
+        with (
+            patch("agent_actions.processing.strategies.online_llm.fire_event"),
+            patch("agent_actions.processing.record_processor.fire_event"),
+        ):
             processor, context = _make_processor_and_context()
 
-            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
+            with patch(
+                "agent_actions.processing.strategies.online_llm.get_task_preparer"
+            ) as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = None
                 mock_prepared.source_snapshot = None
@@ -95,15 +111,20 @@ class TestSourceGuidNoneCoercion:
                 processor.process({"content": {"field": "value"}}, context)
 
         # _transform_response should have been called with "" as source_guid
-        call_args = processor._transform_response.call_args
+        call_args = processor._online_strategy._transform_response.call_args
         assert call_args[0][2] == ""  # 3rd positional arg is source_guid
 
     def test_processing_result_preserves_none_source_guid(self):
         """ProcessingResult.source_guid stays None — not coerced to ''."""
-        with patch("agent_actions.processing.record_processor.fire_event"):
+        with (
+            patch("agent_actions.processing.strategies.online_llm.fire_event"),
+            patch("agent_actions.processing.record_processor.fire_event"),
+        ):
             processor, context = _make_processor_and_context()
 
-            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
+            with patch(
+                "agent_actions.processing.strategies.online_llm.get_task_preparer"
+            ) as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = None
                 mock_prepared.source_snapshot = None

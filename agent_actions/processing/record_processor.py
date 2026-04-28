@@ -1,10 +1,15 @@
-"""Record-level processor: single-item processing pipeline."""
+"""Record-level processor: thin wrapper around OnlineLLMStrategy.
 
-import json
+Delegates per-record logic to OnlineLLMStrategy.process_record() and adds
+enrichment + completion events on top.  Other callers (initial_pipeline,
+data_generator) still use this class.  Will be removed once all callers
+migrate to UnifiedProcessor.
+"""
+
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, SchemaValidationError
@@ -15,22 +20,16 @@ from agent_actions.logging.events.data_pipeline_events import (
     BatchDataProcessingCompleteEvent,
     BatchProcessingProgressEvent,
     BatchProcessingStartedEvent,
-    RecordEmptyOutputEvent,
-    RecordFilteredEvent,
     RecordProcessingCompleteEvent,
-    RecordProcessingStartedEvent,
-    RecordTransformedEvent,
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
 
 from .enrichment import EnrichmentPipeline
-from .exhausted_builder import ExhaustedRecordBuilder
 from .invocation import BatchProvider, InvocationStrategy, InvocationStrategyFactory
-from .prepared_task import GuardStatus, PreparationContext
-from .record_helpers import build_exhausted_tombstone, build_tombstone, extract_existing_content
-from .task_preparer import TaskPreparer, get_task_preparer
+from .strategies.online_llm import OnlineLLMStrategy
+from .task_preparer import TaskPreparer
 from .types import (
     ProcessingContext,
     ProcessingResult,
@@ -40,17 +39,8 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
-def _is_empty_output(response: Any) -> bool:
-    """Check if a tool/LLM response is effectively empty."""
-    if response is None:
-        return True
-    if isinstance(response, dict | list) and len(response) == 0:
-        return True
-    return False
-
-
 class RecordProcessor:
-    """Unified processor for first-stage and subsequent-stage record processing."""
+    """Thin wrapper: delegates per-record logic to OnlineLLMStrategy, adds enrichment."""
 
     @classmethod
     def create(
@@ -114,235 +104,24 @@ class RecordProcessor:
 
         self.enrichment_pipeline = EnrichmentPipeline()
 
-        self._strategy = strategy or InvocationStrategyFactory.create(
+        invocation_strategy = strategy or InvocationStrategyFactory.create(
             mode=mode,
             agent_config=agent_config,
             provider=provider,
         )
+        self._online_strategy = OnlineLLMStrategy(
+            agent_config=agent_config,
+            agent_name=agent_name,
+            invocation_strategy=invocation_strategy,
+        )
 
     def process(self, item: Any, context: ProcessingContext) -> ProcessingResult:
         """Process a single record through the full pipeline (prepare, invoke, transform, enrich)."""
-        prep_context = PreparationContext.from_processing_context(context)
-        prep_context.current_item = item if isinstance(item, dict) else None
-
-        task_preparer = get_task_preparer()
-        prepared = task_preparer.prepare(item, prep_context)
-
-        input_record = item if isinstance(item, dict) else None
-        source_guid = prepared.source_guid
-        source_snapshot = prepared.source_snapshot
-        content = prepared.original_content
-
-        fire_event(
-            RecordProcessingStartedEvent(
-                action_name=context.agent_name,
-                record_index=context.record_index,
-                source_guid=source_guid or "",
-            )
-        )
-
-        if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
-            preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
-            preserved_item["_unprocessed"] = True
-            if not isinstance(preserved_item.get("metadata"), dict):
-                preserved_item["metadata"] = {}
-            if "agent_type" not in preserved_item["metadata"]:
-                preserved_item["metadata"]["agent_type"] = "tombstone"
-            result = ProcessingResult.unprocessed(
-                data=[preserved_item],
-                reason="upstream_unprocessed",
-                source_guid=source_guid,
-                source_snapshot=source_snapshot,
-                input_record=input_record,
-            )
-            return self._finalize_result(result, context, source_guid)
-
-        if prepared.guard_status == GuardStatus.FILTERED:
-            fire_event(
-                RecordFilteredEvent(
-                    action_name=context.agent_name,
-                    record_index=context.record_index,
-                    source_guid=source_guid or "",
-                    filter_reason="guard_filter",
-                )
-            )
-            return ProcessingResult.filtered(
-                source_guid=source_guid,
-                source_snapshot=source_snapshot,
-                input_record=input_record,
-            )
-
-        if prepared.guard_status == GuardStatus.SKIPPED:
-            fire_event(
-                RecordFilteredEvent(
-                    action_name=context.agent_name,
-                    record_index=context.record_index,
-                    source_guid=source_guid or "",
-                    filter_reason=f"guard_{prepared.guard_behavior}",
-                )
-            )
-            tombstone = build_tombstone(
-                context.action_name,
-                input_record,
-                f"guard_{prepared.guard_behavior}",
-                source_guid=source_guid,
-            )
-            result = ProcessingResult.skipped(
-                passthrough_data=tombstone,
-                reason=f"guard_{prepared.guard_behavior}",
-                source_guid=source_guid,
-            )
-            return self._finalize_result(result, context, source_guid)
-
-        invocation_result = self._strategy.invoke(prepared, context)
-
-        response = invocation_result.response
-        executed = invocation_result.executed
-        passthrough_fields = invocation_result.passthrough_fields
-        recovery_metadata = invocation_result.recovery_metadata
-
-        if (
-            context.storage_backend is not None
-            and executed
-            and response is not None
-            and source_guid is not None
-        ):
-            context.storage_backend.update_prompt_trace_response(
-                action_name=context.agent_name,
-                record_id=source_guid,
-                response_text=json.dumps(response, ensure_ascii=False, default=str),
-            )
-
-        if invocation_result.deferred:
-            return ProcessingResult.deferred(
-                task_id=invocation_result.task_id or "",
-                source_guid=source_guid,
-                passthrough_fields=passthrough_fields,
-                source_snapshot=source_snapshot,
-                input_record=input_record,
-            )
-
-        if not executed:
-            if response is None:
-                if recovery_metadata and recovery_metadata.retry:
-                    empty_content = ExhaustedRecordBuilder.build_empty_content(
-                        cast(dict[str, Any], context.agent_config)
-                    )
-                    tombstone = build_exhausted_tombstone(
-                        context.action_name,
-                        input_record,
-                        empty_content,
-                        source_guid=source_guid,
-                    )
-                    result = ProcessingResult.exhausted(
-                        error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
-                        data=[tombstone],
-                        source_guid=source_guid,
-                        recovery_metadata=recovery_metadata,
-                        source_snapshot=source_snapshot,
-                        input_record=input_record,
-                    )
-                    return self._finalize_result(result, context, source_guid)
-                fire_event(
-                    RecordFilteredEvent(
-                        action_name=context.agent_name,
-                        record_index=context.record_index,
-                        source_guid=source_guid or "",
-                        filter_reason="llm_layer_guard_filter",
-                    )
-                )
-                return ProcessingResult.filtered(
-                    source_guid=source_guid,
-                    source_snapshot=source_snapshot,
-                    input_record=input_record,
-                )
-            else:
-                fire_event(
-                    RecordFilteredEvent(
-                        action_name=context.agent_name,
-                        record_index=context.record_index,
-                        source_guid=source_guid or "",
-                        filter_reason="llm_layer_guard_skip",
-                    )
-                )
-                tombstone = build_tombstone(
-                    context.action_name,
-                    input_record,
-                    "guard_skip",
-                    source_guid=source_guid,
-                )
-                result = ProcessingResult.unprocessed(
-                    data=[tombstone],
-                    reason="guard_skip",
-                    source_guid=source_guid,
-                    source_snapshot=source_snapshot,
-                    input_record=input_record,
-                )
-                return self._finalize_result(result, context, source_guid)
-
-        if _is_empty_output(response):
-            on_empty = context.agent_config.get("on_empty", "warn")
-            input_field_count = len(content) if isinstance(content, dict) else 0
-
-            fire_event(
-                RecordEmptyOutputEvent(
-                    action_name=context.agent_name,
-                    record_index=context.record_index,
-                    source_guid=source_guid or "",
-                    input_field_count=input_field_count,
-                    output=response,
-                    on_empty=on_empty,
-                )
-            )
-
-            if on_empty == "error":
-                raise EmptyOutputError(
-                    f"Action '{context.agent_name}' produced empty output for record "
-                    f"'{source_guid}' (on_empty=error)",
-                    context={
-                        "agent_name": context.agent_name,
-                        "source_guid": source_guid,
-                        "output": str(response),
-                    },
-                )
-
-        item_existing_content = (
-            extract_existing_content(item, is_first_stage=context.is_first_stage)
-            if isinstance(item, dict)
-            else None
-        )
-        transformed = self._transform_response(
-            response,
-            content,
-            source_guid or "",
-            passthrough_fields,
-            context,
-            existing_content=item_existing_content,
-        )
-
-        input_size = 1 if not isinstance(response, list) else len(response)
-        output_size = len(transformed) if isinstance(transformed, list) else 1
-        fire_event(
-            RecordTransformedEvent(
-                action_name=context.agent_name,
-                record_index=context.record_index,
-                source_guid=source_guid or "",
-                input_size=input_size,
-                output_size=output_size,
-            )
-        )
-
-        result = ProcessingResult.success(
-            data=transformed,
-            source_guid=source_guid,
-            passthrough_fields=passthrough_fields,
-            source_snapshot=source_snapshot,
-            raw_response=response,
-            recovery_metadata=recovery_metadata,
-            input_record=input_record,
-        )
-
-        return self._finalize_result(result, context, source_guid)
+        result = self._online_strategy.process_record(item, context, skip_guard=False)
+        # DEFERRED and FILTERED results skip enrichment (matching old behavior)
+        if result.status in (ProcessingStatus.DEFERRED, ProcessingStatus.FILTERED):
+            return result
+        return self._finalize_result(result, context, result.source_guid)
 
     def process_batch(self, items: list[Any], context: ProcessingContext) -> list[ProcessingResult]:
         """Process multiple records, capturing per-item failures without aborting the batch."""
@@ -450,30 +229,6 @@ class RecordProcessor:
             )
         )
         return enriched_result
-
-    def _transform_response(
-        self,
-        response: Any,
-        content: Any,
-        source_guid: str,
-        passthrough_fields: dict[str, Any],
-        context: ProcessingContext,
-        existing_content: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Transform LLM response to output format."""
-        from agent_actions.processing.helpers import (
-            transform_with_passthrough,
-        )
-
-        return transform_with_passthrough(
-            response,
-            content,
-            source_guid,
-            cast(dict[str, Any], context.agent_config),
-            action_name=context.action_name,
-            passthrough_fields=passthrough_fields,
-            existing_content=existing_content,
-        )
 
     @staticmethod
     def _create_item_context(

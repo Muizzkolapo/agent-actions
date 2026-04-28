@@ -16,10 +16,11 @@ from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
-from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector, write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
+from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
@@ -127,6 +128,20 @@ class ProcessingPipeline:
         # batch-mode bypass works regardless of which field the user sets.
         self.is_tool_action = self.action_kind == "tool" or self.model_vendor == "tool"
         self.is_hitl_action = self.action_kind == "hitl" or self.model_vendor == "hitl"
+
+        # HITL actions require FILE granularity
+        if self.is_hitl_action and self.granularity != "file":
+            from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
+
+            raise ConfigurationError(
+                HITL_FILE_GRANULARITY_ERROR,
+                context={
+                    "action_name": config.action_name,
+                    "granularity": self.granularity,
+                    "kind": self.action_kind,
+                },
+            )
+
         if processor_factory is None:
             raise DependencyError(
                 "ProcessingPipeline requires processor_factory",
@@ -137,10 +152,11 @@ class ProcessingPipeline:
                 },
             )
 
-        self.record_processor = RecordProcessor.create(
-            agent_config=cast(dict[str, Any], config.action_config),
-            agent_name=config.action_name,
-        )
+        # Enrichment pipeline shared by FILE mode paths
+        from agent_actions.processing.enrichment import EnrichmentPipeline
+
+        self.enrichment_pipeline = EnrichmentPipeline()
+
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
             storage_backend=config.storage_backend,
@@ -560,17 +576,23 @@ class ProcessingPipeline:
                     results = self._process_file_mode_hitl(passing, original_passing, context)
 
                 results.extend(_build_skipped_results(skipped, self.config.action_name))
-        else:
-            results = self.record_processor.process_batch(data, context)
 
-        # Collect success results
-        output, stats = ResultCollector.collect_results(
-            results,
-            cast(dict[str, Any], self.config.action_config),
-            self.config.action_name,
-            is_first_stage=False,
-            storage_backend=self.config.storage_backend,
-        )
+            # Collect FILE-mode results
+            output, stats = ResultCollector.collect_results(
+                results,
+                cast(dict[str, Any], self.config.action_config),
+                self.config.action_name,
+                is_first_stage=False,
+                storage_backend=self.config.storage_backend,
+            )
+        else:
+            # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
+            strategy = OnlineLLMStrategy(
+                agent_config=cast(dict[str, Any], self.config.action_config),
+                agent_name=self.config.action_name,
+            )
+            unified = UnifiedProcessor()
+            output, stats = unified.process(data, context, strategy)
 
         # Signal node-level SKIP only when output is truly empty and the
         # only outcomes were guard-skip / guard-filter.  Guard-skipped
@@ -600,14 +622,14 @@ class ProcessingPipeline:
         self, data: list[dict], original_data: list[dict], context: ProcessingContext
     ) -> list:
         """Delegate to FileToolStrategy for FILE-mode tool invocation."""
-        strategy = FileToolStrategy(self.record_processor.enrichment_pipeline)
+        strategy = FileToolStrategy(self.enrichment_pipeline)
         return strategy.invoke(data, original_data, context)
 
     def _process_file_mode_hitl(
         self, data: list[dict], original_data: list[dict], context: ProcessingContext
     ) -> list:
         """Delegate to HITLStrategy for FILE-mode HITL invocation."""
-        strategy = HITLStrategy(self.record_processor.enrichment_pipeline)
+        strategy = HITLStrategy(self.enrichment_pipeline)
         return strategy.invoke(data, original_data, context)
 
 

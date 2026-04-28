@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Extract OnlineLLMStrategy from RecordProcessor — plugs into UnifiedProcessor for RECORD mode processing"
+time: 2026-04-28T03:07:00.000000Z

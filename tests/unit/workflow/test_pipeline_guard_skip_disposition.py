@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.processing.result_collector import CollectionStats
+from agent_actions.processing.result_collector import CollectionStats, ResultCollector
 from agent_actions.storage.backend import DISPOSITION_SKIPPED, NODE_LEVEL_RECORD_ID
 
 
@@ -34,7 +34,6 @@ def pipeline_and_mocks(tmp_path):
 
     pipeline = ProcessingPipeline.__new__(ProcessingPipeline)
     pipeline.config = config
-    pipeline.record_processor = MagicMock()
     pipeline.output_handler = MagicMock()
     pipeline.granularity = "record"
     pipeline.is_tool_action = False
@@ -49,25 +48,22 @@ class TestGuardSkipDisposition:
     def _run_with_stats(
         self, pipeline, config, stats, file_path, base_dir, output_dir, data=None, output=None
     ):
-        """Call process() with mocked collect_results stats.
+        """Call process() with mocked UnifiedProcessor stats.
 
         Args:
-            output: The output list returned by collect_results. Defaults to
-                ``data`` (simulating passthrough). Pass ``[]`` to simulate
-                filtered records that produce no output.
+            output: The output list returned by UnifiedProcessor.process().
+                Defaults to ``data`` (simulating passthrough). Pass ``[]``
+                to simulate filtered records that produce no output.
         """
         if data is None:
             data = [{"id": "1"}, {"id": "2"}]
         if output is None:
             output = data
 
-        pipeline.record_processor.process_batch.return_value = []
-
-        with patch(
-            "agent_actions.workflow.pipeline.ResultCollector.collect_results",
-            return_value=(output, stats),
-        ):
-            pipeline.process(file_path, base_dir, output_dir, data=data)
+        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
+            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
+                MockProcessor.return_value.process.return_value = (output, stats)
+                pipeline.process(file_path, base_dir, output_dir, data=data)
 
     def test_no_disposition_when_all_guard_skipped_with_output(self, pipeline_and_mocks):
         """Guard-skipped records ARE in output — no node-level skip, downstream proceeds."""
@@ -209,13 +205,11 @@ class TestToolActionEmptyOutputUsesGenericPath:
         pipeline.is_tool_action = True
         stats = CollectionStats(failed=1)
 
-        pipeline.record_processor.process_batch.return_value = []
-        with patch(
-            "agent_actions.workflow.pipeline.ResultCollector.collect_results",
-            return_value=([], stats),
-        ):
-            with pytest.raises(RuntimeError, match="produced 0 successful records"):
-                pipeline.process(fp, base, out, data=[{"id": "1"}])
+        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
+            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
+                MockProcessor.return_value.process.return_value = ([], stats)
+                with pytest.raises(RuntimeError, match="produced 0 successful records"):
+                    pipeline.process(fp, base, out, data=[{"id": "1"}])
 
 
 class TestZeroSuccessFailure:
@@ -228,19 +222,16 @@ class TestZeroSuccessFailure:
     """
 
     def _run_with_stats(self, pipeline, config, stats, fp, base, out, data=None, output=None):
-        """Call process() with mocked collect_results."""
+        """Call process() with mocked UnifiedProcessor."""
         if data is None:
             data = [{"id": "1"}, {"id": "2"}, {"id": "3"}]
         if output is None:
             output = data  # default: mock returns input as output
 
-        pipeline.record_processor.process_batch.return_value = []
-
-        with patch(
-            "agent_actions.workflow.pipeline.ResultCollector.collect_results",
-            return_value=(output, stats),
-        ):
-            pipeline.process(fp, base, out, data=data)
+        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
+            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
+                MockProcessor.return_value.process.return_value = (output, stats)
+                pipeline.process(fp, base, out, data=data)
 
     def test_all_failed_raises(self, pipeline_and_mocks):
         """All records FAILED with zero output → RuntimeError."""
@@ -322,11 +313,23 @@ class TestZeroSuccessFailure:
 class TestZeroSuccessWithRealResults:
     """Integration tests using real ProcessingResult objects through ResultCollector.
 
-    These tests do NOT mock collect_results — they send real ProcessingResult
-    objects through the actual collection pipeline to verify the full chain:
-    process_batch returns results → collect_results produces stats → pipeline
-    check raises RuntimeError.
+    These tests send real ProcessingResult objects through the actual
+    ResultCollector to compute stats, then verify the pipeline reacts
+    correctly to those stats.
     """
+
+    def _run_with_real_results(self, pipeline, config, results, fp, base, out, data):
+        """Compute stats from real results, then run pipeline with those stats."""
+        output, stats = ResultCollector.collect_results(
+            results,
+            config.action_config,
+            config.action_name,
+            is_first_stage=False,
+        )
+        with patch("agent_actions.workflow.pipeline.OnlineLLMStrategy"):
+            with patch("agent_actions.workflow.pipeline.UnifiedProcessor") as MockProcessor:
+                MockProcessor.return_value.process.return_value = (output, stats)
+                pipeline.process(fp, base, out, data=data)
 
     def test_all_exhausted_real_results_raises(self, pipeline_and_mocks):
         """Real EXHAUSTED ProcessingResults through actual collect_results → RuntimeError."""
@@ -344,10 +347,16 @@ class TestZeroSuccessWithRealResults:
             for i in range(3)
         ]
 
-        pipeline.record_processor.process_batch.return_value = exhausted_results
-
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
-            pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+            self._run_with_real_results(
+                pipeline,
+                config,
+                exhausted_results,
+                fp,
+                base,
+                out,
+                data=[{"id": "1"}, {"id": "2"}, {"id": "3"}],
+            )
 
     def test_all_failed_real_results_raises(self, pipeline_and_mocks):
         """Real FAILED ProcessingResults through actual collect_results → RuntimeError."""
@@ -364,10 +373,16 @@ class TestZeroSuccessWithRealResults:
             for i in range(3)
         ]
 
-        pipeline.record_processor.process_batch.return_value = failed_results
-
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
-            pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+            self._run_with_real_results(
+                pipeline,
+                config,
+                failed_results,
+                fp,
+                base,
+                out,
+                data=[{"id": "1"}, {"id": "2"}, {"id": "3"}],
+            )
 
     def test_mixed_real_results_raises(self, pipeline_and_mocks):
         """Mixed FAILED + EXHAUSTED real results → RuntimeError."""
@@ -386,10 +401,16 @@ class TestZeroSuccessWithRealResults:
             ),
         ]
 
-        pipeline.record_processor.process_batch.return_value = results
-
         with pytest.raises(RuntimeError, match=r"2 failed, 1 exhausted"):
-            pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+            self._run_with_real_results(
+                pipeline,
+                config,
+                results,
+                fp,
+                base,
+                out,
+                data=[{"id": "1"}, {"id": "2"}, {"id": "3"}],
+            )
 
     def test_partial_success_real_results_no_raise(self, pipeline_and_mocks):
         """Mix of SUCCESS + FAILED real results → no raise (partial success)."""
@@ -408,7 +429,8 @@ class TestZeroSuccessWithRealResults:
             ProcessingResult.failed("401 Unauthorized", source_guid="guid_1"),
         ]
 
-        pipeline.record_processor.process_batch.return_value = results
-        pipeline.process(fp, base, out, data=[{"id": "1"}, {"id": "2"}])
+        self._run_with_real_results(
+            pipeline, config, results, fp, base, out, data=[{"id": "1"}, {"id": "2"}]
+        )
 
         pipeline.output_handler.save_main_output.assert_called_once()
