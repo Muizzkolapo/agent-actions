@@ -13,8 +13,10 @@ logger = logging.getLogger(__name__)
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.batch_base import BaseBatchClient
 from agent_actions.llm.providers.batch_client_factory import BatchClientFactory
+from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import CacheHitEvent, CacheMissEvent
+from agent_actions.utils.constants import API_KEY_KEY
 
 
 class BatchClientResolver:
@@ -90,10 +92,8 @@ class BatchClientResolver:
 
         try:
             client_config = {}
-            if client_type == "gemini" and agent_config.get("gemini_api_key"):
-                client_config["api_key"] = agent_config["gemini_api_key"]
-            elif client_type == "openai" and agent_config.get("openai_api_key"):
-                client_config["api_key"] = agent_config["openai_api_key"]
+            if agent_config.get(API_KEY_KEY):
+                client_config["api_key"] = BaseClient.get_api_key(agent_config)
 
             client = BatchClientFactory.create_client(client_type, client_config)
 
@@ -178,7 +178,7 @@ class BatchClientResolver:
 
     @staticmethod
     def _build_cache_key(client_type: str, agent_config: dict[str, Any]) -> str:
-        _raw = agent_config.get("api_key") or agent_config.get(f"{client_type}_api_key") or ""
+        _raw = agent_config.get(API_KEY_KEY) or ""
         api_key = _raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw
         if api_key:
             key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:12]
