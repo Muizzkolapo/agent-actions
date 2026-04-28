@@ -415,7 +415,7 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
     print("\n--- Scenario 8: Disposition writer marks guard-skipped records ---")
     print("  Setup: 10 output items — 7 processed, 3 guard-skipped with _unprocessed=True")
 
-    from agent_actions.llm.batch.services.processing_recovery import write_record_dispositions
+    from agent_actions.processing.result_collector import write_record_dispositions
 
     storage = MockStorageBackend()
     mock_service = MagicMock()
@@ -447,7 +447,7 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
             }
         )
 
-    write_record_dispositions(mock_service, output_items, "my_action")
+    write_record_dispositions(mock_service._storage_backend, output_items, "my_action")
 
     # Verify: 3 PASSTHROUGH dispositions (guard-skipped records forward data unchanged)
     passthrough_records = storage.get_dispositions_by_type("my_action", DISPOSITION_PASSTHROUGH)

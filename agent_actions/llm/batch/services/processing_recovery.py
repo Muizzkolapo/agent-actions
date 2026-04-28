@@ -24,14 +24,8 @@ from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
+from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.processing.types import RecoveryMetadata
-from agent_actions.storage.backend import (
-    DISPOSITION_DEFERRED,
-    DISPOSITION_EXHAUSTED,
-    DISPOSITION_FAILED,
-    DISPOSITION_FILTERED,
-    DISPOSITION_PASSTHROUGH,
-)
 
 if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -507,7 +501,7 @@ def finalize_batch_output(
 
     effective_action_name = action_name if action_name is not None else service._action_name
     if service._storage_backend and effective_action_name:
-        write_record_dispositions(service, processed_data, effective_action_name)
+        write_record_dispositions(service._storage_backend, processed_data, effective_action_name)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
 
     output_file = service._determine_output_path(output_directory, file_name, batch_id)
@@ -536,92 +530,4 @@ def finalize_batch_output(
 
 
 # ---------------------------------------------------------------------------
-# Record dispositions
-# ---------------------------------------------------------------------------
-
-
-def write_record_dispositions(
-    service: "BatchProcessingService",
-    items: list[dict[str, Any]],
-    action_name: str,
-) -> None:
-    """Write dispositions for non-success records in batch output.
-
-    Called from both process_batch_results() (single-batch legacy API) and
-    finalize_batch_output() (multi-batch collection path).  These are
-    mutually exclusive entry points — a given batch never flows through both.
-
-    Also clears any prior DEFERRED disposition for each record, since the
-    batch result represents the final status (ARCH-003).
-
-    Disposition writes are telemetry — errors are logged but never propagated.
-    """
-    if not service._storage_backend:
-        return
-    for item in items:
-        source_guid = item.get("source_guid")
-        if not source_guid:
-            continue
-        metadata = item.get("metadata", {})
-
-        try:
-            # Clear the DEFERRED disposition now that the batch result has
-            # arrived.  For success records this is the only disposition
-            # action; for non-success records the final disposition is
-            # written immediately below.
-            service._storage_backend.clear_disposition(
-                action_name,
-                disposition=DISPOSITION_DEFERRED,
-                record_id=source_guid,
-            )
-        except Exception:
-            logger.debug(
-                "Could not clear DEFERRED disposition for %s (may not exist)",
-                source_guid,
-                exc_info=True,
-            )
-
-        try:
-            # Check for evaluation/reprompt exhaustion via _recovery metadata.
-            recovery = item.get("_recovery", {})
-            reprompt_recovery = recovery.get("reprompt", {})
-            if reprompt_recovery.get("passed") is False:
-                validation = reprompt_recovery.get("validation", "unknown")
-                service._storage_backend.set_disposition(
-                    action_name,
-                    source_guid,
-                    DISPOSITION_EXHAUSTED,
-                    reason=f"evaluation_exhausted:{validation}",
-                )
-            elif metadata.get("retry_exhausted"):
-                service._storage_backend.set_disposition(
-                    action_name,
-                    source_guid,
-                    DISPOSITION_EXHAUSTED,
-                    reason="retry_exhausted",
-                )
-            elif item.get("_unprocessed"):
-                reason = metadata.get("reason", "unprocessed")
-                if metadata.get("skipped_by_where_clause"):
-                    disposition = DISPOSITION_FILTERED
-                else:
-                    disposition = DISPOSITION_PASSTHROUGH
-                service._storage_backend.set_disposition(
-                    action_name,
-                    source_guid,
-                    disposition,
-                    reason=reason,
-                )
-            elif item.get("error"):
-                service._storage_backend.set_disposition(
-                    action_name,
-                    source_guid,
-                    DISPOSITION_FAILED,
-                    reason=str(item["error"])[:500],
-                )
-        except Exception:
-            logger.warning(
-                "Failed to write disposition for record %s",
-                source_guid,
-                exc_info=True,
-            )
+# Record dispositions — delegated to result_collector.write_record_dispositions

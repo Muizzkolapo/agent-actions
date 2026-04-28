@@ -23,6 +23,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
+    NODE_LEVEL_RECORD_ID,
 )
 
 if TYPE_CHECKING:
@@ -104,6 +105,106 @@ def _safe_set_disposition(
             disposition,
             exc_info=True,
         )
+
+
+def write_node_level_disposition(
+    storage_backend: Optional["StorageBackend"],
+    action_name: str,
+    disposition: str,
+    reason: str,
+) -> None:
+    """Write a node-level disposition for an entire action.
+
+    Used when all records in an action were skipped or passthroughed,
+    so there is no per-record output to disposition.
+    """
+    if storage_backend is None:
+        return
+    _safe_set_disposition(
+        storage_backend, action_name, NODE_LEVEL_RECORD_ID, disposition, reason=reason
+    )
+
+
+def write_record_dispositions(
+    storage_backend: Optional["StorageBackend"],
+    items: list[dict[str, Any]],
+    action_name: str,
+) -> None:
+    """Write dispositions for batch output records.
+
+    Called after batch results have been converted to workflow format.
+    Clears any prior DEFERRED disposition for each record, then writes
+    the final status (EXHAUSTED, FAILED, FILTERED, PASSTHROUGH).
+    Success records only get their DEFERRED cleared — no new disposition.
+
+    Disposition writes are telemetry — errors are logged but never propagated.
+    """
+    if not storage_backend:
+        return
+    for item in items:
+        source_guid = item.get("source_guid")
+        if not source_guid:
+            continue
+        metadata = item.get("metadata", {})
+
+        try:
+            # Clear the DEFERRED disposition now that the batch result has
+            # arrived.  For success records this is the only disposition
+            # action; for non-success records the final disposition is
+            # written immediately below.
+            storage_backend.clear_disposition(
+                action_name,
+                disposition=DISPOSITION_DEFERRED,
+                record_id=source_guid,
+            )
+        except Exception:
+            logger.debug(
+                "Could not clear DEFERRED disposition for %s (may not exist)",
+                source_guid,
+                exc_info=True,
+            )
+
+        # Check for evaluation/reprompt exhaustion via _recovery metadata.
+        recovery = item.get("_recovery", {})
+        reprompt_recovery = recovery.get("reprompt", {})
+        if reprompt_recovery.get("passed") is False:
+            validation = reprompt_recovery.get("validation", "unknown")
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_EXHAUSTED,
+                reason=f"evaluation_exhausted:{validation}",
+            )
+        elif metadata.get("retry_exhausted"):
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_EXHAUSTED,
+                reason="retry_exhausted",
+            )
+        elif item.get("_unprocessed"):
+            reason = metadata.get("reason", "unprocessed")
+            if metadata.get("skipped_by_where_clause"):
+                disposition = DISPOSITION_FILTERED
+            else:
+                disposition = DISPOSITION_PASSTHROUGH
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                disposition,
+                reason=reason,
+            )
+        elif item.get("error"):
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_FAILED,
+                reason=str(item["error"])[:500],
+            )
 
 
 class ResultCollector:

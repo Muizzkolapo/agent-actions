@@ -17,15 +17,11 @@ from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.record_processor import RecordProcessor
-from agent_actions.processing.result_collector import ResultCollector
+from agent_actions.processing.result_collector import ResultCollector, write_node_level_disposition
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.storage.backend import (
-    DISPOSITION_PASSTHROUGH,
-    DISPOSITION_SKIPPED,
-    NODE_LEVEL_RECORD_ID,
-)
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
@@ -245,13 +241,12 @@ class ProcessingPipeline:
                 output_directory=params.batch_output_directory,
             )
             file_writer.write_target(result.passthrough["data"])
-            if params.storage_backend:
-                params.storage_backend.set_disposition(
-                    params.pipeline_action_name,
-                    NODE_LEVEL_RECORD_ID,
-                    DISPOSITION_PASSTHROUGH,
-                    reason="All records tombstoned",
-                )
+            write_node_level_disposition(
+                params.storage_backend,
+                params.pipeline_action_name,
+                DISPOSITION_PASSTHROUGH,
+                "All records tombstoned",
+            )
             return str(output_file_path)
 
         # Batch job placeholder - always JSON (tracking file, not data)
@@ -583,21 +578,12 @@ class ProcessingPipeline:
         # records with passthrough data ARE in `output`, so `not output`
         # prevents cascade-blocking when passthrough data exists.
         if data and stats.only_guard_outcomes and not output:
-            storage_backend = self.config.storage_backend
-            if storage_backend is not None:
-                try:
-                    storage_backend.set_disposition(
-                        self.config.action_name,
-                        NODE_LEVEL_RECORD_ID,
-                        DISPOSITION_SKIPPED,
-                        reason="All records filtered — no output produced",
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Failed to write guard-skip disposition for %s: %s",
-                        self.config.action_name,
-                        e,
-                    )
+            write_node_level_disposition(
+                self.config.storage_backend,
+                self.config.action_name,
+                DISPOSITION_SKIPPED,
+                "All records filtered — no output produced",
+            )
 
         # Zero-success failure: raise so executor marks FAILED and circuit
         # breaker skips downstream.  Uses stats.success (not `not output`)
