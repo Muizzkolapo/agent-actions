@@ -58,13 +58,7 @@ class TestBatchActionNameInjectionSync:
                 "my_extract", action_idx=0, action_config=config, is_last_action=False
             )
 
-        # action_name must be present on the config dict that was passed
         assert config["action_name"] == "my_extract"
-
-        # Verify handle_batch_agent received the config with action_name
-        call_args = mock_deps.batch_manager.handle_batch_agent.call_args
-        passed_config = call_args[0][2]
-        assert passed_config["action_name"] == "my_extract"
 
     def test_action_name_present_before_handle_batch_agent_called(self, executor, mock_deps):
         """action_name injection must happen BEFORE handle_batch_agent, not after."""

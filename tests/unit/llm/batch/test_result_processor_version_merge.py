@@ -11,17 +11,14 @@ the content namespace structure.
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.processing.result_processor import (
     BatchProcessingContext,
     BatchResultProcessor,
 )
 from agent_actions.llm.providers.batch_base import BatchResult
-
-
-def _make_reconciler(custom_id: str, original_row: dict[str, Any]) -> BatchResultReconciler:
-    """Build a reconciler with a single record in its context_map."""
-    return BatchResultReconciler(context_map={custom_id: original_row})
 
 
 def _make_ctx(
@@ -36,14 +33,23 @@ def _make_ctx(
         output_directory="/tmp/output",
         agent_config=agent_config,
     )
-    ctx.reconciler = _make_reconciler(custom_id, original_row)
+    ctx.reconciler = BatchResultReconciler(context_map={custom_id: original_row})
     return ctx
+
+
+@pytest.fixture
+def processor():
+    """BatchResultProcessor with enrichment pipeline stubbed to pass through."""
+    p = BatchResultProcessor()
+    p._enrichment_pipeline = MagicMock()
+    p._enrichment_pipeline.enrich.side_effect = lambda result, context: result
+    return p
 
 
 class TestLLMVersionMergeWrapsUnderActionName:
     """kind:llm with version_consumption must wrap output under action_name, NOT flat spread."""
 
-    def test_llm_version_merge_wraps_under_action_name(self):
+    def test_llm_version_merge_wraps_under_action_name(self, processor):
         """LLM action with version_consumption_config wraps output under namespace."""
         custom_id = "rec_001"
         original_row = {
@@ -65,21 +71,13 @@ class TestLLMVersionMergeWrapsUnderActionName:
             success=True,
         )
 
-        processor = BatchResultProcessor()
-        processor._enrichment_pipeline = MagicMock()
-        processor._enrichment_pipeline.enrich.side_effect = lambda result, context: result
-
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
         assert len(result) == 1
         content = result[0]["content"]
-        # LLM output MUST be wrapped under action_name namespace
-        assert "aggregate" in content
         assert content["aggregate"] == {"decision": "keep", "reason": "majority vote"}
-        # Upstream namespaces preserved
         assert content["source"] == {"url": "http://example.com"}
         assert content["voter_1"] == {"vote": "keep"}
-        # Output fields are NOT flat-spread into root
         assert "decision" not in content
         assert "reason" not in content
 
@@ -87,7 +85,7 @@ class TestLLMVersionMergeWrapsUnderActionName:
 class TestToolVersionMergeFlatSpreads:
     """kind:tool with version_consumption DOES flat spread (existing behavior)."""
 
-    def test_tool_version_merge_flat_spreads(self):
+    def test_tool_version_merge_flat_spreads(self, processor):
         """Tool action with version_consumption_config flat-spreads into content."""
         custom_id = "rec_001"
         original_row = {
@@ -110,28 +108,21 @@ class TestToolVersionMergeFlatSpreads:
             success=True,
         )
 
-        processor = BatchResultProcessor()
-        processor._enrichment_pipeline = MagicMock()
-        processor._enrichment_pipeline.enrich.side_effect = lambda result, context: result
-
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
         assert len(result) == 1
         content = result[0]["content"]
-        # Tool output IS flat-spread — fields appear at root level
         assert content["final_decision"] == "keep"
         assert content["confidence"] == 0.8
-        # Upstream namespaces also present (merged)
         assert content["source"] == {"url": "http://example.com"}
         assert content["voter_1"] == {"vote": "keep"}
-        # Output is NOT nested under action_name
         assert "aggregate_votes" not in content
 
 
 class TestNoVersionMergeWrapsNormally:
     """Actions without version_consumption_config always wrap under action_name."""
 
-    def test_llm_no_version_merge_wraps(self):
+    def test_llm_no_version_merge_wraps(self, processor):
         """LLM action without version_consumption wraps under action_name."""
         custom_id = "rec_001"
         original_row = {
@@ -149,10 +140,6 @@ class TestNoVersionMergeWrapsNormally:
             success=True,
         )
 
-        processor = BatchResultProcessor()
-        processor._enrichment_pipeline = MagicMock()
-        processor._enrichment_pipeline.enrich.side_effect = lambda result, context: result
-
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
         content = result[0]["content"]
@@ -160,7 +147,7 @@ class TestNoVersionMergeWrapsNormally:
         assert content["source"] == {"url": "http://example.com"}
         assert "category" not in content
 
-    def test_tool_no_version_merge_wraps(self):
+    def test_tool_no_version_merge_wraps(self, processor):
         """Tool action without version_consumption wraps under action_name."""
         custom_id = "rec_001"
         original_row = {
@@ -177,10 +164,6 @@ class TestNoVersionMergeWrapsNormally:
             content={"entities": ["AI", "ML"]},
             success=True,
         )
-
-        processor = BatchResultProcessor()
-        processor._enrichment_pipeline = MagicMock()
-        processor._enrichment_pipeline.enrich.side_effect = lambda result, context: result
 
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
