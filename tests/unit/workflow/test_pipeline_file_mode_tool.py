@@ -1303,40 +1303,48 @@ class TestExtractToolInput:
         result = _extract_tool_input(record, {})
         assert result == {"q": "Q1"}
 
-    def test_drop_respected_in_enriched_content(self):
-        """Drops applied by apply_context_scope_for_records are respected.
+    def test_malformed_ref_rejected_not_silently_matched(self):
+        """Refs that str.split accepted but parse_field_reference rejects.
 
-        When content has already had drops applied (field removed from
-        namespace dict), _extract_tool_input reads from the post-drop
-        namespace and correctly excludes the dropped field.
+        The old _extract_business_fields used str.split(".", 1) which would
+        parse ".field" as ns="" field="field", then match content[""]["leaked"].
+        "ns." would parse as ns="ns" field="" and match content[ns][""].
+        parse_field_reference rejects both outright.
         """
         from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
-        # Simulate enriched record where "secret" was dropped from extract namespace
         record = {
             "content": {
-                "extract": {"question_text": "What?"},  # "secret" already removed by drop
-                "summarize": {"summary": "Short version"},
+                "": {"leaked": "BAD"},  # empty-string namespace
+                "extract": {"": "empty_field_val", "q": "Q1"},
             }
         }
-        result = _extract_tool_input(
-            record, {"observe": ["extract.question_text", "extract.secret"]}
-        )
-        # secret is absent from namespace — not in output
-        assert result == {"question_text": "What?"}
+        # ".leaked" — old code: split → ns="", field="leaked" → content[""]["leaked"] = "BAD"
+        # "extract." — old code: split → ns="extract", field="" → content["extract"][""] = value
+        # parse_field_reference rejects both (empty ns or empty field)
+        result = _extract_tool_input(record, {"observe": [".leaked", "extract.", "extract.q"]})
+        assert result == {"q": "Q1"}
+        assert "leaked" not in result
+        assert "" not in result
 
-    def test_invalid_ref_skipped(self):
-        """Invalid observe refs are silently skipped (already logged by scope application)."""
+    def test_observe_plus_wildcard_interaction(self):
+        """Wildcard on one namespace + specific field on another.
+
+        Tests the N×M combination: wildcard expands all fields from one
+        namespace while a specific ref extracts one field from another.
+        Ensures no cross-contamination between namespaces.
+        """
         from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
         record = {
             "content": {
-                "extract": {"q": "Q1"},
+                "extract": {"q": "Q1", "a": "A1"},
+                "classify": {"category": "FAQ", "confidence": 0.9},
             }
         }
-        # "bad_ref" has no dot — parse_field_reference raises ValueError
-        result = _extract_tool_input(record, {"observe": ["bad_ref", "extract.q"]})
-        assert result == {"q": "Q1"}
+        result = _extract_tool_input(record, {"observe": ["extract.*", "classify.category"]})
+        assert result == {"q": "Q1", "a": "A1", "category": "FAQ"}
+        assert "confidence" not in result
 
 
 # --- Content preservation regression ---
