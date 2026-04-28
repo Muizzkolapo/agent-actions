@@ -164,11 +164,10 @@ class BatchTaskPreparator:
         # ONE guard check with full context (normalize → source → prompt → guard)
         prepared = task_preparer.prepare(row, prep_context, existing_target_id=custom_id)
 
-        # 5. Store passthrough_fields for later merging (always store, even if empty)
-        if custom_id in context_map_builder:
-            BatchContextMetadata.set_passthrough_fields(
-                context_map_builder[custom_id], prepared.passthrough_fields
-            )
+        # 5. Store passthrough_fields for later merging
+        BatchContextMetadata.set_passthrough_fields(
+            context_map_builder[custom_id], prepared.passthrough_fields
+        )
 
         # 6. Handle guard results
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:

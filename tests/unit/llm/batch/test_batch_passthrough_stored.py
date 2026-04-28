@@ -1,8 +1,8 @@
-"""Tests for _apply_context_passthrough — stored passthrough only.
+"""Tests for _apply_context_passthrough — stored passthrough merge.
 
 Passthrough fields are pre-extracted during batch preparation and stored in
 BatchContextMetadata. At result processing time, stored fields are merged into
-generated items. There is no fallback re-extraction path.
+generated items.
 """
 
 from typing import Any
@@ -39,11 +39,6 @@ def _make_context_map_entry(**extra) -> dict[str, Any]:
     return base
 
 
-def _store_passthrough(entry: dict[str, Any], fields: dict[str, Any]) -> None:
-    """Store passthrough fields on a context map entry via BatchContextMetadata."""
-    BatchContextMetadata.set_passthrough_fields(entry, fields)
-
-
 # ── Stored passthrough merges into generated items ───────────────────
 
 
@@ -52,7 +47,7 @@ class TestStoredPassthroughMerge:
 
     def test_single_namespace_field(self):
         entry = _make_context_map_entry()
-        _store_passthrough(entry, {"classify": {"category": "tech"}})
+        BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
         processor = BatchResultProcessor()
 
@@ -64,7 +59,7 @@ class TestStoredPassthroughMerge:
 
     def test_multiple_namespaces(self):
         entry = _make_context_map_entry()
-        _store_passthrough(
+        BatchContextMetadata.set_passthrough_fields(
             entry,
             {
                 "classify": {"category": "tech"},
@@ -82,7 +77,7 @@ class TestStoredPassthroughMerge:
 
     def test_all_generated_items_receive_passthrough(self):
         entry = _make_context_map_entry()
-        _store_passthrough(entry, {"classify": {"category": "tech"}})
+        BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
         processor = BatchResultProcessor()
 
@@ -104,7 +99,7 @@ class TestStoredPassthroughEdgeCases:
     def test_empty_stored_passthrough_returns_unchanged(self):
         """When stored passthrough is empty dict, generated items are unchanged."""
         entry = _make_context_map_entry()
-        _store_passthrough(entry, {})
+        BatchContextMetadata.set_passthrough_fields(entry, {})
         ctx = _make_context(context_map={"rec_001": entry})
         processor = BatchResultProcessor()
 
@@ -125,7 +120,7 @@ class TestStoredPassthroughEdgeCases:
     def test_non_dict_items_passed_through(self):
         """Non-dict items in generated_list are passed through unchanged."""
         entry = _make_context_map_entry()
-        _store_passthrough(entry, {"classify": {"category": "tech"}})
+        BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
         processor = BatchResultProcessor()
 
@@ -140,7 +135,7 @@ class TestStoredPassthroughEdgeCases:
     def test_empty_generated_list(self):
         """Empty generated_list returns empty list."""
         entry = _make_context_map_entry()
-        _store_passthrough(entry, {"classify": {"category": "tech"}})
+        BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
         processor = BatchResultProcessor()
 
@@ -151,7 +146,7 @@ class TestStoredPassthroughEdgeCases:
     def test_passthrough_does_not_fire_without_context_scope_config(self):
         """Even with agent_config having no context_scope, stored passthrough still applies."""
         entry = _make_context_map_entry()
-        _store_passthrough(entry, {"source": {"id": "123"}})
+        BatchContextMetadata.set_passthrough_fields(entry, {"source": {"id": "123"}})
         ctx = _make_context(
             context_map={"rec_001": entry},
             agent_config={"action_name": "test"},
