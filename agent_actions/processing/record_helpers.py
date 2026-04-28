@@ -30,16 +30,16 @@ def build_tombstone(
     source_guid: str | None = None,
     extra_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a tombstone record for skipped/exhausted/guard-filtered records.
+    """Build a tombstone record for guard-skipped or unprocessed records.
 
-    For ``guard_*`` reasons the record gets a null namespace via
-    :meth:`RecordEnvelope.build_skipped`.  For non-guard reasons (e.g.
-    ``retry_exhausted``) the record is built with an empty action output via
-    :meth:`RecordEnvelope.build_skipped` as well — all tombstones are
-    "skipped" records from the envelope perspective.
+    Uses :meth:`RecordEnvelope.build_skipped` to add a null namespace
+    marker (``action_name: None``) while preserving upstream content.
 
     Always sets ``metadata.reason``, ``metadata.agent_type = "tombstone"``,
     and ``_unprocessed = True``.  Carries ``target_id`` from *input_record*.
+
+    For retry-exhausted records that need empty content under the
+    namespace (not null), use :func:`build_exhausted_tombstone` instead.
     """
     item = RecordEnvelope.build_skipped(action_name, input_record)
     item["source_guid"] = source_guid
