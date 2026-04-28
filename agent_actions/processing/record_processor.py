@@ -23,14 +23,13 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
 from agent_actions.utils.constants import HITL_FILE_GRANULARITY_ERROR
-from agent_actions.utils.content import get_existing_content
 
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
 from .invocation import BatchProvider, InvocationStrategy, InvocationStrategyFactory
 from .prepared_task import GuardStatus, PreparationContext
+from .record_helpers import build_exhausted_tombstone, build_tombstone, extract_existing_content
 from .task_preparer import TaskPreparer, get_task_preparer
 from .types import (
     ProcessingContext,
@@ -182,12 +181,11 @@ class RecordProcessor:
                     filter_reason=f"guard_{prepared.guard_behavior}",
                 )
             )
-            tombstone = self._build_tombstone_item(
-                content,
-                source_guid,
-                f"guard_{prepared.guard_behavior}",
-                input_record,
+            tombstone = build_tombstone(
                 context.action_name,
+                input_record,
+                f"guard_{prepared.guard_behavior}",
+                source_guid=source_guid,
             )
             result = ProcessingResult.skipped(
                 passthrough_data=tombstone,
@@ -230,13 +228,11 @@ class RecordProcessor:
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         cast(dict[str, Any], context.agent_config)
                     )
-                    tombstone = self._build_tombstone_item(
-                        empty_content,
-                        source_guid,
-                        "retry_exhausted",
-                        input_record,
+                    tombstone = build_exhausted_tombstone(
                         context.action_name,
-                        extra_metadata={"retry_exhausted": True},
+                        input_record,
+                        empty_content,
+                        source_guid=source_guid,
                     )
                     result = ProcessingResult.exhausted(
                         error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
@@ -269,12 +265,11 @@ class RecordProcessor:
                         filter_reason="llm_layer_guard_skip",
                     )
                 )
-                tombstone = self._build_tombstone_item(
-                    response,
-                    source_guid,
-                    "guard_skip",
-                    input_record,
+                tombstone = build_tombstone(
                     context.action_name,
+                    input_record,
+                    "guard_skip",
+                    source_guid=source_guid,
                 )
                 result = ProcessingResult.unprocessed(
                     data=[tombstone],
@@ -311,11 +306,11 @@ class RecordProcessor:
                     },
                 )
 
-        item_existing_content = get_existing_content(item) if isinstance(item, dict) else None
-        if not item_existing_content and isinstance(item, dict) and context.is_first_stage:
-            raw = {k: v for k, v in item.items() if k not in RECORD_FRAMEWORK_FIELDS}
-            if raw:
-                item_existing_content = {"source": raw}
+        item_existing_content = (
+            extract_existing_content(item, is_first_stage=context.is_first_stage)
+            if isinstance(item, dict)
+            else None
+        )
         transformed = self._transform_response(
             response,
             content,
@@ -437,31 +432,6 @@ class RecordProcessor:
         )
 
         return results
-
-    @staticmethod
-    def _build_tombstone_item(
-        content: Any,
-        source_guid: str | None,
-        reason: str,
-        input_record: dict[str, Any] | None,
-        action_name: str,
-        *,
-        extra_metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Build a tombstone item for guard-skipped, exhausted, or unprocessed records."""
-        if reason.startswith("guard_"):
-            item = RecordEnvelope.build_skipped(action_name, input_record)
-        else:
-            action_output = content if isinstance(content, dict) else {"value": content}
-            item = RecordEnvelope.build(action_name, action_output, input_record)
-        item["source_guid"] = source_guid
-        item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
-        item["_unprocessed"] = True
-        if extra_metadata:
-            item["metadata"].update(extra_metadata)
-        if input_record and isinstance(input_record, dict) and "target_id" in input_record:
-            item["target_id"] = input_record["target_id"]
-        return item
 
     def _finalize_result(
         self,
