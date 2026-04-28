@@ -1322,9 +1322,7 @@ class TestExtractToolInput:
         # ".leaked" — old code: split → ns="", field="leaked" → content[""]["leaked"] = "BAD"
         # "extract." — old code: split → ns="extract", field="" → content["extract"][""] = value
         # parse_field_reference rejects both (empty ns or empty field)
-        result = _extract_tool_input(
-            record, {"observe": [".leaked", "extract.", "extract.q"]}
-        )
+        result = _extract_tool_input(record, {"observe": [".leaked", "extract.", "extract.q"]})
         assert result == {"q": "Q1"}
         assert "leaked" not in result
         assert "" not in result
@@ -1344,9 +1342,7 @@ class TestExtractToolInput:
                 "classify": {"category": "FAQ", "confidence": 0.9},
             }
         }
-        result = _extract_tool_input(
-            record, {"observe": ["extract.*", "classify.category"]}
-        )
+        result = _extract_tool_input(record, {"observe": ["extract.*", "classify.category"]})
         assert result == {"q": "Q1", "a": "A1", "category": "FAQ"}
         assert "confidence" not in result
 
