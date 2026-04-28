@@ -337,6 +337,7 @@ def process_file_mode_tool(
             context=clean_input,
             formatted_prompt="",
             tools_path=context.agent_config.get("tools_path"),
+            skip_guard_eval=True,
         )
 
         if _is_empty_response(raw_response) and data:
@@ -424,6 +425,7 @@ def process_file_mode_hitl(
             context=data,
             formatted_prompt="",
             tools_path=cast(str | None, hitl_agent_config.get("tools_path")),
+            skip_guard_eval=True,
         )
 
         # Unwrap single-item list from invocation service
