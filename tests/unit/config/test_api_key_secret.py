@@ -113,17 +113,17 @@ class TestBatchClientFactorySecretStr:
         assert key_with_secret == key_with_plain
         assert key_with_secret.startswith("openai:")
 
-    def test_cache_key_vendor_specific_fallback_unwraps_secret_str(self):
-        """The f'{client_type}_api_key' fallback in _build_cache_key also handles SecretStr."""
+    def test_cache_key_unwraps_secret_str(self):
+        """_build_cache_key handles SecretStr in the generic api_key field."""
         from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
             BatchClientResolver,
         )
 
         key_with_secret = BatchClientResolver._build_cache_key(
-            "openai", {"openai_api_key": SecretStr("sk-vendor-fallback")}
+            "openai", {"api_key": SecretStr("sk-vendor-fallback")}
         )
         key_with_plain = BatchClientResolver._build_cache_key(
-            "openai", {"openai_api_key": "sk-vendor-fallback"}
+            "openai", {"api_key": "sk-vendor-fallback"}
         )
         assert key_with_secret == key_with_plain
         assert key_with_secret.startswith("openai:")
