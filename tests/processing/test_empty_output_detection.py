@@ -8,7 +8,7 @@ from agent_actions.config.schema import ActionConfig
 from agent_actions.errors import EmptyOutputError
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.logging.events.handlers.run_results import ActionResult, RunResultsCollector
-from agent_actions.processing.record_processor import _is_empty_output
+from agent_actions.processing.strategies.online_llm import _is_empty_output
 
 # =============================================================================
 # _is_empty_output helper tests
@@ -140,7 +140,7 @@ class TestEmptyOutputDetection:
         fired_events = []
 
         with patch(
-            "agent_actions.processing.record_processor.fire_event",
+            "agent_actions.processing.strategies.online_llm.fire_event",
             side_effect=lambda e: fired_events.append(e),
         ):
             from agent_actions.processing.record_processor import RecordProcessor
@@ -167,7 +167,7 @@ class TestEmptyOutputDetection:
             processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
 
             # Mock _transform_response to return a minimal valid result
-            processor._transform_response = MagicMock(
+            processor._online_strategy._transform_response = MagicMock(
                 return_value=[{"content": {}, "source_guid": "sg-1"}]
             )
 
@@ -178,7 +178,9 @@ class TestEmptyOutputDetection:
             )
 
             # Mock task_preparer
-            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
+            with patch(
+                "agent_actions.processing.strategies.online_llm.get_task_preparer"
+            ) as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None
@@ -196,7 +198,7 @@ class TestEmptyOutputDetection:
     def test_empty_output_error_raises(self):
         """When on_empty=error, AgentActionsError is raised on empty output."""
         with patch(
-            "agent_actions.processing.record_processor.fire_event",
+            "agent_actions.processing.strategies.online_llm.fire_event",
         ):
             from agent_actions.processing.record_processor import RecordProcessor
             from agent_actions.processing.types import ProcessingContext
@@ -218,7 +220,7 @@ class TestEmptyOutputDetection:
             mock_strategy.invoke.return_value = mock_result
 
             processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-            processor._transform_response = MagicMock(
+            processor._online_strategy._transform_response = MagicMock(
                 return_value=[{"content": {}, "source_guid": "sg-1"}]
             )
 
@@ -228,7 +230,9 @@ class TestEmptyOutputDetection:
                 record_index=0,
             )
 
-            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
+            with patch(
+                "agent_actions.processing.strategies.online_llm.get_task_preparer"
+            ) as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None
@@ -246,7 +250,7 @@ class TestEmptyOutputDetection:
         fired_events = []
 
         with patch(
-            "agent_actions.processing.record_processor.fire_event",
+            "agent_actions.processing.strategies.online_llm.fire_event",
             side_effect=lambda e: fired_events.append(e),
         ):
             from agent_actions.processing.record_processor import RecordProcessor
@@ -269,7 +273,7 @@ class TestEmptyOutputDetection:
             mock_strategy.invoke.return_value = mock_result
 
             processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-            processor._transform_response = MagicMock(
+            processor._online_strategy._transform_response = MagicMock(
                 return_value=[{"content": {}, "source_guid": "sg-1"}]
             )
 
@@ -279,7 +283,9 @@ class TestEmptyOutputDetection:
                 record_index=0,
             )
 
-            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
+            with patch(
+                "agent_actions.processing.strategies.online_llm.get_task_preparer"
+            ) as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None
@@ -296,7 +302,7 @@ class TestEmptyOutputDetection:
     def test_empty_output_error_propagates_through_process_batch(self):
         """EmptyOutputError must propagate through process_batch (not be swallowed)."""
         with patch(
-            "agent_actions.processing.record_processor.fire_event",
+            "agent_actions.processing.strategies.online_llm.fire_event",
         ):
             from agent_actions.processing.record_processor import RecordProcessor
             from agent_actions.processing.types import ProcessingContext
@@ -318,7 +324,7 @@ class TestEmptyOutputDetection:
             mock_strategy.invoke.return_value = mock_result
 
             processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-            processor._transform_response = MagicMock(
+            processor._online_strategy._transform_response = MagicMock(
                 return_value=[{"content": {}, "source_guid": "sg-1"}]
             )
 
@@ -328,7 +334,9 @@ class TestEmptyOutputDetection:
                 record_index=0,
             )
 
-            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
+            with patch(
+                "agent_actions.processing.strategies.online_llm.get_task_preparer"
+            ) as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None

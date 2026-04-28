@@ -59,7 +59,7 @@ def guard_skip_result(record_processor, guard_skip_prepared, processing_context)
     mock_preparer.prepare.return_value = guard_skip_prepared
 
     with patch(
-        "agent_actions.processing.record_processor.get_task_preparer",
+        "agent_actions.processing.strategies.online_llm.get_task_preparer",
         return_value=mock_preparer,
     ):
         return record_processor.process(

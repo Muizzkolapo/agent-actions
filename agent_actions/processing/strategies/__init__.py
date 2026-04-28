@@ -1,4 +1,4 @@
-"""Pipeline-level processing strategies for FILE-granularity modes."""
+"""Processing strategies for UnifiedProcessor and FILE-granularity modes."""
 
 from .file_tool import FileToolStrategy
 from .hitl import HITLStrategy
