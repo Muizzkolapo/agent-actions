@@ -87,7 +87,7 @@ class TestFileModePipelineVersionMerge:
 
         # Tool returns aggregated output via TrackedItem
         with patch(
-            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
             return_value=(
                 [TrackedItem({"consensus": "keep", "total_score": 11}, source_index=0)],
                 True,
@@ -126,7 +126,7 @@ class TestFileModePipelineVersionMerge:
         ]
 
         with patch(
-            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
             return_value=(
                 [TrackedItem({"summary": "2/3 keep"}, source_index=0)],
                 True,
@@ -151,7 +151,7 @@ class TestFileModePipelineVersionMerge:
         ]
 
         with patch(
-            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
             return_value=(
                 [TrackedItem({"summary": "world"}, source_index=0)],
                 True,
@@ -183,7 +183,7 @@ class TestFileModePipelineVersionMerge:
 
         # Tool returns output via TrackedItem
         with patch(
-            "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+            "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
             return_value=(
                 [TrackedItem({"consensus": "keep"}, source_index=0)],
                 True,

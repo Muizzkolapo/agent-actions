@@ -42,7 +42,7 @@ def test_tracked_item_list_works():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [
                 TrackedItem({"name": "alice"}, source_index=0),
@@ -68,7 +68,7 @@ def test_tracked_item_source_mapping():
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([TrackedItem({"score": 0.9}, source_index=0)], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -91,7 +91,7 @@ def test_tracked_item_preserves_upstream_namespaces():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([TrackedItem({"score": 0.95}, source_index=0)], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -124,7 +124,7 @@ def test_file_udf_result_reconciled():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -154,7 +154,7 @@ def test_file_udf_result_source_mapping():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -178,7 +178,7 @@ def test_file_udf_result_list_source_index():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -212,7 +212,7 @@ def test_synthetic_record_carries_forward_namespaces():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -244,7 +244,7 @@ def test_synthetic_record_empty_original_data():
     )
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool([], [], context)
@@ -281,7 +281,7 @@ def test_synthetic_mixed_with_sourced_records():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -324,7 +324,7 @@ def test_file_tool_plain_dict_rejected():
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([{"score": 0.9}], True),
     ):
         with pytest.raises(AgentActionsError, match="plain dict"):
@@ -338,7 +338,7 @@ def test_file_tool_non_dict_rejected():
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(["just a string"], True),
     ):
         with pytest.raises(AgentActionsError, match="expected TrackedItem"):
@@ -352,7 +352,7 @@ def test_file_tool_non_list_non_fileudfresult_rejected():
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=({"single": "dict"}, True),
     ):
         with pytest.raises(AgentActionsError, match="must return list or FileUDFResult"):
@@ -372,7 +372,7 @@ def test_file_tool_empty_response_with_input_returns_failed():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -388,7 +388,7 @@ def test_file_tool_empty_response_with_empty_input_ok():
     pipeline, context = _make_pipeline_and_context()
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
         results = pipeline._process_file_mode_tool([], [], context)
@@ -409,7 +409,7 @@ def test_file_tool_empty_response_feeds_existing_failure_check():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -433,7 +433,7 @@ def test_file_udf_result_empty_with_input_returns_failed():
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(FileUDFResult(outputs=[]), True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -452,7 +452,7 @@ def test_file_mode_error_surfaces():
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=RuntimeError("connection refused"),
     ):
         with pytest.raises(AgentActionsError, match="connection refused"):
@@ -469,7 +469,7 @@ def test_file_mode_error_includes_context():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=ValueError("bad data"),
     ):
         with pytest.raises(AgentActionsError) as exc_info:
@@ -827,7 +827,7 @@ def test_tracked_item_preserves_source_guid():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [
                 TrackedItem({"score": 0.9}, source_index=0),
@@ -855,7 +855,7 @@ def test_tracked_item_filter_fewer_outputs():
 
     # Tool filters 3→2, keeping items 0 and 2
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [
                 TrackedItem({"name": "alice"}, source_index=0),
@@ -889,7 +889,7 @@ def test_file_udf_result_preserves_source_guid():
     )
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -909,7 +909,7 @@ def test_file_tool_source_guid_never_empty_string():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([TrackedItem({"result": "ok"}, source_index=0)], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -927,7 +927,7 @@ def test_file_tool_empty_input_empty_output():
     pipeline, context = _make_pipeline_and_context()
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
         results = pipeline._process_file_mode_tool([], [], context)
@@ -946,7 +946,7 @@ def test_file_tool_input_without_source_guid():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [
                 TrackedItem({"score": 0.9}, source_index=0),
@@ -980,7 +980,7 @@ def test_file_udf_result_merge_reduces_to_fewer():
     )
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -1003,7 +1003,7 @@ def test_file_udf_result_expansion():
     )
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -1370,7 +1370,7 @@ def test_file_tool_content_preserved_via_tracked_item():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [
                 TrackedItem(
@@ -1408,7 +1408,7 @@ def test_file_tool_shared_source_guid_each_output_gets_correct_mapping():
 
     # Tool deduplicates 5→4, returns TrackedItems skipping index 2
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [
                 TrackedItem({"q": "Q0"}, source_index=0),
@@ -1453,7 +1453,7 @@ def test_file_tool_tracked_item_extends_lineage():
     context.source_data = input_data
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [
                 TrackedItem({"transformed": "new value from original"}, source_index=0),
@@ -1517,7 +1517,7 @@ def test_file_hitl_namespaces_output_under_action():
     decision = {"hitl_status": "approved", "user_comment": "Looks good", "timestamp": "2026-01-01"}
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
         results = pipeline._process_file_mode_hitl(input_data, input_data, context)
@@ -1555,7 +1555,7 @@ def test_file_hitl_preserves_upstream_namespaces():
     decision = {"hitl_status": "approved"}
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
         results = pipeline._process_file_mode_hitl(input_data, input_data, context)
@@ -1587,7 +1587,7 @@ def test_file_hitl_per_record_review_in_namespace():
     }
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
         results = pipeline._process_file_mode_hitl(input_data, input_data, context)
@@ -1620,7 +1620,7 @@ def test_file_hitl_carries_framework_fields():
     decision = {"hitl_status": "approved"}
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
         results = pipeline._process_file_mode_hitl(input_data, input_data, context)
@@ -1662,7 +1662,7 @@ def test_file_tool_version_merge_spreads_not_wraps():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
             [TrackedItem({"consensus": "keep", "score": 11}, source_index=0)],
             True,

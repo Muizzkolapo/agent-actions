@@ -6,8 +6,6 @@ namespaced dicts directly — no flattening, no fallback to flat format.
 
 from unittest.mock import patch
 
-import pytest
-
 from agent_actions.llm.realtime.services.context import ContextService
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.task_preparer import TaskPreparer
