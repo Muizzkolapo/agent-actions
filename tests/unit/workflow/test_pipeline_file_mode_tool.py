@@ -1229,14 +1229,14 @@ class TestReattachSourceGuid:
         assert structured[2]["source_guid"] == "sg-b"
 
 
-# --- _extract_tool_input unit tests ---
+# --- extract_tool_input unit tests ---
 
 
 class TestExtractToolInput:
-    """Direct unit tests for _extract_tool_input logic."""
+    """Direct unit tests for extract_tool_input logic."""
 
     def test_flattens_all_namespaces_no_observe(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {
             "source_guid": "sg-1",
@@ -1246,7 +1246,7 @@ class TestExtractToolInput:
                 "summarize": {"summary": "Short version"},
             },
         }
-        result = _extract_tool_input(record, {})
+        result = extract_tool_input(record, {})
         assert result == {
             "question_text": "What?",
             "answer_text": "Yes.",
@@ -1254,7 +1254,7 @@ class TestExtractToolInput:
         }
 
     def test_extracts_observed_fields_only(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {
             "content": {
@@ -1262,11 +1262,11 @@ class TestExtractToolInput:
                 "summarize": {"summary": "Short version"},
             }
         }
-        result = _extract_tool_input(record, {"observe": ["extract.question_text"]})
+        result = extract_tool_input(record, {"observe": ["extract.question_text"]})
         assert result == {"question_text": "What?"}
 
     def test_wildcard_observe(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {
             "content": {
@@ -1274,25 +1274,25 @@ class TestExtractToolInput:
                 "other": {"x": 99},
             }
         }
-        result = _extract_tool_input(record, {"observe": ["extract.*"]})
+        result = extract_tool_input(record, {"observe": ["extract.*"]})
         assert result == {"q": "Q1", "a": "A1"}
 
     def test_no_content_returns_empty(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {"source_guid": "sg-1"}
-        result = _extract_tool_input(record, {})
+        result = extract_tool_input(record, {})
         assert result == {}
 
     def test_non_dict_content_returns_empty(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {"content": "string_content"}
-        result = _extract_tool_input(record, {})
+        result = extract_tool_input(record, {})
         assert result == {}
 
     def test_skips_non_dict_namespace_values(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {
             "content": {
@@ -1300,7 +1300,7 @@ class TestExtractToolInput:
                 "skipped_action": None,  # guard-skipped action
             }
         }
-        result = _extract_tool_input(record, {})
+        result = extract_tool_input(record, {})
         assert result == {"q": "Q1"}
 
     def test_malformed_ref_rejected_not_silently_matched(self):
@@ -1311,7 +1311,7 @@ class TestExtractToolInput:
         "ns." would parse as ns="ns" field="" and match content[ns][""].
         parse_field_reference rejects both outright.
         """
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {
             "content": {
@@ -1322,7 +1322,7 @@ class TestExtractToolInput:
         # ".leaked" — old code: split → ns="", field="leaked" → content[""]["leaked"] = "BAD"
         # "extract." — old code: split → ns="extract", field="" → content["extract"][""] = value
         # parse_field_reference rejects both (empty ns or empty field)
-        result = _extract_tool_input(record, {"observe": [".leaked", "extract.", "extract.q"]})
+        result = extract_tool_input(record, {"observe": [".leaked", "extract.", "extract.q"]})
         assert result == {"q": "Q1"}
         assert "leaked" not in result
         assert "" not in result
@@ -1334,7 +1334,7 @@ class TestExtractToolInput:
         namespace while a specific ref extracts one field from another.
         Ensures no cross-contamination between namespaces.
         """
-        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
         record = {
             "content": {
@@ -1342,7 +1342,7 @@ class TestExtractToolInput:
                 "classify": {"category": "FAQ", "confidence": 0.9},
             }
         }
-        result = _extract_tool_input(record, {"observe": ["extract.*", "classify.category"]})
+        result = extract_tool_input(record, {"observe": ["extract.*", "classify.category"]})
         assert result == {"q": "Q1", "a": "A1", "category": "FAQ"}
         assert "confidence" not in result
 

@@ -13,10 +13,11 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.record.tracking import TrackedItem
+from agent_actions.utils.content import is_version_merge
 from agent_actions.workflow.pipeline_file_mode import (
-    _extract_tool_input,
-    _is_empty_response,
-    _reconcile_outputs,
+    extract_tool_input,
+    is_empty_response,
+    reconcile_outputs,
 )
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ class FileToolStrategy:
             context_scope = context.agent_config.get("context_scope") or {}
             clean_input: list[TrackedItem] = []
             for i, record in enumerate(data):
-                business = _extract_tool_input(record, context_scope)
+                business = extract_tool_input(record, context_scope)
                 clean_input.append(TrackedItem(business, source_index=i))
 
             raw_response, executed = run_dynamic_agent(
@@ -61,7 +62,7 @@ class FileToolStrategy:
                 skip_guard_eval=True,
             )
 
-            if _is_empty_response(raw_response) and data:
+            if is_empty_response(raw_response) and data:
                 return [
                     ProcessingResult.failed(
                         error=(
@@ -71,9 +72,7 @@ class FileToolStrategy:
                     )
                 ]
 
-            from agent_actions.utils.content import is_version_merge
-
-            structured_data, source_mapping = _reconcile_outputs(
+            structured_data, source_mapping = reconcile_outputs(
                 raw_response,
                 context.agent_name,
                 original_data,
@@ -93,6 +92,8 @@ class FileToolStrategy:
 
             return [result]
 
+        except AgentActionsError:
+            raise
         except Exception as e:
             logger.error("FILE mode tool '%s' failed: %s", context.agent_name, e)
             raise AgentActionsError(

@@ -131,7 +131,7 @@ def _resolve_input_record(
     return original_data[input_idx]
 
 
-def _extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
+def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     """Extract observed business fields from an enriched record for tool input.
 
     Reads from enriched content where drops have already been applied by
@@ -195,7 +195,7 @@ def _build_record(
     return record
 
 
-def _reconcile_outputs(
+def reconcile_outputs(
     raw_response: Any,
     action_name: str,
     original_data: list[dict],
@@ -270,7 +270,7 @@ def framework_prepare_input(
     """Strip framework fields and wrap in TrackedItem for tool input."""
     context_scope: dict[str, Any] = {"observe": observe_refs} if observe_refs else {}
     return [
-        TrackedItem(_extract_tool_input(record, context_scope), source_index=i)
+        TrackedItem(extract_tool_input(record, context_scope), source_index=i)
         for i, record in enumerate(records)
     ]
 
@@ -282,10 +282,10 @@ def framework_reconcile(
 ) -> list[dict[str, Any]]:
     """Reconcile tool output to input records via provenance.
 
-    Standalone wrapper over ``_reconcile_outputs`` for design tests and
+    Standalone wrapper over ``reconcile_outputs`` for design tests and
     simulations.
     """
-    data, _ = _reconcile_outputs(raw_response, action_name, original_data)
+    data, _ = reconcile_outputs(raw_response, action_name, original_data)
     return data
 
 
@@ -294,7 +294,7 @@ def framework_reconcile(
 # ---------------------------------------------------------------------------
 
 
-def _is_empty_response(raw_response: Any) -> bool:
+def is_empty_response(raw_response: Any) -> bool:
     """Check if tool returned an empty response."""
     from agent_actions.utils.udf_management.registry import FileUDFResult
 

@@ -15,6 +15,7 @@ from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
 )
+from agent_actions.record.envelope import RecordEnvelope
 
 if TYPE_CHECKING:
     from agent_actions.processing.enrichment import EnrichmentPipeline
@@ -108,11 +109,6 @@ class HITLStrategy:
                 for key, value in decision_payload.items()
                 if key in {"hitl_status", "user_comment", "timestamp"}
             }
-
-            # Propagate one file-level decision across all input records so
-            # downstream processing keeps record cardinality intact.
-            # Use original_data for the merge to preserve all upstream fields.
-            from agent_actions.record.envelope import RecordEnvelope
 
             structured_data = []
             if original_data:
