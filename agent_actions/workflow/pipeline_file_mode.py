@@ -144,17 +144,21 @@ def _resolve_input_record(
     return original_data[input_idx]
 
 
-def _extract_business_fields(record: dict, agent_config: Mapping[str, Any]) -> dict:
-    """Extract observe-filtered business fields from a record for tool input.
+def _extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
+    """Extract observed business fields from an enriched record for tool input.
 
-    Strips all framework fields.  Returns only business data from observed
-    namespaces.  When no observe is configured, flattens all content namespaces.
+    Reads from enriched content where drops have already been applied by
+    ``apply_context_scope_for_records()``.  Uses ``parse_field_reference()``
+    for validated ref parsing instead of the former ``str.split()`` shadow.
+
+    When no observe is configured, flattens all content namespaces.
     """
+    from agent_actions.prompt.context.scope_parsing import parse_field_reference
+
     content = record.get("content")
     if not isinstance(content, dict):
         return {}
 
-    context_scope = agent_config.get("context_scope") or {}
     observe_refs = context_scope.get("observe", [])
 
     if not observe_refs:
@@ -165,18 +169,21 @@ def _extract_business_fields(record: dict, agent_config: Mapping[str, Any]) -> d
                 business.update(ns_data)
         return business
 
-    # Extract only observed fields
+    # Extract observed fields from post-drop enriched content.
+    # Drops were already applied by apply_context_scope_for_records().
     business = {}
     for ref in observe_refs:
-        if "." not in ref:
-            continue
-        ns, field = ref.split(".", 1)
-        if ns not in content or not isinstance(content[ns], dict):
+        try:
+            ns, field = parse_field_reference(ref)
+        except ValueError:
+            continue  # Bad ref — already logged by scope application
+        ns_data = content.get(ns)
+        if not isinstance(ns_data, dict):
             continue
         if field == "*":
-            business.update(content[ns])
-        elif field in content[ns]:
-            business[field] = content[ns][field]
+            business.update(ns_data)
+        elif field in ns_data:
+            business[field] = ns_data[field]
 
     return business
 
@@ -274,9 +281,9 @@ def framework_prepare_input(
     observe_refs: list[str] | None = None,
 ) -> list[TrackedItem]:
     """Strip framework fields and wrap in TrackedItem for tool input."""
-    config: dict[str, Any] = {"context_scope": {"observe": observe_refs}} if observe_refs else {}
+    context_scope: dict[str, Any] = {"observe": observe_refs} if observe_refs else {}
     return [
-        TrackedItem(_extract_business_fields(record, config), source_index=i)
+        TrackedItem(_extract_tool_input(record, context_scope), source_index=i)
         for i, record in enumerate(records)
     ]
 
@@ -326,9 +333,10 @@ def process_file_mode_tool(
     transforms).  Plain dicts in list returns are an error.
     """
     try:
+        context_scope = context.agent_config.get("context_scope") or {}
         clean_input: list[TrackedItem] = []
         for i, record in enumerate(data):
-            business = _extract_business_fields(record, context.agent_config)
+            business = _extract_tool_input(record, context_scope)
             clean_input.append(TrackedItem(business, source_index=i))
 
         raw_response, executed = run_dynamic_agent(

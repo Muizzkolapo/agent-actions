@@ -1229,14 +1229,14 @@ class TestReattachSourceGuid:
         assert structured[2]["source_guid"] == "sg-b"
 
 
-# --- _extract_business_fields unit tests ---
+# --- _extract_tool_input unit tests ---
 
 
-class TestExtractBusinessFields:
-    """Direct unit tests for _extract_business_fields logic."""
+class TestExtractToolInput:
+    """Direct unit tests for _extract_tool_input logic."""
 
     def test_flattens_all_namespaces_no_observe(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
         record = {
             "source_guid": "sg-1",
@@ -1246,7 +1246,7 @@ class TestExtractBusinessFields:
                 "summarize": {"summary": "Short version"},
             },
         }
-        result = _extract_business_fields(record, {})
+        result = _extract_tool_input(record, {})
         assert result == {
             "question_text": "What?",
             "answer_text": "Yes.",
@@ -1254,7 +1254,7 @@ class TestExtractBusinessFields:
         }
 
     def test_extracts_observed_fields_only(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
         record = {
             "content": {
@@ -1262,12 +1262,11 @@ class TestExtractBusinessFields:
                 "summarize": {"summary": "Short version"},
             }
         }
-        config = {"context_scope": {"observe": ["extract.question_text"]}}
-        result = _extract_business_fields(record, config)
+        result = _extract_tool_input(record, {"observe": ["extract.question_text"]})
         assert result == {"question_text": "What?"}
 
     def test_wildcard_observe(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
         record = {
             "content": {
@@ -1275,26 +1274,25 @@ class TestExtractBusinessFields:
                 "other": {"x": 99},
             }
         }
-        config = {"context_scope": {"observe": ["extract.*"]}}
-        result = _extract_business_fields(record, config)
+        result = _extract_tool_input(record, {"observe": ["extract.*"]})
         assert result == {"q": "Q1", "a": "A1"}
 
     def test_no_content_returns_empty(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
         record = {"source_guid": "sg-1"}
-        result = _extract_business_fields(record, {})
+        result = _extract_tool_input(record, {})
         assert result == {}
 
     def test_non_dict_content_returns_empty(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
         record = {"content": "string_content"}
-        result = _extract_business_fields(record, {})
+        result = _extract_tool_input(record, {})
         assert result == {}
 
     def test_skips_non_dict_namespace_values(self):
-        from agent_actions.workflow.pipeline_file_mode import _extract_business_fields
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
 
         record = {
             "content": {
@@ -1302,7 +1300,42 @@ class TestExtractBusinessFields:
                 "skipped_action": None,  # guard-skipped action
             }
         }
-        result = _extract_business_fields(record, {})
+        result = _extract_tool_input(record, {})
+        assert result == {"q": "Q1"}
+
+    def test_drop_respected_in_enriched_content(self):
+        """Drops applied by apply_context_scope_for_records are respected.
+
+        When content has already had drops applied (field removed from
+        namespace dict), _extract_tool_input reads from the post-drop
+        namespace and correctly excludes the dropped field.
+        """
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+
+        # Simulate enriched record where "secret" was dropped from extract namespace
+        record = {
+            "content": {
+                "extract": {"question_text": "What?"},  # "secret" already removed by drop
+                "summarize": {"summary": "Short version"},
+            }
+        }
+        result = _extract_tool_input(
+            record, {"observe": ["extract.question_text", "extract.secret"]}
+        )
+        # secret is absent from namespace — not in output
+        assert result == {"question_text": "What?"}
+
+    def test_invalid_ref_skipped(self):
+        """Invalid observe refs are silently skipped (already logged by scope application)."""
+        from agent_actions.workflow.pipeline_file_mode import _extract_tool_input
+
+        record = {
+            "content": {
+                "extract": {"q": "Q1"},
+            }
+        }
+        # "bad_ref" has no dot — parse_field_reference raises ValueError
+        result = _extract_tool_input(record, {"observe": ["bad_ref", "extract.q"]})
         assert result == {"q": "Q1"}
 
 

@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Replace shadow observe implementation in FILE tool input with validated parse_field_reference; drops now respected"
+time: 2026-04-28T30:00:00.000000Z
