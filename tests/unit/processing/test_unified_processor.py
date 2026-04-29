@@ -281,6 +281,42 @@ class TestUnifiedProcessorEnrichment:
 
         assert output[0].get("_tagged") is True
 
+    def test_enrich_passes_cumulative_record_index_per_result(self):
+        """Staff review: enumerate(results) collides when each result has many rows."""
+
+        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
+
+        class CaptureIndexEnricher(Enricher):
+            def __init__(self) -> None:
+                self.seen: list[int] = []
+
+            def enrich(self, result, context):
+                self.seen.append(context.record_index)
+                return result
+
+        capture = CaptureIndexEnricher()
+        pipeline = EnrichmentPipeline(enrichers=[capture])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+
+        class MultiResultStrategy:
+            def invoke(self, records, context):
+                return [
+                    ProcessingResult.success(
+                        data=[{"k": 1}, {"k": 2}, {"k": 3}],
+                        source_guid="sg-a",
+                    ),
+                    ProcessingResult.success(
+                        data=[{"k": 4}, {"k": 5}],
+                        source_guid="sg-b",
+                    ),
+                ]
+
+        context = _make_context()
+        context.record_index = 10
+        processor.process([_make_record("sg-1")], context, MultiResultStrategy())
+
+        assert capture.seen == [10, 13]
+
 
 # ---------------------------------------------------------------------------
 # UnifiedProcessor — result collection

@@ -1,11 +1,8 @@
 """Thread-safe version correlation ID generation for workflow sessions."""
 
 import hashlib
-import logging
 import threading
 from collections import OrderedDict
-
-logger = logging.getLogger(__name__)
 
 
 class VersionIdGenerator:
@@ -83,19 +80,31 @@ class VersionIdGenerator:
 
     @classmethod
     def add_version_correlation_id(
-        cls, obj: dict, agent_config: dict, record_index: int | None = None
+        cls,
+        obj: dict,
+        agent_config: dict,
+        *,
+        record_index: int,
     ) -> dict:
-        """Add version correlation ID to an object if agent is versioned.
+        """Add a deterministic position-based ``version_correlation_id`` to *obj*.
+
+        Requires ``version_base_name`` and ``workflow_session_id`` in *agent_config*.
+        There is no alternate code path (no source_guid fallback, no optional index).
 
         Raises:
-            ValueError: If workflow_session_id is missing in version context.
+            ValueError: If required config is missing or ``record_index`` is negative.
         """
-        if not agent_config.get("is_versioned_agent", False):
-            return obj
+        if record_index < 0:
+            raise ValueError(
+                f"record_index must be non-negative for version correlation IDs, got {record_index}"
+            )
 
         version_base_name = agent_config.get("version_base_name")
         if not version_base_name:
-            return obj
+            raise ValueError(
+                "version_base_name is required in agent_config for version correlation IDs. "
+                "Set it in the action definition (including any tool that emits expansions)."
+            )
 
         workflow_session_id = agent_config.get("workflow_session_id")
         if not workflow_session_id:
@@ -106,19 +115,7 @@ class VersionIdGenerator:
             )
 
         obj = obj.copy()
-        if record_index is not None:
-            obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
-                record_index, version_base_name, workflow_session_id
-            )
-        else:
-            source_guid = obj.get("source_guid")
-            if source_guid:
-                obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(
-                    source_guid, version_base_name, workflow_session_id
-                )
-            else:
-                logger.debug(
-                    "Skipping version correlation: source_guid absent for %s",
-                    version_base_name,
-                )
+        obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
+            record_index, version_base_name, workflow_session_id
+        )
         return obj

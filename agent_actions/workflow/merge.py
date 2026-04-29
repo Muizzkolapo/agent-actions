@@ -120,17 +120,18 @@ def merge_branch_records(
     return result
 
 
-def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> str | None:
-    """Return the first matching correlation value from top-level or content, or None."""
-    for key_name in key_candidates:
-        correlation_value = record.get(key_name)
-        if not correlation_value:
-            content = record.get("content")
-            if isinstance(content, dict):
-                correlation_value = content.get(key_name)
-        if correlation_value:
-            return str(correlation_value)
-    return None
+def get_correlation_value(record: dict[str, Any], key: str) -> str | None:
+    """Return ``record[key]`` as a non-empty string, or ``None``.
+
+    **Top-level only** — no nested ``content[...]`` lookup and no multi-key fallback
+    chains. Call sites must put merge keys on the record root.
+    """
+    if key not in record:
+        return None
+    raw = record[key]
+    if raw is None or raw == "":
+        return None
+    return str(raw)
 
 
 def _identify_branch_mapping(
@@ -182,10 +183,14 @@ def _merge_group_deep(group: list[dict[str, Any]]) -> dict[str, Any]:
 def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> list[Any]:
     """Merge records sharing the same correlation key.
 
-    For same-source fan-in (no ``reduce_key``), uses ``merge_branch_records``
-    so each branch contributes only its own namespace and upstream is preserved
-    from the base record (first record in the group).  For ``reduce_key``
-    aggregation (different sources grouped together), uses ``deep_merge_record``.
+    Grouping uses **one** field only:
+
+    - If ``reduce_key`` is set, that field is the key.
+    - If ``reduce_key`` is ``None``, the key is ``source_guid``.
+
+    For same-source fan-in (default path), uses ``merge_branch_records`` so each
+    branch contributes only its own namespace. For ``reduce_key`` aggregation
+    (different sources grouped on the same explicit key), uses ``deep_merge_record``.
 
     Note: When using the branch-records path, ``group[0]`` is the canonical
     upstream source.  Its shared namespaces survive; other records' versions
@@ -194,17 +199,19 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
     groups_by_key: dict[str, list[dict[str, Any]]] = {}
     records_without_key: list[Any] = []
 
-    key_candidates: list[str] = []
-    if reduce_key:
-        key_candidates.append(reduce_key)
-    key_candidates.extend(["root_target_id", "parent_target_id", "source_guid"])
+    if reduce_key is not None and not isinstance(reduce_key, str):
+        raise TypeError(
+            f"merge_records_by_key: reduce_key must be str or None, got {type(reduce_key).__name__}"
+        )
+
+    key_field = reduce_key if reduce_key else "source_guid"
 
     for record in records:
         if not isinstance(record, dict):
             records_without_key.append(record)
             continue
 
-        correlation_value = get_correlation_value(record, key_candidates)
+        correlation_value = get_correlation_value(record, key_field)
         if correlation_value:
             groups_by_key.setdefault(correlation_value, []).append(record)
         else:

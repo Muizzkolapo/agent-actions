@@ -166,18 +166,26 @@ class VersionIdEnricher(Enricher):
         if result.status == ProcessingStatus.FILTERED:
             return result
 
-        # Skip when record_index is invalid (e.g. -1 from batch reconciler miss)
         if context.record_index < 0:
-            return result
+            raise ValueError(
+                f"record_index must be non-negative for version correlation enrichment, "
+                f"got {context.record_index}"
+            )
 
         from agent_actions.utils.correlation import VersionIdGenerator
 
+        agent_config = cast(dict[str, Any], context.agent_config)
+
         for i, item in enumerate(result.data):
-            if not result.is_expansion and item.get("version_correlation_id"):
+            should_assign = result.is_expansion or (
+                bool(agent_config.get("is_versioned_agent"))
+                and not item.get("version_correlation_id")
+            )
+            if not should_assign:
                 continue
             result.data[i] = VersionIdGenerator.add_version_correlation_id(
                 item,
-                cast(dict[str, Any], context.agent_config),
+                agent_config,
                 record_index=context.record_index + i,
             )
 

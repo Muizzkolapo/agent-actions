@@ -3,6 +3,12 @@
 import pytest
 
 from agent_actions.record.envelope import RecordEnvelope, RecordEnvelopeError
+from agent_actions.record.state import (
+    RecordState,
+    reason_cascade,
+    reason_downstream_reset,
+    reason_guard,
+)
 
 # ── build() ──────────────────────────────────────────────────────────────────
 
@@ -147,3 +153,94 @@ class TestInteractions:
         assert r3["content"]["source"] == {"raw": "data"}
         assert r3["content"]["summarize"] == {"summary": "short"}
         assert r3["content"]["review"] == {"score": 9}
+
+
+# ── transition() / state machine ─────────────────────────────────────────────
+
+
+class TestTransition:
+    def test_records_from_and_to_on_transition(self):
+        r = RecordEnvelope.build("act", {"x": 1})
+        RecordEnvelope.transition(
+            r,
+            RecordState.GUARD_SKIPPED,
+            action_name="act",
+            reason=reason_guard(clause="c", behavior="skip", result=False),
+        )
+        t = r["_transitions"][-1]
+        assert t["from_state"] == RecordState.ACTIVE.value
+        assert t["to_state"] == RecordState.GUARD_SKIPPED.value
+        assert t["reason"]["type"] == "guard"
+
+    def test_invalid_prior_state_raises(self):
+        r: dict = {"content": {}, "_state": "not_a_valid_state"}
+        with pytest.raises(RecordEnvelopeError, match="Invalid record _state"):
+            RecordEnvelope.transition(
+                r,
+                RecordState.FAILED,
+                action_name="act",
+                reason={"type": "error", "error_type": "t", "message": "m"},
+            )
+
+    def test_downstream_reset_requires_matching_reason_from_state(self):
+        r = {"content": {}, "_state": RecordState.COMMITTED.value}
+        with pytest.raises(RecordEnvelopeError, match="from_state"):
+            RecordEnvelope.transition(
+                r,
+                RecordState.ACTIVE,
+                action_name="__downstream__",
+                reason=reason_downstream_reset(from_state="guard_skipped"),
+            )
+
+    def test_downstream_reset_committed_to_active(self):
+        r = {"content": {}, "_state": RecordState.COMMITTED.value}
+        RecordEnvelope.transition(
+            r,
+            RecordState.ACTIVE,
+            action_name="__downstream__",
+            reason=reason_downstream_reset(from_state=RecordState.COMMITTED.value),
+        )
+        assert r["_state"] == RecordState.ACTIVE.value
+        assert r["_transitions"][-1]["from_state"] == RecordState.COMMITTED.value
+
+    def test_no_op_transition_rejected(self):
+        r = {"content": {}, "_state": RecordState.ACTIVE.value}
+        with pytest.raises(RecordEnvelopeError, match="no-op"):
+            RecordEnvelope.transition(
+                r,
+                RecordState.ACTIVE,
+                action_name="act",
+                reason={"type": "error", "error_type": "t", "message": "m"},
+            )
+
+    def test_cascade_skipped_self_reapply_allowed(self):
+        r = {"content": {}, "_state": RecordState.CASCADE_SKIPPED.value}
+        RecordEnvelope.transition(
+            r,
+            RecordState.CASCADE_SKIPPED,
+            action_name="act",
+            reason=reason_cascade(upstream_action="up", upstream_state="failed"),
+        )
+        assert r["_transitions"][-1]["from_state"] == RecordState.CASCADE_SKIPPED.value
+
+    def test_passthrough_guard_skip_requires_prior_active(self):
+        r = {"content": {}, "_state": RecordState.COMMITTED.value}
+        with pytest.raises(RecordEnvelopeError, match="passthrough"):
+            RecordEnvelope.transition(
+                r,
+                RecordState.GUARD_SKIPPED,
+                action_name="act",
+                reason={"type": "passthrough", "reason": "where", "mode": "batch"},
+            )
+
+    def test_unsupported_reason_type_rejected(self):
+        r = RecordEnvelope.build("act", {"x": 1})
+        with pytest.raises(RecordEnvelopeError, match="Unsupported transition"):
+            RecordEnvelope.transition(
+                r,
+                RecordState.GUARD_SKIPPED,
+                action_name="act",
+                reason={
+                    "type": "custom_unknown",
+                },
+            )

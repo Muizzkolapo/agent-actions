@@ -283,55 +283,38 @@ class TestParallelBranchLineageSources:
 
 
 class TestGetCorrelationValue:
-    """Tests for get_correlation_value function."""
+    """Tests for get_correlation_value — top-level key only."""
 
     def test_finds_top_level_key(self):
-        """Should find correlation value at top level."""
         record = {"source_guid": "abc123", "other": "data"}
 
-        result = get_correlation_value(record, ["source_guid"])
+        assert get_correlation_value(record, "source_guid") == "abc123"
 
-        assert result == "abc123"
-
-    def test_finds_nested_in_content(self):
-        """Should find correlation value nested in content dict."""
+    def test_requires_top_level_not_nested_in_content(self):
+        """Keys nested only under content are invisible — use root fields."""
         record = {"content": {"parent_target_id": "xyz"}}
 
-        result = get_correlation_value(record, ["parent_target_id"])
+        assert get_correlation_value(record, "parent_target_id") is None
 
-        assert result == "xyz"
-
-    def test_fallback_chain(self):
-        """Should try keys in order and return first found."""
+    def test_unknown_key_returns_none(self):
         record = {"source_guid": "fallback"}
 
-        result = get_correlation_value(record, ["missing_key", "source_guid"])
+        assert get_correlation_value(record, "missing_key") is None
 
-        assert result == "fallback"
-
-    def test_returns_none_when_not_found(self):
-        """Should return None when no correlation key found."""
+    def test_returns_none_when_key_absent(self):
         record = {"unrelated": "data"}
 
-        result = get_correlation_value(record, ["source_guid", "parent_target_id"])
+        assert get_correlation_value(record, "source_guid") is None
 
-        assert result is None
+    def test_empty_string_value_is_absent(self):
+        record = {"source_guid": ""}
 
-    def test_handles_non_dict_content(self):
-        """Should handle non-dict content gracefully."""
-        record = {"content": "string_value"}
-
-        result = get_correlation_value(record, ["nested_key"])
-
-        assert result is None
+        assert get_correlation_value(record, "source_guid") is None
 
     def test_converts_to_string(self):
-        """Should convert correlation value to string."""
         record = {"id": 12345}
 
-        result = get_correlation_value(record, ["id"])
-
-        assert result == "12345"
+        assert get_correlation_value(record, "id") == "12345"
 
 
 class TestMergeRecordsByKey:
@@ -351,13 +334,13 @@ class TestMergeRecordsByKey:
         assert result[0]["field_2"] == "B"
 
     def test_merges_by_parent_target_id(self):
-        """Should merge records by parent_target_id."""
+        """Should merge records by parent_target_id when reduce_key is explicit."""
         records = [
             {"parent_target_id": "xyz", "answer_1": "A"},
             {"parent_target_id": "xyz", "answer_2": "B"},
         ]
 
-        result = merge_records_by_key(records)
+        result = merge_records_by_key(records, reduce_key="parent_target_id")
 
         assert len(result) == 1
         assert result[0]["answer_1"] == "A"
@@ -374,6 +357,21 @@ class TestMergeRecordsByKey:
 
         assert len(result) == 1
         assert result[0]["custom_id"] == "123"
+
+    def test_reduce_key_version_correlation_id_groups_distinct_values(self):
+        """Explicit reduce_key=version_correlation_id merges same id only."""
+        records = [
+            {"version_correlation_id": "vc-a", "field_1": "x"},
+            {"version_correlation_id": "vc-a", "field_2": "y"},
+            {"version_correlation_id": "vc-b", "field_3": "z"},
+        ]
+
+        result = merge_records_by_key(records, reduce_key="version_correlation_id")
+
+        assert len(result) == 2
+        by_id = {rec["version_correlation_id"]: rec for rec in result}
+        assert "field_1" in by_id["vc-a"] and "field_2" in by_id["vc-a"]
+        assert by_id["vc-b"]["field_3"] == "z"
 
     def test_keeps_records_with_different_keys_separate(self):
         """Should not merge records with different correlation keys."""

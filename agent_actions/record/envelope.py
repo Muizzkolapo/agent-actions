@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_actions.record.state import RecordState, append_transition
+from agent_actions.record.state import (
+    RecordState,
+    RecordStateTransitionError,
+    append_transition,
+    parse_state_strict,
+    validate_state_transition,
+)
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
@@ -121,10 +127,16 @@ class RecordEnvelope:
 
         This is the only supported way to mutate `_state`.
         """
+        try:
+            prior = parse_state_strict(record)
+            validate_state_transition(prior, new_state, reason)
+        except RecordStateTransitionError as e:
+            raise RecordEnvelopeError(str(e)) from e
         record["_state"] = new_state.value
         append_transition(
             record,
             action=action_name,
+            from_state=prior,
             to_state=new_state,
             reason=reason,
             detail=detail,
