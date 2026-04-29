@@ -123,8 +123,8 @@ class BatchResultStrategy:
         json_mode = get_default("json_mode")
         output_field = get_default("output_field")
         if agent_config:
-            json_mode = agent_config.get("json_mode", get_default("json_mode"))
-            output_field = agent_config.get("output_field", get_default("output_field"))
+            json_mode = agent_config.get("json_mode", json_mode)
+            output_field = agent_config.get("output_field", output_field)
 
         ctx = BatchProcessingContext(
             batch_results=batch_results,
@@ -345,29 +345,6 @@ class BatchResultStrategy:
             recovery_metadata=recovery_metadata,
         )
 
-    def _create_exhausted_item(
-        self,
-        ctx: BatchProcessingContext,
-        custom_id: str,
-        original_row: dict[str, Any],
-        recovery_metadata: RecoveryMetadata,
-    ) -> dict[str, Any]:
-        """Create an exhausted retry item via ExhaustedRecordBuilder."""
-        if ctx.reconciler is None:
-            raise RuntimeError(
-                "BatchProcessingContext.reconciler is None; "
-                "reconciler must be initialized before creating exhausted items"
-            )
-        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
-
-        return ExhaustedRecordBuilder.build_exhausted_item(
-            source_guid=source_guid,
-            original_row=original_row,
-            recovery_metadata=recovery_metadata,
-            agent_config=ctx.agent_config or {},
-            action_name=(ctx.agent_config.get("action_name", "") if ctx.agent_config else ""),
-        )
-
     # -- Passthrough reconciliation --------------------------------------------
 
     def _reconcile_passthroughs(self, ctx: BatchProcessingContext) -> list[ProcessingResult]:
@@ -439,23 +416,17 @@ class BatchResultStrategy:
             retry_config = ctx.agent_config.get("retry", {})
             on_exhausted = retry_config.get("on_exhausted", "return_last")
 
-        if on_exhausted == "raise":
-            recovery_meta = ctx.exhausted_recovery[custom_id]
-            if recovery_meta.retry is None:
-                raise RuntimeError(
-                    "RecoveryMetadata.retry is None for exhausted record "
-                    f"custom_id={custom_id}; expected retry metadata"
-                )
-            raise RuntimeError(
-                f"Retry exhausted for record {custom_id} after "
-                f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
-            )
-
         recovery_meta = ctx.exhausted_recovery[custom_id]
         if recovery_meta.retry is None:
             raise RuntimeError(
                 "RecoveryMetadata.retry is None for exhausted record "
                 f"custom_id={custom_id}; expected retry metadata with attempt count"
+            )
+
+        if on_exhausted == "raise":
+            raise RuntimeError(
+                f"Retry exhausted for record {custom_id} after "
+                f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
             )
         empty_content = ExhaustedRecordBuilder.build_empty_content(ctx.agent_config or {})
         exhausted_item = build_exhausted_tombstone(
