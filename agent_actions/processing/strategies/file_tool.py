@@ -89,6 +89,7 @@ class FileToolStrategy:
                 raw_response=raw_response,
                 executed=executed,
                 source_mapping=source_mapping,
+                is_expansion=len(structured_data) > len(records),
             )
 
             return [result]

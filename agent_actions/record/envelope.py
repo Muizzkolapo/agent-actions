@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-# Canonical set of framework fields that are NOT user business data.
-# Used by record_processor (first-stage source wrapping), pipeline_file_mode
-# (tool input stripping), and scope_namespace (metadata exclusion).
-RECORD_FRAMEWORK_FIELDS: frozenset[str] = frozenset(
+# Tracking fields: set once at record creation, carried forward through all 1:1
+# pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
+RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
+        "version_correlation_id",
+    }
+)
+
+# Per-stage fields: rebuilt by enrichers at each stage. NOT carried forward.
+# parent_target_id and root_target_id are set by LineageEnricher from the
+# parent's target_id — they're derived per-stage, not stable identity.
+RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
+    {
         "target_id",
         "node_id",
         "lineage",
@@ -20,9 +28,12 @@ RECORD_FRAMEWORK_FIELDS: frozenset[str] = frozenset(
         "parent_target_id",
         "root_target_id",
         "chunk_info",
-        "version_correlation_id",
     }
 )
+
+# Union of all framework fields. Used by record_processor (first-stage source wrapping),
+# pipeline_file_mode (tool input stripping), and scope_namespace (metadata exclusion).
+RECORD_FRAMEWORK_FIELDS: frozenset[str] = RECORD_TRACKING_FIELDS | RECORD_STAGE_FIELDS
 
 
 class RecordEnvelopeError(Exception):
@@ -55,7 +66,7 @@ class RecordEnvelope:
 
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: action_output}}
-        return _carry_source_guid(result, input_record)
+        return _carry_tracking_fields(result, input_record)
 
     @staticmethod
     def build_content(
@@ -86,15 +97,24 @@ class RecordEnvelope:
             raise RecordEnvelopeError("action_name is required")
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: None}}
-        return _carry_source_guid(result, input_record)
+        return _carry_tracking_fields(result, input_record)
 
 
-def _carry_source_guid(
+def _carry_tracking_fields(
     result: dict[str, Any], input_record: dict[str, Any] | None
 ) -> dict[str, Any]:
-    """Copy source_guid from input_record to result if present."""
-    if input_record and "source_guid" in input_record:
-        result["source_guid"] = input_record["source_guid"]
+    """Copy tracking fields from input_record to result.
+
+    Tracking fields are the record's stable identity — set once at creation
+    (first stage or 1→N expansion) and preserved through all downstream
+    1:1 stages. Per-stage fields (metadata, lineage, node_id, etc.) are
+    NOT carried — enrichers rebuild those.
+    """
+    if not input_record:
+        return result
+    for field in RECORD_TRACKING_FIELDS:
+        if field in input_record:
+            result[field] = input_record[field]
     return result
 
 

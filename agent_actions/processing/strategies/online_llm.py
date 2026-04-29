@@ -395,6 +395,7 @@ class OnlineLLMStrategy:
             passthrough_fields,
             context,
             existing_content=item_existing_content,
+            input_record=input_record,
         )
 
         input_size = 1 if not isinstance(response, list) else len(response)
@@ -417,6 +418,7 @@ class OnlineLLMStrategy:
             raw_response=response,
             recovery_metadata=recovery_metadata,
             input_record=input_record,
+            is_expansion=len(transformed) > 1,
         )
 
     def _transform_response(
@@ -427,6 +429,7 @@ class OnlineLLMStrategy:
         passthrough_fields: dict[str, Any],
         context: ProcessingContext,
         existing_content: dict[str, Any] | None = None,
+        input_record: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Transform LLM response to output format."""
         from agent_actions.processing.helpers import transform_with_passthrough
@@ -439,4 +442,5 @@ class OnlineLLMStrategy:
             action_name=context.action_name,
             passthrough_fields=passthrough_fields,
             existing_content=existing_content,
+            input_record=input_record,
         )

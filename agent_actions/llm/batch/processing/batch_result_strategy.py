@@ -268,9 +268,11 @@ class BatchResultStrategy:
             content = apply_version_merge(ctx.agent_config, item_dict, existing_content)
             structured_items.append({"source_guid": original_source_guid, "content": content})
 
-        # Batch items inherit target_id from the original input row.
+        # Batch items inherit target_id and version_correlation_id from the original input row.
         for item in structured_items:
-            carry_framework_fields(original_row, item, fields=("target_id",))
+            carry_framework_fields(
+                original_row, item, fields=("target_id", "version_correlation_id")
+            )
 
         record_index = ctx.reconciler.get_record_index(custom_id)
 

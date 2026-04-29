@@ -195,6 +195,7 @@ def transform_with_passthrough(
     passthrough_fields: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
     existing_content: dict[str, Any] | None = None,
+    input_record: dict[str, Any] | None = None,
 ) -> list[Any]:
     """Apply ``context_scope.passthrough`` logic to generated data."""
     transformer = PassthroughTransformer()
@@ -207,4 +208,5 @@ def transform_with_passthrough(
         passthrough_fields=passthrough_fields,
         metadata=metadata,
         existing_content=existing_content,
+        input_record=input_record,
     )
