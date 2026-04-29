@@ -453,7 +453,7 @@ class ProcessingPipeline:
     ):
         """
         Select and apply the appropriate processing strategy based on
-        configuration. Uses UnifiedProcessor for all processing paths.
+        configuration.
         """
         # Initialize source_data with the input data.
         # For cross-workflow records (source_relative_path is None), the input

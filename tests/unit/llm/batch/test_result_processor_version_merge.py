@@ -9,7 +9,6 @@ the content namespace structure.
 """
 
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -39,11 +38,8 @@ def _make_ctx(
 
 @pytest.fixture
 def processor():
-    """BatchResultStrategy with enrichment pipeline stubbed to pass through."""
-    p = BatchResultStrategy()
-    p._enrichment_pipeline = MagicMock()
-    p._enrichment_pipeline.enrich.side_effect = lambda result, context: result
-    return p
+    """BatchResultStrategy for version_merge testing."""
+    return BatchResultStrategy()
 
 
 class TestLLMVersionMergeWrapsUnderActionName:
@@ -192,8 +188,6 @@ class TestProcessReturnsFlattenableResults:
         )
 
         strategy = BatchResultStrategy()
-        strategy._enrichment_pipeline = MagicMock()
-        strategy._enrichment_pipeline.enrich.side_effect = lambda result, ctx: result
 
         results = strategy.process(
             batch_results=[batch_result],

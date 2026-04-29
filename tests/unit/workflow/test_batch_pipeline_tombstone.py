@@ -95,7 +95,7 @@ class TestHandleBatchGenerationTombstone:
 
 
 # ---------------------------------------------------------------------------
-# C-3  ·  process_file_mode_hitl wraps non-AgentActionsError with context
+# C-3  ·  HITLStrategy wraps non-AgentActionsError with context
 # ---------------------------------------------------------------------------
 
 
