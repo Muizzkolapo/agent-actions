@@ -128,67 +128,67 @@ class TestOnEmptyConfig:
 
 
 # =============================================================================
-# RecordProcessor empty output detection integration tests
+# OnlineLLMStrategy empty output detection integration tests
 # =============================================================================
 
 
+def _make_strategy(agent_config, mock_invocation):
+    """Build an OnlineLLMStrategy with a mock invocation strategy."""
+    from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
+
+    strategy = OnlineLLMStrategy(agent_config, "test_agent", invocation_strategy=mock_invocation)
+    strategy._transform_response = MagicMock(return_value=[{"content": {}, "source_guid": "sg-1"}])
+    return strategy
+
+
+def _make_mock_invocation():
+    mock_strategy = MagicMock()
+    mock_result = MagicMock()
+    mock_result.response = {}
+    mock_result.executed = True
+    mock_result.deferred = False
+    mock_result.passthrough_fields = {}
+    mock_result.recovery_metadata = None
+    mock_result.task_id = None
+    mock_strategy.invoke.return_value = mock_result
+    return mock_strategy
+
+
+def _make_mock_prepared(source_guid="sg-1"):
+    mock_prepared = MagicMock()
+    mock_prepared.source_guid = source_guid
+    mock_prepared.source_snapshot = None
+    mock_prepared.original_content = {"field1": "val1"}
+    mock_prepared.guard_status = None
+    return mock_prepared
+
+
 class TestEmptyOutputDetection:
-    """Tests for empty output detection in RecordProcessor.process()."""
+    """Tests for empty output detection in OnlineLLMStrategy.process_record()."""
 
     def test_empty_output_fires_warning_event(self):
         """When response is empty and on_empty=warn, a RecordEmptyOutputEvent fires."""
+        from agent_actions.processing.types import ProcessingContext
+
         fired_events = []
 
-        with patch(
-            "agent_actions.processing.strategies.online_llm.fire_event",
-            side_effect=lambda e: fired_events.append(e),
+        agent_config = {"name": "test_agent", "intent": "test", "on_empty": "warn"}
+        strategy = _make_strategy(agent_config, _make_mock_invocation())
+        context = ProcessingContext(
+            agent_config=agent_config, agent_name="test_agent", record_index=0
+        )
+
+        with (
+            patch(
+                "agent_actions.processing.strategies.online_llm.fire_event",
+                side_effect=lambda e: fired_events.append(e),
+            ),
+            patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp,
         ):
-            from agent_actions.processing.record_processor import RecordProcessor
-            from agent_actions.processing.types import ProcessingContext
-
-            # Build a minimal processor with a mock strategy returning empty response
-            agent_config = {
-                "name": "test_agent",
-                "intent": "test",
-                "on_empty": "warn",
-            }
-
-            mock_strategy = MagicMock()
-            mock_result = MagicMock()
-            mock_result.response = {}
-            mock_result.executed = True
-            mock_result.deferred = False
-            mock_result.passthrough_fields = {}
-            mock_result.recovery_metadata = None
-            mock_result.task_id = None
-
-            mock_strategy.invoke.return_value = mock_result
-
-            processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-
-            # Mock _transform_response to return a minimal valid result
-            processor._online_strategy._transform_response = MagicMock(
-                return_value=[{"content": {}, "source_guid": "sg-1"}]
+            mock_tp.return_value.prepare.return_value = _make_mock_prepared()
+            strategy.process_record(
+                {"content": {"field1": "val1"}, "source_guid": "sg-1"}, context, skip_guard=False
             )
-
-            context = ProcessingContext(
-                agent_config=agent_config,
-                agent_name="test_agent",
-                record_index=0,
-            )
-
-            # Mock task_preparer
-            with patch(
-                "agent_actions.processing.strategies.online_llm.get_task_preparer"
-            ) as mock_tp:
-                mock_prepared = MagicMock()
-                mock_prepared.source_guid = "sg-1"
-                mock_prepared.source_snapshot = None
-                mock_prepared.original_content = {"field1": "val1"}
-                mock_prepared.guard_status = None  # Not filtered
-                mock_tp.return_value.prepare.return_value = mock_prepared
-
-                processor.process({"content": {"field1": "val1"}, "source_guid": "sg-1"}, context)
 
         empty_events = [e for e in fired_events if isinstance(e, RecordEmptyOutputEvent)]
         assert len(empty_events) == 1
@@ -196,157 +196,73 @@ class TestEmptyOutputDetection:
         assert empty_events[0].on_empty == "warn"
 
     def test_empty_output_error_raises(self):
-        """When on_empty=error, AgentActionsError is raised on empty output."""
-        with patch(
-            "agent_actions.processing.strategies.online_llm.fire_event",
+        """When on_empty=error, EmptyOutputError is raised on empty output."""
+        from agent_actions.processing.types import ProcessingContext
+
+        agent_config = {"name": "test_agent", "intent": "test", "on_empty": "error"}
+        strategy = _make_strategy(agent_config, _make_mock_invocation())
+        context = ProcessingContext(
+            agent_config=agent_config, agent_name="test_agent", record_index=0
+        )
+
+        with (
+            patch("agent_actions.processing.strategies.online_llm.fire_event"),
+            patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp,
         ):
-            from agent_actions.processing.record_processor import RecordProcessor
-            from agent_actions.processing.types import ProcessingContext
-
-            agent_config = {
-                "name": "test_agent",
-                "intent": "test",
-                "on_empty": "error",
-            }
-
-            mock_strategy = MagicMock()
-            mock_result = MagicMock()
-            mock_result.response = {}
-            mock_result.executed = True
-            mock_result.deferred = False
-            mock_result.passthrough_fields = {}
-            mock_result.recovery_metadata = None
-            mock_result.task_id = None
-            mock_strategy.invoke.return_value = mock_result
-
-            processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-            processor._online_strategy._transform_response = MagicMock(
-                return_value=[{"content": {}, "source_guid": "sg-1"}]
-            )
-
-            context = ProcessingContext(
-                agent_config=agent_config,
-                agent_name="test_agent",
-                record_index=0,
-            )
-
-            with patch(
-                "agent_actions.processing.strategies.online_llm.get_task_preparer"
-            ) as mock_tp:
-                mock_prepared = MagicMock()
-                mock_prepared.source_guid = "sg-1"
-                mock_prepared.source_snapshot = None
-                mock_prepared.original_content = {"field1": "val1"}
-                mock_prepared.guard_status = None
-                mock_tp.return_value.prepare.return_value = mock_prepared
-
-                with pytest.raises(EmptyOutputError, match="on_empty=error"):
-                    processor.process(
-                        {"content": {"field1": "val1"}, "source_guid": "sg-1"}, context
-                    )
+            mock_tp.return_value.prepare.return_value = _make_mock_prepared()
+            with pytest.raises(EmptyOutputError, match="on_empty=error"):
+                strategy.process_record(
+                    {"content": {"field1": "val1"}, "source_guid": "sg-1"},
+                    context,
+                    skip_guard=False,
+                )
 
     def test_empty_output_skip_fires_event_for_observability(self):
         """When on_empty=skip, RecordEmptyOutputEvent still fires for observability."""
+        from agent_actions.processing.types import ProcessingContext
+
         fired_events = []
 
-        with patch(
-            "agent_actions.processing.strategies.online_llm.fire_event",
-            side_effect=lambda e: fired_events.append(e),
+        agent_config = {"name": "test_agent", "intent": "test", "on_empty": "skip"}
+        strategy = _make_strategy(agent_config, _make_mock_invocation())
+        context = ProcessingContext(
+            agent_config=agent_config, agent_name="test_agent", record_index=0
+        )
+
+        with (
+            patch(
+                "agent_actions.processing.strategies.online_llm.fire_event",
+                side_effect=lambda e: fired_events.append(e),
+            ),
+            patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp,
         ):
-            from agent_actions.processing.record_processor import RecordProcessor
-            from agent_actions.processing.types import ProcessingContext
-
-            agent_config = {
-                "name": "test_agent",
-                "intent": "test",
-                "on_empty": "skip",
-            }
-
-            mock_strategy = MagicMock()
-            mock_result = MagicMock()
-            mock_result.response = {}
-            mock_result.executed = True
-            mock_result.deferred = False
-            mock_result.passthrough_fields = {}
-            mock_result.recovery_metadata = None
-            mock_result.task_id = None
-            mock_strategy.invoke.return_value = mock_result
-
-            processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-            processor._online_strategy._transform_response = MagicMock(
-                return_value=[{"content": {}, "source_guid": "sg-1"}]
+            mock_tp.return_value.prepare.return_value = _make_mock_prepared()
+            strategy.process_record(
+                {"content": {"field1": "val1"}, "source_guid": "sg-1"}, context, skip_guard=False
             )
-
-            context = ProcessingContext(
-                agent_config=agent_config,
-                agent_name="test_agent",
-                record_index=0,
-            )
-
-            with patch(
-                "agent_actions.processing.strategies.online_llm.get_task_preparer"
-            ) as mock_tp:
-                mock_prepared = MagicMock()
-                mock_prepared.source_guid = "sg-1"
-                mock_prepared.source_snapshot = None
-                mock_prepared.original_content = {"field1": "val1"}
-                mock_prepared.guard_status = None
-                mock_tp.return_value.prepare.return_value = mock_prepared
-
-                processor.process({"content": {"field1": "val1"}, "source_guid": "sg-1"}, context)
 
         empty_events = [e for e in fired_events if isinstance(e, RecordEmptyOutputEvent)]
         assert len(empty_events) == 1
         assert empty_events[0].on_empty == "skip"
 
-    def test_empty_output_error_propagates_through_process_batch(self):
-        """EmptyOutputError must propagate through process_batch (not be swallowed)."""
-        with patch(
-            "agent_actions.processing.strategies.online_llm.fire_event",
+    def test_empty_output_error_propagates_through_invoke(self):
+        """EmptyOutputError must propagate through strategy.invoke() (not be swallowed)."""
+        from agent_actions.processing.types import ProcessingContext
+
+        agent_config = {"name": "test_agent", "intent": "test", "on_empty": "error"}
+        strategy = _make_strategy(agent_config, _make_mock_invocation())
+        context = ProcessingContext(
+            agent_config=agent_config, agent_name="test_agent", record_index=0
+        )
+
+        with (
+            patch("agent_actions.processing.strategies.online_llm.fire_event"),
+            patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp,
         ):
-            from agent_actions.processing.record_processor import RecordProcessor
-            from agent_actions.processing.types import ProcessingContext
-
-            agent_config = {
-                "name": "test_agent",
-                "intent": "test",
-                "on_empty": "error",
-            }
-
-            mock_strategy = MagicMock()
-            mock_result = MagicMock()
-            mock_result.response = {}
-            mock_result.executed = True
-            mock_result.deferred = False
-            mock_result.passthrough_fields = {}
-            mock_result.recovery_metadata = None
-            mock_result.task_id = None
-            mock_strategy.invoke.return_value = mock_result
-
-            processor = RecordProcessor(agent_config, "test_agent", strategy=mock_strategy)
-            processor._online_strategy._transform_response = MagicMock(
-                return_value=[{"content": {}, "source_guid": "sg-1"}]
-            )
-
-            context = ProcessingContext(
-                agent_config=agent_config,
-                agent_name="test_agent",
-                record_index=0,
-            )
-
-            with patch(
-                "agent_actions.processing.strategies.online_llm.get_task_preparer"
-            ) as mock_tp:
-                mock_prepared = MagicMock()
-                mock_prepared.source_guid = "sg-1"
-                mock_prepared.source_snapshot = None
-                mock_prepared.original_content = {"field1": "val1"}
-                mock_prepared.guard_status = None
-                mock_tp.return_value.prepare.return_value = mock_prepared
-
-                items = [{"content": {"field1": "val1"}, "source_guid": "sg-1"}]
-                with pytest.raises(EmptyOutputError, match="on_empty=error"):
-                    processor.process_batch(items, context)
+            mock_tp.return_value.prepare.return_value = _make_mock_prepared()
+            items = [{"content": {"field1": "val1"}, "source_guid": "sg-1"}]
+            with pytest.raises(EmptyOutputError, match="on_empty=error"):
+                strategy.invoke(items, context)
 
 
 # =============================================================================

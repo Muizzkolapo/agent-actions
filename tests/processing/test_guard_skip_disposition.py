@@ -40,21 +40,20 @@ def processing_context():
 
 
 @pytest.fixture
-def record_processor():
-    """Create a RecordProcessor with mocked strategy to avoid LLM init."""
-    from agent_actions.processing.record_processor import RecordProcessor
+def online_strategy():
+    """Create an OnlineLLMStrategy with mocked invocation strategy to avoid LLM init."""
+    from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 
-    processor = RecordProcessor(
+    return OnlineLLMStrategy(
         agent_config={"agent_type": "test_action", "kind": "llm"},
         agent_name="test_action",
-        strategy=MagicMock(),
+        invocation_strategy=MagicMock(),
     )
-    return processor
 
 
 @pytest.fixture
-def guard_skip_result(record_processor, guard_skip_prepared, processing_context):
-    """Run process() with a guard-skipped PreparedTask and return the result."""
+def guard_skip_result(online_strategy, guard_skip_prepared, processing_context):
+    """Run process_record() with a guard-skipped PreparedTask and return the result."""
     mock_preparer = MagicMock()
     mock_preparer.prepare.return_value = guard_skip_prepared
 
@@ -62,9 +61,10 @@ def guard_skip_result(record_processor, guard_skip_prepared, processing_context)
         "agent_actions.processing.strategies.online_llm.get_task_preparer",
         return_value=mock_preparer,
     ):
-        return record_processor.process(
+        return online_strategy.process_record(
             {"source_guid": "guid-1", "content": {"field": "value"}},
             processing_context,
+            skip_guard=False,
         )
 
 

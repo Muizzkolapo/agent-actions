@@ -39,7 +39,7 @@ and chunking/lineage support).
 | `storage` | outbound | Uses StorageBackend for source/target reads via SourceDataLoader |
 | `output` | outbound | Uses FileWriter and UnifiedSourceDataSaver for initial-stage writes |
 | `config` | outbound | Reads workflow configuration, data_source settings, and schema paths |
-| `processing` | outbound | Delegates record processing to RecordProcessor |
+| `processing` | outbound | Delegates record processing to UnifiedProcessor |
 | `prompt` | outbound | Validates staged data against prompt templates |
 | `workflow` | inbound | Workflow executor calls process_initial_stage and context normalization |
 | `validation` | inbound | Uses guard evaluation and field resolution for preflight checks |

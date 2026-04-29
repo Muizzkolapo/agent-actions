@@ -23,7 +23,6 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `exhausted_builder.py` | Module | Builds reports once a workflow’s retries are exhausted. | `validation`, `logging` |
 | `helpers.py` | Module | Shared helpers (UUID construction, tuple flattening) for processors. | `processing` |
 | `record_helpers.py` | Module | Shared record assembly helpers: `build_tombstone`, `build_exhausted_tombstone`, `carry_framework_fields`, `apply_version_merge`, `extract_existing_content`. Used by all processing paths (online, batch, FILE). | `record`, `processing` |
-| `record_processor.py` | Module | Base processor that glues loaders, transformers, and error handling. | `input`, `processing` |
 | `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. Exports `write_node_level_disposition` (node-level skip/passthrough) and `write_record_dispositions` (batch record dispositions). All `set_disposition` calls (except executor-level) are centralized here. | `output` |
 | `prepared_task.py` | Module | `GuardStatus` enum (PASSED, SKIPPED, FILTERED, UPSTREAM_UNPROCESSED), `PreparedTask` dataclass, and `PreparationContext` (carries `mode: RunMode` directly). | `typing` |
 | `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. Short-circuits upstream-unprocessed records before context loading. | `input`, `prompt` |
@@ -33,7 +32,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
-| `RecordProcessor.process()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].granularity`, `actions[].kind` |
+| `UnifiedProcessor.process()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].granularity`, `actions[].kind` |
 | `TaskPreparer.prepare()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].conditional_clause` |
 | `ResultCollector.collect()` | `agent_io/target/{action}/` | Writes | — |
 | `EnrichmentPipeline.enrich()` | `agent_io/target/{action}/` | Transforms | — |
@@ -47,8 +46,8 @@ lineage helpers, recovery flows, and transformation pipelines.
 
 | Package | Direction | Why |
 |---------|-----------|-----|
-| `llm` | inbound | Batch and online runners delegate to RecordProcessor |
-| `prompt` | inbound | DataGenerator creates RecordProcessor for subsequent-stage processing |
+| `llm` | inbound | Batch and online runners delegate to UnifiedProcessor |
+| `prompt` | inbound | DataGenerator uses OnlineLLMStrategy for subsequent-stage processing |
 | `workflow` | inbound | Pipeline orchestrator calls processing for each action stage |
 | `prompt` | outbound | TaskPreparer uses PromptPreparationService for context and prompt rendering |
 | `input` | outbound | Uses guard evaluators and field resolution from preprocessing |

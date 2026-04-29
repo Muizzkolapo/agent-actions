@@ -4,7 +4,7 @@ Tests for upstream unprocessed record filtering (#943).
 Verifies that records with _unprocessed=True are:
 1. Detected by TaskPreparer._is_upstream_unprocessed()
 2. Short-circuited in TaskPreparer.prepare() (no context loading, no prompt)
-3. Handled as UNPROCESSED in RecordProcessor
+3. Handled as UNPROCESSED in OnlineLLMStrategy.process_record()
 4. Counted separately in ResultCollector
 5. Enriched with lineage but not LLM metadata
 """
@@ -16,8 +16,8 @@ import pytest
 from agent_actions.config.types import RunMode
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
-from agent_actions.processing.record_processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
+from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.processing.types import (
     ProcessingContext,
@@ -117,15 +117,15 @@ class TestTaskPreparerUpstreamUnprocessed:
         assert result.target_id == "tgt_existing"
 
 
-# --- RecordProcessor handles UNPROCESSED ---
+# --- OnlineLLMStrategy handles UNPROCESSED ---
 
 
-class TestRecordProcessorUnprocessed:
-    """Tests for RecordProcessor handling of UPSTREAM_UNPROCESSED."""
+class TestOnlineLLMStrategyUnprocessed:
+    """Tests for OnlineLLMStrategy handling of UPSTREAM_UNPROCESSED."""
 
     def test_creates_unprocessed_result(self):
         config = {"agent_type": "test_action"}
-        processor = RecordProcessor(config, "test_action")
+        strategy = OnlineLLMStrategy(config, "test_action")
         context = ProcessingContext(
             agent_config=config,
             agent_name="test_action",
@@ -139,7 +139,7 @@ class TestRecordProcessorUnprocessed:
             "_unprocessed": True,
         }
 
-        result = processor.process(item, context)
+        result = strategy.process_record(item, context, skip_guard=False)
 
         assert result.status == ProcessingStatus.UNPROCESSED
         assert result.executed is False

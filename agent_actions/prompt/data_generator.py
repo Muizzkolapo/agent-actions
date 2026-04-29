@@ -1,4 +1,4 @@
-"""Data generation using agents with RecordProcessor retry support."""
+"""Data generation using agents with OnlineLLMStrategy."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from agent_actions.config.di.container import registry
 from agent_actions.config.interfaces import IGenerator, ProcessingMode
 from agent_actions.config.types import RunMode
 from agent_actions.errors import GenerationError
-from agent_actions.processing.record_processor import RecordProcessor
+from agent_actions.processing.enrichment import EnrichmentPipeline
+from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingStatus,
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @registry.register_generator("data_generator")
 class DataGenerator(IGenerator):
-    """Handles agent creation and data generation via RecordProcessor."""
+    """Handles agent creation and data generation via OnlineLLMStrategy."""
 
     def __init__(
         self,
@@ -41,10 +42,11 @@ class DataGenerator(IGenerator):
         self.agent_indices = agent_indices or {}
         self.storage_backend = storage_backend
 
-        self._record_processor = RecordProcessor.create(
+        self._online_strategy = OnlineLLMStrategy(
             agent_config=cast(dict[str, Any], self.agent_config),
             agent_name=self.agent_name,
         )
+        self._enrichment_pipeline = EnrichmentPipeline()
 
     def supports_async(self) -> bool:
         """Return True as this generator supports async operations."""
@@ -99,7 +101,9 @@ class DataGenerator(IGenerator):
             else:
                 item = {"content": contents}
 
-            result = self._record_processor.process(item, context)
+            result = self._online_strategy.process_record(item, context, skip_guard=False)
+            if result.status not in (ProcessingStatus.DEFERRED, ProcessingStatus.FILTERED):
+                result = self._enrichment_pipeline.enrich(result, context)
 
             if result.status == ProcessingStatus.FILTERED:
                 return ([], False, {})

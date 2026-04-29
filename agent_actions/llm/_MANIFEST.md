@@ -39,7 +39,7 @@ Cohere, etc.).
 | `workflow` | inbound | Workflow executor invokes batch and online runners |
 | `cli` | inbound | CLI commands dispatch to batch_cli and realtime handlers |
 | `prompt` | outbound | Uses MessageBuilder and PromptPreparationService for prompt assembly |
-| `processing` | outbound | Uses RecordProcessor and EnrichmentPipeline for result processing |
+| `processing` | outbound | Uses UnifiedProcessor and BatchResultStrategy for result processing |
 | `config` | outbound | Reads vendor profiles and project paths from config utilities |
 | `output` | outbound | Uses ResponseSchemaCompiler and FileWriter for output handling |
 | `input` | outbound | Uses loaders and preprocessing for batch data preparation |

@@ -13,9 +13,10 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
-from agent_actions.processing.record_processor import RecordProcessor
-from agent_actions.processing.result_collector import ResultCollector, write_node_level_disposition
+from agent_actions.processing.result_collector import write_node_level_disposition
+from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
+from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -488,7 +489,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
         )
         data_chunk = chunks
 
-        # GUIDs must match what RecordProcessor will generate
+        # GUIDs must match what UnifiedProcessor/OnlineLLMStrategy will generate
         from agent_actions.utils.id_generation import IDGenerator
 
         src_text = []
@@ -502,7 +503,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
         if not isinstance(data_chunk, list):
             data_chunk = [data_chunk]
 
-        # Do NOT mutate data_chunk: RecordProcessor hashes raw items for source_guid
+        # Do NOT mutate data_chunk: OnlineLLMStrategy hashes raw items for source_guid
         from agent_actions.utils.id_generation import IDGenerator
 
         src_text = []
@@ -640,11 +641,12 @@ def _process_batch_mode(ctx: BatchProcessingContext):
 def _process_online_mode_with_record_processor(
     data_chunk, ctx: InitialStageContext, file_path, base_directory, output_directory
 ):
-    """Process data in online mode using RecordProcessor."""
+    """Process data in online mode using UnifiedProcessor."""
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
 
-    processor = RecordProcessor.create(ctx.agent_config, ctx.agent_name)
+    strategy = OnlineLLMStrategy(agent_config=ctx.agent_config, agent_name=ctx.agent_name)
+    processor = UnifiedProcessor()
 
     processing_context = ProcessingContext(
         agent_config=cast("ActionConfigDict", ctx.agent_config),
@@ -657,15 +659,7 @@ def _process_online_mode_with_record_processor(
         storage_backend=ctx.storage_backend,
     )
 
-    results = processor.process_batch(data_chunk, processing_context)
-
-    processed_items, stats = ResultCollector.collect_results(
-        results,
-        ctx.agent_config,
-        ctx.agent_name,
-        is_first_stage=True,
-        storage_backend=ctx.storage_backend,
-    )
+    processed_items, stats = processor.process(data_chunk, processing_context, strategy)
 
     # Signal node-level SKIP only when output is truly empty and the
     # only outcomes were guard-skip / guard-filter.  Guard-skipped

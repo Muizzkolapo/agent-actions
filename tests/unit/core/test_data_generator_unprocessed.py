@@ -6,7 +6,7 @@ which caused downstream stages to treat upstream-failed records as real outputs.
 Fix: Explicit UNPROCESSED branch returns (data, False, ...).
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from agent_actions.processing.types import ProcessingResult
 from agent_actions.prompt.data_generator import DataGenerator
@@ -19,8 +19,7 @@ class TestDataGeneratorUnprocessed:
         config = {"agent_type": "test_action"}
         return DataGenerator(agent_config=config, agent_name="test_action")
 
-    @patch.object(DataGenerator, "_record_processor", create=True)
-    def test_unprocessed_returns_not_executed(self, mock_processor):
+    def test_unprocessed_returns_not_executed(self):
         """UNPROCESSED result must return executed=False, not fall through to SUCCESS."""
         gen = self._make_generator()
 
@@ -30,8 +29,11 @@ class TestDataGeneratorUnprocessed:
             reason="upstream_unprocessed",
             source_guid="sg_1",
         )
-        gen._record_processor = MagicMock()
-        gen._record_processor.process.return_value = mock_result
+        # Mock strategy and enrichment pipeline so we can control what process_record returns
+        gen._online_strategy = MagicMock()
+        gen._online_strategy.process_record.return_value = mock_result
+        gen._enrichment_pipeline = MagicMock()
+        gen._enrichment_pipeline.enrich.return_value = mock_result  # return unchanged
 
         item = {"content": "stale", "source_guid": "sg_1", "_unprocessed": True}
         data, executed, passthrough_fields = gen.create_agent_with_data(

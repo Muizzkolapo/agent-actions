@@ -704,8 +704,8 @@ def test_record_tool_list_return_produces_multiple_output_items():
         → ResultCollector.collect_results() extends output  — 3 items total
     """
     from agent_actions.processing.invocation.result import InvocationResult
-    from agent_actions.processing.record_processor import RecordProcessor
     from agent_actions.processing.result_collector import ResultCollector
+    from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
     from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 
     # A RECORD tool config (kind=tool, granularity=record)
@@ -717,7 +717,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
     }
     agent_name = "flatten_tool"
 
-    # Mock strategy that returns a list (1-to-many expansion)
+    # Mock invocation strategy that returns a list (1-to-many expansion)
     class ListReturningStrategy:
         def invoke(self, task, context):
             return InvocationResult.immediate(
@@ -732,14 +732,16 @@ def test_record_tool_list_return_produces_multiple_output_items():
         def supports_recovery(self):
             return False
 
-    processor = RecordProcessor(agent_config, agent_name, strategy=ListReturningStrategy())
+    strategy = OnlineLLMStrategy(
+        agent_config, agent_name, invocation_strategy=ListReturningStrategy()
+    )
 
     # Single input record (typical RECORD mode item)
     item = {"source_guid": "sg-1", "content": {"raw_questions": "..."}}
     context = ProcessingContext(agent_config=agent_config, agent_name=agent_name)
 
     # Process single item
-    result = processor.process(item, context)
+    result = strategy.process_record(item, context, skip_guard=False)
 
     # Verify the result contains all 3 expanded items
     assert result.status == ProcessingStatus.SUCCESS
@@ -762,14 +764,14 @@ def test_record_tool_list_return_produces_multiple_output_items():
     assert output[2]["content"]["flatten_tool"]["question"] == "Q3"
 
 
-# --- SchemaValidationError re-raise in process_batch ---
+# --- SchemaValidationError re-raise in invoke ---
 
 
-def test_process_batch_reraises_schema_validation_error():
-    """SchemaValidationError from process() should propagate through process_batch."""
+def test_invoke_reraises_schema_validation_error():
+    """SchemaValidationError from process_record() should propagate through invoke()."""
     from agent_actions.errors import SchemaValidationError
     from agent_actions.processing.invocation.result import InvocationResult
-    from agent_actions.processing.record_processor import RecordProcessor
+    from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 
     agent_config = {"kind": "tool", "granularity": "record"}
     agent_name = "schema_test_tool"
@@ -784,18 +786,20 @@ def test_process_batch_reraises_schema_validation_error():
         def supports_recovery(self):
             return False
 
-    processor = RecordProcessor(agent_config, agent_name, strategy=SchemaFailingStrategy())
+    strategy = OnlineLLMStrategy(
+        agent_config, agent_name, invocation_strategy=SchemaFailingStrategy()
+    )
     context = ProcessingContext(agent_config=agent_config, agent_name=agent_name)
 
     items = [{"source_guid": "sg-1", "content": {"id": 1}}]
 
     with patch.object(
-        processor,
-        "process",
+        strategy,
+        "process_record",
         side_effect=SchemaValidationError("output doesn't match schema"),
     ):
         with pytest.raises(SchemaValidationError, match="output doesn't match schema"):
-            processor.process_batch(items, context)
+            strategy.invoke(items, context)
 
 
 # --- ResultCollector failure handling ---
