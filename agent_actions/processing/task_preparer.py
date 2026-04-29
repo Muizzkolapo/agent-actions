@@ -12,10 +12,12 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.state import (
     CASCADE_BLOCKING_STATES,
     RESETTABLE_DOWNSTREAM_STATES,
     RecordState,
+    reason_downstream_reset,
 )
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
@@ -317,7 +319,12 @@ class TaskPreparer:
         """Reset upstream-settled records to ACTIVE when used as downstream input."""
         state = RecordState.from_record(item)
         if state in RESETTABLE_DOWNSTREAM_STATES:
-            item["_state"] = RecordState.ACTIVE.value
+            RecordEnvelope.transition(
+                item,
+                RecordState.ACTIVE,
+                action_name="__downstream__",
+                reason=reason_downstream_reset(from_state=state.value),
+            )
 
     def _generate_target_id(self) -> str:
         """Generate a new target_id."""

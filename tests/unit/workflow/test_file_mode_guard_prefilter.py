@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from agent_actions.input.preprocessing.filtering.evaluator import GuardResult
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.record.state import RecordState
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 
@@ -327,6 +328,7 @@ class TestGuardFilterFileMode:
             assert result.source_guid == data[i]["source_guid"]
             # Null namespace marker added by RecordEnvelope.build_skipped
             assert result.data[0]["content"]["my_action"] is None
+            assert result.data[0]["_state"] == RecordState.GUARD_SKIPPED.value
 
     def test_missing_source_guid(self):
         """Items without source_guid get None on the result."""

@@ -167,6 +167,10 @@ def reason_cascade(
     return r
 
 
+def reason_downstream_reset(*, from_state: str):
+    return {"type": "downstream_reset", "from_state": from_state}
+
+
 RESETTABLE_DOWNSTREAM_STATES: frozenset[RecordState] = frozenset(
     {RecordState.COMMITTED, RecordState.GUARD_SKIPPED, RecordState.GUARD_DEFERRED}
 )

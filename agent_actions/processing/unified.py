@@ -14,9 +14,19 @@ from agent_actions.processing.record_helpers import build_guard_skipped_record
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
+from agent_actions.record.state import RecordState, reason_guard
 
 logger = logging.getLogger(__name__)
+
+
+def prefilter_by_guard(*args: Any, **kwargs: Any):
+    """Patch-friendly wrapper around FILE-mode guard prefilter.
+
+    Imported lazily to avoid circular imports at module import time.
+    """
+    from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard as _prefilter_by_guard
+
+    return _prefilter_by_guard(*args, **kwargs)
 
 
 @runtime_checkable
@@ -187,17 +197,46 @@ class UnifiedProcessor:
 
         for item in skipped:
             if action_name and isinstance(item, dict):
+                source_guid = item.get("source_guid")
+                clause = ""
+                guard = config.get("guard")
+                if isinstance(guard, dict):
+                    clause = str(guard.get("clause", ""))
                 content = item.get("content")
-                if isinstance(content, dict) and action_name not in content:
-                    skipped_record = RecordEnvelope.build_skipped(action_name, item)
-                    for key in item:
-                        if key not in skipped_record:
-                            skipped_record[key] = item[key]
-                    item = skipped_record
+                if isinstance(content, dict) and action_name in content:
+                    # Namespace already present (e.g. from upstream/manual edits) — do NOT overwrite with None.
+                    skipped_record = dict(item)
+                    if source_guid is not None:
+                        skipped_record["source_guid"] = source_guid
+                    RecordEnvelope.transition(
+                        skipped_record,
+                        RecordState.GUARD_SKIPPED,
+                        action_name=action_name,
+                        reason=reason_guard(
+                            clause=clause,
+                            behavior="skip",
+                            result=False,
+                        ),
+                    )
+                else:
+                    # Add null namespace marker + guard-skipped state.
+                    skipped_record = build_guard_skipped_record(
+                        action_name,
+                        item,
+                        source_guid=source_guid,
+                        clause=clause,
+                        behavior="skip",
+                        result=False,
+                    )
+                # Preserve any additional (non-envelope) fields for FILE-mode display/debugging.
+                for key in item:
+                    if key not in skipped_record:
+                        skipped_record[key] = item[key]
+                item = skipped_record
             guard_results.append(
                 ProcessingResult.unprocessed(
                     data=[item],
-                    reason="guard_prefilter_skip",
+                    reason="guard_skipped",
                     source_guid=item.get("source_guid") if isinstance(item, dict) else None,
                 )
             )
