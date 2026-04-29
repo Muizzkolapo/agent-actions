@@ -4,12 +4,14 @@ Verifies that structured_items built from the original_row carry version_correla
 before being passed to the enrichment pipeline.
 """
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.processing.batch_result_strategy import (
     BatchProcessingContext,
     BatchResultStrategy,
 )
+from agent_actions.processing.record_helpers import carry_framework_fields
 
 
 def _make_context(original_row: dict, agent_config: dict | None = None) -> BatchProcessingContext:
@@ -36,6 +38,22 @@ def _make_batch_result(custom_id: str = "custom-id-1", content: object = None):
     return result
 
 
+@contextmanager
+def _capture_structured_items():
+    """Intercept carry_framework_fields to observe structured_items mid-flight."""
+    captured: list = []
+
+    def capturing_carry(src, dest, fields=None):
+        captured.append(dest)
+        return carry_framework_fields(src, dest, fields=fields)
+
+    with patch(
+        "agent_actions.llm.batch.processing.batch_result_strategy.carry_framework_fields",
+        side_effect=capturing_carry,
+    ):
+        yield captured
+
+
 class TestBatchVersionCorrelationIdPropagation:
     def test_version_correlation_id_carried_from_original_row(self):
         """Structured items must carry version_correlation_id from original_row."""
@@ -46,30 +64,16 @@ class TestBatchVersionCorrelationIdPropagation:
             "content": {"source": {"text": "hello"}},
         }
         ctx = _make_context(original_row)
-        batch_result = _make_batch_result()
         strategy = BatchResultStrategy()
 
-        # Intercept carry_framework_fields to observe structured_items mid-flight.
-        captured_items: list = []
-        real_carry = __import__(
-            "agent_actions.processing.record_helpers", fromlist=["carry_framework_fields"]
-        ).carry_framework_fields
-
-        def capturing_carry(src, dest, fields=None):
-            captured_items.append(dest)
-            return real_carry(src, dest, fields=fields)
-
-        with patch(
-            "agent_actions.llm.batch.processing.batch_result_strategy.carry_framework_fields",
-            side_effect=capturing_carry,
-        ):
+        with _capture_structured_items() as captured:
             try:
-                strategy._process_successful_result(ctx, batch_result, "custom-id-1")
+                strategy._process_successful_result(ctx, _make_batch_result(), "custom-id-1")
             except Exception:
                 pass  # enrichment pipeline may fail without full context; we only need items
 
-        assert captured_items, "carry_framework_fields was never called"
-        for item in captured_items:
+        assert captured, "carry_framework_fields was never called"
+        for item in captured:
             assert item.get("version_correlation_id") == "vcid-batch-original", (
                 f"expected vcid-batch-original in {item}"
             )
@@ -82,29 +86,15 @@ class TestBatchVersionCorrelationIdPropagation:
             "content": {"source": {"text": "hello"}},
         }
         ctx = _make_context(original_row)
-        batch_result = _make_batch_result()
         strategy = BatchResultStrategy()
 
-        captured_items: list = []
-        real_carry = __import__(
-            "agent_actions.processing.record_helpers", fromlist=["carry_framework_fields"]
-        ).carry_framework_fields
-
-        def capturing_carry(src, dest, fields=None):
-            captured_items.append(dest)
-            return real_carry(src, dest, fields=fields)
-
-        with patch(
-            "agent_actions.llm.batch.processing.batch_result_strategy.carry_framework_fields",
-            side_effect=capturing_carry,
-        ):
+        with _capture_structured_items() as captured:
             try:
-                strategy._process_successful_result(ctx, batch_result, "custom-id-1")
+                strategy._process_successful_result(ctx, _make_batch_result(), "custom-id-1")
             except Exception:
                 pass
 
-        # Items built from a row without version_correlation_id must not have it
-        for item in captured_items:
+        for item in captured:
             assert "version_correlation_id" not in item, (
                 f"unexpected version_correlation_id in {item}"
             )

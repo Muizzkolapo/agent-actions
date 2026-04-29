@@ -270,9 +270,9 @@ class BatchResultStrategy:
 
         # Batch items inherit target_id and version_correlation_id from the original input row.
         for item in structured_items:
-            carry_framework_fields(original_row, item, fields=("target_id",))
-            if "version_correlation_id" in (original_row or {}):
-                item["version_correlation_id"] = original_row["version_correlation_id"]
+            carry_framework_fields(
+                original_row, item, fields=("target_id", "version_correlation_id")
+            )
 
         record_index = ctx.reconciler.get_record_index(custom_id)
 
