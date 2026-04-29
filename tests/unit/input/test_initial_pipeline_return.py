@@ -102,15 +102,11 @@ class TestOnlineModeReturnsPath:
 
         with (
             patch(
-                "agent_actions.input.preprocessing.staging.initial_pipeline.RecordProcessor"
+                "agent_actions.input.preprocessing.staging.initial_pipeline.UnifiedProcessor"
             ) as MockProc,
-            patch(
-                "agent_actions.input.preprocessing.staging.initial_pipeline.ResultCollector"
-            ) as MockCollector,
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
-            MockProc.return_value.process_batch.return_value = [{"result": "ok"}]
-            MockCollector.collect_results.return_value = (
+            MockProc.return_value.process.return_value = (
                 [{"result": "ok"}],
                 CollectionStats(success=1),
             )
@@ -150,15 +146,11 @@ class TestInitialPipelineZeroSuccessFailure:
 
         with (
             patch(
-                "agent_actions.input.preprocessing.staging.initial_pipeline.RecordProcessor"
+                "agent_actions.input.preprocessing.staging.initial_pipeline.UnifiedProcessor"
             ) as MockProc,
-            patch(
-                "agent_actions.input.preprocessing.staging.initial_pipeline.ResultCollector"
-            ) as MockCollector,
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
-            MockProc.return_value.process_batch.return_value = []
-            MockCollector.collect_results.return_value = (output, stats)
+            MockProc.return_value.process.return_value = (output, stats)
 
             return _process_online_mode_with_record_processor(
                 data_chunk, ctx, str(input_file), str(base), str(output_dir)
@@ -229,15 +221,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
-            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process_batch.return_value = []
-            MockCollector.collect_results.return_value = (
-                [],
-                CollectionStats(),  # all zeros
-            )
+            MockProc.return_value.process.return_value = ([], CollectionStats())
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
 
@@ -259,15 +246,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}, {"id": "2"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
-            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process_batch.return_value = []
-            MockCollector.collect_results.return_value = (
-                [],
-                CollectionStats(unprocessed=2),
-            )
+            MockProc.return_value.process.return_value = ([], CollectionStats(unprocessed=2))
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
 
@@ -280,15 +262,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = []
 
         with (
-            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
-            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process_batch.return_value = []
-            MockCollector.collect_results.return_value = (
-                [],
-                CollectionStats(),
-            )
+            MockProc.return_value.process.return_value = ([], CollectionStats())
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
             assert isinstance(result, str)
@@ -308,15 +285,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
-            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process_batch.return_value = []
-            MockCollector.collect_results.return_value = (
-                [],
-                CollectionStats(success=1),
-            )
+            MockProc.return_value.process.return_value = ([], CollectionStats(success=1))
 
             with pytest.raises(RuntimeError, match="tool returned empty result"):
                 _call_online(data_chunk, ctx, input_file, base, output)
@@ -328,15 +300,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.RecordProcessor") as MockProc,
-            patch(f"{_PATCH_PREFIX}.ResultCollector") as MockCollector,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process_batch.return_value = []
-            MockCollector.collect_results.return_value = (
-                [],
-                CollectionStats(success=1),
-            )
+            MockProc.return_value.process.return_value = ([], CollectionStats(success=1))
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
             assert isinstance(result, str)

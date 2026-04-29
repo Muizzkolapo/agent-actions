@@ -379,21 +379,6 @@ class TestInvocationStrategyFactory:
             )
 
 
-class TestRecordProcessorModeWiring:
-    """Tests that RecordProcessor honors the mode parameter for strategy selection."""
-
-    def test_batch_mode_without_provider_raises(self):
-        """RecordProcessor with mode=BATCH but no provider raises ValueError."""
-        from agent_actions.processing.record_processor import RecordProcessor
-
-        with pytest.raises(ValueError, match="BatchProvider required"):
-            RecordProcessor(
-                agent_config={},
-                agent_name="test",
-                mode=RunMode.BATCH,
-            )
-
-
 class TestDeferredResultInProcessor:
     """Regression test: batch invocations must surface as DEFERRED, not FILTERED."""
 
@@ -404,7 +389,7 @@ class TestDeferredResultInProcessor:
     ):
         """
         When BatchStrategy.invoke() returns a deferred InvocationResult,
-        RecordProcessor.process() must return ProcessingResult with
+        OnlineLLMStrategy.process_record() must return ProcessingResult with
         status=DEFERRED and the task_id preserved — NOT status=FILTERED.
 
         Regression: Prior to this fix, deferred results (executed=False,
@@ -412,7 +397,7 @@ class TestDeferredResultInProcessor:
         branch, discarding queued batch tasks.
         """
         from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
-        from agent_actions.processing.record_processor import RecordProcessor
+        from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
         from agent_actions.processing.types import (
             ProcessingContext,
             ProcessingStatus,
@@ -440,10 +425,10 @@ class TestDeferredResultInProcessor:
             passthrough_fields={"key": "val"},
         )
 
-        processor = RecordProcessor(
+        strategy = OnlineLLMStrategy(
             agent_config={"agent_type": "test"},
             agent_name="test",
-            strategy=batch_strategy,
+            invocation_strategy=batch_strategy,
         )
         context = ProcessingContext(
             agent_config={"agent_type": "test"},
@@ -451,7 +436,7 @@ class TestDeferredResultInProcessor:
             mode=RunMode.BATCH,
         )
 
-        result = processor.process({"raw": "data"}, context)
+        result = strategy.process_record({"raw": "data"}, context, skip_guard=False)
 
         # Must be DEFERRED, not FILTERED
         assert result.status == ProcessingStatus.DEFERRED

@@ -1,7 +1,7 @@
 """Online LLM processing strategy for UnifiedProcessor.
 
 Handles per-record processing: prepare task, invoke LLM, handle response,
-transform output. Extracted from RecordProcessor.process().
+transform output.
 """
 
 import json
@@ -190,11 +190,10 @@ class OnlineLLMStrategy:
         Args:
             skip_guard: When True (default), guard evaluation is skipped because
                 UnifiedProcessor already filtered records at the batch level.
-                RecordProcessor passes False for backward compat with callers
-                that rely on per-record guard evaluation.
+                Pass False when calling directly without UnifiedProcessor's
+                batch-level guard filter.
 
-        Does NOT enrich the result — enrichment is handled by UnifiedProcessor
-        or by RecordProcessor._finalize_result() for backward compat callers.
+        Does NOT enrich the result — enrichment is handled by UnifiedProcessor.
         """
         prep_context = PreparationContext.from_processing_context(context)
         prep_context.current_item = item if isinstance(item, dict) else None

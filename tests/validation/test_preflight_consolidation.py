@@ -358,6 +358,31 @@ class TestTypeSpecificValidation:
         with pytest.raises(ValueError, match="impl"):
             ActionConfig(name="t", intent="do", kind="tool")
 
+    def test_llm_file_granularity_blocked(self):
+        """LLM action with granularity: file is rejected — FILE granularity is tool/hitl only."""
+        errors, _ = _validate_entry(
+            {
+                "name": "extract",
+                "agent_type": "llm",
+                "model_name": "n/a",
+                "kind": "llm",
+                "granularity": "file",
+            }
+        )
+        assert any("file granularity" in e.lower() for e in errors)
+
+    def test_llm_without_kind_file_granularity_blocked(self):
+        """Action with no kind and granularity: file is rejected (defaults to LLM behavior)."""
+        errors, _ = _validate_entry(
+            {
+                "name": "extract",
+                "agent_type": "llm",
+                "model_name": "n/a",
+                "granularity": "file",
+            }
+        )
+        assert any("file granularity" in e.lower() for e in errors)
+
     def test_hitl_requires_file_granularity(self):
         """HITL action with granularity: record is caught by action validator."""
         errors, _ = _validate_entry(
