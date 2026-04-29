@@ -179,6 +179,7 @@ class VersionIdEnricher(Enricher):
                 item,
                 cast(dict[str, Any], context.agent_config),
                 record_index=context.record_index + i,
+                force=result.is_expansion,
             )
 
         return result

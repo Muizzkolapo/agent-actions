@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Assign unique version_correlation_id to 1→N expansion items even for non-versioned actions"
+time: 2026-04-29T00:03:15.000000Z
