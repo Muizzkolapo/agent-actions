@@ -88,3 +88,34 @@ class TestPassthroughTransformerInputRecord:
         )
 
         assert "metadata" not in results[0]
+
+    def test_existing_content_wins_when_richer_than_input_record_content(self):
+        """First-stage records: existing_content (synthesised by extract_existing_content)
+        may be richer than input_record['content']. Both are honoured — tracking fields
+        come from input_record, namespaces come from existing_content.
+        """
+        transformer = PassthroughTransformer()
+        data = [{"summary": "short"}]
+        # Simulate a first-stage record with no 'content' key: existing_content is
+        # synthesised as {"source": raw_fields} but input_record has no content.
+        input_record = {
+            "source_guid": "g1",
+            "version_correlation_id": "vcid-first-stage",
+        }
+        existing_content = {"source": {"raw_field": "value"}}
+
+        results = transformer.transform_with_passthrough(
+            data=data,
+            context_data={"summary": "short"},
+            source_guid="g1",
+            agent_config=_simple_config(),
+            action_name="summarize",
+            input_record=input_record,
+            existing_content=existing_content,
+        )
+
+        assert len(results) == 1
+        # Tracking field preserved from input_record
+        assert results[0]["version_correlation_id"] == "vcid-first-stage"
+        # Upstream namespace preserved from existing_content
+        assert results[0]["content"].get("source") == {"raw_field": "value"}
