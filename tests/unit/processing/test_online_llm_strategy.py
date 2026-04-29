@@ -415,6 +415,32 @@ class TestInvokeBatchLoop:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_reraises_template_variable_error(self, mock_fire, mock_get_preparer):
+        """TemplateVariableError propagates through invoke() — it's a code bug, not a data error."""
+        from jinja2 import UndefinedError
+
+        from agent_actions.errors.operations import TemplateVariableError
+
+        mock_get_preparer.return_value.prepare.side_effect = TemplateVariableError(
+            missing_variables=["page_content"],
+            available_variables=["source"],
+            agent_name="test",
+            mode="online",
+            cause=UndefinedError("'page_content' is undefined"),
+        )
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+            invocation_strategy=MagicMock(),
+        )
+
+        context = _make_context()
+        with pytest.raises(TemplateVariableError):
+            strategy.invoke([{"f": "1"}], context)
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
     def test_empty_records_returns_empty(self, mock_fire, mock_get_preparer):
         strategy = OnlineLLMStrategy(
             agent_config={"agent_type": "test"},

@@ -42,6 +42,13 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
                 kind = str(normalized_entry.get("kind", "")).lower()
                 if kind == "hitl":
                     errors.append(f"{desc} {HITL_FILE_GRANULARITY_ERROR}")
+            elif granularity == "file":
+                kind = str(normalized_entry.get("kind", "")).lower()
+                if kind not in ("tool", "hitl"):
+                    errors.append(
+                        f"{desc} FILE granularity is only supported for tool and hitl actions. "
+                        "LLM actions must use RECORD granularity."
+                    )
 
         if "output_field" in normalized_entry:
             json_mode = normalized_entry.get(JSON_MODE_KEY, True)
