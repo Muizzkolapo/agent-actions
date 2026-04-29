@@ -20,7 +20,7 @@ from agent_actions.processing.result_collector import write_node_level_dispositi
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
-from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -583,7 +583,7 @@ class ProcessingPipeline:
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
-    def _select_strategy(self):
+    def _select_strategy(self) -> ProcessingStrategy:
         """Select the processing strategy based on granularity and action kind."""
         if self.granularity == "file":
             if self.is_tool_action:
