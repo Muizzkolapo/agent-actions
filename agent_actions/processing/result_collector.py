@@ -18,12 +18,12 @@ from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.state import RecordState, reason_error
 from agent_actions.storage.backend import (
+    DISPOSITION_CASCADE_SKIPPED,
     DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
     DISPOSITION_GUARD_FILTERED,
     DISPOSITION_GUARD_SKIPPED,
-    DISPOSITION_CASCADE_SKIPPED,
     DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
 )
@@ -147,7 +147,6 @@ def write_record_dispositions(
         source_guid = item.get("source_guid")
         if not source_guid:
             continue
-        metadata = item.get("metadata", {})
 
         try:
             # Clear the DEFERRED disposition now that the batch result has

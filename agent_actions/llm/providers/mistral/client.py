@@ -11,7 +11,7 @@ consistent retry handling across all providers.
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent_actions.errors import DependencyError, NetworkError, RateLimitError, VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
@@ -32,18 +32,23 @@ from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
 
+# Optional SDK imports. Keep module import-safe so non-mistral users (and CI)
+# can still import the client registry/capabilities without installing mistralai.
+MistralSDK: Any | None = None
+mistral_models: Any
 try:
-    # NOTE: Keep Mistral SDK imports optional so the package can be installed
-    # without the Mistral SDK and still run (tests + non-mistral users).
-    from mistralai import Mistral as Mistral  # type: ignore[no-redef]
-    from mistralai import models as mistral_models  # type: ignore[no-redef]
+    from mistralai import Mistral as _MistralSDK  # type: ignore[import-not-found]
+    from mistralai import models as _mistral_models  # type: ignore[import-not-found]
+
+    MistralSDK = _MistralSDK
+    mistral_models = _mistral_models
 except Exception:  # pragma: no cover
-    Mistral = None  # type: ignore[assignment]
+    MistralSDK = None
 
     class _MistralModelsFallback:
         SDKError = Exception
 
-    mistral_models = _MistralModelsFallback()  # type: ignore[assignment]
+    mistral_models = _MistralModelsFallback()
 
 
 _ERROR_MAPPING = VendorErrorMapping(
@@ -89,7 +94,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = datetime.now()
         try:
-            if Mistral is None:  # pragma: no cover
+            if MistralSDK is None:  # pragma: no cover
                 raise DependencyError(
                     "Mistral SDK is not installed (or is incompatible).",
                     context={
@@ -98,7 +103,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                         "install_command": "uv pip install mistralai",
                     },
                 )
-            client = Mistral(api_key=api_key)
+            client = MistralSDK(api_key=api_key)
             envelope = MessageBuilder.build(
                 "mistral", prompt_config, context_data, schema=schema, json_mode=True
             )
@@ -167,7 +172,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = datetime.now()
         try:
-            if Mistral is None:  # pragma: no cover
+            if MistralSDK is None:  # pragma: no cover
                 raise DependencyError(
                     "Mistral SDK is not installed (or is incompatible).",
                     context={
@@ -176,7 +181,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                         "install_command": "uv pip install mistralai",
                     },
                 )
-            client = Mistral(api_key=api_key)
+            client = MistralSDK(api_key=api_key)
             envelope = MessageBuilder.build("mistral", prompt_config, context_data, json_mode=False)
             messages = envelope.to_dicts()
             non_json_kwargs = {

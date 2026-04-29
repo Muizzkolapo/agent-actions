@@ -7,10 +7,11 @@ and transitions are recorded as a list under `record["_transitions"]`.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Iterable
+from typing import Any
 
 
 class RecordState(str, Enum):
@@ -32,7 +33,7 @@ class RecordState(str, Enum):
     CASCADE_SKIPPED = "cascade_skipped"
 
     @classmethod
-    def from_record(cls, record: dict[str, Any]) -> "RecordState":
+    def from_record(cls, record: dict[str, Any]) -> RecordState:
         """Parse state from a record, defaulting to ACTIVE when absent.
 
         During the cutover we may still encounter records without `_state`;

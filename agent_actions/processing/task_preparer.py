@@ -12,7 +12,11 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
-from agent_actions.record.state import CASCADE_BLOCKING_STATES, RESETTABLE_DOWNSTREAM_STATES, RecordState
+from agent_actions.record.state import (
+    CASCADE_BLOCKING_STATES,
+    RESETTABLE_DOWNSTREAM_STATES,
+    RecordState,
+)
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 

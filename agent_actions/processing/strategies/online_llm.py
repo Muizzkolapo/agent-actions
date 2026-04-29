@@ -29,8 +29,8 @@ from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.invocation import InvocationStrategy, InvocationStrategyFactory
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import (
-    build_exhausted_tombstone,
     build_cascade_skipped_record,
+    build_exhausted_tombstone,
     build_guard_skipped_record,
     extract_existing_content,
 )
