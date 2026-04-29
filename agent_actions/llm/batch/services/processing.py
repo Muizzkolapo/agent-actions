@@ -43,6 +43,7 @@ from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter
+from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import (
     write_record_dispositions as _write_record_dispositions_impl,
 )
@@ -98,6 +99,7 @@ class BatchProcessingService:
             dependency_configs=self._dependency_configs,
             storage_backend=self._storage_backend,
         )
+        self._enrichment_pipeline = EnrichmentPipeline()
 
     def process_batch_results(
         self,
@@ -679,8 +681,15 @@ class BatchProcessingService:
             agent_config=agent_config,
             exhausted_recovery=exhausted_recovery,
         )
-        # Flatten ProcessingResult objects to workflow-format dicts.
-        return [item for result in results for item in (result.data or [])]
+        # Enrich results that carry a processing_context, then flatten to
+        # workflow-format dicts.  Error results (processing_context=None) are
+        # intentionally skipped — matching the original pipeline behaviour.
+        enriched: list = []
+        for result in results:
+            if result.processing_context is not None:
+                result = self._enrichment_pipeline.enrich(result, result.processing_context)
+            enriched.append(result)
+        return [item for result in enriched for item in (result.data or [])]
 
     @staticmethod
     def _apply_workflow_session_id(

@@ -130,6 +130,7 @@ class ProcessingResult:
     raw_response: Any | None = None
     pre_extracted_metadata: dict[str, Any] | None = None
     source_mapping: dict[int, int | list[int] | None] | None = None
+    processing_context: Optional["ProcessingContext"] = None
 
     @classmethod
     def success(

@@ -366,19 +366,11 @@ class TestBatchPathReasonDetection:
         ctx = self._make_ctx(passthrough_records=[("cid_4", row)])
         processor = BatchResultStrategy()
 
-        # Patch enrich to capture the ProcessingResult type
-        captured_results = []
-        original_enrich = processor._enrichment_pipeline.enrich
+        results = processor._reconcile_passthroughs(ctx)
 
-        def capturing_enrich(result, context):
-            captured_results.append(result)
-            return original_enrich(result, context)
-
-        processor._enrichment_pipeline.enrich = capturing_enrich
-        processor._reconcile_passthroughs(ctx)
-
-        assert len(captured_results) == 1
-        assert captured_results[0].status == ProcessingStatus.UNPROCESSED
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].processing_context is not None
 
     def test_batch_not_returned_uses_unprocessed_status(self):
         """batch_not_returned records should use ProcessingResult.unprocessed(), not .skipped()."""
@@ -390,15 +382,8 @@ class TestBatchPathReasonDetection:
         ctx = self._make_ctx(passthrough_records=[("cid_5", row)])
         processor = BatchResultStrategy()
 
-        captured_results = []
-        original_enrich = processor._enrichment_pipeline.enrich
+        results = processor._reconcile_passthroughs(ctx)
 
-        def capturing_enrich(result, context):
-            captured_results.append(result)
-            return original_enrich(result, context)
-
-        processor._enrichment_pipeline.enrich = capturing_enrich
-        processor._reconcile_passthroughs(ctx)
-
-        assert len(captured_results) == 1
-        assert captured_results[0].status == ProcessingStatus.UNPROCESSED
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].processing_context is not None

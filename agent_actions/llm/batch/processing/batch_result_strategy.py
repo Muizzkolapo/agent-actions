@@ -15,7 +15,6 @@ from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
-from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.record_helpers import (
     apply_version_merge,
@@ -61,10 +60,12 @@ class BatchResultStrategy:
     this processes already-returned batch results.  The ``process()`` method
     returns ``list[ProcessingResult]`` so the caller can flatten, collect,
     and write dispositions through the shared pipeline.
-    """
 
-    def __init__(self) -> None:
-        self._enrichment_pipeline = EnrichmentPipeline()
+    Each returned result carries a ``processing_context`` field that the
+    caller (``BatchProcessingService``) uses to run enrichment through the
+    shared enrichment pipeline.  Error results have ``processing_context``
+    set to ``None`` and are intentionally not enriched.
+    """
 
     def process(
         self,
@@ -74,11 +75,16 @@ class BatchResultStrategy:
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
     ) -> list[ProcessingResult]:
-        """Convert batch results into enriched ProcessingResult objects.
+        """Convert batch results into unenriched ProcessingResult objects.
 
         Returns one ProcessingResult per input record (successful, failed,
-        exhausted, or unprocessed).  The caller is responsible for flattening
-        ``result.data`` into output records and writing dispositions.
+        exhausted, or unprocessed).  Successful, exhausted, and unprocessed
+        results carry a ``processing_context`` field; the caller uses it to
+        run enrichment through the shared enrichment pipeline.  Error
+        results have ``processing_context=None`` and are not enriched.
+
+        The caller is responsible for enriching, flattening ``result.data``
+        into output records, and writing dispositions.
         """
         ctx = self._init_context(
             batch_results,
@@ -227,7 +233,7 @@ class BatchResultStrategy:
         batch_result: BatchResult,
         custom_id: str,
     ) -> ProcessingResult:
-        """Parse a successful batch result into an enriched ProcessingResult."""
+        """Parse a successful batch result into a ProcessingResult."""
         if ctx.reconciler is None:
             raise RuntimeError(
                 "BatchProcessingContext.reconciler is None; "
@@ -282,7 +288,8 @@ class BatchResultStrategy:
             recovery_metadata=batch_result.recovery_metadata,
         )
 
-        return self._enrichment_pipeline.enrich(processing_result, processing_context)
+        processing_result.processing_context = processing_context
+        return processing_result
 
     def _apply_context_passthrough(
         self,
@@ -404,7 +411,7 @@ class BatchResultStrategy:
         source_guid: str,
         record_index: int,
     ) -> ProcessingResult:
-        """Build an enriched EXHAUSTED result for a retry-exhausted record."""
+        """Build an EXHAUSTED result for a retry-exhausted record."""
         if ctx.exhausted_recovery is None:
             raise RuntimeError(
                 "BatchProcessingContext.exhausted_recovery is None "
@@ -448,7 +455,8 @@ class BatchResultStrategy:
             source_guid=source_guid,
             recovery_metadata=recovery_meta,
         )
-        return self._enrichment_pipeline.enrich(processing_result, processing_context)
+        processing_result.processing_context = processing_context
+        return processing_result
 
     def _build_unprocessed_passthrough(
         self,
@@ -458,7 +466,7 @@ class BatchResultStrategy:
         source_guid: str,
         record_index: int,
     ) -> ProcessingResult:
-        """Build an enriched UNPROCESSED result for a passthrough record."""
+        """Build an UNPROCESSED result for a passthrough record."""
         # Determine actual skip reason from context metadata
         filter_phase = original_row.get(ContextMetaKeys.FILTER_PHASE, "")
         if filter_phase == "upstream_unprocessed":
@@ -486,4 +494,5 @@ class BatchResultStrategy:
             reason=reason,
             source_guid=source_guid,
         )
-        return self._enrichment_pipeline.enrich(processing_result, processing_context)
+        processing_result.processing_context = processing_context
+        return processing_result
