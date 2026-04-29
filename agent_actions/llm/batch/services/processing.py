@@ -684,12 +684,12 @@ class BatchProcessingService:
         # Enrich results that carry a processing_context, then flatten to
         # workflow-format dicts.  Error results (processing_context=None) are
         # intentionally skipped — matching the original pipeline behaviour.
-        enriched: list = []
+        output: list[dict[str, Any]] = []
         for result in results:
             if result.processing_context is not None:
                 result = self._enrichment_pipeline.enrich(result, result.processing_context)
-            enriched.append(result)
-        return [item for result in enriched for item in (result.data or [])]
+            output.extend(result.data or [])
+        return output
 
     @staticmethod
     def _apply_workflow_session_id(
