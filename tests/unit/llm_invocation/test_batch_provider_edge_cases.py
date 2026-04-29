@@ -23,87 +23,65 @@ _RB = "agent_actions.output.response.response_builder"
 # =============================================================================
 
 
-class TestCreateExhaustedItemActionName:
-    """_create_exhausted_item must pass action_name to ExhaustedRecordBuilder."""
+class TestExhaustedRecordBuilderActionName:
+    """ExhaustedRecordBuilder.build_exhausted_item validates action_name propagation."""
 
     def test_action_name_propagated_from_agent_config(self):
         """action_name from agent_config flows into the exhausted item's node_id."""
-        from agent_actions.llm.batch.processing.result_processor import (
-            BatchProcessingContext,
-            BatchResultProcessor,
-        )
-
-        ctx = BatchProcessingContext(
-            batch_results=[],
-            context_map={},
-            output_directory=None,
-            agent_config={"action_name": "classify_sentiment"},
-        )
-        ctx.reconciler = MagicMock()
-        ctx.reconciler.get_source_guid.return_value = "sg-123"
+        from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 
         recovery = RecoveryMetadata(
             retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="api_error")
         )
-        processor = BatchResultProcessor()
 
-        item = processor._create_exhausted_item(ctx, "custom-1", {"text": "hello"}, recovery)
+        item = ExhaustedRecordBuilder.build_exhausted_item(
+            source_guid="sg-123",
+            original_row={"text": "hello"},
+            recovery_metadata=recovery,
+            agent_config={"action_name": "classify_sentiment"},
+            action_name="classify_sentiment",
+        )
 
-        # node_id is generated from action_name — verify it contains the action name
         assert item["node_id"].startswith("classify_sentiment_")
         assert item["source_guid"] == "sg-123"
         assert item["metadata"]["retry_exhausted"] is True
         assert item["_unprocessed"] is True
 
     def test_action_name_missing_raises(self):
-        """When agent_config has no action_name, RecordEnvelopeError is raised (empty names are banned)."""
-        from agent_actions.llm.batch.processing.result_processor import (
-            BatchProcessingContext,
-            BatchResultProcessor,
-        )
+        """When action_name is empty, RecordEnvelopeError is raised."""
+        from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
         from agent_actions.record.envelope import RecordEnvelopeError
-
-        ctx = BatchProcessingContext(
-            batch_results=[],
-            context_map={},
-            output_directory=None,
-            agent_config={"model_vendor": "openai"},  # no action_name
-        )
-        ctx.reconciler = MagicMock()
-        ctx.reconciler.get_source_guid.return_value = "sg-456"
 
         recovery = RecoveryMetadata(
             retry=RetryMetadata(attempts=2, failures=2, succeeded=False, reason="timeout")
         )
-        processor = BatchResultProcessor()
 
         with pytest.raises(RecordEnvelopeError, match="action_name is required"):
-            processor._create_exhausted_item(ctx, "custom-2", {"text": "world"}, recovery)
+            ExhaustedRecordBuilder.build_exhausted_item(
+                source_guid="sg-456",
+                original_row={"text": "world"},
+                recovery_metadata=recovery,
+                agent_config={"model_vendor": "openai"},
+                action_name="",
+            )
 
-    def test_action_name_missing_when_agent_config_is_none_raises(self):
-        """When agent_config is None, RecordEnvelopeError is raised (empty names are banned)."""
-        from agent_actions.llm.batch.processing.result_processor import (
-            BatchProcessingContext,
-            BatchResultProcessor,
-        )
+    def test_action_name_empty_when_agent_config_is_none_raises(self):
+        """When action_name is empty (derived from None config), RecordEnvelopeError is raised."""
+        from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
         from agent_actions.record.envelope import RecordEnvelopeError
-
-        ctx = BatchProcessingContext(
-            batch_results=[],
-            context_map={},
-            output_directory=None,
-            agent_config=None,
-        )
-        ctx.reconciler = MagicMock()
-        ctx.reconciler.get_source_guid.return_value = "sg-789"
 
         recovery = RecoveryMetadata(
             retry=RetryMetadata(attempts=1, failures=1, succeeded=False, reason="network_error")
         )
-        processor = BatchResultProcessor()
 
         with pytest.raises(RecordEnvelopeError, match="action_name is required"):
-            processor._create_exhausted_item(ctx, "custom-3", {"text": "data"}, recovery)
+            ExhaustedRecordBuilder.build_exhausted_item(
+                source_guid="sg-789",
+                original_row={"text": "data"},
+                recovery_metadata=recovery,
+                agent_config={},
+                action_name="",
+            )
 
 
 # =============================================================================

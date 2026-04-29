@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Extract BatchResultStrategy from result_processor.py — batch result processing now returns typed ProcessingResult objects instead of raw dicts"
+time: 2026-04-29T03:10:00.000000Z

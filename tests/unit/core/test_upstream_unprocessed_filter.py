@@ -263,11 +263,13 @@ class TestEnrichmentUnprocessed:
 
 
 class TestBatchPathReasonDetection:
-    """Tests for three-way reason branching in BatchResultProcessor._stage_6_merge_passthroughs."""
+    """Tests for three-way reason branching in BatchResultStrategy._reconcile_passthroughs."""
 
     def _make_ctx(self, passthrough_records):
         """Build a minimal BatchProcessingContext with mocked reconciler."""
-        from agent_actions.llm.batch.processing.result_processor import BatchProcessingContext
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
+            BatchProcessingContext,
+        )
 
         reconciliation = MagicMock()
         reconciliation.passthrough_records = passthrough_records
@@ -289,7 +291,9 @@ class TestBatchPathReasonDetection:
     def test_upstream_unprocessed_reason(self):
         """Records with FILTER_PHASE=upstream_unprocessed get reason=upstream_unprocessed."""
         from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
-        from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
+            BatchResultStrategy,
+        )
 
         row = {
             "content": {"upstream_action": {"field": "value"}},
@@ -297,11 +301,11 @@ class TestBatchPathReasonDetection:
             ContextMetaKeys.FILTER_PHASE: "upstream_unprocessed",
         }
         ctx = self._make_ctx(passthrough_records=[("cid_1", row)])
-        processor = BatchResultProcessor()
-        result_ctx = processor._stage_6_merge_passthroughs(ctx)
+        processor = BatchResultStrategy()
+        results = processor._reconcile_passthroughs(ctx)
 
-        assert len(result_ctx.processed_data) >= 1
-        item = result_ctx.processed_data[0]
+        assert len(results) == 1
+        item = results[0].data[0]
         assert item["metadata"]["reason"] == "upstream_unprocessed"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
@@ -312,16 +316,18 @@ class TestBatchPathReasonDetection:
         """Records with SKIPPED filter status get reason=guard_skipped."""
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
         from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-        from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
+            BatchResultStrategy,
+        )
 
         row = {"content": {"prev": {"x": 1}}, "source_guid": "sg_batch_2"}
         BatchContextMetadata.set_filter_status(row, FilterStatus.SKIPPED)
         ctx = self._make_ctx(passthrough_records=[("cid_2", row)])
-        processor = BatchResultProcessor()
-        result_ctx = processor._stage_6_merge_passthroughs(ctx)
+        processor = BatchResultStrategy()
+        results = processor._reconcile_passthroughs(ctx)
 
-        assert len(result_ctx.processed_data) >= 1
-        item = result_ctx.processed_data[0]
+        assert len(results) == 1
+        item = results[0].data[0]
         assert item["metadata"]["reason"] == "guard_skipped"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
@@ -329,15 +335,17 @@ class TestBatchPathReasonDetection:
 
     def test_batch_not_returned_reason(self):
         """Records without filter metadata get reason=batch_not_returned."""
-        from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
+            BatchResultStrategy,
+        )
 
         row = {"content": {"prev": {"x": 1}}, "source_guid": "sg_batch_3"}
         ctx = self._make_ctx(passthrough_records=[("cid_3", row)])
-        processor = BatchResultProcessor()
-        result_ctx = processor._stage_6_merge_passthroughs(ctx)
+        processor = BatchResultStrategy()
+        results = processor._reconcile_passthroughs(ctx)
 
-        assert len(result_ctx.processed_data) >= 1
-        item = result_ctx.processed_data[0]
+        assert len(results) == 1
+        item = results[0].data[0]
         assert item["metadata"]["reason"] == "batch_not_returned"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
@@ -346,7 +354,9 @@ class TestBatchPathReasonDetection:
     def test_upstream_unprocessed_uses_unprocessed_status(self):
         """upstream_unprocessed records should use ProcessingResult.unprocessed(), not .skipped()."""
         from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
-        from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
+            BatchResultStrategy,
+        )
 
         row = {
             "content": {"upstream": {"data": "stale"}},
@@ -354,7 +364,7 @@ class TestBatchPathReasonDetection:
             ContextMetaKeys.FILTER_PHASE: "upstream_unprocessed",
         }
         ctx = self._make_ctx(passthrough_records=[("cid_4", row)])
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         # Patch enrich to capture the ProcessingResult type
         captured_results = []
@@ -365,18 +375,20 @@ class TestBatchPathReasonDetection:
             return original_enrich(result, context)
 
         processor._enrichment_pipeline.enrich = capturing_enrich
-        processor._stage_6_merge_passthroughs(ctx)
+        processor._reconcile_passthroughs(ctx)
 
         assert len(captured_results) == 1
         assert captured_results[0].status == ProcessingStatus.UNPROCESSED
 
     def test_batch_not_returned_uses_unprocessed_status(self):
         """batch_not_returned records should use ProcessingResult.unprocessed(), not .skipped()."""
-        from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
+            BatchResultStrategy,
+        )
 
         row = {"content": {"prev": {"x": 1}}, "source_guid": "sg_batch_5"}
         ctx = self._make_ctx(passthrough_records=[("cid_5", row)])
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         captured_results = []
         original_enrich = processor._enrichment_pipeline.enrich
@@ -386,7 +398,7 @@ class TestBatchPathReasonDetection:
             return original_enrich(result, context)
 
         processor._enrichment_pipeline.enrich = capturing_enrich
-        processor._stage_6_merge_passthroughs(ctx)
+        processor._reconcile_passthroughs(ctx)
 
         assert len(captured_results) == 1
         assert captured_results[0].status == ProcessingStatus.UNPROCESSED

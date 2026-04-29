@@ -1,9 +1,9 @@
-"""Tests for version_merge branching in batch result processor.
+"""Tests for version_merge branching in batch result strategy.
 
 kind:llm with version_consumption must wrap output under action_name namespace.
 kind:tool with version_consumption flat-spreads into existing content.
 
-The guard at result_processor.py:244-245 ensures only TOOL actions get flat spread.
+The guard at record_helpers.py ensures only TOOL actions get flat spread.
 If someone removes the `and is_tool` guard, LLM actions would silently corrupt
 the content namespace structure.
 """
@@ -13,11 +13,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
-from agent_actions.llm.batch.processing.result_processor import (
+from agent_actions.llm.batch.processing.batch_result_strategy import (
     BatchProcessingContext,
-    BatchResultProcessor,
+    BatchResultStrategy,
 )
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
 
 
@@ -39,8 +39,8 @@ def _make_ctx(
 
 @pytest.fixture
 def processor():
-    """BatchResultProcessor with enrichment pipeline stubbed to pass through."""
-    p = BatchResultProcessor()
+    """BatchResultStrategy with enrichment pipeline stubbed to pass through."""
+    p = BatchResultStrategy()
     p._enrichment_pipeline = MagicMock()
     p._enrichment_pipeline.enrich.side_effect = lambda result, context: result
     return p
@@ -73,8 +73,8 @@ class TestLLMVersionMergeWrapsUnderActionName:
 
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
-        assert len(result) == 1
-        content = result[0]["content"]
+        assert len(result.data) == 1
+        content = result.data[0]["content"]
         assert content["aggregate"] == {"decision": "keep", "reason": "majority vote"}
         assert content["source"] == {"url": "http://example.com"}
         assert content["voter_1"] == {"vote": "keep"}
@@ -110,8 +110,8 @@ class TestToolVersionMergeFlatSpreads:
 
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
-        assert len(result) == 1
-        content = result[0]["content"]
+        assert len(result.data) == 1
+        content = result.data[0]["content"]
         assert content["final_decision"] == "keep"
         assert content["confidence"] == 0.8
         assert content["source"] == {"url": "http://example.com"}
@@ -142,7 +142,7 @@ class TestNoVersionMergeWrapsNormally:
 
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
-        content = result[0]["content"]
+        content = result.data[0]["content"]
         assert content["classify"] == {"category": "tech"}
         assert content["source"] == {"url": "http://example.com"}
         assert "category" not in content
@@ -167,6 +167,75 @@ class TestNoVersionMergeWrapsNormally:
 
         result = processor._process_successful_result(ctx, batch_result, custom_id)
 
-        content = result[0]["content"]
+        content = result.data[0]["content"]
         assert content["extract"] == {"entities": ["AI", "ML"]}
         assert "entities" not in content
+
+
+class TestProcessReturnsFlattenableResults:
+    """BatchResultStrategy.process() returns list[ProcessingResult] that flatten correctly."""
+
+    def test_process_returns_processing_results(self):
+        """process() returns ProcessingResult objects, not raw dicts."""
+        from agent_actions.processing.types import ProcessingStatus
+
+        custom_id = "rec_001"
+        original_row = {
+            "source_guid": "src_001",
+            "content": {"source": {"url": "http://example.com"}},
+        }
+        agent_config = {"action_name": "classify", "kind": "llm"}
+        batch_result = BatchResult(
+            custom_id=custom_id,
+            content={"category": "tech"},
+            success=True,
+        )
+
+        strategy = BatchResultStrategy()
+        strategy._enrichment_pipeline = MagicMock()
+        strategy._enrichment_pipeline.enrich.side_effect = lambda result, ctx: result
+
+        results = strategy.process(
+            batch_results=[batch_result],
+            context_map={custom_id: original_row},
+            agent_config=agent_config,
+        )
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.SUCCESS
+        assert len(results[0].data) == 1
+        assert results[0].data[0]["content"]["classify"] == {"category": "tech"}
+
+        # Verify flatten produces the same dicts the caller extracts
+        flat = [item for r in results for item in (r.data or [])]
+        assert len(flat) == 1
+        assert flat[0]["content"]["classify"] == {"category": "tech"}
+        assert flat[0]["source_guid"] == "src_001"
+
+    def test_process_error_result_flattens_with_error_key(self):
+        """Failed batch results produce ProcessingResult with error dict in data."""
+        from agent_actions.processing.types import ProcessingStatus
+
+        custom_id = "rec_err"
+        original_row = {"source_guid": "src_err", "content": {}}
+        agent_config = {"action_name": "classify", "kind": "llm"}
+        batch_result = BatchResult(
+            custom_id=custom_id,
+            content=None,
+            success=False,
+            error="API timeout",
+        )
+
+        strategy = BatchResultStrategy()
+        results = strategy.process(
+            batch_results=[batch_result],
+            context_map={custom_id: original_row},
+            agent_config=agent_config,
+        )
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.FAILED
+        flat = [item for r in results for item in (r.data or [])]
+        assert len(flat) == 1
+        assert flat[0]["error"] == "API timeout"
+        assert flat[0]["source_guid"] == "src_err"

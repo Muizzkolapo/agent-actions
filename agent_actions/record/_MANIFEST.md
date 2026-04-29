@@ -29,7 +29,7 @@ Single authority for record content assembly. Every action type, granularity, an
 | **Depended on by** | `llm/providers/tools/client.py` | TrackedItem preservation in `_strip_internal_fields` |
 | **Depended on by** | `processing/record_processor.py` | (Phase 2) tombstone builder |
 | **Depended on by** | `processing/exhausted_builder.py` | (Phase 2) exhausted record builder |
-| **Depended on by** | `llm/batch/processing/result_processor.py` | (Phase 2) batch result assembly |
+| **Depended on by** | `llm/batch/processing/batch_result_strategy.py` | (Phase 2) batch result assembly |
 | **Depended on by** | `workflow/managers/loop.py` | (Phase 2) version correlator |
 
 ## Notes

@@ -26,10 +26,10 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
-from agent_actions.llm.batch.processing.result_processor import (
-    BatchResultProcessor,
+from agent_actions.llm.batch.processing.batch_result_strategy import (
+    BatchResultStrategy,
 )
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_reprompt as _check_and_submit_reprompt_impl,
 )
@@ -63,7 +63,7 @@ class BatchProcessingService:
         self,
         client_resolver: BatchClientResolver,
         context_manager: BatchContextManager,
-        result_processor: BatchResultProcessor,
+        result_processor: BatchResultStrategy,
         registry_manager_factory: Callable[[str], BatchRegistryManager],
         source_handler: Any | None = None,
         action_indices: dict[str, int] | None = None,
@@ -672,13 +672,15 @@ class BatchProcessingService:
         Returns:
             Processed results in workflow format
         """
-        return self._result_processor.process(
+        results = self._result_processor.process(
             batch_results=batch_results,
             context_map=context_map,
             output_directory=output_directory,
             agent_config=agent_config,
             exhausted_recovery=exhausted_recovery,
         )
+        # Flatten ProcessingResult objects to workflow-format dicts.
+        return [item for result in results for item in (result.data or [])]
 
     @staticmethod
     def _apply_workflow_session_id(

@@ -8,9 +8,9 @@ generated items.
 from typing import Any
 
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-from agent_actions.llm.batch.processing.result_processor import (
+from agent_actions.llm.batch.processing.batch_result_strategy import (
     BatchProcessingContext,
-    BatchResultProcessor,
+    BatchResultStrategy,
 )
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ class TestStoredPassthroughMerge:
         entry = _make_context_map_entry()
         BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(ctx, "rec_001", [{"summary": "AI overview"}])
 
@@ -67,7 +67,7 @@ class TestStoredPassthroughMerge:
             },
         )
         ctx = _make_context(context_map={"rec_001": entry})
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(ctx, "rec_001", [{"summary": "test"}])
 
@@ -79,7 +79,7 @@ class TestStoredPassthroughMerge:
         entry = _make_context_map_entry()
         BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(
             ctx, "rec_001", [{"item": 1}, {"item": 2}, {"item": 3}]
@@ -101,7 +101,7 @@ class TestStoredPassthroughEdgeCases:
         entry = _make_context_map_entry()
         BatchContextMetadata.set_passthrough_fields(entry, {})
         ctx = _make_context(context_map={"rec_001": entry})
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(ctx, "rec_001", [{"summary": "test"}])
 
@@ -111,7 +111,7 @@ class TestStoredPassthroughEdgeCases:
         """When no passthrough was stored at all, generated items are unchanged."""
         entry = _make_context_map_entry()
         ctx = _make_context(context_map={"rec_001": entry})
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(ctx, "rec_001", [{"summary": "test"}])
 
@@ -122,7 +122,7 @@ class TestStoredPassthroughEdgeCases:
         entry = _make_context_map_entry()
         BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(
             ctx, "rec_001", [{"summary": "test"}, "raw_string", 42]
@@ -137,7 +137,7 @@ class TestStoredPassthroughEdgeCases:
         entry = _make_context_map_entry()
         BatchContextMetadata.set_passthrough_fields(entry, {"classify": {"category": "tech"}})
         ctx = _make_context(context_map={"rec_001": entry})
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(ctx, "rec_001", [])
 
@@ -151,7 +151,7 @@ class TestStoredPassthroughEdgeCases:
             context_map={"rec_001": entry},
             agent_config={"action_name": "test"},
         )
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         result = processor._apply_context_passthrough(ctx, "rec_001", [{"output": "val"}])
 
