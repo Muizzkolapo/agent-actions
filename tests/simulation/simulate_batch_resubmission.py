@@ -442,7 +442,7 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
             {
                 "content": {"text": f"Record {i} content", "category": f"cat-{i % 3}"},
                 "source_guid": f"sg-{i:03d}",
-                "metadata": {"reason": "guard_skipped", "agent_type": "tombstone"},
+                "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
                 "_unprocessed": True,
             }
         )
@@ -483,9 +483,9 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
     for sg in expected_passthrough_guids:
         reason = storage._dispositions.get(("my_action", sg, DISPOSITION_PASSTHROUGH))
         check(
-            reason == "guard_skipped",
-            f"{sg} disposition reason is 'guard_skipped'",
-            f"{sg} reason is '{reason}', expected 'guard_skipped'",
+            reason == "guard_skip",
+            f"{sg} disposition reason is 'guard_skip'",
+            f"{sg} reason is '{reason}', expected 'guard_skip'",
         )
 
     # Verify: consolidated output has all 10 records

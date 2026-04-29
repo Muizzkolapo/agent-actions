@@ -464,7 +464,7 @@ class BatchResultStrategy:
         if filter_phase == "upstream_unprocessed":
             reason = "upstream_unprocessed"
         elif BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED:
-            reason = "guard_skipped"
+            reason = "guard_skip"
         else:
             reason = "batch_not_returned"
 
