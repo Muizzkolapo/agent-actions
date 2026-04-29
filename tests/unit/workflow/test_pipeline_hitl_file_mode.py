@@ -2,30 +2,26 @@
 
 from unittest.mock import patch
 
+import pytest
+
+from agent_actions.errors import AgentActionsError
+from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
 
 def test_file_mode_hitl_applies_file_decision_to_each_input_record():
     """FILE-mode HITL should preserve all records and attach shared decision payload."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-    )
-
     input_data = [
         {"source_guid": "sg-1", "content": {"id": 1, "question": "Q1"}},
         {"source_guid": "sg-2", "content": {"id": 2, "question": "Q2"}},
     ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=(
@@ -37,7 +33,7 @@ def test_file_mode_hitl_applies_file_decision_to_each_input_record():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -57,23 +53,16 @@ def test_file_mode_hitl_applies_file_decision_to_each_input_record():
 
 def test_file_mode_hitl_applies_per_record_decisions_when_provided():
     """Per-record review payload should override shared status for each record."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-    )
-
     input_data = [
         {"source_guid": "sg-1", "content": {"id": 1}},
         {"source_guid": "sg-2", "content": {"id": 2}},
     ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=(
@@ -88,7 +77,7 @@ def test_file_mode_hitl_applies_per_record_decisions_when_provided():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -103,20 +92,13 @@ def test_file_mode_hitl_applies_per_record_decisions_when_provided():
 
 def test_file_mode_hitl_preserves_existing_status_field():
     """HITL decision metadata should not overwrite content.status."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
+    input_data = [{"source_guid": "sg-1", "content": {"id": 1, "status": "pending"}}]
     context = ProcessingContext(
         agent_config={"kind": "hitl", "granularity": "file"},
         agent_name="review_data",
+        source_data=input_data,
     )
 
-    input_data = [{"source_guid": "sg-1", "content": {"id": 1, "status": "pending"}}]
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=(
@@ -131,7 +113,7 @@ def test_file_mode_hitl_preserves_existing_status_field():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -144,17 +126,10 @@ def test_file_mode_hitl_preserves_existing_status_field():
 
 def test_file_mode_hitl_empty_input_returns_empty_output():
     """Empty data input should produce zero output records, not a synthetic one."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
     context = ProcessingContext(
         agent_config={"kind": "hitl", "granularity": "file"},
         agent_name="review_data",
+        source_data=[],
     )
 
     with patch(
@@ -168,7 +143,7 @@ def test_file_mode_hitl_empty_input_returns_empty_output():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_hitl([], [], context)
+        results = HITLStrategy().invoke([], context)
 
     assert len(results) == 1
     result = results[0]
@@ -178,19 +153,6 @@ def test_file_mode_hitl_empty_input_returns_empty_output():
 
 def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
     """Tombstone markers (_unprocessed, metadata) must survive HITL merge."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-    )
-
     input_data = [
         {
             "source_guid": "sg-1",
@@ -200,6 +162,12 @@ def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
             "metadata": {"agent_type": "tombstone"},
         },
     ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=(
@@ -211,7 +179,7 @@ def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -228,19 +196,6 @@ def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
 
 def test_file_mode_hitl_preserves_target_id():
     """Input target_id should be preserved through HITL merge."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-    )
-
     input_data = [
         {
             "source_guid": "sg-1",
@@ -248,6 +203,12 @@ def test_file_mode_hitl_preserves_target_id():
             "content": {"id": 1},
         },
     ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=(
@@ -259,7 +220,7 @@ def test_file_mode_hitl_preserves_target_id():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -271,24 +232,17 @@ def test_file_mode_hitl_preserves_target_id():
 
 def test_file_mode_hitl_sets_identity_source_mapping():
     """HITL result must include identity source_mapping for lineage resolution."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-    )
-
     input_data = [
         {"source_guid": "sg-1", "content": {"id": 1}},
         {"source_guid": "sg-2", "content": {"id": 2}},
         {"source_guid": "sg-3", "content": {"id": 3}},
     ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=(
@@ -296,7 +250,7 @@ def test_file_mode_hitl_sets_identity_source_mapping():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -304,29 +258,47 @@ def test_file_mode_hitl_sets_identity_source_mapping():
     assert result.source_mapping == {0: 0, 1: 1, 2: 2}
 
 
+def test_file_mode_hitl_timeout_raises_with_record_count():
+    """HITL timeout raises AgentActionsError with correct record count."""
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "content": {"id": 3}},
+    ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
+    with (
+        patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=(
+                {
+                    "hitl_status": "timeout",
+                    "record_reviews": [{"hitl_status": "approved"}, None, None],
+                },
+                True,
+            ),
+        ),
+        pytest.raises(AgentActionsError, match="1/3 records reviewed"),
+    ):
+        HITLStrategy().invoke(input_data, context)
+
+
 def test_file_mode_hitl_observe_filters_and_orders_fields():
     """context_scope.observe should filter fields shown to HITL and preserve order."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={
-                "kind": "hitl",
-                "granularity": "file",
-                "context_scope": {
-                    "observe": [
-                        "upstream.question",
-                        "upstream.answer",
-                    ],
-                },
-            },
-            action_name="review_data",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
-        agent_config=pipeline.config.action_config,
-        agent_name="review_data",
-    )
+    action_config = {
+        "kind": "hitl",
+        "granularity": "file",
+        "context_scope": {
+            "observe": [
+                "upstream.question",
+                "upstream.answer",
+            ],
+        },
+    }
 
     # Upstream data with namespaced content (additive model)
     original_data = [
@@ -355,7 +327,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     ]
 
     # Apply the filter using unified context_scope
-    context_scope = pipeline.config.action_config.get("context_scope", {})
+    context_scope = action_config.get("context_scope", {})
     filtered = apply_context_scope_for_records(
         records=original_data,
         context_scope=context_scope,
@@ -369,6 +341,12 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     assert filtered[0]["content"]["upstream"]["selectedAnswerer"] == "Alice"
     assert filtered[0]["source_guid"] == "sg-1"
     assert filtered[1]["content"]["answer"] == "Z is W"
+
+    context = ProcessingContext(
+        agent_config=action_config,
+        agent_name="review_data",
+        source_data=original_data,
+    )
 
     # Verify HITL receives filtered data but merge uses original_data
     captured_context = {}
@@ -384,7 +362,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         side_effect=mock_run_dynamic_agent,
     ):
-        results = pipeline._process_file_mode_hitl(filtered, original_data, context)
+        results = HITLStrategy().invoke(filtered, context)
 
     # HITL UI receives full enriched records
     assert captured_context["context"][0]["content"]["question"] == "What is X?"

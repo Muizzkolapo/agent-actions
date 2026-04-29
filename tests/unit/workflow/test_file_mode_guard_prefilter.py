@@ -3,8 +3,8 @@
 from unittest.mock import MagicMock, patch
 
 from agent_actions.input.preprocessing.filtering.evaluator import GuardResult
-from agent_actions.processing.types import ProcessingStatus
-from agent_actions.workflow.pipeline import _build_skipped_results
+from agent_actions.processing.types import ProcessingContext, ProcessingStatus
+from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 
@@ -277,51 +277,94 @@ class TestPrefilterByGuard:
         assert len(passing) == 0
 
 
-class TestBuildSkippedResults:
-    """Tests for _build_skipped_results()."""
+class TestGuardFilterFileMode:
+    """Tests for UnifiedProcessor._guard_filter_file_mode() skip-wrapping behavior.
 
-    def test_empty_list(self):
-        """Empty skipped list -> empty results."""
-        results = _build_skipped_results([])
-        assert results == []
+    These tests verify that FILE-mode guard-skipped records are correctly
+    converted to UNPROCESSED ProcessingResults with null namespace markers.
+    """
 
-    def test_creates_unprocessed_results(self):
-        """Each skipped item becomes an UNPROCESSED result."""
-        skipped = [
+    @staticmethod
+    def _make_context(action_name="my_action"):
+        return ProcessingContext(
+            agent_config={"guard": {"clause": "score >= 80", "behavior": "skip"}},
+            agent_name=action_name,
+        )
+
+    @staticmethod
+    def _run_filter(records, raw_records, context):
+        processor = UnifiedProcessor()
+        return processor._guard_filter_file_mode(records, context, raw_records)
+
+    def test_no_guard_returns_all(self):
+        """No guard -> all records pass, no guard results."""
+        data = [{"content": {"x": 1}}, {"content": {"x": 2}}]
+        context = ProcessingContext(agent_config={}, agent_name="test")
+        passing, guard_results, original_passing = self._run_filter(data, data, context)
+        assert passing == data
+        assert guard_results == []
+        assert original_passing == data
+
+    def test_skipped_items_become_unprocessed(self):
+        """Each guard-skipped item produces an UNPROCESSED result."""
+        data = [
             {"content": {"score": 40}, "source_guid": "sg-1"},
             {"content": {"score": 20}, "source_guid": "sg-2"},
         ]
-        results = _build_skipped_results(skipped)
+        context = self._make_context()
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
-        assert len(results) == 2
-        for i, result in enumerate(results):
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            passing, guard_results, original_passing = self._run_filter(data, data, context)
+
+        assert passing == []
+        assert len(guard_results) == 2
+        for i, result in enumerate(guard_results):
             assert result.status == ProcessingStatus.UNPROCESSED
-            assert result.data == [skipped[i]]
-            assert result.source_guid == skipped[i]["source_guid"]
+            assert result.source_guid == data[i]["source_guid"]
+            # Null namespace marker added by RecordEnvelope.build_skipped
+            assert result.data[0]["content"]["my_action"] is None
 
     def test_missing_source_guid(self):
-        """Items without source_guid get None."""
-        skipped = [{"content": {"score": 40}}]
-        results = _build_skipped_results(skipped)
+        """Items without source_guid get None on the result."""
+        data = [{"content": {"score": 40}}]
+        context = self._make_context()
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
-        assert len(results) == 1
-        assert results[0].source_guid is None
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            _, guard_results, _ = self._run_filter(data, data, context)
 
-    def test_action_name_adds_null_namespace(self):
-        """With action_name, adds null namespace via RecordEnvelope."""
-        skipped = [{"content": {"prev_action": {"key": "val"}}, "source_guid": "sg-1"}]
-        results = _build_skipped_results(skipped, action_name="my_action")
+        assert len(guard_results) == 1
+        assert guard_results[0].source_guid is None
+        assert guard_results[0].status == ProcessingStatus.UNPROCESSED
 
-        assert len(results) == 1
-        item = results[0].data[0]
+    def test_adds_null_namespace(self):
+        """Skipped items get a null namespace marker via RecordEnvelope."""
+        data = [{"content": {"prev_action": {"key": "val"}}, "source_guid": "sg-1"}]
+        context = self._make_context()
+        evaluator = _make_evaluator(lambda item: False)
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            _, guard_results, _ = self._run_filter(data, data, context)
+
+        assert len(guard_results) == 1
+        item = guard_results[0].data[0]
         assert item["content"]["my_action"] is None
         assert item["content"]["prev_action"] == {"key": "val"}
         assert item["source_guid"] == "sg-1"
 
-    def test_action_name_preserves_framework_fields(self):
-        """Framework fields (target_id, _unprocessed, metadata, batch_id) survive the envelope merge."""
-        skipped = [
+    def test_preserves_framework_fields(self):
+        """Framework fields survive the envelope merge for skipped records."""
+        data = [
             {
                 "content": {"prev": {}},
                 "source_guid": "sg-1",
@@ -331,51 +374,159 @@ class TestBuildSkippedResults:
                 "batch_id": "b-1",
             }
         ]
-        results = _build_skipped_results(skipped, action_name="act")
+        context = self._make_context(action_name="act")
+        evaluator = _make_evaluator(lambda item: False)
 
-        item = results[0].data[0]
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            _, guard_results, _ = self._run_filter(data, data, context)
+
+        item = guard_results[0].data[0]
         assert item["content"]["act"] is None
         assert item["target_id"] == "t-1"
         assert item["_unprocessed"] is True
         assert item["metadata"] == {"key": "val"}
         assert item["batch_id"] == "b-1"
 
-    def test_action_name_skips_when_already_present(self):
-        """If action_name already in content, no mutation occurs."""
-        skipped = [{"content": {"my_action": {"existing": True}}, "source_guid": "sg-1"}]
-        results = _build_skipped_results(skipped, action_name="my_action")
+    def test_skips_when_namespace_already_present(self):
+        """If action_name already in content, no null namespace added."""
+        data = [{"content": {"my_action": {"existing": True}}, "source_guid": "sg-1"}]
+        context = self._make_context()
+        evaluator = _make_evaluator(lambda item: False)
 
-        item = results[0].data[0]
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            _, guard_results, _ = self._run_filter(data, data, context)
+
+        item = guard_results[0].data[0]
         assert item["content"]["my_action"] == {"existing": True}
 
-    def test_no_action_name_no_mutation(self):
-        """Without action_name, items pass through unmodified."""
-        original = {"content": {"score": 40}, "source_guid": "sg-1"}
-        results = _build_skipped_results([original])
-
-        assert results[0].data[0] is original
-
-    def test_mixed_pass_skip_skipped_records_get_null_namespace(self):
-        """When some records pass and some are skipped, skipped get null namespace.
-
-        This exercises the pipeline path at line 568 where _build_skipped_results
-        is called with action_name for records skipped alongside passing records.
-        """
-        skipped = [
-            {"content": {"prev_action": {"key": "other"}}, "source_guid": "sg-2"},
-            {"content": {"prev_action": {"key": "third"}}, "source_guid": "sg-3"},
+    def test_filtered_items_become_filtered_results(self):
+        """Guard-filtered items produce FILTERED results."""
+        data = [
+            {"content": {"score": 40}, "source_guid": "sg-1"},
         ]
+        context = ProcessingContext(
+            agent_config={"guard": {"clause": "score >= 80", "behavior": "filter"}},
+            agent_name="test",
+        )
+        evaluator = _make_evaluator(lambda item: False)
 
-        # Simulate the pipeline call at line 568: _build_skipped_results(skipped, action_name)
-        results = _build_skipped_results(skipped, action_name="review_action")
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            passing, guard_results, original_passing = self._run_filter(data, data, context)
 
-        assert len(results) == 2
-        for i, result in enumerate(results):
+        assert passing == []
+        assert original_passing == []
+        assert len(guard_results) == 1
+        assert guard_results[0].status == ProcessingStatus.FILTERED
+
+    def test_mixed_pass_skip_produces_correct_results(self):
+        """Mixed pass/skip: passing records returned, skipped get null namespace."""
+        data = [
+            {"content": {"score": 90, "prev_action": {"key": "first"}}, "source_guid": "sg-1"},
+            {"content": {"score": 40, "prev_action": {"key": "other"}}, "source_guid": "sg-2"},
+            {"content": {"score": 30, "prev_action": {"key": "third"}}, "source_guid": "sg-3"},
+        ]
+        context = self._make_context(action_name="review_action")
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            passing, guard_results, original_passing = self._run_filter(data, data, context)
+
+        assert len(passing) == 1
+        assert len(guard_results) == 2
+        for result in guard_results:
             assert result.status == ProcessingStatus.UNPROCESSED
             item = result.data[0]
-            # Null namespace marker present
             assert "review_action" in item["content"]
             assert item["content"]["review_action"] is None
-            # Previous content preserved
-            assert item["content"]["prev_action"] == skipped[i]["content"]["prev_action"]
-            assert item["source_guid"] == skipped[i]["source_guid"]
+
+    def test_returns_original_passing(self):
+        """original_passing returns items from raw_records, not from records."""
+        filtered = [
+            {"content": {"score": 90}},
+            {"content": {"score": 40}},
+        ]
+        raw = [
+            {"content": {"score": 90, "name": "Alice"}, "source_guid": "sg-1"},
+            {"content": {"score": 40, "name": "Bob"}, "source_guid": "sg-2"},
+        ]
+        context = self._make_context()
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            passing, guard_results, original_passing = self._run_filter(filtered, raw, context)
+
+        assert len(passing) == 1
+        assert len(original_passing) == 1
+        assert original_passing[0]["content"]["name"] == "Alice"
+        assert original_passing[0]["source_guid"] == "sg-1"
+
+
+class TestUnifiedProcessorFileModePath:
+    """Integration test: UnifiedProcessor.process() with raw_records wires
+    context.source_data correctly before invoking the strategy."""
+
+    def test_process_sets_source_data_before_strategy_invoke(self):
+        """Strategy receives context.source_data = original_passing (not raw input)."""
+        from agent_actions.processing.unified import UnifiedProcessor
+
+        # Records after context scope (what guard evaluates on)
+        filtered = [
+            {"content": {"score": 90}},
+            {"content": {"score": 40}},
+        ]
+        # Raw pre-scope records (what original_passing should come from)
+        raw = [
+            {"content": {"score": 90, "name": "Alice"}, "source_guid": "sg-1"},
+            {"content": {"score": 40, "name": "Bob"}, "source_guid": "sg-2"},
+        ]
+        context = ProcessingContext(
+            agent_config={"guard": {"clause": "score >= 80", "behavior": "skip"}},
+            agent_name="my_tool",
+        )
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
+
+        captured_source_data = {}
+
+        class SpyStrategy:
+            def invoke(self, records, ctx):
+                captured_source_data["value"] = ctx.source_data
+                from agent_actions.processing.types import ProcessingResult
+
+                return [
+                    ProcessingResult.success(
+                        data=[{"content": {"my_tool": {"out": 1}}}],
+                        source_guid="sg-1",
+                    )
+                ]
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            output, stats = UnifiedProcessor().process(
+                filtered, context, SpyStrategy(), raw_records=raw
+            )
+
+        # Strategy must have seen original_passing (only the passing raw record)
+        assert len(captured_source_data["value"]) == 1
+        assert captured_source_data["value"][0]["content"]["name"] == "Alice"
+        assert captured_source_data["value"][0]["source_guid"] == "sg-1"
+
+        # Guard-skipped record should appear in output as UNPROCESSED
+        assert stats.unprocessed == 1
+        assert stats.success == 1

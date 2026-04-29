@@ -6,27 +6,19 @@ import pytest
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.llm.providers.tools.client import ToolClient
+from agent_actions.processing.strategies.file_tool import FileToolStrategy
+from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.udf_management.registry import FileUDFResult
-from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
 
-def _make_pipeline_and_context():
-    """Create a minimal pipeline and context for FILE-mode tool tests."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "tool", "granularity": "file"},
-            action_name="my_file_tool",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
+def _make_context(agent_name="my_file_tool"):
+    """Create a minimal context for FILE-mode tool tests."""
+    return ProcessingContext(
         agent_config={"kind": "tool", "granularity": "file"},
-        agent_name="my_file_tool",
+        agent_name=agent_name,
     )
-    return pipeline, context
 
 
 # --- TrackedItem list return ---
@@ -34,12 +26,14 @@ def _make_pipeline_and_context():
 
 def test_tracked_item_list_works():
     """FILE tool returning TrackedItem list wraps output under action namespace."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
         {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
@@ -51,7 +45,7 @@ def test_tracked_item_list_works():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -63,22 +57,24 @@ def test_tracked_item_list_works():
 
 def test_tracked_item_source_mapping():
     """TrackedItem list return derives source_mapping from _source_index."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([TrackedItem({"score": 0.9}, source_index=0)], True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert results[0].source_mapping == {0: 0}
 
 
 def test_tracked_item_preserves_upstream_namespaces():
     """TrackedItem output preserves upstream namespaces from input record."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {
@@ -90,11 +86,13 @@ def test_tracked_item_preserves_upstream_namespaces():
         },
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([TrackedItem({"score": 0.95}, source_index=0)], True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     content = results[0].data[0]["content"]
     # Upstream namespaces preserved
@@ -109,7 +107,7 @@ def test_tracked_item_preserves_upstream_namespaces():
 
 def test_file_udf_result_reconciled():
     """FILE tool returning FileUDFResult reconciles via source_index."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     udf_result = FileUDFResult(
         outputs=[
@@ -123,11 +121,13 @@ def test_file_udf_result_reconciled():
         {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -139,7 +139,7 @@ def test_file_udf_result_reconciled():
 
 def test_file_udf_result_source_mapping():
     """FileUDFResult source_mapping derived from source_index declarations."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     udf_result = FileUDFResult(
         outputs=[
@@ -153,18 +153,20 @@ def test_file_udf_result_source_mapping():
         {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert results[0].source_mapping == {0: 0, 1: 1}
 
 
 def test_file_udf_result_list_source_index():
     """FileUDFResult with list source_index (many-to-one merge)."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     udf_result = FileUDFResult(
         outputs=[
@@ -177,11 +179,13 @@ def test_file_udf_result_list_source_index():
         {"source_guid": "sg-2", "content": {"prev": {"q": "B"}}},
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert results[0].source_mapping == {0: [0, 1]}
     assert results[0].data[0]["content"]["my_file_tool"]["merged"] is True
@@ -192,7 +196,7 @@ def test_file_udf_result_list_source_index():
 
 def test_synthetic_record_carries_forward_namespaces():
     """FileUDFResult with source_index=None gets namespaces from first input."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     udf_result = FileUDFResult(
         outputs=[
@@ -211,11 +215,13 @@ def test_synthetic_record_carries_forward_namespaces():
         },
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     result = results[0]
@@ -235,7 +241,7 @@ def test_synthetic_record_carries_forward_namespaces():
 
 def test_synthetic_record_empty_original_data():
     """FileUDFResult with source_index=None and empty original_data does not crash."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     udf_result = FileUDFResult(
         outputs=[
@@ -243,11 +249,13 @@ def test_synthetic_record_empty_original_data():
         ],
     )
 
+    context.source_data = []
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool([], [], context)
+        results = FileToolStrategy().invoke([], context)
 
     assert len(results) == 1
     result = results[0]
@@ -259,7 +267,7 @@ def test_synthetic_record_empty_original_data():
 
 def test_synthetic_mixed_with_sourced_records():
     """FileUDFResult with both sourced and synthetic records in same batch."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     udf_result = FileUDFResult(
         outputs=[
@@ -280,11 +288,13 @@ def test_synthetic_mixed_with_sourced_records():
         },
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     result = results[0]
     assert len(result.data) == 3
@@ -319,44 +329,50 @@ def test_file_udf_result_accepts_none_source_index():
 
 def test_file_tool_plain_dict_rejected():
     """FILE tool returning plain dicts (not TrackedItem) raises ValueError."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([{"score": 0.9}], True),
     ):
         with pytest.raises(AgentActionsError, match="plain dict"):
-            pipeline._process_file_mode_tool(input_data, input_data, context)
+            FileToolStrategy().invoke(input_data, context)
 
 
 def test_file_tool_non_dict_rejected():
     """FILE tool returning non-dict items raises ValueError."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(["just a string"], True),
     ):
         with pytest.raises(AgentActionsError, match="expected TrackedItem"):
-            pipeline._process_file_mode_tool(input_data, input_data, context)
+            FileToolStrategy().invoke(input_data, context)
 
 
 def test_file_tool_non_list_non_fileudfresult_rejected():
     """FILE tool returning non-list, non-FileUDFResult raises ValueError."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=({"single": "dict"}, True),
     ):
         with pytest.raises(AgentActionsError, match="must return list or FileUDFResult"):
-            pipeline._process_file_mode_tool(input_data, input_data, context)
+            FileToolStrategy().invoke(input_data, context)
 
 
 # --- Empty tool output detection ---
@@ -364,18 +380,20 @@ def test_file_tool_non_list_non_fileudfresult_rejected():
 
 def test_file_tool_empty_response_with_input_returns_failed():
     """Tool returning [] with non-empty input returns ProcessingResult.failed()."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
         {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert len(results) == 1
     assert results[0].status == ProcessingStatus.FAILED
@@ -385,13 +403,15 @@ def test_file_tool_empty_response_with_input_returns_failed():
 
 def test_file_tool_empty_response_with_empty_input_ok():
     """Tool returning [] with empty input should NOT be marked failed."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
+
+    context.source_data = []
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
-        results = pipeline._process_file_mode_tool([], [], context)
+        results = FileToolStrategy().invoke([], context)
 
     assert len(results) == 1
     assert results[0].status == ProcessingStatus.SUCCESS
@@ -402,17 +422,19 @@ def test_file_tool_empty_response_feeds_existing_failure_check():
     """Empty tool result -> stats.failed=1 -> existing zero-success check fires."""
     from agent_actions.processing.result_collector import ResultCollector
 
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
     input_data = [
         {"content": {"prev": {"a": 1}}},
         {"content": {"prev": {"b": 2}}},
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     output, stats = ResultCollector.collect_results(
         results,
@@ -428,15 +450,17 @@ def test_file_tool_empty_response_feeds_existing_failure_check():
 
 def test_file_udf_result_empty_with_input_returns_failed():
     """FileUDFResult with empty outputs and non-empty input returns FAILED."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(FileUDFResult(outputs=[]), True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert results[0].status == ProcessingStatus.FAILED
     assert "returned empty result" in results[0].error
@@ -447,33 +471,37 @@ def test_file_udf_result_empty_with_input_returns_failed():
 
 def test_file_mode_error_surfaces():
     """FILE tool raising exception should propagate, not produce empty output."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=RuntimeError("connection refused"),
     ):
         with pytest.raises(AgentActionsError, match="connection refused"):
-            pipeline._process_file_mode_tool(input_data, input_data, context)
+            FileToolStrategy().invoke(input_data, context)
 
 
 def test_file_mode_error_includes_context():
     """The surfaced error should include agent_name and record_count."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"content": {"prev": {"a": 1}}},
         {"content": {"prev": {"b": 2}}},
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=ValueError("bad data"),
     ):
         with pytest.raises(AgentActionsError) as exc_info:
-            pipeline._process_file_mode_tool(input_data, input_data, context)
+            FileToolStrategy().invoke(input_data, context)
 
     assert exc_info.value.context["agent_name"] == "my_file_tool"
     assert exc_info.value.context["record_count"] == 2
@@ -819,12 +847,14 @@ def test_result_collector_does_not_raise_when_all_filtered():
 
 def test_tracked_item_preserves_source_guid():
     """TrackedItem output gets source_guid from input via source_index mapping."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
         {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
     ]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
@@ -836,7 +866,7 @@ def test_tracked_item_preserves_source_guid():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     result = results[0]
     assert result.data[0]["source_guid"] == "sg-1"
@@ -845,13 +875,15 @@ def test_tracked_item_preserves_source_guid():
 
 def test_tracked_item_filter_fewer_outputs():
     """When tool filters N→fewer, TrackedItem._source_index resolves correct source_guid."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
         {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
         {"source_guid": "sg-3", "content": {"prev": {"id": 3}}},
     ]
+
+    context.source_data = input_data
 
     # Tool filters 3→2, keeping items 0 and 2
     with patch(
@@ -864,7 +896,7 @@ def test_tracked_item_filter_fewer_outputs():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     result = results[0]
     assert result.data[0]["source_guid"] == "sg-1"
@@ -874,7 +906,7 @@ def test_tracked_item_filter_fewer_outputs():
 
 def test_file_udf_result_preserves_source_guid():
     """FileUDFResult outputs get source_guid from input via source_index."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"prev": {"q": "A"}}},
@@ -888,11 +920,13 @@ def test_file_udf_result_preserves_source_guid():
         ],
     )
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     result = results[0]
     # Reordered outputs map to correct source_guid
@@ -902,17 +936,19 @@ def test_file_udf_result_preserves_source_guid():
 
 def test_file_tool_source_guid_never_empty_string():
     """No output item should ever have source_guid='' after FILE-mode processing."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([TrackedItem({"result": "ok"}, source_index=0)], True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     for item in results[0].data:
         assert item.get("source_guid") != "", "source_guid must not be empty string"
@@ -924,13 +960,15 @@ def test_file_tool_source_guid_never_empty_string():
 
 def test_file_tool_empty_input_empty_output():
     """Empty input + empty output → no crash, no source_guid issues."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
+
+    context.source_data = []
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([], True),
     ):
-        results = pipeline._process_file_mode_tool([], [], context)
+        results = FileToolStrategy().invoke([], context)
 
     assert results[0].status == ProcessingStatus.SUCCESS
     assert results[0].data == []
@@ -938,12 +976,14 @@ def test_file_tool_empty_input_empty_output():
 
 def test_file_tool_input_without_source_guid():
     """Input records missing source_guid — no crash, outputs have absent source_guid."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"content": {"prev": {"id": 1}}},
         {"content": {"prev": {"id": 2}}},
     ]
+
+    context.source_data = input_data
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
@@ -955,7 +995,7 @@ def test_file_tool_input_without_source_guid():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert results[0].status == ProcessingStatus.SUCCESS
     assert len(results[0].data) == 2
@@ -963,13 +1003,15 @@ def test_file_tool_input_without_source_guid():
 
 def test_file_udf_result_merge_reduces_to_fewer():
     """N→fewer merge via FileUDFResult: each output maps to its declared source."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"prev": {"q": "A"}}},
         {"source_guid": "sg-2", "content": {"prev": {"q": "B"}}},
         {"source_guid": "sg-3", "content": {"prev": {"q": "C"}}},
     ]
+
+    context.source_data = input_data
 
     # Tool merges 3→2
     udf_result = FileUDFResult(
@@ -983,7 +1025,7 @@ def test_file_udf_result_merge_reduces_to_fewer():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     result = results[0]
     assert result.source_mapping == {0: [0, 1], 1: 2}
@@ -992,11 +1034,13 @@ def test_file_udf_result_merge_reduces_to_fewer():
 
 def test_file_udf_result_expansion():
     """1→N expansion via FileUDFResult: each output traces to source."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-only", "content": {"prev": {"nested": [1, 2, 3, 4, 5]}}},
     ]
+
+    context.source_data = input_data
 
     udf_result = FileUDFResult(
         outputs=[{"source_index": 0, "data": {"val": i}} for i in range(5)],
@@ -1006,7 +1050,7 @@ def test_file_udf_result_expansion():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     assert len(results[0].data) == 5
     for i, item in enumerate(results[0].data):
@@ -1352,7 +1396,7 @@ class TestExtractToolInput:
 
 def test_file_tool_content_preserved_via_tracked_item():
     """FILE tool content is correctly preserved when using TrackedItem reconciliation."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {
@@ -1369,6 +1413,8 @@ def test_file_tool_content_preserved_via_tracked_item():
         },
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
@@ -1383,7 +1429,7 @@ def test_file_tool_content_preserved_via_tracked_item():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
@@ -1400,11 +1446,13 @@ def test_file_tool_content_preserved_via_tracked_item():
 
 def test_file_tool_shared_source_guid_each_output_gets_correct_mapping():
     """When inputs share source_guid, TrackedItem._source_index resolves each correctly."""
-    pipeline, context = _make_pipeline_and_context()
+    context = _make_context()
 
     input_data = [
         {"source_guid": "sg-shared", "content": {"prev": {"q": f"Q{i}"}}} for i in range(5)
     ]
+
+    context.source_data = input_data
 
     # Tool deduplicates 5→4, returns TrackedItems skipping index 2
     with patch(
@@ -1419,7 +1467,7 @@ def test_file_tool_shared_source_guid_each_output_gets_correct_mapping():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     result = results[0]
     assert result.source_mapping == {0: 0, 1: 1, 2: 3, 3: 4}
@@ -1433,7 +1481,9 @@ def test_file_tool_shared_source_guid_each_output_gets_correct_mapping():
 
 def test_file_tool_tracked_item_extends_lineage():
     """TrackedItem-based reconciliation extends parent lineage correctly."""
-    pipeline, context = _make_pipeline_and_context()
+    from agent_actions.processing.enrichment import EnrichmentPipeline
+
+    context = _make_context()
 
     input_data = [
         {
@@ -1462,20 +1512,28 @@ def test_file_tool_tracked_item_extends_lineage():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
+    # Manually enrich to get lineage extension (enrichment is now done by UnifiedProcessor)
     result = results[0]
-    assert result.status == ProcessingStatus.SUCCESS
-    assert result.source_mapping == {0: 0, 1: 1}
+    enriched_results = EnrichmentPipeline().enrich(result, context)
 
-    assert result.data[0]["content"]["my_file_tool"]["transformed"] == "new value from original"
-    assert result.data[1]["content"]["my_file_tool"]["transformed"] == "new value from other"
+    assert enriched_results.status == ProcessingStatus.SUCCESS
+    assert enriched_results.source_mapping == {0: 0, 1: 1}
 
-    assert result.data[0]["source_guid"] == "sg-1"
-    assert result.data[1]["source_guid"] == "sg-2"
+    assert (
+        enriched_results.data[0]["content"]["my_file_tool"]["transformed"]
+        == "new value from original"
+    )
+    assert (
+        enriched_results.data[1]["content"]["my_file_tool"]["transformed"] == "new value from other"
+    )
+
+    assert enriched_results.data[0]["source_guid"] == "sg-1"
+    assert enriched_results.data[1]["source_guid"] == "sg-2"
 
     # Lineage must be extended from parent, not truncated to just [self]
-    for i, item in enumerate(result.data):
+    for i, item in enumerate(enriched_results.data):
         lineage = item.get("lineage", [])
         assert len(lineage) >= 3, f"item[{i}] lineage not extended from parent: {lineage}"
 
@@ -1483,26 +1541,17 @@ def test_file_tool_tracked_item_extends_lineage():
 # --- FILE HITL RecordEnvelope tests ---
 
 
-def _make_hitl_pipeline_and_context():
-    """Create a minimal pipeline and context for FILE-mode HITL tests."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review_answers",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-    context = ProcessingContext(
+def _make_hitl_context(agent_name="review_answers"):
+    """Create a minimal context for FILE-mode HITL tests."""
+    return ProcessingContext(
         agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_answers",
+        agent_name=agent_name,
     )
-    return pipeline, context
 
 
 def test_file_hitl_namespaces_output_under_action():
     """FILE HITL wraps output under action namespace, not flat into content."""
-    pipeline, context = _make_hitl_pipeline_and_context()
+    context = _make_hitl_context()
 
     input_data = [
         {
@@ -1514,13 +1563,15 @@ def test_file_hitl_namespaces_output_under_action():
         },
     ]
 
+    context.source_data = input_data
+
     decision = {"hitl_status": "approved", "user_comment": "Looks good", "timestamp": "2026-01-01"}
 
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     result = results[0]
     assert result.status == ProcessingStatus.SUCCESS
@@ -1539,7 +1590,7 @@ def test_file_hitl_namespaces_output_under_action():
 
 def test_file_hitl_preserves_upstream_namespaces():
     """FILE HITL preserves all upstream namespaces from input records."""
-    pipeline, context = _make_hitl_pipeline_and_context()
+    context = _make_hitl_context()
 
     input_data = [
         {
@@ -1552,13 +1603,15 @@ def test_file_hitl_preserves_upstream_namespaces():
         },
     ]
 
+    context.source_data = input_data
+
     decision = {"hitl_status": "approved"}
 
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     content = results[0].data[0]["content"]
     assert "source" in content
@@ -1571,12 +1624,14 @@ def test_file_hitl_preserves_upstream_namespaces():
 
 def test_file_hitl_per_record_review_in_namespace():
     """Per-record review fields go under the action namespace, not flat."""
-    pipeline, context = _make_hitl_pipeline_and_context()
+    context = _make_hitl_context()
 
     input_data = [
         {"source_guid": "sg-1", "content": {"source": {"a": 1}}},
         {"source_guid": "sg-2", "content": {"source": {"a": 2}}},
     ]
+
+    context.source_data = input_data
 
     decision = {
         "hitl_status": "approved",
@@ -1590,7 +1645,7 @@ def test_file_hitl_per_record_review_in_namespace():
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     result = results[0]
     # Per-record review overrides file-level decision within the namespace
@@ -1605,7 +1660,7 @@ def test_file_hitl_per_record_review_in_namespace():
 
 def test_file_hitl_carries_framework_fields():
     """Framework fields (source_guid, target_id, _unprocessed) are preserved from input."""
-    pipeline, context = _make_hitl_pipeline_and_context()
+    context = _make_hitl_context()
 
     input_data = [
         {
@@ -1617,13 +1672,15 @@ def test_file_hitl_carries_framework_fields():
         },
     ]
 
+    context.source_data = input_data
+
     decision = {"hitl_status": "approved"}
 
     with patch(
         "agent_actions.processing.strategies.hitl.run_dynamic_agent",
         return_value=([decision], True),
     ):
-        results = pipeline._process_file_mode_hitl(input_data, input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
 
     item = results[0].data[0]
     assert item["source_guid"] == "sg-1"
@@ -1634,20 +1691,13 @@ def test_file_hitl_carries_framework_fields():
 
 def test_file_tool_version_merge_spreads_not_wraps():
     """Version merge tool output is spread flat, not wrapped under action name."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={
-                "kind": "tool",
-                "granularity": "file",
-                "version_consumption_config": {"source": "extract", "pattern": "merge"},
-            },
-            action_name="aggregate",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
+    agent_config = {
+        "kind": "tool",
+        "granularity": "file",
+        "version_consumption_config": {"source": "extract", "pattern": "merge"},
+    }
     context = ProcessingContext(
-        agent_config=pipeline.config.action_config,
+        agent_config=agent_config,
         agent_name="aggregate",
     )
 
@@ -1661,6 +1711,8 @@ def test_file_tool_version_merge_spreads_not_wraps():
         }
     ]
 
+    context.source_data = input_data
+
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(
@@ -1668,7 +1720,7 @@ def test_file_tool_version_merge_spreads_not_wraps():
             True,
         ),
     ):
-        results = pipeline._process_file_mode_tool(input_data, input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
     content = results[0].data[0]["content"]
     # Flat spread, NOT wrapped under action name
