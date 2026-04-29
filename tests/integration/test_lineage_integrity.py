@@ -752,7 +752,7 @@ class TestLineageHitlFileMode:
             ),
         ]
 
-        # HITL output: 1:1 identity mapping (same as process_file_mode_hitl builds)
+        # HITL output: 1:1 identity mapping (same as HITLStrategy builds)
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=[

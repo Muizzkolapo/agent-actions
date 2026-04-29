@@ -642,7 +642,7 @@ class TestHITLFileMode:
                 )
             )
 
-        # HITL identity mapping (same as process_file_mode_hitl builds)
+        # HITL identity mapping (same as HITLStrategy builds)
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=[
