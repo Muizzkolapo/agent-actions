@@ -313,7 +313,7 @@ class TestBatchPathReasonDetection:
         assert item["content"]["upstream_action"] == {"field": "value"}
 
     def test_guard_skipped_reason(self):
-        """Records with SKIPPED filter status get reason=guard_skipped."""
+        """Records with SKIPPED filter status get reason=guard_skip."""
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
         from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
         from agent_actions.llm.batch.processing.batch_result_strategy import (
@@ -328,7 +328,7 @@ class TestBatchPathReasonDetection:
 
         assert len(results) == 1
         item = results[0].data[0]
-        assert item["metadata"]["reason"] == "guard_skipped"
+        assert item["metadata"]["reason"] == "guard_skip"
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
         assert item["content"]["test_batch"] is None

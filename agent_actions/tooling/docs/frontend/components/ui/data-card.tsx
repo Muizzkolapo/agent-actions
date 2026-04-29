@@ -500,9 +500,12 @@ export function getDisplayFields(record: Record<string, unknown>): Record<string
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record)
-  // After namespace unwrap, all displayRecord keys are user content — classifyField
-  // is not used here because a user field named "metadata" is content, not framework metadata.
-  const guardSkipped = Object.values(displayRecord).every(v => v === null)
+  const recordMetadata = record.metadata as Record<string, unknown> | undefined
+  const tombstoneReason = typeof recordMetadata === "object" && recordMetadata !== null
+    ? recordMetadata.reason as string | undefined
+    : undefined
+  const guardSkipped = tombstoneReason === "guard_skip"
+  const upstreamUnprocessed = tombstoneReason === "upstream_unprocessed"
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)
@@ -573,7 +576,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         )}
         {!recordOpen && (
           <span className="text-[10px] text-foreground/50 ml-auto">
-            {guardSkipped ? "guard skipped" : `${trace ? "trace + " : ""}${plural(outputFields.length, "field")}`}
+            {guardSkipped ? "guard skipped" : upstreamUnprocessed ? "upstream unprocessed" : `${trace ? "trace + " : ""}${plural(outputFields.length, "field")}`}
           </span>
         )}
       </button>
@@ -687,19 +690,23 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
       )}
 
       {/* Section 3: Action Output */}
-      {(outputFields.length > 0 || guardSkipped) && (
+      {(outputFields.length > 0 || guardSkipped || upstreamUnprocessed) && (
         <CollapsibleSection
           label="Action Output"
 
-          hint={guardSkipped ? "guard skipped" : plural(outputFields.length, "field")}
+          hint={guardSkipped ? "guard skipped" : upstreamUnprocessed ? "upstream unprocessed" : plural(outputFields.length, "field")}
           open={sec.actionOutput}
           onToggle={() => toggle("actionOutput")}
-          copyText={guardSkipped ? undefined : outputJson}
+          copyText={guardSkipped || upstreamUnprocessed ? undefined : outputJson}
         >
           <div className="pb-2 pl-4">
             {guardSkipped ? (
               <div className="px-4 pb-3 text-xs text-muted-foreground italic">
                 Guard skipped — no output produced
+              </div>
+            ) : upstreamUnprocessed ? (
+              <div className="px-4 pb-3 text-xs text-muted-foreground italic">
+                Upstream failure — no output produced
               </div>
             ) : (
               outputFields.map((f) => {
@@ -730,7 +737,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
         </CollapsibleSection>
       )}
 
-      {outputFields.length === 0 && !guardSkipped && (
+      {outputFields.length === 0 && !guardSkipped && !upstreamUnprocessed && (
         <div className="px-4 pb-3 text-xs text-muted-foreground italic">No content fields</div>
       )}
 
