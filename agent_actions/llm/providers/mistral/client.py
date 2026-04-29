@@ -11,7 +11,7 @@ consistent retry handling across all providers.
 import logging
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 from agent_actions.errors import DependencyError, NetworkError, RateLimitError, VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
