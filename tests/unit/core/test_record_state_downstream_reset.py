@@ -16,4 +16,3 @@ def test_failed_remains_cascade_blocking() -> None:
     TaskPreparer._reset_state_for_downstream(item)
     assert item["_state"] == RecordState.FAILED.value
     assert TaskPreparer._is_upstream_unprocessed(item) is True
-

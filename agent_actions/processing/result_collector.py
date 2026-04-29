@@ -186,10 +186,14 @@ def write_record_dispositions(
         reason_obj = last.get("reason")
         detail_obj = last.get("detail")
         reason_str = (
-            json.dumps(reason_obj, ensure_ascii=False, default=str) if isinstance(reason_obj, dict) else None
+            json.dumps(reason_obj, ensure_ascii=False, default=str)
+            if isinstance(reason_obj, dict)
+            else None
         )
         detail_str = (
-            json.dumps(detail_obj, ensure_ascii=False, default=str) if isinstance(detail_obj, dict) else None
+            json.dumps(detail_obj, ensure_ascii=False, default=str)
+            if isinstance(detail_obj, dict)
+            else None
         )
 
         if state == RecordState.EXHAUSTED:
@@ -300,7 +304,8 @@ class ResultCollector:
                                 RecordState.FAILED,
                                 action_name=agent_name,
                                 reason=reason_error(
-                                    error_type="parse_error", message="LLM provider returned _parse_error"
+                                    error_type="parse_error",
+                                    message="LLM provider returned _parse_error",
                                 ),
                             )
                     output.extend(data)

@@ -143,7 +143,9 @@ def reason_error(*, error_type: str, message: str):
     return {"type": "error", "error_type": error_type, "message": message}
 
 
-def reason_exhausted(*, attempts: int | str, last_error: str | None = None, model: str | None = None):
+def reason_exhausted(
+    *, attempts: int | str, last_error: str | None = None, model: str | None = None
+):
     r: dict[str, Any] = {"type": "exhausted", "attempts": attempts}
     if last_error is not None:
         r["last_error"] = last_error
@@ -177,4 +179,3 @@ CASCADE_BLOCKING_STATES: frozenset[RecordState] = frozenset(
 def is_any_state(record: dict[str, Any], states: Iterable[RecordState]) -> bool:
     state = RecordState.from_record(record)
     return state in set(states)
-

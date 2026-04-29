@@ -57,17 +57,23 @@ class TestBuildGuardSkippedRecord:
         assert result["source_guid"] == "guid-123"
 
     def test_source_guid_defaults_to_none(self):
-        result = build_guard_skipped_record("act", None, clause="x == 1", behavior="skip", result=False)
+        result = build_guard_skipped_record(
+            "act", None, clause="x == 1", behavior="skip", result=False
+        )
         assert result.get("source_guid") is None
 
     def test_target_id_carried_from_input(self):
         input_record = {"content": {}, "target_id": "tid-1"}
-        result = build_guard_skipped_record("act", input_record, clause="x == 1", behavior="skip", result=False)
+        result = build_guard_skipped_record(
+            "act", input_record, clause="x == 1", behavior="skip", result=False
+        )
         assert result["target_id"] == "tid-1"
 
     def test_target_id_not_set_when_missing_from_input(self):
         input_record = {"content": {}}
-        result = build_guard_skipped_record("act", input_record, clause="x == 1", behavior="skip", result=False)
+        result = build_guard_skipped_record(
+            "act", input_record, clause="x == 1", behavior="skip", result=False
+        )
         assert "target_id" not in result
 
     def test_none_input_record(self):
@@ -192,7 +198,13 @@ class TestCarryFrameworkFields:
         assert result is target
 
     def test_default_fields_match_constant(self):
-        assert CARRY_FORWARD_FIELDS == ("target_id", "_recovery", "metadata", "_state", "_transitions")
+        assert CARRY_FORWARD_FIELDS == (
+            "target_id",
+            "_recovery",
+            "metadata",
+            "_state",
+            "_transitions",
+        )
 
 
 # ---------------------------------------------------------------------------

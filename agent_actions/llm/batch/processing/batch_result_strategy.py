@@ -487,7 +487,9 @@ class BatchResultStrategy:
                 action_name,
                 original_row,
                 source_guid=source_guid,
-                clause=str(ctx.agent_config.get("guard", {}).get("clause", "")) if ctx.agent_config else "",
+                clause=str(ctx.agent_config.get("guard", {}).get("clause", ""))
+                if ctx.agent_config
+                else "",
                 behavior="skip",
                 result=False,
             )

@@ -522,9 +522,7 @@ class TestSetDispositionRecordIdValidation:
 
     def test_uuid_style_record_id_accepted(self, backend):
         """set_disposition accepts UUID-style record_id (hyphens allowed)."""
-        backend.set_disposition(
-            "node_1", "550e8400-e29b-41d4-a716-446655440000", "guard_filtered"
-        )
+        backend.set_disposition("node_1", "550e8400-e29b-41d4-a716-446655440000", "guard_filtered")
         results = backend.get_disposition("node_1")
         assert len(results) == 1
 

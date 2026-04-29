@@ -133,7 +133,9 @@ class UnifiedProcessor:
                 context.action_name,
                 item,
                 source_guid=source_guid,
-                clause=str(config.get("guard", {}).get("clause", "")) if isinstance(config, dict) else "",
+                clause=str(config.get("guard", {}).get("clause", ""))
+                if isinstance(config, dict)
+                else "",
                 behavior="skip",
                 result=False,
             )
