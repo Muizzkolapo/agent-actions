@@ -474,3 +474,59 @@ class TestGuardFilterFileMode:
         assert len(original_passing) == 1
         assert original_passing[0]["content"]["name"] == "Alice"
         assert original_passing[0]["source_guid"] == "sg-1"
+
+
+class TestUnifiedProcessorFileModePath:
+    """Integration test: UnifiedProcessor.process() with raw_records wires
+    context.source_data correctly before invoking the strategy."""
+
+    def test_process_sets_source_data_before_strategy_invoke(self):
+        """Strategy receives context.source_data = original_passing (not raw input)."""
+        from agent_actions.processing.unified import UnifiedProcessor
+
+        # Records after context scope (what guard evaluates on)
+        filtered = [
+            {"content": {"score": 90}},
+            {"content": {"score": 40}},
+        ]
+        # Raw pre-scope records (what original_passing should come from)
+        raw = [
+            {"content": {"score": 90, "name": "Alice"}, "source_guid": "sg-1"},
+            {"content": {"score": 40, "name": "Bob"}, "source_guid": "sg-2"},
+        ]
+        context = ProcessingContext(
+            agent_config={"guard": {"clause": "score >= 80", "behavior": "skip"}},
+            agent_name="my_tool",
+        )
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
+
+        captured_source_data = {}
+
+        class SpyStrategy:
+            def invoke(self, records, ctx):
+                captured_source_data["value"] = ctx.source_data
+                from agent_actions.processing.types import ProcessingResult
+
+                return [
+                    ProcessingResult.success(
+                        data=[{"content": {"my_tool": {"out": 1}}}],
+                        source_guid="sg-1",
+                    )
+                ]
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            output, stats = UnifiedProcessor().process(
+                filtered, context, SpyStrategy(), raw_records=raw
+            )
+
+        # Strategy must have seen original_passing (only the passing raw record)
+        assert len(captured_source_data["value"]) == 1
+        assert captured_source_data["value"][0]["content"]["name"] == "Alice"
+        assert captured_source_data["value"][0]["source_guid"] == "sg-1"
+
+        # Guard-skipped record should appear in output as UNPROCESSED
+        assert stats.unprocessed == 1
+        assert stats.success == 1

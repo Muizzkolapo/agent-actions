@@ -2,6 +2,9 @@
 
 from unittest.mock import patch
 
+import pytest
+
+from agent_actions.errors import AgentActionsError
 from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
@@ -253,6 +256,35 @@ def test_file_mode_hitl_sets_identity_source_mapping():
     result = results[0]
     # source_mapping must be an identity map: output[i] came from input[i]
     assert result.source_mapping == {0: 0, 1: 1, 2: 2}
+
+
+def test_file_mode_hitl_timeout_raises_with_record_count():
+    """HITL timeout raises AgentActionsError with correct record count."""
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+        {"source_guid": "sg-3", "content": {"id": 3}},
+    ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
+    with (
+        patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=(
+                {
+                    "hitl_status": "timeout",
+                    "record_reviews": [{"hitl_status": "approved"}, None, None],
+                },
+                True,
+            ),
+        ),
+        pytest.raises(AgentActionsError, match="1/3 records reviewed"),
+    ):
+        HITLStrategy().invoke(input_data, context)
 
 
 def test_file_mode_hitl_observe_filters_and_orders_fields():
