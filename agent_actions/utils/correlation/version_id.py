@@ -124,7 +124,10 @@ class VersionIdGenerator:
         obj = obj.copy()
         if record_index is not None:
             obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
-                record_index, version_base_name, workflow_session_id
+                record_index,
+                version_base_name,
+                workflow_session_id,
+                file_context=obj.get("source_guid", ""),
             )
         else:
             source_guid = obj.get("source_guid")
