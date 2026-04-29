@@ -50,6 +50,9 @@ except Exception:  # pragma: no cover
 
     mistral_models = _MistralModelsFallback()
 
+# Backwards-compatible alias for tests/patches that expect this symbol.
+Mistral = MistralSDK
+
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="mistral",
@@ -94,7 +97,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = datetime.now()
         try:
-            if MistralSDK is None:  # pragma: no cover
+            if Mistral is None:  # pragma: no cover
                 raise DependencyError(
                     "Mistral SDK is not installed (or is incompatible).",
                     context={
@@ -103,7 +106,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                         "install_command": "uv pip install mistralai",
                     },
                 )
-            client = MistralSDK(api_key=api_key)
+            client = Mistral(api_key=api_key)
             envelope = MessageBuilder.build(
                 "mistral", prompt_config, context_data, schema=schema, json_mode=True
             )
@@ -172,7 +175,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = datetime.now()
         try:
-            if MistralSDK is None:  # pragma: no cover
+            if Mistral is None:  # pragma: no cover
                 raise DependencyError(
                     "Mistral SDK is not installed (or is incompatible).",
                     context={
@@ -181,7 +184,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                         "install_command": "uv pip install mistralai",
                     },
                 )
-            client = MistralSDK(api_key=api_key)
+            client = Mistral(api_key=api_key)
             envelope = MessageBuilder.build("mistral", prompt_config, context_data, json_mode=False)
             messages = envelope.to_dicts()
             non_json_kwargs = {
