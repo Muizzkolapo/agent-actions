@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.helpers import run_dynamic_agent
@@ -20,9 +20,6 @@ from agent_actions.workflow.pipeline_file_mode import (
     reconcile_outputs,
 )
 
-if TYPE_CHECKING:
-    from agent_actions.processing.enrichment import EnrichmentPipeline
-
 logger = logging.getLogger(__name__)
 
 
@@ -34,22 +31,28 @@ class FileToolStrategy:
     framework reconciles output to input via ``TrackedItem._source_index``
     (for N->N list returns) or ``FileUDFResult.source_index`` (for N->M
     transforms).  Plain dicts in list returns are an error.
-    """
 
-    def __init__(self, enrichment_pipeline: EnrichmentPipeline) -> None:
-        self.enrichment_pipeline = enrichment_pipeline
+    Conforms to the ``ProcessingStrategy`` protocol so it can be used
+    with ``UnifiedProcessor.process()``.  Enrichment is handled by the
+    processor, not by this strategy.
+    """
 
     def invoke(
         self,
-        data: list[dict],
-        original_data: list[dict],
+        records: list[dict[str, Any]],
         context: ProcessingContext,
     ) -> list[ProcessingResult]:
-        """Invoke a FILE-mode tool and reconcile outputs."""
+        """Invoke a FILE-mode tool and reconcile outputs.
+
+        ``context.source_data`` must contain the pre-context-scope records
+        that passed the guard filter (set by UnifiedProcessor before
+        invoking the strategy).  These are used for output reconciliation.
+        """
+        original_data = context.source_data
         try:
             context_scope = context.agent_config.get("context_scope") or {}
             clean_input: list[TrackedItem] = []
-            for i, record in enumerate(data):
+            for i, record in enumerate(records):
                 business = extract_tool_input(record, context_scope)
                 clean_input.append(TrackedItem(business, source_index=i))
 
@@ -62,12 +65,12 @@ class FileToolStrategy:
                 skip_guard_eval=True,
             )
 
-            if is_empty_response(raw_response) and data:
+            if is_empty_response(raw_response) and records:
                 return [
                     ProcessingResult.failed(
                         error=(
                             f"Tool '{context.agent_name}' returned empty result "
-                            f"from {len(data)} input record(s)"
+                            f"from {len(records)} input record(s)"
                         ),
                     )
                 ]
@@ -88,8 +91,6 @@ class FileToolStrategy:
                 source_mapping=source_mapping,
             )
 
-            result = self.enrichment_pipeline.enrich(result, context)
-
             return [result]
 
         except AgentActionsError:
@@ -100,7 +101,7 @@ class FileToolStrategy:
                 f"FILE mode tool '{context.agent_name}' failed: {e}",
                 context={
                     "agent_name": context.agent_name,
-                    "record_count": len(data),
+                    "record_count": len(records),
                     "operation": "file_mode_tool",
                 },
                 cause=e,

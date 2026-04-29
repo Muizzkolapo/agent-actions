@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import Any, cast
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.helpers import run_dynamic_agent
@@ -17,9 +17,6 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import RecordEnvelope
 
-if TYPE_CHECKING:
-    from agent_actions.processing.enrichment import EnrichmentPipeline
-
 logger = logging.getLogger(__name__)
 
 
@@ -29,18 +26,24 @@ class HITLStrategy:
     Invokes HITL once with the full array and applies the single file-level
     decision payload to every record so downstream stages retain full dataset
     cardinality.
-    """
 
-    def __init__(self, enrichment_pipeline: EnrichmentPipeline) -> None:
-        self.enrichment_pipeline = enrichment_pipeline
+    Conforms to the ``ProcessingStrategy`` protocol so it can be used
+    with ``UnifiedProcessor.process()``.  Enrichment is handled by the
+    processor, not by this strategy.
+    """
 
     def invoke(
         self,
-        data: list[dict],
-        original_data: list[dict],
+        records: list[dict[str, Any]],
         context: ProcessingContext,
     ) -> list[ProcessingResult]:
-        """Invoke a FILE-mode HITL action and broadcast the decision."""
+        """Invoke a FILE-mode HITL action and broadcast the decision.
+
+        ``context.source_data`` must contain the pre-context-scope records
+        that passed the guard filter (set by UnifiedProcessor before
+        invoking the strategy).  These are used to build structured output.
+        """
+        original_data = context.source_data
         try:
             # Inject HITL state persistence metadata into agent config
             hitl_agent_config = dict(context.agent_config)
@@ -59,7 +62,7 @@ class HITLStrategy:
             raw_response, executed = run_dynamic_agent(
                 agent_config=hitl_agent_config,
                 agent_name=context.agent_name,
-                context=data,
+                context=records,
                 formatted_prompt="",
                 tools_path=cast(str | None, hitl_agent_config.get("tools_path")),
                 skip_guard_eval=True,
@@ -89,11 +92,11 @@ class HITLStrategy:
                     1 for r in (decision_payload.get("record_reviews") or []) if r is not None
                 )
                 raise AgentActionsError(
-                    f"HITL review timed out ({reviewed}/{len(data)} records reviewed). "
+                    f"HITL review timed out ({reviewed}/{len(records)} records reviewed). "
                     "Partial reviews saved. Re-run workflow to resume.",
                     context={
                         "agent_name": context.agent_name,
-                        "record_count": len(data),
+                        "record_count": len(records),
                     },
                 )
 
@@ -136,7 +139,6 @@ class HITLStrategy:
                 source_mapping={i: i for i in range(len(structured_data))},
             )
 
-            result = self.enrichment_pipeline.enrich(result, context)
             return [result]
         except AgentActionsError:
             raise

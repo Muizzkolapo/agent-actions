@@ -16,18 +16,16 @@ from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
-from agent_actions.processing.result_collector import ResultCollector, write_node_level_disposition
+from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
-from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
-from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -152,20 +150,12 @@ class ProcessingPipeline:
                 },
             )
 
-        # Shared enrichment pipeline (FILE mode paths use directly,
-        # RECORD mode passes to UnifiedProcessor to avoid double allocation)
-        from agent_actions.processing.enrichment import EnrichmentPipeline
-
-        self.enrichment_pipeline = EnrichmentPipeline()
-
         # RECORD mode processor — created once, reused per file
         self._online_strategy = OnlineLLMStrategy(
             agent_config=cast(dict[str, Any], config.action_config),
             agent_name=config.action_name,
         )
-        self._unified_processor = UnifiedProcessor(
-            enrichment_pipeline=self.enrichment_pipeline,
-        )
+        self._unified_processor = UnifiedProcessor()
 
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
@@ -546,14 +536,14 @@ class ProcessingPipeline:
             storage_backend=self.config.storage_backend,
         )
 
-        # Process via RecordProcessor
-        # NOTE: Do NOT filter _unprocessed records here. Guard-skipped records
-        # (on_false: skip) produce _unprocessed tombstones that are valid pipeline
-        # data. task_preparer._is_upstream_unprocessed() handles them per-record.
+        # Select processing strategy based on granularity and action kind.
+        strategy = self._select_strategy()
+
         if self.granularity == "file" and (self.is_tool_action or self.is_hitl_action):
-            # For FILE mode, use the input data as source for parent lookup
-            # (not source_data which points to original source folder)
-            context.source_data = data
+            # FILE mode: apply context scope, then delegate guard + invoke +
+            # enrich + collect to UnifiedProcessor with raw_records for
+            # pre-observe alignment.  UnifiedProcessor sets context.source_data
+            # to original_passing after the guard filter runs.
             filtered = apply_context_scope_for_records(
                 records=data,
                 context_scope=cast(dict[str, Any], self.config.action_config).get(
@@ -562,42 +552,12 @@ class ProcessingPipeline:
                 action_name=self.config.action_name,
                 source_data=source_data,
             )
-
-            # Guards must run before FILE-mode processing because FILE mode
-            # sends the entire array in one batch and cannot filter per-record.
-            # Pass raw `data` so original_passing preserves pre-observe fields.
-            passing, skipped, original_passing = prefilter_by_guard(
-                filtered,
-                cast(dict[str, Any], self.config.action_config),
-                self.config.action_name,
-                original_data=data,
-            )
-
-            # Align context.source_data with the guard-passing subset so the
-            # enricher's source_mapping indices resolve to the correct parents.
-            context.source_data = original_passing
-
-            if not passing:
-                results = _build_skipped_results(skipped, self.config.action_name)
-            else:
-                if self.is_tool_action:
-                    results = self._process_file_mode_tool(passing, original_passing, context)
-                else:
-                    results = self._process_file_mode_hitl(passing, original_passing, context)
-
-                results.extend(_build_skipped_results(skipped, self.config.action_name))
-
-            # Collect FILE-mode results
-            output, stats = ResultCollector.collect_results(
-                results,
-                cast(dict[str, Any], self.config.action_config),
-                self.config.action_name,
-                is_first_stage=False,
-                storage_backend=self.config.storage_backend,
+            output, stats = self._unified_processor.process(
+                filtered, context, strategy, raw_records=data
             )
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
-            output, stats = self._unified_processor.process(data, context, self._online_strategy)
+            output, stats = self._unified_processor.process(data, context, strategy)
 
         # Signal node-level SKIP only when output is truly empty and the
         # only outcomes were guard-skip / guard-filter.  Guard-skipped
@@ -623,48 +583,14 @@ class ProcessingPipeline:
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
-    def _process_file_mode_tool(
-        self, data: list[dict], original_data: list[dict], context: ProcessingContext
-    ) -> list:
-        """Delegate to FileToolStrategy for FILE-mode tool invocation."""
-        strategy = FileToolStrategy(self.enrichment_pipeline)
-        return strategy.invoke(data, original_data, context)
-
-    def _process_file_mode_hitl(
-        self, data: list[dict], original_data: list[dict], context: ProcessingContext
-    ) -> list:
-        """Delegate to HITLStrategy for FILE-mode HITL invocation."""
-        strategy = HITLStrategy(self.enrichment_pipeline)
-        return strategy.invoke(data, original_data, context)
-
-
-def _build_skipped_results(
-    skipped: list[dict], action_name: str | None = None
-) -> list[ProcessingResult]:
-    """Convert guard-skipped items into UNPROCESSED ProcessingResults.
-
-    When action_name is provided, adds a null namespace to the record's
-    content so downstream UI and processing see an explicit skip marker
-    rather than a missing namespace.
-    """
-    results = []
-    for item in skipped:
-        if action_name and isinstance(item, dict):
-            content = item.get("content")
-            if isinstance(content, dict) and action_name not in content:
-                skipped_record = RecordEnvelope.build_skipped(action_name, item)
-                for key in item:
-                    if key not in skipped_record:
-                        skipped_record[key] = item[key]
-                item = skipped_record
-        results.append(
-            ProcessingResult.unprocessed(
-                data=[item],
-                reason="guard_prefilter_skip",
-                source_guid=item.get("source_guid"),
-            )
-        )
-    return results
+    def _select_strategy(self):
+        """Select the processing strategy based on granularity and action kind."""
+        if self.granularity == "file":
+            if self.is_tool_action:
+                return FileToolStrategy()
+            if self.is_hitl_action:
+                return HITLStrategy()
+        return self._online_strategy
 
 
 def create_processing_pipeline(

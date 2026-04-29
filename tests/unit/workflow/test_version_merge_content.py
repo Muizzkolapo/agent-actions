@@ -13,17 +13,17 @@ import pytest
 from agent_actions.input.preprocessing.transformation.transformer import (
     DataTransformer,
 )
+from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.record.tracking import TrackedItem
-from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_version_merge_pipeline_and_context():
-    """Create pipeline and context for a version consumption FILE-mode tool."""
+def _make_version_merge_context():
+    """Create context for a version consumption FILE-mode tool."""
     config = {
         "kind": "tool",
         "granularity": "file",
@@ -32,33 +32,17 @@ def _make_version_merge_pipeline_and_context():
             "pattern": "merge",
         },
     }
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config=config,
-            action_name="aggregate_votes",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
     context = ProcessingContext(agent_config=config, agent_name="aggregate_votes")
-    return pipeline, context
+    return context
 
 
-def _make_normal_pipeline_and_context():
-    """Create pipeline and context for a normal (non-version-merge) FILE-mode tool."""
-    pipeline = ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "tool", "granularity": "file"},
-            action_name="summarize",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
+def _make_normal_context():
+    """Create context for a normal (non-version-merge) FILE-mode tool."""
     context = ProcessingContext(
         agent_config={"kind": "tool", "granularity": "file"},
         agent_name="summarize",
     )
-    return pipeline, context
+    return context
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +55,7 @@ class TestFileModePipelineVersionMerge:
 
     def test_version_merge_spreads_tool_output(self):
         """Version merge action: tool output spread at top level, not wrapped."""
-        pipeline, context = _make_version_merge_pipeline_and_context()
+        context = _make_version_merge_context()
 
         # Version-correlated input record (what the version correlator produces)
         input_data = [
@@ -84,6 +68,7 @@ class TestFileModePipelineVersionMerge:
                 },
             }
         ]
+        context.source_data = input_data
 
         # Tool returns aggregated output via TrackedItem
         with patch(
@@ -93,7 +78,7 @@ class TestFileModePipelineVersionMerge:
                 True,
             ),
         ):
-            results = pipeline._process_file_mode_tool(input_data, input_data, context)
+            results = FileToolStrategy().invoke(input_data, context)
 
         assert results[0].status == ProcessingStatus.SUCCESS
         content = results[0].data[0]["content"]
@@ -111,7 +96,7 @@ class TestFileModePipelineVersionMerge:
 
     def test_version_merge_preserves_version_namespaces(self):
         """Version namespaces from input are preserved in the output content."""
-        pipeline, context = _make_version_merge_pipeline_and_context()
+        context = _make_version_merge_context()
 
         input_data = [
             {
@@ -124,6 +109,7 @@ class TestFileModePipelineVersionMerge:
                 },
             }
         ]
+        context.source_data = input_data
 
         with patch(
             "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
@@ -132,7 +118,7 @@ class TestFileModePipelineVersionMerge:
                 True,
             ),
         ):
-            results = pipeline._process_file_mode_tool(input_data, input_data, context)
+            results = FileToolStrategy().invoke(input_data, context)
 
         content = results[0].data[0]["content"]
         assert len([k for k in content if k.startswith("filter_learning_quality")]) == 3
@@ -140,7 +126,7 @@ class TestFileModePipelineVersionMerge:
 
     def test_normal_action_still_wraps_under_action_name(self):
         """Non-version-merge action: tool output wrapped under action name."""
-        pipeline, context = _make_normal_pipeline_and_context()
+        context = _make_normal_context()
 
         input_data = [
             {
@@ -149,6 +135,7 @@ class TestFileModePipelineVersionMerge:
                 "content": {"upstream_action": {"text": "hello"}},
             }
         ]
+        context.source_data = input_data
 
         with patch(
             "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
@@ -157,7 +144,7 @@ class TestFileModePipelineVersionMerge:
                 True,
             ),
         ):
-            results = pipeline._process_file_mode_tool(input_data, input_data, context)
+            results = FileToolStrategy().invoke(input_data, context)
 
         content = results[0].data[0]["content"]
         # Normal action wraps under action name
@@ -168,7 +155,7 @@ class TestFileModePipelineVersionMerge:
 
     def test_version_merge_tool_returns_content_key(self):
         """Version merge tool returning {"content": {...}} is handled correctly."""
-        pipeline, context = _make_version_merge_pipeline_and_context()
+        context = _make_version_merge_context()
 
         input_data = [
             {
@@ -180,6 +167,7 @@ class TestFileModePipelineVersionMerge:
                 },
             }
         ]
+        context.source_data = input_data
 
         # Tool returns output via TrackedItem
         with patch(
@@ -189,7 +177,7 @@ class TestFileModePipelineVersionMerge:
                 True,
             ),
         ):
-            results = pipeline._process_file_mode_tool(input_data, input_data, context)
+            results = FileToolStrategy().invoke(input_data, context)
 
         content = results[0].data[0]["content"]
         assert "aggregate_votes" not in content

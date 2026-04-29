@@ -6,10 +6,11 @@ import pytest
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.llm.batch.core.batch_models import SubmissionResult
+from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.workflow.config_pipeline import discover_workflow_udfs
 from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
-from agent_actions.workflow.pipeline import BatchPipelineParams, PipelineConfig, ProcessingPipeline
+from agent_actions.workflow.pipeline import BatchPipelineParams, ProcessingPipeline
 
 # ---------------------------------------------------------------------------
 # C-1  ·  _handle_batch_generation — tombstone passthrough path exercises
@@ -98,26 +99,16 @@ class TestHandleBatchGenerationTombstone:
 # ---------------------------------------------------------------------------
 
 
-def _make_pipeline():
-    return ProcessingPipeline(
-        config=PipelineConfig(
-            action_config={"kind": "hitl", "granularity": "file"},
-            action_name="review",
-            idx=0,
-        ),
-        processor_factory=object(),
-    )
-
-
 class TestHITLFileModePropagatesExceptions:
     """C-3 — non-AgentActionsError propagates bare (not swallowed or wrapped)."""
 
     def test_runtime_error_propagates_bare(self):
-        pipeline = _make_pipeline()
+        data = [{"source_guid": "sg-1", "content": {}}]
         context = ProcessingContext(
             agent_config={"kind": "hitl", "granularity": "file"},
             agent_name="review",
         )
+        context.source_data = data
         with (
             patch(
                 "agent_actions.processing.strategies.hitl.run_dynamic_agent",
@@ -125,14 +116,15 @@ class TestHITLFileModePropagatesExceptions:
             ),
             pytest.raises(RuntimeError, match="infra failure"),
         ):
-            pipeline._process_file_mode_hitl([{"source_guid": "sg-1", "content": {}}], [], context)
+            HITLStrategy().invoke(data, context)
 
     def test_non_agent_error_propagates_as_original_type(self):
-        pipeline = _make_pipeline()
+        data = [{"source_guid": "sg-1", "content": {}}]
         context = ProcessingContext(
             agent_config={"kind": "hitl", "granularity": "file"},
             agent_name="review",
         )
+        context.source_data = data
         original = ValueError("bad value")
         with (
             patch(
@@ -141,17 +133,18 @@ class TestHITLFileModePropagatesExceptions:
             ),
             pytest.raises(ValueError) as exc_info,
         ):
-            pipeline._process_file_mode_hitl([{"source_guid": "sg-1", "content": {}}], [], context)
+            HITLStrategy().invoke(data, context)
 
         assert exc_info.value is original
 
     def test_agent_actions_error_passes_through_unchanged(self):
         """AgentActionsError is NOT re-wrapped — it re-raises directly."""
-        pipeline = _make_pipeline()
+        data = [{"source_guid": "sg-1", "content": {}}]
         context = ProcessingContext(
             agent_config={"kind": "hitl", "granularity": "file"},
             agent_name="review",
         )
+        context.source_data = data
         original = AgentActionsError("original app error")
         with (
             patch(
@@ -160,7 +153,7 @@ class TestHITLFileModePropagatesExceptions:
             ),
             pytest.raises(AgentActionsError) as exc_info,
         ):
-            pipeline._process_file_mode_hitl([{"source_guid": "sg-1", "content": {}}], [], context)
+            HITLStrategy().invoke(data, context)
 
         assert exc_info.value is original
 

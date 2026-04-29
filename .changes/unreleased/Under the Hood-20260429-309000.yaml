@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Migrate pipeline dispatch to UnifiedProcessor — collapse 3-way FILE/HITL/RECORD dispatch into strategy selection + single process() call"
+time: 2026-04-29T30:90:00.000000Z
