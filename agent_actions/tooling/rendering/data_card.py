@@ -24,7 +24,8 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "root_target_id",
         "chunk_info",
         "_recovery",
-        "_unprocessed",
+        "_state",
+        "_transitions",
         "_file",
     }
 )

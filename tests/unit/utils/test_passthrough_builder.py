@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
+from agent_actions.record.state import RecordState
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -55,7 +56,7 @@ class TestBuildItemBatchMode:
     """build_item with mode='batch' (the default)."""
 
     def test_basic_batch_item_structure(self):
-        """Batch items have _unprocessed, metadata.agent_type, and a legacy flag."""
+        """Batch items are guard-skipped passthrough records with state transitions."""
         row = {"content": {"text": "hello"}, "target_id": "tid-1", "source_guid": "sg-1"}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
@@ -64,11 +65,10 @@ class TestBuildItemBatchMode:
                 action_name="test_action",
             )
 
-        assert item["_unprocessed"] is True
-        assert item["metadata"]["agent_type"] == "tombstone"
-        assert item["metadata"]["skipped_by_where_clause"] is True
-        # Batch mode should NOT have a 'reason' string in metadata
-        assert "reason" not in item["metadata"]
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert item["content"]["test_action"] is None
+        assert item["_transitions"][-1]["reason"]["reason"] == "where_clause_not_matched"
+        assert item["_transitions"][-1]["reason"]["mode"] == "batch"
 
     def test_target_id_from_row(self):
         """target_id is taken from the row when present."""
@@ -163,14 +163,14 @@ class TestBuildItemBatchMode:
         assert item["content"] == {"a": None}
 
     def test_conditional_clause_flag_in_batch(self):
-        """Batch mode with conditional_clause_failed sets the right flag."""
+        """Conditional passthrough is still guard-skipped, with reason recorded."""
         row = {}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
                 row=row, reason="conditional_clause_failed", action_name="a"
             )
-        assert item["metadata"]["skipped_by_conditional"] is True
-        assert "reason" not in item["metadata"]
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert item["_transitions"][-1]["reason"]["reason"] == "conditional_clause_failed"
 
     def test_node_id_uses_action_name(self):
         """node_id is generated from the action_name."""
@@ -206,10 +206,10 @@ class TestBuildItemBatchMode:
 
 
 class TestBuildItemOnlineMode:
-    """build_item with mode='online' adds a reason string in metadata."""
+    """build_item with mode='online' records the passthrough reason in transitions."""
 
     def test_online_has_reason_string(self):
-        """Online mode adds metadata.reason as a string."""
+        """Online mode records the passthrough reason."""
         row = {}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
@@ -218,10 +218,12 @@ class TestBuildItemOnlineMode:
                 action_name="a",
                 mode="online",
             )
-        assert item["metadata"]["reason"] == "where_clause_not_matched"
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert item["_transitions"][-1]["reason"]["reason"] == "where_clause_not_matched"
+        assert item["_transitions"][-1]["reason"]["mode"] == "online"
 
     def test_online_also_has_legacy_flag(self):
-        """Online mode still sets the legacy boolean flag."""
+        """Online mode does not rely on legacy metadata flags."""
         row = {}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
@@ -230,7 +232,7 @@ class TestBuildItemOnlineMode:
                 action_name="a",
                 mode="online",
             )
-        assert item["metadata"]["skipped_by_where_clause"] is True
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
 
     def test_online_conditional_reason(self):
         """Online mode with conditional_clause_failed reason."""
@@ -242,11 +244,11 @@ class TestBuildItemOnlineMode:
                 action_name="a",
                 mode="online",
             )
-        assert item["metadata"]["reason"] == "conditional_clause_failed"
-        assert item["metadata"]["skipped_by_conditional"] is True
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert item["_transitions"][-1]["reason"]["reason"] == "conditional_clause_failed"
 
     def test_online_tombstone_marker(self):
-        """Online items still have agent_type=tombstone and _unprocessed."""
+        """Online passthroughs are stateful and carry no legacy tombstone markers."""
         row = {}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
@@ -255,8 +257,9 @@ class TestBuildItemOnlineMode:
                 action_name="a",
                 mode="online",
             )
-        assert item["_unprocessed"] is True
-        assert item["metadata"]["agent_type"] == "tombstone"
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert "_unprocessed" not in item
+        assert "metadata" not in item
 
 
 # ---------------------------------------------------------------------------
@@ -273,8 +276,7 @@ class TestBuildItemEdgeCases:
             item = PassthroughItemBuilder.build_item(
                 row={}, reason="where_clause_not_matched", action_name="a"
             )
-        assert item["_unprocessed"] is True
-        assert item["metadata"]["agent_type"] == "tombstone"
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
         assert item["target_id"] == FIXED_TARGET_ID
         assert item["content"] == {"a": None}
 
@@ -301,13 +303,14 @@ class TestBuildItemEdgeCases:
         assert item["target_id"] == "custom-fallback"
 
     def test_unknown_reason_in_batch(self):
-        """Unknown reason still produces a valid item with the default flag."""
+        """Unknown reason still produces a valid item with reason recorded."""
         row = {}
         with _patch_id_gen():
             item = PassthroughItemBuilder.build_item(
                 row=row, reason="totally_new_reason", action_name="a"
             )
-        assert item["metadata"]["skipped_by_where_clause"] is True
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert item["_transitions"][-1]["reason"]["reason"] == "totally_new_reason"
 
     def test_unknown_reason_in_online(self):
         """Online mode with unknown reason still stores the raw reason string."""
@@ -316,8 +319,8 @@ class TestBuildItemEdgeCases:
             item = PassthroughItemBuilder.build_item(
                 row=row, reason="totally_new_reason", action_name="a", mode="online"
             )
-        assert item["metadata"]["reason"] == "totally_new_reason"
-        assert item["metadata"]["skipped_by_where_clause"] is True
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert item["_transitions"][-1]["reason"]["reason"] == "totally_new_reason"
 
     def test_parent_tracking_propagated_from_row(self):
         """parent_target_id and root_target_id are propagated from the source row."""

@@ -33,8 +33,7 @@ GUARD_SKIPPED_RECORDS = [
             "classify": {"genre": "fiction"},
             "review": None,
         },
-        "_unprocessed": True,
-        "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
+        "_state": "guard_skipped",
     },
     {
         "source_guid": "g2",
@@ -101,7 +100,7 @@ class TestUnwrapRecords:
         """Batch with both skipped and normal records."""
         result = self._cmd("review")._unwrap_records(GUARD_SKIPPED_RECORDS)
         assert result[0]["content"] == {}
-        assert result[0]["_unprocessed"] is True
+        assert result[0]["_state"] == "guard_skipped"
         assert result[1]["content"] == {"quality": "good"}
 
 
@@ -144,14 +143,14 @@ class TestShowTableNamespaceUnwrap:
 
 
 class TestGuardSkippedDisplay:
-    """Display methods render guard-skipped records using real metadata."""
+    """Display methods render guard-skipped records using `_state`."""
 
     def test_table_shows_reason_from_metadata(self, capsys):
         cmd = PreviewCommand(workflow="test_wf", action="review")
         records = cmd._unwrap_records(GUARD_SKIPPED_RECORDS)
         cmd._show_table(records)
         output = capsys.readouterr().out
-        assert "[guard-skip]" in output
+        assert "[guard-skipped]" in output
         assert "good" in output  # non-skipped record renders normally
 
     def test_table_skipped_row_does_not_pollute_columns(self, capsys):
@@ -169,8 +168,7 @@ class TestGuardSkippedDisplay:
         records = cmd._unwrap_records(GUARD_SKIPPED_RECORDS)
         cmd._show_json(records)
         output = capsys.readouterr().out
-        assert '"_unprocessed": true' in output
-        assert '"guard_skip"' in output
+        assert '"_state": "guard_skipped"' in output
         assert "quality" in output
 
     def test_raw_shows_empty_content_with_metadata(self, capsys):
@@ -180,8 +178,7 @@ class TestGuardSkippedDisplay:
         output = capsys.readouterr().out
         parsed = json.loads(output)
         assert parsed[0]["content"] == {}
-        assert parsed[0]["_unprocessed"] is True
-        assert parsed[0]["metadata"]["reason"] == "guard_skip"
+        assert parsed[0]["_state"] == "guard_skipped"
         assert parsed[1]["content"] == {"quality": "good"}
 
 

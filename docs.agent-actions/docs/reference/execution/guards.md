@@ -143,7 +143,7 @@ How guard results affect downstream actions in a multi-action workflow:
 
 | on_false | Output record | Downstream actions |
 |----------|--------------|-------------------|
-| `skip` | Original content preserved, `metadata.reason: "guard_skip"` | **Process normally** — each action evaluates its own guard independently |
+| `skip` | Original content preserved with null namespace, `_state: "guard_skipped"` | **Process normally** — each action evaluates its own guard independently |
 | `filter` | Record excluded from output | **Never sees it** — record is removed from the pipeline |
 
 ### Skipped records flow downstream
@@ -165,7 +165,7 @@ actions:
 
 ### Upstream failures are short-circuited
 
-When an upstream action fails for some records (e.g., batch API errors), those records are marked with `_unprocessed: true` and automatically skipped by all downstream actions — no context loading, prompt rendering, or LLM calls are wasted. These records are preserved in the output for lineage traceability.
+When an upstream action fails for some records (e.g., batch API errors), those records are marked with `_state: "cascade_skipped"` (or `_state: "failed"` at the failing action) and automatically skipped by all downstream actions — no context loading, prompt rendering, or LLM calls are wasted. These records are preserved in the output for lineage traceability.
 
 ## Error Handling
 

@@ -159,7 +159,7 @@ class TestProcessRecordGuardStatuses:
         result = strategy.process_record(item, context)
 
         assert result.status == ProcessingStatus.UNPROCESSED
-        assert result.skip_reason == "upstream_unprocessed"
+        assert result.skip_reason == "cascade_skipped"
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
@@ -199,7 +199,7 @@ class TestProcessRecordGuardStatuses:
         result = strategy.process_record({"field": "value"}, context, skip_guard=False)
 
         assert result.status == ProcessingStatus.SKIPPED
-        assert result.skip_reason == "guard_skip"
+        assert result.skip_reason == "guard_skipped"
 
 
 # ---------------------------------------------------------------------------
@@ -305,8 +305,8 @@ class TestProcessRecordResponseHandling:
         context = _make_context()
         result = strategy.process_record({"field": "value"}, context)
 
-        assert result.status == ProcessingStatus.UNPROCESSED
-        assert result.skip_reason == "guard_skip"
+        assert result.status == ProcessingStatus.SKIPPED
+        assert result.skip_reason == "guard_skipped"
 
 
 # ---------------------------------------------------------------------------

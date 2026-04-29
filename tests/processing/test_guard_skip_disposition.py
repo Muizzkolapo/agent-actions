@@ -81,16 +81,16 @@ class TestGuardSkipProducesSkippedStatus:
 
     def test_guard_skip_reason_preserved(self, guard_skip_result):
         """skip_reason carries the guard behavior string."""
-        assert guard_skip_result.skip_reason == "guard_skip"
+        assert guard_skip_result.skip_reason == "guard_skipped"
 
 
 class TestGuardSkipDisposition:
     """Storage backend receives DISPOSITION_PASSTHROUGH for guard-skipped records."""
 
     def test_skipped_result_gets_disposition_passthrough(self):
-        """ResultCollector writes DISPOSITION_PASSTHROUGH for SKIPPED results."""
+        """ResultCollector writes guard-skipped disposition for SKIPPED results."""
         result = ProcessingResult.skipped(
-            passthrough_data={"content": {}, "source_guid": "guid-1", "_unprocessed": True},
+            passthrough_data={"content": {}, "source_guid": "guid-1", "_state": "guard_skipped"},
             reason="guard_skip",
             source_guid="guid-1",
         )
@@ -107,7 +107,7 @@ class TestGuardSkipDisposition:
         backend.set_disposition.assert_called_once_with(
             "test_action",
             "guid-1",
-            DISPOSITION_PASSTHROUGH,
+            "guard_skipped",
             reason="guard_skip",
         )
 

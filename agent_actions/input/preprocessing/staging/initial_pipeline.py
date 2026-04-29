@@ -13,8 +13,8 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
-from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
+from agent_actions.processing.result_collector import ResultCollector, write_node_level_disposition
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter

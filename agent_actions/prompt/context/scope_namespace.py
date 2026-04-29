@@ -24,7 +24,8 @@ _RECORD_METADATA_KEYS = frozenset(
         "root_target_id",
         "chunk_info",
         "_recovery",
-        "_unprocessed",
+        "_state",
+        "_transitions",
     }
 )
 

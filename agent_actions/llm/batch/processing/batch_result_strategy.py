@@ -19,7 +19,9 @@ from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.record_helpers import (
     apply_version_merge,
     build_exhausted_tombstone,
-    build_tombstone,
+    build_cascade_skipped_record,
+    build_failed_record,
+    build_guard_skipped_record,
     carry_framework_fields,
 )
 from agent_actions.processing.types import (
@@ -472,18 +474,33 @@ class BatchResultStrategy:
         # Determine actual skip reason from context metadata
         filter_phase = original_row.get(ContextMetaKeys.FILTER_PHASE, "")
         if filter_phase == "upstream_unprocessed":
-            reason = "upstream_unprocessed"
+            passthrough_item = build_cascade_skipped_record(
+                action_name,
+                original_row,
+                source_guid=source_guid,
+                upstream_action="unknown",
+                upstream_state="unprocessed",
+            )
+            reason = "cascade_skipped"
         elif BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED:
-            reason = "guard_skip"
+            passthrough_item = build_guard_skipped_record(
+                action_name,
+                original_row,
+                source_guid=source_guid,
+                clause=str(ctx.agent_config.get("guard", {}).get("clause", "")) if ctx.agent_config else "",
+                behavior="skip",
+                result=False,
+            )
+            reason = "guard_skipped"
         else:
-            reason = "batch_not_returned"
-
-        passthrough_item = build_tombstone(
-            action_name,
-            original_row,
-            reason,
-            source_guid=source_guid,
-        )
+            passthrough_item = build_failed_record(
+                action_name,
+                original_row,
+                source_guid=source_guid,
+                error_type="batch_not_returned",
+                message="Batch API did not return a record for this custom_id",
+            )
+            reason = "failed"
 
         processing_context = BatchContextAdapter.to_processing_context(
             agent_config=ctx.agent_config or {},

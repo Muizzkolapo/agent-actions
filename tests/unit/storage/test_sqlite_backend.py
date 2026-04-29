@@ -216,8 +216,8 @@ class TestDispositionMethods:
 
     def test_get_disposition_filters_by_record_id(self, backend):
         """Test filtering dispositions by record_id."""
-        backend.set_disposition("node_1", "rec_1", "filtered")
-        backend.set_disposition("node_1", "rec_2", "filtered")
+        backend.set_disposition("node_1", "rec_1", "guard_filtered")
+        backend.set_disposition("node_1", "rec_2", "guard_filtered")
         backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
 
         results = backend.get_disposition("node_1", record_id="rec_1")
@@ -226,7 +226,7 @@ class TestDispositionMethods:
 
     def test_get_disposition_filters_by_disposition(self, backend):
         """Test filtering dispositions by disposition type."""
-        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", "rec_1", "guard_filtered")
         backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
 
         results = backend.get_disposition("node_1", disposition="passthrough")
@@ -244,14 +244,14 @@ class TestDispositionMethods:
 
     def test_has_disposition_with_record_id(self, backend):
         """Test has_disposition filters by record_id."""
-        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", "rec_1", "guard_filtered")
 
-        assert backend.has_disposition("node_1", "filtered", record_id="rec_1") is True
-        assert backend.has_disposition("node_1", "filtered", record_id="rec_2") is False
+        assert backend.has_disposition("node_1", "guard_filtered", record_id="rec_1") is True
+        assert backend.has_disposition("node_1", "guard_filtered", record_id="rec_2") is False
 
     def test_clear_disposition_all_for_node(self, backend):
         """Test clearing all dispositions for a node."""
-        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", "rec_1", "guard_filtered")
         backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
         backend.set_disposition("node_2", NODE_LEVEL_RECORD_ID, "passthrough")
 
@@ -265,7 +265,7 @@ class TestDispositionMethods:
 
     def test_clear_disposition_by_type(self, backend):
         """Test clearing specific disposition type for a node."""
-        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", "rec_1", "guard_filtered")
         backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
 
         deleted = backend.clear_disposition("node_1", disposition="passthrough")
@@ -273,12 +273,12 @@ class TestDispositionMethods:
 
         remaining = backend.get_disposition("node_1")
         assert len(remaining) == 1
-        assert remaining[0]["disposition"] == "filtered"
+        assert remaining[0]["disposition"] == "guard_filtered"
 
     def test_clear_disposition_by_record_id(self, backend):
         """Test clearing dispositions for a specific record."""
-        backend.set_disposition("node_1", "rec_1", "filtered")
-        backend.set_disposition("node_1", "rec_2", "filtered")
+        backend.set_disposition("node_1", "rec_1", "guard_filtered")
+        backend.set_disposition("node_1", "rec_2", "guard_filtered")
 
         deleted = backend.clear_disposition("node_1", record_id="rec_1")
         assert deleted == 1
@@ -303,7 +303,7 @@ class TestDispositionMethods:
     def test_disposition_in_storage_stats(self, backend):
         """Test that storage stats include disposition count."""
         backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
-        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", "rec_1", "guard_filtered")
 
         stats = backend.get_storage_stats()
         assert stats["disposition_count"] == 2
@@ -508,21 +508,23 @@ class TestSetDispositionRecordIdValidation:
     def test_path_traversal_record_id_rejected(self, backend):
         """set_disposition rejects path-traversal record_id."""
         with pytest.raises(ValueError, match="Path traversal"):
-            backend.set_disposition("node_1", "../../etc/passwd", "filtered")
+            backend.set_disposition("node_1", "../../etc/passwd", "guard_filtered")
 
     def test_empty_record_id_rejected(self, backend):
         """set_disposition rejects empty record_id."""
         with pytest.raises(ValueError, match="Empty"):
-            backend.set_disposition("node_1", "", "filtered")
+            backend.set_disposition("node_1", "", "guard_filtered")
 
     def test_invalid_chars_in_record_id_rejected(self, backend):
         """set_disposition rejects record_id with invalid characters."""
         with pytest.raises(ValueError, match="Invalid characters"):
-            backend.set_disposition("node_1", "rec;id", "filtered")
+            backend.set_disposition("node_1", "rec;id", "guard_filtered")
 
     def test_uuid_style_record_id_accepted(self, backend):
         """set_disposition accepts UUID-style record_id (hyphens allowed)."""
-        backend.set_disposition("node_1", "550e8400-e29b-41d4-a716-446655440000", "filtered")
+        backend.set_disposition(
+            "node_1", "550e8400-e29b-41d4-a716-446655440000", "guard_filtered"
+        )
         results = backend.get_disposition("node_1")
         assert len(results) == 1
 
@@ -534,7 +536,7 @@ class TestSetDispositionRecordIdValidation:
     def test_has_disposition_validates_record_id(self, backend):
         """has_disposition rejects invalid record_id filter."""
         with pytest.raises(ValueError, match="Invalid characters"):
-            backend.has_disposition("node_1", "filtered", record_id="rec;id")
+            backend.has_disposition("node_1", "guard_filtered", record_id="rec;id")
 
     def test_clear_disposition_validates_record_id(self, backend):
         """clear_disposition rejects invalid record_id filter."""

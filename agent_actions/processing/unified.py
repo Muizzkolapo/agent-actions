@@ -10,7 +10,7 @@ import logging
 from typing import Any, Protocol, cast, runtime_checkable
 
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.record_helpers import build_tombstone
+from agent_actions.processing.record_helpers import build_guard_skipped_record
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.record.envelope import RecordEnvelope
@@ -129,16 +129,18 @@ class UnifiedProcessor:
 
         for item in skipped:
             source_guid = item.get("source_guid")
-            tombstone = build_tombstone(
+            tombstone = build_guard_skipped_record(
                 context.action_name,
                 item,
-                "guard_skip",
                 source_guid=source_guid,
+                clause=str(config.get("guard", {}).get("clause", "")) if isinstance(config, dict) else "",
+                behavior="skip",
+                result=False,
             )
             guard_results.append(
                 ProcessingResult.skipped(
                     passthrough_data=tombstone,
-                    reason="guard_skip",
+                    reason="guard_skipped",
                     source_guid=source_guid,
                 )
             )

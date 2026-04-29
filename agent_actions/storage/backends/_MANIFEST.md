@@ -36,14 +36,15 @@ CREATE TABLE target_data (
 );
 
 CREATE TABLE record_disposition (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     action_name TEXT NOT NULL,
     record_id TEXT NOT NULL,  -- "__node__" for node-level signals
-    disposition TEXT NOT NULL, -- "passthrough", "skipped", "filtered", "exhausted", "failed", "unprocessed"
+    disposition TEXT NOT NULL, -- record-level derived from RecordState (e.g. "success", "guard_skipped", "guard_filtered", "failed", "exhausted", "cascade_skipped")
     reason TEXT,
+    detail TEXT,
     relative_path TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(action_name, record_id, disposition)
+    input_snapshot TEXT,
+    timestamp TEXT NOT NULL,
+    PRIMARY KEY (action_name, record_id)
 );
 ```
 

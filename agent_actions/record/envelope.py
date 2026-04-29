@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent_actions.record.state import RecordState, append_transition
+
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
@@ -23,7 +25,8 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         "lineage",
         "metadata",
         "content",
-        "_unprocessed",
+        "_state",
+        "_transitions",
         "_recovery",
         "parent_target_id",
         "root_target_id",
@@ -65,7 +68,10 @@ class RecordEnvelope:
             )
 
         existing = _extract_existing(input_record)
-        result: dict[str, Any] = {"content": {**existing, action_name: action_output}}
+        result: dict[str, Any] = {
+            "content": {**existing, action_name: action_output},
+            "_state": RecordState.ACTIVE.value,
+        }
         return _carry_tracking_fields(result, input_record)
 
     @staticmethod
@@ -91,13 +97,39 @@ class RecordEnvelope:
     ) -> dict[str, Any]:
         """Build a record with a null namespace for a guard-skipped action.
 
-        Does NOT set ``_unprocessed`` or ``metadata`` -- callers add those.
+        Does NOT set execution metadata; callers may add framework fields.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
         existing = _extract_existing(input_record)
-        result: dict[str, Any] = {"content": {**existing, action_name: None}}
+        result: dict[str, Any] = {
+            "content": {**existing, action_name: None},
+            "_state": RecordState.ACTIVE.value,
+        }
         return _carry_tracking_fields(result, input_record)
+
+    @staticmethod
+    def transition(
+        record: dict[str, Any],
+        new_state: RecordState,
+        *,
+        action_name: str,
+        reason: dict[str, Any],
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Transition a record to a new state and record the transition.
+
+        This is the only supported way to mutate `_state`.
+        """
+        record["_state"] = new_state.value
+        append_transition(
+            record,
+            action=action_name,
+            to_state=new_state,
+            reason=reason,
+            detail=detail,
+        )
+        return record
 
 
 def _carry_tracking_fields(

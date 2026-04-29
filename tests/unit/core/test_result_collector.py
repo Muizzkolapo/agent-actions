@@ -87,7 +87,8 @@ def test_result_collector_aggregates_statuses_first_stage():
         is_first_stage=True,
     )
 
-    assert output[0] == {"content": {"value": 1}}
+    assert output[0]["content"] == {"value": 1}
+    assert output[0]["_state"] == "committed"
     assert output[1] == {"content": {"value": 2}}
 
     exhausted_item = output[2]
@@ -322,7 +323,7 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "my_agent",
             "src-f1",
-            "filtered",
+            "guard_filtered",
             reason="low_confidence",
         )
 
@@ -341,8 +342,8 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "agent",
             "src-f2",
-            "filtered",
-            reason="guard_filter",
+            "guard_filtered",
+            reason="guard_filtered",
         )
 
     def test_failed_result_writes_disposition(self):
@@ -413,7 +414,7 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "agent",
             "src-sk",
-            "passthrough",
+            "guard_skipped",
             reason="guard_skip",
         )
 
@@ -462,7 +463,7 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "agent",
             "src-un",
-            "unprocessed",
+            "cascade_skipped",
             reason="where_clause",
         )
 
@@ -596,7 +597,7 @@ class TestResultCollectorDispositions:
         assert backend.set_disposition.call_count == 3
         calls = backend.set_disposition.call_args_list
         assert calls[0] == (("agent", "ok", "success"), {})
-        assert calls[1] == (("agent", "filt", "filtered"), {"reason": "guard_filter"})
+        assert calls[1] == (("agent", "filt", "guard_filtered"), {"reason": "guard_filtered"})
         assert calls[2] == (
             ("agent", "fail", "failed"),
             {"reason": "err", "input_snapshot": None, "detail": "err"},
@@ -622,7 +623,7 @@ class TestResultCollectorDispositions:
         assert backend.set_disposition.call_count == 2
         calls = backend.set_disposition.call_args_list
         assert calls[0] == (("agent", "src-d", "deferred"), {"reason": "batch_queued:task_id=t-1"})
-        assert calls[1] == (("agent", "src-f", "filtered"), {"reason": "guard_filter"})
+        assert calls[1] == (("agent", "src-f", "guard_filtered"), {"reason": "guard_filtered"})
 
 
 class TestCollectionStatsOnlyGuardOutcomes:
@@ -759,7 +760,7 @@ class TestParseErrorDisposition:
         )
 
     def test_parse_error_record_marked_unprocessed(self):
-        """Parse error items get _unprocessed=True so downstream guards skip them."""
+        """Parse error items are marked FAILED so downstream skips execution."""
         result = ProcessingResult.success(
             data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
             source_guid="guid-pe",
@@ -773,7 +774,7 @@ class TestParseErrorDisposition:
         )
 
         assert len(output) == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"
 
     def test_parse_error_stats_counted_as_failed(self):
         """Parse error reclassifies from success to failed in stats."""

@@ -10,43 +10,89 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
+from agent_actions.record.state import RecordState, reason_error, reason_exhausted, reason_guard
 from agent_actions.utils.content import get_existing_content, is_version_merge
 
 # Framework fields that should be carried from an input record to an output
 # record when the envelope builder does not manage them automatically.
 CARRY_FORWARD_FIELDS: tuple[str, ...] = (
     "target_id",
-    "_unprocessed",
     "_recovery",
     "metadata",
+    "_state",
+    "_transitions",
 )
 
 
-def build_tombstone(
+def build_guard_skipped_record(
     action_name: str,
     input_record: dict[str, Any] | None,
-    reason: str,
     *,
     source_guid: str | None = None,
-    extra_metadata: dict[str, Any] | None = None,
+    clause: str = "",
+    behavior: str = "skip",
+    result: bool = False,
+    values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a tombstone record for guard-skipped or unprocessed records.
-
-    Uses :meth:`RecordEnvelope.build_skipped` to add a null namespace
-    marker (``action_name: None``) while preserving upstream content.
-
-    Always sets ``metadata.reason``, ``metadata.agent_type = "tombstone"``,
-    and ``_unprocessed = True``.  Carries ``target_id`` from *input_record*.
-
-    For retry-exhausted records that need empty content under the
-    namespace (not null), use :func:`build_exhausted_tombstone` instead.
-    """
+    """Build a guard-skipped passthrough record (null namespace + state)."""
     item = RecordEnvelope.build_skipped(action_name, input_record)
-    item["source_guid"] = source_guid
-    item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
-    item["_unprocessed"] = True
-    if extra_metadata:
-        item["metadata"].update(extra_metadata)
+    if source_guid is not None:
+        item["source_guid"] = source_guid
+    RecordEnvelope.transition(
+        item,
+        RecordState.GUARD_SKIPPED,
+        action_name=action_name,
+        reason=reason_guard(clause=clause, behavior=behavior, result=result, values=values),
+    )
+    carry_framework_fields(input_record, item, fields=("target_id",))
+    return item
+
+
+def build_cascade_skipped_record(
+    action_name: str,
+    input_record: dict[str, Any] | None,
+    *,
+    source_guid: str | None = None,
+    upstream_action: str | None = None,
+    upstream_state: str | None = None,
+    upstream_reason: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a cascade-skipped passthrough record (null namespace + state)."""
+    item = RecordEnvelope.build_skipped(action_name, input_record)
+    if source_guid is not None:
+        item["source_guid"] = source_guid
+    reason: dict[str, Any] = {"type": "cascade"}
+    if upstream_action is not None:
+        reason["upstream_action"] = upstream_action
+    if upstream_state is not None:
+        reason["upstream_state"] = upstream_state
+    if upstream_reason is not None:
+        reason["upstream_reason"] = upstream_reason
+    RecordEnvelope.transition(
+        item, RecordState.CASCADE_SKIPPED, action_name=action_name, reason=reason
+    )
+    carry_framework_fields(input_record, item, fields=("target_id",))
+    return item
+
+
+def build_failed_record(
+    action_name: str,
+    input_record: dict[str, Any] | None,
+    *,
+    source_guid: str | None = None,
+    error_type: str,
+    message: str,
+) -> dict[str, Any]:
+    """Build a failed passthrough record (null namespace + FAILED state)."""
+    item = RecordEnvelope.build_skipped(action_name, input_record)
+    if source_guid is not None:
+        item["source_guid"] = source_guid
+    RecordEnvelope.transition(
+        item,
+        RecordState.FAILED,
+        action_name=action_name,
+        reason=reason_error(error_type=error_type, message=message),
+    )
     carry_framework_fields(input_record, item, fields=("target_id",))
     return item
 
@@ -71,16 +117,24 @@ def build_exhausted_tombstone(
     item: dict[str, Any] = {
         "content": content,
         "source_guid": source_guid,
-        "metadata": {
-            "reason": "retry_exhausted",
-            "retry_exhausted": True,
-            "agent_type": "tombstone",
-        },
-        "_unprocessed": True,
+        "_state": RecordState.ACTIVE.value,
     }
+    retry_attempts = "unknown"
+    last_error = None
+    model = None
     if extra_metadata:
-        item["metadata"].update(extra_metadata)
+        # Some call sites already have structured retry metadata here; surface
+        # common fields into the transition reason.
+        retry_attempts = extra_metadata.get("attempts", retry_attempts)
+        last_error = extra_metadata.get("last_error")
+        model = extra_metadata.get("model")
     carry_framework_fields(input_record, item, fields=("target_id",))
+    RecordEnvelope.transition(
+        item,
+        RecordState.EXHAUSTED,
+        action_name=action_name,
+        reason=reason_exhausted(attempts=retry_attempts, last_error=last_error, model=model),
+    )
     return item
 
 

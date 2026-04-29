@@ -104,4 +104,4 @@ Downstream actions observing `review_consolidated_answers.*` get empty data.
 
 ## Guard-skip tombstones
 
-Guard-skipped records (`on_false: skip`) have `_unprocessed: True` but are valid pipeline data. They do NOT cascade as upstream failures — downstream actions should still process them.
+Guard-skipped records (`on_false: skip`) have `_state: "guard_skipped"` and are valid pipeline data. They do NOT cascade as upstream failures — downstream actions should still process them.

@@ -3,6 +3,7 @@
 from typing import Any
 
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import RecordState
 from agent_actions.utils.field_management.manager import FieldManager
 from agent_actions.utils.id_generation.generator import IDGenerator
 from agent_actions.utils.lineage.builder import LineageBuilder
@@ -22,10 +23,8 @@ class PassthroughItemBuilder:
     ) -> dict[str, Any]:
         """Build a passthrough (tombstone) item with required fields and metadata.
 
-        The returned item has ``_unprocessed = True`` and
-        ``metadata.agent_type = "tombstone"`` so downstream processing
-        skips it. Metadata format varies by *mode* (batch uses legacy flags,
-        online adds a ``reason`` string).
+        The returned item is a stateful passthrough record. It does not rely on
+        legacy `_unprocessed` or `metadata.reason` flags.
 
         Args:
             row: Original data item.
@@ -58,19 +57,13 @@ class PassthroughItemBuilder:
 
         LineageBuilder.set_parent_tracking(processed_item, row)
 
-        if "metadata" not in processed_item:
-            processed_item["metadata"] = {}
-
-        if mode == "online":
-            processed_item["metadata"]["reason"] = reason
-            flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
-            processed_item["metadata"][flag_name] = True
-        else:
-            flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
-            processed_item["metadata"][flag_name] = True
-
-        processed_item["metadata"]["agent_type"] = "tombstone"
-        processed_item["_unprocessed"] = True
+        processed_item["_state"] = RecordState.ACTIVE.value
+        RecordEnvelope.transition(
+            processed_item,
+            RecordState.GUARD_SKIPPED,
+            action_name=action_name,
+            reason={"type": "passthrough", "reason": reason, "mode": mode},
+        )
 
         return processed_item
 

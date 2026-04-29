@@ -12,6 +12,7 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
+from agent_actions.record.state import CASCADE_BLOCKING_STATES, RESETTABLE_DOWNSTREAM_STATES, RecordState
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 
@@ -41,6 +42,9 @@ class TaskPreparer:
             context.is_first_stage,
             skip_guard,
         )
+
+        if isinstance(item, dict):
+            self._reset_state_for_downstream(item)
 
         if self._is_upstream_unprocessed(item):
             target_id = existing_target_id or self._generate_target_id()
@@ -298,20 +302,18 @@ class TaskPreparer:
 
     @staticmethod
     def _is_upstream_unprocessed(item: Any) -> bool:
-        """Return True only for cascade-failure tombstones, not guard-skip tombstones.
-
-        Guard-skipped records (reason=guard_skip) are valid pipeline data — the
-        action was intentionally skipped but downstream should still process.
-        Only upstream_unprocessed cascades should propagate as unprocessed.
-        """
+        """Return True only for cascade-blocked records (FAILED/EXHAUSTED/CASCADE_SKIPPED)."""
         if not isinstance(item, dict):
             return False
-        if item.get("_unprocessed") is not True:
-            return False
-        metadata = item.get("metadata")
-        if isinstance(metadata, dict) and metadata.get("reason") == "guard_skip":
-            return False
-        return True
+        state = RecordState.from_record(item)
+        return state in CASCADE_BLOCKING_STATES
+
+    @staticmethod
+    def _reset_state_for_downstream(item: dict[str, Any]) -> None:
+        """Reset upstream-settled records to ACTIVE when used as downstream input."""
+        state = RecordState.from_record(item)
+        if state in RESETTABLE_DOWNSTREAM_STATES:
+            item["_state"] = RecordState.ACTIVE.value
 
     def _generate_target_id(self) -> str:
         """Generate a new target_id."""

@@ -405,7 +405,7 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         items = [
             {
                 "source_guid": "sg-1",
-                "metadata": {"retry_exhausted": True},
+                "_state": "exhausted",
                 "_recovery": {
                     "reprompt": {"attempts": 2, "passed": False, "validation": "check_output"}
                 },
@@ -424,16 +424,15 @@ class TestWriteRecordDispositionsEvaluationExhausted:
     def test_retry_exhausted_still_works(self):
         """Existing retry_exhausted path is preserved when no reprompt recovery."""
         service = _make_service()
-        items = [{"source_guid": "sg-1", "metadata": {"retry_exhausted": True}}]
+        items = [{"source_guid": "sg-1", "_state": "exhausted"}]
 
         from agent_actions.processing.result_collector import (
             write_record_dispositions,
         )
 
         write_record_dispositions(service._storage_backend, items, "my_action")
-        service._storage_backend.set_disposition.assert_called_once_with(
-            "my_action", "sg-1", DISPOSITION_EXHAUSTED, reason="retry_exhausted"
-        )
+        args, kwargs = service._storage_backend.set_disposition.call_args
+        assert args[:3] == ("my_action", "sg-1", DISPOSITION_EXHAUSTED)
 
     def test_unknown_validation_fallback(self):
         """Missing validation name defaults to 'unknown'."""

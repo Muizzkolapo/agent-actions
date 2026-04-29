@@ -37,7 +37,7 @@ Single authority for record content assembly. Every action type, granularity, an
 RecordEnvelope is a stateless utility -- all methods are `@staticmethod` and return plain dicts. There is no `RecordEnvelope` instance.
 
 The module does NOT own:
-- Framework metadata (`_unprocessed`, `metadata`, `_recovery`) -- callers add these after assembly
+- Framework metadata (`_state`, `_transitions`, `_recovery`) -- callers add these after assembly
 - Enrichment (lineage, node_id, target_id) -- `EnrichmentPipeline` handles post-assembly
 - Initial source structuring -- `initial_pipeline.py` creates the first `source` namespace
 - Observe/passthrough resolution -- `scope_application.py` reads FROM content

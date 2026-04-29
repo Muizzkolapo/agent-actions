@@ -6,13 +6,14 @@ import pytest
 
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.storage.backend import (
+    DISPOSITION_CASCADE_SKIPPED,
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
-    DISPOSITION_FILTERED,
+    DISPOSITION_GUARD_FILTERED,
+    DISPOSITION_GUARD_SKIPPED,
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
-    DISPOSITION_UNPROCESSED,
     VALID_DISPOSITIONS,
     Disposition,
 )
@@ -72,11 +73,12 @@ class TestDispositionEnum:
     def test_enum_values_match_string_constants(self):
         assert Disposition.PASSTHROUGH.value == DISPOSITION_PASSTHROUGH
         assert Disposition.SKIPPED.value == DISPOSITION_SKIPPED
-        assert Disposition.FILTERED.value == DISPOSITION_FILTERED
+        assert Disposition.SUCCESS.value == DISPOSITION_SUCCESS
+        assert Disposition.GUARD_SKIPPED.value == DISPOSITION_GUARD_SKIPPED
+        assert Disposition.GUARD_FILTERED.value == DISPOSITION_GUARD_FILTERED
+        assert Disposition.CASCADE_SKIPPED.value == DISPOSITION_CASCADE_SKIPPED
         assert Disposition.EXHAUSTED.value == DISPOSITION_EXHAUSTED
         assert Disposition.FAILED.value == DISPOSITION_FAILED
-        assert Disposition.UNPROCESSED.value == DISPOSITION_UNPROCESSED
-        assert Disposition.SUCCESS.value == DISPOSITION_SUCCESS
 
     def test_valid_dispositions_contains_all_enum_values(self):
         for member in Disposition:
@@ -100,10 +102,10 @@ class TestDispositionEnum:
         backend.set_disposition(
             action_name="action_b",
             record_id="rec_002",
-            disposition="filtered",
+            disposition="guard_filtered",
         )
         rows = backend.get_disposition("action_b", "rec_002")
-        assert rows[0]["disposition"] == "filtered"
+        assert rows[0]["disposition"] == "guard_filtered"
 
     def test_set_disposition_stores_detail(self, backend):
         backend.set_disposition(

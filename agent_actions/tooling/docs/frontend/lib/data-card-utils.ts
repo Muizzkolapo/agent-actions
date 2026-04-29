@@ -20,7 +20,8 @@ export const METADATA_KEYS = new Set([
   "root_target_id",
   "chunk_info",
   "_recovery",
-  "_unprocessed",
+  "_state",
+  "_transitions",
   "_file",
   "_trace",
 ])

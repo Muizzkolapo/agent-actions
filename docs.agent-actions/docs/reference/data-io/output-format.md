@@ -76,7 +76,8 @@ The following fields are metadata and are automatically excluded when extracting
 - `metadata`
 - `chunk_info`
 - `_recovery`
-- `_unprocessed`
+- `_state`
+- `_transitions`
 
 This means when an action references upstream data, it sees the `content` fields organized by upstream action namespace, without these wrappers or system fields.
 
@@ -86,9 +87,9 @@ Records fall into two categories based on whether the action's LLM/tool actually
 
 | How to identify | Meaning | Content |
 |----------------|---------|---------|
-| `_unprocessed` absent | **Processed** — action ran normally | LLM/tool output |
-| `_unprocessed: true` | **Unprocessed** — upstream action failed (API error, missing batch result) | Original upstream content, preserved for lineage |
-| `metadata.reason` present | **Skipped** — guard evaluated to false (`on_false: skip`) | Original content, forwarded unchanged |
+| `_state: "committed"` | **Processed** — action ran normally | LLM/tool output |
+| `_state: "cascade_skipped"` | **Unprocessed** — upstream action failed (API error, missing batch result) | Original upstream content, preserved for lineage |
+| `_state: "guard_skipped"` | **Skipped** — guard evaluated to false (`on_false: skip`) | Original content, forwarded unchanged |
 
 ### System Fields
 
@@ -97,7 +98,8 @@ Records may carry underscore-prefixed system fields that control internal proces
 | Field | Type | Meaning |
 |-------|------|---------|
 | `_recovery` | `object` | Recovery metadata — present when a record went through [batch recovery](../execution/batch-recovery.md) (retry for missing records and/or reprompt for validation failures). Contains `retry` and/or `reprompt` sub-objects with attempt counts, success status, and timestamps. |
-| `_unprocessed` | `true` | Upstream action failed (API error, missing batch result) — automatically skipped by downstream actions |
+| `_state` | `string` | Record state for this action (e.g. `committed`, `guard_skipped`, `failed`, `exhausted`, `cascade_skipped`) |
+| `_transitions` | `array` | State transition audit trail (timestamp, action, reason, detail) |
 
 These fields are excluded from content extraction and should not be set by users. See [Batch Recovery](../execution/batch-recovery.md) for the full `_recovery` structure.
 
