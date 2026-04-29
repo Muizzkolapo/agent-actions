@@ -47,6 +47,7 @@ class PassthroughTransformer:
         passthrough_fields: dict | None = None,
         metadata: dict | None = None,
         existing_content: dict | None = None,
+        input_record: dict | None = None,
     ) -> list:
         """Apply context_scope.passthrough logic to generated data.
 
@@ -87,11 +88,16 @@ class PassthroughTransformer:
         if action_outputs is None:
             action_outputs = []
 
-        # Build records via RecordEnvelope — wraps under namespace,
-        # preserves upstream content.
-        input_record = {"source_guid": source_guid, "content": existing_content or {}}
+        # Build records via RecordEnvelope — wraps under namespace, preserves upstream
+        # content and carries tracking fields. If a real input_record is provided (from
+        # the calling strategy), use it so version_correlation_id is preserved. Otherwise
+        # fall back to a synthetic record (backward compat for callers without it).
+        envelope_input = input_record or {
+            "source_guid": source_guid,
+            "content": existing_content or {},
+        }
         output = [
-            RecordEnvelope.build(action_name, ensure_dict_output(fields), input_record)
+            RecordEnvelope.build(action_name, ensure_dict_output(fields), envelope_input)
             for fields in action_outputs
         ]
 

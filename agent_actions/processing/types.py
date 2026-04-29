@@ -131,6 +131,7 @@ class ProcessingResult:
     pre_extracted_metadata: dict[str, Any] | None = None
     source_mapping: dict[int, int | list[int] | None] | None = None
     processing_context: Optional["ProcessingContext"] = None
+    is_expansion: bool = False  # True when a single input produced multiple outputs (1→N)
 
     @classmethod
     def success(
@@ -144,6 +145,7 @@ class ProcessingResult:
         recovery_metadata: Optional["RecoveryMetadata"] = None,
         input_record: dict[str, Any] | None = None,
         pre_extracted_metadata: dict[str, Any] | None = None,
+        is_expansion: bool = False,
     ) -> "ProcessingResult":
         """Factory for successful result."""
         return cls(
@@ -157,6 +159,7 @@ class ProcessingResult:
             recovery_metadata=recovery_metadata,
             input_record=input_record,
             pre_extracted_metadata=pre_extracted_metadata,
+            is_expansion=is_expansion,
         )
 
     @classmethod

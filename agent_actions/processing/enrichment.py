@@ -154,7 +154,15 @@ class VersionIdEnricher(Enricher):
     """Add version correlation IDs."""
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
-        """Add version correlation ID to each item."""
+        """Add version correlation ID to each item.
+
+        For 1→N expansions (result.is_expansion=True), always assigns fresh
+        IDs — each expanded item is a new logical entity.
+
+        For 1:1 passthroughs, respects existing version_correlation_id
+        carried forward by RecordEnvelope. Only assigns if absent
+        (e.g. first-stage records that don't yet have one).
+        """
         if result.status == ProcessingStatus.FILTERED:
             return result
 
@@ -165,8 +173,12 @@ class VersionIdEnricher(Enricher):
         from agent_actions.utils.correlation import VersionIdGenerator
 
         for i, item in enumerate(result.data):
+            if not result.is_expansion and item.get("version_correlation_id"):
+                continue
             result.data[i] = VersionIdGenerator.add_version_correlation_id(
-                item, cast(dict[str, Any], context.agent_config), record_index=context.record_index
+                item,
+                cast(dict[str, Any], context.agent_config),
+                record_index=context.record_index + i,
             )
 
         return result
