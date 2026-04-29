@@ -170,3 +170,72 @@ class TestNoVersionMergeWrapsNormally:
         content = result.data[0]["content"]
         assert content["extract"] == {"entities": ["AI", "ML"]}
         assert "entities" not in content
+
+
+class TestProcessReturnsFlattenableResults:
+    """BatchResultStrategy.process() returns list[ProcessingResult] that flatten correctly."""
+
+    def test_process_returns_processing_results(self):
+        """process() returns ProcessingResult objects, not raw dicts."""
+        from agent_actions.processing.types import ProcessingStatus
+
+        custom_id = "rec_001"
+        original_row = {
+            "source_guid": "src_001",
+            "content": {"source": {"url": "http://example.com"}},
+        }
+        agent_config = {"action_name": "classify", "kind": "llm"}
+        batch_result = BatchResult(
+            custom_id=custom_id,
+            content={"category": "tech"},
+            success=True,
+        )
+
+        strategy = BatchResultStrategy()
+        strategy._enrichment_pipeline = MagicMock()
+        strategy._enrichment_pipeline.enrich.side_effect = lambda result, ctx: result
+
+        results = strategy.process(
+            batch_results=[batch_result],
+            context_map={custom_id: original_row},
+            agent_config=agent_config,
+        )
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.SUCCESS
+        assert len(results[0].data) == 1
+        assert results[0].data[0]["content"]["classify"] == {"category": "tech"}
+
+        # Verify flatten produces the same dicts the caller extracts
+        flat = [item for r in results for item in (r.data or [])]
+        assert len(flat) == 1
+        assert flat[0]["content"]["classify"] == {"category": "tech"}
+        assert flat[0]["source_guid"] == "src_001"
+
+    def test_process_error_result_flattens_with_error_key(self):
+        """Failed batch results produce ProcessingResult with error dict in data."""
+        from agent_actions.processing.types import ProcessingStatus
+
+        custom_id = "rec_err"
+        original_row = {"source_guid": "src_err", "content": {}}
+        agent_config = {"action_name": "classify", "kind": "llm"}
+        batch_result = BatchResult(
+            custom_id=custom_id,
+            content=None,
+            success=False,
+            error="API timeout",
+        )
+
+        strategy = BatchResultStrategy()
+        results = strategy.process(
+            batch_results=[batch_result],
+            context_map={custom_id: original_row},
+            agent_config=agent_config,
+        )
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.FAILED
+        flat = [item for r in results for item in (r.data or [])]
+        assert len(flat) == 1
+        assert flat[0]["error"] == "API timeout"
+        assert flat[0]["source_guid"] == "src_err"

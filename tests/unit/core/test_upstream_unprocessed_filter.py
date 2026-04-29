@@ -304,7 +304,7 @@ class TestBatchPathReasonDetection:
         processor = BatchResultStrategy()
         results = processor._reconcile_passthroughs(ctx)
 
-        assert len(results) >= 1
+        assert len(results) == 1
         item = results[0].data[0]
         assert item["metadata"]["reason"] == "upstream_unprocessed"
         assert item["metadata"]["agent_type"] == "tombstone"
@@ -326,7 +326,7 @@ class TestBatchPathReasonDetection:
         processor = BatchResultStrategy()
         results = processor._reconcile_passthroughs(ctx)
 
-        assert len(results) >= 1
+        assert len(results) == 1
         item = results[0].data[0]
         assert item["metadata"]["reason"] == "guard_skipped"
         assert item["metadata"]["agent_type"] == "tombstone"
@@ -344,7 +344,7 @@ class TestBatchPathReasonDetection:
         processor = BatchResultStrategy()
         results = processor._reconcile_passthroughs(ctx)
 
-        assert len(results) >= 1
+        assert len(results) == 1
         item = results[0].data[0]
         assert item["metadata"]["reason"] == "batch_not_returned"
         assert item["metadata"]["agent_type"] == "tombstone"
