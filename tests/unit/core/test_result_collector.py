@@ -845,8 +845,8 @@ class TestParseErrorDisposition:
         assert stats.success == 1
         assert len(output) == 2
         # Parse error item is marked, normal is not
-        assert output[0]["_unprocessed"] is True
-        assert "_unprocessed" not in output[1]
+        assert output[0]["_state"] == "failed"
+        assert output[1].get("_state") != "failed"
         # Parse error gets FAILED disposition, normal gets SUCCESS disposition
         assert backend.set_disposition.call_count == 2
         calls = backend.set_disposition.call_args_list
@@ -870,7 +870,7 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"
         backend.set_disposition.assert_not_called()
 
     def test_parse_error_no_backend_no_crash(self):
@@ -889,4 +889,4 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"

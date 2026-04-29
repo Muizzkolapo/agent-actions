@@ -53,6 +53,7 @@ class ExhaustedRecordBuilder:
             "source_guid": resolved_source_guid,
             "content": RecordEnvelope.build_content(action_name, empty_content, existing),
             "node_id": node_id,
+            "metadata": {"retry_exhausted": True},
             "_recovery": recovery_metadata.to_dict(),
             "_state": RecordState.ACTIVE.value,
         }

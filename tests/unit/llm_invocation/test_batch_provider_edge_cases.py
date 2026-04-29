@@ -12,6 +12,7 @@ import pytest
 from agent_actions.errors import ExternalServiceError
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
+from agent_actions.record.state import RecordState
 
 # Patch targets:
 # - set_last_usage and fire_event (LLMResponseEvent) now live in response_builder
@@ -45,7 +46,7 @@ class TestExhaustedRecordBuilderActionName:
         assert item["node_id"].startswith("classify_sentiment_")
         assert item["source_guid"] == "sg-123"
         assert item["metadata"]["retry_exhausted"] is True
-        assert item["_unprocessed"] is True
+        assert item["_state"] == RecordState.EXHAUSTED.value
 
     def test_action_name_missing_raises(self):
         """When action_name is empty, RecordEnvelopeError is raised."""

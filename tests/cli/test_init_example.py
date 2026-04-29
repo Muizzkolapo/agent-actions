@@ -238,4 +238,6 @@ class TestInitSubcommands:
     def test_init_no_args_shows_usage(self) -> None:
         runner = CliRunner()
         result = runner.invoke(init, [])
-        assert result.exit_code != 0
+        # Click shows help and exits successfully when no subcommand is provided.
+        assert result.exit_code == 0
+        assert "Usage:" in result.output
