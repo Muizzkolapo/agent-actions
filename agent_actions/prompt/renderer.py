@@ -229,9 +229,12 @@ class ConfigRenderingService:
             "json_mode": action.get("json_mode", get_default("json_mode")),
         }
 
-        if action.get("kind") == "tool":
-            agent_entry["model_vendor"] = "tool"
-            agent_entry["model_name"] = action.get("impl", action.get("name"))
+        kind = action.get("kind")
+        if kind:
+            agent_entry["kind"] = kind
+            if kind == "tool":
+                agent_entry["model_vendor"] = "tool"
+                agent_entry["model_name"] = action.get("impl", action.get("name"))
 
         schema_value = action.get("schema")
         if schema_value:

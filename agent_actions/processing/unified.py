@@ -7,6 +7,7 @@ enrichment, result collection) is handled uniformly by UnifiedProcessor.
 """
 
 import logging
+from dataclasses import replace
 from typing import Any, Protocol, cast, runtime_checkable
 
 from agent_actions.processing.enrichment import EnrichmentPipeline
@@ -209,8 +210,15 @@ class UnifiedProcessor:
         results: list[ProcessingResult],
         context: ProcessingContext,
     ) -> list[ProcessingResult]:
-        """Run enrichment pipeline on each result."""
-        return [self._enrichment_pipeline.enrich(r, context) for r in results]
+        """Run enrichment pipeline on each result.
+
+        Each result gets a context with its positional record_index so that
+        VersionIdEnricher produces distinct version_correlation_ids per record.
+        """
+        return [
+            self._enrichment_pipeline.enrich(r, replace(context, record_index=i))
+            for i, r in enumerate(results)
+        ]
 
     def _collect(
         self,

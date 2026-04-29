@@ -34,7 +34,7 @@ def _patch_generator():
     """Patch VersionIdGenerator to return a deterministic ID."""
     return patch(
         "agent_actions.utils.correlation.VersionIdGenerator.add_version_correlation_id",
-        side_effect=lambda item, config, record_index=0: {
+        side_effect=lambda item, config, record_index=0, force=False: {
             **item,
             "version_correlation_id": FRESH_VCID,
         },
@@ -91,6 +91,51 @@ class TestVersionIdEnricherPassthrough:
 
         mock_gen.assert_not_called()
         assert enriched.data[0]["version_correlation_id"] == "vcid-abc"
+
+    def test_non_versioned_expansion_gets_unique_ids(self):
+        """Non-versioned 1→N expansion must assign unique IDs via force=True."""
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        VersionIdGenerator.clear()
+        data = [
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+        ]
+        result = _make_result(data, is_expansion=True)
+        context = ProcessingContext(
+            agent_config={
+                "action_name": "flatten_questions",
+                "workflow_session_id": "sess-123",
+            },
+            agent_name="flatten_questions",
+            record_index=0,
+        )
+
+        enriched = VersionIdEnricher().enrich(result, context)
+
+        ids = [item["version_correlation_id"] for item in enriched.data]
+        # All IDs must be unique (not the parent's shared ID)
+        assert len(set(ids)) == 3
+        assert all(vcid != "vcid-parent" for vcid in ids)
+
+    def test_non_versioned_passthrough_skips_assignment(self):
+        """Non-versioned 1:1 passthrough must NOT assign version_correlation_id."""
+        data = [{"source_guid": "g1"}]
+        result = _make_result(data, is_expansion=False)
+        context = ProcessingContext(
+            agent_config={
+                "action_name": "some_action",
+                "workflow_session_id": "sess-123",
+            },
+            agent_name="some_action",
+            record_index=0,
+        )
+
+        enriched = VersionIdEnricher().enrich(result, context)
+
+        # No version_correlation_id should be set — action is not versioned
+        assert "version_correlation_id" not in enriched.data[0]
 
     def test_negative_record_index_skipped(self):
         data = [{"source_guid": "g1"}]

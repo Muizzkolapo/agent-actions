@@ -221,15 +221,12 @@ class TestProcessorUtilsIntegration:
         correlation_ids = {
             outputs[0]["version_correlation_id"] for outputs in outputs_by_guid.values()
         }
-        expected_positions = set()
-        chunk_size = len(input_data) // 3
-        for agent_id in range(3):
-            start_idx = agent_id * chunk_size
-            end_idx = start_idx + chunk_size if agent_id < 3 - 1 else len(input_data)
-            chunk_len = end_idx - start_idx
-            expected_positions.update(range(chunk_len))
-        assert len(correlation_ids) == len(expected_positions), (
-            f"Expected {len(expected_positions)} unique correlation IDs, got {len(correlation_ids)}"
+        # Each record has a unique source_guid, so each gets a unique vcid.
+        # The hash includes source_guid to differentiate records at the same
+        # position but from different source pages.
+        assert len(correlation_ids) == len(input_data), (
+            f"Expected {len(input_data)} unique correlation IDs (one per record), "
+            f"got {len(correlation_ids)}"
         )
 
 

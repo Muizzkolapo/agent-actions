@@ -83,19 +83,35 @@ class VersionIdGenerator:
 
     @classmethod
     def add_version_correlation_id(
-        cls, obj: dict, agent_config: dict, record_index: int | None = None
+        cls,
+        obj: dict,
+        agent_config: dict,
+        record_index: int | None = None,
+        *,
+        force: bool = False,
     ) -> dict:
-        """Add version correlation ID to an object if agent is versioned.
+        """Add version correlation ID to an object.
+
+        For versioned agents (``is_versioned_agent=True``), always assigns.
+        For non-versioned agents, only assigns when *force* is ``True``
+        (used by ``VersionIdEnricher`` for 1→N expansions where each new
+        item needs a unique identity for downstream fan-in grouping).
 
         Raises:
             ValueError: If workflow_session_id is missing in version context.
         """
-        if not agent_config.get("is_versioned_agent", False):
+        if not force and not agent_config.get("is_versioned_agent", False):
             return obj
 
         version_base_name = agent_config.get("version_base_name")
         if not version_base_name:
-            return obj
+            if not force:
+                return obj
+            # Expansion fallback: use action_name as the base name so each
+            # expanding action produces a distinct ID namespace.
+            version_base_name = agent_config.get("action_name") or agent_config.get("name")
+            if not version_base_name:
+                return obj
 
         workflow_session_id = agent_config.get("workflow_session_id")
         if not workflow_session_id:
@@ -108,7 +124,10 @@ class VersionIdGenerator:
         obj = obj.copy()
         if record_index is not None:
             obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
-                record_index, version_base_name, workflow_session_id
+                record_index,
+                version_base_name,
+                workflow_session_id,
+                file_context=obj.get("source_guid", ""),
             )
         else:
             source_guid = obj.get("source_guid")
