@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove duplicate EnrichmentPipeline from BatchResultStrategy; batch result enrichment now runs through BatchProcessingService using the shared pipeline class"
+time: 2026-04-29T03:12:00.000000Z
