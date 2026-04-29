@@ -106,11 +106,11 @@ def initialize_services(
     )
     from agent_actions.llm.batch.infrastructure.context import BatchContextManager
     from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
-    from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
+    from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
     from agent_actions.llm.batch.service import create_registry_manager_factory
     from agent_actions.llm.batch.services.processing import BatchProcessingService
 
-    result_processor = BatchResultProcessor()
+    result_processor = BatchResultStrategy()
     context_manager = BatchContextManager()
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     source_handler = BatchSourceHandler()

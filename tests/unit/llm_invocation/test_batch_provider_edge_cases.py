@@ -28,9 +28,9 @@ class TestCreateExhaustedItemActionName:
 
     def test_action_name_propagated_from_agent_config(self):
         """action_name from agent_config flows into the exhausted item's node_id."""
-        from agent_actions.llm.batch.processing.result_processor import (
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchProcessingContext,
-            BatchResultProcessor,
+            BatchResultStrategy,
         )
 
         ctx = BatchProcessingContext(
@@ -45,7 +45,7 @@ class TestCreateExhaustedItemActionName:
         recovery = RecoveryMetadata(
             retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="api_error")
         )
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         item = processor._create_exhausted_item(ctx, "custom-1", {"text": "hello"}, recovery)
 
@@ -57,9 +57,9 @@ class TestCreateExhaustedItemActionName:
 
     def test_action_name_missing_raises(self):
         """When agent_config has no action_name, RecordEnvelopeError is raised (empty names are banned)."""
-        from agent_actions.llm.batch.processing.result_processor import (
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchProcessingContext,
-            BatchResultProcessor,
+            BatchResultStrategy,
         )
         from agent_actions.record.envelope import RecordEnvelopeError
 
@@ -75,16 +75,16 @@ class TestCreateExhaustedItemActionName:
         recovery = RecoveryMetadata(
             retry=RetryMetadata(attempts=2, failures=2, succeeded=False, reason="timeout")
         )
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         with pytest.raises(RecordEnvelopeError, match="action_name is required"):
             processor._create_exhausted_item(ctx, "custom-2", {"text": "world"}, recovery)
 
     def test_action_name_missing_when_agent_config_is_none_raises(self):
         """When agent_config is None, RecordEnvelopeError is raised (empty names are banned)."""
-        from agent_actions.llm.batch.processing.result_processor import (
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchProcessingContext,
-            BatchResultProcessor,
+            BatchResultStrategy,
         )
         from agent_actions.record.envelope import RecordEnvelopeError
 
@@ -100,7 +100,7 @@ class TestCreateExhaustedItemActionName:
         recovery = RecoveryMetadata(
             retry=RetryMetadata(attempts=1, failures=1, succeeded=False, reason="network_error")
         )
-        processor = BatchResultProcessor()
+        processor = BatchResultStrategy()
 
         with pytest.raises(RecordEnvelopeError, match="action_name is required"):
             processor._create_exhausted_item(ctx, "custom-3", {"text": "data"}, recovery)

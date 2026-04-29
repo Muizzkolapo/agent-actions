@@ -1,9 +1,11 @@
-"""
-Batch Result Processor.
+"""Batch result processing strategy.
+
+Converts raw BatchResult objects into enriched ProcessingResult records
+that can flow through the shared enrich/collect pipeline.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
@@ -21,7 +23,11 @@ from agent_actions.processing.record_helpers import (
     build_tombstone,
     carry_framework_fields,
 )
-from agent_actions.processing.types import ProcessingResult, RecoveryMetadata
+from agent_actions.processing.types import (
+    ProcessingResult,
+    ProcessingStatus,
+    RecoveryMetadata,
+)
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -29,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BatchProcessingContext:
-    """Context passed through the batch result processing pipeline."""
+    """Internal context for batch result parsing."""
 
     # Input data
     batch_results: list[BatchResult]
@@ -47,19 +53,17 @@ class BatchProcessingContext:
     # Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None
 
-    # Accumulated output
-    processed_data: list[dict[str, Any]] = field(default_factory=list)
 
-    # Statistics
-    success_count: int = 0
-    error_count: int = 0
-    passthrough_count: int = 0
+class BatchResultStrategy:
+    """Converts batch provider results into ProcessingResult objects.
 
+    Unlike InvocationStrategy implementations that invoke LLM/tool/HITL,
+    this processes already-returned batch results.  The ``process()`` method
+    returns ``list[ProcessingResult]`` so the caller can flatten, collect,
+    and write dispositions through the shared pipeline.
+    """
 
-class BatchResultProcessor:
-    """Converts batch provider results into workflow format via pipeline stages."""
-
-    def __init__(self):
+    def __init__(self) -> None:
         self._enrichment_pipeline = EnrichmentPipeline()
 
     def process(
@@ -69,32 +73,43 @@ class BatchResultProcessor:
         output_directory: str | None = None,
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Process batch results through the pipeline into workflow format."""
-        ctx = self._stage_1_initialize_context(
+    ) -> list[ProcessingResult]:
+        """Convert batch results into enriched ProcessingResult objects.
+
+        Returns one ProcessingResult per input record (successful, failed,
+        exhausted, or unprocessed).  The caller is responsible for flattening
+        ``result.data`` into output records and writing dispositions.
+        """
+        ctx = self._init_context(
             batch_results,
             context_map,
             output_directory,
             agent_config,
             exhausted_recovery,
         )
+        ctx.reconciler = BatchResultReconciler(ctx.context_map)
 
-        ctx = self._stage_2_reconcile(ctx)
+        results = self._process_batch_results(ctx)
+        results.extend(self._reconcile_passthroughs(ctx))
 
-        ctx = self._stage_3_4_process_results(ctx)
-
-        ctx = self._stage_6_merge_passthroughs(ctx)
+        success_count = sum(1 for r in results if r.status == ProcessingStatus.SUCCESS)
+        error_count = sum(
+            1 for r in results if r.status in (ProcessingStatus.FAILED, ProcessingStatus.EXHAUSTED)
+        )
+        passthrough_count = sum(1 for r in results if r.status == ProcessingStatus.UNPROCESSED)
 
         logger.debug(
             "Batch result processing complete: %d success, %d errors, %d passthrough",
-            ctx.success_count,
-            ctx.error_count,
-            ctx.passthrough_count,
+            success_count,
+            error_count,
+            passthrough_count,
         )
 
-        return ctx.processed_data
+        return results
 
-    def _stage_1_initialize_context(
+    # -- Initialisation --------------------------------------------------------
+
+    def _init_context(
         self,
         batch_results: list[BatchResult],
         context_map: dict[str, Any] | None,
@@ -102,7 +117,7 @@ class BatchResultProcessor:
         agent_config: dict[str, Any] | None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
     ) -> BatchProcessingContext:
-        """Initialize processing context with configuration values."""
+        """Build the internal parsing context from caller parameters."""
         context_map = context_map or {}
 
         json_mode = get_default("json_mode")
@@ -129,26 +144,24 @@ class BatchResultProcessor:
 
         return ctx
 
-    def _stage_2_reconcile(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
-        """Set up BatchResultReconciler for tracking processed vs missing records."""
-        ctx.reconciler = BatchResultReconciler(ctx.context_map)
-        return ctx
+    # -- Batch result processing -----------------------------------------------
 
-    def _stage_3_4_process_results(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
-        """Process all batch results, handling both successes and errors."""
+    def _process_batch_results(self, ctx: BatchProcessingContext) -> list[ProcessingResult]:
+        """Process all batch results, returning one ProcessingResult per result."""
         if ctx.reconciler is None:
             raise RuntimeError(
                 "BatchProcessingContext.reconciler is None; "
-                "_stage_2_reconcile() must run before _stage_3_4_process_results()"
+                "reconciler must be initialized before processing results"
             )
+        results: list[ProcessingResult] = []
+
         for batch_result in ctx.batch_results:
             custom_id = str(batch_result.custom_id)
 
             if batch_result.success and batch_result.content is not None:
                 try:
-                    items = self._process_successful_result(ctx, batch_result, custom_id)
-                    ctx.processed_data.extend(items)
-                    ctx.success_count += len(items)
+                    result = self._process_successful_result(ctx, batch_result, custom_id)
+                    results.append(result)
                     ctx.reconciler.mark_processed(custom_id)
 
                     logger.debug(
@@ -156,22 +169,22 @@ class BatchResultProcessor:
                         extra={
                             "operation": "process_batch_item",
                             "custom_id": custom_id,
-                            "items_generated": len(items),
+                            "items_generated": len(result.data),
                             "success": True,
                         },
                     )
 
                 except Exception as e:
-                    error_item = self._create_error_item(
-                        ctx,
-                        custom_id,
-                        f"Processing error: {str(e)}",
-                        batch_result.metadata,
-                        batch_result.content,
-                        recovery_metadata=batch_result.recovery_metadata,
+                    results.append(
+                        self._build_error_result(
+                            ctx,
+                            custom_id,
+                            f"Processing error: {str(e)}",
+                            batch_result.metadata,
+                            batch_result.content,
+                            recovery_metadata=batch_result.recovery_metadata,
+                        )
                     )
-                    ctx.processed_data.append(error_item)
-                    ctx.error_count += 1
                     ctx.reconciler.mark_processed(custom_id)
 
                     logger.error(
@@ -185,15 +198,15 @@ class BatchResultProcessor:
                     )
 
             else:
-                error_item = self._create_error_item(
-                    ctx,
-                    custom_id,
-                    batch_result.error or "Batch processing failed",
-                    batch_result.metadata,
-                    recovery_metadata=batch_result.recovery_metadata,
+                results.append(
+                    self._build_error_result(
+                        ctx,
+                        custom_id,
+                        batch_result.error or "Batch processing failed",
+                        batch_result.metadata,
+                        recovery_metadata=batch_result.recovery_metadata,
+                    )
                 )
-                ctx.processed_data.append(error_item)
-                ctx.error_count += 1
                 ctx.reconciler.mark_processed(custom_id)
 
                 logger.error(
@@ -206,12 +219,15 @@ class BatchResultProcessor:
                     },
                 )
 
-        return ctx
+        return results
 
     def _process_successful_result(
-        self, ctx: BatchProcessingContext, batch_result: BatchResult, custom_id: str
-    ) -> list[dict[str, Any]]:
-        """Build agent output from successful batch result, delegating enrichment to EnrichmentPipeline."""
+        self,
+        ctx: BatchProcessingContext,
+        batch_result: BatchResult,
+        custom_id: str,
+    ) -> ProcessingResult:
+        """Parse a successful batch result into an enriched ProcessingResult."""
         if ctx.reconciler is None:
             raise RuntimeError(
                 "BatchProcessingContext.reconciler is None; "
@@ -230,7 +246,6 @@ class BatchResultProcessor:
             if custom_id in ctx.context_map:
                 generated_list = self._apply_context_passthrough(ctx, custom_id, generated_list)
             elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
-                # Passthrough configured but custom_id missing from context_map
                 logger.warning(
                     "custom_id '%s' not found in context_map, skipping passthrough",
                     custom_id,
@@ -267,9 +282,7 @@ class BatchResultProcessor:
             recovery_metadata=batch_result.recovery_metadata,
         )
 
-        enriched = self._enrichment_pipeline.enrich(processing_result, processing_context)
-
-        return enriched.data
+        return self._enrichment_pipeline.enrich(processing_result, processing_context)
 
     def _apply_context_passthrough(
         self,
@@ -288,7 +301,9 @@ class BatchResultProcessor:
 
         return generated_list
 
-    def _create_error_item(
+    # -- Error / exhausted / unprocessed builders ------------------------------
+
+    def _build_error_result(
         self,
         ctx: BatchProcessingContext,
         custom_id: str,
@@ -296,8 +311,13 @@ class BatchResultProcessor:
         metadata: dict[str, Any] | None = None,
         raw_content: Any = None,
         recovery_metadata: RecoveryMetadata | None = None,
-    ) -> dict[str, Any]:
-        """Create an error item for failed batch results."""
+    ) -> ProcessingResult:
+        """Build a FAILED ProcessingResult for a batch error.
+
+        Error results carry the error dict in ``data`` so that downstream
+        ``write_record_dispositions()`` can still find and disposition them.
+        Error results are NOT enriched (matching the original pipeline behaviour).
+        """
         if ctx.reconciler is None:
             raise RuntimeError(
                 "BatchProcessingContext.reconciler is None; "
@@ -317,7 +337,13 @@ class BatchResultProcessor:
         if recovery_metadata:
             error_item["_recovery"] = recovery_metadata.to_dict()
 
-        return error_item
+        return ProcessingResult(
+            status=ProcessingStatus.FAILED,
+            data=[error_item],
+            source_guid=source_guid,
+            error=error_message,
+            recovery_metadata=recovery_metadata,
+        )
 
     def _create_exhausted_item(
         self,
@@ -332,8 +358,6 @@ class BatchResultProcessor:
                 "BatchProcessingContext.reconciler is None; "
                 "reconciler must be initialized before creating exhausted items"
             )
-        from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
 
         return ExhaustedRecordBuilder.build_exhausted_item(
@@ -341,19 +365,16 @@ class BatchResultProcessor:
             original_row=original_row,
             recovery_metadata=recovery_metadata,
             agent_config=ctx.agent_config or {},
-            action_name=ctx.agent_config.get("action_name", "") if ctx.agent_config else "",
+            action_name=(ctx.agent_config.get("action_name", "") if ctx.agent_config else ""),
         )
 
-    def _stage_6_merge_passthroughs(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
-        """
-        Stage 6: Merge passthrough records for missing/skipped items.
+    # -- Passthrough reconciliation --------------------------------------------
 
-        Routes all passthrough/exhausted records through the EnrichmentPipeline
-        for consistent lineage, metadata, and version_correlation_id enrichment.
+    def _reconcile_passthroughs(self, ctx: BatchProcessingContext) -> list[ProcessingResult]:
+        """Reconcile missing/skipped records into ProcessingResult objects.
 
-        IMPORTANT: Exhausted retry records are treated differently from skipped records:
-        - Skipped records (guard/conditional): Passthrough with original content
-        - Exhausted retry records: Empty schema content + _recovery metadata
+        Routes exhausted-retry and passthrough records through enrichment
+        for consistent lineage, metadata, and version_correlation_id.
         """
         if ctx.reconciler is None:
             raise RuntimeError(
@@ -361,113 +382,137 @@ class BatchResultProcessor:
                 "reconciler must be initialized before merging passthroughs"
             )
         reconciliation = ctx.reconciler.reconcile()
+        results: list[ProcessingResult] = []
 
-        if reconciliation.passthrough_records:
-            for custom_id, original_row in reconciliation.passthrough_records:
-                is_exhausted = ctx.exhausted_recovery and custom_id in ctx.exhausted_recovery
+        if not reconciliation.passthrough_records:
+            return results
 
-                record_index = ctx.reconciler.get_record_index(custom_id)
-                source_guid = ctx.reconciler.get_source_guid(
-                    custom_id, fallback=custom_id or "NOT_SET"
+        for custom_id, original_row in reconciliation.passthrough_records:
+            is_exhausted = ctx.exhausted_recovery and custom_id in ctx.exhausted_recovery
+
+            record_index = ctx.reconciler.get_record_index(custom_id)
+            source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
+
+            if not ctx.agent_config or "action_name" not in ctx.agent_config:
+                raise ValueError("agent_config must contain 'action_name' for content namespacing")
+            action_name = ctx.agent_config["action_name"]
+
+            if is_exhausted:
+                result = self._build_exhausted_passthrough(
+                    ctx,
+                    custom_id,
+                    original_row,
+                    action_name,
+                    source_guid,
+                    record_index,
                 )
+            else:
+                result = self._build_unprocessed_passthrough(
+                    ctx,
+                    original_row,
+                    action_name,
+                    source_guid,
+                    record_index,
+                )
+            results.append(result)
 
-                if not ctx.agent_config or "action_name" not in ctx.agent_config:
-                    raise ValueError(
-                        "agent_config must contain 'action_name' for content namespacing"
-                    )
-                stage6_action_name = ctx.agent_config["action_name"]
+        return results
 
-                if is_exhausted:
-                    if ctx.exhausted_recovery is None:
-                        raise RuntimeError(
-                            "BatchProcessingContext.exhausted_recovery is None "
-                            "but record was identified as exhausted; "
-                            f"expected exhausted_recovery dict for custom_id={custom_id}"
-                        )
-                    on_exhausted = "return_last"  # default
-                    if ctx.agent_config:
-                        retry_config = ctx.agent_config.get("retry", {})
-                        on_exhausted = retry_config.get("on_exhausted", "return_last")
+    def _build_exhausted_passthrough(
+        self,
+        ctx: BatchProcessingContext,
+        custom_id: str,
+        original_row: dict[str, Any],
+        action_name: str,
+        source_guid: str,
+        record_index: int,
+    ) -> ProcessingResult:
+        """Build an enriched EXHAUSTED result for a retry-exhausted record."""
+        if ctx.exhausted_recovery is None:
+            raise RuntimeError(
+                "BatchProcessingContext.exhausted_recovery is None "
+                "but record was identified as exhausted; "
+                f"expected exhausted_recovery dict for custom_id={custom_id}"
+            )
+        on_exhausted = "return_last"  # default
+        if ctx.agent_config:
+            retry_config = ctx.agent_config.get("retry", {})
+            on_exhausted = retry_config.get("on_exhausted", "return_last")
 
-                    if on_exhausted == "raise":
-                        recovery_meta = ctx.exhausted_recovery[custom_id]
-                        if recovery_meta.retry is None:
-                            raise RuntimeError(
-                                "RecoveryMetadata.retry is None for exhausted record "
-                                f"custom_id={custom_id}; expected retry metadata"
-                            )
-                        raise RuntimeError(
-                            f"Retry exhausted for record {custom_id} after "
-                            f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
-                        )
+        if on_exhausted == "raise":
+            recovery_meta = ctx.exhausted_recovery[custom_id]
+            if recovery_meta.retry is None:
+                raise RuntimeError(
+                    "RecoveryMetadata.retry is None for exhausted record "
+                    f"custom_id={custom_id}; expected retry metadata"
+                )
+            raise RuntimeError(
+                f"Retry exhausted for record {custom_id} after "
+                f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
+            )
 
-                    recovery_meta = ctx.exhausted_recovery[custom_id]
-                    if recovery_meta.retry is None:
-                        raise RuntimeError(
-                            "RecoveryMetadata.retry is None for exhausted record "
-                            f"custom_id={custom_id}; expected retry metadata with attempt count"
-                        )
-                    empty_content = ExhaustedRecordBuilder.build_empty_content(
-                        ctx.agent_config or {}
-                    )
-                    exhausted_item = build_exhausted_tombstone(
-                        stage6_action_name,
-                        original_row,
-                        empty_content,
-                        source_guid=source_guid,
-                    )
+        recovery_meta = ctx.exhausted_recovery[custom_id]
+        if recovery_meta.retry is None:
+            raise RuntimeError(
+                "RecoveryMetadata.retry is None for exhausted record "
+                f"custom_id={custom_id}; expected retry metadata with attempt count"
+            )
+        empty_content = ExhaustedRecordBuilder.build_empty_content(ctx.agent_config or {})
+        exhausted_item = build_exhausted_tombstone(
+            action_name,
+            original_row,
+            empty_content,
+            source_guid=source_guid,
+        )
 
-                    processing_context = BatchContextAdapter.to_processing_context(
-                        agent_config=ctx.agent_config or {},
-                        original_row=original_row,
-                        record_index=record_index,
-                        output_directory=ctx.output_directory,
-                    )
-                    processing_result = ProcessingResult.exhausted(
-                        error=f"Retry exhausted after {recovery_meta.retry.attempts} attempts",
-                        data=[exhausted_item],
-                        source_guid=source_guid,
-                        recovery_metadata=recovery_meta,
-                    )
-                    enriched = self._enrichment_pipeline.enrich(
-                        processing_result, processing_context
-                    )
-                    ctx.processed_data.extend(enriched.data)
-                    ctx.error_count += 1
-                else:
-                    # Determine actual skip reason from context metadata
-                    filter_phase = original_row.get(ContextMetaKeys.FILTER_PHASE, "")
-                    if filter_phase == "upstream_unprocessed":
-                        reason = "upstream_unprocessed"
-                    elif (
-                        BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED
-                    ):
-                        reason = "guard_skipped"
-                    else:
-                        reason = "batch_not_returned"
+        processing_context = BatchContextAdapter.to_processing_context(
+            agent_config=ctx.agent_config or {},
+            original_row=original_row,
+            record_index=record_index,
+            output_directory=ctx.output_directory,
+        )
+        processing_result = ProcessingResult.exhausted(
+            error=f"Retry exhausted after {recovery_meta.retry.attempts} attempts",
+            data=[exhausted_item],
+            source_guid=source_guid,
+            recovery_metadata=recovery_meta,
+        )
+        return self._enrichment_pipeline.enrich(processing_result, processing_context)
 
-                    passthrough_item = build_tombstone(
-                        stage6_action_name,
-                        original_row,
-                        reason,
-                        source_guid=source_guid,
-                    )
+    def _build_unprocessed_passthrough(
+        self,
+        ctx: BatchProcessingContext,
+        original_row: dict[str, Any],
+        action_name: str,
+        source_guid: str,
+        record_index: int,
+    ) -> ProcessingResult:
+        """Build an enriched UNPROCESSED result for a passthrough record."""
+        # Determine actual skip reason from context metadata
+        filter_phase = original_row.get(ContextMetaKeys.FILTER_PHASE, "")
+        if filter_phase == "upstream_unprocessed":
+            reason = "upstream_unprocessed"
+        elif BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED:
+            reason = "guard_skipped"
+        else:
+            reason = "batch_not_returned"
 
-                    processing_context = BatchContextAdapter.to_processing_context(
-                        agent_config=ctx.agent_config or {},
-                        original_row=original_row,
-                        record_index=record_index,
-                        output_directory=ctx.output_directory,
-                    )
-                    processing_result = ProcessingResult.unprocessed(
-                        data=[passthrough_item],
-                        reason=reason,
-                        source_guid=source_guid,
-                    )
-                    enriched = self._enrichment_pipeline.enrich(
-                        processing_result, processing_context
-                    )
-                    ctx.processed_data.extend(enriched.data)
-                    ctx.passthrough_count += 1
+        passthrough_item = build_tombstone(
+            action_name,
+            original_row,
+            reason,
+            source_guid=source_guid,
+        )
 
-        return ctx
+        processing_context = BatchContextAdapter.to_processing_context(
+            agent_config=ctx.agent_config or {},
+            original_row=original_row,
+            record_index=record_index,
+            output_directory=ctx.output_directory,
+        )
+        processing_result = ProcessingResult.unprocessed(
+            data=[passthrough_item],
+            reason=reason,
+            source_guid=source_guid,
+        )
+        return self._enrichment_pipeline.enrich(processing_result, processing_context)
