@@ -16,7 +16,7 @@ from agent_actions.logging.events import (
 )
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.record.state import RecordState, reason_error
+from agent_actions.record.state import InvalidRecordStateError, RecordState, reason_error
 from agent_actions.storage.backend import (
     DISPOSITION_CASCADE_SKIPPED,
     DISPOSITION_DEFERRED,
@@ -139,7 +139,12 @@ def write_record_dispositions(
     the final status (EXHAUSTED, FAILED, FILTERED, PASSTHROUGH).
     Success records only get their DEFERRED cleared — no new disposition.
 
-    Disposition writes are telemetry — errors are logged but never propagated.
+    Rows with missing or invalid ``record['_state']`` receive
+    ``DISPOSITION_FAILED`` with an explanatory reason; processing continues
+    for remaining rows.
+
+    Disposition writes are telemetry — storage errors are logged but never
+    propagated.
     """
     if not storage_backend:
         return
@@ -165,7 +170,23 @@ def write_record_dispositions(
                 exc_info=True,
             )
 
-        state = RecordState.from_record(item)
+        try:
+            state = RecordState.from_record(item)
+        except InvalidRecordStateError as err:
+            logger.warning(
+                "[%s] invalid record state for disposition record_id=%s: %s — writing FAILED disposition",
+                action_name,
+                source_guid,
+                err,
+            )
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_FAILED,
+                reason=str(err)[:500],
+            )
+            continue
 
         # Reprompt exhaustion is expressed via _recovery metadata, not record state.
         recovery = item.get("_recovery", {})
