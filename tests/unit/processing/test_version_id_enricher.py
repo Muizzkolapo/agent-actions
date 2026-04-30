@@ -42,7 +42,7 @@ def _patch_generator():
     """Patch VersionIdGenerator to return a deterministic ID."""
     return patch(
         "agent_actions.utils.correlation.VersionIdGenerator.add_version_correlation_id",
-        side_effect=lambda item, config, *, record_index: {
+        side_effect=lambda item, config, record_index=0, force=False: {
             **item,
             "version_correlation_id": FRESH_VCID,
         },
@@ -100,6 +100,32 @@ class TestVersionIdEnricherPassthrough:
         mock_gen.assert_not_called()
         assert enriched.data[0]["version_correlation_id"] == "vcid-abc"
 
+    def test_non_versioned_expansion_gets_unique_ids(self):
+        """Non-versioned 1→N expansion must assign unique IDs via force=True."""
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        VersionIdGenerator.clear()
+        data = [
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+        ]
+        result = _make_result(data, is_expansion=True)
+        context = ProcessingContext(
+            agent_config={
+                "action_name": "flatten_questions",
+                "workflow_session_id": "sess-123",
+            },
+            agent_name="flatten_questions",
+            record_index=0,
+        )
+
+        enriched = VersionIdEnricher().enrich(result, context)
+
+        ids = [item["version_correlation_id"] for item in enriched.data]
+        assert len(set(ids)) == 3
+        assert all(vcid != "vcid-parent" for vcid in ids)
+
     def test_non_versioned_passthrough_skips_assignment(self):
         """Non-versioned 1:1 without expansion must not call the generator."""
         data = [{"source_guid": "g1"}]
@@ -119,7 +145,7 @@ class TestVersionIdEnricherPassthrough:
 
         mock_gen.assert_not_called()
 
-    def test_non_versioned_expansion_requires_explicit_base_name(self):
+    def test_non_versioned_expansion_with_explicit_base_name(self):
         """1→N expansion assigns distinct IDs when version_base_name is configured."""
         from agent_actions.utils.correlation import VersionIdGenerator
 
@@ -188,15 +214,16 @@ class TestVersionIdEnricherPassthrough:
         all_ids = [x["version_correlation_id"] for x in out3.data + out2.data]
         assert len(set(all_ids)) == 5
 
-    def test_expansion_missing_version_base_name_raises(self):
+    def test_expansion_without_resolvable_base_name_leaves_record_unchanged(self):
+        """Expansion with no base name or action name cannot assign — skips silently."""
         result = _make_result([{"source_guid": "g"}], is_expansion=True)
         context = ProcessingContext(
             agent_config={"workflow_session_id": "sess-x"},
             agent_name="bad",
             record_index=0,
         )
-        with pytest.raises(ValueError, match="version_base_name is required"):
-            VersionIdEnricher().enrich(result, context)
+        enriched = VersionIdEnricher().enrich(result, context)
+        assert "version_correlation_id" not in enriched.data[0]
 
     def test_expansion_missing_workflow_session_raises(self):
         result = _make_result([{"source_guid": "g"}], is_expansion=True)

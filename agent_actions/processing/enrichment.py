@@ -187,6 +187,7 @@ class VersionIdEnricher(Enricher):
                 item,
                 agent_config,
                 record_index=context.record_index + i,
+                force=result.is_expansion,
             )
 
         return result

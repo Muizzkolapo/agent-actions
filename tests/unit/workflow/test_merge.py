@@ -283,38 +283,55 @@ class TestParallelBranchLineageSources:
 
 
 class TestGetCorrelationValue:
-    """Tests for get_correlation_value — top-level key only."""
+    """Tests for get_correlation_value function."""
 
     def test_finds_top_level_key(self):
+        """Should find correlation value at top level."""
         record = {"source_guid": "abc123", "other": "data"}
 
-        assert get_correlation_value(record, "source_guid") == "abc123"
+        result = get_correlation_value(record, ["source_guid"])
 
-    def test_requires_top_level_not_nested_in_content(self):
-        """Keys nested only under content are invisible — use root fields."""
+        assert result == "abc123"
+
+    def test_finds_nested_in_content(self):
+        """Should find correlation value nested in content dict."""
         record = {"content": {"parent_target_id": "xyz"}}
 
-        assert get_correlation_value(record, "parent_target_id") is None
+        result = get_correlation_value(record, ["parent_target_id"])
 
-    def test_unknown_key_returns_none(self):
+        assert result == "xyz"
+
+    def test_fallback_chain(self):
+        """Should try keys in order and return first found."""
         record = {"source_guid": "fallback"}
 
-        assert get_correlation_value(record, "missing_key") is None
+        result = get_correlation_value(record, ["missing_key", "source_guid"])
 
-    def test_returns_none_when_key_absent(self):
+        assert result == "fallback"
+
+    def test_returns_none_when_not_found(self):
+        """Should return None when no correlation key found."""
         record = {"unrelated": "data"}
 
-        assert get_correlation_value(record, "source_guid") is None
+        result = get_correlation_value(record, ["source_guid", "parent_target_id"])
 
-    def test_empty_string_value_is_absent(self):
-        record = {"source_guid": ""}
+        assert result is None
 
-        assert get_correlation_value(record, "source_guid") is None
+    def test_handles_non_dict_content(self):
+        """Should handle non-dict content gracefully."""
+        record = {"content": "string_value"}
+
+        result = get_correlation_value(record, ["nested_key"])
+
+        assert result is None
 
     def test_converts_to_string(self):
+        """Should convert correlation value to string."""
         record = {"id": 12345}
 
-        assert get_correlation_value(record, "id") == "12345"
+        result = get_correlation_value(record, ["id"])
+
+        assert result == "12345"
 
 
 class TestMergeRecordsByKey:

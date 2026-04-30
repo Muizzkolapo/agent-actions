@@ -1,8 +1,11 @@
 """Thread-safe version correlation ID generation for workflow sessions."""
 
 import hashlib
+import logging
 import threading
 from collections import OrderedDict
+
+logger = logging.getLogger(__name__)
 
 
 class VersionIdGenerator:
@@ -83,28 +86,32 @@ class VersionIdGenerator:
         cls,
         obj: dict,
         agent_config: dict,
+        record_index: int | None = None,
         *,
-        record_index: int,
+        force: bool = False,
     ) -> dict:
-        """Add a deterministic position-based ``version_correlation_id`` to *obj*.
+        """Add version correlation ID to an object.
 
-        Requires ``version_base_name`` and ``workflow_session_id`` in *agent_config*.
-        There is no alternate code path (no source_guid fallback, no optional index).
+        For versioned agents (``is_versioned_agent=True``), always assigns.
+        For non-versioned agents, only assigns when *force* is ``True``
+        (used by ``VersionIdEnricher`` for 1→N expansions where each new
+        item needs a unique identity for downstream fan-in grouping).
 
         Raises:
-            ValueError: If required config is missing or ``record_index`` is negative.
+            ValueError: If workflow_session_id is missing in version context.
         """
-        if record_index < 0:
-            raise ValueError(
-                f"record_index must be non-negative for version correlation IDs, got {record_index}"
-            )
+        if not force and not agent_config.get("is_versioned_agent", False):
+            return obj
 
         version_base_name = agent_config.get("version_base_name")
         if not version_base_name:
-            raise ValueError(
-                "version_base_name is required in agent_config for version correlation IDs. "
-                "Set it in the action definition (including any tool that emits expansions)."
-            )
+            if not force:
+                return obj
+            # Expansion fallback: use action_name as the base name so each
+            # expanding action produces a distinct ID namespace.
+            version_base_name = agent_config.get("action_name") or agent_config.get("name")
+            if not version_base_name:
+                return obj
 
         workflow_session_id = agent_config.get("workflow_session_id")
         if not workflow_session_id:
@@ -115,7 +122,22 @@ class VersionIdGenerator:
             )
 
         obj = obj.copy()
-        obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
-            record_index, version_base_name, workflow_session_id
-        )
+        if record_index is not None:
+            obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
+                record_index,
+                version_base_name,
+                workflow_session_id,
+                file_context=obj.get("source_guid", ""),
+            )
+        else:
+            source_guid = obj.get("source_guid")
+            if source_guid:
+                obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(
+                    source_guid, version_base_name, workflow_session_id
+                )
+            else:
+                logger.debug(
+                    "Skipping version correlation: source_guid absent for %s",
+                    version_base_name,
+                )
         return obj
