@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Add missing `detail` column to record_disposition CREATE TABLE — inserts were referencing it but the base schema omitted it, relying on an ALTER TABLE migration that was removed"
+time: 2026-04-30T31:60:00.000000Z
