@@ -50,6 +50,7 @@ class SQLiteBackend(StorageBackend):
             reason TEXT,
             relative_path TEXT,
             input_snapshot TEXT,
+            detail TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(action_name, record_id, disposition)
         )
@@ -197,18 +198,6 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
-                # Migration: add input_snapshot column for existing databases
-                try:
-                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN input_snapshot TEXT")
-                    logger.debug("Added input_snapshot column to record_disposition")
-                except sqlite3.OperationalError:
-                    logger.debug("input_snapshot column already exists in record_disposition")
-                # Migration: add detail column for error messages and context
-                try:
-                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN detail TEXT")
-                    logger.debug("Added detail column to record_disposition")
-                except sqlite3.OperationalError:
-                    logger.debug("detail column already exists in record_disposition")
                 # Migration: add run_mode column for existing prompt_trace tables
                 try:
                     cursor.execute("ALTER TABLE prompt_trace ADD COLUMN run_mode TEXT")
