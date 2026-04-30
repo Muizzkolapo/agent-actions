@@ -89,20 +89,21 @@ class TestPassthroughTransformerInputRecord:
 
         assert "metadata" not in results[0]
 
-    def test_existing_content_wins_when_richer_than_input_record_content(self):
-        """First-stage records: existing_content (synthesised by extract_existing_content)
-        may be richer than input_record['content']. Both are honoured — tracking fields
-        come from input_record, namespaces come from existing_content.
+    def test_first_stage_record_carries_envelope_source(self):
+        """First-stage records hold source on the envelope, not synthesised in content.
+
+        After staging admission ``record["source"]`` is set; ``content`` is the
+        empty action-namespace dict. Tracking fields (``source_guid``, ``source``,
+        ``version_correlation_id``) flow forward via ``_carry_tracking_fields``.
         """
         transformer = PassthroughTransformer()
         data = [{"summary": "short"}]
-        # Simulate a first-stage record with no 'content' key: existing_content is
-        # synthesised as {"source": raw_fields} but input_record has no content.
         input_record = {
             "source_guid": "g1",
+            "source": {"raw_field": "value"},
             "version_correlation_id": "vcid-first-stage",
+            "content": {},
         }
-        existing_content = {"source": {"raw_field": "value"}}
 
         results = transformer.transform_with_passthrough(
             data=data,
@@ -111,11 +112,12 @@ class TestPassthroughTransformerInputRecord:
             agent_config=_simple_config(),
             action_name="summarize",
             input_record=input_record,
-            existing_content=existing_content,
         )
 
         assert len(results) == 1
-        # Tracking field preserved from input_record
+        # Tracking fields preserved from input_record envelope
         assert results[0]["version_correlation_id"] == "vcid-first-stage"
-        # Upstream namespace preserved from existing_content
-        assert results[0]["content"].get("source") == {"raw_field": "value"}
+        assert results[0]["source"] == {"raw_field": "value"}
+        # Source is NOT in content — content is action-namespaces only
+        assert "source" not in results[0]["content"]
+        assert "summarize" in results[0]["content"]

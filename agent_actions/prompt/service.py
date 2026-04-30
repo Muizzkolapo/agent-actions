@@ -207,7 +207,6 @@ class PromptPreparationService:
             agent_name=request.agent_name,
             agent_config=request.agent_config,
             agent_indices=agent_indices,
-            source_content=request.source_content,
             version_context=request.version_context,
             workflow_metadata=request.workflow_metadata,
             current_item=request.current_item,

@@ -152,82 +152,61 @@ class TestApplyContextScopeForRecords:
         assert result[0]["content"]["extract.text"] == "hello"
         assert result[0]["content"]["classify.topic"] == "science"
 
-    def test_source_namespace_from_source_data(self):
-        """source.url resolves from source_data, not from record content."""
+    def test_source_namespace_from_envelope(self):
+        """source.url resolves from the record's envelope ``source`` field."""
         data = [
             {
                 "source_guid": "sg-1",
+                "source": {"url": "https://example.com", "title": "Ex"},
                 "content": {
                     "extract": {"text": "article"},
                 },
             },
         ]
-        source_data = [
-            {"source_guid": "sg-1", "content": {"url": "https://example.com", "title": "Ex"}},
-        ]
         context_scope = {"observe": ["extract.text", "source.url"]}
         result = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="classify",
-            source_data=source_data,
         )
         assert result[0]["content"]["text"] == "article"
         assert result[0]["content"]["url"] == "https://example.com"
 
-    def test_source_namespace_multi_guid(self):
-        """Two records with different source_guid get different source.url values."""
+    def test_source_namespace_multi_record(self):
+        """Each record carries its own envelope source — no cross-record lookup."""
         data = [
-            {"source_guid": "sg-A", "content": {"extract": {"text": "Q1"}}},
-            {"source_guid": "sg-B", "content": {"extract": {"text": "Q2"}}},
-        ]
-        source_data = [
-            {"source_guid": "sg-A", "content": {"url": "https://a.com"}},
-            {"source_guid": "sg-B", "content": {"url": "https://b.com"}},
+            {
+                "source_guid": "sg-A",
+                "source": {"url": "https://a.com"},
+                "content": {"extract": {"text": "Q1"}},
+            },
+            {
+                "source_guid": "sg-B",
+                "source": {"url": "https://b.com"},
+                "content": {"extract": {"text": "Q2"}},
+            },
         ]
         context_scope = {"observe": ["extract.text", "source.url"]}
         result = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="classify",
-            source_data=source_data,
         )
         assert result[0]["content"]["text"] == "Q1"
         assert result[0]["content"]["url"] == "https://a.com"
         assert result[1]["content"]["text"] == "Q2"
         assert result[1]["content"]["url"] == "https://b.com"
 
-    def test_source_guid_fallback_to_first_source(self):
-        """Record whose source_guid doesn't match falls back to source_data[0]."""
-        data = [
-            {"source_guid": "sg-unknown", "content": {"extract": {"text": "Q"}}},
-        ]
-        source_data = [
-            {"source_guid": "sg-other", "content": {"url": "https://fallback.com"}},
-        ]
+    def test_source_missing_with_source_ref_raises(self):
+        """Record without an envelope source field but with source.* observed raises."""
+        data = [{"source_guid": "sg-x", "content": {"extract": {"text": "Q"}}}]
         context_scope = {"observe": ["extract.text", "source.url"]}
-        result = apply_context_scope_for_records(
-            records=data,
-            context_scope=context_scope,
-            action_name="classify",
-            source_data=source_data,
-        )
-        assert result[0]["content"]["text"] == "Q"
-        assert result[0]["content"]["url"] == "https://fallback.com"
-
-    def test_source_data_flat_format(self):
-        """source_data in flat format (no content wrapper) still works."""
-        data = [{"content": {"extract": {"text": "Q"}}}]
-        source_data = [{"url": "https://example.com", "title": "Example"}]
-        context_scope = {"observe": ["extract.text", "source.url"]}
-        result = apply_context_scope_for_records(
-            records=data,
-            context_scope=context_scope,
-            action_name="classify",
-            source_data=source_data,
-        )
-        assert result[0]["content"]["text"] == "Q"
-        assert result[0]["content"]["url"] == "https://example.com"
+        with pytest.raises(ConfigurationError):
+            apply_context_scope_for_records(
+                records=data,
+                context_scope=context_scope,
+                action_name="classify",
+            )
 
     def test_explicit_ref_to_missing_namespace_raises(self):
         """Explicit ref to absent namespace raises ConfigurationError (unified behavior)."""

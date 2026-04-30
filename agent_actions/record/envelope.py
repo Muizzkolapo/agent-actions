@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from agent_actions.record.state import (
@@ -13,11 +14,18 @@ from agent_actions.record.state import (
     validate_state_transition,
 )
 
+logger = logging.getLogger(__name__)
+
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
+#
+# `source` carries the user's original staging fields. It is hoisted from raw
+# top-level keys at staging admission and never mutated thereafter — actions read
+# it as the `source.<field>` namespace but cannot write to it.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
+        "source",
         "version_correlation_id",
     }
 )
@@ -38,6 +46,8 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         "parent_target_id",
         "root_target_id",
         "chunk_info",
+        "batch_id",
+        "batch_uuid",
     }
 )
 
@@ -119,9 +129,32 @@ class RecordEnvelope:
     def admit_staging_row(record: dict[str, Any]) -> None:
         """Mark a loader-produced row as ready to enter task preparation.
 
-        Staging (initial file load) calls this once per dict row. Idempotent
-        when ``_state`` is already set (replay or downstream-shaped input).
+        Staging (initial file load) calls this once per dict row. Performs two
+        mutations:
+
+        1. **Source hoist.** All non-framework keys at the top level are moved
+           under ``record["source"]``. This makes the user's original staging
+           fields accessible as the ``source.<field>`` namespace from every
+           downstream action via the envelope's tracking-field carry — without
+           any duck-type probing in the bus.
+
+        2. **State stamp.** ``_state`` is set to ``ACTIVE`` if absent.
+
+        Idempotent: if ``record["source"]`` already exists at the top level,
+        the hoist is skipped (a previous admission, replay, or downstream-shaped
+        input has already done the work). State stamping remains idempotent
+        when ``_state`` is already set.
         """
+        if "source" not in record:
+            raw = {k: v for k, v in record.items() if k not in RECORD_FRAMEWORK_FIELDS}
+            for key in raw:
+                del record[key]
+            record["source"] = raw
+            if raw:
+                logger.debug(
+                    "admit_staging_row: hoisted %d field(s) into record['source']",
+                    len(raw),
+                )
         if "_state" not in record:
             record["_state"] = RecordState.ACTIVE.value
 

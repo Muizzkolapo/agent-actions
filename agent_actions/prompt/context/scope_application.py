@@ -12,7 +12,6 @@ from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
     ContextScopeAppliedEvent,
 )
-from agent_actions.prompt.context.scope_namespace import _extract_content_data
 from agent_actions.prompt.context.scope_parsing import (
     extract_action_fields,
     extract_field_value,
@@ -319,35 +318,6 @@ def format_llm_context(llm_context: dict) -> str:
 # ── FILE mode helpers ──────────────────────────────────────────────────
 
 
-def _build_source_index(source_data: list[dict] | None) -> dict[str | None, dict]:
-    """Build source_guid -> source record index for cross-record source resolution."""
-    index: dict[str | None, dict] = {}
-    if not source_data:
-        return index
-    for src in source_data:
-        sguid = src.get("source_guid") if isinstance(src, dict) else None
-        if sguid:
-            index[sguid] = src
-    return index
-
-
-def _resolve_source_content(
-    source_guid: str | None,
-    source_index: dict[str | None, dict],
-    source_data: list[dict] | None,
-) -> dict:
-    """Resolve source namespace content for a record via source_guid.
-
-    Falls back to first source record if source_guid not found in index.
-    """
-    matched = source_index.get(source_guid)
-    if not matched and source_data:
-        matched = source_data[0]
-    if matched:
-        return _extract_content_data(matched)
-    return {}
-
-
 def _resolve_observe_refs_for_flat_keys(
     observe_refs: list[str],
     action_name: str = "unknown",
@@ -445,14 +415,20 @@ def apply_context_scope_for_records(
 
     For each record:
     1. Extract namespaced content
-    2. Resolve source namespace via source_guid cross-reference
+    2. Read source namespace from the envelope (``record["source"]``)
     3. Call apply_context_scope() for observe/drop/passthrough processing
     4. Rebuild enriched record: original content + drops applied + flat observed keys
 
     Unlike apply_context_scope() which gates prompt_context to observed namespaces
     only (correct for Jinja), this function preserves ALL original namespaces in the
     enriched record because downstream guards need full namespace visibility.
+
+    The ``source_data`` parameter is retained for backwards-compatible call sites
+    but is no longer consulted: source data lives on each record's envelope as a
+    tracking field, set once at staging admission.
     """
+    del source_data  # Unused — source comes from each record's envelope.
+
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
     drop_refs = context_scope.get("drop", [])
@@ -460,43 +436,33 @@ def apply_context_scope_for_records(
     if not observe_refs and not passthrough_refs and not drop_refs:
         return records
 
-    # Check if any directive references the source namespace
-    has_source_refs = (
-        any(ref.startswith("source.") for ref in observe_refs)
-        or any(ref.startswith("source.") for ref in passthrough_refs)
-        or any(ref.startswith("source.") for ref in drop_refs)
-    )
-
-    source_index = _build_source_index(source_data) if has_source_refs else {}
     resolved_observe, qualify_wildcards = (
         _resolve_observe_refs_for_flat_keys(observe_refs, action_name)
         if observe_refs
         else ([], False)
     )
 
-    source_cache: dict[str | None, dict] = {}
     enriched: list[dict] = []
 
     for record in records:
         content = get_existing_content(record)
-        sguid = record.get("source_guid")
+        record_source = record.get("source") if isinstance(record, dict) else None
 
-        # Build field_context with source namespace resolved
+        # Build field_context with source namespace resolved from the envelope.
         field_context = dict(content)
-        if has_source_refs:
-            if sguid not in source_cache:
-                source_cache[sguid] = _resolve_source_content(sguid, source_index, source_data)
-            source_content = source_cache[sguid]
-            if source_content:
-                field_context["source"] = source_content
+        if isinstance(record_source, dict) and record_source:
+            field_context["source"] = record_source
 
         # Call unified bus filter (validates refs, fires events)
         apply_context_scope(field_context, context_scope, action_name=action_name)
 
-        # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
+        # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys.
+        # The enriched_content dict is the rendered view used by downstream tooling
+        # (FILE-mode tools see source under enriched_content["source"] for the duration
+        # of the dispatch); the canonical envelope continues to carry source at top level.
         enriched_content = deepcopy(content)
-        if has_source_refs and source_cache.get(sguid):
-            enriched_content["source"] = deepcopy(source_cache[sguid])
+        if isinstance(record_source, dict) and record_source:
+            enriched_content["source"] = deepcopy(record_source)
         _apply_drops_to_content(enriched_content, drop_refs)
         _inject_flat_observed_keys(enriched_content, resolved_observe, qualify_wildcards)
 

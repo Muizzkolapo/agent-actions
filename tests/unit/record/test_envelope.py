@@ -172,6 +172,83 @@ class TestRecordStateFromRecord:
 # ── transition() / state machine ─────────────────────────────────────────────
 
 
+class TestAdmitStagingRow:
+    """admit_staging_row hoists raw user fields into record['source'] and stamps _state."""
+
+    def test_hoists_raw_fields_under_source(self):
+        row = {"page_content": "hello", "title": "T", "source_guid": "sg"}
+        RecordEnvelope.admit_staging_row(row)
+        assert row["source"] == {"page_content": "hello", "title": "T"}
+        assert "page_content" not in row
+        assert "title" not in row
+
+    def test_stamps_state(self):
+        row = {"page_content": "x", "source_guid": "sg"}
+        RecordEnvelope.admit_staging_row(row)
+        assert row["_state"] == RecordState.ACTIVE.value
+
+    def test_preserves_framework_fields_at_top_level(self):
+        row = {
+            "page_content": "x",
+            "source_guid": "sg",
+            "target_id": "tid",
+            "node_id": "n",
+            "_state": RecordState.ACTIVE.value,
+        }
+        RecordEnvelope.admit_staging_row(row)
+        assert row["source"] == {"page_content": "x"}
+        assert row["source_guid"] == "sg"
+        assert row["target_id"] == "tid"
+        assert row["node_id"] == "n"
+
+    def test_idempotent_when_source_present(self):
+        row = {
+            "source": {"page_content": "x"},
+            "source_guid": "sg",
+            "_state": RecordState.ACTIVE.value,
+        }
+        RecordEnvelope.admit_staging_row(row)
+        assert row["source"] == {"page_content": "x"}
+
+    def test_idempotent_does_not_re_hoist_top_level_keys(self):
+        row = {
+            "source": {"page_content": "x"},
+            "extra_user_field": "value",
+            "source_guid": "sg",
+            "_state": RecordState.ACTIVE.value,
+        }
+        RecordEnvelope.admit_staging_row(row)
+        # Already-admitted rows are not re-touched; extra_user_field stays put
+        assert row["source"] == {"page_content": "x"}
+        assert row["extra_user_field"] == "value"
+
+    def test_text_chunk_row_is_left_alone(self):
+        # Batch text chunks have framework fields only — admission stamps state
+        # and creates an empty source dict.
+        row = {
+            "content": "<chunk text>",
+            "batch_id": "b1",
+            "batch_uuid": "b1_0",
+            "source_guid": "sg",
+            "target_id": "tid",
+            "parent_target_id": None,
+            "root_target_id": "tid",
+            "node_id": "n",
+        }
+        RecordEnvelope.admit_staging_row(row)
+        assert row["content"] == "<chunk text>"
+        assert row["batch_id"] == "b1"
+        assert row["batch_uuid"] == "b1_0"
+        assert row["source"] == {}
+        assert row["_state"] == RecordState.ACTIVE.value
+
+    def test_state_only_stamp_when_already_admitted(self):
+        row: dict = {"source": {"x": 1}, "source_guid": "sg"}
+        RecordEnvelope.admit_staging_row(row)
+        assert row["_state"] == RecordState.ACTIVE.value
+        assert row["source"] == {"x": 1}
+
+
 class TestTransition:
     def test_records_from_and_to_on_transition(self):
         r = RecordEnvelope.build("act", {"x": 1})

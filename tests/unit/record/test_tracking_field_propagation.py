@@ -27,6 +27,11 @@ class TestFieldSets:
     def test_tracking_contains_version_correlation_id(self):
         assert "version_correlation_id" in RECORD_TRACKING_FIELDS
 
+    def test_tracking_contains_source(self):
+        # source is identity-of-origin — set once at staging admission, carried
+        # forward through every action. Lives on the envelope, never inside content.
+        assert "source" in RECORD_TRACKING_FIELDS
+
     def test_metadata_not_in_tracking(self):
         # metadata is a per-stage field — must not bleed into tracking carry
         assert "metadata" not in RECORD_TRACKING_FIELDS
@@ -82,6 +87,23 @@ class TestEnvelopeBuildCarriesTrackingFields:
 
         assert r3["version_correlation_id"] == "vcid-xyz"
         assert r3["source_guid"] == "g1"
+
+    def test_source_chains_through_stages(self):
+        """source carries identity-of-origin across every action."""
+        r1 = RecordEnvelope.build(
+            "extract",
+            {"summary": "s"},
+            {
+                "source_guid": "g1",
+                "source": {"page_content": "hello", "title": "T"},
+                "content": {},
+            },
+        )
+        r2 = RecordEnvelope.build("summarize", {"out": "x"}, r1)
+        r3 = RecordEnvelope.build("review", {"score": 9}, r2)
+
+        assert r3["source"] == {"page_content": "hello", "title": "T"}
+        assert "source" not in r3["content"]  # never re-enters content
 
 
 class TestBuildSkippedCarriesTrackingFields:

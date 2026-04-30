@@ -110,18 +110,21 @@ def parity_current_item() -> dict[str, Any]:
     """
     Current item context for parity testing.
 
-    Mimics a typical batch/online item with source_guid and lineage.
+    Mimics a typical batch/online item with source on the envelope, source_guid,
+    and lineage. Source lives at the envelope top level (tracking field), not
+    inside content.
     """
     return {
         "source_guid": "test-guid-001",
-        "node_id": "node_1_parity_test_agent",
-        "lineage": ["node_0_source"],
-        "content": {
+        "source": {
             "text": "Sample text for processing",
             "metadata": {"source": "test", "priority": "high"},
             "internal_id": "secret-123",
             "record_id": "rec-001",
         },
+        "node_id": "node_1_parity_test_agent",
+        "lineage": ["node_0_source"],
+        "content": {},
     }
 
 

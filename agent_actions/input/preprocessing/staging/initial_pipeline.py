@@ -30,10 +30,34 @@ logger = logging.getLogger(__name__)
 
 
 def _admit_staging_rows(rows: list[Any]) -> None:
-    """Ensure loader dict rows carry ``_state`` before UnifiedProcessor."""
+    """Ensure loader dict rows are envelope-shaped before UnifiedProcessor.
+
+    ``RecordEnvelope.admit_staging_row`` hoists raw user fields under
+    ``record["source"]`` and stamps ``_state``. Mutates each dict row
+    in place.
+    """
     for row in rows:
         if isinstance(row, dict):
             RecordEnvelope.admit_staging_row(row)
+
+
+def _to_source_table_row(row: Any) -> Any:
+    """Return the flat source-data-table representation of a row.
+
+    Source-data table records are the canonical raw input — they stay flat,
+    not envelope-shaped. If ``row`` has been admitted (raw fields hoisted
+    under ``"source"`` by ``RecordEnvelope.admit_staging_row``), this
+    flattens it back. Non-admitted rows pass through unchanged so existing
+    loader output (text chunks, JSON-builder output) keeps its shape.
+    """
+    if not isinstance(row, dict):
+        return row
+    if isinstance(row.get("source"), dict):
+        flat = dict(row["source"])
+        if "source_guid" in row and "source_guid" not in flat:
+            flat["source_guid"] = row["source_guid"]
+        return flat
+    return row.copy()
 
 
 @dataclass
@@ -306,11 +330,22 @@ def _save_source_data(
     output_directory: str | None = None,
     storage_backend: Any = None,
 ) -> None:
-    """UNIFIED source saving logic for both batch and online modes."""
+    """UNIFIED source saving logic for both batch and online modes.
+
+    Source-data table records are flat — they are the canonical raw input,
+    not envelope-shaped pipeline records. ``_to_source_table_row`` flattens
+    any rows that were already admitted (raw fields hoisted under
+    ``"source"``) back to the canonical flat shape.
+    """
     if src_text:
-        source_items = src_text if isinstance(src_text, list) else [src_text]
+        items = src_text if isinstance(src_text, list) else [src_text]
+        source_items = [_to_source_table_row(row) for row in items]
     else:
-        source_items = [row.copy() for row in data_chunk if row.get("source_guid")]
+        source_items = [
+            _to_source_table_row(row)
+            for row in data_chunk
+            if isinstance(row, dict) and row.get("source_guid")
+        ]
 
     if source_items:
         if not _should_save_source_items(source_items, file_path, base_directory, output_directory):

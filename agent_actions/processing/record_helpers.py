@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.state import RecordState, reason_error, reason_exhausted, reason_guard
 from agent_actions.utils.content import get_existing_content, is_version_merge
 
@@ -183,17 +183,16 @@ def apply_version_merge(
 def extract_existing_content(
     record: dict[str, Any],
     *,
-    is_first_stage: bool = False,
+    is_first_stage: bool = False,  # noqa: ARG001 — accepted for callsite compatibility
 ) -> dict[str, Any]:
-    """Extract existing content with consistent first-stage fallback.
+    """Return the action-namespaced content dict for a record.
 
-    On first-stage records that have no ``content`` dict, the raw
-    non-framework fields are wrapped under ``{"source": ...}`` so
-    downstream actions can reference source data.
+    Equivalent to :func:`agent_actions.utils.content.get_existing_content`.
+    Source data lives at the envelope top level (``record["source"]``) as a
+    tracking field and is never part of ``content`` — there is no first-stage
+    synthesis to perform.
+
+    The ``is_first_stage`` parameter is preserved as a keyword-only arg for
+    callsite compatibility but is unused; it will be removed in a follow-up.
     """
-    existing = get_existing_content(record)
-    if not existing and is_first_stage:
-        raw = {k: v for k, v in record.items() if k not in RECORD_FRAMEWORK_FIELDS}
-        if raw:
-            return {"source": raw}
-    return existing
+    return get_existing_content(record)

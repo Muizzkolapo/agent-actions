@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Source Namespace Hoist — Technical Design Document</title>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --border-strong: #d6d3d1;
+    --text: #1c1917;
+    --text-secondary: #57534e;
+    --text-dim: #78716c;
+    --accent: #0f766e;
+    --accent-light: #ccfbf1;
+    --accent-bg: #f0fdfa;
+    --warning: #b45309;
+    --warning-bg: #fffbeb;
+    --warning-border: #fde68a;
+    --danger: #b91c1c;
+    --info: #1d4ed8;
+    --info-bg: #eff6ff;
+    --info-border: #bfdbfe;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans: 'Inter', -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0a09; --surface: #1c1917; --border: #292524;
+      --border-strong: #44403c; --text: #e7e5e4; --text-secondary: #a8a29e;
+      --text-dim: #78716c; --accent: #2dd4bf; --accent-light: #042f2e;
+      --accent-bg: #0d1f1e; --warning: #f59e0b; --warning-bg: #1a1400;
+      --warning-border: #78350f; --danger: #ef4444; --info: #60a5fa;
+      --info-bg: #0c1929; --info-border: #1e3a5f;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans);
+         font-size: 15px; line-height: 1.8; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 820px; margin: 0 auto; padding: 48px 32px 80px; }
+  .doc-header { border-bottom: 2px solid var(--text); padding-bottom: 32px; margin-bottom: 40px; }
+  .doc-header h1 { font-family: var(--serif); font-size: 2rem; font-weight: 700; line-height: 1.25; margin-bottom: 16px; }
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 24px; font-size: 0.85rem; color: var(--text-secondary); }
+  .doc-meta dt { font-weight: 600; color: var(--text-dim); text-transform: uppercase;
+                 font-size: 0.7rem; letter-spacing: 0.5px; font-family: var(--mono); }
+  .doc-meta dd { margin: 2px 0 0 0; }
+  .status-badge { display: inline-block; padding: 2px 10px; border-radius: 4px;
+                  font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .status-draft { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+  .section { margin-bottom: 48px; }
+  .section-number { font-family: var(--mono); font-size: 0.75rem; font-weight: 500;
+                    color: var(--accent); letter-spacing: 0.5px; margin-bottom: 4px; }
+  h2 { font-family: var(--serif); font-size: 1.5rem; font-weight: 600;
+       line-height: 1.3; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-family: var(--sans); font-size: 1.05rem; font-weight: 600; margin: 28px 0 10px; color: var(--text); }
+  p { margin-bottom: 14px; color: var(--text-secondary); }
+  ul, ol { margin: 0 0 14px 24px; color: var(--text-secondary); }
+  ul li, ol li { margin-bottom: 6px; }
+  .decision { background: var(--surface); border: 1px solid var(--border);
+              border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0;
+              padding: 20px 24px; margin: 20px 0; }
+  .decision-label { font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+                    text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin-bottom: 8px; }
+  .decision p { margin-bottom: 8px; }
+  .decision p:last-child { margin-bottom: 0; }
+  .decision .chosen { font-weight: 600; color: var(--text); }
+  .decision .rationale { font-size: 0.9rem; color: var(--text-dim); font-style: italic; }
+  .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  @media (max-width: 600px) { .scope-grid { grid-template-columns: 1fr; } }
+  .scope-box { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; }
+  .scope-box.in-scope { border-top: 3px solid var(--accent); }
+  .scope-box.out-scope { border-top: 3px solid var(--text-dim); }
+  .scope-box h4 { font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+                  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .scope-box.in-scope h4 { color: var(--accent); }
+  .scope-box.out-scope h4 { color: var(--text-dim); }
+  .scope-box ul { list-style: none; font-size: 0.9rem; margin: 0; }
+  .scope-box ul li { padding: 4px 0 4px 16px; position: relative; color: var(--text-secondary); margin-bottom: 0; }
+  .scope-box.in-scope ul li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+  .scope-box.out-scope ul li::before { content: '×'; position: absolute; left: 0; color: var(--text-dim); font-weight: 700; }
+  .file-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.88rem; }
+  .file-table th { text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border-strong);
+                   font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase;
+                   letter-spacing: 0.5px; color: var(--text-dim); font-weight: 600; }
+  .file-table td { padding: 10px 14px; border-bottom: 1px solid var(--border);
+                   color: var(--text-secondary); vertical-align: top; }
+  .file-table td:first-child { font-family: var(--mono); font-size: 0.82rem; color: var(--text); }
+  .action-create { color: var(--accent); font-weight: 600; }
+  .action-modify { color: var(--warning); font-weight: 600; }
+  .action-delete { color: var(--danger); font-weight: 600; }
+  .risk-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.88rem; }
+  .risk-table th { text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border-strong);
+                   font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase;
+                   letter-spacing: 0.5px; color: var(--text-dim); font-weight: 600; }
+  .risk-table td { padding: 10px 14px; border-bottom: 1px solid var(--border);
+                   color: var(--text-secondary); vertical-align: top; }
+  .risk-high { color: var(--danger); font-weight: 600; }
+  .risk-medium { color: var(--warning); font-weight: 600; }
+  .risk-low { color: var(--accent); font-weight: 600; }
+  .open-question { background: var(--info-bg); border: 1px solid var(--info-border);
+                   border-radius: 6px; padding: 16px 20px; margin: 12px 0; font-size: 0.92rem; }
+  .open-question::before { content: '?'; display: inline-block; width: 22px; height: 22px;
+                           line-height: 22px; text-align: center; border-radius: 50%;
+                           background: var(--info); color: white; font-weight: 700;
+                           font-size: 0.75rem; margin-right: 10px; vertical-align: middle; }
+  .pr-list { list-style: none; margin: 20px 0; }
+  .pr-list li { padding: 12px 0 12px 40px; position: relative; color: var(--text-secondary);
+                font-size: 0.92rem; border-left: 2px solid var(--border); margin-left: 10px; }
+  .pr-list li::before { content: 'PR' attr(data-pr); position: absolute; left: -22px;
+                        padding: 2px 8px; border-radius: 4px; background: var(--accent);
+                        color: white; font-weight: 700; font-size: 0.65rem;
+                        font-family: var(--mono); letter-spacing: 0.5px; }
+  .pr-list li:last-child { border-left: 2px solid transparent; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--surface);
+         border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+        padding: 16px 20px; overflow-x: auto; margin: 16px 0; font-family: var(--mono);
+        font-size: 0.85rem; line-height: 1.6; color: var(--text); }
+  pre code { background: transparent; border: none; padding: 0; }
+  .dep-graph { background: var(--surface); border: 1px dashed var(--border-strong);
+               border-radius: 6px; padding: 20px; margin: 20px 0; color: var(--text);
+               font-size: 0.82rem; font-family: var(--mono); white-space: pre; overflow-x: auto; line-height: 1.55; }
+  .doc-footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border);
+                font-size: 0.8rem; color: var(--text-dim); font-family: var(--mono); }
+  @media print {
+    body { font-size: 12pt; }
+    .page { max-width: none; padding: 0; }
+    .decision, .scope-box, .open-question { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-header">
+    <h1>Source Namespace Hoist — Technical Design Document</h1>
+    <div class="doc-meta">
+      <dl><dt>Author</dt><dd>Engineering</dd></dl>
+      <dl><dt>Date</dt><dd>2026-04-30</dd></dl>
+      <dl><dt>Status</dt><dd><span class="status-badge status-draft">Draft</span></dd></dl>
+      <dl><dt>Branch</dt><dd>phase-5-record-state-machine</dd></dl>
+      <dl><dt>Mode</dt><dd>Hard cutover · no backward compat</dd></dl>
+    </div>
+  </div>
+
+  <!-- 1. Problem Statement -->
+  <div class="section">
+    <div class="section-number">01</div>
+    <h2>Problem Statement</h2>
+    <p>The framework's record bus conflates <em>identity-of-origin</em> with <em>action-output payload</em>: the
+    user's original staging fields are stuffed into <code>record["content"]["source"]</code> as if "source"
+    were just another action namespace. Consumers must duck-type their way back out — and on the
+    <code>phase-5-record-state-machine</code> branch the duck-type now misclassifies wrapped target envelopes,
+    breaking the <code>source.&lt;field&gt;</code> reference for every action after the first. The bug surfaces as
+    <code>context_scope.observe field 'source.page_content' not found at runtime</code>; the underlying disease
+    is that <code>source</code> has no first-class home on the record envelope.</p>
+
+    <h3>Where the Pain Lives</h3>
+    <p>Bus boundary: <code>agent_actions/prompt/context/scope_builder.py:_load_source_namespace</code>
+    branches on <code>"content" in source_content</code> as a shape probe. Same naive probe in
+    <code>agent_actions/prompt/context/scope_namespace.py:_extract_content_data</code> and in
+    <code>agent_actions/prompt/context/scope_application.py:_resolve_source_content</code>. First-stage
+    synthesis lives in <code>agent_actions/processing/record_helpers.py:extract_existing_content</code>, where
+    raw fields get wrapped under <code>{"source": raw}</code> and merged into <code>content</code> by
+    <code>RecordEnvelope.build</code>. Three places, three sources of truth, drift guaranteed.</p>
+
+    <h3>Why Now</h3>
+    <p>PR #433 (record state machine) appended <code>_state</code> and <code>_transitions</code> to every
+    stored record. The new keys make the duck-type misclassify wrapped target envelopes more often, and
+    the additive-content shape was simultaneously regularised through <code>RecordEnvelope.build</code> —
+    so both halves of the assumption that kept the duck-type correct broke at the same time. Pipelines with
+    two or more actions are unrunnable on this branch.</p>
+
+    <h3>Cost of Inaction</h3>
+    <p>Every multi-action pipeline crashes at action 2 with the missing-source error. The state-machine
+    branch is unmergeable. Patching <code>_load_source_namespace</code> alone re-leaves <code>source</code>
+    inside <code>content</code> — symptom fix, root cause intact, next change to the data shape will
+    re-break it. A user with hundreds of dollars of LLM spend in a stored DB cannot read their data with
+    new code.</p>
+  </div>
+
+  <!-- 2. Success Criteria -->
+  <div class="section">
+    <div class="section-number">02</div>
+    <h2>Success Criteria</h2>
+    <ul>
+      <li><strong>Single source of truth.</strong> Every record carries <code>source</code> at exactly one
+        location: top-level on the envelope. No code path ever reads it from <code>content["source"]</code>.</li>
+      <li><strong>Bus reads source in O(1).</strong> <code>_load_source_namespace</code> contains zero shape
+        branching: <code>field_context["source"] = record.get("source", {})</code>.</li>
+      <li><strong>Multi-action pipelines work.</strong> A two-action pipeline where action 2 observes
+        <code>source.page_content</code> resolves correctly when (a) <code>source_relative_path</code> is
+        configured, (b) it is missing, (c) the upstream is guard-skipped, (d) the upstream is a 1→N
+        version expansion. All four scenarios covered by tests that fail today and pass after.</li>
+      <li><strong>Source survives every state transition.</strong> Guard-skipped, cascade-skipped,
+        exhausted, and failed records all retain their <code>source</code> field — proven by tests.</li>
+      <li><strong>Source-data table shape is preserved.</strong> Records persisted to the
+        <code>source_data</code> SQLite table remain flat (they <em>are</em> the source); no double-wrap on save
+        or load. Verified by round-trip test.</li>
+      <li><strong>Net code reduction.</strong> Two helper functions deleted
+        (<code>_resolve_source_content</code>, <code>_build_source_index</code>,
+        <code>_enrich_source_namespace</code>), one helper collapses
+        (<code>extract_existing_content</code>), one branch deleted in
+        <code>PassthroughTransformer.transform_with_passthrough</code>.</li>
+      <li><strong>Lint, typecheck, full test suite green.</strong></li>
+    </ul>
+  </div>
+
+  <!-- 3. Scope -->
+  <div class="section">
+    <div class="section-number">03</div>
+    <h2>Scope</h2>
+
+    <div class="scope-grid">
+      <div class="scope-box in-scope">
+        <h4>In Scope — Files &amp; Modules</h4>
+        <ul>
+          <li>agent_actions/record/envelope.py</li>
+          <li>agent_actions/processing/record_helpers.py</li>
+          <li>agent_actions/processing/task_preparer.py</li>
+          <li>agent_actions/processing/strategies/online_llm.py</li>
+          <li>agent_actions/utils/transformation/passthrough.py</li>
+          <li>agent_actions/prompt/context/scope_builder.py</li>
+          <li>agent_actions/prompt/context/scope_namespace.py</li>
+          <li>agent_actions/prompt/context/scope_application.py</li>
+          <li>agent_actions/input/preprocessing/staging/initial_pipeline.py</li>
+          <li>agent_actions/workflow/pipeline_file_mode.py (extract_tool_input)</li>
+          <li>tests/* fixtures using <code>{content:{source:…}}</code></li>
+          <li>_MANIFEST.md files for the four affected modules</li>
+        </ul>
+      </div>
+      <div class="scope-box out-scope">
+        <h4>Out of Scope</h4>
+        <ul>
+          <li>State machine itself (transitions, transition validators)</li>
+          <li>Storage layer ABCs / SQLite schema</li>
+          <li>LineageEnricher (uses <code>source_data</code> for lineage, not source-namespace)</li>
+          <li>HITL strategy (gets source-carry for free via tracking-field rule)</li>
+          <li>Backward compatibility shim (user opted out — hard cutover)</li>
+          <li>Database migration script (no production data on branch)</li>
+          <li>Bugs #2–#8 from the PR review (separate work)</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Affected Dependencies (record envelope blast radius)</h3>
+    <div class="dep-graph">
+record/envelope.py
+   │
+   ├── record/__init__.py                  (re-export RECORD_FRAMEWORK_FIELDS)
+   │
+   ├── record_helpers.py                   (extract_existing_content collapses)
+   │     └── strategies/online_llm.py      (drops is_first_stage arg)
+   │     └── strategies/hitl.py            (no change — gets source via tracking field)
+   │
+   ├── transformation/passthrough.py       (drops first-stage richer-content branch)
+   │     └── workflow/pipeline_file_mode.py
+   │
+   ├── prompt/context/scope_builder.py     (_load_source_namespace simplified)
+   │     └── processing/task_preparer.py
+   │     └── prompt/service.py
+   │     └── input/.../context_provider.py
+   │
+   ├── prompt/context/scope_namespace.py   (_RECORD_METADATA_KEYS picks up "source",
+   │                                       _enrich_source_namespace deleted)
+   │
+   ├── prompt/context/scope_application.py (drops _build_source_index/_resolve_source_content,
+   │                                       reads record["source"] directly)
+   │
+   └── input/.../initial_pipeline.py       (admit_staging_row hoists raw → record["source"];
+                                           save path uses pre-admission snapshot)
+    </div>
+    <p>Indirect consumers (LineageEnricher, HITL, tools) inherit correct behavior automatically once
+    <code>source</code> is added to <code>RECORD_TRACKING_FIELDS</code>: <code>RecordEnvelope.build</code>
+    and <code>RecordEnvelope.build_skipped</code> already iterate that set inside
+    <code>_carry_tracking_fields</code>, so source flows through every stage without explicit code.</p>
+  </div>
+
+  <!-- 4. Constraints & Trade-offs -->
+  <div class="section">
+    <div class="section-number">04</div>
+    <h2>Constraints &amp; Trade-offs</h2>
+
+    <h3>Codebase Constraints</h3>
+    <p>Must follow Agent Manifest Protocol: every module touched must have its
+    <code>_MANIFEST.md</code> updated for any change to the <code>## Modules</code>,
+    <code>## Project Surface</code>, or <code>## Dependencies</code> tables. Logging convention
+    is <code>logger</code> not <code>print</code>. Lint is <code>ruff</code>; tests are
+    <code>pytest</code> (no new test framework). No new third-party dependencies.</p>
+
+    <h3>Dependency Constraints</h3>
+    <p>The envelope is a pure data structure with no IO. Carry-forward of <code>source</code> through
+    <code>_carry_tracking_fields</code> requires only a one-line add to
+    <code>RECORD_TRACKING_FIELDS</code>; this also extends <code>RECORD_FRAMEWORK_FIELDS</code>
+    automatically (it's the union with stage fields), which already feeds metadata-exclusion logic.
+    The hoist must coexist with the existing batch text-chunk row shape
+    (<code>{content: "&lt;str&gt;", batch_id, batch_uuid, …}</code>): <code>content</code> is already a
+    framework field so it stays put, but <code>batch_id</code> / <code>batch_uuid</code> are not in the
+    framework set today and would otherwise be hoisted into source. We extend the framework set or carve
+    them out at admission — see Decision 4.</p>
+
+    <h3>Key Design Decisions</h3>
+    <div class="decision">
+      <div class="decision-label">Decision 1 — Where source lives</div>
+      <p class="chosen">Chosen: top-level field on the envelope, alongside <code>source_guid</code>,
+      <code>_state</code>, <code>content</code>.</p>
+      <p>Alternatives considered: (a) keep nested in content (status quo, with naive duck-type fix);
+      (b) separate "metadata" sub-dict on the envelope; (c) external sidecar table keyed by
+      <code>source_guid</code>.</p>
+      <p class="rationale">Rationale: source is identity-of-origin — same conceptual class as
+      <code>source_guid</code>, which is already an envelope tracking field. Treating it as a tracking
+      field unifies the carry-forward logic, eliminates duck-typing, and makes the bus a one-liner.
+      A sidecar table would add IO to every prompt build for no behavioral gain. A metadata sub-dict
+      adds a level of indirection without justification.</p>
+    </div>
+    <div class="decision">
+      <div class="decision-label">Decision 2 — Source carry mechanism</div>
+      <p class="chosen">Chosen: add <code>"source"</code> to <code>RECORD_TRACKING_FIELDS</code>;
+      <code>_carry_tracking_fields</code> already handles propagation through
+      <code>RecordEnvelope.build()</code>, <code>build_skipped()</code>, and downstream helpers.</p>
+      <p>Alternatives considered: explicit <code>build(source=…)</code> parameter on the envelope API.</p>
+      <p class="rationale">Rationale: source is set once at staging admission and never mutated by
+      actions. That is precisely the contract <code>RECORD_TRACKING_FIELDS</code> encodes. Reusing the
+      existing mechanism is one line of code; introducing a new API surface is many.</p>
+    </div>
+    <div class="decision">
+      <div class="decision-label">Decision 3 — Source data table shape</div>
+      <p class="chosen">Chosen: source-data table records remain flat — they <em>are</em> the source.</p>
+      <p>Alternatives considered: (a) save full envelope shape (<code>{source: {raw}, source_guid, …}</code>)
+      to source-data table for consistency with target_data table.</p>
+      <p class="rationale">Rationale: target_data records carry <code>source</code> because they need to
+      reference origin while themselves being something else (action output). Source-data records
+      <em>are</em> origin — wrapping their own raw data under <code>"source"</code> would create a
+      circular shape (<code>row["source"]["source"]["source"]…</code>) and force every reader to
+      un-wrap. The flat shape stays canonical; only target records gain the envelope field.</p>
+    </div>
+    <div class="decision">
+      <div class="decision-label">Decision 4 — Admission hoist boundary</div>
+      <p class="chosen">Chosen: <code>RecordEnvelope.admit_staging_row</code> hoists every key NOT in
+      <code>RECORD_FRAMEWORK_FIELDS</code> into <code>record["source"]</code>. Add
+      <code>batch_id</code> and <code>batch_uuid</code> to the framework set so they don't get
+      mistakenly hoisted.</p>
+      <p>Alternatives considered: maintain a separate "do not hoist" allowlist; hoist only
+      "user-looking" keys via heuristic.</p>
+      <p class="rationale">Rationale: <code>RECORD_FRAMEWORK_FIELDS</code> is already the canonical
+      enumeration of "framework metadata, not user data." Extending it for <code>batch_id</code> /
+      <code>batch_uuid</code> closes a real gap — those keys are framework-managed, not user-supplied.
+      Heuristics fail in surprising ways at scale.</p>
+    </div>
+    <div class="decision">
+      <div class="decision-label">Decision 5 — Source-data save path</div>
+      <p class="chosen">Chosen: <code>_save_source_data</code> persists pre-admission snapshots. For
+      paths that today alias <code>src_text = data_chunk</code> (CSV/XLSX/XML), take a shallow copy
+      <em>before</em> <code>_admit_staging_rows</code> mutates. For batch paths (where
+      <code>src_text = []</code>), introduce <code>_to_source_table_row(row)</code> that emits the flat
+      shape from a hoisted row.</p>
+      <p>Alternatives considered: (a) make admission non-destructive (return a new dict);
+      (b) save first then admit; (c) double-mutate the saved row to un-hoist after save.</p>
+      <p class="rationale">Rationale: pre-admission snapshots match the existing intent and are local
+      to <code>initial_pipeline.py</code>. Non-destructive admission would require re-binding lists
+      everywhere admission is called — wider surface. Save-first-then-admit reorders a load-bearing
+      sequence used by the rest of staging.</p>
+    </div>
+    <div class="decision">
+      <div class="decision-label">Decision 6 — File mode tool input</div>
+      <p class="chosen">Chosen: <code>pipeline_file_mode.extract_tool_input</code> includes
+      <code>record["source"]</code> as a synthetic <code>"source"</code> namespace in the tool's
+      flattened input, replicating the pre-refactor shape that tools observed under
+      <code>source.field</code>.</p>
+      <p>Alternatives considered: tools learn about envelope source separately and read
+      <code>source.field</code> through a different path.</p>
+      <p class="rationale">Rationale: tool API stability. Tools already expect a flat dict with
+      <code>source</code> alongside upstream namespaces; preserving that shape avoids breaking every
+      tool in the wild for a refactor that's about plumbing.</p>
+    </div>
+    <div class="decision">
+      <div class="decision-label">Decision 7 — No backward compatibility</div>
+      <p class="chosen">Chosen: hard cutover. Records produced by old code cannot be read by new code,
+      and vice versa. No feature flag, no shim, no migration.</p>
+      <p>Alternatives considered: dual-read shim for one release; runtime migration of stored records on
+      first read.</p>
+      <p class="rationale">Rationale: the change is on an unmerged branch (<code>phase-5-record-state-machine</code>)
+      with no production deployment. The user explicitly opted out of compatibility. Compat code would
+      be tech debt deleted in the next release anyway.</p>
+    </div>
+  </div>
+
+  <!-- 5. Solution Design -->
+  <div class="section">
+    <div class="section-number">05</div>
+    <h2>Solution Design</h2>
+
+    <h3>High-Level Architecture</h3>
+    <p>Today's record is a wrapper around <code>content</code>; identity-of-origin lives inside
+    <code>content</code> as a pseudo-namespace; framework metadata (<code>_state</code>,
+    <code>_transitions</code>, <code>source_guid</code>) lives at top level. The conflation between
+    "user data" and "namespaced action output" inside <code>content</code> is the architectural error.</p>
+    <p>The new envelope is a flat record with a clean separation of concerns:</p>
+    <pre><code>record = {
+    # Tracking fields — stable identity, set once, carried verbatim
+    "source_guid": str,
+    "source": {raw user fields},        # NEW — was nested in content
+    "version_correlation_id": str | None,
+
+    # Stage fields — rebuilt per stage, framework-managed
+    "target_id": str,
+    "node_id": str,
+    "lineage": [...],
+    "metadata": {...},
+    "content": {                        # ONLY action namespaces now
+        "action_1": {...},
+        "action_2": {...},
+    },
+    "_state": "active",
+    "_transitions": [...],
+    "_recovery": {...},
+    "parent_target_id": str | None,
+    "root_target_id": str,
+    "chunk_info": {...},
+}</code></pre>
+    <p>The bus reads <code>source</code> from a fixed location. <code>RecordEnvelope.build()</code>
+    propagates it via the existing tracking-field carry. <code>extract_existing_content</code> stops
+    synthesising it. <code>_resolve_source_content</code>'s entire mechanism — looking up source by
+    <code>source_guid</code> in a list, building an index, returning the wrapped record's content
+    field — disappears.</p>
+
+    <h3>Data-flow diagrams</h3>
+    <p><strong>Before</strong> — three places to look, two of them wrong:</p>
+    <div class="dep-graph">
+[STAGING FILE]                 {page_content, title}
+    │
+    │ admit_staging_row(): stamps _state only
+    ▼
+[STAGE ROW]                    {page_content, title, source_guid, target_id, _state}
+    │
+    │ action_1: extract_existing_content(is_first_stage=True)
+    │   wraps raw fields as {"source": raw} into content
+    ▼
+[ACTION 1 OUTPUT]              {content: {source: {raw}, action_1: {…}},
+                                _state, _transitions, source_guid, target_id}
+    │
+    │ action_2: source_data lookup returns the WHOLE envelope
+    │   _load_source_namespace sees "content" key → unwraps:
+    │   field_context.source = {source: {raw}, action_1: {…}}    ← WRONG
+    ▼
+[ACTION 2 INPUT]               source.page_content → KeyError
+    </div>
+    <p><strong>After</strong> — one place, no probing:</p>
+    <div class="dep-graph">
+[STAGING FILE]                 {page_content, title}
+    │
+    │ admit_staging_row():
+    │   • hoist non-framework fields → record["source"]
+    │   • initialise content = {} if absent
+    │   • stamp _state
+    ▼
+[STAGE ROW]                    {source: {page_content, title},
+                                content: {},
+                                _state, source_guid, target_id}
+    │
+    │ action_1: RecordEnvelope.build()
+    │   carries source via _carry_tracking_fields()
+    ▼
+[ACTION 1 OUTPUT]              {source: {page_content, title},     ← unchanged
+                                content: {action_1: {…}},          ← only namespaces
+                                _state, _transitions, source_guid, target_id}
+    │
+    │ action_N: bus reads record["source"]. No lookup. No probe.
+    ▼
+[ACTION N INPUT]               field_context.source = record["source"]
+                               source.page_content → "..."          ✓
+    </div>
+
+    <h3>Interface Contracts</h3>
+    <ul>
+      <li><strong>Envelope invariant:</strong> after <code>admit_staging_row()</code> or any
+        <code>RecordEnvelope.build*()</code> call, the returned record has <code>"source"</code> at
+        top level (possibly empty dict) and <code>"content"</code> at top level. Neither key
+        contains the other. Other framework keys (<code>_state</code>, <code>source_guid</code>,
+        <code>target_id</code>, …) live alongside, never inside <code>content</code>.</li>
+      <li><strong>Source mutability:</strong> <code>record["source"]</code> is set exactly once at
+        staging admission. Actions never write to it. Helper code that builds tombstones, skipped
+        records, or exhausted records inherits source via the tracking-field carry.</li>
+      <li><strong>Bus contract:</strong> <code>build_field_context_with_history(current_item=…)</code>
+        derives the source namespace from <code>current_item.get("source", {})</code>. The
+        <code>source_content</code> parameter is removed (callers no longer pass it).</li>
+      <li><strong>Source-data table shape:</strong> rows in the <code>source_data</code> SQLite
+        table are flat — they are the canonical raw input. They carry <code>source_guid</code> for
+        cross-record lookup but no <code>source</code> field. Loaded as
+        <code>list[dict[str, Any]]</code> via <code>SourceDataLoader.load_source_data</code>.</li>
+      <li><strong>File-mode tool input:</strong> <code>extract_tool_input(record, context_scope)</code>
+        emits a flat dict with <code>"source"</code> drawn from <code>record["source"]</code> when
+        <code>source.*</code> is observed; this matches the pre-refactor flat-keys API.</li>
+    </ul>
+
+    <h3>Affected Files Inventory</h3>
+    <table class="file-table">
+      <thead><tr><th>File / Path</th><th>Action</th><th>Change Description</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>agent_actions/record/envelope.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Add <code>"source"</code> to <code>RECORD_TRACKING_FIELDS</code>; add
+            <code>"batch_id"</code>, <code>"batch_uuid"</code> to <code>RECORD_STAGE_FIELDS</code>;
+            extend <code>admit_staging_row</code> to hoist non-framework fields under
+            <code>record["source"]</code> and initialise <code>content</code>.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/processing/record_helpers.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Delete first-stage branch in <code>extract_existing_content</code>; collapse to
+            <code>get_existing_content</code>. Drop <code>is_first_stage</code> parameter.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/processing/strategies/online_llm.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Drop <code>is_first_stage=…</code> from <code>extract_existing_content</code> call.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/utils/transformation/passthrough.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Simplify <code>existing_content != input_record.get("content")</code> branch — dead now.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/processing/task_preparer.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Replace <code>_get_source_content</code> list lookup with
+            <code>item.get("source", {})</code>. Remove <code>source_content</code> argument from
+            <code>_load_full_context</code> call.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/prompt/context/scope_builder.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Remove <code>source_content</code> parameter from
+            <code>build_field_context_with_history</code>; <code>_load_source_namespace</code>
+            reads <code>current_item.get("source", {})</code>.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/prompt/context/scope_namespace.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Add <code>"source"</code> to <code>_RECORD_METADATA_KEYS</code>; delete
+            <code>_enrich_source_namespace</code> (dead code).</td>
+        </tr>
+        <tr>
+          <td>agent_actions/prompt/context/scope_application.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Delete <code>_build_source_index</code> and <code>_resolve_source_content</code>;
+            <code>apply_context_scope_for_records</code> reads <code>record["source"]</code>
+            directly.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/input/preprocessing/staging/initial_pipeline.py</td>
+          <td class="action-modify">Modify</td>
+          <td>For CSV/XLSX/XML/batch paths, snapshot <code>src_text</code> via copy <em>before</em>
+            <code>_admit_staging_rows</code> mutates. Add helper
+            <code>_to_source_table_row</code> for batch fallback.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/workflow/pipeline_file_mode.py</td>
+          <td class="action-modify">Modify</td>
+          <td>In <code>extract_tool_input</code>, when <code>source.*</code> is observed (or
+            <code>observe_refs</code> is empty), include <code>record["source"]</code> in the
+            flattened result.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/prompt/service.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Drop <code>source_content</code> kwarg from
+            <code>build_field_context_with_history</code> calls.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/input/preprocessing/field_resolution/context_provider.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Drop <code>source_content</code> kwarg.</td>
+        </tr>
+        <tr>
+          <td>tests/* (record envelope shape fixtures)</td>
+          <td class="action-modify">Modify</td>
+          <td>Update fixtures from <code>{content:{source:…}}</code> to
+            <code>{source:…, content:{…}}</code>. Affected files enumerated by blast-radius
+            survey (~10 production tests + ~17 namespace-fixture tests).</td>
+        </tr>
+        <tr>
+          <td>tests/unit/processing/test_record_helpers.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Delete <code>TestExtractExistingContent</code>'s first-stage tests; rename
+            <code>test_non_first_stage_ignores_raw_fields</code> to reflect single behavior.</td>
+        </tr>
+        <tr>
+          <td>tests/unit/utils/test_passthrough_tracking_fields.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Delete
+            <code>test_existing_content_wins_when_richer_than_input_record_content</code>;
+            no longer applicable.</td>
+        </tr>
+        <tr>
+          <td>tests/unit/record/test_tracking_field_propagation.py</td>
+          <td class="action-modify">Modify</td>
+          <td>Add <code>"source"</code> assertions to <code>RECORD_TRACKING_FIELDS</code> tests.</td>
+        </tr>
+        <tr>
+          <td>tests/preprocessing/context/test_special_namespaces.py</td>
+          <td class="action-delete">Delete or strip</td>
+          <td>Remove tests of <code>_enrich_source_namespace</code> (dead).</td>
+        </tr>
+        <tr>
+          <td>tests/regression/test_source_namespace_hoist.py</td>
+          <td class="action-create">Create</td>
+          <td>New regression file with five tests: source carries across actions; admit
+            hoists raw; bus reads envelope source; cross-workflow no-source-data-table works;
+            guard-skip preserves source.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/record/_MANIFEST.md</td>
+          <td class="action-modify">Modify</td>
+          <td>Note <code>"source"</code> as a tracking field in the design notes.</td>
+        </tr>
+        <tr>
+          <td>agent_actions/processing/_MANIFEST.md</td>
+          <td class="action-modify">Modify</td>
+          <td>Update <code>extract_existing_content</code> description (collapsed).</td>
+        </tr>
+        <tr>
+          <td>agent_actions/prompt/context/_MANIFEST.md</td>
+          <td class="action-modify">Modify</td>
+          <td>Reflect deletions: <code>_resolve_source_content</code>,
+            <code>_build_source_index</code>, <code>_enrich_source_namespace</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Failure Modes &amp; Recovery</h3>
+    <ul>
+      <li><strong>F1.</strong> Admission called twice on the same row → second call is a no-op
+        (idempotency contract): if <code>"source"</code> already present at top-level, do not re-hoist
+        non-framework keys. <strong>Recovery:</strong> guard with
+        <code>if "source" not in record: …</code>.</li>
+      <li><strong>F2.</strong> Staging row with both top-level <code>"source"</code> and other raw
+        fields (user data has a literal <code>"source"</code> key) → ambiguity. <strong>Recovery:</strong>
+        treat literal user <code>"source"</code> as raw data and hoist alongside other raw fields:
+        <code>{user_source: …, page_content: …}</code> becomes
+        <code>{source: {source: user_source, page_content: …}}</code>. Documented behavior in tests.</li>
+      <li><strong>F3.</strong> Old DB record without top-level <code>source</code> read by new code →
+        <code>field_context["source"] = {}</code>; templates/guards referencing
+        <code>source.field</code> raise the existing missing-field error with a clear message.
+        Acceptable per Decision 7.</li>
+      <li><strong>F4.</strong> Tool input lacking <code>source</code> namespace because tool config
+        doesn't observe <code>source.*</code> → <code>extract_tool_input</code> only injects source
+        when explicitly observed (matches today's behavior for other namespaces).</li>
+      <li><strong>F5.</strong> Batch text-chunk row (where <code>content</code> is a string not a
+        dict) → admission preserves <code>content</code> as framework-protected; raw-field hoist
+        skips (nothing else outside framework set in those rows). Verified by test.</li>
+    </ul>
+
+    <h3>Observability Strategy</h3>
+    <p>Add a <code>logger.debug</code> at <code>admit_staging_row</code> reporting the count of
+    fields hoisted. Add a <code>logger.warning</code> at <code>_load_source_namespace</code> if a
+    record passes through with no <code>"source"</code> key (signals staging admission was skipped —
+    a regression we want to spot fast). The existing
+    <code>ContextNamespaceLoadedEvent</code> at <code>scope_builder.py:98-105</code> already fires
+    when source is loaded; no new event needed.</p>
+
+    <h3>Testing Strategy</h3>
+    <ul>
+      <li><strong>Unit (envelope):</strong> assert <code>"source" in RECORD_TRACKING_FIELDS</code>;
+        <code>RecordEnvelope.build</code> carries source from input to output;
+        <code>build_skipped</code> carries source; <code>admit_staging_row</code> hoists
+        non-framework keys; <code>admit_staging_row</code> is idempotent.</li>
+      <li><strong>Unit (bus):</strong> <code>_load_source_namespace</code> reads
+        <code>current_item["source"]</code>; returns empty when source absent;
+        <code>build_field_context_with_history</code> still produces
+        <code>field_context["source"]</code> for downstream actions.</li>
+      <li><strong>Integration (regression for the reported bug):</strong> two-action pipeline,
+        action 2 observes <code>source.page_content</code>, executes correctly when:
+        (a) <code>source_relative_path</code> is set; (b) <code>source_relative_path</code> is None
+        / DB read fails; (c) action 1 was guard-skipped; (d) action 1 was a 1→N expansion.</li>
+      <li><strong>Integration (round-trip):</strong> staging row written to source_data table,
+        read back, asserts shape is flat (no nested <code>source.source</code>).</li>
+      <li><strong>Integration (file-mode tool):</strong> tool action observes <code>source.*</code>,
+        receives source fields in its flattened input.</li>
+      <li><strong>Lint:</strong> <code>ruff check .</code> clean.</li>
+      <li><strong>Full suite:</strong> <code>pytest</code> green.</li>
+    </ul>
+  </div>
+
+  <!-- 6. Scaling & Evolution -->
+  <div class="section">
+    <div class="section-number">06</div>
+    <h2>Scaling &amp; Evolution</h2>
+    <h3>Growth Projections &amp; Limits</h3>
+    <p>Source size scales with input row size; same constraint as today (raw fields used to live in
+    <code>content</code> instead of top-level). No new memory cost — moving keys, not duplicating.
+    The <code>_carry_tracking_fields</code> path is already O(|TRACKING_FIELDS|) per record — adding
+    one entry doesn't change the asymptote.</p>
+
+    <h3>Future Extension Points</h3>
+    <p>If we ever need additional identity-of-origin fields (e.g., source ingestion timestamp, source
+    file checksum), they can be added as new envelope tracking fields without touching the bus or any
+    consumer. The carry-forward mechanism scales naturally. Before this refactor, adding a new origin
+    field meant either jamming it into <code>content["source"]</code> (which forced every consumer
+    to re-special-case it) or adding ad-hoc top-level fields without carry semantics.</p>
+
+    <h3>Deprecation Considerations</h3>
+    <p>The <code>extract_existing_content</code> function with its <code>is_first_stage</code> kwarg
+    becomes a thin alias for <code>get_existing_content</code>; we may inline it at call sites in a
+    follow-up PR after one release cycle, but that's cosmetic. The
+    <code>_enrich_source_namespace</code> helper and its tests are deleted outright. The
+    <code>_resolve_source_content</code> / <code>_build_source_index</code> pair is deleted outright.
+    No long-lived deprecation surface.</p>
+  </div>
+
+  <!-- 7. Rollout Plan -->
+  <div class="section">
+    <div class="section-number">07</div>
+    <h2>Rollout Plan</h2>
+
+    <h3>PR Strategy &amp; Sequencing</h3>
+    <ol class="pr-list">
+      <li data-pr="1">Envelope foundation. Add <code>"source"</code> to
+        <code>RECORD_TRACKING_FIELDS</code>; add <code>batch_id</code> / <code>batch_uuid</code> to
+        <code>RECORD_STAGE_FIELDS</code>; extend <code>admit_staging_row</code> to hoist
+        non-framework fields under <code>"source"</code>. Update tracking-field test. <em>This PR
+        alone makes records carry <code>source</code> through every <code>build()</code> call but
+        the bus does not yet read it.</em></li>
+      <li data-pr="2">Bus simplification. <code>_load_source_namespace</code> reads
+        <code>current_item["source"]</code>; <code>scope_application.apply_context_scope_for_records</code>
+        drops <code>_resolve_source_content</code> / <code>_build_source_index</code>;
+        <code>scope_namespace._enrich_source_namespace</code> deleted. Update bus tests.
+        <em>After this PR, multi-action pipelines work — the reported bug is fixed.</em></li>
+      <li data-pr="3">Cleanup. Delete first-stage branch in
+        <code>extract_existing_content</code>; drop <code>is_first_stage</code> arg at the one
+        call site; simplify <code>PassthroughTransformer.transform_with_passthrough</code>'s
+        first-stage richer-content branch; update <code>extract_tool_input</code>; update
+        <code>_save_source_data</code> snapshot logic; update all test fixtures; update
+        <code>_MANIFEST.md</code> files. <em>After this PR, no dead code remains.</em></li>
+    </ol>
+    <p>Each PR runs <code>pytest</code> + <code>ruff</code> green before merge. PRs 1 and 2 are
+    behaviorally compatible with each other (PR 1 doesn't break anything; PR 2 fixes the bug
+    when run on top of PR 1). PR 3 is dead-code removal — pure refactor.</p>
+
+    <h3>Risk Register</h3>
+    <table class="risk-table">
+      <thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th><th>Rollback</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Test fixtures using <code>{content:{source:…}}</code> are widespread; missing one
+            silently breaks an integration test.</td>
+          <td class="risk-high">High</td>
+          <td>Rip-grep for the pattern, fix all matches in PR 3. Run full pytest before merge.
+            Blast-radius report enumerates affected files.</td>
+          <td>Revert PR 3. PRs 1 and 2 alone provide the data-model fix and a working bus —
+            test fixtures break in isolation but the production code is correct.</td>
+        </tr>
+        <tr>
+          <td>File-mode tool input shape changes silently; tools in user repos break.</td>
+          <td class="risk-medium">Medium</td>
+          <td>Decision 6 keeps the flat-keys API stable. Add a regression test that exercises a
+            tool consuming <code>source.field</code>.</td>
+          <td>Revert <code>extract_tool_input</code> change; tools fall back to old path while
+            envelope changes hold.</td>
+        </tr>
+        <tr>
+          <td>Source-data table double-wrap on save — flat rows become nested.</td>
+          <td class="risk-medium">Medium</td>
+          <td>Decision 5 captures pre-admission snapshots. Add a round-trip test (write → read →
+            assert flat).</td>
+          <td>Revert PR 1; staging admission stops hoisting; old shape returns.</td>
+        </tr>
+        <tr>
+          <td>Batch text-chunk rows silently lose <code>content</code> string at admission.</td>
+          <td class="risk-low">Low</td>
+          <td>Test admit_staging_row idempotency on a row with <code>{content: "&lt;str&gt;",
+            batch_id, batch_uuid}</code> — assert shape unchanged. Decision 4 covers the framework-set
+            extension.</td>
+          <td>Revert PR 1.</td>
+        </tr>
+        <tr>
+          <td>HITL or LineageEnricher surprises — unexpected dependency on
+            <code>content["source"]</code>.</td>
+          <td class="risk-low">Low</td>
+          <td>Blast-radius report verified neither uses <code>content["source"]</code>; HITL
+            inherits source via tracking-field carry; LineageEnricher only uses
+            <code>source_data</code> for parent identity, not source-namespace.</td>
+          <td>Revert PR 1.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Dependency Sequencing</h3>
+    <p>PR 1 is independent. PR 2 depends on PR 1 (bus reads the envelope field PR 1 introduces).
+    PR 3 depends on PR 2 (test fixtures must align with the new shape that PR 2 made effective).
+    No cross-repo / cross-service coordination needed.</p>
+
+    <h3>Migration Plan</h3>
+    <p>None. Per Decision 7, this is a hard cutover on an unmerged branch. Local SQLite databases
+    written by old code are abandoned. Users on the branch run their pipelines from staging fresh.
+    If the branch ever needs to merge to a release where users have stored data, a migration script
+    is a follow-up — out of scope here.</p>
+  </div>
+
+  <!-- 8. Open Questions -->
+  <div class="section">
+    <div class="section-number">08</div>
+    <h2>Open Questions</h2>
+    <div class="open-question">Should <code>extract_existing_content</code> be deleted outright (since
+      it's now equivalent to <code>get_existing_content</code>), or kept as an alias for one release
+      to ease the transition? Recommendation: keep as alias in PR 3, delete in next release —
+      cosmetic, deferred.</div>
+    <div class="open-question">Should the <code>source_content</code> parameter on
+      <code>build_field_context_with_history</code> be removed (breaking the public-ish API of the
+      bus) or kept as deprecated-and-ignored? Recommendation: remove. The function is internal to
+      the framework; no third-party consumer.</div>
+    <div class="open-question">For users with literal <code>"source"</code> as a top-level field in
+      their staging input (Failure Mode F2), is the nested
+      <code>source: {source: user_source}</code> shape acceptable, or should we error at admission?
+      Recommendation: nested is acceptable; document in <code>SKILL.md</code>.</div>
+  </div>
+
+  <!-- 9. Appendix -->
+  <div class="section">
+    <div class="section-number">09</div>
+    <h2>Appendix</h2>
+
+    <h3>A. Envelope shape contract (canonical)</h3>
+    <pre><code>Record = TypedDict("Record", {
+    # Tracking — set once, never mutated by actions
+    "source_guid": str,
+    "source": Dict[str, Any],
+    "version_correlation_id": str | None,
+
+    # Stage — framework-managed, rebuilt per stage
+    "target_id": str,
+    "node_id": str,
+    "lineage": List[str],
+    "metadata": Dict[str, Any],
+    "content": Dict[str, Dict[str, Any]],   # action_name → output dict
+    "_state": str,
+    "_transitions": List[Dict[str, Any]],
+    "_recovery": Dict[str, Any],
+    "parent_target_id": str | None,
+    "root_target_id": str,
+    "chunk_info": Dict[str, Any],
+    "batch_id": str | None,
+    "batch_uuid": str | None,
+})</code></pre>
+
+    <h3>B. Reference test (proves the bug is fixed)</h3>
+    <pre><code>def test_action_two_can_read_source_page_content():
+    # Action 1 stores a target record (with source on envelope, content namespaced)
+    record_after_action_1 = {
+        "source": {"page_content": "hello world", "title": "T"},
+        "content": {"action_1": {"summary": "hi"}},
+        "_state": "active",
+        "_transitions": [{"from_state": "active", "to_state": "processed"}],
+        "source_guid": "sg-1",
+        "target_id": "tid-1",
+    }
+    # Bus loads source for action 2
+    fc = {}
+    _load_source_namespace(fc, record_after_action_1, "action_2")
+    assert fc["source"]["page_content"] == "hello world"
+    assert fc["source"]["title"] == "T"</code></pre>
+
+    <h3>C. Out-of-scope follow-ups (issues to file)</h3>
+    <ul>
+      <li>PR review bug #2: upstream records missing <code>_state</code> in online mode.</li>
+      <li>PR review bug #3: batch pre-loaded records missing <code>_state</code>.</li>
+      <li>PR review bug #4: <code>version_merge=True</code> tools produce stateless records.</li>
+      <li>PR review bug #5: <code>build_guard_skipped_record</code> crashes on stateless input.</li>
+      <li>PR review bug #6: batch <code>filter_phase</code> string vs <code>_state</code> field
+        disagreement.</li>
+      <li>PR review bug #7: <code>invoke_reset</code> transition rule blocks valid state reset.</li>
+      <li>Inline <code>extract_existing_content</code> at call sites (cosmetic).</li>
+      <li>Audit <code>SKILL.md</code> / <code>references/*.md</code> for "additive content" prose
+        and rewrite to reflect "source on envelope, content is action namespaces only."</li>
+    </ul>
+  </div>
+
+  <div class="doc-footer">
+    Generated via Staff Design Flow · 2026-04-30
+  </div>
+
+</div>
+</body>
+</html>

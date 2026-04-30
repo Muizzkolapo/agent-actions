@@ -328,7 +328,6 @@ class TestOutputFieldPromotionInTaskPreparer:
         ):
             result = preparer._load_full_context(
                 content={"text": "test"},
-                source_content={"text": "source"},
                 context=context,
                 current_item=None,
             )
@@ -368,7 +367,6 @@ class TestOutputFieldPromotionInTaskPreparer:
         ):
             result = preparer._load_full_context(
                 content={},
-                source_content={},
                 context=context,
                 current_item=None,
             )
@@ -404,7 +402,6 @@ class TestOutputFieldPromotionInTaskPreparer:
         ):
             result = preparer._load_full_context(
                 content={},
-                source_content={},
                 context=context,
                 current_item=None,
             )
@@ -445,7 +442,6 @@ class TestOutputFieldPromotionInTaskPreparer:
         ):
             preparer._load_full_context(
                 content={},
-                source_content={},
                 context=context,
                 current_item=None,
             )
@@ -478,7 +474,6 @@ class TestOutputFieldPromotionInTaskPreparer:
         ):
             result = preparer._load_full_context(
                 content={},
-                source_content={},
                 context=context,
                 current_item=None,
             )

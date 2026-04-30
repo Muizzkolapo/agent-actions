@@ -24,7 +24,6 @@ def build_field_context_with_history(
     agent_name: str,
     agent_config: dict | None,
     agent_indices: dict[str, int] | None = None,
-    source_content: Any | None = None,
     version_context: dict | None = None,
     workflow_metadata: dict | None = None,
     current_item: dict | None = None,
@@ -38,7 +37,7 @@ def build_field_context_with_history(
 
     Architecture (per anatomy_action.md):
     field_context = {
-        "source": {...},        # Original input data
+        "source": {...},        # Original input data — read from current_item["source"]
         "{dep_name}": {...},    # Dependency action outputs (FILTERED by context_scope)
         "seed": {...},          # Static reference data (via static_data)
         "version": {...},       # Version iteration info (i, idx, length, first, last)
@@ -49,10 +48,11 @@ def build_field_context_with_history(
         agent_name: Name of the current action
         agent_config: Action configuration dict
         agent_indices: REQUIRED if action has dependencies. Maps action names to positions.
-        source_content: Original input data for "source" namespace
         version_context: Loop iteration info
         workflow_metadata: Workflow metadata
-        current_item: Current record being processed (has lineage, content)
+        current_item: Current record being processed. Must carry the source
+            namespace at the top-level ``source`` field (set once at staging
+            admission, propagated as a tracking field).
         context_scope: Controls which fields to load (progressive data exposure)
 
     Returns:
@@ -65,7 +65,7 @@ def build_field_context_with_history(
     """
     field_context: dict = {}
 
-    _load_source_namespace(field_context, source_content, agent_name)
+    _load_source_namespace(field_context, current_item, agent_name)
     _load_dependency_namespaces(
         field_context, agent_name, agent_config, agent_indices, current_item, context_scope
     )
@@ -81,28 +81,38 @@ def build_field_context_with_history(
     return field_context
 
 
-def _load_source_namespace(
-    field_context: dict, source_content: Any | None, agent_name: str
-) -> None:
-    """Load original input data into the 'source' namespace."""
-    source_namespace: dict = {}
-    if source_content and isinstance(source_content, dict):
-        if "content" in source_content and isinstance(source_content["content"], dict):
-            source_namespace = source_content["content"]
-        else:
-            source_namespace = dict(source_content)
+def _load_source_namespace(field_context: dict, current_item: Any | None, agent_name: str) -> None:
+    """Load the source namespace from the record envelope.
 
-    if source_namespace:
-        field_context["source"] = source_namespace
-        logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
-        fire_event(
-            ContextNamespaceLoadedEvent(
-                action_name=agent_name,
-                namespace="source",
-                field_count=len(source_namespace),
-                fields=list(source_namespace.keys()),
+    The ``source`` field on the record envelope is the canonical, single source
+    of truth for original-input data. It is set once at staging admission via
+    ``RecordEnvelope.admit_staging_row`` (which hoists raw user fields under
+    ``record["source"]``) and propagated by ``_carry_tracking_fields`` through
+    every action — no duck-typing on shape, no list lookup, no fallback path.
+    """
+    if not isinstance(current_item, dict):
+        return
+
+    source_namespace = current_item.get("source")
+    if not isinstance(source_namespace, dict) or not source_namespace:
+        if current_item and "source" not in current_item:
+            logger.warning(
+                "Action '%s' received a record with no top-level 'source' field — "
+                "staging admission may have been skipped",
+                agent_name,
             )
+        return
+
+    field_context["source"] = source_namespace
+    logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
+    fire_event(
+        ContextNamespaceLoadedEvent(
+            action_name=agent_name,
+            namespace="source",
+            field_count=len(source_namespace),
+            fields=list(source_namespace.keys()),
         )
+    )
 
 
 def _load_dependency_namespaces(

@@ -13,9 +13,14 @@ logger = logging.getLogger(__name__)
 
 # System/metadata keys excluded from content extraction.
 # These are infrastructure fields that must not leak into downstream prompts.
+# ``source`` is excluded because it lives at the envelope's top level as a
+# tracking field — not as a content namespace key. Including it here ensures
+# the flat-format extractor never accidentally treats the envelope's source
+# field as a content entry.
 _RECORD_METADATA_KEYS = frozenset(
     {
         "source_guid",
+        "source",
         "lineage",
         "node_id",
         "metadata",
@@ -26,6 +31,8 @@ _RECORD_METADATA_KEYS = frozenset(
         "_recovery",
         "_state",
         "_transitions",
+        "batch_id",
+        "batch_uuid",
     }
 )
 
@@ -49,28 +56,6 @@ def _extract_content_data(source_content: Any) -> dict:
 
     # Flat format: {...} but exclude metadata keys
     return {k: v for k, v in source_content.items() if k not in _RECORD_METADATA_KEYS}
-
-
-def _enrich_source_namespace(
-    base_namespace: dict[str, Any], current_item: dict[str, Any] | None
-) -> dict[str, Any]:
-    """
-    Merge fallback fields into the source namespace from the current item.
-
-    This helps downstream actions get at least one source-like namespace even if the
-    stored source file was sparse (e.g., only identifiers).
-    """
-    merged = dict(base_namespace or {})
-
-    if not current_item or not isinstance(current_item, dict):
-        return merged
-
-    fallback = _extract_content_data(current_item)
-    for key, value in fallback.items():
-        if key not in merged:
-            merged[key] = value
-
-    return merged
 
 
 def _filter_and_store_fields(

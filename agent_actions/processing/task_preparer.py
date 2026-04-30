@@ -65,15 +65,15 @@ class TaskPreparer:
         content, source_guid, source_snapshot = self._normalize_input(item, context)
         target_id = existing_target_id or self._generate_target_id()
 
-        if context.is_first_stage:
-            source_content = content
-        else:
-            source_content = self._get_source_content(source_guid, context)
-            if source_content is None:
-                source_content = content
+        # Source data is read from the envelope's top-level ``source`` field —
+        # set once at staging admission, propagated as a tracking field through
+        # every downstream action. No list lookup, no shape probe.
+        source_content = item.get("source") if isinstance(item, dict) else None
+        if source_content is None:
+            source_content = {}
 
         current_item = item if isinstance(item, dict) else context.current_item
-        field_context = self._load_full_context(content, source_content, context, current_item)
+        field_context = self._load_full_context(content, context, current_item)
 
         guard_config = context.agent_config.get("guard")
         conditional_clause = context.agent_config.get("conditional_clause")
@@ -188,48 +188,42 @@ class TaskPreparer:
     def _get_source_content(
         self, source_guid: str | None, context: PreparationContext
     ) -> Any | None:
-        """Look up source content by source_guid, or return None."""
-        if source_guid is None:
-            return None
+        """Look up source content by source_guid in the source_data table.
 
-        if not context.source_data:
-            logger.debug(
-                "Source data not available for %s; cannot look up source_guid=%s",
-                context.agent_name,
-                source_guid,
-            )
+        DEPRECATED for inline source-namespace resolution: source data now lives
+        on each record's envelope (``record["source"]``) as a tracking field.
+        Retained only for callers that need to cross-reference the canonical
+        source-data table by ``source_guid`` (e.g., source-snapshot diagnostics).
+        """
+        if source_guid is None or not context.source_data:
             return None
 
         from agent_actions.input.preprocessing.transformation.transformer import (
             DataTransformer,
         )
 
-        source_content = DataTransformer.get_content_by_source_guid(
-            context.source_data, source_guid
-        )
-        if source_content is None:
-            logger.debug(
-                "Could not resolve source content for %s (%s source_data items)",
-                context.agent_name,
-                len(context.source_data),
-            )
-        return source_content
+        return DataTransformer.get_content_by_source_guid(context.source_data, source_guid)
 
     def _load_full_context(
         self,
         content: Any,
-        source_content: Any,
         context: PreparationContext,
         current_item: dict | None = None,
     ) -> dict[str, Any]:
-        """Load full context (source, upstream, version, workflow) for guard and prompt."""
+        """Load full context (source, upstream, version, workflow) for guard and prompt.
+
+        The source namespace is read from ``current_item["source"]`` — the envelope
+        tracking field set once at staging admission. ``content`` is retained on
+        the signature because downstream output_field promotion below references
+        the prior action's content; it is no longer used as a source-namespace
+        fallback.
+        """
         from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
         field_context = build_field_context_with_history(
             agent_name=context.agent_name,
             agent_config=context.agent_config,
             agent_indices=context.agent_indices,
-            source_content=source_content,
             version_context=context.version_context,
             workflow_metadata=context.workflow_metadata,
             current_item=current_item,

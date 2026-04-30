@@ -135,10 +135,14 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     """Extract observed business fields from an enriched record for tool input.
 
     Reads from enriched content where drops have already been applied by
-    ``apply_context_scope_for_records()``.  Uses ``parse_field_reference()``
-    for validated ref parsing instead of the former ``str.split()`` shadow.
+    ``apply_context_scope_for_records()`` and where the envelope's ``source``
+    field has been re-injected as a ``source`` namespace for the duration of
+    tool dispatch. Uses ``parse_field_reference()`` for validated ref parsing.
 
-    When no observe is configured, flattens all content namespaces.
+    When no observe is configured, flattens all content namespaces. Source is
+    included automatically because ``apply_context_scope_for_records`` injects
+    it into ``record["content"]["source"]`` whenever any directive references
+    ``source.*``.
     """
     from agent_actions.prompt.context.scope_parsing import parse_field_reference
 

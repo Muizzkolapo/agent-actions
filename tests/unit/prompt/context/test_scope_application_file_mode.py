@@ -17,23 +17,13 @@ from agent_actions.prompt.context.scope_application import (
 
 RECORD = {
     "source_guid": "guid-1",
+    "source": {"page_content": "Doc text", "url": "http://1.com"},
     "node_id": "node_123",
     "content": {
         "extract_qa": {"question": "What is X?", "answer": "Y", "confidence": 0.9},
         "validate": {"pass": True, "violations": [], "internal_token_count": 450},
     },
 }
-
-SOURCE_DATA = [
-    {
-        "source_guid": "guid-1",
-        "content": {"page_content": "Doc text", "url": "http://1.com"},
-    },
-    {
-        "source_guid": "guid-2",
-        "content": {"page_content": "Other doc", "url": "http://2.com"},
-    },
-]
 
 
 # ── All 3 directives ──────────────────────────────────────────────────
@@ -75,9 +65,7 @@ class TestAllDirectives:
             "drop": ["validate.internal_token_count"],
             "passthrough": ["extract_qa.confidence"],
         }
-        result = apply_context_scope_for_records(
-            [deepcopy(RECORD)], scope, action_name="test", source_data=SOURCE_DATA
-        )
+        result = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
         content = result[0]["content"]
         # Drop applied
         assert "internal_token_count" not in content["validate"]
@@ -193,42 +181,39 @@ class TestEmptyObserve:
 
 
 class TestSourceResolution:
-    def test_source_resolved_per_record_via_guid(self):
-        """Each record gets its own source namespace via source_guid."""
+    """Source lives on the record envelope (record["source"]) — no list lookup."""
+
+    def test_source_resolved_per_record_from_envelope(self):
+        """Each record carries its own source namespace at envelope top level."""
         records = [
-            {"source_guid": "guid-1", "content": {"dep": {"f": 1}}},
-            {"source_guid": "guid-2", "content": {"dep": {"f": 2}}},
+            {
+                "source_guid": "guid-1",
+                "source": {"url": "http://1.com"},
+                "content": {"dep": {"f": 1}},
+            },
+            {
+                "source_guid": "guid-2",
+                "source": {"url": "http://2.com"},
+                "content": {"dep": {"f": 2}},
+            },
         ]
         scope = {"observe": ["source.url", "dep.f"]}
-        result = apply_context_scope_for_records(
-            records, scope, action_name="test", source_data=SOURCE_DATA
-        )
+        result = apply_context_scope_for_records(records, scope, action_name="test")
         assert result[0]["content"]["url"] == "http://1.com"
         assert result[1]["content"]["url"] == "http://2.com"
 
-    def test_source_guid_not_found_falls_back_to_first(self):
-        """Unknown source_guid falls back to first source record."""
-        records = [{"source_guid": "unknown", "content": {"dep": {"f": 1}}}]
-        scope = {"observe": ["source.url", "dep.f"]}
-        result = apply_context_scope_for_records(
-            records, scope, action_name="test", source_data=SOURCE_DATA
-        )
-        assert result[0]["content"]["url"] == "http://1.com"
-
-    def test_no_source_data_with_source_refs_raises(self):
-        """Explicit source ref without source_data raises ConfigurationError."""
-        records = [{"content": {"dep": {"f": 1}}}]
+    def test_no_source_field_with_source_refs_raises(self):
+        """Source ref without an envelope source field raises ConfigurationError."""
+        records = [{"source_guid": "g", "content": {"dep": {"f": 1}}}]
         scope = {"observe": ["source.url"]}
         with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope_for_records(records, scope, action_name="test", source_data=None)
+            apply_context_scope_for_records(records, scope, action_name="test")
 
-    def test_no_source_refs_skips_resolution(self):
-        """If no directive references source, source_data is ignored."""
+    def test_no_source_refs_skips_source_injection(self):
+        """If no directive references source, source is not injected into content."""
         records = [deepcopy(RECORD)]
         scope = {"observe": ["extract_qa.question"]}
-        result = apply_context_scope_for_records(
-            records, scope, action_name="test", source_data=SOURCE_DATA
-        )
+        result = apply_context_scope_for_records(records, scope, action_name="test")
         # Source not injected since no source.* refs
         assert "url" not in result[0]["content"]
 

@@ -281,7 +281,13 @@ class TestApplyVersionMerge:
 
 
 class TestExtractExistingContent:
-    """Tests for extract_existing_content()."""
+    """Tests for extract_existing_content().
+
+    The function returns the action-namespaced ``content`` dict for a record.
+    It does NOT synthesise a ``{"source": raw}`` wrapper for first-stage
+    records — source data lives at the envelope's top level as a tracking field
+    (set once at staging admission via ``RecordEnvelope.admit_staging_row``).
+    """
 
     def test_returns_content_dict(self):
         record = {"content": {"ns_a": {"x": 1}}, "source_guid": "sg"}
@@ -293,35 +299,18 @@ class TestExtractExistingContent:
     def test_returns_empty_dict_when_content_is_not_dict(self):
         assert extract_existing_content({"content": "string_value"}) == {}
 
-    def test_first_stage_wraps_raw_fields(self):
-        record = {"field_a": 1, "field_b": "two", "source_guid": "sg"}
-        result = extract_existing_content(record, is_first_stage=True)
-        assert result == {"source": {"field_a": 1, "field_b": "two"}}
-
-    def test_first_stage_excludes_framework_fields(self):
+    def test_first_stage_record_with_envelope_source_returns_empty_content(self):
+        """Admitted first-stage records have source at top level and empty content."""
         record = {
             "source_guid": "sg",
-            "target_id": "tid",
-            "node_id": "nid",
-            "metadata": {},
-            "user_field": "val",
+            "source": {"field_a": 1, "field_b": "two"},
+            "_state": "active",
         }
-        result = extract_existing_content(record, is_first_stage=True)
-        assert result == {"source": {"user_field": "val"}}
+        # No first-stage synthesis — content is whatever's in record["content"].
+        assert extract_existing_content(record, is_first_stage=True) == {}
 
-    def test_first_stage_with_existing_content_returns_content(self):
-        """First-stage fallback only applies when content is missing."""
-        record = {"content": {"ns": {"x": 1}}, "field_a": 1}
-        result = extract_existing_content(record, is_first_stage=True)
-        assert result == {"ns": {"x": 1}}
-
-    def test_first_stage_empty_raw_fields_returns_empty(self):
-        """If only framework fields remain after filtering, return {}."""
-        record = {"source_guid": "sg", "target_id": "tid"}
-        result = extract_existing_content(record, is_first_stage=True)
-        assert result == {}
-
-    def test_non_first_stage_ignores_raw_fields(self):
-        record = {"field_a": 1, "field_b": "two"}
-        result = extract_existing_content(record, is_first_stage=False)
-        assert result == {}
+    def test_is_first_stage_arg_is_ignored(self):
+        """The is_first_stage parameter is preserved for callsite compat but unused."""
+        record = {"content": {"ns_a": {"x": 1}}, "source_guid": "sg"}
+        assert extract_existing_content(record, is_first_stage=True) == {"ns_a": {"x": 1}}
+        assert extract_existing_content(record, is_first_stage=False) == {"ns_a": {"x": 1}}

@@ -22,10 +22,10 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `error_handling.py` | Module | `ProcessorErrorHandlerMixin` for wrapping file loading/processing logic. | `logging` |
 | `exhausted_builder.py` | Module | Builds reports once a workflow’s retries are exhausted. | `validation`, `logging` |
 | `helpers.py` | Module | Shared helpers (UUID construction, tuple flattening) for processors. | `processing` |
-| `record_helpers.py` | Module | Shared record assembly helpers: `build_tombstone`, `build_exhausted_tombstone`, `carry_framework_fields`, `apply_version_merge`, `extract_existing_content`. Used by all processing paths (online, batch, FILE). | `record`, `processing` |
+| `record_helpers.py` | Module | Shared record assembly helpers: `build_tombstone`, `build_exhausted_tombstone`, `carry_framework_fields`, `apply_version_merge`, `extract_existing_content`, `get_existing_content`. `extract_existing_content` is now a thin alias over `get_existing_content` (no first-stage source synthesis -- `source` lives on the envelope). | `record`, `processing` |
 | `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. Exports `write_node_level_disposition` (node-level skip/passthrough) and `write_record_dispositions` (batch record dispositions). All `set_disposition` calls (except executor-level) are centralized here. | `output` |
 | `prepared_task.py` | Module | `GuardStatus` enum (PASSED, SKIPPED, FILTERED, UPSTREAM_UNPROCESSED), `PreparedTask` dataclass, and `PreparationContext` (carries `mode: RunMode` directly). | `typing` |
-| `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. Short-circuits upstream-unprocessed records before context loading. | `input`, `prompt` |
+| `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. Short-circuits upstream-unprocessed records before context loading. Reads `source` from `item["source"]` (envelope top-level) and forwards into prompt context. `_get_source_content` is deprecated and only used as a defensive fallback for legacy callers. | `input`, `prompt` |
 | `types.py` | Module | `ProcessingStatus` enum (SUCCESS, SKIPPED, FILTERED, FAILED, EXHAUSTED, DEFERRED, UNPROCESSED), `ProcessingResult` factories, and `ProcessingContext` (uses `RunMode` for mode). | `typing` |
 
 ## Project Surface

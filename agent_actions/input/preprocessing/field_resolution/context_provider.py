@@ -92,7 +92,6 @@ class EvaluationContextProvider:
             agent_name=config.agent_name,
             agent_config=config.agent_config,
             agent_indices=config.agent_indices,
-            source_content=config.source_content,
             version_context=config.version_context,
             workflow_metadata=config.workflow_metadata,
             current_item=current_item,

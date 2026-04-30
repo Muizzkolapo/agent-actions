@@ -371,14 +371,14 @@ class TestEdgeCases:
     ):
         """Both modes should handle None optional params identically.
 
-        source_content is required so the observed source.text field exists
-        at runtime. Other optional params remain None.
+        ``current_item`` carries source on its envelope so the observed
+        ``source.text`` field exists at runtime. Other optional params remain None.
         """
         common_args = {
             "agent_config": parity_agent_config_no_context_scope,
             "agent_name": "parity_test_agent_simple",
             "contents": parity_contents,
-            "source_content": parity_contents,
+            "current_item": {"source_guid": "g", "source": parity_contents, "content": {}},
             # Other optional params default to None
         }
 

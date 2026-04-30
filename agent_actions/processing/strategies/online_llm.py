@@ -388,11 +388,7 @@ class OnlineLLMStrategy:
                 )
 
         # Transform response
-        item_existing_content = (
-            extract_existing_content(item, is_first_stage=context.is_first_stage)
-            if isinstance(item, dict)
-            else None
-        )
+        item_existing_content = extract_existing_content(item) if isinstance(item, dict) else None
         transformed = self._transform_response(
             response,
             content,

@@ -15,5 +15,5 @@ into generated data and ensure outputs remain structured.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `passthrough.py` | Module | `PassthroughTransformer` orchestrates context_scope.passthrough + structured vs unstructured data using the strategy list. Wraps strategy output via `RecordEnvelope.build()`. | `field_management`, `record.envelope` |
+| `passthrough.py` | Module | `PassthroughTransformer` orchestrates context_scope.passthrough + structured vs unstructured data using the strategy list. Wraps strategy output via `RecordEnvelope.build()`. `transform_with_passthrough` no longer synthesizes a `source` namespace from `existing_content` -- `source` lives on the envelope. | `field_management`, `record.envelope` |
 | `PassthroughTransformer` | Class | Applies the first matching strategy (which returns flat action output dicts), wraps each via `RecordEnvelope.build()` to namespace and preserve upstream, and ensures each item has required IDs/metadata. | `field_management`, `record.envelope` |

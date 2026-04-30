@@ -9,7 +9,6 @@ import pytest
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_inference import infer_dependencies
-from agent_actions.prompt.context.scope_namespace import _enrich_source_namespace
 
 
 class TestSpecialNamespaceValidationBypass:
@@ -75,68 +74,8 @@ class TestSpecialNamespaceValidationBypass:
         assert "not found in workflow" in str(exc_info.value)
 
 
-class TestEnrichSourceNamespace:
-    """Test _enrich_source_namespace() fallback logic."""
-
-    def test_enrich_source_namespace_no_current_item(self):
-        """Test with no current item returns base namespace unchanged."""
-        base_namespace = {"existing": "value"}
-        current_item = None
-
-        result = _enrich_source_namespace(base_namespace, current_item)
-
-        assert result == {"existing": "value"}
-
-    def test_enrich_source_namespace_empty_current_item(self):
-        """Test with empty current item returns base namespace unchanged."""
-        base_namespace = {"existing": "value"}
-        current_item = {}
-
-        result = _enrich_source_namespace(base_namespace, current_item)
-
-        assert result == {"existing": "value"}
-
-    def test_enrich_source_namespace_adds_missing_fields(self):
-        """Test that fallback fields are added from current item."""
-        base_namespace = {"source_guid": "guid-123"}
-        current_item = {
-            "content": {"page_content": "Full text here", "title": "My Title"},
-            "source_guid": "guid-123",
-        }
-
-        result = _enrich_source_namespace(base_namespace, current_item)
-
-        assert result["source_guid"] == "guid-123"  # Original preserved
-        assert result["page_content"] == "Full text here"  # Added from current
-        assert result["title"] == "My Title"  # Added from current
-
-    def test_enrich_source_namespace_does_not_overwrite_existing(self):
-        """Test that existing fields in base namespace are NOT overwritten."""
-        base_namespace = {"page_content": "Original content", "source_guid": "guid-123"}
-        current_item = {"content": {"page_content": "Different content", "extra": "value"}}
-
-        result = _enrich_source_namespace(base_namespace, current_item)
-
-        assert result["page_content"] == "Original content"  # NOT overwritten
-        assert result["extra"] == "value"  # Added
-        assert result["source_guid"] == "guid-123"  # Preserved
-
-    def test_enrich_source_namespace_with_flat_structure(self):
-        """Test with flat current item structure (no 'content' key)."""
-        base_namespace = {}
-        current_item = {"page_content": "Text", "title": "Title", "id": "123"}
-
-        result = _enrich_source_namespace(base_namespace, current_item)
-
-        assert result["page_content"] == "Text"
-        assert result["title"] == "Title"
-        assert result["id"] == "123"
-
-    def test_enrich_source_namespace_handles_none_base(self):
-        """Test with None base namespace (should create new dict)."""
-        base_namespace = None
-        current_item = {"content": {"field": "value"}}
-
-        result = _enrich_source_namespace(base_namespace, current_item)
-
-        assert result == {"field": "value"}
+# NOTE: TestEnrichSourceNamespace was removed when ``source`` was hoisted out of
+# ``content`` and onto the record envelope as a tracking field. The bus reads
+# source from ``record["source"]`` directly — no fallback synthesis from
+# ``current_item["content"]`` is needed or wanted. See the regression test
+# ``tests/regression/test_source_namespace_hoist.py`` for the new model.

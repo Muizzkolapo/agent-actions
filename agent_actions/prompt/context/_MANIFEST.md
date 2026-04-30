@@ -14,8 +14,8 @@ loaders for cataloging prompts at documentation time.
 | ~~`scope.py`~~ | Deleted | Facade removed. Consumers import directly from the 6 `scope_*` modules. | — |
 | `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. | `preprocessing` |
 | `scope_inference.py` | Module | Dependency inference: fan-in detection, version branch expansion, input/context source resolution. | `preprocessing` |
-| `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. | `preprocessing` |
-| `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. | `preprocessing` |
-| `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces. | `preprocessing` |
+| `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. Reads `source` directly from `record["source"]` (no `source_data` lookup). | `preprocessing` |
+| `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. `_RECORD_METADATA_KEYS` excludes envelope-only fields (`source`, `batch_id`, `batch_uuid`) from content extraction. | `preprocessing` |
+| `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces. `_load_source_namespace` reads `current_item["source"]` directly from envelope. | `preprocessing` |
 | ~~`scope_file_mode.py`~~ | Deleted | FILE-mode observe merged into `scope_application.py:apply_context_scope_for_records`. | — |
 | `static_loader.py` | Module | Static prompt loader used during docs generation to read prompt store files. | `tooling.docs`, `file_io` |

@@ -89,19 +89,11 @@ class PassthroughTransformer:
             action_outputs = []
 
         # Build records via RecordEnvelope — wraps under namespace, preserves upstream
-        # content and carries tracking fields.
-        #
-        # When input_record is provided we use it as-is, EXCEPT when existing_content
-        # is also provided and differs from input_record["content"]. This happens on
-        # first-stage records: extract_existing_content synthesises {"source": raw_fields}
-        # even when the record has no "content" key, so existing_content can be richer
-        # than input_record.get("content"). We honour existing_content in that case so
-        # upstream namespaces are not lost.
+        # content, and carries tracking fields (``source``, ``source_guid``,
+        # ``version_correlation_id``). Source data lives on the envelope, not inside
+        # content, so there is no first-stage synthesis to honour.
         if input_record is not None:
-            if existing_content and existing_content != input_record.get("content"):
-                envelope_input = {**input_record, "content": existing_content}
-            else:
-                envelope_input = input_record
+            envelope_input = input_record
         else:
             envelope_input = {"source_guid": source_guid, "content": existing_content or {}}
         output = [
