@@ -18,6 +18,7 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.processing.unified import ProcessingStrategy
+from agent_actions.record.state import RecordState
 
 
 def _make_context(
@@ -154,7 +155,11 @@ class TestProcessRecordGuardStatuses:
             invocation_strategy=MagicMock(),
         )
 
-        item = {"content": {"field": "value"}, "_unprocessed": True, "metadata": {}}
+        item = {
+            "content": {"field": "value"},
+            "_state": RecordState.CASCADE_SKIPPED.value,
+            "metadata": {},
+        }
         context = _make_context()
         result = strategy.process_record(item, context)
 

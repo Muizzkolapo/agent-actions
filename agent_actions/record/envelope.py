@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.record.state import (
+    InvalidRecordStateError,
     RecordState,
     RecordStateTransitionError,
     append_transition,
@@ -115,6 +116,16 @@ class RecordEnvelope:
         return _carry_tracking_fields(result, input_record)
 
     @staticmethod
+    def admit_staging_row(record: dict[str, Any]) -> None:
+        """Mark a loader-produced row as ready to enter task preparation.
+
+        Staging (initial file load) calls this once per dict row. Idempotent
+        when ``_state`` is already set (replay or downstream-shaped input).
+        """
+        if "_state" not in record:
+            record["_state"] = RecordState.ACTIVE.value
+
+    @staticmethod
     def transition(
         record: dict[str, Any],
         new_state: RecordState,
@@ -130,7 +141,7 @@ class RecordEnvelope:
         try:
             prior = parse_state_strict(record)
             validate_state_transition(prior, new_state, reason)
-        except RecordStateTransitionError as e:
+        except (RecordStateTransitionError, InvalidRecordStateError) as e:
             raise RecordEnvelopeError(str(e)) from e
         record["_state"] = new_state.value
         append_transition(

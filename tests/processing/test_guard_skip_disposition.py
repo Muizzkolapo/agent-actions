@@ -2,7 +2,7 @@
 
 When a guard evaluates to false with on_false=skip, the record must
 get ProcessingStatus.SKIPPED (not UNPROCESSED) and storage must receive
-DISPOSITION_PASSTHROUGH (the data is forwarded unchanged).
+DISPOSITION_GUARD_SKIPPED (per-record guard skip).
 
 Bug: specs/new/037-guard-skip-disposition-fix.md
 """
@@ -14,7 +14,7 @@ import pytest
 from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
+from agent_actions.record.state import RecordState
 
 
 @pytest.fixture
@@ -85,10 +85,10 @@ class TestGuardSkipProducesSkippedStatus:
 
 
 class TestGuardSkipDisposition:
-    """Storage backend receives DISPOSITION_PASSTHROUGH for guard-skipped records."""
+    """Storage backend receives DISPOSITION_GUARD_SKIPPED for guard-skipped records."""
 
-    def test_skipped_result_gets_disposition_passthrough(self):
-        """ResultCollector writes guard-skipped disposition for SKIPPED results."""
+    def test_skipped_result_gets_guard_skipped_disposition(self):
+        """ResultCollector writes guard_skipped disposition for SKIPPED results."""
         result = ProcessingResult.skipped(
             passthrough_data={"content": {}, "source_guid": "guid-1", "_state": "guard_skipped"},
             reason="guard_skip",
@@ -121,7 +121,7 @@ class TestGuardSkipPreservesData:
             "content": {"field": "value"},
             "source_guid": "guid-1",
             "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
-            "_unprocessed": True,
+            "_state": RecordState.GUARD_SKIPPED.value,
         }
         result = ProcessingResult.skipped(
             passthrough_data=tombstone,

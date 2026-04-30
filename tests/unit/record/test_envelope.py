@@ -4,6 +4,7 @@ import pytest
 
 from agent_actions.record.envelope import RecordEnvelope, RecordEnvelopeError
 from agent_actions.record.state import (
+    InvalidRecordStateError,
     RecordState,
     reason_cascade,
     reason_downstream_reset,
@@ -153,6 +154,19 @@ class TestInteractions:
         assert r3["content"]["source"] == {"raw": "data"}
         assert r3["content"]["summarize"] == {"summary": "short"}
         assert r3["content"]["review"] == {"score": 9}
+
+
+class TestRecordStateFromRecord:
+    def test_missing_state_raises(self):
+        with pytest.raises(InvalidRecordStateError, match="record\\['_state'\\] is required"):
+            RecordState.from_record({})
+
+    def test_valid_string_parsed(self):
+        assert RecordState.from_record({"_state": "committed"}) == RecordState.COMMITTED
+
+    def test_invalid_state_raises(self):
+        with pytest.raises(InvalidRecordStateError, match="Invalid record _state"):
+            RecordState.from_record({"_state": "not_valid"})
 
 
 # ── transition() / state machine ─────────────────────────────────────────────

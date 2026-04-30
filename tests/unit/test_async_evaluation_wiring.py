@@ -16,6 +16,7 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_EXHAUSTED
 
 # Module path prefix for patching deferred imports in processing_recovery.
@@ -384,6 +385,7 @@ class TestWriteRecordDispositionsEvaluationExhausted:
             {
                 "source_guid": "sg-1",
                 "metadata": {},
+                "_state": RecordState.ACTIVE.value,
                 "_recovery": {
                     "reprompt": {"attempts": 2, "passed": False, "validation": "check_schema"}
                 },
@@ -438,7 +440,12 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         """Missing validation name defaults to 'unknown'."""
         service = _make_service()
         items = [
-            {"source_guid": "sg-1", "metadata": {}, "_recovery": {"reprompt": {"passed": False}}}
+            {
+                "source_guid": "sg-1",
+                "_state": RecordState.ACTIVE.value,
+                "metadata": {},
+                "_recovery": {"reprompt": {"passed": False}},
+            }
         ]
 
         from agent_actions.processing.result_collector import (
@@ -455,6 +462,7 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         items = [
             {
                 "source_guid": "sg-1",
+                "_state": RecordState.ACTIVE.value,
                 "metadata": {},
                 "_recovery": {"reprompt": {"attempts": 1, "passed": True, "validation": "v"}},
             }

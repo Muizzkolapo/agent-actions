@@ -1,8 +1,9 @@
 """Record state machine primitives.
 
-This module provides a single, typed source of truth for record lifecycle state
-within a pipeline run. The state is stored on each record as `record["_state"]`
-and transitions are recorded as a list under `record["_transitions"]`.
+Every pipeline dict must carry ``record["_state"]`` (a :class:`RecordState` value).
+Initial staging calls :meth:`RecordEnvelope.admit_staging_row` so loader rows are
+lifecycle-ready; :meth:`RecordState.from_record` and :meth:`RecordEnvelope.transition`
+require the field thereafter.
 """
 
 from __future__ import annotations
@@ -16,6 +17,12 @@ from typing import Any, cast
 
 class RecordStateTransitionError(Exception):
     """Invalid lifecycle transition or malformed transition reason."""
+
+    pass
+
+
+class InvalidRecordStateError(ValueError):
+    """``record['_state']`` is missing, or present but not a valid :class:`RecordState`."""
 
     pass
 
@@ -40,22 +47,24 @@ class RecordState(str, Enum):
 
     @classmethod
     def from_record(cls, record: dict[str, Any]) -> RecordState:
-        """Parse state from a record, defaulting to ACTIVE when absent.
+        """Return the record's lifecycle state.
 
-        During the cutover we may still encounter records without `_state`;
-        treating those as ACTIVE keeps processing stable until all producers
-        are migrated.
+        ``_state`` is **required** on every pipeline record. Build with
+        :class:`RecordEnvelope` or set ``_state`` explicitly before passing the
+        dict into processing.
         """
 
         raw = record.get("_state")
         if raw is None:
-            return cls.ACTIVE
+            raise InvalidRecordStateError(
+                "record['_state'] is required — build with RecordEnvelope or set explicitly"
+            )
         try:
             return cls(str(raw))
-        except ValueError:
-            # Unknown state value; treat as ACTIVE so the pipeline can proceed,
-            # while still surfacing the raw value via transitions/dispositions.
-            return cls.ACTIVE
+        except ValueError as e:
+            raise InvalidRecordStateError(
+                f"Invalid record _state value {raw!r} — must be a known RecordState"
+            ) from e
 
     def is_processable(self) -> bool:
         """Return True if the record can be processed in the current action."""
@@ -107,21 +116,9 @@ def now_iso() -> str:
 
 
 def parse_state_strict(record: dict[str, Any]) -> RecordState:
-    """Parse ``record['_state']`` for transition validation.
+    """Same as :meth:`RecordState.from_record` — used at envelope transition time."""
 
-    Absent ``_state`` means ACTIVE. Unknown string values raise — callers must
-    not rely on silent coercion when mutating lifecycle via ``RecordEnvelope.transition``.
-    """
-
-    raw = record.get("_state")
-    if raw is None:
-        return RecordState.ACTIVE
-    try:
-        return RecordState(str(raw))
-    except ValueError as e:
-        raise RecordStateTransitionError(
-            f"Invalid record _state value {raw!r} — must be a known RecordState"
-        ) from e
+    return RecordState.from_record(record)
 
 
 def validate_transition_reason(reason: dict[str, Any]) -> str:

@@ -18,6 +18,7 @@ from agent_actions.processing.types import (
     RecoveryMetadata,
     RetryMetadata,
 )
+from agent_actions.record.state import RecordState
 from agent_actions.utils.id_generation import IDGenerator
 
 
@@ -47,7 +48,10 @@ def test_result_collector_aggregates_statuses_first_stage():
         },
     }
 
-    success = ProcessingResult.success(data=[{"content": {"value": 1}}], source_guid="src-1")
+    success = ProcessingResult.success(
+        data=[{"content": {"value": 1}, "_state": RecordState.ACTIVE.value}],
+        source_guid="src-1",
+    )
     skipped = ProcessingResult.skipped(
         passthrough_data={"content": {"value": 2}}, reason="guard_skip", source_guid="src-2"
     )
@@ -448,7 +452,7 @@ class TestResultCollectorDispositions:
         unprocessed = ProcessingResult(
             status=ProcessingStatus.UNPROCESSED,
             source_guid="src-un",
-            data=[{"content": {}}],
+            data=[{"content": {}, "_state": RecordState.CASCADE_SKIPPED.value}],
             skip_reason="where_clause",
         )
 
@@ -470,7 +474,7 @@ class TestResultCollectorDispositions:
     def test_success_result_writes_disposition(self):
         backend = _make_backend()
         success = ProcessingResult.success(
-            data=[{"content": {"v": 1}}],
+            data=[{"content": {"v": 1}, "_state": RecordState.ACTIVE.value}],
             source_guid="src-ok",
         )
 
@@ -581,7 +585,9 @@ class TestResultCollectorDispositions:
         backend = _make_backend()
 
         results = [
-            ProcessingResult.success(data=[{"content": {}}], source_guid="ok"),
+            ProcessingResult.success(
+                data=[{"content": {}, "_state": RecordState.ACTIVE.value}], source_guid="ok"
+            ),
             ProcessingResult.filtered(source_guid="filt"),
             ProcessingResult.failed(error="err", source_guid="fail"),
         ]
@@ -733,6 +739,7 @@ class TestParseErrorDisposition:
             data=[
                 {
                     "source_guid": "guid-pe",
+                    "_state": RecordState.ACTIVE.value,
                     "content": {
                         "my_action": {
                             "_parse_error": "Expecting value: line 1",
@@ -762,7 +769,12 @@ class TestParseErrorDisposition:
     def test_parse_error_record_marked_unprocessed(self):
         """Parse error items are marked FAILED so downstream skips execution."""
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid="guid-pe",
         )
 
@@ -779,7 +791,12 @@ class TestParseErrorDisposition:
     def test_parse_error_stats_counted_as_failed(self):
         """Parse error reclassifies from success to failed in stats."""
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid="guid-pe",
         )
 
@@ -797,7 +814,12 @@ class TestParseErrorDisposition:
         """Normal SUCCESS records are not reclassified by parse error detection."""
         backend = _make_backend()
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"question": "What?", "answer": "42"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"question": "What?", "answer": "42"}},
+                }
+            ],
             source_guid="guid-ok",
         )
 
@@ -824,11 +846,21 @@ class TestParseErrorDisposition:
         backend = _make_backend()
         results = [
             ProcessingResult.success(
-                data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+                data=[
+                    {
+                        "_state": RecordState.ACTIVE.value,
+                        "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                    }
+                ],
                 source_guid="guid-pe",
             ),
             ProcessingResult.success(
-                data=[{"content": {"action": {"field": "ok"}}}],
+                data=[
+                    {
+                        "_state": RecordState.ACTIVE.value,
+                        "content": {"action": {"field": "ok"}},
+                    }
+                ],
                 source_guid="guid-ok",
             ),
         ]
@@ -857,7 +889,12 @@ class TestParseErrorDisposition:
         """Parse error without source_guid marks items but skips disposition write."""
         backend = _make_backend()
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid=None,
         )
 
@@ -876,7 +913,12 @@ class TestParseErrorDisposition:
     def test_parse_error_no_backend_no_crash(self):
         """Parse error detection works gracefully without storage backend."""
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid="guid-pe",
         )
 

@@ -18,6 +18,7 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
@@ -26,6 +27,13 @@ if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
 
 logger = logging.getLogger(__name__)
+
+
+def _admit_staging_rows(rows: list[Any]) -> None:
+    """Ensure loader dict rows carry ``_state`` before UnifiedProcessor."""
+    for row in rows:
+        if isinstance(row, dict):
+            RecordEnvelope.admit_staging_row(row)
 
 
 @dataclass
@@ -458,6 +466,7 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         if "root_target_id" not in row:
             row["root_target_id"] = row["target_id"]
 
+    _admit_staging_rows(data_chunk)
     return data_chunk, src_text
 
 
@@ -542,6 +551,8 @@ def _prepare_online_data(ctx: DataPreparationContext):
             },
         )
 
+    if isinstance(data_chunk, list):
+        _admit_staging_rows(data_chunk)
     return data_chunk, src_text
 
 

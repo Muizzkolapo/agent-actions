@@ -2,8 +2,8 @@
 
 from unittest.mock import patch
 
-from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
 from agent_actions.record.state import RecordState
+from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
 
 # ---------------------------------------------------------------------------
 # Helpers

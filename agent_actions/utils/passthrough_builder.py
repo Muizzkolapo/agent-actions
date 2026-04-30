@@ -23,8 +23,8 @@ class PassthroughItemBuilder:
     ) -> dict[str, Any]:
         """Build a passthrough (tombstone) item with required fields and metadata.
 
-        The returned item is a stateful passthrough record. It does not rely on
-        legacy `_unprocessed` or `metadata.reason` flags.
+        The returned item carries :attr:`RecordState.GUARD_SKIPPED` and
+        ``_transitions`` — not ad-hoc skip flags on the record.
 
         Args:
             row: Original data item.

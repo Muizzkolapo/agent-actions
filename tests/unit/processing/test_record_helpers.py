@@ -119,7 +119,7 @@ class TestBuildExhaustedTombstone:
         assert result["_state"] == RecordState.EXHAUSTED.value
         assert result["_transitions"][-1]["reason"]["type"] == "exhausted"
 
-    def test_unprocessed_flag_set(self):
+    def test_exhausted_state_set_on_tombstone(self):
         result = build_exhausted_tombstone("act", None, {})
         assert result["_state"] == RecordState.EXHAUSTED.value
 

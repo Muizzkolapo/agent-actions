@@ -6,6 +6,7 @@ import pytest
 
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext, PreparedTask
 from agent_actions.processing.task_preparer import TaskPreparer
+from agent_actions.record.state import RecordState
 
 
 @pytest.fixture
@@ -201,7 +202,9 @@ class TestTaskPreparerGuardEvaluation:
             mock_result.prompt_context = {}
             mock_prep.return_value = mock_result
 
-            result = preparer.prepare({"status": "active"}, basic_context)
+            result = preparer.prepare(
+                {"status": "active", "_state": RecordState.ACTIVE.value}, basic_context
+            )
 
         assert result.guard_status == GuardStatus.PASSED
         assert result.should_execute is True
@@ -236,7 +239,9 @@ class TestTaskPreparerPrepare:
         basic_context.agent_config["guard"] = {"clause": "True", "behavior": "skip"}
 
         preparer = TaskPreparer()
-        result = preparer.prepare({"content": "test"}, basic_context)
+        result = preparer.prepare(
+            {"content": "test", "_state": RecordState.ACTIVE.value}, basic_context
+        )
 
         assert isinstance(result, PreparedTask)
         assert result.formatted_prompt == "Rendered prompt"
@@ -261,7 +266,9 @@ class TestTaskPreparerPrepare:
         basic_context.agent_config["guard"] = {"clause": "x == 1", "behavior": "skip"}
 
         preparer = TaskPreparer()
-        result = preparer.prepare({"content": "test"}, basic_context)
+        result = preparer.prepare(
+            {"content": "test", "_state": RecordState.ACTIVE.value}, basic_context
+        )
 
         assert result.guard_status == GuardStatus.SKIPPED
         assert result.guard_behavior == "skip"
@@ -286,7 +293,9 @@ class TestTaskPreparerPrepare:
         basic_context.agent_config["guard"] = {"clause": "x == 1", "behavior": "filter"}
 
         preparer = TaskPreparer()
-        result = preparer.prepare({"content": "test"}, basic_context)
+        result = preparer.prepare(
+            {"content": "test", "_state": RecordState.ACTIVE.value}, basic_context
+        )
 
         assert result.guard_status == GuardStatus.FILTERED
         assert result.guard_behavior == "filter"
@@ -325,7 +334,7 @@ class TestGuardEvaluatedOnce:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"x": 10}, context)
+        preparer.prepare({"x": 10, "_state": RecordState.ACTIVE.value}, context)
 
         # Guard should be evaluated exactly once
         assert mock_guard.call_count == 1
@@ -351,7 +360,7 @@ class TestGuardEvaluatedOnce:
 
         preparer = TaskPreparer()
         with patch.object(preparer, "_evaluate_guard") as mock_guard:
-            preparer.prepare({"x": 10}, context)
+            preparer.prepare({"x": 10, "_state": RecordState.ACTIVE.value}, context)
             # Guard should NOT be called when no guard config
             assert mock_guard.call_count == 0
 
@@ -385,7 +394,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare({"content": "test", "_state": RecordState.ACTIVE.value}, context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
@@ -416,7 +425,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare({"content": "test", "_state": RecordState.ACTIVE.value}, context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
@@ -448,7 +457,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare({"content": "test", "_state": RecordState.ACTIVE.value}, context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
@@ -489,7 +498,9 @@ class TestGuardBeforePromptRendering:
 
         preparer = TaskPreparer()
         # Item is missing 'missing_field' but should be filtered, not error
-        result = preparer.prepare({"status": "inactive"}, context)
+        result = preparer.prepare(
+            {"status": "inactive", "_state": RecordState.ACTIVE.value}, context
+        )
 
         # Guard should be called
         assert mock_guard.call_count == 1
@@ -531,7 +542,9 @@ class TestGuardBeforePromptRendering:
         )
 
         preparer = TaskPreparer()
-        result = preparer.prepare({"status": "active", "field": "value"}, context)
+        result = preparer.prepare(
+            {"status": "active", "field": "value", "_state": RecordState.ACTIVE.value}, context
+        )
 
         # Guard should be called
         assert mock_guard.call_count == 1

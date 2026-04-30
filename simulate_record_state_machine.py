@@ -848,18 +848,15 @@ def main() -> None:
 {"─" * 80}
   {bold("WHAT THE STATE MACHINE ELIMINATES")}
 
-  {bold("Before (current system):")}
-    • _unprocessed flag (boolean) + metadata.reason (8 strings) + disposition (8 types)
-    • 3 different strings for guard-skip: "guard_skip", "guard_skipped", "guard_prefilter_skip"
-    • 19 set_disposition() calls across 4 files
-    • _is_upstream_unprocessed() does string matching to distinguish guard-skip from cascade
+  {bold('Before (legacy, removed):')}
+    • _unprocessed tombstone boolean + ad-hoc metadata.reason strings
+    • Overlapping skip/passthrough disposition naming in scattered call sites
+    • Upstream cascade detection separate from typed record state
 
-  {bold("After (state machine):")}
-    • ONE field: record._state (enum)
-    • ONE disposition derivation: state → disposition (1 mapping, 1 location)
-    • Guard has 3 explicit behaviors: skip / defer / filter
-    • Cascade is automatic: FAILED/EXHAUSTED upstream → CASCADE_SKIPPED downstream
-    • Rerun targets retriable states only
+  {bold('Now (cutover):')}
+    • ONE lifecycle field: record._state (RecordState enum); missing or invalid errors on read
+    • TaskPreparer._is_upstream_unprocessed() uses CASCADE_BLOCKING_STATES + from_record
+    • Transitions are append-only via RecordEnvelope.transition with typed reasons
 
   {bold("States demonstrated in this simulation:")}
     {colored(RecordState.ACTIVE.value, RecordState.ACTIVE):>40s}  ✓  Every record, every action

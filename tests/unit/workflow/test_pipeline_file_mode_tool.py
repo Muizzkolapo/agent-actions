@@ -9,6 +9,7 @@ from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
+from agent_actions.record.state import RecordState
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.udf_management.registry import FileUDFResult
 
@@ -737,7 +738,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
     )
 
     # Single input record (typical RECORD mode item)
-    item = {"source_guid": "sg-1", "content": {"raw_questions": "..."}}
+    item = {"source_guid": "sg-1", "content": {"raw_questions": "..."}, "_state": RecordState.ACTIVE.value}
     context = ProcessingContext(agent_config=agent_config, agent_name=agent_name)
 
     # Process single item
@@ -811,7 +812,7 @@ def test_result_collector_does_not_raise_on_partial_failure():
     from agent_actions.processing.types import ProcessingResult
 
     results = [
-        ProcessingResult.success(data=[{"content": {"val": 1}}]),
+        ProcessingResult.success(data=[{"content": {"val": 1}, "_state": RecordState.ACTIVE.value}]),
         ProcessingResult.failed(error="connection timeout"),
     ]
 

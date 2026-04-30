@@ -51,15 +51,18 @@ class TestIsUpstreamUnprocessed:
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
     def test_no_metadata_passes(self):
-        item = {"content": "raw data"}
+        item = {"content": "raw data", "_state": RecordState.ACTIVE.value}
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
     def test_non_dict_passes(self):
         assert TaskPreparer._is_upstream_unprocessed("plain string") is False
 
-    def test_unknown_state_is_not_cascade_blocking(self):
+    def test_unknown_state_raises(self):
         item = {"content": "data", "_state": "some_new_state"}
-        assert TaskPreparer._is_upstream_unprocessed(item) is False
+        from agent_actions.record.state import InvalidRecordStateError
+
+        with pytest.raises(InvalidRecordStateError, match="Invalid record _state"):
+            TaskPreparer._is_upstream_unprocessed(item)
 
 
 # --- TaskPreparer.prepare() early exit ---
@@ -150,12 +153,16 @@ class TestResultCollectorUnprocessed:
 
     def test_counts_unprocessed_separately(self):
         results = [
-            ProcessingResult.success(data=[{"content": "ok"}]),
+            ProcessingResult.success(
+                data=[{"content": "ok", "_state": RecordState.ACTIVE.value}]
+            ),
             ProcessingResult.unprocessed(
                 data=[{"content": "stale"}],
                 reason="cascade_skipped",
             ),
-            ProcessingResult.success(data=[{"content": "ok2"}]),
+            ProcessingResult.success(
+                data=[{"content": "ok2", "_state": RecordState.ACTIVE.value}]
+            ),
         ]
 
         output, _ = ResultCollector.collect_results(

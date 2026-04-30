@@ -13,6 +13,7 @@ from agent_actions.processing.unified import (
     ProcessingStrategy,
     UnifiedProcessor,
 )
+from agent_actions.record.state import RecordState
 
 
 def _make_context(
@@ -39,6 +40,7 @@ def _make_record(source_guid: str = "sg-1", **content: Any) -> dict[str, Any]:
     """Create a minimal record dict."""
     return {
         "source_guid": source_guid,
+        "_state": RecordState.ACTIVE.value,
         "content": {**content} if content else {"source": {"field": "value"}},
     }
 
@@ -92,7 +94,7 @@ class TestNoOpStrategy:
 
     def test_record_without_source_guid(self):
         strategy = NoOpStrategy()
-        record = {"content": {"source": {"val": 1}}}
+        record = {"content": {"source": {"val": 1}}, "_state": RecordState.ACTIVE.value}
         context = _make_context()
 
         results = strategy.invoke([record], context)
@@ -302,11 +304,18 @@ class TestUnifiedProcessorEnrichment:
             def invoke(self, records, context):
                 return [
                     ProcessingResult.success(
-                        data=[{"k": 1}, {"k": 2}, {"k": 3}],
+                        data=[
+                            {"k": 1, "_state": RecordState.ACTIVE.value},
+                            {"k": 2, "_state": RecordState.ACTIVE.value},
+                            {"k": 3, "_state": RecordState.ACTIVE.value},
+                        ],
                         source_guid="sg-a",
                     ),
                     ProcessingResult.success(
-                        data=[{"k": 4}, {"k": 5}],
+                        data=[
+                            {"k": 4, "_state": RecordState.ACTIVE.value},
+                            {"k": 5, "_state": RecordState.ACTIVE.value},
+                        ],
                         source_guid="sg-b",
                     ),
                 ]
@@ -353,7 +362,12 @@ class TestUnifiedProcessorCollection:
                 return [
                     ProcessingResult.exhausted(
                         error="retries exceeded",
-                        data=[{"content": {"test_action": None}, "_unprocessed": True}],
+                        data=[
+                            {
+                                "content": {"test_action": None},
+                                "_state": RecordState.EXHAUSTED.value,
+                            }
+                        ],
                         source_guid="sg-1",
                     )
                 ]
@@ -399,8 +413,8 @@ class TestUnifiedProcessorEdgeCases:
                 return [
                     ProcessingResult.success(
                         data=[
-                            {"content": {"test_action": {"i": 1}}},
-                            {"content": {"test_action": {"i": 2}}},
+                            {"content": {"test_action": {"i": 1}}, "_state": RecordState.ACTIVE.value},
+                            {"content": {"test_action": {"i": 2}}, "_state": RecordState.ACTIVE.value},
                         ],
                         source_guid="sg-1",
                     )
