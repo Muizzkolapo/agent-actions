@@ -4,66 +4,95 @@ from agent_actions.processing.record_helpers import (
     CARRY_FORWARD_FIELDS,
     apply_version_merge,
     build_exhausted_tombstone,
-    build_tombstone,
+    build_guard_skipped_record,
     carry_framework_fields,
     extract_existing_content,
 )
+from agent_actions.record.state import RecordState
 
 # ---------------------------------------------------------------------------
-# build_tombstone
+# build_guard_skipped_record
 # ---------------------------------------------------------------------------
 
 
-class TestBuildTombstone:
-    """Tests for build_tombstone()."""
+class TestBuildGuardSkippedRecord:
+    """Tests for build_guard_skipped_record()."""
 
     def test_guard_skip_sets_null_namespace(self):
         input_record = {"content": {"prev_action": {"a": 1}}, "source_guid": "sg1"}
-        result = build_tombstone("my_action", input_record, "guard_skip", source_guid="sg1")
+        result = build_guard_skipped_record(
+            "my_action",
+            input_record,
+            source_guid="sg1",
+            clause="x == 1",
+            behavior="skip",
+            result=False,
+        )
 
         assert result["content"]["my_action"] is None
         assert result["content"]["prev_action"] == {"a": 1}
 
-    def test_metadata_has_reason_and_agent_type(self):
-        result = build_tombstone("act", None, "guard_filter")
-        assert result["metadata"]["reason"] == "guard_filter"
-        assert result["metadata"]["agent_type"] == "tombstone"
-
-    def test_unprocessed_flag_set(self):
-        result = build_tombstone("act", None, "guard_skip")
-        assert result["_unprocessed"] is True
+    def test_sets_state_and_transition(self):
+        result = build_guard_skipped_record(
+            "act",
+            None,
+            clause="review.score < 0.8",
+            behavior="skip",
+            result=False,
+        )
+        assert result["_state"] == RecordState.GUARD_SKIPPED.value
+        assert isinstance(result.get("_transitions"), list)
+        assert result["_transitions"][-1]["to_state"] == RecordState.GUARD_SKIPPED.value
+        assert result["_transitions"][-1]["reason"]["type"] == "guard"
 
     def test_source_guid_set_explicitly(self):
-        result = build_tombstone("act", None, "guard_skip", source_guid="guid-123")
+        result = build_guard_skipped_record(
+            "act",
+            None,
+            source_guid="guid-123",
+            clause="x == 1",
+            behavior="skip",
+            result=False,
+        )
         assert result["source_guid"] == "guid-123"
 
     def test_source_guid_defaults_to_none(self):
-        result = build_tombstone("act", None, "guard_skip")
-        assert result["source_guid"] is None
-
-    def test_extra_metadata_merged(self):
-        result = build_tombstone("act", None, "guard_skip", extra_metadata={"retry_count": 3})
-        assert result["metadata"]["reason"] == "guard_skip"
-        assert result["metadata"]["retry_count"] == 3
+        result = build_guard_skipped_record(
+            "act", None, clause="x == 1", behavior="skip", result=False
+        )
+        assert result.get("source_guid") is None
 
     def test_target_id_carried_from_input(self):
         input_record = {"content": {}, "target_id": "tid-1"}
-        result = build_tombstone("act", input_record, "guard_skip")
+        result = build_guard_skipped_record(
+            "act", input_record, clause="x == 1", behavior="skip", result=False
+        )
         assert result["target_id"] == "tid-1"
 
     def test_target_id_not_set_when_missing_from_input(self):
         input_record = {"content": {}}
-        result = build_tombstone("act", input_record, "guard_skip")
+        result = build_guard_skipped_record(
+            "act", input_record, clause="x == 1", behavior="skip", result=False
+        )
         assert "target_id" not in result
 
     def test_none_input_record(self):
-        result = build_tombstone("act", None, "guard_skip", source_guid="sg")
+        result = build_guard_skipped_record(
+            "act",
+            None,
+            source_guid="sg",
+            clause="x == 1",
+            behavior="skip",
+            result=False,
+        )
         assert result["content"] == {"act": None}
-        assert result["_unprocessed"] is True
+        assert result["_state"] == RecordState.GUARD_SKIPPED.value
 
     def test_preserves_upstream_namespaces(self):
         input_record = {"content": {"ns_a": {"x": 1}, "ns_b": {"y": 2}}}
-        result = build_tombstone("ns_c", input_record, "guard_skip")
+        result = build_guard_skipped_record(
+            "ns_c", input_record, clause="x == 1", behavior="skip", result=False
+        )
         assert result["content"]["ns_a"] == {"x": 1}
         assert result["content"]["ns_b"] == {"y": 2}
         assert result["content"]["ns_c"] is None
@@ -87,13 +116,12 @@ class TestBuildExhaustedTombstone:
 
     def test_metadata_has_retry_exhausted_and_reason(self):
         result = build_exhausted_tombstone("act", None, {})
-        assert result["metadata"]["retry_exhausted"] is True
-        assert result["metadata"]["agent_type"] == "tombstone"
-        assert result["metadata"]["reason"] == "retry_exhausted"
+        assert result["_state"] == RecordState.EXHAUSTED.value
+        assert result["_transitions"][-1]["reason"]["type"] == "exhausted"
 
-    def test_unprocessed_flag_set(self):
+    def test_exhausted_state_set_on_tombstone(self):
         result = build_exhausted_tombstone("act", None, {})
-        assert result["_unprocessed"] is True
+        assert result["_state"] == RecordState.EXHAUSTED.value
 
     def test_source_guid_set(self):
         result = build_exhausted_tombstone("act", None, {}, source_guid="sg-1")
@@ -106,8 +134,7 @@ class TestBuildExhaustedTombstone:
 
     def test_extra_metadata_merged(self):
         result = build_exhausted_tombstone("act", None, {}, extra_metadata={"custom_key": "val"})
-        assert result["metadata"]["custom_key"] == "val"
-        assert result["metadata"]["retry_exhausted"] is True
+        assert result["_state"] == RecordState.EXHAUSTED.value
 
     def test_none_input_record_produces_empty_existing(self):
         result = build_exhausted_tombstone("act", None, {"f": None})
@@ -131,23 +158,23 @@ class TestCarryFrameworkFields:
     def test_carries_all_default_fields(self):
         source = {
             "target_id": "tid",
-            "_unprocessed": True,
             "_recovery": {"attempt": 1},
-            "metadata": {"reason": "test"},
+            "_state": "active",
+            "_transitions": [{"to_state": "active"}],
         }
         target: dict = {}
         carry_framework_fields(source, target)
         assert target["target_id"] == "tid"
-        assert target["_unprocessed"] is True
         assert target["_recovery"] == {"attempt": 1}
-        assert target["metadata"]["reason"] == "test"
+        assert target["_state"] == "active"
+        assert target["_transitions"] == [{"to_state": "active"}]
 
     def test_skips_missing_fields(self):
         source = {"content": {"x": 1}}
         target: dict = {}
         carry_framework_fields(source, target)
         assert "target_id" not in target
-        assert "_unprocessed" not in target
+        assert "_state" not in target
 
     def test_overwrites_existing_target_value(self):
         source = {"target_id": "new"}
@@ -171,7 +198,13 @@ class TestCarryFrameworkFields:
         assert result is target
 
     def test_default_fields_match_constant(self):
-        assert CARRY_FORWARD_FIELDS == ("target_id", "_unprocessed", "_recovery", "metadata")
+        assert CARRY_FORWARD_FIELDS == (
+            "target_id",
+            "_recovery",
+            "metadata",
+            "_state",
+            "_transitions",
+        )
 
 
 # ---------------------------------------------------------------------------

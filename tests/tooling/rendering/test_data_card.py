@@ -25,7 +25,8 @@ class TestClassifyField:
             "root_target_id",
             "chunk_info",
             "_recovery",
-            "_unprocessed",
+            "_state",
+            "_transitions",
             "_file",
         ):
             assert classify_field(key) == "metadata", f"{key} should be metadata"

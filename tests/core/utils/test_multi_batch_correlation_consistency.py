@@ -212,9 +212,13 @@ class TestMultiBatchCorrelationConsistency:
             "workflow_session_id": shared_session_id,
         }
         record = {"source_guid": "test-record-123", "content": "test data"}
-        result1 = VersionIdGenerator.add_version_correlation_id(record, agent_config)
+        result1 = VersionIdGenerator.add_version_correlation_id(
+            record, agent_config, record_index=0
+        )
         VersionIdGenerator.clear_version_correlation_registry()
-        result2 = VersionIdGenerator.add_version_correlation_id(record, agent_config)
+        result2 = VersionIdGenerator.add_version_correlation_id(
+            record, agent_config, record_index=0
+        )
         assert "version_correlation_id" in result1
         assert "version_correlation_id" in result2
         assert result1["version_correlation_id"] == result2["version_correlation_id"]
@@ -227,7 +231,7 @@ class TestMultiBatchCorrelationConsistency:
         agent_config = {"is_versioned_agent": True, "version_base_name": "missing_session_loop"}
         record = {"source_guid": "test-record", "content": "test data"}
         with pytest.raises(ValueError) as exc_info:
-            VersionIdGenerator.add_version_correlation_id(record, agent_config)
+            VersionIdGenerator.add_version_correlation_id(record, agent_config, record_index=0)
         error_message = str(exc_info.value)
         assert "Missing workflow_session_id" in error_message
         assert "deterministic correlation IDs" in error_message

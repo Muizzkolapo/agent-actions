@@ -500,12 +500,9 @@ export function getDisplayFields(record: Record<string, unknown>): Record<string
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record)
-  const recordMetadata = record.metadata as Record<string, unknown> | undefined
-  const tombstoneReason = typeof recordMetadata === "object" && recordMetadata !== null
-    ? recordMetadata.reason as string | undefined
-    : undefined
-  const guardSkipped = tombstoneReason === "guard_skip"
-  const upstreamUnprocessed = tombstoneReason === "upstream_unprocessed"
+  const recordState = typeof record._state === "string" ? (record._state as string) : undefined
+  const guardSkipped = recordState === "guard_skipped"
+  const upstreamUnprocessed = recordState === "cascade_skipped"
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)

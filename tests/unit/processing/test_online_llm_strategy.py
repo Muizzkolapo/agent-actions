@@ -18,6 +18,7 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.processing.unified import ProcessingStrategy
+from agent_actions.record.state import RecordState
 
 
 def _make_context(
@@ -154,12 +155,16 @@ class TestProcessRecordGuardStatuses:
             invocation_strategy=MagicMock(),
         )
 
-        item = {"content": {"field": "value"}, "_unprocessed": True, "metadata": {}}
+        item = {
+            "content": {"field": "value"},
+            "_state": RecordState.CASCADE_SKIPPED.value,
+            "metadata": {},
+        }
         context = _make_context()
         result = strategy.process_record(item, context)
 
         assert result.status == ProcessingStatus.UNPROCESSED
-        assert result.skip_reason == "upstream_unprocessed"
+        assert result.skip_reason == "cascade_skipped"
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
@@ -199,7 +204,7 @@ class TestProcessRecordGuardStatuses:
         result = strategy.process_record({"field": "value"}, context, skip_guard=False)
 
         assert result.status == ProcessingStatus.SKIPPED
-        assert result.skip_reason == "guard_skip"
+        assert result.skip_reason == "guard_skipped"
 
 
 # ---------------------------------------------------------------------------
@@ -305,8 +310,8 @@ class TestProcessRecordResponseHandling:
         context = _make_context()
         result = strategy.process_record({"field": "value"}, context)
 
-        assert result.status == ProcessingStatus.UNPROCESSED
-        assert result.skip_reason == "guard_skip"
+        assert result.status == ProcessingStatus.SKIPPED
+        assert result.skip_reason == "guard_skipped"
 
 
 # ---------------------------------------------------------------------------

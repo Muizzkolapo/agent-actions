@@ -7,27 +7,42 @@ from typing import Any
 
 NODE_LEVEL_RECORD_ID = "__node__"
 """Sentinel record_id for node-level disposition signals."""
+
+# ---------------------------------------------------------------------------
+# Node-level dispositions (action-level signals)
+# ---------------------------------------------------------------------------
 DISPOSITION_PASSTHROUGH = "passthrough"
 DISPOSITION_SKIPPED = "skipped"
-DISPOSITION_FILTERED = "filtered"
+DISPOSITION_DEFERRED = "deferred"
+
+# ---------------------------------------------------------------------------
+# Record-level dispositions (derived from RecordState)
+# ---------------------------------------------------------------------------
+DISPOSITION_SUCCESS = "success"
+DISPOSITION_GUARD_SKIPPED = "guard_skipped"
+DISPOSITION_GUARD_DEFERRED = "guard_deferred"
+DISPOSITION_GUARD_FILTERED = "guard_filtered"
 DISPOSITION_EXHAUSTED = "exhausted"
 DISPOSITION_FAILED = "failed"
-DISPOSITION_DEFERRED = "deferred"
-DISPOSITION_UNPROCESSED = "unprocessed"
-DISPOSITION_SUCCESS = "success"
+DISPOSITION_CASCADE_SKIPPED = "cascade_skipped"
 
 
 class Disposition(str, Enum):
     """Enumeration of valid record disposition values."""
 
+    # Node-level
     PASSTHROUGH = DISPOSITION_PASSTHROUGH
     SKIPPED = DISPOSITION_SKIPPED
-    FILTERED = DISPOSITION_FILTERED
+    DEFERRED = DISPOSITION_DEFERRED
+
+    # Record-level
+    SUCCESS = DISPOSITION_SUCCESS
+    GUARD_SKIPPED = DISPOSITION_GUARD_SKIPPED
+    GUARD_DEFERRED = DISPOSITION_GUARD_DEFERRED
+    GUARD_FILTERED = DISPOSITION_GUARD_FILTERED
     EXHAUSTED = DISPOSITION_EXHAUSTED
     FAILED = DISPOSITION_FAILED
-    DEFERRED = DISPOSITION_DEFERRED
-    UNPROCESSED = DISPOSITION_UNPROCESSED
-    SUCCESS = DISPOSITION_SUCCESS
+    CASCADE_SKIPPED = DISPOSITION_CASCADE_SKIPPED
 
 
 VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)

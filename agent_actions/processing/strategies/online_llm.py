@@ -29,8 +29,9 @@ from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.invocation import InvocationStrategy, InvocationStrategyFactory
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import (
+    build_cascade_skipped_record,
     build_exhausted_tombstone,
-    build_tombstone,
+    build_guard_skipped_record,
     extract_existing_content,
 )
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
@@ -217,14 +218,16 @@ class OnlineLLMStrategy:
         # Upstream unprocessed — passthrough as tombstone
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
             preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
-            preserved_item["_unprocessed"] = True
-            if not isinstance(preserved_item.get("metadata"), dict):
-                preserved_item["metadata"] = {}
-            if "agent_type" not in preserved_item["metadata"]:
-                preserved_item["metadata"]["agent_type"] = "tombstone"
+            preserved_item = build_cascade_skipped_record(
+                context.action_name,
+                preserved_item if isinstance(preserved_item, dict) else None,
+                source_guid=source_guid,
+                upstream_action="unknown",
+                upstream_state="unprocessed",
+            )
             return ProcessingResult.unprocessed(
                 data=[preserved_item],
-                reason="upstream_unprocessed",
+                reason="cascade_skipped",
                 source_guid=source_guid,
                 source_snapshot=source_snapshot,
                 input_record=input_record,
@@ -255,15 +258,17 @@ class OnlineLLMStrategy:
                     filter_reason=f"guard_{prepared.guard_behavior}",
                 )
             )
-            tombstone = build_tombstone(
+            tombstone = build_guard_skipped_record(
                 context.action_name,
                 input_record,
-                f"guard_{prepared.guard_behavior}",
                 source_guid=source_guid,
+                clause="",  # per-record guard only; UnifiedProcessor is the default guard path
+                behavior=str(prepared.guard_behavior or "skip"),
+                result=False,
             )
             return ProcessingResult.skipped(
                 passthrough_data=tombstone,
-                reason=f"guard_{prepared.guard_behavior}",
+                reason="guard_skipped",
                 source_guid=source_guid,
             )
 
@@ -341,18 +346,18 @@ class OnlineLLMStrategy:
                         filter_reason="llm_layer_guard_skip",
                     )
                 )
-                tombstone = build_tombstone(
+                tombstone = build_guard_skipped_record(
                     context.action_name,
                     input_record,
-                    "guard_skip",
                     source_guid=source_guid,
+                    clause="",
+                    behavior="skip",
+                    result=False,
                 )
-                return ProcessingResult.unprocessed(
-                    data=[tombstone],
-                    reason="guard_skip",
+                return ProcessingResult.skipped(
+                    passthrough_data=tombstone,
+                    reason="guard_skipped",
                     source_guid=source_guid,
-                    source_snapshot=source_snapshot,
-                    input_record=input_record,
                 )
 
         # Empty output handling

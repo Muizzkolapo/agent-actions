@@ -35,7 +35,7 @@ from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
-    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_GUARD_SKIPPED,
 )
 
 # ======================================================================
@@ -413,9 +413,10 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
     # Scenario 8: Disposition writer marks skipped records correctly
     # ------------------------------------------------------------------
     print("\n--- Scenario 8: Disposition writer marks guard-skipped records ---")
-    print("  Setup: 10 output items — 7 processed, 3 guard-skipped with _unprocessed=True")
+    print("  Setup: 10 output items — 7 processed, 3 guard-skipped (with _state=guard_skipped)")
 
     from agent_actions.processing.result_collector import write_record_dispositions
+    from agent_actions.record.state import RecordState
 
     storage = MockStorageBackend()
     mock_service = MagicMock()
@@ -424,7 +425,7 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
     # Build output items as the result processor would produce them
     output_items: list[dict[str, Any]] = []
 
-    # 7 successfully processed records (no _unprocessed flag)
+    # 7 successfully processed records (_state omitted → treated as active)
     for i in range(10):
         if i in {2, 5, 8}:
             continue
@@ -432,36 +433,37 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
             {
                 "content": {"summary": f"LLM response for record {i}"},
                 "source_guid": f"sg-{i:03d}",
+                "_state": RecordState.ACTIVE.value,
                 "metadata": {"agent_type": "llm"},
             }
         )
 
-    # 3 guard-skipped passthrough records (with _unprocessed=True)
+    # 3 guard-skipped passthrough records
     for i in [2, 5, 8]:
         output_items.append(
             {
                 "content": {"text": f"Record {i} content", "category": f"cat-{i % 3}"},
                 "source_guid": f"sg-{i:03d}",
                 "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
-                "_unprocessed": True,
+                "_state": RecordState.GUARD_SKIPPED.value,
             }
         )
 
     write_record_dispositions(mock_service._storage_backend, output_items, "my_action")
 
-    # Verify: 3 PASSTHROUGH dispositions (guard-skipped records forward data unchanged)
-    passthrough_records = storage.get_dispositions_by_type("my_action", DISPOSITION_PASSTHROUGH)
+    # Verify: 3 guard_skipped dispositions
+    skipped_records = storage.get_dispositions_by_type("my_action", DISPOSITION_GUARD_SKIPPED)
     check(
-        len(passthrough_records) == 3,
-        f"3 records have PASSTHROUGH disposition: {passthrough_records}",
-        f"Expected 3 PASSTHROUGH, got {len(passthrough_records)}: {passthrough_records}",
+        len(skipped_records) == 3,
+        f"3 records have GUARD_SKIPPED disposition: {skipped_records}",
+        f"Expected 3 GUARD_SKIPPED, got {len(skipped_records)}: {skipped_records}",
     )
 
     expected_passthrough_guids = {"sg-002", "sg-005", "sg-008"}
     check(
-        set(passthrough_records) == expected_passthrough_guids,
-        "Correct source_guids are PASSTHROUGH",
-        f"Expected {expected_passthrough_guids}, got {set(passthrough_records)}",
+        set(skipped_records) == expected_passthrough_guids,
+        "Correct source_guids are GUARD_SKIPPED",
+        f"Expected {expected_passthrough_guids}, got {set(skipped_records)}",
     )
 
     # Verify: no FAILED or FILTERED dispositions
@@ -479,13 +481,13 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
         f"Unexpected FILTERED dispositions: {filtered_records}",
     )
 
-    # Verify: reasons are set correctly
+    # Verify: guard-skipped rows received a per-record disposition
     for sg in expected_passthrough_guids:
-        reason = storage._dispositions.get(("my_action", sg, DISPOSITION_PASSTHROUGH))
+        key = ("my_action", sg, DISPOSITION_GUARD_SKIPPED)
         check(
-            reason == "guard_skip",
-            f"{sg} disposition reason is 'guard_skip'",
-            f"{sg} reason is '{reason}', expected 'guard_skip'",
+            key in storage._dispositions,
+            f"{sg} has a GUARD_SKIPPED disposition row",
+            f"Missing disposition for {sg}",
         )
 
     # Verify: consolidated output has all 10 records
@@ -496,8 +498,14 @@ def run_reconciliation_scenarios() -> tuple[int, int]:
     )
 
     # Verify: processed records have LLM content, skipped have original
-    processed_count = sum(1 for item in output_items if not item.get("_unprocessed"))
-    skipped_count = sum(1 for item in output_items if item.get("_unprocessed"))
+    processed_count = sum(
+        1
+        for item in output_items
+        if RecordState.from_record(item) != RecordState.GUARD_SKIPPED
+    )
+    skipped_count = sum(
+        1 for item in output_items if RecordState.from_record(item) == RecordState.GUARD_SKIPPED
+    )
     check(
         processed_count == 7 and skipped_count == 3,
         f"Output split: {processed_count} processed + {skipped_count} skipped = {len(output_items)} total",

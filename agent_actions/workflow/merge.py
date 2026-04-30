@@ -191,6 +191,11 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
     upstream source.  Its shared namespaces survive; other records' versions
     of the same upstream namespaces are ignored.
     """
+    if reduce_key is not None and not isinstance(reduce_key, str):
+        raise TypeError(
+            f"merge_records_by_key: reduce_key must be str or None, got {type(reduce_key).__name__}"
+        )
+
     groups_by_key: dict[str, list[dict[str, Any]]] = {}
     records_without_key: list[Any] = []
 

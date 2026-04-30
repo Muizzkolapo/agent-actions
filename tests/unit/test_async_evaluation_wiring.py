@@ -16,7 +16,8 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.storage.backend import DISPOSITION_EXHAUSTED
+from agent_actions.record.state import RecordState
+from agent_actions.storage.backend import DISPOSITION_EXHAUSTED, DISPOSITION_FAILED
 
 # Module path prefix for patching deferred imports in processing_recovery.
 _MOD = "agent_actions.llm.batch.services.processing_recovery"
@@ -384,6 +385,7 @@ class TestWriteRecordDispositionsEvaluationExhausted:
             {
                 "source_guid": "sg-1",
                 "metadata": {},
+                "_state": RecordState.ACTIVE.value,
                 "_recovery": {
                     "reprompt": {"attempts": 2, "passed": False, "validation": "check_schema"}
                 },
@@ -405,7 +407,7 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         items = [
             {
                 "source_guid": "sg-1",
-                "metadata": {"retry_exhausted": True},
+                "_state": "exhausted",
                 "_recovery": {
                     "reprompt": {"attempts": 2, "passed": False, "validation": "check_output"}
                 },
@@ -424,22 +426,26 @@ class TestWriteRecordDispositionsEvaluationExhausted:
     def test_retry_exhausted_still_works(self):
         """Existing retry_exhausted path is preserved when no reprompt recovery."""
         service = _make_service()
-        items = [{"source_guid": "sg-1", "metadata": {"retry_exhausted": True}}]
+        items = [{"source_guid": "sg-1", "_state": "exhausted"}]
 
         from agent_actions.processing.result_collector import (
             write_record_dispositions,
         )
 
         write_record_dispositions(service._storage_backend, items, "my_action")
-        service._storage_backend.set_disposition.assert_called_once_with(
-            "my_action", "sg-1", DISPOSITION_EXHAUSTED, reason="retry_exhausted"
-        )
+        args, kwargs = service._storage_backend.set_disposition.call_args
+        assert args[:3] == ("my_action", "sg-1", DISPOSITION_EXHAUSTED)
 
     def test_unknown_validation_fallback(self):
         """Missing validation name defaults to 'unknown'."""
         service = _make_service()
         items = [
-            {"source_guid": "sg-1", "metadata": {}, "_recovery": {"reprompt": {"passed": False}}}
+            {
+                "source_guid": "sg-1",
+                "_state": RecordState.ACTIVE.value,
+                "metadata": {},
+                "_recovery": {"reprompt": {"passed": False}},
+            }
         ]
 
         from agent_actions.processing.result_collector import (
@@ -456,6 +462,7 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         items = [
             {
                 "source_guid": "sg-1",
+                "_state": RecordState.ACTIVE.value,
                 "metadata": {},
                 "_recovery": {"reprompt": {"attempts": 1, "passed": True, "validation": "v"}},
             }
@@ -467,3 +474,25 @@ class TestWriteRecordDispositionsEvaluationExhausted:
 
         write_record_dispositions(service._storage_backend, items, "my_action")
         service._storage_backend.set_disposition.assert_not_called()
+
+    def test_missing_state_gets_failed_and_siblings_still_dispositioned(self):
+        """One row without _state gets FAILED; other rows are still processed."""
+        from agent_actions.processing.result_collector import write_record_dispositions
+
+        service = _make_service()
+        items = [
+            {"source_guid": "sg-good", "_state": RecordState.EXHAUSTED.value},
+            {"source_guid": "sg-bad"},
+        ]
+        write_record_dispositions(service._storage_backend, items, "my_action")
+        assert service._storage_backend.set_disposition.call_count == 2
+        calls = service._storage_backend.set_disposition.call_args_list
+        by_record = {(c.args[0], c.args[1]): c.args[2] for c in calls}
+        assert by_record[("my_action", "sg-good")] == DISPOSITION_EXHAUSTED
+        assert by_record[("my_action", "sg-bad")] == DISPOSITION_FAILED
+        failed_reason = next(
+            c.kwargs["reason"]
+            for c in calls
+            if c.args[1] == "sg-bad" and c.args[2] == DISPOSITION_FAILED
+        )
+        assert "required" in failed_reason

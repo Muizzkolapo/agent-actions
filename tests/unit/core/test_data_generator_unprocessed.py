@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 from agent_actions.processing.types import ProcessingResult
 from agent_actions.prompt.data_generator import DataGenerator
+from agent_actions.record.state import RecordState
 
 
 class TestDataGeneratorUnprocessed:
@@ -23,7 +24,7 @@ class TestDataGeneratorUnprocessed:
         """UNPROCESSED result must return executed=False, not fall through to SUCCESS."""
         gen = self._make_generator()
 
-        unprocessed_data = [{"content": "stale", "_unprocessed": True}]
+        unprocessed_data = [{"content": "stale", "_state": RecordState.CASCADE_SKIPPED.value}]
         mock_result = ProcessingResult.unprocessed(
             data=unprocessed_data,
             reason="upstream_unprocessed",
@@ -35,7 +36,11 @@ class TestDataGeneratorUnprocessed:
         gen._enrichment_pipeline = MagicMock()
         gen._enrichment_pipeline.enrich.return_value = mock_result  # return unchanged
 
-        item = {"content": "stale", "source_guid": "sg_1", "_unprocessed": True}
+        item = {
+            "content": "stale",
+            "source_guid": "sg_1",
+            "_state": RecordState.CASCADE_SKIPPED.value,
+        }
         data, executed, passthrough_fields = gen.create_agent_with_data(
             contents=item, current_item=item
         )

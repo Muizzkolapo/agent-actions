@@ -15,14 +15,16 @@ from agent_actions.logging.events import (
     ResultCollectionStartedEvent,
 )
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import InvalidRecordStateError, RecordState, reason_error
 from agent_actions.storage.backend import (
+    DISPOSITION_CASCADE_SKIPPED,
     DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
-    DISPOSITION_FILTERED,
-    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_GUARD_FILTERED,
+    DISPOSITION_GUARD_SKIPPED,
     DISPOSITION_SUCCESS,
-    DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
 )
 
@@ -137,7 +139,12 @@ def write_record_dispositions(
     the final status (EXHAUSTED, FAILED, FILTERED, PASSTHROUGH).
     Success records only get their DEFERRED cleared — no new disposition.
 
-    Disposition writes are telemetry — errors are logged but never propagated.
+    Rows with missing or invalid ``record['_state']`` receive
+    ``DISPOSITION_FAILED`` with an explanatory reason; processing continues
+    for remaining rows.
+
+    Disposition writes are telemetry — storage errors are logged but never
+    propagated.
     """
     if not storage_backend:
         return
@@ -145,7 +152,6 @@ def write_record_dispositions(
         source_guid = item.get("source_guid")
         if not source_guid:
             continue
-        metadata = item.get("metadata", {})
 
         try:
             # Clear the DEFERRED disposition now that the batch result has
@@ -164,7 +170,25 @@ def write_record_dispositions(
                 exc_info=True,
             )
 
-        # Check for evaluation/reprompt exhaustion via _recovery metadata.
+        try:
+            state = RecordState.from_record(item)
+        except InvalidRecordStateError as err:
+            logger.warning(
+                "[%s] invalid record state for disposition record_id=%s: %s — writing FAILED disposition",
+                action_name,
+                source_guid,
+                err,
+            )
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_FAILED,
+                reason=str(err)[:500],
+            )
+            continue
+
+        # Reprompt exhaustion is expressed via _recovery metadata, not record state.
         recovery = item.get("_recovery", {})
         reprompt_recovery = recovery.get("reprompt", {})
         if reprompt_recovery.get("passed") is False:
@@ -176,26 +200,67 @@ def write_record_dispositions(
                 DISPOSITION_EXHAUSTED,
                 reason=f"evaluation_exhausted:{validation}",
             )
-        elif metadata.get("retry_exhausted"):
+            continue
+
+        transitions = item.get("_transitions") if isinstance(item.get("_transitions"), list) else []
+        last = transitions[-1] if transitions else {}
+        reason_obj = last.get("reason")
+        detail_obj = last.get("detail")
+        reason_str = (
+            json.dumps(reason_obj, ensure_ascii=False, default=str)
+            if isinstance(reason_obj, dict)
+            else None
+        )
+        detail_str = (
+            json.dumps(detail_obj, ensure_ascii=False, default=str)
+            if isinstance(detail_obj, dict)
+            else None
+        )
+
+        if state == RecordState.EXHAUSTED:
             _safe_set_disposition(
                 storage_backend,
                 action_name,
                 source_guid,
                 DISPOSITION_EXHAUSTED,
-                reason="retry_exhausted",
+                reason=reason_str,
+                detail=detail_str,
             )
-        elif item.get("_unprocessed"):
-            reason = metadata.get("reason", "unprocessed")
-            if metadata.get("skipped_by_where_clause"):
-                disposition = DISPOSITION_FILTERED
-            else:
-                disposition = DISPOSITION_PASSTHROUGH
+        elif state == RecordState.FAILED:
             _safe_set_disposition(
                 storage_backend,
                 action_name,
                 source_guid,
-                disposition,
-                reason=reason,
+                DISPOSITION_FAILED,
+                reason=reason_str or (str(item.get("error"))[:500] if item.get("error") else None),
+                detail=detail_str,
+            )
+        elif state == RecordState.CASCADE_SKIPPED:
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_CASCADE_SKIPPED,
+                reason=reason_str,
+                detail=detail_str,
+            )
+        elif state == RecordState.GUARD_SKIPPED:
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_GUARD_SKIPPED,
+                reason=reason_str,
+                detail=detail_str,
+            )
+        elif state == RecordState.GUARD_FILTERED:
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_GUARD_FILTERED,
+                reason=reason_str,
+                detail=detail_str,
             )
         elif item.get("error"):
             _safe_set_disposition(
@@ -254,7 +319,16 @@ class ResultCollector:
                 # during invocation, before result collection).
                 if data and _data_has_parse_error(data):
                     for d in data:
-                        d["_unprocessed"] = True
+                        if isinstance(d, dict):
+                            RecordEnvelope.transition(
+                                d,
+                                RecordState.FAILED,
+                                action_name=agent_name,
+                                reason=reason_error(
+                                    error_type="parse_error",
+                                    message="LLM provider returned _parse_error",
+                                ),
+                            )
                     output.extend(data)
                     stats[status_key] -= 1
                     stats["failed"] += 1
@@ -282,6 +356,14 @@ class ResultCollector:
                     continue
 
                 if data:
+                    for d in data:
+                        if isinstance(d, dict):
+                            RecordEnvelope.transition(
+                                d,
+                                RecordState.COMMITTED,
+                                action_name=agent_name,
+                                reason={"type": "commit"},
+                            )
                     output.extend(data)
                 logger.debug(
                     "Collected SUCCESS result source_guid=%s count=%d",
@@ -324,8 +406,8 @@ class ResultCollector:
                         storage_backend,
                         agent_name,
                         result.source_guid,
-                        DISPOSITION_PASSTHROUGH,
-                        reason=result.skip_reason or "guard_skip",
+                        DISPOSITION_GUARD_SKIPPED,
+                        reason=result.skip_reason or "guard_skipped",
                     )
 
             elif status == ProcessingStatus.EXHAUSTED:
@@ -409,8 +491,8 @@ class ResultCollector:
                         storage_backend,
                         agent_name,
                         result.source_guid,
-                        DISPOSITION_FILTERED,
-                        reason=result.skip_reason or "guard_filter",
+                        DISPOSITION_GUARD_FILTERED,
+                        reason=result.skip_reason or "guard_filtered",
                     )
 
             elif status == ProcessingStatus.UNPROCESSED:
@@ -430,12 +512,23 @@ class ResultCollector:
                     )
                 )
                 if storage_backend and result.source_guid:
+                    # Derive from the record state when available.
+                    disp = DISPOSITION_CASCADE_SKIPPED
+                    reason = result.skip_reason or "cascade_skipped"
+                    if data and isinstance(data[0], dict):
+                        s = RecordState.from_record(data[0])
+                        if s == RecordState.FAILED:
+                            disp = DISPOSITION_FAILED
+                            reason = "failed"
+                        elif s == RecordState.GUARD_SKIPPED:
+                            disp = DISPOSITION_GUARD_SKIPPED
+                            reason = "guard_skipped"
                     _safe_set_disposition(
                         storage_backend,
                         agent_name,
                         result.source_guid,
-                        DISPOSITION_UNPROCESSED,
-                        reason=result.skip_reason or "unprocessed",
+                        disp,
+                        reason=reason,
                     )
 
             elif status == ProcessingStatus.DEFERRED:

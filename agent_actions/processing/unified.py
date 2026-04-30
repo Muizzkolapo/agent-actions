@@ -11,13 +11,23 @@ from dataclasses import replace
 from typing import Any, Protocol, cast, runtime_checkable
 
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.record_helpers import build_tombstone
+from agent_actions.processing.record_helpers import build_guard_skipped_record
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
+from agent_actions.record.state import RecordState, reason_guard
 
 logger = logging.getLogger(__name__)
+
+
+def prefilter_by_guard(*args: Any, **kwargs: Any):
+    """Patch-friendly wrapper around FILE-mode guard prefilter.
+
+    Imported lazily to avoid circular imports at module import time.
+    """
+    from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard as _prefilter_by_guard
+
+    return _prefilter_by_guard(*args, **kwargs)
 
 
 @runtime_checkable
@@ -130,16 +140,20 @@ class UnifiedProcessor:
 
         for item in skipped:
             source_guid = item.get("source_guid")
-            tombstone = build_tombstone(
+            tombstone = build_guard_skipped_record(
                 context.action_name,
                 item,
-                "guard_skip",
                 source_guid=source_guid,
+                clause=str(config.get("guard", {}).get("clause", ""))
+                if isinstance(config, dict)
+                else "",
+                behavior="skip",
+                result=False,
             )
             guard_results.append(
                 ProcessingResult.skipped(
                     passthrough_data=tombstone,
-                    reason="guard_skip",
+                    reason="guard_skipped",
                     source_guid=source_guid,
                 )
             )
@@ -184,17 +198,46 @@ class UnifiedProcessor:
 
         for item in skipped:
             if action_name and isinstance(item, dict):
+                source_guid = item.get("source_guid")
+                clause = ""
+                guard = config.get("guard")
+                if isinstance(guard, dict):
+                    clause = str(guard.get("clause", ""))
                 content = item.get("content")
-                if isinstance(content, dict) and action_name not in content:
-                    skipped_record = RecordEnvelope.build_skipped(action_name, item)
-                    for key in item:
-                        if key not in skipped_record:
-                            skipped_record[key] = item[key]
-                    item = skipped_record
+                if isinstance(content, dict) and action_name in content:
+                    # Namespace already present (e.g. from upstream/manual edits) — do NOT overwrite with None.
+                    skipped_record = dict(item)
+                    if source_guid is not None:
+                        skipped_record["source_guid"] = source_guid
+                    RecordEnvelope.transition(
+                        skipped_record,
+                        RecordState.GUARD_SKIPPED,
+                        action_name=action_name,
+                        reason=reason_guard(
+                            clause=clause,
+                            behavior="skip",
+                            result=False,
+                        ),
+                    )
+                else:
+                    # Add null namespace marker + guard-skipped state.
+                    skipped_record = build_guard_skipped_record(
+                        action_name,
+                        item,
+                        source_guid=source_guid,
+                        clause=clause,
+                        behavior="skip",
+                        result=False,
+                    )
+                # Preserve any additional (non-envelope) fields for FILE-mode display/debugging.
+                for key in item:
+                    if key not in skipped_record:
+                        skipped_record[key] = item[key]
+                item = skipped_record
             guard_results.append(
                 ProcessingResult.unprocessed(
                     data=[item],
-                    reason="guard_prefilter_skip",
+                    reason="guard_skipped",
                     source_guid=item.get("source_guid") if isinstance(item, dict) else None,
                 )
             )
@@ -212,13 +255,18 @@ class UnifiedProcessor:
     ) -> list[ProcessingResult]:
         """Run enrichment pipeline on each result.
 
-        Each result gets a context with its positional record_index so that
-        VersionIdEnricher produces distinct version_correlation_ids per record.
+        ``VersionIdEnricher`` assigns position-based IDs using
+        ``context.record_index + i`` for each row *i* in ``result.data``.
+        We therefore advance ``record_index`` by ``len(result.data)`` after each
+        result so indices never collide when one batch contains multiple
+        ``ProcessingResult``s with multi-row ``data``.
         """
-        return [
-            self._enrichment_pipeline.enrich(r, replace(context, record_index=i))
-            for i, r in enumerate(results)
-        ]
+        enriched: list[ProcessingResult] = []
+        base = context.record_index
+        for r in results:
+            enriched.append(self._enrichment_pipeline.enrich(r, replace(context, record_index=base)))
+            base += len(r.data)
+        return enriched
 
     def _collect(
         self,

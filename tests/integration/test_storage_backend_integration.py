@@ -645,7 +645,9 @@ class TestDispositionLifecycle:
                 backend.set_disposition(
                     "extract", "rec_1", "exhausted", reason="Retry limit reached"
                 )
-                backend.set_disposition("extract", "rec_2", "filtered", reason="Below threshold")
+                backend.set_disposition(
+                    "extract", "rec_2", "guard_filtered", reason="Below threshold"
+                )
 
                 # Query all for node
                 all_dispositions = backend.get_disposition("extract")
@@ -667,7 +669,7 @@ class TestDispositionLifecycle:
                 # Write some target data and dispositions
                 backend.write_target("node1", "batch.json", [{"id": 1}])
                 backend.set_disposition("node1", NODE_LEVEL_RECORD_ID, "passthrough")
-                backend.set_disposition("node1", "rec_1", "filtered")
+                backend.set_disposition("node1", "rec_1", "guard_filtered")
 
                 stats = backend.get_storage_stats()
                 assert stats["disposition_count"] == 2

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from agent_actions.input.preprocessing.filtering.evaluator import GuardResult
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.record.state import RecordState
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 
@@ -327,6 +328,7 @@ class TestGuardFilterFileMode:
             assert result.source_guid == data[i]["source_guid"]
             # Null namespace marker added by RecordEnvelope.build_skipped
             assert result.data[0]["content"]["my_action"] is None
+            assert result.data[0]["_state"] == RecordState.GUARD_SKIPPED.value
 
     def test_missing_source_guid(self):
         """Items without source_guid get None on the result."""
@@ -369,7 +371,7 @@ class TestGuardFilterFileMode:
                 "content": {"prev": {}},
                 "source_guid": "sg-1",
                 "target_id": "t-1",
-                "_unprocessed": True,
+                "legacy_skip_marker": True,
                 "metadata": {"key": "val"},
                 "batch_id": "b-1",
             }
@@ -386,13 +388,19 @@ class TestGuardFilterFileMode:
         item = guard_results[0].data[0]
         assert item["content"]["act"] is None
         assert item["target_id"] == "t-1"
-        assert item["_unprocessed"] is True
+        assert item["legacy_skip_marker"] is True
         assert item["metadata"] == {"key": "val"}
         assert item["batch_id"] == "b-1"
 
     def test_skips_when_namespace_already_present(self):
         """If action_name already in content, no null namespace added."""
-        data = [{"content": {"my_action": {"existing": True}}, "source_guid": "sg-1"}]
+        data = [
+            {
+                "content": {"my_action": {"existing": True}},
+                "source_guid": "sg-1",
+                "_state": RecordState.ACTIVE.value,
+            }
+        ]
         context = self._make_context()
         evaluator = _make_evaluator(lambda item: False)
 
@@ -486,13 +494,21 @@ class TestUnifiedProcessorFileModePath:
 
         # Records after context scope (what guard evaluates on)
         filtered = [
-            {"content": {"score": 90}},
-            {"content": {"score": 40}},
+            {"content": {"score": 90}, "_state": RecordState.ACTIVE.value},
+            {"content": {"score": 40}, "_state": RecordState.ACTIVE.value},
         ]
         # Raw pre-scope records (what original_passing should come from)
         raw = [
-            {"content": {"score": 90, "name": "Alice"}, "source_guid": "sg-1"},
-            {"content": {"score": 40, "name": "Bob"}, "source_guid": "sg-2"},
+            {
+                "content": {"score": 90, "name": "Alice"},
+                "source_guid": "sg-1",
+                "_state": RecordState.ACTIVE.value,
+            },
+            {
+                "content": {"score": 40, "name": "Bob"},
+                "source_guid": "sg-2",
+                "_state": RecordState.ACTIVE.value,
+            },
         ]
         context = ProcessingContext(
             agent_config={"guard": {"clause": "score >= 80", "behavior": "skip"}},
@@ -509,7 +525,12 @@ class TestUnifiedProcessorFileModePath:
 
                 return [
                     ProcessingResult.success(
-                        data=[{"content": {"my_tool": {"out": 1}}}],
+                        data=[
+                            {
+                                "content": {"my_tool": {"out": 1}},
+                                "_state": RecordState.ACTIVE.value,
+                            }
+                        ],
                         source_guid="sg-1",
                     )
                 ]

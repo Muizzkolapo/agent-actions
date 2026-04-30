@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
+from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_SKIPPED, NODE_LEVEL_RECORD_ID
 
 
@@ -246,7 +247,7 @@ class TestZeroSuccessFailure:
         """
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(exhausted=3)
-        tombstones = [{"_unprocessed": True}] * 3
+        tombstones = [{"_state": RecordState.EXHAUSTED.value}] * 3
 
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
             self._run_with_stats(pipeline, config, stats, fp, base, out, output=tombstones)
@@ -255,7 +256,7 @@ class TestZeroSuccessFailure:
         """Mixed FAILED + EXHAUSTED with zero successes → RuntimeError."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(failed=2, exhausted=1)
-        tombstones = [{"_unprocessed": True}]
+        tombstones = [{"_state": RecordState.EXHAUSTED.value}]
 
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
             self._run_with_stats(pipeline, config, stats, fp, base, out, output=tombstones)
@@ -267,7 +268,7 @@ class TestZeroSuccessFailure:
 
         with pytest.raises(RuntimeError, match=r"2 failed, 1 exhausted"):
             self._run_with_stats(
-                pipeline, config, stats, fp, base, out, output=[{"_unprocessed": True}]
+                pipeline, config, stats, fp, base, out, output=[{"_state": RecordState.EXHAUSTED.value}]
             )
 
     def test_partial_success_with_failures_no_raise(self, pipeline_and_mocks):
@@ -285,7 +286,7 @@ class TestZeroSuccessFailure:
         """Some records succeed + some exhaust → no raise."""
         pipeline, config, fp, base, out = pipeline_and_mocks
         stats = CollectionStats(success=2, exhausted=1)
-        output = [{"result": "ok"}, {"result": "ok2"}, {"_unprocessed": True}]
+        output = [{"result": "ok"}, {"result": "ok2"}, {"_state": RecordState.EXHAUSTED.value}]
 
         self._run_with_stats(pipeline, config, stats, fp, base, out, output=output)
 
@@ -335,7 +336,7 @@ class TestZeroSuccessWithRealResults:
         exhausted_results = [
             ProcessingResult.exhausted(
                 "timeout after 3 attempts",
-                data=[{"_unprocessed": True, "source_guid": f"guid_{i}"}],
+                data=[{"_state": RecordState.EXHAUSTED.value, "source_guid": f"guid_{i}"}],
                 source_guid=f"guid_{i}",
             )
             for i in range(3)
@@ -390,7 +391,7 @@ class TestZeroSuccessWithRealResults:
             ProcessingResult.failed("401 Unauthorized", source_guid="guid_1"),
             ProcessingResult.exhausted(
                 "timeout after 3 attempts",
-                data=[{"_unprocessed": True}],
+                data=[{"_state": RecordState.EXHAUSTED.value}],
                 source_guid="guid_2",
             ),
         ]
@@ -416,7 +417,9 @@ class TestZeroSuccessWithRealResults:
         results = [
             ProcessingResult(
                 status=ProcessingStatus.SUCCESS,
-                data=[{"result": "ok", "source_guid": "guid_0"}],
+                data=[
+                    {"result": "ok", "source_guid": "guid_0", "_state": RecordState.ACTIVE.value}
+                ],
                 executed=True,
                 source_guid="guid_0",
             ),

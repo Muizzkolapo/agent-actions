@@ -20,6 +20,7 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import (
 )
 from agent_actions.llm.batch.core.batch_models import SubmissionResult
 from agent_actions.processing.result_collector import CollectionStats
+from agent_actions.record.state import RecordState
 
 
 @pytest.fixture
@@ -165,7 +166,7 @@ class TestInitialPipelineZeroSuccessFailure:
     def test_all_exhausted_raises(self, tmp_dirs):
         """All records EXHAUSTED (tombstones in output) -> RuntimeError."""
         stats = CollectionStats(exhausted=3)
-        tombstones = [{"_unprocessed": True}] * 3
+        tombstones = [{"_state": RecordState.EXHAUSTED.value}] * 3
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
             self._run_online(tmp_dirs, stats, output=tombstones)
 
@@ -173,7 +174,7 @@ class TestInitialPipelineZeroSuccessFailure:
         """Mixed FAILED + EXHAUSTED -> RuntimeError with both counts."""
         stats = CollectionStats(failed=2, exhausted=1)
         with pytest.raises(RuntimeError, match=r"2 failed, 1 exhausted"):
-            self._run_online(tmp_dirs, stats, output=[{"_unprocessed": True}])
+            self._run_online(tmp_dirs, stats, output=[{"_state": RecordState.EXHAUSTED.value}])
 
     def test_partial_success_no_raise(self, tmp_dirs):
         """Some succeed + some fail -> no raise."""

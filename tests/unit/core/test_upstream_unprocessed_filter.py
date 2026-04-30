@@ -1,7 +1,7 @@
 """
 Tests for upstream unprocessed record filtering (#943).
 
-Verifies that records with _unprocessed=True are:
+Verifies that records with a cascade-blocking `_state` are:
 1. Detected by TaskPreparer._is_upstream_unprocessed()
 2. Short-circuited in TaskPreparer.prepare() (no context loading, no prompt)
 3. Handled as UNPROCESSED in OnlineLLMStrategy.process_record()
@@ -24,6 +24,7 @@ from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
 )
+from agent_actions.record.state import RecordState
 from agent_actions.utils.correlation import VersionIdGenerator
 
 
@@ -42,28 +43,26 @@ class TestIsUpstreamUnprocessed:
     """Tests for the _is_upstream_unprocessed static helper."""
 
     def test_detects_unprocessed(self):
-        item = {"content": "stale", "_unprocessed": True}
+        item = {"content": "stale", "_state": RecordState.CASCADE_SKIPPED.value}
         assert TaskPreparer._is_upstream_unprocessed(item) is True
 
     def test_normal_record_passes(self):
-        item = {"content": "real", "metadata": {"agent_type": "llm"}}
+        item = {"content": "real", "_state": RecordState.ACTIVE.value}
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
     def test_no_metadata_passes(self):
-        item = {"content": "raw data"}
+        item = {"content": "raw data", "_state": RecordState.ACTIVE.value}
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
     def test_non_dict_passes(self):
         assert TaskPreparer._is_upstream_unprocessed("plain string") is False
 
-    def test_truthy_non_true_does_not_trigger(self):
-        """_unprocessed must be exactly True, not just truthy."""
-        item = {"content": "data", "_unprocessed": 1}
-        assert TaskPreparer._is_upstream_unprocessed(item) is False
+    def test_unknown_state_raises(self):
+        item = {"content": "data", "_state": "some_new_state"}
+        from agent_actions.record.state import InvalidRecordStateError
 
-    def test_unprocessed_false_does_not_trigger(self):
-        item = {"content": "data", "_unprocessed": False}
-        assert TaskPreparer._is_upstream_unprocessed(item) is False
+        with pytest.raises(InvalidRecordStateError, match="Invalid record _state"):
+            TaskPreparer._is_upstream_unprocessed(item)
 
 
 # --- TaskPreparer.prepare() early exit ---
@@ -84,7 +83,7 @@ class TestTaskPreparerUpstreamUnprocessed:
         item = {
             "content": {"upstream_action": {"data": "stale"}},
             "source_guid": "sg_123",
-            "_unprocessed": True,
+            "_state": RecordState.CASCADE_SKIPPED.value,
         }
         result = preparer.prepare(item, self._make_context())
 
@@ -101,7 +100,7 @@ class TestTaskPreparerUpstreamUnprocessed:
         preparer = TaskPreparer()
         item = {
             "content": {"upstream_action": {"val": "stale"}},
-            "_unprocessed": True,
+            "_state": RecordState.FAILED.value,
         }
         preparer.prepare(item, self._make_context())
         mock_load.assert_not_called()
@@ -111,7 +110,7 @@ class TestTaskPreparerUpstreamUnprocessed:
         item = {
             "content": {"upstream_action": {"val": "stale"}},
             "source_guid": "sg_456",
-            "_unprocessed": True,
+            "_state": RecordState.EXHAUSTED.value,
         }
         result = preparer.prepare(item, self._make_context(), existing_target_id="tgt_existing")
         assert result.target_id == "tgt_existing"
@@ -136,7 +135,7 @@ class TestOnlineLLMStrategyUnprocessed:
         item = {
             "content": {"original": "data"},
             "source_guid": "sg_unproc_1",
-            "_unprocessed": True,
+            "_state": RecordState.CASCADE_SKIPPED.value,
         }
 
         result = strategy.process_record(item, context, skip_guard=False)
@@ -154,12 +153,16 @@ class TestResultCollectorUnprocessed:
 
     def test_counts_unprocessed_separately(self):
         results = [
-            ProcessingResult.success(data=[{"content": "ok"}]),
+            ProcessingResult.success(
+                data=[{"content": "ok", "_state": RecordState.ACTIVE.value}]
+            ),
             ProcessingResult.unprocessed(
                 data=[{"content": "stale"}],
-                reason="upstream_unprocessed",
+                reason="cascade_skipped",
             ),
-            ProcessingResult.success(data=[{"content": "ok2"}]),
+            ProcessingResult.success(
+                data=[{"content": "ok2", "_state": RecordState.ACTIVE.value}]
+            ),
         ]
 
         output, _ = ResultCollector.collect_results(
@@ -177,7 +180,7 @@ class TestResultCollectorUnprocessed:
         results = [
             ProcessingResult.unprocessed(
                 data=[unprocessed_data],
-                reason="upstream_unprocessed",
+                reason="cascade_skipped",
             ),
         ]
 
@@ -212,11 +215,11 @@ class TestEnrichmentUnprocessed:
         item = {
             "content": {"original": "data"},
             "source_guid": "sg_enrich_1",
-            "_unprocessed": True,
+            "_state": RecordState.CASCADE_SKIPPED.value,
         }
         result = ProcessingResult.unprocessed(
             data=[item],
-            reason="upstream_unprocessed",
+            reason="cascade_skipped",
             source_guid="sg_enrich_1",
         )
 
@@ -246,7 +249,7 @@ class TestEnrichmentUnprocessed:
         }
         result = ProcessingResult.unprocessed(
             data=[item],
-            reason="upstream_unprocessed",
+            reason="cascade_skipped",
             source_guid="sg_meta_1",
         )
 
@@ -289,7 +292,7 @@ class TestBatchPathReasonDetection:
         )
 
     def test_upstream_unprocessed_reason(self):
-        """Records with FILTER_PHASE=upstream_unprocessed get reason=upstream_unprocessed."""
+        """Records with FILTER_PHASE=upstream_unprocessed become CASCADE_SKIPPED."""
         from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
@@ -306,14 +309,13 @@ class TestBatchPathReasonDetection:
 
         assert len(results) == 1
         item = results[0].data[0]
-        assert item["metadata"]["reason"] == "upstream_unprocessed"
-        assert item["metadata"]["agent_type"] == "tombstone"
-        assert item.get("_unprocessed") is True
+        assert item["_state"] == RecordState.CASCADE_SKIPPED.value
+        assert item["_transitions"][-1]["reason"]["type"] == "cascade"
         assert item["content"]["test_batch"] is None
         assert item["content"]["upstream_action"] == {"field": "value"}
 
     def test_guard_skipped_reason(self):
-        """Records with SKIPPED filter status get reason=guard_skip."""
+        """Records with SKIPPED filter status become GUARD_SKIPPED."""
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
         from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
         from agent_actions.llm.batch.processing.batch_result_strategy import (
@@ -328,13 +330,12 @@ class TestBatchPathReasonDetection:
 
         assert len(results) == 1
         item = results[0].data[0]
-        assert item["metadata"]["reason"] == "guard_skip"
-        assert item["metadata"]["agent_type"] == "tombstone"
-        assert item.get("_unprocessed") is True
+        assert item["_state"] == RecordState.GUARD_SKIPPED.value
+        assert item["_transitions"][-1]["reason"]["type"] == "guard"
         assert item["content"]["test_batch"] is None
 
     def test_batch_not_returned_reason(self):
-        """Records without filter metadata get reason=batch_not_returned."""
+        """Records without filter metadata become FAILED (batch_not_returned)."""
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
         )
@@ -346,9 +347,8 @@ class TestBatchPathReasonDetection:
 
         assert len(results) == 1
         item = results[0].data[0]
-        assert item["metadata"]["reason"] == "batch_not_returned"
-        assert item["metadata"]["agent_type"] == "tombstone"
-        assert item.get("_unprocessed") is True
+        assert item["_state"] == RecordState.FAILED.value
+        assert item["_transitions"][-1]["reason"]["error_type"] == "batch_not_returned"
         assert item["content"]["test_batch"] is None
 
     def test_upstream_unprocessed_uses_unprocessed_status(self):

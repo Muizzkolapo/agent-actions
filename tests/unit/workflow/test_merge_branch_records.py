@@ -159,9 +159,12 @@ class TestMergeBranchRecordsVersionPattern:
 class TestMergeBranchRecordsMissingNamespace:
     """Branch missing its own namespace — warning logged, others proceed."""
 
-    def test_missing_namespace_logs_warning(self, mocker):
+    def test_missing_namespace_logs_warning(self, monkeypatch):
         """Branch without own namespace in content logs a warning."""
-        mock_warn = mocker.patch("agent_actions.workflow.merge.logger.warning")
+        from unittest.mock import MagicMock
+
+        mock_warn = MagicMock()
+        monkeypatch.setattr("agent_actions.workflow.merge.logger.warning", mock_warn)
         branch_a = {
             "source_guid": "guid-1",
             "content": {

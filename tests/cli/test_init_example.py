@@ -238,4 +238,6 @@ class TestInitSubcommands:
     def test_init_no_args_shows_usage(self) -> None:
         runner = CliRunner()
         result = runner.invoke(init, [])
-        assert result.exit_code != 0
+        # Click exits differently across versions (0 vs 2), but should always show usage.
+        assert result.exit_code in (0, 2)
+        assert "Usage:" in result.output

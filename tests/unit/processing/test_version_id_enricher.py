@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.processing.enrichment import VersionIdEnricher
 from agent_actions.processing.types import (
     ProcessingContext,
@@ -12,7 +14,13 @@ from agent_actions.processing.types import (
 
 def _make_context(record_index=0):
     return ProcessingContext(
-        agent_config={"kind": "llm", "agent_type": "summarize"},
+        agent_config={
+            "kind": "llm",
+            "agent_type": "summarize",
+            "is_versioned_agent": True,
+            "version_base_name": "summarize",
+            "workflow_session_id": "sess-test",
+        },
         agent_name="summarize",
         record_index=record_index,
     )
@@ -115,34 +123,114 @@ class TestVersionIdEnricherPassthrough:
         enriched = VersionIdEnricher().enrich(result, context)
 
         ids = [item["version_correlation_id"] for item in enriched.data]
-        # All IDs must be unique (not the parent's shared ID)
         assert len(set(ids)) == 3
         assert all(vcid != "vcid-parent" for vcid in ids)
 
     def test_non_versioned_passthrough_skips_assignment(self):
-        """Non-versioned 1:1 passthrough must NOT assign version_correlation_id."""
+        """Non-versioned 1:1 without expansion must not call the generator."""
         data = [{"source_guid": "g1"}]
         result = _make_result(data, is_expansion=False)
         context = ProcessingContext(
             agent_config={
-                "action_name": "some_action",
+                "action_name": "some_tool",
                 "workflow_session_id": "sess-123",
+                "version_base_name": "some_tool",
             },
-            agent_name="some_action",
+            agent_name="some_tool",
             record_index=0,
         )
-
-        enriched = VersionIdEnricher().enrich(result, context)
-
-        # No version_correlation_id should be set — action is not versioned
-        assert "version_correlation_id" not in enriched.data[0]
-
-    def test_negative_record_index_skipped(self):
-        data = [{"source_guid": "g1"}]
-        result = _make_result(data)
-        context = _make_context(record_index=-1)
 
         with _patch_generator() as mock_gen:
             VersionIdEnricher().enrich(result, context)
 
         mock_gen.assert_not_called()
+
+    def test_non_versioned_expansion_with_explicit_base_name(self):
+        """1→N expansion assigns distinct IDs when version_base_name is configured."""
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        VersionIdGenerator.clear()
+        data = [
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+            {"source_guid": "g1", "version_correlation_id": "vcid-parent"},
+        ]
+        result = _make_result(data, is_expansion=True)
+        context = ProcessingContext(
+            agent_config={
+                "action_name": "flatten_questions",
+                "workflow_session_id": "sess-123",
+                "version_base_name": "flatten_questions",
+            },
+            agent_name="flatten_questions",
+            record_index=0,
+        )
+
+        enriched = VersionIdEnricher().enrich(result, context)
+        ids = [item["version_correlation_id"] for item in enriched.data]
+        assert len(set(ids)) == 3
+        assert all(vcid != "vcid-parent" for vcid in ids)
+
+    def test_negative_record_index_raises(self):
+        data = [{"source_guid": "g1"}]
+        result = _make_result(data)
+        context = _make_context(record_index=-1)
+
+        with _patch_generator() as mock_gen, pytest.raises(ValueError, match="non-negative"):
+            VersionIdEnricher().enrich(result, context)
+
+        mock_gen.assert_not_called()
+
+    def test_expansion_second_result_uses_non_colliding_indices(self):
+        """Cumulative context.record_index across results: 3 rows then 2 rows → indices 0–4."""
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        VersionIdGenerator.clear()
+        cfg = {
+            "action_name": "expand",
+            "workflow_session_id": "sess-collide",
+            "version_base_name": "expand",
+        }
+        r3 = _make_result(
+            [
+                {"source_guid": "g", "version_correlation_id": "parent"},
+                {"source_guid": "g", "version_correlation_id": "parent"},
+                {"source_guid": "g", "version_correlation_id": "parent"},
+            ],
+            is_expansion=True,
+        )
+        r2 = _make_result(
+            [
+                {"source_guid": "g", "version_correlation_id": "parent"},
+                {"source_guid": "g", "version_correlation_id": "parent"},
+            ],
+            is_expansion=True,
+        )
+        ctx0 = ProcessingContext(agent_config=cfg, agent_name="expand", record_index=0)
+        ctx3 = ProcessingContext(agent_config=cfg, agent_name="expand", record_index=3)
+        enricher = VersionIdEnricher()
+        out3 = enricher.enrich(r3, ctx0)
+        out2 = enricher.enrich(r2, ctx3)
+        all_ids = [x["version_correlation_id"] for x in out3.data + out2.data]
+        assert len(set(all_ids)) == 5
+
+    def test_expansion_without_resolvable_base_name_leaves_record_unchanged(self):
+        """Expansion with no base name or action name cannot assign — skips silently."""
+        result = _make_result([{"source_guid": "g"}], is_expansion=True)
+        context = ProcessingContext(
+            agent_config={"workflow_session_id": "sess-x"},
+            agent_name="bad",
+            record_index=0,
+        )
+        enriched = VersionIdEnricher().enrich(result, context)
+        assert "version_correlation_id" not in enriched.data[0]
+
+    def test_expansion_missing_workflow_session_raises(self):
+        result = _make_result([{"source_guid": "g"}], is_expansion=True)
+        context = ProcessingContext(
+            agent_config={"version_base_name": "vb"},
+            agent_name="bad",
+            record_index=0,
+        )
+        with pytest.raises(ValueError, match="workflow_session_id"):
+            VersionIdEnricher().enrich(result, context)

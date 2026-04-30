@@ -43,15 +43,15 @@ class SQLiteBackend(StorageBackend):
 
     DISPOSITION_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS record_disposition (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
             action_name TEXT NOT NULL,
             record_id TEXT NOT NULL,
             disposition TEXT NOT NULL,
             reason TEXT,
+            detail TEXT,
             relative_path TEXT,
             input_snapshot TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(action_name, record_id, disposition)
+            timestamp TEXT NOT NULL,
+            PRIMARY KEY (action_name, record_id)
         )
     """
 
@@ -189,7 +189,43 @@ class SQLiteBackend(StorageBackend):
             try:
                 cursor.execute(self.SOURCE_TABLE_SQL)
                 cursor.execute(self.TARGET_TABLE_SQL)
-                cursor.execute(self.DISPOSITION_TABLE_SQL)
+                # Disposition schema migration: ensure v2 layout with primary key (action_name, record_id).
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS record_disposition_v2 (
+                        action_name TEXT NOT NULL,
+                        record_id TEXT NOT NULL,
+                        disposition TEXT NOT NULL,
+                        reason TEXT,
+                        detail TEXT,
+                        relative_path TEXT,
+                        input_snapshot TEXT,
+                        timestamp TEXT NOT NULL,
+                        PRIMARY KEY (action_name, record_id)
+                    )
+                    """
+                )
+                try:
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO record_disposition_v2
+                        (action_name, record_id, disposition, reason, detail, relative_path, input_snapshot, timestamp)
+                        SELECT action_name,
+                               record_id,
+                               disposition,
+                               reason,
+                               COALESCE(detail, NULL) as detail,
+                               COALESCE(relative_path, NULL) as relative_path,
+                               COALESCE(input_snapshot, NULL) as input_snapshot,
+                               COALESCE(created_at, CURRENT_TIMESTAMP) as timestamp
+                        FROM record_disposition
+                        """
+                    )
+                except sqlite3.OperationalError:
+                    # Fresh DB or already-migrated schema (no legacy table/columns).
+                    pass
+                cursor.execute("DROP TABLE IF EXISTS record_disposition")
+                cursor.execute("ALTER TABLE record_disposition_v2 RENAME TO record_disposition")
                 cursor.execute(self.SOURCE_INDEX_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
@@ -197,18 +233,6 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
-                # Migration: add input_snapshot column for existing databases
-                try:
-                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN input_snapshot TEXT")
-                    logger.debug("Added input_snapshot column to record_disposition")
-                except sqlite3.OperationalError:
-                    logger.debug("input_snapshot column already exists in record_disposition")
-                # Migration: add detail column for error messages and context
-                try:
-                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN detail TEXT")
-                    logger.debug("Added detail column to record_disposition")
-                except sqlite3.OperationalError:
-                    logger.debug("detail column already exists in record_disposition")
                 # Migration: add run_mode column for existing prompt_trace tables
                 try:
                     cursor.execute("ALTER TABLE prompt_trace ADD COLUMN run_mode TEXT")
@@ -579,8 +603,8 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO record_disposition
-                    (action_name, record_id, disposition, reason, relative_path,
-                     input_snapshot, detail, created_at)
+                    (action_name, record_id, disposition, reason, detail, relative_path,
+                     input_snapshot, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
@@ -588,9 +612,9 @@ class SQLiteBackend(StorageBackend):
                         record_id,
                         disposition,
                         reason,
+                        detail,
                         relative_path,
                         input_snapshot,
-                        detail,
                     ),
                 )
                 self.connection.commit()
@@ -626,7 +650,7 @@ class SQLiteBackend(StorageBackend):
 
         query = (
             "SELECT action_name, record_id, disposition, reason, relative_path,"
-            " input_snapshot, detail, created_at"
+            " input_snapshot, detail, timestamp"
             " FROM record_disposition WHERE action_name = ?"
         )
         params: list[str] = [action_name]
@@ -639,7 +663,7 @@ class SQLiteBackend(StorageBackend):
             query += " AND disposition = ?"
             params.append(disposition)
 
-        query += " ORDER BY id"
+        query += " ORDER BY timestamp"
 
         with self._lock:
             cursor = self.connection.cursor()

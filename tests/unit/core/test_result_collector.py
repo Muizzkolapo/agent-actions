@@ -18,6 +18,7 @@ from agent_actions.processing.types import (
     RecoveryMetadata,
     RetryMetadata,
 )
+from agent_actions.record.state import RecordState
 from agent_actions.utils.id_generation import IDGenerator
 
 
@@ -47,7 +48,10 @@ def test_result_collector_aggregates_statuses_first_stage():
         },
     }
 
-    success = ProcessingResult.success(data=[{"content": {"value": 1}}], source_guid="src-1")
+    success = ProcessingResult.success(
+        data=[{"content": {"value": 1}, "_state": RecordState.ACTIVE.value}],
+        source_guid="src-1",
+    )
     skipped = ProcessingResult.skipped(
         passthrough_data={"content": {"value": 2}}, reason="guard_skip", source_guid="src-2"
     )
@@ -87,7 +91,8 @@ def test_result_collector_aggregates_statuses_first_stage():
         is_first_stage=True,
     )
 
-    assert output[0] == {"content": {"value": 1}}
+    assert output[0]["content"] == {"value": 1}
+    assert output[0]["_state"] == "committed"
     assert output[1] == {"content": {"value": 2}}
 
     exhausted_item = output[2]
@@ -322,7 +327,7 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "my_agent",
             "src-f1",
-            "filtered",
+            "guard_filtered",
             reason="low_confidence",
         )
 
@@ -341,8 +346,8 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "agent",
             "src-f2",
-            "filtered",
-            reason="guard_filter",
+            "guard_filtered",
+            reason="guard_filtered",
         )
 
     def test_failed_result_writes_disposition(self):
@@ -413,7 +418,7 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "agent",
             "src-sk",
-            "passthrough",
+            "guard_skipped",
             reason="guard_skip",
         )
 
@@ -447,7 +452,7 @@ class TestResultCollectorDispositions:
         unprocessed = ProcessingResult(
             status=ProcessingStatus.UNPROCESSED,
             source_guid="src-un",
-            data=[{"content": {}}],
+            data=[{"content": {}, "_state": RecordState.CASCADE_SKIPPED.value}],
             skip_reason="where_clause",
         )
 
@@ -462,14 +467,14 @@ class TestResultCollectorDispositions:
         backend.set_disposition.assert_called_once_with(
             "agent",
             "src-un",
-            "unprocessed",
+            "cascade_skipped",
             reason="where_clause",
         )
 
     def test_success_result_writes_disposition(self):
         backend = _make_backend()
         success = ProcessingResult.success(
-            data=[{"content": {"v": 1}}],
+            data=[{"content": {"v": 1}, "_state": RecordState.ACTIVE.value}],
             source_guid="src-ok",
         )
 
@@ -580,7 +585,9 @@ class TestResultCollectorDispositions:
         backend = _make_backend()
 
         results = [
-            ProcessingResult.success(data=[{"content": {}}], source_guid="ok"),
+            ProcessingResult.success(
+                data=[{"content": {}, "_state": RecordState.ACTIVE.value}], source_guid="ok"
+            ),
             ProcessingResult.filtered(source_guid="filt"),
             ProcessingResult.failed(error="err", source_guid="fail"),
         ]
@@ -596,7 +603,7 @@ class TestResultCollectorDispositions:
         assert backend.set_disposition.call_count == 3
         calls = backend.set_disposition.call_args_list
         assert calls[0] == (("agent", "ok", "success"), {})
-        assert calls[1] == (("agent", "filt", "filtered"), {"reason": "guard_filter"})
+        assert calls[1] == (("agent", "filt", "guard_filtered"), {"reason": "guard_filtered"})
         assert calls[2] == (
             ("agent", "fail", "failed"),
             {"reason": "err", "input_snapshot": None, "detail": "err"},
@@ -622,7 +629,7 @@ class TestResultCollectorDispositions:
         assert backend.set_disposition.call_count == 2
         calls = backend.set_disposition.call_args_list
         assert calls[0] == (("agent", "src-d", "deferred"), {"reason": "batch_queued:task_id=t-1"})
-        assert calls[1] == (("agent", "src-f", "filtered"), {"reason": "guard_filter"})
+        assert calls[1] == (("agent", "src-f", "guard_filtered"), {"reason": "guard_filtered"})
 
 
 class TestCollectionStatsOnlyGuardOutcomes:
@@ -732,6 +739,7 @@ class TestParseErrorDisposition:
             data=[
                 {
                     "source_guid": "guid-pe",
+                    "_state": RecordState.ACTIVE.value,
                     "content": {
                         "my_action": {
                             "_parse_error": "Expecting value: line 1",
@@ -759,9 +767,14 @@ class TestParseErrorDisposition:
         )
 
     def test_parse_error_record_marked_unprocessed(self):
-        """Parse error items get _unprocessed=True so downstream guards skip them."""
+        """Parse error items are marked FAILED so downstream skips execution."""
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid="guid-pe",
         )
 
@@ -773,12 +786,17 @@ class TestParseErrorDisposition:
         )
 
         assert len(output) == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"
 
     def test_parse_error_stats_counted_as_failed(self):
         """Parse error reclassifies from success to failed in stats."""
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid="guid-pe",
         )
 
@@ -796,7 +814,12 @@ class TestParseErrorDisposition:
         """Normal SUCCESS records are not reclassified by parse error detection."""
         backend = _make_backend()
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"question": "What?", "answer": "42"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"question": "What?", "answer": "42"}},
+                }
+            ],
             source_guid="guid-ok",
         )
 
@@ -823,11 +846,21 @@ class TestParseErrorDisposition:
         backend = _make_backend()
         results = [
             ProcessingResult.success(
-                data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+                data=[
+                    {
+                        "_state": RecordState.ACTIVE.value,
+                        "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                    }
+                ],
                 source_guid="guid-pe",
             ),
             ProcessingResult.success(
-                data=[{"content": {"action": {"field": "ok"}}}],
+                data=[
+                    {
+                        "_state": RecordState.ACTIVE.value,
+                        "content": {"action": {"field": "ok"}},
+                    }
+                ],
                 source_guid="guid-ok",
             ),
         ]
@@ -844,8 +877,8 @@ class TestParseErrorDisposition:
         assert stats.success == 1
         assert len(output) == 2
         # Parse error item is marked, normal is not
-        assert output[0]["_unprocessed"] is True
-        assert "_unprocessed" not in output[1]
+        assert output[0]["_state"] == "failed"
+        assert output[1].get("_state") != "failed"
         # Parse error gets FAILED disposition, normal gets SUCCESS disposition
         assert backend.set_disposition.call_count == 2
         calls = backend.set_disposition.call_args_list
@@ -856,7 +889,12 @@ class TestParseErrorDisposition:
         """Parse error without source_guid marks items but skips disposition write."""
         backend = _make_backend()
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid=None,
         )
 
@@ -869,13 +907,18 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"
         backend.set_disposition.assert_not_called()
 
     def test_parse_error_no_backend_no_crash(self):
         """Parse error detection works gracefully without storage backend."""
         result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            data=[
+                {
+                    "_state": RecordState.ACTIVE.value,
+                    "content": {"action": {"_parse_error": "bad", "raw_response": "x"}},
+                }
+            ],
             source_guid="guid-pe",
         )
 
@@ -888,4 +931,4 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"

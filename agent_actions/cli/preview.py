@@ -160,9 +160,9 @@ class PreviewCommand:
         specific action, unwrap so all formats show that action's fields.
 
         Guard-skipped actions have ``content[action] = None`` and carry
-        ``_unprocessed: True`` with ``metadata.reason``.  Content is set
-        to ``{}`` so json/raw formats show the real record structure
-        (empty content + metadata) rather than an invented sentinel.
+        ``_state: "guard_skipped"``. Content is set to ``{}`` so json/raw
+        formats show the real record structure (empty content + framework
+        fields) rather than an invented sentinel.
         """
         if not self.action:
             return records
@@ -190,7 +190,14 @@ class PreviewCommand:
 
         all_keys: set[str] = set()
         for record in records:
-            if isinstance(record, dict) and not record.get("_unprocessed"):
+            if isinstance(record, dict) and record.get("_state") not in (
+                "cascade_skipped",
+                "failed",
+                "exhausted",
+                "guard_skipped",
+                "guard_deferred",
+                "guard_filtered",
+            ):
                 if "content" in record and isinstance(record["content"], dict):
                     all_keys.update(record["content"].keys())
                 else:
@@ -211,9 +218,16 @@ class PreviewCommand:
 
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):
-                if record.get("_unprocessed"):
-                    reason = record.get("metadata", {}).get("reason", "skipped")
-                    label = f"[{reason.replace('_', '-')}]"
+                state = record.get("_state")
+                if state in (
+                    "cascade_skipped",
+                    "failed",
+                    "exhausted",
+                    "guard_skipped",
+                    "guard_deferred",
+                    "guard_filtered",
+                ):
+                    label = f"[{str(state).replace('_', '-')}]"
                     values = [str(idx), rich_escape(label)]
                     values.extend("" for _ in display_keys[1:])
                     table.add_row(*values)

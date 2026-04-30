@@ -13,6 +13,7 @@ from agent_actions.processing.unified import (
     ProcessingStrategy,
     UnifiedProcessor,
 )
+from agent_actions.record.state import RecordState
 
 
 def _make_context(
@@ -39,6 +40,7 @@ def _make_record(source_guid: str = "sg-1", **content: Any) -> dict[str, Any]:
     """Create a minimal record dict."""
     return {
         "source_guid": source_guid,
+        "_state": RecordState.ACTIVE.value,
         "content": {**content} if content else {"source": {"field": "value"}},
     }
 
@@ -92,7 +94,7 @@ class TestNoOpStrategy:
 
     def test_record_without_source_guid(self):
         strategy = NoOpStrategy()
-        record = {"content": {"source": {"val": 1}}}
+        record = {"content": {"source": {"val": 1}}, "_state": RecordState.ACTIVE.value}
         context = _make_context()
 
         results = strategy.invoke([record], context)
@@ -281,6 +283,49 @@ class TestUnifiedProcessorEnrichment:
 
         assert output[0].get("_tagged") is True
 
+    def test_enrich_passes_cumulative_record_index_per_result(self):
+        """Staff review: enumerate(results) collides when each result has many rows."""
+
+        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
+
+        class CaptureIndexEnricher(Enricher):
+            def __init__(self) -> None:
+                self.seen: list[int] = []
+
+            def enrich(self, result, context):
+                self.seen.append(context.record_index)
+                return result
+
+        capture = CaptureIndexEnricher()
+        pipeline = EnrichmentPipeline(enrichers=[capture])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+
+        class MultiResultStrategy:
+            def invoke(self, records, context):
+                return [
+                    ProcessingResult.success(
+                        data=[
+                            {"k": 1, "_state": RecordState.ACTIVE.value},
+                            {"k": 2, "_state": RecordState.ACTIVE.value},
+                            {"k": 3, "_state": RecordState.ACTIVE.value},
+                        ],
+                        source_guid="sg-a",
+                    ),
+                    ProcessingResult.success(
+                        data=[
+                            {"k": 4, "_state": RecordState.ACTIVE.value},
+                            {"k": 5, "_state": RecordState.ACTIVE.value},
+                        ],
+                        source_guid="sg-b",
+                    ),
+                ]
+
+        context = _make_context()
+        context.record_index = 10
+        processor.process([_make_record("sg-1")], context, MultiResultStrategy())
+
+        assert capture.seen == [10, 13]
+
 
 # ---------------------------------------------------------------------------
 # UnifiedProcessor — result collection
@@ -317,7 +362,12 @@ class TestUnifiedProcessorCollection:
                 return [
                     ProcessingResult.exhausted(
                         error="retries exceeded",
-                        data=[{"content": {"test_action": None}, "_unprocessed": True}],
+                        data=[
+                            {
+                                "content": {"test_action": None},
+                                "_state": RecordState.EXHAUSTED.value,
+                            }
+                        ],
                         source_guid="sg-1",
                     )
                 ]
@@ -363,8 +413,8 @@ class TestUnifiedProcessorEdgeCases:
                 return [
                     ProcessingResult.success(
                         data=[
-                            {"content": {"test_action": {"i": 1}}},
-                            {"content": {"test_action": {"i": 2}}},
+                            {"content": {"test_action": {"i": 1}}, "_state": RecordState.ACTIVE.value},
+                            {"content": {"test_action": {"i": 2}}, "_state": RecordState.ACTIVE.value},
                         ],
                         source_guid="sg-1",
                     )

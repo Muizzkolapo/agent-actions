@@ -4,6 +4,7 @@ from typing import Any
 
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import RecordState, reason_exhausted
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.lineage.builder import LineageBuilder
@@ -52,10 +53,21 @@ class ExhaustedRecordBuilder:
             "source_guid": resolved_source_guid,
             "content": RecordEnvelope.build_content(action_name, empty_content, existing),
             "node_id": node_id,
-            "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
+            "metadata": {"retry_exhausted": True},
             "_recovery": recovery_metadata.to_dict(),
-            "_unprocessed": True,
+            "_state": RecordState.ACTIVE.value,
         }
+
+        RecordEnvelope.transition(
+            exhausted_item,
+            RecordState.EXHAUSTED,
+            action_name=action_name,
+            reason=reason_exhausted(
+                attempts=recovery_metadata.retry.attempts if recovery_metadata.retry else "unknown",
+                last_error=recovery_metadata.retry.reason if recovery_metadata.retry else None,
+                model=None,
+            ),
+        )
 
         if isinstance(original_row, dict):
             if "target_id" in original_row and original_row["target_id"]:

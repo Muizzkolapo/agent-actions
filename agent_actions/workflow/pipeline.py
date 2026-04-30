@@ -536,9 +536,12 @@ class ProcessingPipeline:
             storage_backend=self.config.storage_backend,
         )
 
+        # Process via RecordProcessor.
+        # NOTE: Do NOT filter settled records here. Guard-skipped/deferred records
+        # are valid pipeline data and should flow downstream; cascade-blocked
+        # records are short-circuited per-record in task preparation.
         # Select processing strategy based on granularity and action kind.
         strategy = self._select_strategy()
-
         if self.granularity == "file" and (self.is_tool_action or self.is_hitl_action):
             # FILE mode: apply context scope, then delegate guard + invoke +
             # enrich + collect to UnifiedProcessor with raw_records for

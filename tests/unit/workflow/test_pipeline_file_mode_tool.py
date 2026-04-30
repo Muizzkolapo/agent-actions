@@ -9,6 +9,7 @@ from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
+from agent_actions.record.state import RecordState
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.udf_management.registry import FileUDFResult
 
@@ -737,7 +738,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
     )
 
     # Single input record (typical RECORD mode item)
-    item = {"source_guid": "sg-1", "content": {"raw_questions": "..."}}
+    item = {"source_guid": "sg-1", "content": {"raw_questions": "..."}, "_state": RecordState.ACTIVE.value}
     context = ProcessingContext(agent_config=agent_config, agent_name=agent_name)
 
     # Process single item
@@ -811,7 +812,7 @@ def test_result_collector_does_not_raise_on_partial_failure():
     from agent_actions.processing.types import ProcessingResult
 
     results = [
-        ProcessingResult.success(data=[{"content": {"val": 1}}]),
+        ProcessingResult.success(data=[{"content": {"val": 1}, "_state": RecordState.ACTIVE.value}]),
         ProcessingResult.failed(error="connection timeout"),
     ]
 
@@ -1663,14 +1664,16 @@ def test_file_hitl_per_record_review_in_namespace():
 
 
 def test_file_hitl_carries_framework_fields():
-    """Framework fields (source_guid, target_id, _unprocessed) are preserved from input."""
+    """Framework fields (source_guid, target_id, _state) are preserved from input."""
+    from agent_actions.record.state import RecordState
+
     context = _make_hitl_context()
 
     input_data = [
         {
             "source_guid": "sg-1",
             "target_id": "tid-1",
-            "_unprocessed": True,
+            "_state": RecordState.CASCADE_SKIPPED.value,
             "_recovery": {"reason": "tombstone"},
             "content": {"source": {"a": 1}},
         },
@@ -1689,7 +1692,7 @@ def test_file_hitl_carries_framework_fields():
     item = results[0].data[0]
     assert item["source_guid"] == "sg-1"
     assert item["target_id"] == "tid-1"
-    assert item["_unprocessed"] is True
+    assert item["_state"] == RecordState.CASCADE_SKIPPED.value
     assert item["_recovery"] == {"reason": "tombstone"}
 
 

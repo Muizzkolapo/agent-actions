@@ -15,6 +15,7 @@ from agent_actions.logging.events.workflow_events import (
 )
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.record.state import RecordState
 
 # ---------------------------------------------------------------------------
 # 1. GuardBehavior.WARN enum
@@ -188,7 +189,7 @@ class TestAllFilteredWarning:
     @staticmethod
     def _make_mixed_results(n_success: int, n_filtered: int) -> list[ProcessingResult]:
         results = [
-            ProcessingResult(status=ProcessingStatus.SUCCESS, data=[{"content": "ok"}])
+            ProcessingResult(status=ProcessingStatus.SUCCESS, data=[{"content": "ok", "_state": RecordState.ACTIVE.value}])
             for _ in range(n_success)
         ]
         results.extend(
@@ -242,7 +243,7 @@ class TestAllFilteredWarning:
 
     def test_no_warning_when_no_filter(self, caplog):
         results = [
-            ProcessingResult(status=ProcessingStatus.SUCCESS, data=[{"content": "ok"}])
+            ProcessingResult(status=ProcessingStatus.SUCCESS, data=[{"content": "ok", "_state": RecordState.ACTIVE.value}])
             for _ in range(5)
         ]
         agent_config = {}
@@ -333,7 +334,11 @@ class TestTaskPreparerWarnLogging:
         context.current_item = None
         context.record_index = 0
 
-        item = {"content": {"quality_score": 0.1}, "source_guid": "sg-1"}
+        item = {
+            "content": {"quality_score": 0.1},
+            "source_guid": "sg-1",
+            "_state": RecordState.ACTIVE.value,
+        }
 
         warned_result = GuardResult.warned()
 

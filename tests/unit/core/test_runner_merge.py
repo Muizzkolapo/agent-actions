@@ -26,13 +26,13 @@ class TestMergeRecordsByKey:
         assert result[0]["field_2"] == "value_2"
 
     def test_merges_records_with_parent_target_id(self):
-        """Should merge records using parent_target_id as correlation key."""
+        """Should merge records using parent_target_id when reduce_key is set."""
         records = [
             {"parent_target_id": "xyz", "answer_1": "A"},
             {"parent_target_id": "xyz", "answer_2": "B"},
         ]
 
-        result = merge_records_by_key(records)
+        result = merge_records_by_key(records, reduce_key="parent_target_id")
 
         assert len(result) == 1
         assert result[0]["answer_1"] == "A"
@@ -149,7 +149,7 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
         params.output_directory = "/output"
-        params.agent_config = {}
+        params.action_config = {}
         params.agent_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
@@ -190,7 +190,7 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
         params.output_directory = "/output"
-        params.agent_config = {}
+        params.action_config = {}
         params.agent_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
@@ -223,7 +223,7 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1"]
         params.output_directory = "/output"
-        params.agent_config = {}
+        params.action_config = {}
         params.agent_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
