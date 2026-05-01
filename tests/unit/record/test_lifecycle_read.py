@@ -3,7 +3,10 @@
 import pytest
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
+from agent_actions.record.lifecycle_read import (
+    require_frozen_record_lifecycle,
+    validate_frozen_target_payload,
+)
 from agent_actions.record.state import STATE_SCHEMA_VERSION, RecordState
 
 
@@ -52,3 +55,22 @@ class TestRequireFrozenRecordLifecycle:
             },
             action_name="my_action",
         )
+
+
+class TestValidateFrozenTargetPayload:
+    def test_list_with_non_dict_item_raises(self):
+        with pytest.raises(ConfigurationError, match="index 1 must be an object"):
+            validate_frozen_target_payload(
+                [
+                    {
+                        "_state": RecordState.PROCESSED.value,
+                        "_state_schema_version": STATE_SCHEMA_VERSION,
+                    },
+                    None,
+                ],
+                action_name="my_action",
+            )
+
+    def test_scalar_root_raises(self):
+        with pytest.raises(ConfigurationError, match="Target JSON must be a list or object"):
+            validate_frozen_target_payload("not a target payload", action_name="my_action")

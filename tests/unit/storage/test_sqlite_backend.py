@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.storage import BACKENDS, get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -439,7 +440,11 @@ class TestPreviewTargetNullRecordCount:
         """preview_target computes correct count from JSON when record_count IS NULL."""
         import json
 
-        records = [{"id": 1}, {"id": 2}, {"id": 3}]
+        records = [
+            with_target_lifecycle({"id": 1}),
+            with_target_lifecycle({"id": 2}),
+            with_target_lifecycle({"id": 3}),
+        ]
         # Insert directly with NULL record_count to simulate legacy data
         backend.connection.execute(
             "INSERT INTO target_data (action_name, relative_path, data, record_count) "
@@ -451,6 +456,20 @@ class TestPreviewTargetNullRecordCount:
         result = backend.preview_target("node_1")
         assert result["total_count"] == 3
         assert len(result["records"]) == 3
+
+    def test_preview_target_validates_lifecycle(self, backend):
+        """preview_target enforces the same frozen-target lifecycle contract as read_target."""
+        import json
+
+        backend.connection.execute(
+            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
+            "VALUES (?, ?, ?, NULL)",
+            ("node_1", "legacy.json", json.dumps([{"id": 1}])),
+        )
+        backend.connection.commit()
+
+        with pytest.raises(ConfigurationError, match="missing '_state'"):
+            backend.preview_target("node_1")
 
 
 class TestGetStorageStatsNullRecordCount:

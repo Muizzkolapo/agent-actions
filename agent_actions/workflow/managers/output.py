@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Any, Optional
 from rich.console import Console
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
+from agent_actions.record.lifecycle_read import (
+    require_frozen_record_lifecycle,
+    validate_frozen_target_payload,
+)
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
@@ -73,15 +76,13 @@ class ActionOutputManager:
                 with open(json_file, encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, list):
-                        for record in data:
-                            if isinstance(record, dict):
-                                require_frozen_record_lifecycle(record, action_name=prev_agent_name)
+                        validate_frozen_target_payload(data, action_name=prev_agent_name)
                         outputs.extend(data)
                     elif isinstance(data, dict):
                         require_frozen_record_lifecycle(data, action_name=prev_agent_name)
                         outputs.append(data)
                     else:
-                        agent_output["errors"].append(
+                        raise ConfigurationError(
                             f"Invalid JSON root type in {json_file.name}: "
                             f"expected list or object, got {type(data).__name__}"
                         )
@@ -189,6 +190,8 @@ class ActionOutputManager:
                 else:
                     outputs.append(data)  # type: ignore[unreachable]
             except Exception as e:
+                if isinstance(e, ConfigurationError):
+                    raise
                 logger.warning(
                     "Failed to read backend target %s/%s: %s",
                     action_name,

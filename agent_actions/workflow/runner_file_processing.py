@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
@@ -275,6 +276,8 @@ def process_from_storage_backend(
                     data_by_path[relative_path] = []
                 data_by_path[relative_path].append((action_name, data))
             except Exception as e:
+                if isinstance(e, ConfigurationError):
+                    raise
                 logger.warning(
                     "Failed to read backend entry %s/%s: %s",
                     action_name,

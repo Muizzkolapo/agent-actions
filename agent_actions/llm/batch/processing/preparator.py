@@ -118,6 +118,8 @@ class BatchTaskPreparator:
                     stats.included_items += 1
 
             except Exception as e:
+                if isinstance(e, ConfigurationError):
+                    raise
                 logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
 

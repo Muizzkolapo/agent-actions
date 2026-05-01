@@ -93,6 +93,8 @@ class TestFileModePipelineVersionMerge:
         assert "aggregate_votes" not in content
         assert content["consensus"] == "keep"
         assert content["total_score"] == 11
+        assert results[0].data[0]["_state"] == "processed"
+        assert results[0].data[0]["_state_schema_version"] == 1
 
     def test_version_merge_preserves_version_namespaces(self):
         """Version namespaces from input are preserved in the output content."""

@@ -205,6 +205,8 @@ class TestProcessReturnsFlattenableResults:
         assert len(flat) == 1
         assert flat[0]["content"]["classify"] == {"category": "tech"}
         assert flat[0]["source_guid"] == "src_001"
+        assert flat[0]["_state"] == "processed"
+        assert flat[0]["_state_schema_version"] == 1
 
     def test_process_error_result_flattens_with_error_key(self):
         """Failed batch results produce ProcessingResult with error dict in data."""
@@ -233,3 +235,5 @@ class TestProcessReturnsFlattenableResults:
         assert len(flat) == 1
         assert flat[0]["error"] == "API timeout"
         assert flat[0]["source_guid"] == "src_err"
+        assert flat[0]["_state"] == "failed"
+        assert flat[0]["_state_schema_version"] == 1

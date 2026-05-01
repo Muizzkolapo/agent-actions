@@ -307,6 +307,10 @@ class ActionRunner:
                 self._sync_virtual_action_to_local_backend(dep_name, upstream_target)
                 return upstream_target
         except Exception as e:
+            from agent_actions.errors import ConfigurationError
+
+            if isinstance(e, ConfigurationError):
+                raise
             logger.debug("Upstream storage backend export failed for '%s': %s", dep_name, e)
 
         logger.warning(
@@ -343,13 +347,23 @@ class ActionRunner:
                         relative_path=file_path.name,
                         data=data,
                     )
-                    logger.debug(
-                        "Synced virtual action '%s/%s' to local storage backend (%d records)",
-                        dep_name,
-                        file_path.name,
-                        len(data),
+                elif isinstance(data, dict):
+                    self.storage_backend.write_target(
+                        action_name=dep_name,
+                        relative_path=file_path.name,
+                        data=[data],
                     )
+                logger.debug(
+                    "Synced virtual action '%s/%s' to local storage backend (%d records)",
+                    dep_name,
+                    file_path.name,
+                    len(data) if isinstance(data, list) else 1,
+                )
             except Exception as e:
+                from agent_actions.errors import ConfigurationError
+
+                if isinstance(e, ConfigurationError):
+                    raise
                 logger.warning(
                     "Failed to sync virtual action '%s/%s' to local backend: %s",
                     dep_name,

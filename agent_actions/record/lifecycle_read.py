@@ -62,7 +62,7 @@ def require_frozen_record_lifecycle(
 
 
 def validate_frozen_target_payload(
-    data: list[dict[str, Any]] | dict[str, Any],
+    data: Any,
     *,
     action_name: str,
 ) -> None:
@@ -70,6 +70,18 @@ def validate_frozen_target_payload(
     if isinstance(data, dict):
         require_frozen_record_lifecycle(data, action_name=action_name)
         return
-    for item in data:
-        if isinstance(item, dict):
-            require_frozen_record_lifecycle(item, action_name=action_name)
+    if not isinstance(data, list):
+        raise ConfigurationError(
+            f"Target JSON must be a list or object; got {type(data).__name__}. "
+            f"Delete agent_io/target/ and re-run. (action '{action_name}')",
+            context={"action_name": action_name},
+        )
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise ConfigurationError(
+                f"Target JSON list item at index {index} must be an object; "
+                f"got {type(item).__name__}. Delete agent_io/target/ and re-run. "
+                f"(action '{action_name}')",
+                context={"action_name": action_name, "index": index},
+            )
+        require_frozen_record_lifecycle(item, action_name=action_name)

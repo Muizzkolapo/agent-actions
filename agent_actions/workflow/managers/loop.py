@@ -9,9 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import DataValidationError
+from agent_actions.errors import ConfigurationError, DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
-from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
+from agent_actions.record.lifecycle_read import (
+    require_frozen_record_lifecycle,
+    validate_frozen_target_payload,
+)
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.content import get_existing_content
 from agent_actions.workflow.merge import merge_branch_records
@@ -138,6 +141,8 @@ class VersionOutputCorrelator:
                         outputs.append(data)
                     filenames.add(relative_path)
                 except Exception as e:
+                    if isinstance(e, ConfigurationError):
+                        raise
                     logger.warning(
                         "Failed to read target %s/%s from storage backend: %s",
                         version_agent,
@@ -155,6 +160,8 @@ class VersionOutputCorrelator:
             return outputs, filenames
 
         except Exception as e:
+            if isinstance(e, ConfigurationError):
+                raise
             logger.warning(
                 "Failed to list target files from storage backend for %s: %s",
                 version_agent,
@@ -229,9 +236,7 @@ class VersionOutputCorrelator:
                 data = json.load(f)
                 action_name = params.records_action_name or params.output_dir.name
                 if isinstance(data, list):
-                    for record in data:
-                        if isinstance(record, dict):
-                            require_frozen_record_lifecycle(record, action_name=action_name)
+                    validate_frozen_target_payload(data, action_name=action_name)
                     if params.add_source_file:
                         for record in data:
                             if isinstance(record, dict):

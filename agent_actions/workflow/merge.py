@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
+from agent_actions.record.lifecycle_read import validate_frozen_target_payload
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -249,13 +249,10 @@ def merge_json_files(
         try:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
+                validate_frozen_target_payload(data, action_name=records_action_name)
                 if isinstance(data, list):
-                    for rec in data:
-                        if isinstance(rec, dict):
-                            require_frozen_record_lifecycle(rec, action_name=records_action_name)
                     all_records.extend(data)
-                elif isinstance(data, dict):
-                    require_frozen_record_lifecycle(data, action_name=records_action_name)
+                else:
                     all_records.append(data)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(

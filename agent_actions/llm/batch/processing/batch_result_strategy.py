@@ -27,7 +27,9 @@ from agent_actions.processing.types import (
     ProcessingStatus,
     RecoveryMetadata,
 )
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import BATCH_NOT_RETURNED, GUARD_SKIP, UPSTREAM_UNPROCESSED
+from agent_actions.record.state import RecordState
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -260,6 +262,7 @@ class BatchResultStrategy:
 
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
+        action_name = ctx.agent_config["action_name"]
 
         existing_content = get_existing_content(original_row)
 
@@ -267,7 +270,11 @@ class BatchResultStrategy:
         for item in generated_list:
             item_dict = item if isinstance(item, dict) else {}
             content = apply_version_merge(ctx.agent_config, item_dict, existing_content)
-            structured_items.append({"source_guid": original_source_guid, "content": content})
+            structured_item = {"source_guid": original_source_guid, "content": content}
+            RecordEnvelope.transition(
+                structured_item, RecordState.PROCESSED, action_name, "batch_result", None
+            )
+            structured_items.append(structured_item)
 
         # Batch items inherit target_id and version_correlation_id from the original input row.
         for item in structured_items:
@@ -334,6 +341,8 @@ class BatchResultStrategy:
                 "reconciler must be initialized before creating error items"
             )
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
+        if not ctx.agent_config or "action_name" not in ctx.agent_config:
+            raise ValueError("agent_config must contain 'action_name' for lifecycle stamping")
 
         error_item: dict[str, Any] = {
             "source_guid": source_guid,
@@ -346,6 +355,14 @@ class BatchResultStrategy:
 
         if recovery_metadata:
             error_item["_recovery"] = recovery_metadata.to_dict()
+
+        RecordEnvelope.transition(
+            error_item,
+            RecordState.FAILED,
+            ctx.agent_config["action_name"],
+            "batch_error",
+            error_message,
+        )
 
         return ProcessingResult(
             status=ProcessingStatus.FAILED,

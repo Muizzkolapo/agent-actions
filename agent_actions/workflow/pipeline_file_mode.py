@@ -183,10 +183,15 @@ def _build_record(
 ) -> dict[str, Any]:
     """Build a single output record, either namespaced or version-merge spread."""
     if version_merge:
+        from agent_actions.record.envelope import RecordEnvelope
+        from agent_actions.record.state import RecordState
         from agent_actions.utils.content import get_existing_content
 
         existing = get_existing_content(matched) if matched else {}
         record: dict[str, Any] = {"content": {**existing, **data_fields}}
+        RecordEnvelope.transition(
+            record, RecordState.PROCESSED, action_name, "file_version_merge", None
+        )
     else:
         from agent_actions.record.envelope import RecordEnvelope
 

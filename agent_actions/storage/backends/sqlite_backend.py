@@ -478,7 +478,9 @@ class SQLiteBackend(StorageBackend):
                 if not data_row:
                     continue
 
-                records = json.loads(data_row["data"])
+                parsed: Any = json.loads(data_row["data"])
+                validate_frozen_target_payload(parsed, action_name=action_name)
+                records = [parsed] if isinstance(parsed, dict) else parsed
                 for record in records:
                     if skipped < offset:
                         skipped += 1
