@@ -15,6 +15,13 @@ from agent_actions.record.state import (
 )
 
 
+class TestPublicPackageContract:
+    def test_record_state_importable_from_package(self):
+        from agent_actions.record import RecordState as RS
+
+        assert RS.ACTIVE == "active"
+
+
 class TestRecordStateEnum:
     def test_is_str_enum(self):
         assert isinstance(RecordState.ACTIVE, str)

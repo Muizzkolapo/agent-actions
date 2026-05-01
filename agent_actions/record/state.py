@@ -63,5 +63,5 @@ def is_settled(state: RecordState) -> bool:
 
 
 def is_retriable(state: RecordState) -> bool:
-    """True if the record failed and could be retried."""
+    """True if the record is in a retriable terminal state (FAILED or EXHAUSTED)."""
     return state in RETRIABLE_STATES
