@@ -23,21 +23,9 @@ class RecordState(str, Enum):
     EXHAUSTED = "exhausted"
 
 
-# -- State categories --------------------------------------------------------
-
 PROCESSABLE_STATES: frozenset[RecordState] = frozenset({RecordState.ACTIVE})
 
-SETTLED_STATES: frozenset[RecordState] = frozenset(
-    {
-        RecordState.PROCESSED,
-        RecordState.COMMITTED,
-        RecordState.GUARD_SKIPPED,
-        RecordState.GUARD_DEFERRED,
-        RecordState.CASCADE_SKIPPED,
-        RecordState.FAILED,
-        RecordState.EXHAUSTED,
-    }
-)
+SETTLED_STATES: frozenset[RecordState] = frozenset(RecordState) - PROCESSABLE_STATES
 
 RESETTABLE_DOWNSTREAM_STATES: frozenset[RecordState] = frozenset(
     {
@@ -62,9 +50,6 @@ RETRIABLE_STATES: frozenset[RecordState] = frozenset(
         RecordState.EXHAUSTED,
     }
 )
-
-
-# -- Helpers -----------------------------------------------------------------
 
 
 def is_processable(state: RecordState) -> bool:
