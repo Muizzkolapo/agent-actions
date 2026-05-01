@@ -1,8 +1,24 @@
-"""Unified record envelope -- single authority for record content assembly."""
+"""Unified record envelope -- single authority for record content assembly.
+
+``RecordEnvelope.transition()`` is the only sanctioned mutator for lifecycle
+fields (``_state``, ``_state_history``, ``_state_schema_version``).  See
+``record/_MANIFEST.md`` for legal transition edges, history cap, and schema
+version bump rules.
+"""
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
+
+from agent_actions.record.state import (
+    PROCESSABLE_STATES,
+    RESETTABLE_DOWNSTREAM_STATES,
+    RecordState,
+)
+
+STATE_HISTORY_CAP: int = 64
+_STATE_SCHEMA_VERSION: int = 1
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
@@ -28,6 +44,9 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         "parent_target_id",
         "root_target_id",
         "chunk_info",
+        "_state",
+        "_state_history",
+        "_state_schema_version",
     }
 )
 
@@ -54,10 +73,10 @@ class RecordEnvelope:
         """Build a record wrapping *action_output* under *action_name*.
 
         Preserves upstream namespaces from *input_record* and carries
-        ``source_guid``.  Collision on *action_name* overwrites.
+        ``source_guid``. Collision on *action_name* overwrites.
 
-        The assembled content dict is new, but *action_output* itself is stored
-        by reference inside it.  Callers must not mutate *action_output* after
+        The assembled content dict is new, but *action_output* is stored by
+        reference inside it. Callers must not mutate *action_output* after
         calling ``build()``.
         """
         if not action_name:
@@ -80,7 +99,7 @@ class RecordEnvelope:
     ) -> dict[str, Any]:
         """Return a content dict with *action_output* under *action_name*.
 
-        No record wrapper or ``source_guid`` -- content level only.
+        No record wrapper or ``source_guid`` — content level only.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -95,7 +114,7 @@ class RecordEnvelope:
     ) -> dict[str, Any]:
         """Build a record with a null namespace for a guard-skipped action.
 
-        Does NOT set ``_unprocessed`` or ``metadata`` -- callers add those.
+        Does not set ``_unprocessed`` or ``metadata`` — callers add those.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -103,16 +122,87 @@ class RecordEnvelope:
         result: dict[str, Any] = {"content": {**existing, action_name: None}}
         return _carry_tracking_fields(result, input_record)
 
+    @staticmethod
+    def transition(
+        record: dict[str, Any],
+        to_state: RecordState,
+        action_name: str,
+        reason: str,
+        detail: str | None = None,
+    ) -> dict[str, Any]:
+        """Transition *record* to *to_state*.
+
+        The only sanctioned mutator for ``_state``, ``_state_history``, and
+        ``_state_schema_version``. Appends a timestamped history entry (capped
+        at ``STATE_HISTORY_CAP``) and mutates the record in-place.
+
+        Raises ``RecordEnvelopeError`` for illegal transitions, unknown current
+        state values, or corrupt history shapes. Returns the record for chaining.
+        """
+        if not action_name:
+            raise RecordEnvelopeError("action_name is required")
+
+        from_state_raw = record.get("_state")
+        if from_state_raw is not None:
+            try:
+                from_state: RecordState | None = RecordState(from_state_raw)
+            except ValueError:
+                raise RecordEnvelopeError(
+                    f"Record has unknown _state value: {from_state_raw!r}"
+                ) from None
+        else:
+            from_state = None
+
+        _validate_transition(from_state, to_state)
+
+        raw_history = record.get("_state_history")
+        if raw_history is not None and not isinstance(raw_history, list):
+            raise RecordEnvelopeError(
+                f"_state_history must be a list, got {type(raw_history).__name__}"
+            )
+        history: list[dict[str, Any]] = raw_history or []
+        entry: dict[str, Any] = {
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+            "action": action_name,
+            "from": from_state_raw,
+            "to": to_state.value,
+            "reason": reason,
+            "detail": detail,
+        }
+        history.append(entry)
+        if len(history) > STATE_HISTORY_CAP:
+            history = history[-STATE_HISTORY_CAP:]
+
+        record["_state"] = to_state.value
+        record["_state_history"] = history
+        record["_state_schema_version"] = _STATE_SCHEMA_VERSION
+        return record
+
+
+def _validate_transition(from_state: RecordState | None, to_state: RecordState) -> None:
+    """Raise RecordEnvelopeError if the from→to edge violates state machine rules."""
+    if from_state is None:
+        return
+    if from_state == to_state:
+        return
+    if from_state in PROCESSABLE_STATES:
+        return
+    if from_state in RESETTABLE_DOWNSTREAM_STATES and to_state in PROCESSABLE_STATES:
+        return
+    raise RecordEnvelopeError(
+        f"Illegal state transition: {from_state.value!r} → {to_state.value!r}"
+    )
+
 
 def _carry_tracking_fields(
     result: dict[str, Any], input_record: dict[str, Any] | None
 ) -> dict[str, Any]:
-    """Copy tracking fields from input_record to result.
+    """Copy tracking fields from *input_record* into *result*.
 
-    Tracking fields are the record's stable identity — set once at creation
-    (first stage or 1→N expansion) and preserved through all downstream
-    1:1 stages. Per-stage fields (metadata, lineage, node_id, etc.) are
-    NOT carried — enrichers rebuild those.
+    Tracking fields (``source_guid``, ``version_correlation_id``) are the
+    record's stable identity — set once at creation and preserved through all
+    downstream 1:1 stages. Per-stage fields (metadata, lineage, etc.) are not
+    carried; enrichers rebuild those each stage.
     """
     if input_record is None:
         return result
