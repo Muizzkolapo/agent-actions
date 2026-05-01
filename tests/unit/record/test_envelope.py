@@ -69,11 +69,14 @@ class TestBuild:
         assert result["content"] == {"action": {"x": 1}}
         assert result["source_guid"] == "g1"
 
-    def test_empty_dict_input_record_is_valid(self):
-        """Empty dict input_record must not be treated as absent — tracking fields are carried."""
-        result = RecordEnvelope.build("action", {"x": 1}, {"source_guid": "g-empty"})
+    def test_empty_dict_input_record_does_not_short_circuit(self):
+        """Empty dict {} input_record must not be treated as absent by _carry_tracking_fields."""
+        result = RecordEnvelope.build("action", {"x": 1}, {})
         assert result["content"] == {"action": {"x": 1}}
-        assert result["source_guid"] == "g-empty"
+
+    def test_input_record_tracking_fields_are_carried(self):
+        result = RecordEnvelope.build("action", {"x": 1}, {"source_guid": "g-carry"})
+        assert result["source_guid"] == "g-carry"
 
 
 # ── build_content() ─────────────────────────────────────────────────────────
