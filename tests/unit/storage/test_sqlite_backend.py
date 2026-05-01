@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_actions.errors.configuration import ConfigurationError
 from agent_actions.storage import BACKENDS, get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -85,8 +86,6 @@ class TestSQLiteBackend:
 
     def test_read_target_raises_when_state_missing(self, backend):
         """read_target raises ConfigurationError when persisted records omit _state."""
-        from agent_actions.errors.configuration import ConfigurationError
-
         data = [{"source_guid": "sg-1", "content": {"x": 1}}]
         backend.write_target("node_1", "batch.json", data)
         with pytest.raises(ConfigurationError, match="_state"):

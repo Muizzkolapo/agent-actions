@@ -17,6 +17,7 @@ from agent_actions.errors.configuration import ConfigurationError
 from agent_actions.record.state import RecordState
 
 _SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
+_VALID_STATES: frozenset[str] = frozenset(s.value for s in RecordState)
 
 
 def validate_lifecycle(
@@ -43,14 +44,12 @@ def validate_lifecycle(
         )
 
     raw_state = record["_state"]
-    try:
-        RecordState(raw_state)
-    except ValueError:
+    if raw_state not in _VALID_STATES:
         raise ConfigurationError(
             f"Record has unrecognised '_state' value {raw_state!r}. "
             f"Delete agent_io/target/ and re-run. "
             f"(action='{action_name}', source_guid='{source_guid}')"
-        ) from None
+        )
 
     schema_version = record.get("_state_schema_version")
     if schema_version is not None and schema_version not in _SUPPORTED_SCHEMA_VERSIONS:
@@ -72,5 +71,10 @@ def validate_lifecycle_batch(
     Fails on the first invalid record.  Use this after loading a full
     target file from storage.
     """
-    for record in records:
+    for i, record in enumerate(records):
+        if not isinstance(record, dict):
+            raise ConfigurationError(
+                f"Expected a dict at index {i} in target data for action '{action_name}', "
+                f"got {type(record).__name__}. Delete agent_io/target/ and re-run."
+            )
         validate_lifecycle(record, action_name=action_name)
