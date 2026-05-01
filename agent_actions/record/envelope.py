@@ -55,6 +55,10 @@ class RecordEnvelope:
 
         Preserves upstream namespaces from *input_record* and carries
         ``source_guid``.  Collision on *action_name* overwrites.
+
+        The assembled content dict is new, but *action_output* itself is stored
+        by reference inside it.  Callers must not mutate *action_output* after
+        calling ``build()``.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -80,7 +84,7 @@ class RecordEnvelope:
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
-        content = dict(existing_content) if existing_content else {}
+        content = dict(existing_content) if existing_content is not None else {}
         content[action_name] = action_output
         return content
 
@@ -110,7 +114,7 @@ def _carry_tracking_fields(
     1:1 stages. Per-stage fields (metadata, lineage, node_id, etc.) are
     NOT carried — enrichers rebuild those.
     """
-    if not input_record:
+    if input_record is None:
         return result
     for field in RECORD_TRACKING_FIELDS:
         if field in input_record:

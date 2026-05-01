@@ -69,6 +69,15 @@ class TestBuild:
         assert result["content"] == {"action": {"x": 1}}
         assert result["source_guid"] == "g1"
 
+    def test_empty_dict_input_record_does_not_short_circuit(self):
+        """Empty dict {} input_record must not be treated as absent by _carry_tracking_fields."""
+        result = RecordEnvelope.build("action", {"x": 1}, {})
+        assert result["content"] == {"action": {"x": 1}}
+
+    def test_input_record_tracking_fields_are_carried(self):
+        result = RecordEnvelope.build("action", {"x": 1}, {"source_guid": "g-carry"})
+        assert result["source_guid"] == "g-carry"
+
 
 # ── build_content() ─────────────────────────────────────────────────────────
 
@@ -93,6 +102,11 @@ class TestBuildContent:
     def test_empty_action_name_raises(self):
         with pytest.raises(RecordEnvelopeError, match="action_name is required"):
             RecordEnvelope.build_content("", {"x": 1})
+
+    def test_empty_dict_existing_content_is_valid(self):
+        """Empty dict is valid existing content, not a missing-content sentinel."""
+        result = RecordEnvelope.build_content("x", {"a": 1}, existing_content={})
+        assert result == {"x": {"a": 1}}
 
 
 # ── build_skipped() ─────────────────────────────────────────────────────────
