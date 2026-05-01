@@ -13,6 +13,11 @@ from pathlib import Path
 
 import pytest
 
+
+def _tr(*extra_fields, **kwargs) -> dict:
+    """Minimal valid target record with lifecycle fields."""
+    return {"_state": "processed", "_state_schema_version": 1, **kwargs}
+
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
@@ -79,8 +84,8 @@ class TestTargetDataOperations:
     def test_write_and_read_target_data(self, backend):
         """Can write and read target data for a node."""
         test_data = [
-            {"content": {"text": "record 1"}, "source_guid": "guid-1"},
-            {"content": {"text": "record 2"}, "source_guid": "guid-2"},
+            {"_state": "processed", "_state_schema_version": 1, "content": {"text": "record 1"}, "source_guid": "guid-1"},
+            {"_state": "processed", "_state_schema_version": 1, "content": {"text": "record 2"}, "source_guid": "guid-2"},
         ]
 
         # Write
@@ -96,10 +101,10 @@ class TestTargetDataOperations:
     def test_write_target_overwrites_existing(self, backend):
         """Writing to same path overwrites existing data."""
         # Write initial data
-        backend.write_target("node1", "file.json", [{"id": 1}])
+        backend.write_target("node1", "file.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}])
 
         # Write new data to same path
-        backend.write_target("node1", "file.json", [{"id": 2}, {"id": 3}])
+        backend.write_target("node1", "file.json", [{"_state": "processed", "_state_schema_version": 1, "id": 2}, {"_state": "processed", "_state_schema_version": 1, "id": 3}])
 
         # Should have new data
         retrieved = backend.read_target("node1", "file.json")
@@ -115,9 +120,9 @@ class TestTargetDataOperations:
 
     def test_list_target_files(self, backend):
         """Can list all target files for a node."""
-        backend.write_target("node1", "batch_001.json", [{"id": 1}])
-        backend.write_target("node1", "batch_002.json", [{"id": 2}])
-        backend.write_target("node2", "batch_001.json", [{"id": 3}])
+        backend.write_target("node1", "batch_001.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}])
+        backend.write_target("node1", "batch_002.json", [{"_state": "processed", "_state_schema_version": 1, "id": 2}])
+        backend.write_target("node2", "batch_001.json", [{"_state": "processed", "_state_schema_version": 1, "id": 3}])
 
         node1_files = backend.list_target_files("node1")
         assert len(node1_files) == 2
@@ -232,17 +237,17 @@ class TestPreviewAndStats:
             backend.write_target(
                 "extract",
                 "batch_001.json",
-                [{"id": i, "text": f"record {i}"} for i in range(15)],
+                [{"_state": "processed", "_state_schema_version": 1, "id": i, "text": f"record {i}"} for i in range(15)],
             )
             backend.write_target(
                 "extract",
                 "batch_002.json",
-                [{"id": i, "text": f"record {i}"} for i in range(15, 25)],
+                [{"_state": "processed", "_state_schema_version": 1, "id": i, "text": f"record {i}"} for i in range(15, 25)],
             )
             backend.write_target(
                 "transform",
                 "batch_001.json",
-                [{"id": i, "result": f"transformed {i}"} for i in range(5)],
+                [{"_state": "processed", "_state_schema_version": 1, "id": i, "result": f"transformed {i}"} for i in range(5)],
             )
 
             # Add sample source data
@@ -373,7 +378,7 @@ class TestConcurrencyAndResilience:
                     backend.write_target(
                         "node1",
                         f"batch_{i:03d}.json",
-                        [{"batch": i, "id": j} for j in range(5)],
+                        [{"_state": "processed", "_state_schema_version": 1, "batch": i, "id": j} for j in range(5)],
                     )
 
                 files = backend.list_target_files("node1")
@@ -388,9 +393,9 @@ class TestConcurrencyAndResilience:
                 backend.initialize()
 
                 test_data = [
-                    {"text": "Hello 世界 🌍"},
-                    {"text": "Ελληνικά"},
-                    {"text": "العربية"},
+                    {"_state": "processed", "_state_schema_version": 1, "text": "Hello 世界 🌍"},
+                    {"_state": "processed", "_state_schema_version": 1, "text": "Ελληνικά"},
+                    {"_state": "processed", "_state_schema_version": 1, "text": "العربية"},
                 ]
 
                 backend.write_target("node1", "unicode.json", test_data)
@@ -410,7 +415,7 @@ class TestConcurrencyAndResilience:
 
                 # Create a large record (~1MB of text)
                 large_text = "x" * (1024 * 1024)
-                test_data = [{"large_field": large_text}]
+                test_data = [{"_state": "processed", "_state_schema_version": 1, "large_field": large_text}]
 
                 backend.write_target("node1", "large.json", test_data)
                 retrieved = backend.read_target("node1", "large.json")
@@ -446,7 +451,7 @@ class TestConcurrencyAndResilience:
                         backend.write_target(
                             f"node_{thread_id}",
                             f"batch_{i}.json",
-                            [{"id": i, "thread": thread_id}],
+                            [{"_state": "processed", "_state_schema_version": 1, "id": i, "thread": thread_id}],
                         )
                     results.append(f"target-{thread_id}")
                 except Exception as e:
@@ -496,8 +501,8 @@ class TestWorkflowIntegration:
 
                 # Action 1: Extract - writes target data
                 extract_output = [
-                    {"source_guid": "g1", "content": {"raw": "doc1"}},
-                    {"source_guid": "g2", "content": {"raw": "doc2"}},
+                    {"_state": "processed", "_state_schema_version": 1, "source_guid": "g1", "content": {"raw": "doc1"}},
+                    {"_state": "processed", "_state_schema_version": 1, "source_guid": "g2", "content": {"raw": "doc2"}},
                 ]
                 backend.write_target("extract", "batch.json", extract_output)
 
@@ -525,9 +530,9 @@ class TestWorkflowIntegration:
                 backend.initialize()
 
                 # Simulate parallel writes from different actions
-                backend.write_target("action_a", "batch.json", [{"from": "a"}])
-                backend.write_target("action_b", "batch.json", [{"from": "b"}])
-                backend.write_target("action_c", "batch.json", [{"from": "c"}])
+                backend.write_target("action_a", "batch.json", [{"_state": "processed", "_state_schema_version": 1, "from": "a"}])
+                backend.write_target("action_b", "batch.json", [{"_state": "processed", "_state_schema_version": 1, "from": "b"}])
+                backend.write_target("action_c", "batch.json", [{"_state": "processed", "_state_schema_version": 1, "from": "c"}])
 
                 # Each action's data is separate
                 data_a = backend.read_target("action_a", "batch.json")
@@ -547,8 +552,8 @@ class TestWorkflowIntegration:
                 backend.initialize()
 
                 # Two parallel upstream actions
-                backend.write_target("extract_a", "batch.json", [{"id": 1, "src": "a"}])
-                backend.write_target("extract_b", "batch.json", [{"id": 2, "src": "b"}])
+                backend.write_target("extract_a", "batch.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1, "src": "a"}])
+                backend.write_target("extract_b", "batch.json", [{"_state": "processed", "_state_schema_version": 1, "id": 2, "src": "b"}])
 
                 # Merge action reads from both
                 data_a = backend.read_target("extract_a", "batch.json")
@@ -665,7 +670,7 @@ class TestDispositionLifecycle:
                 backend.initialize()
 
                 # Write some target data and dispositions
-                backend.write_target("node1", "batch.json", [{"id": 1}])
+                backend.write_target("node1", "batch.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}])
                 backend.set_disposition("node1", NODE_LEVEL_RECORD_ID, "passthrough")
                 backend.set_disposition("node1", "rec_1", "filtered")
 

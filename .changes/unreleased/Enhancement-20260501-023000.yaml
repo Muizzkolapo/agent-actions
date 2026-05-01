@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Add fail-closed lifecycle validation: records loaded from target storage must carry _state or raise ConfigurationError with actionable delete-and-rerun message"
+time: 2026-05-01T02:30:00.000000Z
