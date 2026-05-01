@@ -1,8 +1,40 @@
-"""Unified record envelope -- single authority for record content assembly."""
+"""Unified record envelope -- single authority for record content assembly.
+
+``RecordEnvelope.transition()`` is the **only** sanctioned mutator for
+lifecycle fields (``_state``, ``_state_history``, ``_state_schema_version``).
+All other code reads these fields; it does not write them directly.
+
+## _state_schema_version bump rules
+
+Version 1 (current): history entries have keys
+  {timestamp, action, from, to, reason, detail}
+
+Bump to version 2 when: a new required key is added to history entries,
+or the semantics of an existing key change in a breaking way.  Additive
+optional keys do not require a bump.
+
+## _state_history cap
+
+History is capped at ``STATE_HISTORY_CAP`` entries (default: 64).  This
+prevents unbounded serialization growth across long retry chains.  When the
+cap is reached, the oldest entry is dropped on each new append.  64 entries
+is enough for any realistic pipeline run (typical records see 2-10
+transitions).
+"""
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
+
+from agent_actions.record.state import (
+    PROCESSABLE_STATES,
+    RESETTABLE_DOWNSTREAM_STATES,
+    RecordState,
+)
+
+STATE_HISTORY_CAP: int = 64
+_STATE_SCHEMA_VERSION: int = 1
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
@@ -28,6 +60,9 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         "parent_target_id",
         "root_target_id",
         "chunk_info",
+        "_state",
+        "_state_history",
+        "_state_schema_version",
     }
 )
 
@@ -102,6 +137,75 @@ class RecordEnvelope:
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: None}}
         return _carry_tracking_fields(result, input_record)
+
+    @staticmethod
+    def transition(
+        record: dict[str, Any],
+        to_state: RecordState,
+        action_name: str,
+        reason: str,
+        detail: str | None = None,
+    ) -> dict[str, Any]:
+        """Transition *record* to *to_state* — the only sanctioned lifecycle mutator.
+
+        Updates ``_state``, appends to ``_state_history`` (capped at
+        ``STATE_HISTORY_CAP``), and sets ``_state_schema_version``.
+
+        Raises ``RecordEnvelopeError`` if the transition is illegal.
+        Returns the record (mutated in-place) for chaining.
+        """
+        from_state_raw = record.get("_state")
+        from_state = RecordState(from_state_raw) if from_state_raw is not None else None
+
+        _validate_transition(from_state, to_state)
+
+        history: list[dict[str, Any]] = list(record.get("_state_history") or [])
+        entry: dict[str, Any] = {
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+            "action": action_name,
+            "from": from_state_raw,
+            "to": to_state.value,
+            "reason": reason,
+            "detail": detail,
+        }
+        history.append(entry)
+        if len(history) > STATE_HISTORY_CAP:
+            history = history[-STATE_HISTORY_CAP:]
+
+        record["_state"] = to_state.value
+        record["_state_history"] = history
+        record["_state_schema_version"] = _STATE_SCHEMA_VERSION
+        return record
+
+
+def _validate_transition(from_state: RecordState | None, to_state: RecordState) -> None:
+    """Raise RecordEnvelopeError if the from→to edge is not legal.
+
+    Legal edges:
+    - None → any state          (first transition on a new record)
+    - ACTIVE → any settled      (normal pipeline progression)
+    - RESETTABLE → ACTIVE       (downstream reset before retry)
+    - any → same state          (idempotent re-application, e.g. retry logic)
+
+    Illegal edges:
+    - CASCADE_BLOCKING → ACTIVE (CASCADE_SKIPPED/FAILED/EXHAUSTED cannot be
+                                 reset to ACTIVE directly; they require an
+                                 explicit reset through RESETTABLE states first,
+                                 which is not a supported path today)
+    - SETTLED → SETTLED (cross-settled transitions, e.g. PROCESSED → FAILED,
+                         are not valid — settled means done for this stage)
+    """
+    if from_state is None:
+        return
+    if from_state == to_state:
+        return
+    if from_state in PROCESSABLE_STATES:
+        return
+    if from_state in RESETTABLE_DOWNSTREAM_STATES and to_state in PROCESSABLE_STATES:
+        return
+    raise RecordEnvelopeError(
+        f"Illegal state transition: {from_state.value!r} → {to_state.value!r}"
+    )
 
 
 def _carry_tracking_fields(
