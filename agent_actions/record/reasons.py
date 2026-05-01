@@ -4,9 +4,6 @@ Every reason/skip/cascade/filter string that flows through disposition writes,
 tombstone metadata, ProcessingResult factories, or telemetry events must be
 defined here.  Production code imports from this module instead of using bare
 string literals.
-
-Test files may still use bare strings — that is intentional so tests break
-visibly if a constant value changes.
 """
 
 # -- Guard outcomes ----------------------------------------------------------
@@ -33,5 +30,5 @@ PARSE_ERROR = "parse_error"
 GUARD_FILTERED_ALL = "All records guard-filtered — no output produced"
 
 # -- FILTER_PHASE values (batch preparator) -----------------------------------
-FILTER_PHASE_UPSTREAM = "upstream_unprocessed"
+FILTER_PHASE_UPSTREAM = UPSTREAM_UNPROCESSED  # same value by design — batch dispatch relies on this
 FILTER_PHASE_UNIFIED = "unified"
