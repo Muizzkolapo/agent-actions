@@ -167,19 +167,19 @@ class PromptTraceCheck(Check):
                         )
                     )
 
-                # Check 4: 1:1 join — every target record with a source_guid has a trace
-                # Exclude records with NULL/empty source_guid (aggregation tool outputs)
+                # Check 4: 1:1 join — every target record with a target_id has a trace
+                # Exclude records with NULL/empty target_id (aggregation tool outputs)
                 cursor.execute(
                     """
                     SELECT td.action_name,
-                           json_extract(j.value, '$.source_guid') as guid
+                           json_extract(j.value, '$.target_id') as tid
                     FROM target_data td, json_each(td.data) j
                     LEFT JOIN prompt_trace pt
                         ON td.action_name = pt.action_name
-                        AND json_extract(j.value, '$.source_guid') = pt.record_id
+                        AND json_extract(j.value, '$.target_id') = pt.record_id
                     WHERE pt.record_id IS NULL
-                      AND json_extract(j.value, '$.source_guid') IS NOT NULL
-                      AND json_extract(j.value, '$.source_guid') != ''
+                      AND json_extract(j.value, '$.target_id') IS NOT NULL
+                      AND json_extract(j.value, '$.target_id') != ''
                       AND td.action_name IN (
                           SELECT DISTINCT action_name FROM prompt_trace
                       )
@@ -187,7 +187,7 @@ class PromptTraceCheck(Check):
                 )
                 orphans = cursor.fetchall()
                 if orphans:
-                    orphan_list = [f"{r['action_name']}:{r['guid']}" for r in orphans]
+                    orphan_list = [f"{r['action_name']}:{r['tid']}" for r in orphans]
                     results.append(
                         CheckResult(
                             False,

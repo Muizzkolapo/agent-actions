@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix prompt trace overwrite: key traces by target_id instead of source_guid so sibling records from 1→N expansions each retain their own llm_context in the UI viewer"
+time: 2026-05-01T43:50:00.000000Z

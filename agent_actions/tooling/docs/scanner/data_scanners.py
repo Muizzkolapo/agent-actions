@@ -256,19 +256,21 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
 
         # Attach prompt traces to preview records (if table exists).
         # The prompt_trace table was added in v0.1.6; older DBs won't have it.
+        # Traces are keyed by target_id (unique per record) to avoid collisions
+        # when multiple records share a source_guid (e.g. 1→N expansions).
         try:
             for action_name, node_data in nodes.items():
-                # Map source_guid → list of records (multiple records can share a guid)
-                guid_map: dict[str, list[dict]] = {}
+                # Map target_id → record (one-to-one)
+                target_map: dict[str, dict] = {}
                 for rec in node_data["preview"]:
-                    sg = rec.get("source_guid")
-                    if sg:
-                        guid_map.setdefault(sg, []).append(rec)
+                    tid = rec.get("target_id")
+                    if tid:
+                        target_map[tid] = rec
 
-                if not guid_map:
+                if not target_map:
                     continue
 
-                placeholders = ",".join("?" for _ in guid_map)
+                placeholders = ",".join("?" for _ in target_map)
                 cursor.execute(
                     f"SELECT record_id, compiled_prompt, llm_context, "
                     f"response_text, model_name, model_vendor, run_mode, "
@@ -276,7 +278,7 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
                     f"FROM prompt_trace "
                     f"WHERE action_name = ? AND record_id IN ({placeholders})"
                     f" ORDER BY attempt DESC",
-                    [action_name, *guid_map.keys()],
+                    [action_name, *target_map.keys()],
                 )
                 seen: set[str] = set()
                 for trace_row in cursor:
@@ -295,7 +297,8 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
                         "response_length": trace_row["response_length"],
                         "attempt": trace_row["attempt"],
                     }
-                    for rec in guid_map.get(rid, []):
+                    rec = target_map.get(rid)
+                    if rec is not None:
                         rec["_trace"] = trace_data
         except sqlite3.OperationalError:
             logger.debug("No prompt_trace table in %s — skipping trace attachment", db_file)

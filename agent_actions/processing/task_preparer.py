@@ -116,21 +116,15 @@ class TaskPreparer:
         )
 
         if context.storage_backend is not None:
-            if prepared.source_guid is not None:
-                context.storage_backend.write_prompt_trace(
-                    action_name=context.agent_name,
-                    record_id=prepared.source_guid,
-                    compiled_prompt=prepared.formatted_prompt,
-                    llm_context=json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
-                    model_name=context.agent_config.get("model"),
-                    model_vendor=context.agent_config.get("model_vendor"),
-                    run_mode=context.mode.value if context.mode else None,
-                )
-            else:
-                logger.warning(
-                    "Skipping prompt trace: source_guid is None for action=%s",
-                    context.agent_name,
-                )
+            context.storage_backend.write_prompt_trace(
+                action_name=context.agent_name,
+                record_id=prepared.target_id,
+                compiled_prompt=prepared.formatted_prompt,
+                llm_context=json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
+                model_name=context.agent_config.get("model"),
+                model_vendor=context.agent_config.get("model_vendor"),
+                run_mode=context.mode.value if context.mode else None,
+            )
 
         return prepared
 
