@@ -5,6 +5,13 @@ from agent_actions.record.envelope import (
     RecordEnvelope,
     RecordEnvelopeError,
 )
+from agent_actions.record.state import RecordState
 from agent_actions.record.tracking import TrackedItem
 
-__all__ = ["RECORD_FRAMEWORK_FIELDS", "RecordEnvelope", "RecordEnvelopeError", "TrackedItem"]
+__all__ = [
+    "RECORD_FRAMEWORK_FIELDS",
+    "RecordEnvelope",
+    "RecordEnvelopeError",
+    "RecordState",
+    "TrackedItem",
+]
