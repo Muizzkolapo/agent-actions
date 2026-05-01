@@ -3,6 +3,8 @@
 import pytest
 
 from agent_actions.record.envelope import (
+    RECORD_FRAMEWORK_FIELDS,
+    RECORD_STAGE_FIELDS,
     STATE_HISTORY_CAP,
     RecordEnvelope,
     RecordEnvelopeError,
@@ -107,18 +109,33 @@ class TestTransitionIllegalEdges:
     )
     def test_cascade_blocking_cannot_reset_to_active(self, from_state):
         rec = _record(from_state)
-        with pytest.raises(RecordEnvelopeError, match="Illegal state transition"):
+        with pytest.raises(RecordEnvelopeError, match=f"{from_state.value!r}.*active"):
             RecordEnvelope.transition(rec, RecordState.ACTIVE, "act", "reset")
 
     def test_processed_cannot_go_to_failed(self):
         rec = _record(RecordState.PROCESSED)
-        with pytest.raises(RecordEnvelopeError, match="Illegal state transition"):
+        with pytest.raises(RecordEnvelopeError, match="'processed'.*'failed'"):
             RecordEnvelope.transition(rec, RecordState.FAILED, "act", "oops")
 
     def test_committed_cannot_go_to_guard_skipped(self):
         rec = _record(RecordState.COMMITTED)
-        with pytest.raises(RecordEnvelopeError, match="Illegal state transition"):
+        with pytest.raises(RecordEnvelopeError, match="'committed'.*'guard_skipped'"):
             RecordEnvelope.transition(rec, RecordState.GUARD_SKIPPED, "act", "reason")
+
+    def test_unknown_state_value_raises_envelope_error(self):
+        rec = {"_state": "bogus_state", "content": {}}
+        with pytest.raises(RecordEnvelopeError, match="unknown _state value.*bogus_state"):
+            RecordEnvelope.transition(rec, RecordState.PROCESSED, "act", "reason")
+
+    def test_corrupt_history_type_raises_envelope_error(self):
+        rec = {"_state": "active", "_state_history": "not-a-list", "content": {}}
+        with pytest.raises(RecordEnvelopeError, match="_state_history must be a list"):
+            RecordEnvelope.transition(rec, RecordState.PROCESSED, "act", "reason")
+
+    def test_empty_action_name_raises(self):
+        rec = _active_record()
+        with pytest.raises(RecordEnvelopeError, match="action_name is required"):
+            RecordEnvelope.transition(rec, RecordState.PROCESSED, "", "reason")
 
 
 class TestTransitionHistoryCap:
@@ -153,15 +170,11 @@ class TestTransitionHistoryCap:
 
 class TestFrameworkFields:
     def test_state_fields_in_record_stage_fields(self):
-        from agent_actions.record.envelope import RECORD_STAGE_FIELDS
-
         assert "_state" in RECORD_STAGE_FIELDS
         assert "_state_history" in RECORD_STAGE_FIELDS
         assert "_state_schema_version" in RECORD_STAGE_FIELDS
 
     def test_state_fields_in_framework_fields(self):
-        from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
-
         assert "_state" in RECORD_FRAMEWORK_FIELDS
         assert "_state_history" in RECORD_FRAMEWORK_FIELDS
         assert "_state_schema_version" in RECORD_FRAMEWORK_FIELDS

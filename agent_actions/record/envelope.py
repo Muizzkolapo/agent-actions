@@ -135,15 +135,32 @@ class RecordEnvelope:
         Updates ``_state``, appends to ``_state_history`` (capped at
         ``STATE_HISTORY_CAP``), and sets ``_state_schema_version``.
 
-        Raises ``RecordEnvelopeError`` if the transition is illegal.
+        Raises ``RecordEnvelopeError`` for illegal transitions, unknown current
+        state values, or corrupt history shapes.
         Returns the record (mutated in-place) for chaining.
         """
+        if not action_name:
+            raise RecordEnvelopeError("action_name is required")
+
         from_state_raw = record.get("_state")
-        from_state = RecordState(from_state_raw) if from_state_raw is not None else None
+        if from_state_raw is not None:
+            try:
+                from_state: RecordState | None = RecordState(from_state_raw)
+            except ValueError:
+                raise RecordEnvelopeError(
+                    f"Record has unknown _state value: {from_state_raw!r}"
+                ) from None
+        else:
+            from_state = None
 
         _validate_transition(from_state, to_state)
 
-        history: list[dict[str, Any]] = record.get("_state_history") or []
+        raw_history = record.get("_state_history")
+        if raw_history is not None and not isinstance(raw_history, list):
+            raise RecordEnvelopeError(
+                f"_state_history must be a list, got {type(raw_history).__name__}"
+            )
+        history: list[dict[str, Any]] = raw_history or []
         entry: dict[str, Any] = {
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "action": action_name,
