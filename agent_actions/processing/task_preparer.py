@@ -18,10 +18,6 @@ from agent_actions.utils.id_generation import IDGenerator
 
 logger = logging.getLogger(__name__)
 
-# Guard outcomes that should NOT cascade as upstream failures.
-# A guard-skipped record is valid pipeline data — the action was intentionally
-# skipped but downstream should still process.  All guard-skip variants must
-# be listed here regardless of which mode (online/batch/FILE) produced them.
 GUARD_EXEMPT_REASONS: frozenset[str] = frozenset(
     {
         GUARD_SKIP,

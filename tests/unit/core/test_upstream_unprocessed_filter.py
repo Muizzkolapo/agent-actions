@@ -65,15 +65,11 @@ class TestIsUpstreamUnprocessed:
         item = {"content": "data", "_unprocessed": False}
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
-    # -- Guard exemption: all variants must NOT cascade --------------------
-
     def test_guard_skip_exempt_from_cascade(self):
-        """Online guard-skip should not propagate as upstream failure."""
         item = {"content": "data", "_unprocessed": True, "metadata": {"reason": "guard_skip"}}
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
     def test_guard_prefilter_skip_exempt_from_cascade(self):
-        """FILE-mode guard-skip should not propagate as upstream failure."""
         item = {
             "content": "data",
             "_unprocessed": True,
@@ -82,14 +78,10 @@ class TestIsUpstreamUnprocessed:
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
     def test_guard_filter_exempt_from_cascade(self):
-        """Guard-filter should not propagate as upstream failure."""
         item = {"content": "data", "_unprocessed": True, "metadata": {"reason": "guard_filter"}}
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
-    # -- Non-guard reasons: MUST cascade -----------------------------------
-
     def test_upstream_unprocessed_cascades(self):
-        """True upstream failure must propagate."""
         item = {
             "content": "data",
             "_unprocessed": True,
@@ -98,7 +90,6 @@ class TestIsUpstreamUnprocessed:
         assert TaskPreparer._is_upstream_unprocessed(item) is True
 
     def test_batch_not_returned_cascades(self):
-        """Batch not-returned must propagate."""
         item = {
             "content": "data",
             "_unprocessed": True,
@@ -107,7 +98,6 @@ class TestIsUpstreamUnprocessed:
         assert TaskPreparer._is_upstream_unprocessed(item) is True
 
     def test_retry_exhausted_cascades(self):
-        """Retry-exhausted must propagate."""
         item = {
             "content": "data",
             "_unprocessed": True,
