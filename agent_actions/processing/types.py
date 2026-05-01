@@ -5,6 +5,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.config.types import ActionConfigDict, RunMode
+from agent_actions.record import reasons
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -19,7 +20,7 @@ class ProcessingStatus(Enum):
     FAILED = "failed"  # Processing failed
     EXHAUSTED = "exhausted"  # Retry exhausted
     DEFERRED = "deferred"  # Deferred for batch execution
-    UNPROCESSED = "unprocessed"  # Upstream failed/skipped this record
+    UNPROCESSED = reasons.UNPROCESSED
 
 
 @dataclass
