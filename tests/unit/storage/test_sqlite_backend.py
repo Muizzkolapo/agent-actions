@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_actions.errors.configuration import ConfigurationError
 from agent_actions.storage import BACKENDS, get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -66,8 +67,8 @@ class TestSQLiteBackend:
     def test_write_and_read_target(self, backend):
         """Test writing and reading target data."""
         data = [
-            {"target_id": "t1", "content": {"field1": "value1"}},
-            {"target_id": "t2", "content": {"field2": "value2"}},
+            {"_state": "processed", "_state_schema_version": 1, "target_id": "t1", "content": {"field1": "value1"}},
+            {"_state": "processed", "_state_schema_version": 1, "target_id": "t2", "content": {"field2": "value2"}},
         ]
 
         # Write target data
@@ -82,6 +83,13 @@ class TestSQLiteBackend:
         """Test that reading non-existent target raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
             backend.read_target("node_1", "nonexistent.json")
+
+    def test_read_target_raises_when_state_missing(self, backend):
+        """read_target raises ConfigurationError when persisted records omit _state."""
+        data = [{"source_guid": "sg-1", "content": {"x": 1}}]
+        backend.write_target("node_1", "batch.json", data)
+        with pytest.raises(ConfigurationError, match="_state"):
+            backend.read_target("node_1", "batch.json")
 
     def test_write_and_read_source(self, backend):
         """Test writing and reading source data."""
@@ -173,11 +181,11 @@ class TestSQLiteBackend:
 
     def test_target_update_replaces_data(self, backend):
         """Test that writing to same target path replaces data."""
-        backend.write_target("node_1", "file.json", [{"v": "original"}])
-        backend.write_target("node_1", "file.json", [{"v": "updated"}])
+        backend.write_target("node_1", "file.json", [{"_state": "active", "v": "original"}])
+        backend.write_target("node_1", "file.json", [{"_state": "active", "v": "updated"}])
 
         data = backend.read_target("node_1", "file.json")
-        assert data == [{"v": "updated"}]
+        assert data == [{"_state": "active", "v": "updated"}]
 
 
 class TestDispositionMethods:
@@ -349,13 +357,13 @@ class TestValidation:
 
     def test_path_with_dots_but_no_traversal_allowed(self, backend):
         """Test that paths with dots (but not ..) are still valid."""
-        backend.write_target("node_1", "file.v2.json", [{"id": 1}])
-        assert backend.read_target("node_1", "file.v2.json") == [{"id": 1}]
+        backend.write_target("node_1", "file.v2.json", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node_1", "file.v2.json") == [{"_state": "active", "id": 1}]
 
     def test_relative_path_with_spaces_allowed(self, backend):
         """Test that filenames with spaces are accepted."""
-        backend.write_target("node_1", "my file.json", [{"id": 1}])
-        assert backend.read_target("node_1", "my file.json") == [{"id": 1}]
+        backend.write_target("node_1", "my file.json", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node_1", "my file.json") == [{"_state": "active", "id": 1}]
 
     def test_whitespace_only_path_rejected(self, backend):
         """Test that whitespace-only relative_path is rejected."""
@@ -369,13 +377,13 @@ class TestValidation:
 
     def test_leading_trailing_spaces_in_path_allowed(self, backend):
         """Test that leading/trailing spaces in paths are accepted."""
-        backend.write_target("node_1", " file.json ", [{"id": 1}])
-        assert backend.read_target("node_1", " file.json ") == [{"id": 1}]
+        backend.write_target("node_1", " file.json ", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node_1", " file.json ") == [{"_state": "active", "id": 1}]
 
     def test_space_in_action_name_allowed(self, backend):
         """Test that spaces in action_name are accepted."""
-        backend.write_target("node 1", "file.json", [{"id": 1}])
-        assert backend.read_target("node 1", "file.json") == [{"id": 1}]
+        backend.write_target("node 1", "file.json", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node 1", "file.json") == [{"_state": "active", "id": 1}]
 
     def test_invalid_character_rejected(self, backend):
         """Test that characters outside the allowlist are rejected."""
