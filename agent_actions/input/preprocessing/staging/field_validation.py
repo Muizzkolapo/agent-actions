@@ -2,40 +2,39 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
-logger = logging.getLogger(__name__)
-
 
 def validate_staging_field_names(raw_content: Any, file_path: str) -> None:
     """Validate that staging record field names do not collide with reserved namespaces.
 
-    The framework reserves certain top-level names (``source``, ``version``,
-    ``workflow``, ``seed``, etc.) as prompt-context namespaces.  If a staging
-    record contains a field with one of these names the pipeline will silently
-    mis-route the value at prompt-build time.  Catching the collision here —
-    before any processing — gives the user a clear, actionable error.
+    The framework reserves top-level names in ``SPECIAL_NAMESPACES``
+    (``source``, ``version``, ``workflow``, ``seed``, ``prompt``,
+    ``schema``, ``action``) as prompt-context namespaces.  If a staging
+    record contains a field with one of these names the pipeline will
+    silently mis-route the value at prompt-build time.
+
+    For list inputs every dict row is checked, not just the first — staging
+    files can contain heterogeneous records.
     """
     if not raw_content:
         return
 
-    # Grab a representative record to inspect field names.
-    if isinstance(raw_content, list) and raw_content:
-        sample = raw_content[0]
-    elif isinstance(raw_content, dict):
-        sample = raw_content
-    else:
-        return
+    if isinstance(raw_content, dict):
+        _check_dict(raw_content, file_path)
+    elif isinstance(raw_content, list):
+        for item in raw_content:
+            if isinstance(item, dict):
+                _check_dict(item, file_path)
 
-    if not isinstance(sample, dict):
-        return
 
-    collisions = SPECIAL_NAMESPACES & sample.keys()
+def _check_dict(record: dict[str, Any], file_path: str) -> None:
+    """Raise ``ConfigValidationError`` if *record* has reserved field names."""
+    collisions = SPECIAL_NAMESPACES & record.keys()
     if collisions:
         collision_list = ", ".join(sorted(collisions))
         reserved_list = ", ".join(sorted(SPECIAL_NAMESPACES))
