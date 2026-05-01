@@ -194,7 +194,9 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
                 relative_path,
                 reduce_key or "auto",
             )
-            merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
+            merged_data = merge_json_files(
+                file_paths, reduce_key=reduce_key, records_action_name=params.action_name
+            )
 
             # Write merged data to a temp directory instead of mutating the
             # upstream file in-place.  The old approach (overwrite + restore

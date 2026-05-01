@@ -14,6 +14,7 @@ from agent_actions.workflow.managers.output import (
     AgentOutputManager,
     OutputManagerConfig,
 )
+from tests.support.target_records import with_target_lifecycle
 
 
 @pytest.fixture
@@ -57,7 +58,7 @@ class TestProcessAgentOutputBackend:
         """When backend has data, returns it without touching filesystem."""
         mock_storage_backend.list_target_files.return_value = ["batch_0.json"]
         mock_storage_backend.read_target.return_value = [
-            {"id": "1", "val": "from_backend"},
+            with_target_lifecycle({"id": "1", "val": "from_backend"}),
         ]
 
         mgr = make_manager(
@@ -80,8 +81,8 @@ class TestProcessAgentOutputBackend:
             "batch_1.json",
         ]
         mock_storage_backend.read_target.side_effect = [
-            [{"id": "1"}],
-            [{"id": "2"}],
+            [with_target_lifecycle({"id": "1"})],
+            [with_target_lifecycle({"id": "2"})],
         ]
 
         mgr = make_manager(
@@ -100,7 +101,9 @@ class TestProcessAgentOutputBackend:
 
         output_dir = tmp_path / "target" / "extract"
         output_dir.mkdir(parents=True)
-        (output_dir / "batch_0.json").write_text(json.dumps([{"id": "1", "val": "from_fs"}]))
+        (output_dir / "batch_0.json").write_text(
+            json.dumps([with_target_lifecycle({"id": "1", "val": "from_fs"})])
+        )
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
@@ -153,7 +156,9 @@ class TestProcessAgentOutputBackend:
 
         output_dir = tmp_path / "target" / "extract"
         output_dir.mkdir(parents=True)
-        (output_dir / "batch_0.json").write_text(json.dumps([{"id": "1", "val": "fallback"}]))
+        (output_dir / "batch_0.json").write_text(
+            json.dumps([with_target_lifecycle({"id": "1", "val": "fallback"})])
+        )
 
         mgr = make_manager(
             execution_order=["extract", "transform"],

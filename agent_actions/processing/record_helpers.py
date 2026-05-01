@@ -10,7 +10,15 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
-from agent_actions.record.reasons import RETRY_EXHAUSTED
+from agent_actions.record.reasons import (
+    GUARD_FILTER,
+    GUARD_PREFILTER_SKIP,
+    GUARD_SKIP,
+    LLM_LAYER_GUARD_FILTER,
+    LLM_LAYER_GUARD_SKIP,
+    RETRY_EXHAUSTED,
+)
+from agent_actions.record.state import RecordState
 from agent_actions.utils.content import get_existing_content, is_version_merge
 
 # Framework fields that should be carried from an input record to an output
@@ -21,6 +29,19 @@ CARRY_FORWARD_FIELDS: tuple[str, ...] = (
     "_recovery",
     "metadata",
 )
+
+
+def _record_state_for_tombstone(reason: str) -> RecordState:
+    """Map tombstone metadata reason to lifecycle state."""
+    if reason in (
+        GUARD_SKIP,
+        GUARD_FILTER,
+        GUARD_PREFILTER_SKIP,
+        LLM_LAYER_GUARD_SKIP,
+        LLM_LAYER_GUARD_FILTER,
+    ) or reason.startswith("guard_"):
+        return RecordState.GUARD_SKIPPED
+    return RecordState.CASCADE_SKIPPED
 
 
 def build_tombstone(
@@ -49,6 +70,9 @@ def build_tombstone(
     if extra_metadata:
         item["metadata"].update(extra_metadata)
     carry_framework_fields(input_record, item, fields=("target_id",))
+    RecordEnvelope.transition(
+        item, _record_state_for_tombstone(reason), action_name, "tombstone", reason
+    )
     return item
 
 
@@ -82,6 +106,7 @@ def build_exhausted_tombstone(
     if extra_metadata:
         item["metadata"].update(extra_metadata)
     carry_framework_fields(input_record, item, fields=("target_id",))
+    RecordEnvelope.transition(item, RecordState.EXHAUSTED, action_name, "retry_exhausted", None)
     return item
 
 

@@ -12,6 +12,7 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
+from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
 from agent_actions.record.reasons import GUARD_FILTER, GUARD_PREFILTER_SKIP, GUARD_SKIP
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
@@ -50,6 +51,9 @@ class TaskPreparer:
             context.is_first_stage,
             skip_guard,
         )
+
+        if not context.is_first_stage and isinstance(item, dict):
+            require_frozen_record_lifecycle(item, action_name=context.agent_name)
 
         if self._is_upstream_unprocessed(item):
             target_id = existing_target_id or self._generate_target_id()

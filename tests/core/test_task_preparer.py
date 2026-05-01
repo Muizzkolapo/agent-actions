@@ -6,6 +6,7 @@ import pytest
 
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext, PreparedTask
 from agent_actions.processing.task_preparer import TaskPreparer
+from tests.support.target_records import with_target_lifecycle
 
 
 @pytest.fixture
@@ -385,7 +386,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare(with_target_lifecycle({"content": "test"}), context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
@@ -416,7 +417,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare(with_target_lifecycle({"content": "test"}), context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
@@ -448,7 +449,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare(with_target_lifecycle({"content": "test"}), context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]

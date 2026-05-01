@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
+from agent_actions.errors import ConfigurationError
 from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.record.lifecycle_read import validate_frozen_target_payload
 from agent_actions.storage.backend import VALID_DISPOSITIONS, Disposition, StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -290,8 +292,18 @@ class SQLiteBackend(StorageBackend):
         if row is None:
             raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
 
-        result: list[dict[str, Any]] = json.loads(row["data"])
-        return result
+        parsed: Any = json.loads(row["data"])
+        if isinstance(parsed, dict):
+            validate_frozen_target_payload(parsed, action_name=action_name)
+            return [parsed]
+        if isinstance(parsed, list):
+            validate_frozen_target_payload(parsed, action_name=action_name)
+            return parsed
+        raise ConfigurationError(
+            f"Target JSON must be a list or object; got {type(parsed).__name__}. "
+            f"Delete agent_io/target/ and re-run. (action '{action_name}', file '{relative_path}')",
+            context={"action_name": action_name, "relative_path": relative_path},
+        )
 
     def write_source(
         self,

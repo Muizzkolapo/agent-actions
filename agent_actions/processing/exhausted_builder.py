@@ -4,6 +4,7 @@ from typing import Any
 
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import RecordState
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.lineage.builder import LineageBuilder
@@ -65,4 +66,7 @@ class ExhaustedRecordBuilder:
         else:
             exhausted_item["lineage"] = [node_id]
 
+        RecordEnvelope.transition(
+            exhausted_item, RecordState.EXHAUSTED, action_name, "retry_exhausted", None
+        )
         return exhausted_item

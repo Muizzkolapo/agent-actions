@@ -334,6 +334,9 @@ class ActionRunner:
                 continue
             try:
                 data = json.loads(file_path.read_text())
+                from agent_actions.record.lifecycle_read import validate_frozen_target_payload
+
+                validate_frozen_target_payload(data, action_name=dep_name)
                 if isinstance(data, list):
                     self.storage_backend.write_target(
                         action_name=dep_name,

@@ -12,6 +12,7 @@ from agent_actions.workflow.merge import (
     merge_json_files,
     merge_records_by_key,
 )
+from tests.support.target_records import with_target_lifecycle
 
 
 class TestDeepMergeRecord:
@@ -251,24 +252,28 @@ class TestParallelBranchLineageSources:
             file1.write_text(
                 json.dumps(
                     [
-                        {
-                            "source_guid": "book-001",
-                            "node_id": "gen_concept_def",
-                            "lineage": ["root_xyz", "gen_concept_def"],
-                            "content": {"concept": "explanation"},
-                        }
+                        with_target_lifecycle(
+                            {
+                                "source_guid": "book-001",
+                                "node_id": "gen_concept_def",
+                                "lineage": ["root_xyz", "gen_concept_def"],
+                                "content": {"concept": "explanation"},
+                            }
+                        )
                     ]
                 )
             )
             file2.write_text(
                 json.dumps(
                     [
-                        {
-                            "source_guid": "book-001",
-                            "node_id": "gen_feynman_abc",
-                            "lineage": ["root_xyz", "gen_feynman_abc"],
-                            "content": {"feynman": "explanation"},
-                        }
+                        with_target_lifecycle(
+                            {
+                                "source_guid": "book-001",
+                                "node_id": "gen_feynman_abc",
+                                "lineage": ["root_xyz", "gen_feynman_abc"],
+                                "content": {"feynman": "explanation"},
+                            }
+                        )
                     ]
                 )
             )
@@ -421,8 +426,12 @@ class TestMergeJsonFiles:
             file1 = Path(tmpdir) / "file1.json"
             file2 = Path(tmpdir) / "file2.json"
 
-            file1.write_text(json.dumps([{"source_guid": "abc", "field_1": "A"}]))
-            file2.write_text(json.dumps([{"source_guid": "abc", "field_2": "B"}]))
+            file1.write_text(
+                json.dumps([with_target_lifecycle({"source_guid": "abc", "field_1": "A"})])
+            )
+            file2.write_text(
+                json.dumps([with_target_lifecycle({"source_guid": "abc", "field_2": "B"})])
+            )
 
             result = merge_json_files([file1, file2])
 
@@ -434,7 +443,9 @@ class TestMergeJsonFiles:
         """Should handle JSON files containing a single object (not array)."""
         with TemporaryDirectory() as tmpdir:
             file1 = Path(tmpdir) / "file1.json"
-            file1.write_text(json.dumps({"source_guid": "abc", "data": "value"}))
+            file1.write_text(
+                json.dumps(with_target_lifecycle({"source_guid": "abc", "data": "value"}))
+            )
 
             result = merge_json_files([file1])
 
@@ -447,7 +458,9 @@ class TestMergeJsonFiles:
             valid_file = Path(tmpdir) / "valid.json"
             invalid_file = Path(tmpdir) / "invalid.json"
 
-            valid_file.write_text(json.dumps([{"source_guid": "abc", "data": "good"}]))
+            valid_file.write_text(
+                json.dumps([with_target_lifecycle({"source_guid": "abc", "data": "good"})])
+            )
             invalid_file.write_text("not valid json {{{")
 
             result = merge_json_files([valid_file, invalid_file])
@@ -461,7 +474,9 @@ class TestMergeJsonFiles:
             valid_file = Path(tmpdir) / "valid.json"
             missing_file = Path(tmpdir) / "missing.json"
 
-            valid_file.write_text(json.dumps([{"source_guid": "abc", "data": "good"}]))
+            valid_file.write_text(
+                json.dumps([with_target_lifecycle({"source_guid": "abc", "data": "good"})])
+            )
 
             result = merge_json_files([valid_file, missing_file])
 
@@ -473,8 +488,8 @@ class TestMergeJsonFiles:
             file1 = Path(tmpdir) / "file1.json"
             file2 = Path(tmpdir) / "file2.json"
 
-            file1.write_text(json.dumps([{"custom_key": "x", "a": 1}]))
-            file2.write_text(json.dumps([{"custom_key": "x", "b": 2}]))
+            file1.write_text(json.dumps([with_target_lifecycle({"custom_key": "x", "a": 1})]))
+            file2.write_text(json.dumps([with_target_lifecycle({"custom_key": "x", "b": 2})]))
 
             result = merge_json_files([file1, file2], reduce_key="custom_key")
 

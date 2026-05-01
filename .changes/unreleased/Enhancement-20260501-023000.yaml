@@ -1,0 +1,3 @@
+kind: Enhancement
+body: "Fail-closed validation for frozen target records: require _state and supported _state_schema_version on read paths; stamp lifecycle on RecordEnvelope.build and tombstone paths; FILE guard-skip transitions; tests updated."
+time: 2026-05-01T02:30:00.000000Z

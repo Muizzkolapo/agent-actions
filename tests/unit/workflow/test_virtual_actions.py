@@ -8,6 +8,7 @@ Covers:
 """
 
 from agent_actions.workflow.models import VirtualAction, WorkflowMetadata
+from tests.support.target_records import with_target_lifecycle
 
 
 class TestVirtualActionModel:
@@ -227,7 +228,11 @@ class TestVirtualActionStorageSync:
         upstream_io = tmp_path / "ingest" / "agent_io"
         extract_dir = upstream_io / "target" / "extract"
         extract_dir.mkdir(parents=True)
-        records = [{"source_guid": "sg-1", "node_id": "extract_abc", "question": "Q1"}]
+        records = [
+            with_target_lifecycle(
+                {"source_guid": "sg-1", "node_id": "extract_abc", "question": "Q1"}
+            )
+        ]
         (extract_dir / "data.json").write_text(json.dumps(records))
 
         # Set up runner with mock storage backend

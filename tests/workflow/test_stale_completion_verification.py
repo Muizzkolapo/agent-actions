@@ -23,6 +23,7 @@ import pytest
 
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStatus
+from tests.support.target_records import with_target_lifecycle
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -222,7 +223,7 @@ class TestSQLiteBackendThreadSafeReads:
 
         backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
-        backend.write_target("action_a", "out.json", [{"id": 1}])
+        backend.write_target("action_a", "out.json", [with_target_lifecycle({"id": 1})])
 
         acquired = []
         original_lock = backend._lock
@@ -245,7 +246,7 @@ class TestSQLiteBackendThreadSafeReads:
 
         backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
-        backend.write_target("action_a", "out.json", [{"id": 1}])
+        backend.write_target("action_a", "out.json", [with_target_lifecycle({"id": 1})])
 
         acquired = []
         original_lock = backend._lock
@@ -271,7 +272,11 @@ class TestSQLiteBackendThreadSafeReads:
 
         backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
-        backend.write_target("upstream", "data.json", [{"val": i} for i in range(50)])
+        backend.write_target(
+            "upstream",
+            "data.json",
+            [with_target_lifecycle({"val": i}) for i in range(50)],
+        )
 
         results: list[list[str]] = []
         errors: list[Exception] = []
@@ -364,7 +369,7 @@ class TestSQLiteBackendRemainingReadLocks:
 
     def test_preview_target_acquires_lock(self, tmp_path):
         backend = self._setup_backend(tmp_path)
-        backend.write_target("action_a", "out.json", [{"id": 1}])
+        backend.write_target("action_a", "out.json", [with_target_lifecycle({"id": 1})])
 
         tracking_lock, acquired = _make_tracking_lock(backend)
         with patch.object(backend, "_lock", tracking_lock):
@@ -374,7 +379,7 @@ class TestSQLiteBackendRemainingReadLocks:
 
     def test_get_storage_stats_acquires_lock(self, tmp_path):
         backend = self._setup_backend(tmp_path)
-        backend.write_target("action_a", "out.json", [{"id": 1}])
+        backend.write_target("action_a", "out.json", [with_target_lifecycle({"id": 1})])
 
         tracking_lock, acquired = _make_tracking_lock(backend)
         with patch.object(backend, "_lock", tracking_lock):

@@ -11,6 +11,7 @@ from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.udf_management.registry import FileUDFResult
+from tests.support.target_records import with_target_lifecycle
 
 
 def _make_context(agent_name="my_file_tool"):
@@ -737,7 +738,7 @@ def test_record_tool_list_return_produces_multiple_output_items():
     )
 
     # Single input record (typical RECORD mode item)
-    item = {"source_guid": "sg-1", "content": {"raw_questions": "..."}}
+    item = with_target_lifecycle({"source_guid": "sg-1", "content": {"raw_questions": "..."}})
     context = ProcessingContext(agent_config=agent_config, agent_name=agent_name)
 
     # Process single item

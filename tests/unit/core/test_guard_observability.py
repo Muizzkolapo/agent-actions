@@ -333,7 +333,11 @@ class TestTaskPreparerWarnLogging:
         context.current_item = None
         context.record_index = 0
 
-        item = {"content": {"quality_score": 0.1}, "source_guid": "sg-1"}
+        from tests.support.target_records import with_target_lifecycle
+
+        item = with_target_lifecycle(
+            {"content": {"quality_score": 0.1}, "source_guid": "sg-1"},
+        )
 
         warned_result = GuardResult.warned()
 

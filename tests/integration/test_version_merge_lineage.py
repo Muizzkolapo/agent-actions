@@ -14,6 +14,7 @@ import pytest
 from agent_actions.processing.enrichment import LineageEnricher
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+from tests.support.target_records import with_target_lifecycle
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -28,8 +29,9 @@ def _write_version_outputs(agent_folder: Path, version_agents: dict):
     for agent_name, records in version_agents.items():
         target_dir = agent_folder / "target" / agent_name
         target_dir.mkdir(parents=True, exist_ok=True)
+        stamped = [with_target_lifecycle(r) if isinstance(r, dict) else r for r in records]
         with open(target_dir / "data.json", "w") as f:
-            json.dump(records, f)
+            json.dump(stamped, f)
 
 
 def _load_source_data(agent_folder: Path, filename: str = "data.json") -> list[dict]:

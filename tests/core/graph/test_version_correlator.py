@@ -8,6 +8,11 @@ import pytest
 
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+from tests.support.target_records import with_target_lifecycle
+
+
+def _stamp_records(records: list[dict]) -> list[dict]:
+    return [with_target_lifecycle(r) for r in records]
 
 
 class TestVersionOutputCorrelator:
@@ -110,7 +115,7 @@ class TestVersionOutputCorrelator:
                 }
             ]
             with open(loop_dir / test_filename, "w") as f:
-                json.dump(test_data, f)
+                json.dump(_stamp_records(test_data), f)
         result_dir = correlator.prepare_correlated_input(
             "reconstruct_options",
             ["generate_distractors_1", "generate_distractors_2", "generate_distractors_3"],
@@ -137,7 +142,7 @@ class TestVersionOutputCorrelator:
                 }
             ]
             with open(loop_dir / "data.json", "w") as f:
-                json.dump(test_data, f)
+                json.dump(_stamp_records(test_data), f)
 
         correlator.prepare_correlated_input("aggregate", ["scorer_1", "scorer_2"], 3)
 
@@ -197,11 +202,11 @@ class TestVersionOutputCorrelator:
             }
         ]
         with open(loop1_dir / "data.json", "w") as f:
-            json.dump(data_loop1, f)
+            json.dump(_stamp_records(data_loop1), f)
         with open(loop2_dir / "data.json", "w") as f:
-            json.dump(data_loop2, f)
+            json.dump(_stamp_records(data_loop2), f)
         with open(loop3_dir / "data.json", "w") as f:
-            json.dump(data_loop3, f)
+            json.dump(_stamp_records(data_loop3), f)
         result_dir = correlator.prepare_correlated_input(
             "consumer", ["distractor_1", "distractor_2", "distractor_3"], 4
         )
@@ -246,7 +251,7 @@ class TestVersionOutputCorrelator:
                 }
             ]
             with open(loop1_dir / filename, "w") as f:
-                json.dump(data1, f)
+                json.dump(_stamp_records(data1), f)
             data2 = [
                 {
                     "source_guid": f"{filename}-guid-1",
@@ -255,7 +260,7 @@ class TestVersionOutputCorrelator:
                 }
             ]
             with open(loop2_dir / filename, "w") as f:
-                json.dump(data2, f)
+                json.dump(_stamp_records(data2), f)
         result_dir = correlator.prepare_correlated_input(
             "aggregator", ["processor_1", "processor_2"], 3
         )
@@ -378,7 +383,7 @@ class TestVersionOutputCorrelatorIntegration:
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
-                json.dump(data, f)
+                json.dump(_stamp_records(data), f)
         result = correlator.prepare_correlated_input("consumer", ["loop_1", "loop_2", "loop_3"], 4)
         assert result is not None
         output_file = Path(result) / "output.json"
@@ -420,7 +425,7 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
-                json.dump(test_data, f)
+                json.dump(_stamp_records(test_data), f)
         result_dir = correlator.prepare_correlated_input(
             "aggregate", ["refine_1", "refine_2", "refine_3"], 4
         )
@@ -452,7 +457,7 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             with open(loop_dir / "result.json", "w") as f:
-                json.dump(test_data, f)
+                json.dump(_stamp_records(test_data), f)
         result_dir = correlator.prepare_correlated_input(
             "consumer", ["process_1", "process_2", "process_3"], 4
         )
@@ -483,7 +488,7 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             with open(loop_dir / "data.json", "w") as f:
-                json.dump(test_data, f)
+                json.dump(_stamp_records(test_data), f)
         result_dir = correlator.prepare_correlated_input("final", ["step_1", "step_2", "step_3"], 4)
         assert result_dir is not None
         output_file = Path(result_dir) / "data.json"
@@ -514,7 +519,7 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
-                json.dump(test_data, f)
+                json.dump(_stamp_records(test_data), f)
         for i in range(3, 5):
             loop_dir = temp_agent_folder / "target" / f"par_{i - 2}"
             loop_dir.mkdir(parents=True)
@@ -527,7 +532,7 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             with open(loop_dir / "output.json", "w") as f:
-                json.dump(test_data, f)
+                json.dump(_stamp_records(test_data), f)
         seq_result = correlator.prepare_correlated_input("seq_consumer", ["seq_1", "seq_2"], 5)
         par_result = correlator.prepare_correlated_input("par_consumer", ["par_1", "par_2"], 6)
         assert seq_result is not None
@@ -597,7 +602,7 @@ class TestVersionCorrelatorSourceProtection:
                     "content": {"action_1": {"result": "v1"}},
                 }
             ]
-            (version1_dir / "data.json").write_text(json.dumps(version1_output))
+            (version1_dir / "data.json").write_text(json.dumps(_stamp_records(version1_output)))
 
             version2_dir = agent_folder / "target" / "action_2"
             version2_dir.mkdir(parents=True)
@@ -611,7 +616,7 @@ class TestVersionCorrelatorSourceProtection:
                     "content": {"action_2": {"result": "v2"}},
                 }
             ]
-            (version2_dir / "data.json").write_text(json.dumps(version2_output))
+            (version2_dir / "data.json").write_text(json.dumps(_stamp_records(version2_output)))
 
             # Run correlation (this will try to write sparse source data)
             result = correlator.prepare_correlated_input("consumer", ["action_1", "action_2"], 0)

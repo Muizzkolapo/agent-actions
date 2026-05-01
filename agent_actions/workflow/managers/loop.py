@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
+from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.content import get_existing_content
 from agent_actions.workflow.merge import merge_branch_records
@@ -31,6 +32,7 @@ class JsonLoadParams:
     output_dir: Path
     operation: str
     add_source_file: bool = False
+    records_action_name: str = ""
 
 
 class VersionOutputCorrelator:
@@ -225,18 +227,30 @@ class VersionOutputCorrelator:
         try:
             with open(params.json_file, encoding="utf-8") as f:
                 data = json.load(f)
-                if params.add_source_file:
-                    if isinstance(data, list):
+                action_name = params.records_action_name or params.output_dir.name
+                if isinstance(data, list):
+                    for record in data:
+                        if isinstance(record, dict):
+                            require_frozen_record_lifecycle(record, action_name=action_name)
+                    if params.add_source_file:
                         for record in data:
-                            record["_source_file"] = params.json_file.name
+                            if isinstance(record, dict):
+                                record["_source_file"] = params.json_file.name
                         params.outputs.extend(data)
                     else:
+                        params.outputs.extend(data)
+                elif isinstance(data, dict):
+                    require_frozen_record_lifecycle(data, action_name=action_name)
+                    if params.add_source_file:
                         data["_source_file"] = params.json_file.name
                         params.outputs.append(data)
-                elif isinstance(data, list):
-                    params.outputs.extend(data)
+                    else:
+                        params.outputs.append(data)
                 else:
-                    params.outputs.append(data)
+                    raise DataValidationError(
+                        f"Target JSON must be a list or object; got {type(data).__name__}",
+                        {"file": str(params.json_file), "action_name": action_name},
+                    )
         except json.JSONDecodeError as e:
             logger.warning(
                 "Skipping corrupted JSON file in version output",
@@ -291,6 +305,7 @@ class VersionOutputCorrelator:
                     output_dir=output_dir,
                     operation="load_version_outputs_with_filenames",
                     add_source_file=True,
+                    records_action_name=output_dir.name,
                 )
             )
             if len(outputs) > before_count:

@@ -25,6 +25,7 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.utils.correlation import VersionIdGenerator
+from tests.support.target_records import with_target_lifecycle
 
 
 @pytest.fixture(autouse=True)
@@ -121,11 +122,14 @@ class TestTaskPreparerUpstreamUnprocessed:
 
     def test_returns_upstream_unprocessed_status(self):
         preparer = TaskPreparer()
-        item = {
-            "content": {"upstream_action": {"data": "stale"}},
-            "source_guid": "sg_123",
-            "_unprocessed": True,
-        }
+        item = with_target_lifecycle(
+            {
+                "content": {"upstream_action": {"data": "stale"}},
+                "source_guid": "sg_123",
+                "_unprocessed": True,
+            },
+            state="cascade_skipped",
+        )
         result = preparer.prepare(item, self._make_context())
 
         assert result.guard_status == GuardStatus.UPSTREAM_UNPROCESSED
@@ -139,20 +143,26 @@ class TestTaskPreparerUpstreamUnprocessed:
     def test_no_context_loading(self, mock_load):
         """Verify _load_full_context is NOT called for unprocessed records."""
         preparer = TaskPreparer()
-        item = {
-            "content": {"upstream_action": {"val": "stale"}},
-            "_unprocessed": True,
-        }
+        item = with_target_lifecycle(
+            {
+                "content": {"upstream_action": {"val": "stale"}},
+                "_unprocessed": True,
+            },
+            state="cascade_skipped",
+        )
         preparer.prepare(item, self._make_context())
         mock_load.assert_not_called()
 
     def test_preserves_existing_target_id(self):
         preparer = TaskPreparer()
-        item = {
-            "content": {"upstream_action": {"val": "stale"}},
-            "source_guid": "sg_456",
-            "_unprocessed": True,
-        }
+        item = with_target_lifecycle(
+            {
+                "content": {"upstream_action": {"val": "stale"}},
+                "source_guid": "sg_456",
+                "_unprocessed": True,
+            },
+            state="cascade_skipped",
+        )
         result = preparer.prepare(item, self._make_context(), existing_target_id="tgt_existing")
         assert result.target_id == "tgt_existing"
 
@@ -173,11 +183,14 @@ class TestOnlineLLMStrategyUnprocessed:
             is_first_stage=False,
         )
 
-        item = {
-            "content": {"original": "data"},
-            "source_guid": "sg_unproc_1",
-            "_unprocessed": True,
-        }
+        item = with_target_lifecycle(
+            {
+                "content": {"original": "data"},
+                "source_guid": "sg_unproc_1",
+                "_unprocessed": True,
+            },
+            state="cascade_skipped",
+        )
 
         result = strategy.process_record(item, context, skip_guard=False)
 

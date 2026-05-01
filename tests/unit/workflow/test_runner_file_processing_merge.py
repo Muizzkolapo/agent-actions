@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.workflow.runner_file_processing import process_merged_files
+from tests.support.target_records import with_target_lifecycle
 
 
 def _make_params(upstream_dirs, output_dir, action_config=None):
@@ -38,8 +39,8 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         for d in [upstream_a, upstream_b, output]:
             d.mkdir()
 
-        original_a = [{"id": 1, "value": "from_a"}]
-        original_b = [{"id": 2, "value": "from_b"}]
+        original_a = [with_target_lifecycle({"id": 1, "value": "from_a"})]
+        original_b = [with_target_lifecycle({"id": 2, "value": "from_b"})]
         (upstream_a / "data.json").write_text(json.dumps(original_a))
         (upstream_b / "data.json").write_text(json.dumps(original_b))
 
@@ -65,8 +66,8 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         for d in [upstream_a, upstream_b, output]:
             d.mkdir()
 
-        original_a = [{"id": 1}]
-        original_b = [{"id": 2}]
+        original_a = [with_target_lifecycle({"id": 1})]
+        original_b = [with_target_lifecycle({"id": 2})]
         (upstream_a / "data.json").write_text(json.dumps(original_a))
         (upstream_b / "data.json").write_text(json.dumps(original_b))
 
@@ -93,8 +94,8 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         for d in [upstream_a, upstream_b, output]:
             d.mkdir()
 
-        (upstream_a / "data.json").write_text(json.dumps([{"id": 1}]))
-        (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
+        (upstream_a / "data.json").write_text(json.dumps([with_target_lifecycle({"id": 1})]))
+        (upstream_b / "data.json").write_text(json.dumps([with_target_lifecycle({"id": 2})]))
 
         runner = MagicMock()
         runner._collect_files_from_upstream.return_value = {
@@ -118,8 +119,8 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         for d in [upstream_a, upstream_b, output]:
             d.mkdir()
 
-        (upstream_a / "data.json").write_text(json.dumps([{"id": 1}]))
-        (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
+        (upstream_a / "data.json").write_text(json.dumps([with_target_lifecycle({"id": 1})]))
+        (upstream_b / "data.json").write_text(json.dumps([with_target_lifecycle({"id": 2})]))
 
         runner = MagicMock()
         runner._collect_files_from_upstream.return_value = {
@@ -143,8 +144,8 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         for d in [upstream_a, upstream_b, output]:
             d.mkdir()
 
-        (upstream_a / "data.json").write_text(json.dumps([{"id": 1}]))
-        (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
+        (upstream_a / "data.json").write_text(json.dumps([with_target_lifecycle({"id": 1})]))
+        (upstream_b / "data.json").write_text(json.dumps([with_target_lifecycle({"id": 2})]))
 
         runner = MagicMock()
         runner._collect_files_from_upstream.return_value = {

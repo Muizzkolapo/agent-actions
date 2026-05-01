@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -236,7 +237,12 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
     return merged_results + records_without_key
 
 
-def merge_json_files(file_paths: list[Path], reduce_key: str | None = None) -> list[Any]:
+def merge_json_files(
+    file_paths: list[Path],
+    reduce_key: str | None = None,
+    *,
+    records_action_name: str = "merge_target",
+) -> list[Any]:
     """Load and merge JSON records from multiple files by correlation key (MapReduce pattern)."""
     all_records: list[Any] = []
     for file_path in file_paths:
@@ -244,8 +250,12 @@ def merge_json_files(file_paths: list[Path], reduce_key: str | None = None) -> l
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
+                    for rec in data:
+                        if isinstance(rec, dict):
+                            require_frozen_record_lifecycle(rec, action_name=records_action_name)
                     all_records.extend(data)
-                else:
+                elif isinstance(data, dict):
+                    require_frozen_record_lifecycle(data, action_name=records_action_name)
                     all_records.append(data)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(

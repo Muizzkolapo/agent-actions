@@ -5,6 +5,7 @@ import pytest
 from agent_actions.storage import BACKENDS, get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from tests.support.target_records import with_target_lifecycle
 
 
 class TestStorageBackendFactory:
@@ -66,8 +67,8 @@ class TestSQLiteBackend:
     def test_write_and_read_target(self, backend):
         """Test writing and reading target data."""
         data = [
-            {"target_id": "t1", "content": {"field1": "value1"}},
-            {"target_id": "t2", "content": {"field2": "value2"}},
+            with_target_lifecycle({"target_id": "t1", "content": {"field1": "value1"}}),
+            with_target_lifecycle({"target_id": "t2", "content": {"field2": "value2"}}),
         ]
 
         # Write target data
@@ -142,9 +143,9 @@ class TestSQLiteBackend:
 
     def test_list_target_files(self, backend):
         """Test listing target files for a node."""
-        backend.write_target("node_1", "file1.json", [{"id": 1}])
-        backend.write_target("node_1", "file2.json", [{"id": 2}])
-        backend.write_target("node_2", "file3.json", [{"id": 3}])
+        backend.write_target("node_1", "file1.json", [with_target_lifecycle({"id": 1})])
+        backend.write_target("node_1", "file2.json", [with_target_lifecycle({"id": 2})])
+        backend.write_target("node_2", "file3.json", [with_target_lifecycle({"id": 3})])
 
         files = backend.list_target_files("node_1")
         assert sorted(files) == ["file1.json", "file2.json"]
@@ -166,18 +167,18 @@ class TestSQLiteBackend:
 
         with SQLiteBackend(str(db_path), "test_workflow") as backend:
             backend.initialize()
-            backend.write_target("node_1", "file.json", [{"id": 1}])
+            backend.write_target("node_1", "file.json", [with_target_lifecycle({"id": 1})])
 
         # Connection should be closed
         assert backend._connection is None
 
     def test_target_update_replaces_data(self, backend):
         """Test that writing to same target path replaces data."""
-        backend.write_target("node_1", "file.json", [{"v": "original"}])
-        backend.write_target("node_1", "file.json", [{"v": "updated"}])
+        backend.write_target("node_1", "file.json", [with_target_lifecycle({"v": "original"})])
+        backend.write_target("node_1", "file.json", [with_target_lifecycle({"v": "updated"})])
 
         data = backend.read_target("node_1", "file.json")
-        assert data == [{"v": "updated"}]
+        assert data == [with_target_lifecycle({"v": "updated"})]
 
 
 class TestDispositionMethods:
@@ -340,47 +341,47 @@ class TestValidation:
     def test_path_traversal_rejected_in_write_target(self, backend):
         """Test that path traversal components are rejected."""
         with pytest.raises(ValueError, match="Path traversal"):
-            backend.write_target("node_1", "../../etc/passwd", [{}])
+            backend.write_target("node_1", "../../etc/passwd", [with_target_lifecycle({})])
 
     def test_path_traversal_rejected_in_action_name(self, backend):
         """Test that path traversal is also rejected in action_name."""
         with pytest.raises(ValueError, match="Path traversal"):
-            backend.write_target("../evil", "file.json", [{}])
+            backend.write_target("../evil", "file.json", [with_target_lifecycle({})])
 
     def test_path_with_dots_but_no_traversal_allowed(self, backend):
         """Test that paths with dots (but not ..) are still valid."""
-        backend.write_target("node_1", "file.v2.json", [{"id": 1}])
-        assert backend.read_target("node_1", "file.v2.json") == [{"id": 1}]
+        backend.write_target("node_1", "file.v2.json", [with_target_lifecycle({"id": 1})])
+        assert backend.read_target("node_1", "file.v2.json") == [with_target_lifecycle({"id": 1})]
 
     def test_relative_path_with_spaces_allowed(self, backend):
         """Test that filenames with spaces are accepted."""
-        backend.write_target("node_1", "my file.json", [{"id": 1}])
-        assert backend.read_target("node_1", "my file.json") == [{"id": 1}]
+        backend.write_target("node_1", "my file.json", [with_target_lifecycle({"id": 1})])
+        assert backend.read_target("node_1", "my file.json") == [with_target_lifecycle({"id": 1})]
 
     def test_whitespace_only_path_rejected(self, backend):
         """Test that whitespace-only relative_path is rejected."""
         with pytest.raises(ValueError, match="Empty"):
-            backend.write_target("node_1", "   ", [{}])
+            backend.write_target("node_1", "   ", [with_target_lifecycle({})])
 
     def test_whitespace_only_action_name_rejected(self, backend):
         """Test that whitespace-only action_name is rejected."""
         with pytest.raises(ValueError, match="Empty"):
-            backend.write_target(" ", "file.json", [{}])
+            backend.write_target(" ", "file.json", [with_target_lifecycle({})])
 
     def test_leading_trailing_spaces_in_path_allowed(self, backend):
         """Test that leading/trailing spaces in paths are accepted."""
-        backend.write_target("node_1", " file.json ", [{"id": 1}])
-        assert backend.read_target("node_1", " file.json ") == [{"id": 1}]
+        backend.write_target("node_1", " file.json ", [with_target_lifecycle({"id": 1})])
+        assert backend.read_target("node_1", " file.json ") == [with_target_lifecycle({"id": 1})]
 
     def test_space_in_action_name_allowed(self, backend):
         """Test that spaces in action_name are accepted."""
-        backend.write_target("node 1", "file.json", [{"id": 1}])
-        assert backend.read_target("node 1", "file.json") == [{"id": 1}]
+        backend.write_target("node 1", "file.json", [with_target_lifecycle({"id": 1})])
+        assert backend.read_target("node 1", "file.json") == [with_target_lifecycle({"id": 1})]
 
     def test_invalid_character_rejected(self, backend):
         """Test that characters outside the allowlist are rejected."""
         with pytest.raises(ValueError, match="Invalid characters"):
-            backend.write_target("node_1", "file;name.json", [{}])
+            backend.write_target("node_1", "file;name.json", [with_target_lifecycle({})])
 
 
 class TestWriteSourceDropGuard:
@@ -485,9 +486,13 @@ class TestGetStorageStatsNullRecordCount:
         backend.connection.execute(
             "INSERT INTO target_data (action_name, relative_path, data, record_count) "
             "VALUES (?, ?, ?, NULL)",
-            ("node_1", "legacy.json", json.dumps([{"id": 1}])),
+            ("node_1", "legacy.json", json.dumps([with_target_lifecycle({"id": 1})])),
         )
-        backend.write_target("node_1", "new.json", [{"id": 2}, {"id": 3}])
+        backend.write_target(
+            "node_1",
+            "new.json",
+            [with_target_lifecycle({"id": 2}), with_target_lifecycle({"id": 3})],
+        )
 
         stats = backend.get_storage_stats()
         # SUM ignores NULLs: only the non-NULL row (2) is summed

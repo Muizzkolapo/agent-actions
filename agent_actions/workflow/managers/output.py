@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from rich.console import Console
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.record.lifecycle_read import require_frozen_record_lifecycle
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
@@ -62,7 +63,9 @@ class ActionOutputManager:
         self._version_consumption_map: dict | None = None
         self._version_consumption_lock = threading.Lock()
 
-    def _load_json_files(self, json_files: list[Path], agent_output: dict[str, Any]) -> list[Any]:
+    def _load_json_files(
+        self, json_files: list[Path], agent_output: dict[str, Any], *, prev_agent_name: str
+    ) -> list[Any]:
         """Load data from JSON files."""
         outputs = []
         for json_file in json_files:
@@ -70,9 +73,18 @@ class ActionOutputManager:
                 with open(json_file, encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, list):
+                        for record in data:
+                            if isinstance(record, dict):
+                                require_frozen_record_lifecycle(record, action_name=prev_agent_name)
                         outputs.extend(data)
-                    else:
+                    elif isinstance(data, dict):
+                        require_frozen_record_lifecycle(data, action_name=prev_agent_name)
                         outputs.append(data)
+                    else:
+                        agent_output["errors"].append(
+                            f"Invalid JSON root type in {json_file.name}: "
+                            f"expected list or object, got {type(data).__name__}"
+                        )
             except (OSError, ValueError, TypeError) as file_error:
                 agent_output["errors"].append(f"Failed to read {json_file.name}: {file_error}")
         return outputs
@@ -96,7 +108,9 @@ class ActionOutputManager:
             json_files = list(output_dir.glob("*.json"))
             agent_output["output_files"] = [str(f.name) for f in json_files]
             if json_files:
-                outputs = self._load_json_files(json_files, agent_output)
+                outputs = self._load_json_files(
+                    json_files, agent_output, prev_agent_name=prev_agent_name
+                )
 
         agent_output["data"] = outputs
         agent_output["output_count"] = len(outputs)

@@ -16,6 +16,7 @@ from agent_actions.processing.result_collector import CollectionStats, ResultCol
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_PREFILTER_SKIP, GUARD_SKIP
+from agent_actions.record.state import RecordState
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 logger = logging.getLogger(__name__)
@@ -183,15 +184,26 @@ class UnifiedProcessor:
         guard_results: list[ProcessingResult] = []
         action_name = context.action_name
 
+        _lifecycle_keys = ("_state", "_state_history", "_state_schema_version")
         for item in skipped:
             if action_name and isinstance(item, dict):
                 content = item.get("content")
                 if isinstance(content, dict) and action_name not in content:
                     skipped_record = RecordEnvelope.build_skipped(action_name, item)
                     for key in item:
-                        if key not in skipped_record:
+                        if key not in skipped_record and key not in _lifecycle_keys:
                             skipped_record[key] = item[key]
                     item = skipped_record
+            if isinstance(item, dict):
+                for lk in _lifecycle_keys:
+                    item.pop(lk, None)
+                RecordEnvelope.transition(
+                    item,
+                    RecordState.GUARD_SKIPPED,
+                    action_name,
+                    "prefilter_skip",
+                    GUARD_PREFILTER_SKIP,
+                )
             guard_results.append(
                 ProcessingResult.unprocessed(
                     data=[item],

@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from enum import Enum
 
+# Bump when `_state` / `_state_history` semantics change; see `RecordEnvelope.transition()`.
+STATE_SCHEMA_VERSION: int = 1
+SUPPORTED_STATE_SCHEMA_VERSIONS: frozenset[int] = frozenset({STATE_SCHEMA_VERSION})
+
 
 class RecordState(str, Enum):
     """Lifecycle state of a pipeline record."""

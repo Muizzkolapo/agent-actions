@@ -14,11 +14,11 @@ from typing import Any
 from agent_actions.record.state import (
     PROCESSABLE_STATES,
     RESETTABLE_DOWNSTREAM_STATES,
+    STATE_SCHEMA_VERSION,
     RecordState,
 )
 
 STATE_HISTORY_CAP: int = 64
-_STATE_SCHEMA_VERSION: int = 1
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
@@ -89,7 +89,11 @@ class RecordEnvelope:
 
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: action_output}}
-        return _carry_tracking_fields(result, input_record)
+        carried = _carry_tracking_fields(result, input_record)
+        RecordEnvelope.transition(
+            carried, RecordState.PROCESSED, action_name, "envelope_build", None
+        )
+        return carried
 
     @staticmethod
     def build_content(
@@ -175,7 +179,7 @@ class RecordEnvelope:
 
         record["_state"] = to_state.value
         record["_state_history"] = history
-        record["_state_schema_version"] = _STATE_SCHEMA_VERSION
+        record["_state_schema_version"] = STATE_SCHEMA_VERSION
         return record
 
 

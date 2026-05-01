@@ -113,7 +113,7 @@ class TestBatchClientFactorySecretStr:
         assert key_with_secret == key_with_plain
         assert key_with_secret.startswith("openai:")
 
-    def test_cache_key_unwraps_secret_str(self):
+    def test_cache_key_unwraps_secret_str_vendor_fallback(self):
         """_build_cache_key handles SecretStr in the generic api_key field."""
         from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
             BatchClientResolver,

@@ -8,7 +8,8 @@ Single authority for record content assembly. Every action type, granularity, an
 |------|------|---------|---------|
 | `envelope.py` | Module | `RecordEnvelope`, `RecordEnvelopeError` | - |
 | `tracking.py` | Module | `TrackedItem` | - |
-| `state.py` | Module | `RecordState`, `PROCESSABLE_STATES`, `SETTLED_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `RETRIABLE_STATES`, `is_processable`, `is_settled`, `is_retriable` | - |
+| `state.py` | Module | `RecordState`, `STATE_SCHEMA_VERSION`, `SUPPORTED_STATE_SCHEMA_VERSIONS`, `PROCESSABLE_STATES`, `SETTLED_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `RETRIABLE_STATES`, `is_processable`, `is_settled`, `is_retriable` | - |
+| `lifecycle_read.py` | Module | `require_frozen_record_lifecycle`, `validate_frozen_target_payload` | - |
 | `__init__.py` | Re-export | `RecordEnvelope`, `RecordEnvelopeError`, `RecordState`, `TrackedItem` | - |
 
 ## Project Surface
@@ -19,6 +20,7 @@ Single authority for record content assembly. Every action type, granularity, an
 | `RecordEnvelope.build_content()` | `agent_io/target/{action}/` | Writes content dict (no record wrapper) | - |
 | `RecordEnvelope.build_skipped()` | `agent_io/target/{action}/` | Writes record with null namespace for guard skip | - |
 | `RecordEnvelope.transition()` | `agent_io/target/{action}/` | Only sanctioned writer of `_state`, `_state_history`, `_state_schema_version` | - |
+| `require_frozen_record_lifecycle()` | `agent_io/target/{action}/` | Validates `_state` + `_state_schema_version` when loading frozen target JSON | - |
 | `TrackedItem` | `tools/{workflow}/*.py` | FILE tool input: dict subclass with hidden `_source_index` provenance | - |
 
 ## Dependencies

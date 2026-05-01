@@ -35,7 +35,10 @@ class TestBuild:
 
     def test_no_input_record(self):
         result = RecordEnvelope.build("first", {"a": 1})
-        assert result == {"content": {"first": {"a": 1}}}
+        assert result["content"] == {"first": {"a": 1}}
+        assert result["_state"] == "processed"
+        assert result["_state_schema_version"] == 1
+        assert len(result.get("_state_history", [])) == 1
         assert "source_guid" not in result
 
     def test_empty_action_name_raises(self):
