@@ -73,10 +73,10 @@ class RecordEnvelope:
         """Build a record wrapping *action_output* under *action_name*.
 
         Preserves upstream namespaces from *input_record* and carries
-        ``source_guid``.  Collision on *action_name* overwrites.
+        ``source_guid``. Collision on *action_name* overwrites.
 
-        The assembled content dict is new, but *action_output* itself is stored
-        by reference inside it.  Callers must not mutate *action_output* after
+        The assembled content dict is new, but *action_output* is stored by
+        reference inside it. Callers must not mutate *action_output* after
         calling ``build()``.
         """
         if not action_name:
@@ -99,7 +99,7 @@ class RecordEnvelope:
     ) -> dict[str, Any]:
         """Return a content dict with *action_output* under *action_name*.
 
-        No record wrapper or ``source_guid`` -- content level only.
+        No record wrapper or ``source_guid`` — content level only.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -114,7 +114,7 @@ class RecordEnvelope:
     ) -> dict[str, Any]:
         """Build a record with a null namespace for a guard-skipped action.
 
-        Does NOT set ``_unprocessed`` or ``metadata`` -- callers add those.
+        Does not set ``_unprocessed`` or ``metadata`` — callers add those.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -130,14 +130,14 @@ class RecordEnvelope:
         reason: str,
         detail: str | None = None,
     ) -> dict[str, Any]:
-        """Transition *record* to *to_state* — the only sanctioned lifecycle mutator.
+        """Transition *record* to *to_state*.
 
-        Updates ``_state``, appends to ``_state_history`` (capped at
-        ``STATE_HISTORY_CAP``), and sets ``_state_schema_version``.
+        The only sanctioned mutator for ``_state``, ``_state_history``, and
+        ``_state_schema_version``. Appends a timestamped history entry (capped
+        at ``STATE_HISTORY_CAP``) and mutates the record in-place.
 
         Raises ``RecordEnvelopeError`` for illegal transitions, unknown current
-        state values, or corrupt history shapes.
-        Returns the record (mutated in-place) for chaining.
+        state values, or corrupt history shapes. Returns the record for chaining.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -197,12 +197,12 @@ def _validate_transition(from_state: RecordState | None, to_state: RecordState) 
 def _carry_tracking_fields(
     result: dict[str, Any], input_record: dict[str, Any] | None
 ) -> dict[str, Any]:
-    """Copy tracking fields from input_record to result.
+    """Copy tracking fields from *input_record* into *result*.
 
-    Tracking fields are the record's stable identity — set once at creation
-    (first stage or 1→N expansion) and preserved through all downstream
-    1:1 stages. Per-stage fields (metadata, lineage, node_id, etc.) are
-    NOT carried — enrichers rebuild those.
+    Tracking fields (``source_guid``, ``version_correlation_id``) are the
+    record's stable identity — set once at creation and preserved through all
+    downstream 1:1 stages. Per-stage fields (metadata, lineage, etc.) are not
+    carried; enrichers rebuild those each stage.
     """
     if input_record is None:
         return result
