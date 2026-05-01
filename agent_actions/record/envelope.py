@@ -159,7 +159,7 @@ class RecordEnvelope:
 
         _validate_transition(from_state, to_state)
 
-        history: list[dict[str, Any]] = list(record.get("_state_history") or [])
+        history: list[dict[str, Any]] = record.get("_state_history") or []
         entry: dict[str, Any] = {
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "action": action_name,
@@ -179,22 +179,7 @@ class RecordEnvelope:
 
 
 def _validate_transition(from_state: RecordState | None, to_state: RecordState) -> None:
-    """Raise RecordEnvelopeError if the from→to edge is not legal.
-
-    Legal edges:
-    - None → any state          (first transition on a new record)
-    - ACTIVE → any settled      (normal pipeline progression)
-    - RESETTABLE → ACTIVE       (downstream reset before retry)
-    - any → same state          (idempotent re-application, e.g. retry logic)
-
-    Illegal edges:
-    - CASCADE_BLOCKING → ACTIVE (CASCADE_SKIPPED/FAILED/EXHAUSTED cannot be
-                                 reset to ACTIVE directly; they require an
-                                 explicit reset through RESETTABLE states first,
-                                 which is not a supported path today)
-    - SETTLED → SETTLED (cross-settled transitions, e.g. PROCESSED → FAILED,
-                         are not valid — settled means done for this stage)
-    """
+    """Raise RecordEnvelopeError if the from→to edge violates state machine rules."""
     if from_state is None:
         return
     if from_state == to_state:
