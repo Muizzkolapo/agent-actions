@@ -29,7 +29,7 @@ Source data (the user's original staging input) reaches `_load_source_namespace(
 
 | Path | When | How source data arrives | Entry point |
 |------|------|------------------------|-------------|
-| **Staging file load** | First action, initial run | Read from `agent_io/staging/*.json` by `FileReader` | `initial_pipeline.process_initial_stage()` |
+| **Staging file load** | First action, initial run | Read from the user-configured `data_source` path (`folder` + `file_type` in workflow config) by `FileReader` | `initial_pipeline.process_initial_stage()` |
 | **Storage lookup** | Downstream actions | Saved to storage during first action; retrieved by `source_guid` | `task_preparer._get_source_content()` |
 | **FILE mode index** | FILE-granularity actions | Resolved per-`source_guid` from a shared source index | `scope_application._resolve_source_content()` |
 | **Batch resume** | Batch re-run after prior submission | Records already in memory/storage from prior batch prep | `params.data` pre-loaded, skips `initial_pipeline` |
