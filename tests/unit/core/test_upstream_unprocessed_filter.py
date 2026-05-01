@@ -65,6 +65,46 @@ class TestIsUpstreamUnprocessed:
         item = {"content": "data", "_unprocessed": False}
         assert TaskPreparer._is_upstream_unprocessed(item) is False
 
+    def test_guard_skip_exempt_from_cascade(self):
+        item = {"content": "data", "_unprocessed": True, "metadata": {"reason": "guard_skip"}}
+        assert TaskPreparer._is_upstream_unprocessed(item) is False
+
+    def test_guard_prefilter_skip_exempt_from_cascade(self):
+        item = {
+            "content": "data",
+            "_unprocessed": True,
+            "metadata": {"reason": "guard_prefilter_skip"},
+        }
+        assert TaskPreparer._is_upstream_unprocessed(item) is False
+
+    def test_guard_filter_exempt_from_cascade(self):
+        item = {"content": "data", "_unprocessed": True, "metadata": {"reason": "guard_filter"}}
+        assert TaskPreparer._is_upstream_unprocessed(item) is False
+
+    def test_upstream_unprocessed_cascades(self):
+        item = {
+            "content": "data",
+            "_unprocessed": True,
+            "metadata": {"reason": "upstream_unprocessed"},
+        }
+        assert TaskPreparer._is_upstream_unprocessed(item) is True
+
+    def test_batch_not_returned_cascades(self):
+        item = {
+            "content": "data",
+            "_unprocessed": True,
+            "metadata": {"reason": "batch_not_returned"},
+        }
+        assert TaskPreparer._is_upstream_unprocessed(item) is True
+
+    def test_retry_exhausted_cascades(self):
+        item = {
+            "content": "data",
+            "_unprocessed": True,
+            "metadata": {"reason": "retry_exhausted"},
+        }
+        assert TaskPreparer._is_upstream_unprocessed(item) is True
+
 
 # --- TaskPreparer.prepare() early exit ---
 

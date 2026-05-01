@@ -12,11 +12,19 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
-from agent_actions.record.reasons import GUARD_SKIP
+from agent_actions.record.reasons import GUARD_FILTER, GUARD_PREFILTER_SKIP, GUARD_SKIP
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 
 logger = logging.getLogger(__name__)
+
+GUARD_EXEMPT_REASONS: frozenset[str] = frozenset(
+    {
+        GUARD_SKIP,
+        GUARD_PREFILTER_SKIP,
+        GUARD_FILTER,
+    }
+)
 
 
 class TaskPreparer:
@@ -301,16 +309,20 @@ class TaskPreparer:
     def _is_upstream_unprocessed(item: Any) -> bool:
         """Return True only for cascade-failure tombstones, not guard-skip tombstones.
 
-        Guard-skipped records (reason=guard_skip) are valid pipeline data — the
-        action was intentionally skipped but downstream should still process.
-        Only upstream_unprocessed cascades should propagate as unprocessed.
+        Guard-skipped records are valid pipeline data — the action was
+        intentionally skipped but downstream should still process.  All guard
+        outcome variants (online ``guard_skip``, FILE ``guard_prefilter_skip``,
+        ``guard_filter``) are exempt from cascade propagation.
+
+        Only true upstream failures (``upstream_unprocessed``, ``batch_not_returned``,
+        etc.) should propagate as unprocessed.
         """
         if not isinstance(item, dict):
             return False
         if item.get("_unprocessed") is not True:
             return False
         metadata = item.get("metadata")
-        if isinstance(metadata, dict) and metadata.get("reason") == GUARD_SKIP:
+        if isinstance(metadata, dict) and metadata.get("reason") in GUARD_EXEMPT_REASONS:
             return False
         return True
 
