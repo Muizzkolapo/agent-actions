@@ -5,6 +5,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 from agent_actions.config.types import RunMode
+from agent_actions.record import reasons
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
@@ -17,7 +18,7 @@ class GuardStatus(Enum):
     PASSED = "passed"  # Guard passed, task should be executed
     SKIPPED = "skipped"  # Guard triggered skip behavior (passthrough)
     FILTERED = "filtered"  # Guard triggered filter behavior (excluded)
-    UPSTREAM_UNPROCESSED = "upstream_unprocessed"  # Upstream failed/skipped this record
+    UPSTREAM_UNPROCESSED = reasons.UPSTREAM_UNPROCESSED
 
 
 @dataclass

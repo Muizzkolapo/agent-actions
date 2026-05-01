@@ -15,6 +15,13 @@ from agent_actions.logging.events import (
     ResultCollectionStartedEvent,
 )
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.record.reasons import (
+    GUARD_FILTER,
+    GUARD_SKIP,
+    PARSE_ERROR,
+    RETRY_EXHAUSTED,
+    UNPROCESSED,
+)
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
@@ -182,10 +189,10 @@ def write_record_dispositions(
                 action_name,
                 source_guid,
                 DISPOSITION_EXHAUSTED,
-                reason="retry_exhausted",
+                reason=RETRY_EXHAUSTED,
             )
         elif item.get("_unprocessed"):
-            reason = metadata.get("reason", "unprocessed")
+            reason = metadata.get("reason", UNPROCESSED)
             if metadata.get("skipped_by_where_clause"):
                 disposition = DISPOSITION_FILTERED
             else:
@@ -277,7 +284,7 @@ class ResultCollector:
                             agent_name,
                             result.source_guid,
                             DISPOSITION_FAILED,
-                            reason="parse_error",
+                            reason=PARSE_ERROR,
                         )
                     continue
 
@@ -325,7 +332,7 @@ class ResultCollector:
                         agent_name,
                         result.source_guid,
                         DISPOSITION_PASSTHROUGH,
-                        reason=result.skip_reason or "guard_skip",
+                        reason=result.skip_reason or GUARD_SKIP,
                     )
 
             elif status == ProcessingStatus.EXHAUSTED:
@@ -410,7 +417,7 @@ class ResultCollector:
                         agent_name,
                         result.source_guid,
                         DISPOSITION_FILTERED,
-                        reason=result.skip_reason or "guard_filter",
+                        reason=result.skip_reason or GUARD_FILTER,
                     )
 
             elif status == ProcessingStatus.UNPROCESSED:
@@ -435,7 +442,7 @@ class ResultCollector:
                         agent_name,
                         result.source_guid,
                         DISPOSITION_UNPROCESSED,
-                        reason=result.skip_reason or "unprocessed",
+                        reason=result.skip_reason or UNPROCESSED,
                     )
 
             elif status == ProcessingStatus.DEFERRED:

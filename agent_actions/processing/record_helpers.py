@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
+from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.content import get_existing_content, is_version_merge
 
 # Framework fields that should be carried from an input record to an output
@@ -72,7 +73,7 @@ def build_exhausted_tombstone(
         "content": content,
         "source_guid": source_guid,
         "metadata": {
-            "reason": "retry_exhausted",
+            "reason": RETRY_EXHAUSTED,
             "retry_exhausted": True,
             "agent_type": "tombstone",
         },

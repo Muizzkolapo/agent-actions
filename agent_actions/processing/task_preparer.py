@@ -12,6 +12,7 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
+from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 
@@ -309,7 +310,7 @@ class TaskPreparer:
         if item.get("_unprocessed") is not True:
             return False
         metadata = item.get("metadata")
-        if isinstance(metadata, dict) and metadata.get("reason") == "guard_skip":
+        if isinstance(metadata, dict) and metadata.get("reason") == GUARD_SKIP:
             return False
         return True
 
