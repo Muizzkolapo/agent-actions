@@ -199,7 +199,10 @@ class OnlineLLMStrategy:
         prep_context.current_item = item if isinstance(item, dict) else None
 
         task_preparer = get_task_preparer()
-        prepared = task_preparer.prepare(item, prep_context, skip_guard=skip_guard)
+        existing_target_id = item.get("target_id") if isinstance(item, dict) else None
+        prepared = task_preparer.prepare(
+            item, prep_context, existing_target_id=existing_target_id, skip_guard=skip_guard
+        )
 
         input_record = item if isinstance(item, dict) else None
         source_guid = prepared.source_guid

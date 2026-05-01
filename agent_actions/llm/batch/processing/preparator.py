@@ -300,4 +300,6 @@ class BatchTaskPreparator:
         # Skip guard evaluation to ensure prompt is always rendered for validation
         # (guards might filter the first row, hiding template errors)
         task_preparer = get_task_preparer()
-        task_preparer.prepare(first_row, prep_context, skip_guard=True)
+        task_preparer.prepare(
+            first_row, prep_context, existing_target_id=first_row.get("target_id"), skip_guard=True
+        )
