@@ -1,25 +1,9 @@
 """Unified record envelope -- single authority for record content assembly.
 
-``RecordEnvelope.transition()`` is the **only** sanctioned mutator for
-lifecycle fields (``_state``, ``_state_history``, ``_state_schema_version``).
-All other code reads these fields; it does not write them directly.
-
-## _state_schema_version bump rules
-
-Version 1 (current): history entries have keys
-  {timestamp, action, from, to, reason, detail}
-
-Bump to version 2 when: a new required key is added to history entries,
-or the semantics of an existing key change in a breaking way.  Additive
-optional keys do not require a bump.
-
-## _state_history cap
-
-History is capped at ``STATE_HISTORY_CAP`` entries (default: 64).  This
-prevents unbounded serialization growth across long retry chains.  When the
-cap is reached, the oldest entry is dropped on each new append.  64 entries
-is enough for any realistic pipeline run (typical records see 2-10
-transitions).
+``RecordEnvelope.transition()`` is the only sanctioned mutator for lifecycle
+fields (``_state``, ``_state_history``, ``_state_schema_version``).  See
+``record/_MANIFEST.md`` for legal transition edges, history cap, and schema
+version bump rules.
 """
 
 from __future__ import annotations
