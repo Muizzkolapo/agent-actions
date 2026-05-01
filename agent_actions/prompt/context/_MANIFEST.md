@@ -16,6 +16,27 @@ loaders for cataloging prompts at documentation time.
 | `scope_inference.py` | Module | Dependency inference: fan-in detection, version branch expansion, input/context source resolution. | `preprocessing` |
 | `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. | `preprocessing` |
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. | `preprocessing` |
-| `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces. | `preprocessing` |
+| `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces. Convergence point for source data validation (see design note). | `preprocessing`, `staging.field_validation` |
 | ~~`scope_file_mode.py`~~ | Deleted | FILE-mode observe merged into `scope_application.py:apply_context_scope_for_records`. | — |
 | `static_loader.py` | Module | Static prompt loader used during docs generation to read prompt store files. | `tooling.docs`, `file_io` |
+
+## Design Notes
+
+### Source data: four retrieval paths, one convergence point
+
+Source data (the user's original staging input) reaches `_load_source_namespace()` in
+`scope_builder.py` through four paths, each serving a different pipeline lifecycle stage:
+
+| Path | When | How source data arrives | Entry point |
+|------|------|------------------------|-------------|
+| **Staging file load** | First action, initial run | Read from `agent_io/staging/*.json` by `FileReader` | `initial_pipeline.process_initial_stage()` |
+| **Storage lookup** | Downstream actions | Saved to storage during first action; retrieved by `source_guid` | `task_preparer._get_source_content()` |
+| **FILE mode index** | FILE-granularity actions | Resolved per-`source_guid` from a shared source index | `scope_application._resolve_source_content()` |
+| **Batch resume** | Batch re-run after prior submission | Records already in memory/storage from prior batch prep | `params.data` pre-loaded, skips `initial_pipeline` |
+
+The data is the same in all four cases — the user's original staging fields. The paths
+differ because of *where the data lives* at each stage (disk → storage → index → memory).
+
+`_load_source_namespace()` is the single convergence point where all four paths write to
+`field_context["source"]`. Validation for reserved namespace collisions runs here to
+cover all paths regardless of how the data entered the pipeline.
