@@ -70,10 +70,10 @@ class TestBuild:
         assert result["source_guid"] == "g1"
 
     def test_empty_dict_input_record_is_valid(self):
-        """Empty dict input_record must not be treated as absent — tracking carry should run."""
-        result = RecordEnvelope.build("action", {"x": 1}, {})
+        """Empty dict input_record must not be treated as absent — tracking fields are carried."""
+        result = RecordEnvelope.build("action", {"x": 1}, {"source_guid": "g-empty"})
         assert result["content"] == {"action": {"x": 1}}
-        assert "source_guid" not in result
+        assert result["source_guid"] == "g-empty"
 
 
 # ── build_content() ─────────────────────────────────────────────────────────

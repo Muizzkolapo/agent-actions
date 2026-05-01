@@ -56,9 +56,9 @@ class RecordEnvelope:
         Preserves upstream namespaces from *input_record* and carries
         ``source_guid``.  Collision on *action_name* overwrites.
 
-        *action_output* is stored by reference — the content dict is a shallow
-        copy of its container, not a deep copy.  Callers must not mutate
-        *action_output* after calling ``build()``.
+        The assembled content dict is new, but *action_output* itself is stored
+        by reference inside it.  Callers must not mutate *action_output* after
+        calling ``build()``.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
