@@ -162,6 +162,12 @@ def process_initial_stage(ctx: InitialStageContext):
         },
     )
 
+    from agent_actions.input.preprocessing.staging.field_validation import (
+        validate_staging_field_names,
+    )
+
+    validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
+
     _validate_staged_data(
         raw_content=content,
         file_type=file_type,
