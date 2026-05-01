@@ -15,6 +15,7 @@ from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.reasons import GUARD_PREFILTER_SKIP, GUARD_SKIP
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 logger = logging.getLogger(__name__)
@@ -133,13 +134,13 @@ class UnifiedProcessor:
             tombstone = build_tombstone(
                 context.action_name,
                 item,
-                "guard_skip",
+                GUARD_SKIP,
                 source_guid=source_guid,
             )
             guard_results.append(
                 ProcessingResult.skipped(
                     passthrough_data=tombstone,
-                    reason="guard_skip",
+                    reason=GUARD_SKIP,
                     source_guid=source_guid,
                 )
             )
@@ -194,7 +195,7 @@ class UnifiedProcessor:
             guard_results.append(
                 ProcessingResult.unprocessed(
                     data=[item],
-                    reason="guard_prefilter_skip",
+                    reason=GUARD_PREFILTER_SKIP,
                     source_guid=item.get("source_guid") if isinstance(item, dict) else None,
                 )
             )

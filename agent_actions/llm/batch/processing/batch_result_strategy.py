@@ -27,6 +27,7 @@ from agent_actions.processing.types import (
     ProcessingStatus,
     RecoveryMetadata,
 )
+from agent_actions.record.reasons import BATCH_NOT_RETURNED, GUARD_SKIP, UPSTREAM_UNPROCESSED
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -471,12 +472,12 @@ class BatchResultStrategy:
         """Build an UNPROCESSED result for a passthrough record."""
         # Determine actual skip reason from context metadata
         filter_phase = original_row.get(ContextMetaKeys.FILTER_PHASE, "")
-        if filter_phase == "upstream_unprocessed":
-            reason = "upstream_unprocessed"
+        if filter_phase == UPSTREAM_UNPROCESSED:
+            reason = UPSTREAM_UNPROCESSED
         elif BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED:
-            reason = "guard_skip"
+            reason = GUARD_SKIP
         else:
-            reason = "batch_not_returned"
+            reason = BATCH_NOT_RETURNED
 
         passthrough_item = build_tombstone(
             action_name,

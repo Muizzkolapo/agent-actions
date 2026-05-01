@@ -14,6 +14,7 @@ from agent_actions.llm.batch.core.batch_models import (
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
+from agent_actions.record.reasons import FILTER_PHASE_UNIFIED, FILTER_PHASE_UPSTREAM
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -174,7 +175,7 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "upstream_unprocessed"
+            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = FILTER_PHASE_UPSTREAM
             stats.skipped_items += 1
             logger.debug("Upstream unprocessed item %s", custom_id)
             return None
@@ -183,7 +184,7 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.FILTERED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "unified"
+            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = FILTER_PHASE_UNIFIED
             stats.filtered_items += 1
             logger.debug("Guard filtered item %s (phase=unified)", custom_id)
             return None
@@ -192,7 +193,7 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "unified"
+            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = FILTER_PHASE_UNIFIED
             stats.skipped_items += 1
             logger.debug("Guard skipped item %s (phase=unified)", custom_id)
             return None
