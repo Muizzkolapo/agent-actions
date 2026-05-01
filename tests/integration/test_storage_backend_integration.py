@@ -13,11 +13,6 @@ from pathlib import Path
 
 import pytest
 
-
-def _tr(*extra_fields, **kwargs) -> dict:
-    """Minimal valid target record with lifecycle fields."""
-    return {"_state": "processed", "_state_schema_version": 1, **kwargs}
-
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 

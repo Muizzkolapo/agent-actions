@@ -83,6 +83,15 @@ class TestSQLiteBackend:
         with pytest.raises(FileNotFoundError):
             backend.read_target("node_1", "nonexistent.json")
 
+    def test_read_target_raises_when_state_missing(self, backend):
+        """read_target raises ConfigurationError when persisted records omit _state."""
+        from agent_actions.errors.configuration import ConfigurationError
+
+        data = [{"source_guid": "sg-1", "content": {"x": 1}}]
+        backend.write_target("node_1", "batch.json", data)
+        with pytest.raises(ConfigurationError, match="_state"):
+            backend.read_target("node_1", "batch.json")
+
     def test_write_and_read_source(self, backend):
         """Test writing and reading source data."""
         data = [
