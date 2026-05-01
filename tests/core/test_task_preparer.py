@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext, PreparedTask
 from agent_actions.processing.task_preparer import TaskPreparer
 from tests.support.target_records import with_target_lifecycle
@@ -540,3 +541,14 @@ class TestGuardBeforePromptRendering:
         assert mock_render_prompt.call_count == 1
         assert result.guard_status == GuardStatus.PASSED
         assert result.formatted_prompt == "Rendered: value"
+
+    def test_prepare_non_first_stage_missing_lifecycle_raises(self, basic_agent_config):
+        """Subsequent-stage dict inputs must include frozen-target lifecycle fields."""
+        context = PreparationContext(
+            agent_config=basic_agent_config,
+            agent_name="test_agent",
+            is_first_stage=False,
+        )
+
+        with pytest.raises(ConfigurationError, match="missing '_state'"):
+            TaskPreparer().prepare({"content": {"foo": "bar"}}, context)

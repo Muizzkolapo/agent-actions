@@ -3,6 +3,7 @@
 from typing import Any
 
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import RecordState
 from agent_actions.utils.field_management.manager import FieldManager
 from agent_actions.utils.id_generation.generator import IDGenerator
 from agent_actions.utils.lineage.builder import LineageBuilder
@@ -71,6 +72,13 @@ class PassthroughItemBuilder:
 
         processed_item["metadata"]["agent_type"] = "tombstone"
         processed_item["_unprocessed"] = True
+        RecordEnvelope.transition(
+            processed_item,
+            RecordState.GUARD_SKIPPED,
+            action_name,
+            "passthrough_tombstone",
+            reason,
+        )
 
         return processed_item
 

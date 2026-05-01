@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+from agent_actions.record.state import STATE_SCHEMA_VERSION
 from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
 
 # ---------------------------------------------------------------------------
@@ -69,6 +70,8 @@ class TestBuildItemBatchMode:
         assert item["metadata"]["skipped_by_where_clause"] is True
         # Batch mode should NOT have a 'reason' string in metadata
         assert "reason" not in item["metadata"]
+        assert item["_state"] == "guard_skipped"
+        assert item["_state_schema_version"] == STATE_SCHEMA_VERSION
 
     def test_target_id_from_row(self):
         """target_id is taken from the row when present."""

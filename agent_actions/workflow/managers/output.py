@@ -249,6 +249,3 @@ class ActionOutputManager:
             },
         )
 
-
-# Backward-compatible alias
-AgentOutputManager = ActionOutputManager

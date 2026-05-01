@@ -669,7 +669,7 @@ class TestVersionCorrelationFailureError:
 
         from agent_actions.errors import ConfigurationError
         from agent_actions.workflow.managers.output import (
-            AgentOutputManager,
+            ActionOutputManager,
             OutputManagerConfig,
         )
 
@@ -701,7 +701,7 @@ class TestVersionCorrelationFailureError:
                 console=MagicMock(),  # Mock console to avoid print errors
                 storage_backend=MagicMock(),
             )
-            output_manager = AgentOutputManager(config)
+            output_manager = ActionOutputManager(config)
 
             # Resolve correlated input for consumer (idx=2) — no version
             # outputs exist so this should raise ConfigurationError

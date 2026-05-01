@@ -253,6 +253,7 @@ class BatchTaskPreparator:
     ) -> PreparationContext:
         """Build PreparationContext with common settings."""
         agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
+        is_first_stage = self._is_first_stage(agent_config, agent_name)
         file_path = (
             str(Path(output_directory) / batch_name) if output_directory and batch_name else None
         )
@@ -260,7 +261,7 @@ class BatchTaskPreparator:
         return PreparationContext(
             agent_config=agent_config,
             agent_name=agent_name,
-            is_first_stage=False,  # Batch is always subsequent-stage
+            is_first_stage=is_first_stage,
             mode=RunMode.BATCH,
             source_data=source_data,
             agent_indices=self.action_indices,
@@ -273,6 +274,23 @@ class BatchTaskPreparator:
             storage_backend=self.storage_backend,
             current_item=current_item,
         )
+
+    def _is_first_stage(self, agent_config: dict[str, Any], agent_name: str) -> bool:
+        """Determine whether the batch action is first stage in the workflow graph."""
+        depends_on = agent_config.get("depends_on")
+        if isinstance(depends_on, (list, tuple, set)):
+            return len(depends_on) == 0
+        if depends_on is not None:
+            return False
+
+        idx = self.action_indices.get(agent_name)
+        if idx is None:
+            return True
+
+        numeric_indices = [i for i in self.action_indices.values() if isinstance(i, int)]
+        if not numeric_indices:
+            return True
+        return idx == min(numeric_indices)
 
     def _run_preflight_validation(
         self,
