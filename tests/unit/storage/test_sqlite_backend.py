@@ -596,3 +596,62 @@ class TestServiceInitSqliteError:
         console.print.assert_called()
         error_output = console.print.call_args[0][0]
         assert "Storage backend failed" in error_output
+
+
+class TestSchemaEnforcement:
+    """Tests for _enforce_schema dropping stale tables."""
+
+    def test_old_schema_dropped_and_recreated(self, tmp_path):
+        """Table with missing columns is dropped and recreated on initialize()."""
+        import sqlite3
+
+        db_path = tmp_path / "test.db"
+        # Create a DB with old schema missing 'detail' column
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE record_disposition (
+                id INTEGER PRIMARY KEY,
+                action_name TEXT,
+                record_id TEXT,
+                disposition TEXT,
+                reason TEXT
+            )
+        """)
+        conn.execute(
+            "INSERT INTO record_disposition (action_name, record_id, disposition) VALUES ('a', 'r', 'd')"
+        )
+        conn.commit()
+        conn.close()
+
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+
+        # Table should now have all required columns
+        cursor = backend.connection.cursor()
+        cursor.execute("PRAGMA table_info(record_disposition)")
+        columns = {row[1] for row in cursor.fetchall()}
+        assert "detail" in columns
+        assert "input_snapshot" in columns
+
+        # Old data should be gone (table was dropped)
+        cursor.execute("SELECT COUNT(*) FROM record_disposition")
+        assert cursor.fetchone()[0] == 0
+        backend.close()
+
+    def test_correct_schema_not_dropped(self, tmp_path):
+        """Table with all columns is left intact on initialize()."""
+        db_path = tmp_path / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+
+        # Write some data
+        backend.write_target("node1", "file.json", [{"_state": "active", "id": 1}])
+
+        # Re-initialize — data should survive
+        backend.close()
+        backend2 = SQLiteBackend(str(db_path), "test_workflow")
+        backend2.initialize()
+
+        data = backend2.read_target("node1", "file.json")
+        assert data[0]["id"] == 1
+        backend2.close()
