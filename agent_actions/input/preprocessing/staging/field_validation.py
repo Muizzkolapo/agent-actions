@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
+logger = logging.getLogger(__name__)
 
 
 def validate_staging_field_names(raw_content: Any, file_path: str) -> None:
@@ -27,9 +30,16 @@ def validate_staging_field_names(raw_content: Any, file_path: str) -> None:
     if isinstance(raw_content, dict):
         _check_dict(raw_content, file_path)
     elif isinstance(raw_content, list):
-        for item in raw_content:
+        for idx, item in enumerate(raw_content):
             if isinstance(item, dict):
                 _check_dict(item, file_path)
+            else:
+                logger.debug(
+                    "Skipping non-dict element at index %d in %s (type: %s)",
+                    idx,
+                    Path(file_path).name,
+                    type(item).__name__,
+                )
 
 
 def _check_dict(record: dict[str, Any], file_path: str) -> None:

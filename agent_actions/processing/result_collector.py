@@ -22,6 +22,7 @@ from agent_actions.record.reasons import (
     GUARD_SKIP,
     PARSE_ERROR,
     RETRY_EXHAUSTED,
+    SUCCESS,
     UNPROCESSED,
 )
 from agent_actions.record.state import RecordState
@@ -301,7 +302,7 @@ class ResultCollector:
 
                 if data:
                     for d in data:
-                        _stamp(d, RecordState.PROCESSED, agent_name, "success")
+                        _stamp(d, RecordState.PROCESSED, agent_name, SUCCESS)
                     output.extend(data)
                 logger.debug(
                     "Collected SUCCESS result source_guid=%s count=%d",

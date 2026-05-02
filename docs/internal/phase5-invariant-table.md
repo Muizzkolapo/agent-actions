@@ -16,7 +16,7 @@ This table is **normative**. If code disagrees with this table, the code is wron
 | 8 | Retry exhausted (return_last) | EXHAUSTED | EXHAUSTED | false | No | `online_llm.py:311` |
 | 9 | Retry exhausted (raise) | — (exception) | EXHAUSTED | false | No | `result_collector.py:526` |
 | 10 | Guard deferred (HITL / batch queue) | — (not in output) | DEFERRED | false | No | `online_llm.py:299` |
-| 11 | FILE guard prefilter skip | CASCADE_SKIPPED | UNPROCESSED | false | No | `unified.py:186` |
+| 11 | FILE guard prefilter skip | GUARD_SKIPPED | UNPROCESSED | false | No | `unified.py:186` |
 | 12 | FILE tool success | PROCESSED | SUCCESS | true | Yes | `file_tool.py:85` |
 | 13 | FILE tool error | — (not in output) | FAILED | false | No | `file_tool.py:68` |
 | 14 | Batch success | PROCESSED | SUCCESS | true | Yes | `batch_result_strategy.py:287` |
@@ -41,14 +41,14 @@ This table is **normative**. If code disagrees with this table, the code is wron
 | SUCCESS | PROCESSED | Action completed, output produced |
 | SKIPPED | GUARD_SKIPPED | Guard clause rejected, tombstone written |
 | FILTERED | — (no output) | Guard rejected, record dropped entirely |
-| UNPROCESSED | CASCADE_SKIPPED | Upstream dependency missing or guard-prefilter |
+| UNPROCESSED | GUARD_SKIPPED or CASCADE_SKIPPED | Guard prefilter → GUARD_SKIPPED; cascade → CASCADE_SKIPPED |
 | EXHAUSTED | EXHAUSTED | Retries consumed, last attempt output preserved |
 | FAILED | FAILED | Error during processing (stamped only if data written) |
 | DEFERRED | — (no output) | Queued for batch/HITL, disposition tracked |
 
 ## Resolved Mismatches (P5-031)
 
-1. **FILE guard prefilter uses UNPROCESSED — intentional (FM13).** `unified.py:186` returns `ProcessingResult.unprocessed()` for FILE guard skips. This preserves `guard_results + invocation_results` merge ordering. Changing to `skipped()` would collapse the two list sources and risk FM13 regression. FILE prefilter skips remain CASCADE_SKIPPED by design.
+1. **FILE guard prefilter uses UNPROCESSED — intentional (FM13).** `unified.py:186` returns `ProcessingResult.unprocessed()` for FILE guard skips. This preserves `guard_results + invocation_results` merge ordering. Changing to `skipped()` would collapse the two list sources and risk FM13 regression. However, `ResultCollector` stamps these as **GUARD_SKIPPED** (resettable at boundary) because `skip_reason=GUARD_PREFILTER_SKIP` identifies them as guard decisions, not cascade failures.
 
 2. **Online post-invoke guard skip — FIXED.** `online_llm.py:343` now returns `ProcessingResult.skipped()` instead of `unprocessed()`. This is a guard decision (not a cascade), so GUARD_SKIPPED is correct. Aligns with pre-invoke guard skip behavior.
 
