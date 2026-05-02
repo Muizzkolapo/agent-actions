@@ -65,7 +65,7 @@ class TestSQLiteBackend:
         backend.close()
 
     def test_write_and_read_target(self, backend):
-        """Test writing and reading target data."""
+        """Test writing and reading target data — read resets resettable states to ACTIVE."""
         data = [
             {"_state": "processed", "_state_schema_version": 1, "target_id": "t1", "content": {"field1": "value1"}},
             {"_state": "processed", "_state_schema_version": 1, "target_id": "t2", "content": {"field2": "value2"}},
@@ -75,9 +75,12 @@ class TestSQLiteBackend:
         result = backend.write_target("node_1", "batch_001.json", data)
         assert result == "node_1:batch_001.json"
 
-        # Read target data
+        # Read target data — resettable states become ACTIVE
         read_data = backend.read_target("node_1", "batch_001.json")
-        assert read_data == data
+        assert read_data[0]["_state"] == "active"
+        assert read_data[0]["target_id"] == "t1"
+        assert read_data[1]["_state"] == "active"
+        assert read_data[1]["target_id"] == "t2"
 
     def test_read_target_not_found_raises(self, backend):
         """Test that reading non-existent target raises FileNotFoundError."""

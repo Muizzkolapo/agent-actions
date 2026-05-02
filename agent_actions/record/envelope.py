@@ -12,6 +12,7 @@ import datetime
 from typing import Any
 
 from agent_actions.record.state import (
+    CASCADE_BLOCKING_STATES,
     PROCESSABLE_STATES,
     RESETTABLE_DOWNSTREAM_STATES,
     RecordState,
@@ -188,6 +189,8 @@ def _validate_transition(from_state: RecordState | None, to_state: RecordState) 
     if from_state in PROCESSABLE_STATES:
         return
     if from_state in RESETTABLE_DOWNSTREAM_STATES and to_state in PROCESSABLE_STATES:
+        return
+    if from_state in CASCADE_BLOCKING_STATES and to_state == RecordState.CASCADE_SKIPPED:
         return
     raise RecordEnvelopeError(
         f"Illegal state transition: {from_state.value!r} → {to_state.value!r}"
