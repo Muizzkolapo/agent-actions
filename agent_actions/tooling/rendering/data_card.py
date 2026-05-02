@@ -26,6 +26,9 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "_recovery",
         "_unprocessed",
         "_file",
+        "_state",
+        "_state_history",
+        "_state_schema_version",
     }
 )
 

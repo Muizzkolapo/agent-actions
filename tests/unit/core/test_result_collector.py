@@ -87,8 +87,10 @@ def test_result_collector_aggregates_statuses_first_stage():
         is_first_stage=True,
     )
 
-    assert output[0] == {"content": {"value": 1}}
-    assert output[1] == {"content": {"value": 2}}
+    assert output[0]["content"] == {"value": 1}
+    assert output[0]["_state"] == "processed"
+    assert output[1]["content"] == {"value": 2}
+    assert output[1]["_state"] == "guard_skipped"
 
     exhausted_item = output[2]
     assert exhausted_item["source_guid"] == "src-3"
@@ -758,8 +760,8 @@ class TestParseErrorDisposition:
             reason="parse_error",
         )
 
-    def test_parse_error_record_marked_unprocessed(self):
-        """Parse error items get _unprocessed=True so downstream guards skip them."""
+    def test_parse_error_record_stamped_failed(self):
+        """Parse error items get _state=failed so downstream cascades them."""
         result = ProcessingResult.success(
             data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
             source_guid="guid-pe",
@@ -773,7 +775,7 @@ class TestParseErrorDisposition:
         )
 
         assert len(output) == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"
 
     def test_parse_error_stats_counted_as_failed(self):
         """Parse error reclassifies from success to failed in stats."""
@@ -791,6 +793,23 @@ class TestParseErrorDisposition:
 
         assert stats.failed == 1
         assert stats.success == 0
+
+    def test_parse_error_mutates_result_status(self):
+        """result.status is mutated to FAILED — not just the local counter (CR-9)."""
+        result = ProcessingResult.success(
+            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            source_guid="guid-pe",
+        )
+        assert result.status == ProcessingStatus.SUCCESS
+
+        ResultCollector.collect_results(
+            [result],
+            {},
+            "action",
+            is_first_stage=False,
+        )
+
+        assert result.status == ProcessingStatus.FAILED
 
     def test_normal_success_not_affected(self):
         """Normal SUCCESS records are not reclassified by parse error detection."""
@@ -810,7 +829,6 @@ class TestParseErrorDisposition:
 
         assert stats.success == 1
         assert stats.failed == 0
-        assert "_unprocessed" not in output[0]
         # Normal SUCCESS writes DISPOSITION_SUCCESS, not FAILED
         backend.set_disposition.assert_called_once_with(
             "action",
@@ -844,8 +862,6 @@ class TestParseErrorDisposition:
         assert stats.success == 1
         assert len(output) == 2
         # Parse error item is marked, normal is not
-        assert output[0]["_unprocessed"] is True
-        assert "_unprocessed" not in output[1]
         # Parse error gets FAILED disposition, normal gets SUCCESS disposition
         assert backend.set_disposition.call_count == 2
         calls = backend.set_disposition.call_args_list
@@ -869,7 +885,6 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True
         backend.set_disposition.assert_not_called()
 
     def test_parse_error_no_backend_no_crash(self):
@@ -888,4 +903,83 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True
+
+
+class TestCollectorStateStamping:
+    """Verify ResultCollector stamps correct _state based on skip_reason."""
+
+    def test_guard_prefilter_skip_stamps_guard_skipped(self):
+        """FILE prefilter skip_reason=guard_prefilter_skip → GUARD_SKIPPED (resettable)."""
+        record = {"content": {}, "_state": "active"}
+        result = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            source_guid="src-gp",
+            data=[record],
+            skip_reason="guard_prefilter_skip",
+        )
+
+        output, stats = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert len(output) == 1
+        assert output[0]["_state"] == "guard_skipped"
+
+    def test_guard_skip_stamps_guard_skipped(self):
+        """skip_reason=guard_skip → GUARD_SKIPPED."""
+        record = {"content": {}, "_state": "active"}
+        result = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            source_guid="src-gs",
+            data=[record],
+            skip_reason="guard_skip",
+        )
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert output[0]["_state"] == "guard_skipped"
+
+    def test_cascade_reason_stamps_cascade_skipped(self):
+        """Non-guard skip_reason (e.g. 'upstream_unprocessed') → CASCADE_SKIPPED."""
+        record = {"content": {}, "_state": "active"}
+        result = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            source_guid="src-cs",
+            data=[record],
+            skip_reason="upstream_unprocessed",
+        )
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert output[0]["_state"] == "cascade_skipped"
+
+    def test_success_stamps_processed(self):
+        """SUCCESS results stamp PROCESSED."""
+        record = {"content": {"v": 1}, "_state": "active"}
+        result = ProcessingResult.success(data=[record], source_guid="src-s")
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert output[0]["_state"] == "processed"

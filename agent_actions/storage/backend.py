@@ -5,6 +5,8 @@ from enum import Enum
 from types import TracebackType
 from typing import Any
 
+from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
+
 NODE_LEVEL_RECORD_ID = "__node__"
 """Sentinel record_id for node-level disposition signals."""
 DISPOSITION_PASSTHROUGH = "passthrough"
@@ -61,13 +63,24 @@ class StorageBackend(ABC):
         """Write target data for a specific node."""
         ...
 
-    @abstractmethod
     def read_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
-        """Read target data for a specific node.
+        """Read target data, validate lifecycle fields, and reset for downstream.
+
+        Subclasses implement _read_target_raw(). This method adds lifecycle
+        validation and executor boundary reset so every backend gets them
+        automatically.
 
         Raises:
             FileNotFoundError: If the target data doesn't exist.
         """
+        result = self._read_target_raw(action_name, relative_path)
+        validate_lifecycle_batch(result, action_name=action_name)
+        reset_for_downstream(result, action_name=action_name)
+        return result
+
+    @abstractmethod
+    def _read_target_raw(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
+        """Read raw target data from storage. Subclasses implement this."""
         ...
 
     @abstractmethod

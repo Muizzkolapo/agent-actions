@@ -152,12 +152,11 @@ def test_file_mode_hitl_empty_input_returns_empty_output():
 
 
 def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
-    """Tombstone markers (_unprocessed, metadata) must survive HITL merge."""
+    """Tombstone markers (_recovery, metadata) must survive HITL merge."""
     input_data = [
         {
             "source_guid": "sg-1",
             "content": {"id": 1},
-            "_unprocessed": True,
             "_recovery": {"reason": "tombstone"},
             "metadata": {"agent_type": "tombstone"},
         },
@@ -186,7 +185,6 @@ def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 1
     item = result.data[0]
-    assert item["_unprocessed"] is True
     assert item["_recovery"] == {"reason": "tombstone"}
     assert item["source_guid"] == "sg-1"
     # metadata is present (enrichment may overwrite the value with LLM

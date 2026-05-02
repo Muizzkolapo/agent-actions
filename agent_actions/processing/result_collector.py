@@ -15,6 +15,17 @@ from agent_actions.logging.events import (
     ResultCollectionStartedEvent,
 )
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.reasons import (
+    GUARD_FILTER,
+    GUARD_PREFILTER_SKIP,
+    GUARD_SKIP,
+    PARSE_ERROR,
+    RETRY_EXHAUSTED,
+    SUCCESS,
+    UNPROCESSED,
+)
+from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
@@ -30,6 +41,16 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+
+def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason: str) -> None:
+    """Stamp lifecycle state on a record entering output.
+
+    Records arrive ACTIVE (after downstream reset) or CASCADE_BLOCKING.
+    ACTIVE → any settled is legal. CASCADE_BLOCKING → CASCADE_SKIPPED
+    is legal (cascade propagation). Same → same is a no-op.
+    """
+    RecordEnvelope.transition(record, state, action_name, reason)
 
 
 def _get_retry_attempts(result: ProcessingResult) -> str | int:
@@ -91,19 +112,16 @@ def _safe_set_disposition(
     disposition: str,
     **kwargs: Any,
 ) -> None:
-    """Write a disposition record, logging and swallowing errors.
-
-    Disposition writes are telemetry — they must not crash the data pipeline.
-    """
+    """Write a disposition record — log ERROR on failure, do not crash pipeline."""
     try:
         backend.set_disposition(action_name, record_id, disposition, **kwargs)
     except Exception:
-        logger.warning(
-            "Failed to write disposition action=%s record=%s disp=%s",
+        logger.exception(
+            "Failed to write disposition action=%s record=%s disp=%s — "
+            "disposition may diverge from _state until next run",
             action_name,
             record_id,
             disposition,
-            exc_info=True,
         )
 
 
@@ -182,20 +200,20 @@ def write_record_dispositions(
                 action_name,
                 source_guid,
                 DISPOSITION_EXHAUSTED,
-                reason="retry_exhausted",
+                reason=RETRY_EXHAUSTED,
             )
-        elif item.get("_unprocessed"):
-            reason = metadata.get("reason", "unprocessed")
-            if metadata.get("skipped_by_where_clause"):
-                disposition = DISPOSITION_FILTERED
-            else:
-                disposition = DISPOSITION_PASSTHROUGH
+        elif item.get("_state") in (
+            RecordState.CASCADE_SKIPPED.value,
+            RecordState.GUARD_SKIPPED.value,
+        ):
+            from agent_actions.record.disposition import derive_disposition
+
             _safe_set_disposition(
                 storage_backend,
                 action_name,
                 source_guid,
-                disposition,
-                reason=reason,
+                derive_disposition(item),
+                reason=metadata.get("reason", UNPROCESSED),
             )
         elif item.get("error"):
             _safe_set_disposition(
@@ -253,8 +271,9 @@ class ResultCollector:
                 # Reprompt has already had its chance to repair (it runs
                 # during invocation, before result collection).
                 if data and _data_has_parse_error(data):
+                    result.status = ProcessingStatus.FAILED
                     for d in data:
-                        d["_unprocessed"] = True
+                        _stamp(d, RecordState.FAILED, agent_name, PARSE_ERROR)
                     output.extend(data)
                     stats[status_key] -= 1
                     stats["failed"] += 1
@@ -277,11 +296,13 @@ class ResultCollector:
                             agent_name,
                             result.source_guid,
                             DISPOSITION_FAILED,
-                            reason="parse_error",
+                            reason=PARSE_ERROR,
                         )
                     continue
 
                 if data:
+                    for d in data:
+                        _stamp(d, RecordState.PROCESSED, agent_name, SUCCESS)
                     output.extend(data)
                 logger.debug(
                     "Collected SUCCESS result source_guid=%s count=%d",
@@ -306,6 +327,13 @@ class ResultCollector:
             elif status == ProcessingStatus.SKIPPED:
                 data = result.data or []
                 if data:
+                    for d in data:
+                        _stamp(
+                            d,
+                            RecordState.GUARD_SKIPPED,
+                            agent_name,
+                            result.skip_reason or GUARD_SKIP,
+                        )
                     output.extend(data)
                 logger.debug(
                     "Collected SKIPPED result source_guid=%s count=%d",
@@ -325,12 +353,14 @@ class ResultCollector:
                         agent_name,
                         result.source_guid,
                         DISPOSITION_PASSTHROUGH,
-                        reason=result.skip_reason or "guard_skip",
+                        reason=result.skip_reason or GUARD_SKIP,
                     )
 
             elif status == ProcessingStatus.EXHAUSTED:
                 data = result.data or []
                 if data:
+                    for d in data:
+                        _stamp(d, RecordState.EXHAUSTED, agent_name, RETRY_EXHAUSTED)
                     output.extend(data)
                 attempts = _get_retry_attempts(result)
                 logger.debug(
@@ -410,12 +440,21 @@ class ResultCollector:
                         agent_name,
                         result.source_guid,
                         DISPOSITION_FILTERED,
-                        reason=result.skip_reason or "guard_filter",
+                        reason=result.skip_reason or GUARD_FILTER,
                     )
 
             elif status == ProcessingStatus.UNPROCESSED:
                 data = result.data or []
                 if data:
+                    reason = result.skip_reason or UNPROCESSED
+                    # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
+                    state = (
+                        RecordState.GUARD_SKIPPED
+                        if reason in (GUARD_PREFILTER_SKIP, GUARD_SKIP, GUARD_FILTER)
+                        else RecordState.CASCADE_SKIPPED
+                    )
+                    for d in data:
+                        _stamp(d, state, agent_name, reason)
                     output.extend(data)  # Preserve in output for lineage
                 logger.debug(
                     "Collected UNPROCESSED result source_guid=%s count=%d",
@@ -435,7 +474,7 @@ class ResultCollector:
                         agent_name,
                         result.source_guid,
                         DISPOSITION_UNPROCESSED,
-                        reason=result.skip_reason or "unprocessed",
+                        reason=result.skip_reason or UNPROCESSED,
                     )
 
             elif status == ProcessingStatus.DEFERRED:

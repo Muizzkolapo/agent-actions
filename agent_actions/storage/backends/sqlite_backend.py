@@ -48,6 +48,7 @@ class SQLiteBackend(StorageBackend):
             record_id TEXT NOT NULL,
             disposition TEXT NOT NULL,
             reason TEXT,
+            detail TEXT,
             relative_path TEXT,
             input_snapshot TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -95,6 +96,37 @@ class SQLiteBackend(StorageBackend):
     """
 
     _MAX_TRACE_FIELD_SIZE = 1_048_576  # 1MB
+
+    # Required columns per table — schema enforcement drops tables missing any.
+    _REQUIRED_COLUMNS: dict[str, set[str]] = {
+        "source_data": {"relative_path", "source_guid", "data", "created_at"},
+        "target_data": {"action_name", "relative_path", "data", "record_count", "created_at"},
+        "record_disposition": {
+            "action_name",
+            "record_id",
+            "disposition",
+            "reason",
+            "relative_path",
+            "input_snapshot",
+            "detail",
+            "created_at",
+        },
+        "prompt_trace": {
+            "action_name",
+            "record_id",
+            "attempt",
+            "compiled_prompt",
+            "llm_context",
+            "response_text",
+            "model_name",
+            "model_vendor",
+            "run_mode",
+            "prompt_length",
+            "context_length",
+            "response_length",
+            "created_at",
+        },
+    }
 
     _INSERT_SOURCE_IGNORE_SQL = """
         INSERT OR IGNORE INTO source_data
@@ -182,11 +214,12 @@ class SQLiteBackend(StorageBackend):
             return self._connection
 
     def initialize(self) -> None:
-        """Create connection, tables, and indexes."""
+        """Create connection, enforce schema, create tables and indexes."""
         with self._lock:
             self._open_connection()
             cursor = self.connection.cursor()
             try:
+                self._enforce_schema(cursor)
                 cursor.execute(self.SOURCE_TABLE_SQL)
                 cursor.execute(self.TARGET_TABLE_SQL)
                 cursor.execute(self.DISPOSITION_TABLE_SQL)
@@ -197,24 +230,6 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
-                # Migration: add input_snapshot column for existing databases
-                try:
-                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN input_snapshot TEXT")
-                    logger.debug("Added input_snapshot column to record_disposition")
-                except sqlite3.OperationalError:
-                    logger.debug("input_snapshot column already exists in record_disposition")
-                # Migration: add detail column for error messages and context
-                try:
-                    cursor.execute("ALTER TABLE record_disposition ADD COLUMN detail TEXT")
-                    logger.debug("Added detail column to record_disposition")
-                except sqlite3.OperationalError:
-                    logger.debug("detail column already exists in record_disposition")
-                # Migration: add run_mode column for existing prompt_trace tables
-                try:
-                    cursor.execute("ALTER TABLE prompt_trace ADD COLUMN run_mode TEXT")
-                    logger.debug("Added run_mode column to prompt_trace")
-                except sqlite3.OperationalError:
-                    logger.debug("run_mode column already exists in prompt_trace")
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -229,6 +244,23 @@ class SQLiteBackend(StorageBackend):
                     extra={"db_path": str(self.db_path), "workflow_name": self.workflow_name},
                 )
                 raise
+
+    def _enforce_schema(self, cursor: sqlite3.Cursor) -> None:
+        """Drop tables whose columns don't match _REQUIRED_COLUMNS."""
+        for table_name, required in self._REQUIRED_COLUMNS.items():
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            rows = cursor.fetchall()
+            if not rows:
+                continue  # table doesn't exist yet — CREATE will handle it
+            existing = {row[1] for row in rows}
+            missing = required - existing
+            if missing:
+                logger.warning(
+                    "Table '%s' schema outdated (missing: %s) — dropping and recreating",
+                    table_name,
+                    sorted(missing),
+                )
+                cursor.execute(f"DROP TABLE {table_name}")
 
     def write_target(self, action_name: str, relative_path: str, data: list[dict[str, Any]]) -> str:
         """Write target data for a specific node."""
@@ -271,8 +303,8 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
-    def read_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
-        """Read target data for a specific node.
+    def _read_target_raw(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
+        """Read raw target data from SQLite.
 
         Raises:
             FileNotFoundError: If no data exists for the given path.

@@ -349,7 +349,6 @@ class TestTaskPreparerWarnLogging:
         try:
             with (
                 patch.object(preparer, "_normalize_input", return_value=(item, "sg-1", item)),
-                patch.object(preparer, "_is_upstream_unprocessed", return_value=False),
                 patch.object(preparer, "_load_full_context", return_value={"quality_score": 0.1}),
                 patch.object(preparer, "_evaluate_guard", return_value=warned_result),
                 patch.object(

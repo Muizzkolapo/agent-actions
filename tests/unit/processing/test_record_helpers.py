@@ -29,10 +29,6 @@ class TestBuildTombstone:
         assert result["metadata"]["reason"] == "guard_filter"
         assert result["metadata"]["agent_type"] == "tombstone"
 
-    def test_unprocessed_flag_set(self):
-        result = build_tombstone("act", None, "guard_skip")
-        assert result["_unprocessed"] is True
-
     def test_source_guid_set_explicitly(self):
         result = build_tombstone("act", None, "guard_skip", source_guid="guid-123")
         assert result["source_guid"] == "guid-123"
@@ -59,7 +55,6 @@ class TestBuildTombstone:
     def test_none_input_record(self):
         result = build_tombstone("act", None, "guard_skip", source_guid="sg")
         assert result["content"] == {"act": None}
-        assert result["_unprocessed"] is True
 
     def test_preserves_upstream_namespaces(self):
         input_record = {"content": {"ns_a": {"x": 1}, "ns_b": {"y": 2}}}
@@ -90,10 +85,6 @@ class TestBuildExhaustedTombstone:
         assert result["metadata"]["retry_exhausted"] is True
         assert result["metadata"]["agent_type"] == "tombstone"
         assert result["metadata"]["reason"] == "retry_exhausted"
-
-    def test_unprocessed_flag_set(self):
-        result = build_exhausted_tombstone("act", None, {})
-        assert result["_unprocessed"] is True
 
     def test_source_guid_set(self):
         result = build_exhausted_tombstone("act", None, {}, source_guid="sg-1")
@@ -131,23 +122,23 @@ class TestCarryFrameworkFields:
     def test_carries_all_default_fields(self):
         source = {
             "target_id": "tid",
-            "_unprocessed": True,
             "_recovery": {"attempt": 1},
             "metadata": {"reason": "test"},
+            "_state_history": [{"action": "a"}],
         }
         target: dict = {}
         carry_framework_fields(source, target)
         assert target["target_id"] == "tid"
-        assert target["_unprocessed"] is True
         assert target["_recovery"] == {"attempt": 1}
         assert target["metadata"]["reason"] == "test"
+        assert target["_state_history"] == [{"action": "a"}]
 
     def test_skips_missing_fields(self):
         source = {"content": {"x": 1}}
         target: dict = {}
         carry_framework_fields(source, target)
         assert "target_id" not in target
-        assert "_unprocessed" not in target
+        assert "_recovery" not in target
 
     def test_overwrites_existing_target_value(self):
         source = {"target_id": "new"}
@@ -171,7 +162,34 @@ class TestCarryFrameworkFields:
         assert result is target
 
     def test_default_fields_match_constant(self):
-        assert CARRY_FORWARD_FIELDS == ("target_id", "_unprocessed", "_recovery", "metadata")
+        assert CARRY_FORWARD_FIELDS == (
+            "target_id",
+            "_recovery",
+            "metadata",
+            "_state_history",
+        )
+
+    def test_state_history_is_carried(self):
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        source = {"_state": "processed", "_state_history": history}
+        target: dict = {}
+        carry_framework_fields(source, target)
+        assert target["_state_history"] == history
+
+    def test_state_is_not_carried(self):
+        source = {"_state": "processed", "_state_history": []}
+        target: dict = {}
+        carry_framework_fields(source, target)
+        assert "_state" not in target
 
 
 # ---------------------------------------------------------------------------

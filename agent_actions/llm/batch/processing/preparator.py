@@ -6,7 +6,7 @@ from typing import Any
 
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError
-from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
+from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
     BatchTaskPreparationStats,
@@ -174,7 +174,6 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "upstream_unprocessed"
             stats.skipped_items += 1
             logger.debug("Upstream unprocessed item %s", custom_id)
             return None
@@ -183,18 +182,16 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.FILTERED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "unified"
             stats.filtered_items += 1
-            logger.debug("Guard filtered item %s (phase=unified)", custom_id)
+            logger.debug("Guard filtered item %s", custom_id)
             return None
 
         if prepared.guard_status == GuardStatus.SKIPPED:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "unified"
             stats.skipped_items += 1
-            logger.debug("Guard skipped item %s (phase=unified)", custom_id)
+            logger.debug("Guard skipped item %s", custom_id)
             return None
 
         # 7. Create and return task

@@ -21,7 +21,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `get_storage_backend` | Function | Factory that creates storage backend instances by type (default: sqlite). | `workflow` |
 | `BACKENDS` | Dict | Registry mapping backend type names to their implementation classes. | `config` |
 | `backend.py` | Module | Abstract `StorageBackend` interface defining the contract for all backends. | `abc`, `typing` |
-| `StorageBackend` | ABC | Abstract base class with methods: `initialize`, `write_target`, `read_target`, `write_source`, `read_source`, `list_target_files`, `list_source_files`, `set_disposition`, `get_disposition`, `has_disposition`, `clear_disposition`, `close`. | `abc` |
+| `StorageBackend` | ABC | Abstract base class. `read_target()` is a template method: calls `_read_target_raw()` (abstract), then validates lifecycle and resets for downstream. Subclasses implement `_read_target_raw()` only. | `abc` |
 
 ## Integration Points
 

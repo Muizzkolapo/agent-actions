@@ -8,7 +8,8 @@ Single authority for record content assembly. Every action type, granularity, an
 |------|------|---------|---------|
 | `envelope.py` | Module | `RecordEnvelope`, `RecordEnvelopeError` | - |
 | `tracking.py` | Module | `TrackedItem` | - |
-| `__init__.py` | Re-export | `RecordEnvelope`, `RecordEnvelopeError`, `TrackedItem` | - |
+| `state.py` | Module | `RecordState`, `PROCESSABLE_STATES`, `SETTLED_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `RETRIABLE_STATES`, `is_processable`, `is_settled`, `is_retriable` | - |
+| `__init__.py` | Re-export | `RecordEnvelope`, `RecordEnvelopeError`, `RecordState`, `TrackedItem` | - |
 
 ## Project Surface
 
@@ -17,6 +18,7 @@ Single authority for record content assembly. Every action type, granularity, an
 | `RecordEnvelope.build()` | `agent_io/target/{action}/` | Writes record with action output under namespace | - |
 | `RecordEnvelope.build_content()` | `agent_io/target/{action}/` | Writes content dict (no record wrapper) | - |
 | `RecordEnvelope.build_skipped()` | `agent_io/target/{action}/` | Writes record with null namespace for guard skip | - |
+| `RecordEnvelope.transition()` | `agent_io/target/{action}/` | Only sanctioned writer of `_state`, `_state_history`, `_state_schema_version` | - |
 | `TrackedItem` | `tools/{workflow}/*.py` | FILE tool input: dict subclass with hidden `_source_index` provenance | - |
 
 ## Dependencies
@@ -41,3 +43,16 @@ The module does NOT own:
 - Enrichment (lineage, node_id, target_id) -- `EnrichmentPipeline` handles post-assembly
 - Initial source structuring -- `initial_pipeline.py` creates the first `source` namespace
 - Observe/passthrough resolution -- `scope_application.py` reads FROM content
+
+### transition() — legal state edges
+
+| From | To | Allowed? |
+|------|----|----------|
+| `None` (new record) | any | Yes — first write |
+| `ACTIVE` | any settled | Yes — normal progression |
+| `PROCESSED`, `COMMITTED`, `GUARD_SKIPPED`, `GUARD_DEFERRED` | `ACTIVE` | Yes — downstream reset |
+| any | same state | Yes — idempotent re-application |
+| `CASCADE_SKIPPED`, `FAILED`, `EXHAUSTED` | `ACTIVE` | **No** — cascade-blocking states cannot be reset |
+| settled | different settled | **No** — cross-settled writes are not valid |
+
+History is capped at 64 entries (oldest drops on overflow). Schema version bumps when a required key is added to history entries or an existing key changes semantics.

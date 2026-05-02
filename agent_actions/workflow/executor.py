@@ -18,6 +18,7 @@ from agent_actions.logging.events import (
     BatchCompleteEvent,
     BatchSubmittedEvent,
 )
+from agent_actions.record.reasons import GUARD_FILTERED_ALL
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_SKIPPED,
@@ -369,7 +370,7 @@ class ActionExecutor:
                 params.action_name,
                 ActionStatus.SKIPPED,
                 execution_time=duration,
-                skip_reason="All records guard-filtered — no output produced",
+                skip_reason=GUARD_FILTERED_ALL,
             )
             total_actions = (
                 len(self.deps.action_runner.execution_order)
@@ -381,7 +382,7 @@ class ActionExecutor:
                     action_name=params.action_name,
                     action_index=params.action_idx,
                     total_actions=total_actions,
-                    skip_reason="All records guard-filtered — no output produced",
+                    skip_reason=GUARD_FILTERED_ALL,
                     mode=params.action_config.get("run_mode", ""),
                 )
             )
@@ -391,7 +392,7 @@ class ActionExecutor:
                     action_name=params.action_name,
                     status="skipped",
                     duration_seconds=duration,
-                    skip_reason="All records guard-filtered — no output produced",
+                    skip_reason=GUARD_FILTERED_ALL,
                 )
                 self.run_tracker.record_action_complete(config=config)
             return ActionExecutionResult(
@@ -804,8 +805,8 @@ class ActionExecutor:
             try:
                 submitted_dt = datetime.fromisoformat(submitted_at)
                 return (datetime.now() - submitted_dt).total_seconds()
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logger.debug("Could not parse submitted_at %r: %s", submitted_at, e)
         return fallback
 
     def _handle_batch_check(

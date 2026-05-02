@@ -1663,14 +1663,13 @@ def test_file_hitl_per_record_review_in_namespace():
 
 
 def test_file_hitl_carries_framework_fields():
-    """Framework fields (source_guid, target_id, _unprocessed) are preserved from input."""
+    """Framework fields (source_guid, target_id, _recovery) are preserved from input."""
     context = _make_hitl_context()
 
     input_data = [
         {
             "source_guid": "sg-1",
             "target_id": "tid-1",
-            "_unprocessed": True,
             "_recovery": {"reason": "tombstone"},
             "content": {"source": {"a": 1}},
         },
@@ -1689,7 +1688,6 @@ def test_file_hitl_carries_framework_fields():
     item = results[0].data[0]
     assert item["source_guid"] == "sg-1"
     assert item["target_id"] == "tid-1"
-    assert item["_unprocessed"] is True
     assert item["_recovery"] == {"reason": "tombstone"}
 
 

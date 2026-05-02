@@ -39,6 +39,13 @@ from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
 )
+from agent_actions.record.reasons import (
+    GUARD_FILTER,
+    GUARD_SKIP,
+    LLM_LAYER_GUARD_FILTER,
+    LLM_LAYER_GUARD_SKIP,
+    UPSTREAM_UNPROCESSED,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -217,14 +224,13 @@ class OnlineLLMStrategy:
         # Upstream unprocessed — passthrough as tombstone
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
             preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
-            preserved_item["_unprocessed"] = True
             if not isinstance(preserved_item.get("metadata"), dict):
                 preserved_item["metadata"] = {}
             if "agent_type" not in preserved_item["metadata"]:
                 preserved_item["metadata"]["agent_type"] = "tombstone"
             return ProcessingResult.unprocessed(
                 data=[preserved_item],
-                reason="upstream_unprocessed",
+                reason=UPSTREAM_UNPROCESSED,
                 source_guid=source_guid,
                 source_snapshot=source_snapshot,
                 input_record=input_record,
@@ -237,7 +243,7 @@ class OnlineLLMStrategy:
                     action_name=context.agent_name,
                     record_index=context.record_index,
                     source_guid=source_guid or "",
-                    filter_reason="guard_filter",
+                    filter_reason=GUARD_FILTER,
                 )
             )
             return ProcessingResult.filtered(
@@ -319,7 +325,7 @@ class OnlineLLMStrategy:
                         action_name=context.agent_name,
                         record_index=context.record_index,
                         source_guid=source_guid or "",
-                        filter_reason="llm_layer_guard_filter",
+                        filter_reason=LLM_LAYER_GUARD_FILTER,
                     )
                 )
                 return ProcessingResult.filtered(
@@ -333,21 +339,19 @@ class OnlineLLMStrategy:
                         action_name=context.agent_name,
                         record_index=context.record_index,
                         source_guid=source_guid or "",
-                        filter_reason="llm_layer_guard_skip",
+                        filter_reason=LLM_LAYER_GUARD_SKIP,
                     )
                 )
                 tombstone = build_tombstone(
                     context.action_name,
                     input_record,
-                    "guard_skip",
+                    GUARD_SKIP,
                     source_guid=source_guid,
                 )
-                return ProcessingResult.unprocessed(
-                    data=[tombstone],
-                    reason="guard_skip",
+                return ProcessingResult.skipped(
+                    passthrough_data=tombstone,
+                    reason=GUARD_SKIP,
                     source_guid=source_guid,
-                    source_snapshot=source_snapshot,
-                    input_record=input_record,
                 )
 
         # Empty output handling

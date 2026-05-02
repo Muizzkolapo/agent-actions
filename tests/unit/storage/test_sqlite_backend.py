@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_actions.errors.configuration import ConfigurationError
 from agent_actions.storage import BACKENDS, get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -64,24 +65,44 @@ class TestSQLiteBackend:
         backend.close()
 
     def test_write_and_read_target(self, backend):
-        """Test writing and reading target data."""
+        """Test writing and reading target data — read resets resettable states to ACTIVE."""
         data = [
-            {"target_id": "t1", "content": {"field1": "value1"}},
-            {"target_id": "t2", "content": {"field2": "value2"}},
+            {
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "target_id": "t1",
+                "content": {"field1": "value1"},
+            },
+            {
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "target_id": "t2",
+                "content": {"field2": "value2"},
+            },
         ]
 
         # Write target data
         result = backend.write_target("node_1", "batch_001.json", data)
         assert result == "node_1:batch_001.json"
 
-        # Read target data
+        # Read target data — resettable states become ACTIVE
         read_data = backend.read_target("node_1", "batch_001.json")
-        assert read_data == data
+        assert read_data[0]["_state"] == "active"
+        assert read_data[0]["target_id"] == "t1"
+        assert read_data[1]["_state"] == "active"
+        assert read_data[1]["target_id"] == "t2"
 
     def test_read_target_not_found_raises(self, backend):
         """Test that reading non-existent target raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
             backend.read_target("node_1", "nonexistent.json")
+
+    def test_read_target_raises_when_state_missing(self, backend):
+        """read_target raises ConfigurationError when persisted records omit _state."""
+        data = [{"source_guid": "sg-1", "content": {"x": 1}}]
+        backend.write_target("node_1", "batch.json", data)
+        with pytest.raises(ConfigurationError, match="_state"):
+            backend.read_target("node_1", "batch.json")
 
     def test_write_and_read_source(self, backend):
         """Test writing and reading source data."""
@@ -173,11 +194,11 @@ class TestSQLiteBackend:
 
     def test_target_update_replaces_data(self, backend):
         """Test that writing to same target path replaces data."""
-        backend.write_target("node_1", "file.json", [{"v": "original"}])
-        backend.write_target("node_1", "file.json", [{"v": "updated"}])
+        backend.write_target("node_1", "file.json", [{"_state": "active", "v": "original"}])
+        backend.write_target("node_1", "file.json", [{"_state": "active", "v": "updated"}])
 
         data = backend.read_target("node_1", "file.json")
-        assert data == [{"v": "updated"}]
+        assert data == [{"_state": "active", "v": "updated"}]
 
 
 class TestDispositionMethods:
@@ -349,13 +370,13 @@ class TestValidation:
 
     def test_path_with_dots_but_no_traversal_allowed(self, backend):
         """Test that paths with dots (but not ..) are still valid."""
-        backend.write_target("node_1", "file.v2.json", [{"id": 1}])
-        assert backend.read_target("node_1", "file.v2.json") == [{"id": 1}]
+        backend.write_target("node_1", "file.v2.json", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node_1", "file.v2.json") == [{"_state": "active", "id": 1}]
 
     def test_relative_path_with_spaces_allowed(self, backend):
         """Test that filenames with spaces are accepted."""
-        backend.write_target("node_1", "my file.json", [{"id": 1}])
-        assert backend.read_target("node_1", "my file.json") == [{"id": 1}]
+        backend.write_target("node_1", "my file.json", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node_1", "my file.json") == [{"_state": "active", "id": 1}]
 
     def test_whitespace_only_path_rejected(self, backend):
         """Test that whitespace-only relative_path is rejected."""
@@ -369,13 +390,13 @@ class TestValidation:
 
     def test_leading_trailing_spaces_in_path_allowed(self, backend):
         """Test that leading/trailing spaces in paths are accepted."""
-        backend.write_target("node_1", " file.json ", [{"id": 1}])
-        assert backend.read_target("node_1", " file.json ") == [{"id": 1}]
+        backend.write_target("node_1", " file.json ", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node_1", " file.json ") == [{"_state": "active", "id": 1}]
 
     def test_space_in_action_name_allowed(self, backend):
         """Test that spaces in action_name are accepted."""
-        backend.write_target("node 1", "file.json", [{"id": 1}])
-        assert backend.read_target("node 1", "file.json") == [{"id": 1}]
+        backend.write_target("node 1", "file.json", [{"_state": "active", "id": 1}])
+        assert backend.read_target("node 1", "file.json") == [{"_state": "active", "id": 1}]
 
     def test_invalid_character_rejected(self, backend):
         """Test that characters outside the allowlist are rejected."""
@@ -585,3 +606,62 @@ class TestServiceInitSqliteError:
         console.print.assert_called()
         error_output = console.print.call_args[0][0]
         assert "Storage backend failed" in error_output
+
+
+class TestSchemaEnforcement:
+    """Tests for _enforce_schema dropping stale tables."""
+
+    def test_old_schema_dropped_and_recreated(self, tmp_path):
+        """Table with missing columns is dropped and recreated on initialize()."""
+        import sqlite3
+
+        db_path = tmp_path / "test.db"
+        # Create a DB with old schema missing 'detail' column
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE record_disposition (
+                id INTEGER PRIMARY KEY,
+                action_name TEXT,
+                record_id TEXT,
+                disposition TEXT,
+                reason TEXT
+            )
+        """)
+        conn.execute(
+            "INSERT INTO record_disposition (action_name, record_id, disposition) VALUES ('a', 'r', 'd')"
+        )
+        conn.commit()
+        conn.close()
+
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+
+        # Table should now have all required columns
+        cursor = backend.connection.cursor()
+        cursor.execute("PRAGMA table_info(record_disposition)")
+        columns = {row[1] for row in cursor.fetchall()}
+        assert "detail" in columns
+        assert "input_snapshot" in columns
+
+        # Old data should be gone (table was dropped)
+        cursor.execute("SELECT COUNT(*) FROM record_disposition")
+        assert cursor.fetchone()[0] == 0
+        backend.close()
+
+    def test_correct_schema_not_dropped(self, tmp_path):
+        """Table with all columns is left intact on initialize()."""
+        db_path = tmp_path / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+
+        # Write some data
+        backend.write_target("node1", "file.json", [{"_state": "active", "id": 1}])
+
+        # Re-initialize — data should survive
+        backend.close()
+        backend2 = SQLiteBackend(str(db_path), "test_workflow")
+        backend2.initialize()
+
+        data = backend2.read_target("node1", "file.json")
+        assert data[0]["id"] == 1
+        backend2.close()
