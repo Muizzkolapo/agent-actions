@@ -18,6 +18,7 @@ from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     GUARD_FILTER,
+    GUARD_PREFILTER_SKIP,
     GUARD_SKIP,
     PARSE_ERROR,
     RETRY_EXHAUSTED,
@@ -445,13 +446,15 @@ class ResultCollector:
             elif status == ProcessingStatus.UNPROCESSED:
                 data = result.data or []
                 if data:
+                    reason = result.skip_reason or UNPROCESSED
+                    # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
+                    state = (
+                        RecordState.GUARD_SKIPPED
+                        if reason in (GUARD_PREFILTER_SKIP, GUARD_SKIP, GUARD_FILTER)
+                        else RecordState.CASCADE_SKIPPED
+                    )
                     for d in data:
-                        _stamp(
-                            d,
-                            RecordState.CASCADE_SKIPPED,
-                            agent_name,
-                            result.skip_reason or UNPROCESSED,
-                        )
+                        _stamp(d, state, agent_name, reason)
                     output.extend(data)  # Preserve in output for lineage
                 logger.debug(
                     "Collected UNPROCESSED result source_guid=%s count=%d",
