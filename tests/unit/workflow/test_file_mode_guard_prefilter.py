@@ -545,7 +545,7 @@ class TestUnifiedProcessorFileModePath:
             {"content": {"score": 40}, "source_guid": "sg-skip-1"},
             {"content": {"score": 30}, "source_guid": "sg-skip-2"},
         ]
-        raw = list(records)
+        raw = records
         context = ProcessingContext(
             agent_config={"guard": {"clause": "score >= 80", "behavior": "skip"}},
             agent_name="my_tool",
