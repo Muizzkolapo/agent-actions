@@ -14,7 +14,8 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.errors.configuration import ConfigurationError
-from agent_actions.record.state import RecordState
+from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import RESETTABLE_DOWNSTREAM_STATES, RecordState
 
 _SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
 _VALID_STATES: frozenset[str] = frozenset(s.value for s in RecordState)
@@ -78,3 +79,24 @@ def validate_lifecycle_batch(
                 f"got {type(record).__name__}. Delete agent_io/target/ and re-run."
             )
         validate_lifecycle(record, action_name=action_name)
+
+
+_RESETTABLE_VALUES: frozenset[str] = frozenset(s.value for s in RESETTABLE_DOWNSTREAM_STATES)
+
+
+def reset_for_downstream(
+    records: list[dict[str, Any]],
+    *,
+    action_name: str,
+) -> None:
+    """Reset resettable records to ACTIVE for downstream processing.
+
+    Records in RESETTABLE_DOWNSTREAM_STATES (PROCESSED, COMMITTED,
+    GUARD_SKIPPED, GUARD_DEFERRED) are reset to ACTIVE via transition().
+    Records in CASCADE_BLOCKING_STATES stay as-is for cascade logic.
+    ACTIVE records pass through unchanged.
+    """
+    for record in records:
+        raw_state = record.get("_state")
+        if raw_state in _RESETTABLE_VALUES:
+            RecordEnvelope.transition(record, RecordState.ACTIVE, action_name, "downstream_reset")

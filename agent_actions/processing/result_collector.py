@@ -42,14 +42,12 @@ logger = logging.getLogger(__name__)
 
 
 def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason: str) -> None:
-    """Reset per-action _state and stamp the new lifecycle state.
+    """Stamp lifecycle state on a record entering output.
 
-    Records arriving from upstream carry a prior action's _state. Clear it
-    so transition() treats this as a fresh entry for this action. History
-    is preserved — the transition appends an entry with from=None.
+    Records arrive ACTIVE (after downstream reset) or CASCADE_BLOCKING.
+    ACTIVE → any settled is legal. CASCADE_BLOCKING → CASCADE_SKIPPED
+    is legal (cascade propagation). Same → same is a no-op.
     """
-    record.pop("_state", None)
-    record.pop("_state_schema_version", None)
     RecordEnvelope.transition(record, state, action_name, reason)
 
 

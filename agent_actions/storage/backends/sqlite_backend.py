@@ -10,7 +10,7 @@ from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
-from agent_actions.record.lifecycle_read import validate_lifecycle_batch
+from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
 from agent_actions.storage.backend import VALID_DISPOSITIONS, Disposition, StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -293,6 +293,7 @@ class SQLiteBackend(StorageBackend):
 
         result: list[dict[str, Any]] = json.loads(row["data"])
         validate_lifecycle_batch(result, action_name=action_name)
+        reset_for_downstream(result, action_name=action_name)
         return result
 
     def write_source(
