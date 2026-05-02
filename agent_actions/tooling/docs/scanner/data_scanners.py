@@ -256,21 +256,30 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
 
         # Attach prompt traces to preview records (if table exists).
         # The prompt_trace table was added in v0.1.6; older DBs won't have it.
-        # Traces are keyed by target_id (unique per record) to avoid collisions
-        # when multiple records share a source_guid (e.g. 1→N expansions).
+        # Traces may be keyed by target_id (new, unique per record) or
+        # source_guid (legacy).  Try target_id first, fall back to source_guid.
         try:
             for action_name, node_data in nodes.items():
-                # Map target_id → record (one-to-one)
+                # Build both lookup maps
                 target_map: dict[str, dict] = {}
+                guid_map: dict[str, list[dict]] = {}
                 for rec in node_data["preview"]:
                     tid = rec.get("target_id")
                     if tid:
                         target_map[tid] = rec
+                    sg = rec.get("source_guid")
+                    if sg:
+                        guid_map.setdefault(sg, []).append(rec)
 
-                if not target_map:
+                # Collect all candidate keys for a single query
+                all_keys: dict[str, None] = {}
+                all_keys.update(dict.fromkeys(target_map))
+                all_keys.update(dict.fromkeys(guid_map))
+
+                if not all_keys:
                     continue
 
-                placeholders = ",".join("?" for _ in target_map)
+                placeholders = ",".join("?" for _ in all_keys)
                 cursor.execute(
                     f"SELECT record_id, compiled_prompt, llm_context, "
                     f"response_text, model_name, model_vendor, run_mode, "
@@ -278,7 +287,7 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
                     f"FROM prompt_trace "
                     f"WHERE action_name = ? AND record_id IN ({placeholders})"
                     f" ORDER BY attempt DESC",
-                    [action_name, *target_map.keys()],
+                    [action_name, *all_keys],
                 )
                 seen: set[str] = set()
                 for trace_row in cursor:
@@ -297,9 +306,13 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
                         "response_length": trace_row["response_length"],
                         "attempt": trace_row["attempt"],
                     }
+                    # Prefer target_id match (1:1); fall back to source_guid (1:N)
                     rec = target_map.get(rid)
                     if rec is not None:
                         rec["_trace"] = trace_data
+                    else:
+                        for rec in guid_map.get(rid, []):
+                            rec["_trace"] = trace_data
         except sqlite3.OperationalError:
             logger.debug("No prompt_trace table in %s — skipping trace attachment", db_file)
 

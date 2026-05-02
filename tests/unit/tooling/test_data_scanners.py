@@ -407,8 +407,51 @@ class TestScanSqliteReadonlyTraceAttachment:
         assert len(records) == 1
         assert "_trace" not in records[0]
 
-    def test_no_trace_when_no_matching_target_id(self, tmp_path):
-        """Records without target_id should not get traces."""
+    def test_trace_attached_via_source_guid_fallback(self, tmp_path):
+        """Traces keyed by source_guid (legacy) still attach to records."""
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
+        conn.execute(
+            "CREATE TABLE target_data "
+            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
+        )
+        # Record with target_id AND source_guid, but trace keyed by source_guid
+        record = json.dumps(
+            [{"source_guid": "sg-001", "target_id": "tgt-001", "issue_type": "bug"}]
+        )
+        conn.execute(
+            "INSERT INTO target_data VALUES (?, ?, ?, ?)", ("act", "f.json", record, 1)
+        )
+        conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("sg-001", "f.json", "{}"))
+        conn.execute(
+            "CREATE TABLE prompt_trace ("
+            "  id INTEGER PRIMARY KEY, action_name TEXT, record_id TEXT,"
+            "  attempt INTEGER DEFAULT 0, compiled_prompt TEXT,"
+            "  llm_context TEXT, response_text TEXT, model_name TEXT,"
+            "  model_vendor TEXT, run_mode TEXT, prompt_length INTEGER,"
+            "  context_length INTEGER, response_length INTEGER,"
+            "  created_at TEXT, UNIQUE(action_name, record_id, attempt))"
+        )
+        # Trace keyed by source_guid (legacy format)
+        conn.execute(
+            "INSERT INTO prompt_trace "
+            "(action_name, record_id, attempt, compiled_prompt, prompt_length) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("act", "sg-001", 0, "legacy prompt", 13),
+        )
+        conn.commit()
+        conn.close()
+
+        result = scan_sqlite_readonly(db_path, "test_wf")
+        records = result["nodes"]["act"]["preview"]
+        assert len(records) == 1
+        trace = records[0].get("_trace")
+        assert trace is not None
+        assert trace["compiled_prompt"] == "legacy prompt"
+
+    def test_no_trace_when_no_matching_key(self, tmp_path):
+        """Records without target_id or source_guid should not get traces."""
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
