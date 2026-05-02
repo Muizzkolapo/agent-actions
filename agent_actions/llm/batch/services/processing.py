@@ -34,6 +34,9 @@ from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_reprompt as _check_and_submit_reprompt_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
+    cleanup_recovery as _cleanup_recovery_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
     finalize_batch_output as _finalize_batch_output_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
@@ -585,11 +588,11 @@ class BatchProcessingService:
         action_name: str | None,
         start_time: float,
     ) -> str:
-        """Finalize batch processing: convert, write output, fire events.
+        """Finalize batch processing: convert, write output, fire events, cleanup.
 
-        Delegates to processing_recovery.finalize_batch_output.
+        Delegates to processing_recovery.finalize_batch_output then cleanup_recovery.
         """
-        return _finalize_batch_output_impl(
+        output_path = _finalize_batch_output_impl(
             self,
             batch_results=batch_results,
             exhausted_recovery=exhausted_recovery,
@@ -602,6 +605,8 @@ class BatchProcessingService:
             action_name=action_name,
             start_time=start_time,
         )
+        _cleanup_recovery_impl(self, manager, output_directory, file_name)
+        return output_path
 
     def _write_record_dispositions(self, items: list[dict[str, Any]], action_name: str) -> None:
         """Write dispositions for non-success records in batch output.
