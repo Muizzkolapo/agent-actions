@@ -201,7 +201,7 @@ def write_record_dispositions(
                 DISPOSITION_EXHAUSTED,
                 reason=RETRY_EXHAUSTED,
             )
-        elif item.get("_state") in ("cascade_skipped", "guard_skipped"):
+        elif item.get("_state") in (RecordState.CASCADE_SKIPPED.value, RecordState.GUARD_SKIPPED.value):
             from agent_actions.record.disposition import derive_disposition
 
             _safe_set_disposition(
