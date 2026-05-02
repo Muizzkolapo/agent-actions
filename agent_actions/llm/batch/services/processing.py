@@ -616,8 +616,8 @@ class BatchProcessingService:
             return
         try:
             for item in items:
-                source_guid = item.get("source_guid")
-                if not source_guid:
+                target_id = item.get("target_id")
+                if not target_id:
                     continue
                 content = item.get("content")
                 if content is None:
@@ -625,7 +625,7 @@ class BatchProcessingService:
                 response_text = json.dumps(content, ensure_ascii=False, default=str)
                 self._storage_backend.update_prompt_trace_response(
                     action_name=action_name,
-                    record_id=source_guid,
+                    record_id=target_id,
                     response_text=response_text,
                 )
         except Exception:

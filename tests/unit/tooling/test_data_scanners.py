@@ -318,8 +318,10 @@ def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
         "CREATE TABLE target_data "
         "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
     )
-    # Insert one target record with a known source_guid
-    record = json.dumps([{"source_guid": "guid-001", "issue_type": "bug", "lineage": []}])
+    # Insert one target record with known source_guid and target_id
+    record = json.dumps(
+        [{"source_guid": "guid-001", "target_id": "tid-001", "issue_type": "bug", "lineage": []}]
+    )
     conn.execute(
         "INSERT INTO target_data VALUES (?, ?, ?, ?)",
         ("classify", "issues.json", record, 1),
@@ -357,7 +359,7 @@ def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 "classify",
-                "guid-001",
+                "tid-001",
                 0,
                 "You are a classifier...",
                 '[{"issue_type":"bug"}]',
@@ -403,8 +405,8 @@ class TestScanSqliteReadonlyTraceAttachment:
         assert len(records) == 1
         assert "_trace" not in records[0]
 
-    def test_no_trace_when_no_matching_guid(self, tmp_path):
-        """Records without source_guid should not get traces."""
+    def test_no_trace_when_no_matching_target_id(self, tmp_path):
+        """Records without target_id should not get traces."""
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
@@ -451,7 +453,7 @@ class TestScanSqliteReadonlyTraceAttachment:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 "classify",
-                "guid-001",
+                "tid-001",
                 1,
                 "You are a classifier (retry)...",
                 '[{"issue_type":"feature_request"}]',
