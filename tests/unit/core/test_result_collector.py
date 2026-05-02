@@ -87,8 +87,10 @@ def test_result_collector_aggregates_statuses_first_stage():
         is_first_stage=True,
     )
 
-    assert output[0] == {"content": {"value": 1}}
-    assert output[1] == {"content": {"value": 2}}
+    assert output[0]["content"] == {"value": 1}
+    assert output[0]["_state"] == "processed"
+    assert output[1]["content"] == {"value": 2}
+    assert output[1]["_state"] == "guard_skipped"
 
     exhausted_item = output[2]
     assert exhausted_item["source_guid"] == "src-3"
