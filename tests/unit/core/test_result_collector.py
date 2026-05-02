@@ -794,6 +794,23 @@ class TestParseErrorDisposition:
         assert stats.failed == 1
         assert stats.success == 0
 
+    def test_parse_error_mutates_result_status(self):
+        """result.status is mutated to FAILED — not just the local counter (CR-9)."""
+        result = ProcessingResult.success(
+            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
+            source_guid="guid-pe",
+        )
+        assert result.status == ProcessingStatus.SUCCESS
+
+        ResultCollector.collect_results(
+            [result],
+            {},
+            "action",
+            is_first_stage=False,
+        )
+
+        assert result.status == ProcessingStatus.FAILED
+
     def test_normal_success_not_affected(self):
         """Normal SUCCESS records are not reclassified by parse error detection."""
         backend = _make_backend()

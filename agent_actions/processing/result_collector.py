@@ -272,6 +272,7 @@ class ResultCollector:
                 # Reprompt has already had its chance to repair (it runs
                 # during invocation, before result collection).
                 if data and _data_has_parse_error(data):
+                    result.status = ProcessingStatus.FAILED
                     for d in data:
                         d["_unprocessed"] = True
                         _stamp(d, RecordState.FAILED, agent_name, PARSE_ERROR)
