@@ -354,12 +354,10 @@ class OnlineLLMStrategy:
                     GUARD_SKIP,
                     source_guid=source_guid,
                 )
-                return ProcessingResult.unprocessed(
-                    data=[tombstone],
+                return ProcessingResult.skipped(
+                    passthrough_data=tombstone,
                     reason=GUARD_SKIP,
                     source_guid=source_guid,
-                    source_snapshot=source_snapshot,
-                    input_record=input_record,
                 )
 
         # Empty output handling
