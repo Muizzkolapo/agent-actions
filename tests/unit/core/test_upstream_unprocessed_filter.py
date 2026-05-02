@@ -321,7 +321,6 @@ class TestBatchPathReasonDetection:
         item = results[0].data[0]
         assert item["metadata"]["reason"] == "upstream_unprocessed"
         assert item["metadata"]["agent_type"] == "tombstone"
-        assert item.get("_unprocessed") is True
         assert item["content"]["test_batch"] is None
         assert item["content"]["upstream_action"] == {"field": "value"}
 
@@ -343,7 +342,6 @@ class TestBatchPathReasonDetection:
         item = results[0].data[0]
         assert item["metadata"]["reason"] == "guard_skip"
         assert item["metadata"]["agent_type"] == "tombstone"
-        assert item.get("_unprocessed") is True
         assert item["content"]["test_batch"] is None
 
     def test_batch_not_returned_reason(self):
@@ -361,7 +359,6 @@ class TestBatchPathReasonDetection:
         item = results[0].data[0]
         assert item["metadata"]["reason"] == "batch_not_returned"
         assert item["metadata"]["agent_type"] == "tombstone"
-        assert item.get("_unprocessed") is True
         assert item["content"]["test_batch"] is None
 
     def test_upstream_unprocessed_uses_unprocessed_status(self):

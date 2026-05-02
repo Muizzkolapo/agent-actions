@@ -224,7 +224,6 @@ class OnlineLLMStrategy:
         # Upstream unprocessed — passthrough as tombstone
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
             preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
-            preserved_item["_unprocessed"] = True
             if not isinstance(preserved_item.get("metadata"), dict):
                 preserved_item["metadata"] = {}
             if "agent_type" not in preserved_item["metadata"]:

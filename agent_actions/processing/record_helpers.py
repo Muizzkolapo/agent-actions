@@ -18,7 +18,6 @@ from agent_actions.utils.content import get_existing_content, is_version_merge
 # _state is intentionally absent — it resets per-action at the executor boundary.
 CARRY_FORWARD_FIELDS: tuple[str, ...] = (
     "target_id",
-    "_unprocessed",
     "_recovery",
     "metadata",
     "_state_history",
@@ -38,8 +37,8 @@ def build_tombstone(
     Uses :meth:`RecordEnvelope.build_skipped` to add a null namespace
     marker (``action_name: None``) while preserving upstream content.
 
-    Always sets ``metadata.reason``, ``metadata.agent_type = "tombstone"``,
-    and ``_unprocessed = True``.  Carries ``target_id`` from *input_record*.
+    Always sets ``metadata.reason`` and ``metadata.agent_type = "tombstone"``.
+    Carries ``target_id`` from *input_record*.
 
     For retry-exhausted records that need empty content under the
     namespace (not null), use :func:`build_exhausted_tombstone` instead.
@@ -47,7 +46,6 @@ def build_tombstone(
     item = RecordEnvelope.build_skipped(action_name, input_record)
     item["source_guid"] = source_guid
     item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
-    item["_unprocessed"] = True
     if extra_metadata:
         item["metadata"].update(extra_metadata)
     carry_framework_fields(input_record, item, fields=("target_id",))
@@ -79,7 +77,6 @@ def build_exhausted_tombstone(
             "retry_exhausted": True,
             "agent_type": "tombstone",
         },
-        "_unprocessed": True,
     }
     if extra_metadata:
         item["metadata"].update(extra_metadata)
