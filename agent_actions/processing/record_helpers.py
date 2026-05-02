@@ -13,15 +13,9 @@ from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelop
 from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.content import get_existing_content, is_version_merge
 
-# Framework fields carried from an input record to an output record when the
-# envelope builder does not manage them automatically.
-#
-# Lifecycle carry rules (P5-024):
-#   _state_history  — CARRIED: cumulative audit trail across all actions.
-#   _state          — NOT CARRIED: per-action; executor resets it at each
-#                     action boundary (P5-040). Carrying a stale value from
-#                     a prior action (e.g. COMMITTED) would corrupt the
-#                     downstream lifecycle.
+# Framework fields carried from input to output when the envelope builder
+# does not manage them automatically.
+# _state is intentionally absent — it resets per-action at the executor boundary.
 CARRY_FORWARD_FIELDS: tuple[str, ...] = (
     "target_id",
     "_unprocessed",
