@@ -230,9 +230,12 @@ def handle_reprompt_recovery(
         on_exhausted=state.on_exhausted,
     )
     if setup is None:
+        # Merge prior graduated results with current cycle before finalizing.
+        final_results = BatchRetryService.deserialize_results(state.graduated_results)
+        final_results.extend(recovery_results)
         return _finalize_and_cleanup(
             service,
-            recovery_results,
+            final_results,
             None,
             context_map,
             output_directory,
