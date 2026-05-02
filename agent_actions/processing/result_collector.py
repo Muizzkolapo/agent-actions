@@ -110,19 +110,16 @@ def _safe_set_disposition(
     disposition: str,
     **kwargs: Any,
 ) -> None:
-    """Write a disposition record, logging and swallowing errors.
-
-    Disposition writes are telemetry — they must not crash the data pipeline.
-    """
+    """Write a disposition record — log ERROR on failure, do not crash pipeline."""
     try:
         backend.set_disposition(action_name, record_id, disposition, **kwargs)
     except Exception:
-        logger.warning(
-            "Failed to write disposition action=%s record=%s disp=%s",
+        logger.exception(
+            "Failed to write disposition action=%s record=%s disp=%s — "
+            "disposition may diverge from _state until next run",
             action_name,
             record_id,
             disposition,
-            exc_info=True,
         )
 
 
@@ -272,6 +269,7 @@ class ResultCollector:
                 # Reprompt has already had its chance to repair (it runs
                 # during invocation, before result collection).
                 if data and _data_has_parse_error(data):
+                    result.status = ProcessingStatus.FAILED
                     for d in data:
                         d["_unprocessed"] = True
                         _stamp(d, RecordState.FAILED, agent_name, PARSE_ERROR)

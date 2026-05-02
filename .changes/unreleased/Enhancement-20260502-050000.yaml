@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Phase F: derive_disposition() centralizes RecordState→Disposition mapping, fix parse-error status mutation (CR-9), error policy upgrades disposition write failures to ERROR, crash coherence documented"
+time: 2026-05-02T05:00:00.000000Z
