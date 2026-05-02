@@ -3,6 +3,7 @@
 import pytest
 
 from agent_actions.record.disposition import derive_disposition
+from agent_actions.record.envelope import RecordEnvelopeError
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import Disposition
 
@@ -35,15 +36,15 @@ class TestDeriveDisposition:
         assert derive_disposition({"_state": "active"}) == Disposition.PASSTHROUGH.value
 
     def test_all_states_covered(self):
-        """Every RecordState has a mapping — no KeyError."""
+        """Every RecordState has a mapping."""
         for state in RecordState:
             result = derive_disposition({"_state": state.value})
             assert isinstance(result, str)
 
-    def test_missing_state_raises(self):
-        with pytest.raises(KeyError):
+    def test_missing_state_raises_envelope_error(self):
+        with pytest.raises(RecordEnvelopeError, match="no '_state' field"):
             derive_disposition({"content": "no state"})
 
-    def test_invalid_state_raises(self):
-        with pytest.raises(ValueError):
+    def test_invalid_state_raises_envelope_error(self):
+        with pytest.raises(RecordEnvelopeError, match="unknown _state value.*bogus"):
             derive_disposition({"_state": "bogus"})

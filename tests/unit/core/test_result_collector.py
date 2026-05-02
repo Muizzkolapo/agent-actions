@@ -903,3 +903,83 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
+
+
+class TestCollectorStateStamping:
+    """Verify ResultCollector stamps correct _state based on skip_reason."""
+
+    def test_guard_prefilter_skip_stamps_guard_skipped(self):
+        """FILE prefilter skip_reason=guard_prefilter_skip → GUARD_SKIPPED (resettable)."""
+        record = {"content": {}, "_state": "active"}
+        result = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            source_guid="src-gp",
+            data=[record],
+            skip_reason="guard_prefilter_skip",
+        )
+
+        output, stats = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert len(output) == 1
+        assert output[0]["_state"] == "guard_skipped"
+
+    def test_guard_skip_stamps_guard_skipped(self):
+        """skip_reason=guard_skip → GUARD_SKIPPED."""
+        record = {"content": {}, "_state": "active"}
+        result = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            source_guid="src-gs",
+            data=[record],
+            skip_reason="guard_skip",
+        )
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert output[0]["_state"] == "guard_skipped"
+
+    def test_cascade_reason_stamps_cascade_skipped(self):
+        """Non-guard skip_reason (e.g. 'upstream_unprocessed') → CASCADE_SKIPPED."""
+        record = {"content": {}, "_state": "active"}
+        result = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            source_guid="src-cs",
+            data=[record],
+            skip_reason="upstream_unprocessed",
+        )
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert output[0]["_state"] == "cascade_skipped"
+
+    def test_success_stamps_processed(self):
+        """SUCCESS results stamp PROCESSED."""
+        record = {"content": {"v": 1}, "_state": "active"}
+        result = ProcessingResult.success(data=[record], source_guid="src-s")
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "test_action",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert output[0]["_state"] == "processed"

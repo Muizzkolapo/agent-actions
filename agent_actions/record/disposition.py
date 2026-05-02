@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent_actions.record.envelope import RecordEnvelopeError
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import Disposition
 
@@ -21,5 +22,18 @@ _STATE_TO_DISPOSITION: dict[RecordState, Disposition] = {
 
 def derive_disposition(record: dict[str, Any]) -> str:
     """Map a record's ``_state`` to its storage disposition value."""
-    state = RecordState(record["_state"])
-    return _STATE_TO_DISPOSITION[state].value
+    raw = record.get("_state")
+    if raw is None:
+        raise RecordEnvelopeError("Cannot derive disposition: record has no '_state' field")
+    try:
+        state = RecordState(raw)
+    except ValueError:
+        raise RecordEnvelopeError(
+            f"Cannot derive disposition: unknown _state value {raw!r}"
+        ) from None
+    disposition = _STATE_TO_DISPOSITION.get(state)
+    if disposition is None:
+        raise RecordEnvelopeError(
+            f"Cannot derive disposition: no mapping for state {state.value!r}"
+        )
+    return disposition.value

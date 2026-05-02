@@ -152,7 +152,7 @@ def test_file_mode_hitl_empty_input_returns_empty_output():
 
 
 def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
-    """Tombstone markers (_unprocessed, metadata) must survive HITL merge."""
+    """Tombstone markers (_recovery, metadata) must survive HITL merge."""
     input_data = [
         {
             "source_guid": "sg-1",

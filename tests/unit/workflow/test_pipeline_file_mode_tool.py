@@ -1663,7 +1663,7 @@ def test_file_hitl_per_record_review_in_namespace():
 
 
 def test_file_hitl_carries_framework_fields():
-    """Framework fields (source_guid, target_id, _unprocessed) are preserved from input."""
+    """Framework fields (source_guid, target_id, _recovery) are preserved from input."""
     context = _make_hitl_context()
 
     input_data = [

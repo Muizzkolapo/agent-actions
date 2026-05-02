@@ -6,6 +6,9 @@ defined here.  Production code imports from this module instead of using bare
 string literals.
 """
 
+# -- Success -----------------------------------------------------------------
+SUCCESS = "success"
+
 # -- Guard outcomes ----------------------------------------------------------
 GUARD_SKIP = "guard_skip"
 GUARD_PREFILTER_SKIP = "guard_prefilter_skip"

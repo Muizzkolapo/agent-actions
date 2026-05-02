@@ -97,6 +97,20 @@ class TestTransitionLegalEdges:
         assert rec["_state"] == "active"
         assert len(rec["_state_history"]) == 1
 
+    @pytest.mark.parametrize(
+        "from_state",
+        [
+            RecordState.CASCADE_SKIPPED,
+            RecordState.FAILED,
+            RecordState.EXHAUSTED,
+        ],
+    )
+    def test_cascade_blocking_to_cascade_skipped(self, from_state):
+        """CASCADE_BLOCKING states can transition to CASCADE_SKIPPED (cascade propagation)."""
+        rec = _record(from_state)
+        RecordEnvelope.transition(rec, RecordState.CASCADE_SKIPPED, "downstream", "cascade")
+        assert rec["_state"] == "cascade_skipped"
+
 
 class TestTransitionIllegalEdges:
     @pytest.mark.parametrize(
