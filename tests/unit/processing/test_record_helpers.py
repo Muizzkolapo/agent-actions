@@ -170,7 +170,16 @@ class TestCarryFrameworkFields:
         )
 
     def test_state_history_is_carried(self):
-        history = [{"timestamp": "t", "action": "a", "from": None, "to": "active", "reason": "r", "detail": None}]
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
         source = {"_state": "processed", "_state_history": history}
         target: dict = {}
         carry_framework_fields(source, target)

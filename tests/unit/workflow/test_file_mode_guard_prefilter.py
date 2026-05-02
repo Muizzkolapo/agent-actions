@@ -558,7 +558,9 @@ class TestUnifiedProcessorFileModePath:
 
                 return [
                     ProcessingResult.success(
-                        data=[{"content": {"my_tool": {"out": i}}, "source_guid": r["source_guid"]}],
+                        data=[
+                            {"content": {"my_tool": {"out": i}}, "source_guid": r["source_guid"]}
+                        ],
                         source_guid=r["source_guid"],
                     )
                     for i, r in enumerate(recs)

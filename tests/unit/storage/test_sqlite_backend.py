@@ -67,8 +67,18 @@ class TestSQLiteBackend:
     def test_write_and_read_target(self, backend):
         """Test writing and reading target data — read resets resettable states to ACTIVE."""
         data = [
-            {"_state": "processed", "_state_schema_version": 1, "target_id": "t1", "content": {"field1": "value1"}},
-            {"_state": "processed", "_state_schema_version": 1, "target_id": "t2", "content": {"field2": "value2"}},
+            {
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "target_id": "t1",
+                "content": {"field1": "value1"},
+            },
+            {
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "target_id": "t2",
+                "content": {"field2": "value2"},
+            },
         ]
 
         # Write target data

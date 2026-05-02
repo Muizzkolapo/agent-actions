@@ -33,9 +33,7 @@ from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
-_CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(
-    s.value for s in CASCADE_BLOCKING_STATES
-)
+_CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(s.value for s in CASCADE_BLOCKING_STATES)
 
 
 @dataclass
