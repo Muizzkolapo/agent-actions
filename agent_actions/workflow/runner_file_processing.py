@@ -17,7 +17,11 @@ from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
-    from agent_actions.workflow.runner import ActionRunner, FileProcessParams
+    from agent_actions.workflow.runner import (
+        ActionRunner,
+        FileProcessParams,
+        SingleFileProcessParams,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +75,7 @@ def _build_file_params(
     *,
     source_relative_path: str | None = None,
     data: Any = None,
-) -> Any:
+) -> SingleFileProcessParams:
     """Build SingleFileProcessParams with shared fields from FileProcessParams."""
     from agent_actions.workflow.runner import FileLocationParams, SingleFileProcessParams
 
@@ -293,6 +297,12 @@ def process_from_storage_backend(
             source_key = str(Path(relative_path).with_suffix(""))
             virtual_input_path = output_path / relative_path
 
+            record_count = len(data) if isinstance(data, list) else 1
+            logger.debug(
+                "Processing %s with %d pre-loaded records (no file read)",
+                relative_path,
+                record_count,
+            )
             runner._process_single_file(
                 _build_file_params(
                     params,
