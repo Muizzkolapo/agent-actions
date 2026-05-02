@@ -171,7 +171,26 @@ class TestCarryFrameworkFields:
         assert result is target
 
     def test_default_fields_match_constant(self):
-        assert CARRY_FORWARD_FIELDS == ("target_id", "_unprocessed", "_recovery", "metadata")
+        assert CARRY_FORWARD_FIELDS == (
+            "target_id",
+            "_unprocessed",
+            "_recovery",
+            "metadata",
+            "_state_history",
+        )
+
+    def test_state_history_is_carried(self):
+        history = [{"timestamp": "t", "action": "a", "from": None, "to": "active", "reason": "r", "detail": None}]
+        source = {"_state": "processed", "_state_history": history}
+        target: dict = {}
+        carry_framework_fields(source, target)
+        assert target["_state_history"] == history
+
+    def test_state_is_not_carried(self):
+        source = {"_state": "processed", "_state_history": []}
+        target: dict = {}
+        carry_framework_fields(source, target)
+        assert "_state" not in target
 
 
 # ---------------------------------------------------------------------------

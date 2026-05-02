@@ -13,13 +13,15 @@ from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelop
 from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.content import get_existing_content, is_version_merge
 
-# Framework fields that should be carried from an input record to an output
-# record when the envelope builder does not manage them automatically.
+# Framework fields carried from input to output when the envelope builder
+# does not manage them automatically.
+# _state is intentionally absent — it resets per-action at the executor boundary.
 CARRY_FORWARD_FIELDS: tuple[str, ...] = (
     "target_id",
     "_unprocessed",
     "_recovery",
     "metadata",
+    "_state_history",
 )
 
 
