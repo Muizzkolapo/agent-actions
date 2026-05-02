@@ -1,0 +1,74 @@
+"""Consolidated reprompt exhaustion handling.
+
+Single source of truth for what happens when reprompt recovery attempts
+are exhausted. Optionally raises based on the ``on_exhausted`` policy
+configured in the workflow.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_actions.llm.providers.batch_base import BatchResult
+
+from agent_actions.processing.types import RecoveryMetadata, RepromptMetadata
+
+logger = logging.getLogger(__name__)
+
+
+def apply_exhausted_reprompt(
+    results: list[BatchResult],
+    failed_ids: set[str],
+    validation_name: str,
+    attempt: int,
+    on_exhausted: str,
+    per_record_attempts: dict[str, int] | None = None,
+) -> list[BatchResult]:
+    """Apply reprompt exhaustion metadata to records that failed validation.
+
+    Mutates results in-place and returns the same list.
+
+    Args:
+        results: Batch results (mutated in-place for failed IDs).
+        failed_ids: Custom IDs that still fail validation.
+        validation_name: Name of the validation strategy.
+        attempt: Default number of attempts (used when per_record_attempts
+            is not provided or a record is missing from it).
+        on_exhausted: ``"return_last"`` to accept last response, or
+            ``"raise"`` to propagate a RuntimeError.
+        per_record_attempts: Optional per-record attempt counts. When
+            provided, each record's metadata uses its own count instead
+            of the scalar ``attempt``. Used by the sync reprompt path.
+
+    Returns:
+        The same results list with exhaustion metadata applied.
+
+    Raises:
+        RuntimeError: When ``on_exhausted="raise"`` and failed records exist.
+    """
+    for result in results:
+        if result.custom_id not in failed_ids:
+            continue
+
+        if on_exhausted == "raise":
+            raise RuntimeError(
+                f"Reprompt validation exhausted for {result.custom_id} "
+                f"after {attempt} attempts (validation: {validation_name})"
+            )
+
+        record_attempts = (
+            per_record_attempts.get(result.custom_id, attempt) if per_record_attempts else attempt
+        )
+
+        if not result.recovery_metadata:
+            result.recovery_metadata = RecoveryMetadata()
+
+        result.recovery_metadata.reprompt = RepromptMetadata(
+            attempts=record_attempts,
+            passed=False,
+            validation=validation_name,
+        )
+
+    return results
