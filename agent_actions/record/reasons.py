@@ -28,7 +28,3 @@ PARSE_ERROR = "parse_error"
 
 # -- Action-level skip reasons -----------------------------------------------
 GUARD_FILTERED_ALL = "All records guard-filtered — no output produced"
-
-# -- FILTER_PHASE values (batch preparator) -----------------------------------
-FILTER_PHASE_UPSTREAM = UPSTREAM_UNPROCESSED  # same value by design — batch dispatch relies on this
-FILTER_PHASE_UNIFIED = "unified"

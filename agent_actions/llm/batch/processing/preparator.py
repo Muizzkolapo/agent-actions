@@ -6,7 +6,7 @@ from typing import Any
 
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError
-from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
+from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
     BatchTaskPreparationStats,
@@ -14,7 +14,6 @@ from agent_actions.llm.batch.core.batch_models import (
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
-from agent_actions.record.reasons import FILTER_PHASE_UNIFIED, FILTER_PHASE_UPSTREAM
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -175,7 +174,6 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = FILTER_PHASE_UPSTREAM
             stats.skipped_items += 1
             logger.debug("Upstream unprocessed item %s", custom_id)
             return None
@@ -184,18 +182,16 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.FILTERED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = FILTER_PHASE_UNIFIED
             stats.filtered_items += 1
-            logger.debug("Guard filtered item %s (phase=unified)", custom_id)
+            logger.debug("Guard filtered item %s", custom_id)
             return None
 
         if prepared.guard_status == GuardStatus.SKIPPED:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = FILTER_PHASE_UNIFIED
             stats.skipped_items += 1
-            logger.debug("Guard skipped item %s (phase=unified)", custom_id)
+            logger.debug("Guard skipped item %s", custom_id)
             return None
 
         # 7. Create and return task

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
+from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
@@ -28,9 +28,14 @@ from agent_actions.processing.types import (
     RecoveryMetadata,
 )
 from agent_actions.record.reasons import BATCH_NOT_RETURNED, GUARD_SKIP, UPSTREAM_UNPROCESSED
+from agent_actions.record.state import CASCADE_BLOCKING_STATES
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
+
+_CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(
+    s.value for s in CASCADE_BLOCKING_STATES
+)
 
 
 @dataclass
@@ -470,9 +475,8 @@ class BatchResultStrategy:
         record_index: int,
     ) -> ProcessingResult:
         """Build an UNPROCESSED result for a passthrough record."""
-        # Determine actual skip reason from context metadata
-        filter_phase = original_row.get(ContextMetaKeys.FILTER_PHASE, "")
-        if filter_phase == UPSTREAM_UNPROCESSED:
+        raw_state = original_row.get("_state")
+        if raw_state in _CASCADE_BLOCKING_VALUES:
             reason = UPSTREAM_UNPROCESSED
         elif BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED:
             reason = GUARD_SKIP
