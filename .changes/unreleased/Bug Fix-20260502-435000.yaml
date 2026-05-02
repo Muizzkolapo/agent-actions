@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix Data Explorer card view showing duplicate content for 1→N sibling records by using target_id as React key instead of shared source_guid"
+time: 2026-05-02T04:35:00.000000Z
