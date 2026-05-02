@@ -15,6 +15,7 @@ from agent_actions.logging.events import (
     ResultCollectionStartedEvent,
 )
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     GUARD_FILTER,
     GUARD_SKIP,
@@ -22,6 +23,7 @@ from agent_actions.record.reasons import (
     RETRY_EXHAUSTED,
     UNPROCESSED,
 )
+from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
@@ -37,6 +39,18 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+
+def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason: str) -> None:
+    """Reset per-action _state and stamp the new lifecycle state.
+
+    Records arriving from upstream carry a prior action's _state. Clear it
+    so transition() treats this as a fresh entry for this action. History
+    is preserved — the transition appends an entry with from=None.
+    """
+    record.pop("_state", None)
+    record.pop("_state_schema_version", None)
+    RecordEnvelope.transition(record, state, action_name, reason)
 
 
 def _get_retry_attempts(result: ProcessingResult) -> str | int:
@@ -262,6 +276,7 @@ class ResultCollector:
                 if data and _data_has_parse_error(data):
                     for d in data:
                         d["_unprocessed"] = True
+                        _stamp(d, RecordState.FAILED, agent_name, PARSE_ERROR)
                     output.extend(data)
                     stats[status_key] -= 1
                     stats["failed"] += 1
@@ -289,6 +304,8 @@ class ResultCollector:
                     continue
 
                 if data:
+                    for d in data:
+                        _stamp(d, RecordState.PROCESSED, agent_name, "success")
                     output.extend(data)
                 logger.debug(
                     "Collected SUCCESS result source_guid=%s count=%d",
@@ -313,6 +330,13 @@ class ResultCollector:
             elif status == ProcessingStatus.SKIPPED:
                 data = result.data or []
                 if data:
+                    for d in data:
+                        _stamp(
+                            d,
+                            RecordState.GUARD_SKIPPED,
+                            agent_name,
+                            result.skip_reason or GUARD_SKIP,
+                        )
                     output.extend(data)
                 logger.debug(
                     "Collected SKIPPED result source_guid=%s count=%d",
@@ -338,6 +362,8 @@ class ResultCollector:
             elif status == ProcessingStatus.EXHAUSTED:
                 data = result.data or []
                 if data:
+                    for d in data:
+                        _stamp(d, RecordState.EXHAUSTED, agent_name, RETRY_EXHAUSTED)
                     output.extend(data)
                 attempts = _get_retry_attempts(result)
                 logger.debug(
@@ -423,6 +449,13 @@ class ResultCollector:
             elif status == ProcessingStatus.UNPROCESSED:
                 data = result.data or []
                 if data:
+                    for d in data:
+                        _stamp(
+                            d,
+                            RecordState.CASCADE_SKIPPED,
+                            agent_name,
+                            result.skip_reason or UNPROCESSED,
+                        )
                     output.extend(data)  # Preserve in output for lineage
                 logger.debug(
                     "Collected UNPROCESSED result source_guid=%s count=%d",
