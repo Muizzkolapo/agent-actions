@@ -302,8 +302,7 @@ class TestBatchPathReasonDetection:
         )
 
     def test_upstream_unprocessed_reason(self):
-        """Records with FILTER_PHASE=upstream_unprocessed get reason=upstream_unprocessed."""
-        from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
+        """Records with cascade-blocking _state get reason=upstream_unprocessed."""
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
         )
@@ -311,7 +310,8 @@ class TestBatchPathReasonDetection:
         row = {
             "content": {"upstream_action": {"field": "value"}},
             "source_guid": "sg_batch_1",
-            ContextMetaKeys.FILTER_PHASE: "upstream_unprocessed",
+            "_state": "cascade_skipped",
+            "_state_schema_version": 1,
         }
         ctx = self._make_ctx(passthrough_records=[("cid_1", row)])
         processor = BatchResultStrategy()
@@ -365,8 +365,7 @@ class TestBatchPathReasonDetection:
         assert item["content"]["test_batch"] is None
 
     def test_upstream_unprocessed_uses_unprocessed_status(self):
-        """upstream_unprocessed records should use ProcessingResult.unprocessed(), not .skipped()."""
-        from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
+        """cascade-blocking records should use ProcessingResult.unprocessed(), not .skipped()."""
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
         )
@@ -374,7 +373,8 @@ class TestBatchPathReasonDetection:
         row = {
             "content": {"upstream": {"data": "stale"}},
             "source_guid": "sg_batch_4",
-            ContextMetaKeys.FILTER_PHASE: "upstream_unprocessed",
+            "_state": "failed",
+            "_state_schema_version": 1,
         }
         ctx = self._make_ctx(passthrough_records=[("cid_4", row)])
         processor = BatchResultStrategy()
