@@ -286,8 +286,8 @@ class TestProcessRecordResponseHandling:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
-    def test_not_executed_with_response_returns_unprocessed(self, mock_fire, mock_get_preparer):
-        """executed=False with non-None response → guard_skip → UNPROCESSED."""
+    def test_not_executed_with_response_returns_skipped(self, mock_fire, mock_get_preparer):
+        """executed=False with non-None response → guard_skip → SKIPPED."""
         prepared = _make_prepared()
         mock_get_preparer.return_value.prepare.return_value = prepared
 
@@ -305,7 +305,7 @@ class TestProcessRecordResponseHandling:
         context = _make_context()
         result = strategy.process_record({"field": "value"}, context)
 
-        assert result.status == ProcessingStatus.UNPROCESSED
+        assert result.status == ProcessingStatus.SKIPPED
         assert result.skip_reason == "guard_skip"
 
 
