@@ -195,6 +195,8 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
             )
             merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
 
+            # TemporaryDirectory instead of in-place overwrite: the old approach
+            # (overwrite + restore in finally) left corrupt files on SIGKILL.
             with tempfile.TemporaryDirectory() as td:
                 tmp_file = Path(td) / relative_path
                 tmp_file.parent.mkdir(parents=True, exist_ok=True)

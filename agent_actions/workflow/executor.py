@@ -344,6 +344,10 @@ class ActionExecutor:
                 ActionStatus.COMPLETED,
                 **self._limit_metadata(params.action_config),
             )
+            logger.info(
+                "Action completed (passthrough)",
+                extra={"action_name": params.action_name, "duration": duration},
+            )
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
@@ -427,11 +431,12 @@ class ActionExecutor:
         """Record action completion in run_tracker if available."""
         if self.run_tracker is None or self.run_id is None:
             return
-        tracker_status = (
-            "skipped"
-            if skip_reason
-            else ("success" if status == ActionStatus.COMPLETED else "partial")
-        )
+        if status == ActionStatus.SKIPPED:
+            tracker_status = "skipped"
+        elif status == ActionStatus.COMPLETED:
+            tracker_status = "success"
+        else:
+            tracker_status = "partial"
         config = ActionCompleteConfig(
             run_id=self.run_id,
             action_name=action_name,
@@ -827,7 +832,8 @@ class ActionExecutor:
         """Handle batch job status checking (synchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
-        # Required by RecordEnvelope.build_content() for namespace resolution
+        # Config uses "agent_type" but additive model needs "action_name" for
+        # RecordEnvelope.build_content() namespace resolution.
         action_config["action_name"] = action_name
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
@@ -849,7 +855,8 @@ class ActionExecutor:
         """Handle batch job status checking (asynchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
-        # Required by RecordEnvelope.build_content() for namespace resolution
+        # Config uses "agent_type" but additive model needs "action_name" for
+        # RecordEnvelope.build_content() namespace resolution.
         action_config["action_name"] = action_name
 
         output_folder, batch_status = await asyncio.to_thread(
