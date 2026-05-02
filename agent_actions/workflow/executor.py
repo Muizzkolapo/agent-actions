@@ -344,17 +344,6 @@ class ActionExecutor:
                 ActionStatus.COMPLETED,
                 **self._limit_metadata(params.action_config),
             )
-            logger.info(
-                "Action completed (passthrough)",
-                extra={
-                    "operation": "execute_action_run",
-                    "action_name": params.action_name,
-                    "action_idx": params.action_idx,
-                    "duration": duration,
-                    "status": "passthrough",
-                    "is_last_action": params.is_last_action,
-                },
-            )
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
@@ -362,45 +351,10 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
-        # Normal completion — check for guard-all-filtered or partial item failures
         final_status = self._resolve_completion_status(params.action_name)
 
         if final_status == ActionStatus.SKIPPED:
-            self.deps.state_manager.update_status(
-                params.action_name,
-                ActionStatus.SKIPPED,
-                execution_time=duration,
-                skip_reason=GUARD_FILTERED_ALL,
-            )
-            total_actions = (
-                len(self.deps.action_runner.execution_order)
-                if hasattr(self.deps.action_runner, "execution_order")
-                else 0
-            )
-            fire_event(
-                ActionSkipEvent(
-                    action_name=params.action_name,
-                    action_index=params.action_idx,
-                    total_actions=total_actions,
-                    skip_reason=GUARD_FILTERED_ALL,
-                    mode=params.action_config.get("run_mode", ""),
-                )
-            )
-            if self.run_tracker is not None and self.run_id is not None:
-                config = ActionCompleteConfig(
-                    run_id=self.run_id,
-                    action_name=params.action_name,
-                    status="skipped",
-                    duration_seconds=duration,
-                    skip_reason=GUARD_FILTERED_ALL,
-                )
-                self.run_tracker.record_action_complete(config=config)
-            return ActionExecutionResult(
-                success=True,
-                output_folder=output_folder,
-                status=ActionStatus.SKIPPED,
-                metrics=ExecutionMetrics(duration=duration),
-            )
+            return self._handle_guard_all_filtered(params, output_folder, duration)
 
         self.deps.state_manager.update_status(
             params.action_name,
@@ -409,18 +363,7 @@ class ActionExecutor:
             **self._limit_metadata(params.action_config),
         )
         tokens = get_last_usage()
-
-        tracker_status = "success" if final_status == ActionStatus.COMPLETED else "partial"
-        if self.run_tracker is not None and self.run_id is not None:
-            config = ActionCompleteConfig(
-                run_id=self.run_id,
-                action_name=params.action_name,
-                status=tracker_status,
-                duration_seconds=duration,
-                tokens=tokens,
-                files_processed=0,
-            )
-            self.run_tracker.record_action_complete(config=config)
+        self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
 
         return ActionExecutionResult(
             success=True,
@@ -434,6 +377,71 @@ class ActionExecutor:
                 files_processed=0,
             ),
         )
+
+    def _handle_guard_all_filtered(
+        self,
+        params: ActionRunParams,
+        output_folder: str,
+        duration: float,
+    ) -> ActionExecutionResult:
+        """Handle the case where all records were guard-filtered (action resolves as SKIPPED)."""
+        self.deps.state_manager.update_status(
+            params.action_name,
+            ActionStatus.SKIPPED,
+            execution_time=duration,
+            skip_reason=GUARD_FILTERED_ALL,
+        )
+        total_actions = (
+            len(self.deps.action_runner.execution_order)
+            if hasattr(self.deps.action_runner, "execution_order")
+            else 0
+        )
+        fire_event(
+            ActionSkipEvent(
+                action_name=params.action_name,
+                action_index=params.action_idx,
+                total_actions=total_actions,
+                skip_reason=GUARD_FILTERED_ALL,
+                mode=params.action_config.get("run_mode", ""),
+            )
+        )
+        self._track_action_complete(
+            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=GUARD_FILTERED_ALL
+        )
+        return ActionExecutionResult(
+            success=True,
+            output_folder=output_folder,
+            status=ActionStatus.SKIPPED,
+            metrics=ExecutionMetrics(duration=duration),
+        )
+
+    def _track_action_complete(
+        self,
+        action_name: str,
+        duration: float,
+        status: ActionStatus,
+        *,
+        tokens: dict[str, int] | None = None,
+        skip_reason: str | None = None,
+    ) -> None:
+        """Record action completion in run_tracker if available."""
+        if self.run_tracker is None or self.run_id is None:
+            return
+        tracker_status = (
+            "skipped"
+            if skip_reason
+            else ("success" if status == ActionStatus.COMPLETED else "partial")
+        )
+        config = ActionCompleteConfig(
+            run_id=self.run_id,
+            action_name=action_name,
+            status=tracker_status,
+            duration_seconds=duration,
+            tokens=tokens,
+            skip_reason=skip_reason,
+            files_processed=0,
+        )
+        self.run_tracker.record_action_complete(config=config)
 
     def _write_failed_disposition(self, action_name: str, reason: str) -> None:
         """Write DISPOSITION_FAILED to storage so downstream and future runs detect the failure."""
