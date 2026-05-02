@@ -818,13 +818,7 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle batch job status checking (synchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
-        workflow_name = self.deps.action_runner.workflow_name
-        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / action_name)
-
-        # Ensure action_name is on the config dict — batch result processor needs it
-        # for RecordEnvelope.build_content() namespacing. The config system uses
-        # "agent_type" as the key, but the additive model needs "action_name".
+        output_directory = self._batch_output_directory(action_name)
         action_config["action_name"] = action_name
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
@@ -832,68 +826,8 @@ class ActionExecutor:
         )
 
         duration = (datetime.now() - start_time).total_seconds()
-
-        if batch_status == "completed":
-            wall_clock = self._compute_batch_wall_clock(action_name, duration)
-            final_status = self._resolve_completion_status(action_name)
-            self.deps.state_manager.update_status(
-                action_name,
-                final_status,
-                execution_time=wall_clock,
-                execution_mode="batch",
-                **self._limit_metadata(action_config),
-            )
-            fire_event(
-                BatchCompleteEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    total=1,
-                    completed=1,
-                    failed=0,
-                    elapsed_time=wall_clock,
-                )
-            )
-            return ActionExecutionResult(
-                success=True,
-                output_folder=output_folder,
-                status=final_status,
-                metrics=ExecutionMetrics(duration=wall_clock),
-            )
-
-        if batch_status == "in_progress":
-            self.deps.state_manager.update_status(action_name, ActionStatus.BATCH_SUBMITTED)
-            fire_event(
-                BatchSubmittedEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    request_count=0,
-                    provider=action_config.get("model_vendor", ""),
-                )
-            )
-            return ActionExecutionResult(
-                success=True,
-                status=ActionStatus.BATCH_SUBMITTED,
-                metrics=ExecutionMetrics(duration=duration),
-            )
-
-        self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
-        self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
-        fire_event(
-            BatchCompleteEvent(
-                batch_id=action_config.get("batch_id", ""),
-                action_name=action_name,
-                total=1,
-                completed=0,
-                failed=1,
-                elapsed_time=duration,
-            )
-        )
-        error = Exception(f"Batch job for {action_name} failed")
-        return ActionExecutionResult(
-            success=False,
-            status=ActionStatus.FAILED,
-            error=error,
-            metrics=ExecutionMetrics(duration=duration),
+        return self._resolve_batch_outcome(
+            action_name, action_config, output_folder, batch_status, duration
         )
 
     async def _handle_batch_check_async(
@@ -905,12 +839,7 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle batch job status checking (asynchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
-        workflow_name = self.deps.action_runner.workflow_name
-        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / action_name)
-
-        # Ensure action_name is on the config dict — batch result processor needs it
-        # for RecordEnvelope.build_content() namespacing.
+        output_directory = self._batch_output_directory(action_name)
         action_config["action_name"] = action_name
 
         output_folder, batch_status = await asyncio.to_thread(
@@ -921,7 +850,25 @@ class ActionExecutor:
         )
 
         duration = (datetime.now() - start_time).total_seconds()
+        return self._resolve_batch_outcome(
+            action_name, action_config, output_folder, batch_status, duration
+        )
 
+    def _batch_output_directory(self, action_name: str) -> str:
+        """Resolve the target output directory for a batch action."""
+        workflow_name = self.deps.action_runner.workflow_name
+        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
+        return str(agent_io_path / "target" / action_name)
+
+    def _resolve_batch_outcome(
+        self,
+        action_name: str,
+        action_config: ActionConfigDict,
+        output_folder: str | None,
+        batch_status: str,
+        duration: float,
+    ) -> ActionExecutionResult:
+        """Map batch_manager result to status, events, and ActionExecutionResult."""
         if batch_status == "completed":
             wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
@@ -965,6 +912,7 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
+        # Failed
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
         fire_event(
@@ -977,11 +925,10 @@ class ActionExecutor:
                 elapsed_time=duration,
             )
         )
-        error = Exception(f"Batch job for {action_name} failed")
         return ActionExecutionResult(
             success=False,
             status=ActionStatus.FAILED,
-            error=error,
+            error=Exception(f"Batch job for {action_name} failed"),
             metrics=ExecutionMetrics(duration=duration),
         )
 
