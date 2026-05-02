@@ -674,7 +674,7 @@ class TestGetFailedItems:
             def write_target(self, *a, **kw):
                 pass
 
-            def read_target(self, *a, **kw):
+            def _read_target_raw(self, *a, **kw):
                 return []
 
             def write_source(self, *a, **kw):
