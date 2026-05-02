@@ -250,7 +250,16 @@ class TestHandleRetryRecovery:
         assert state.retry_attempt == 2
         assert state.missing_ids == ["id-2"]
         mock_mgr.save.assert_called_once()
-        manager.save_batch_job.assert_called_once()
+        # Verify _register_recovery_batch produced correct BatchJobEntry
+        save_args = manager.save_batch_job.call_args[0]
+        assert save_args[0] == "test_file_retry_2"  # {parent}_{type}_{attempt}
+        entry = save_args[1]
+        assert entry.batch_id == "new-batch-id"
+        assert entry.recovery_type == "retry"
+        assert entry.recovery_attempt == 2
+        assert entry.parent_file_name == "test_file"
+        assert entry.record_count == 1
+        assert entry.status == BatchStatus.SUBMITTED
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
     @patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions")
@@ -661,3 +670,87 @@ class TestRecoveryStatePersistence:
 
         assert state.reprompt_attempt == 2
         mock_mgr.save.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestApplyExhaustedReprompt (direct unit tests for exhaustion.py)
+# ---------------------------------------------------------------------------
+
+
+class TestApplyExhaustedReprompt:
+    """Direct tests for apply_exhausted_reprompt — per_record_attempts and metadata preservation."""
+
+    def test_per_record_attempts_used_when_provided(self):
+        """per_record_attempts dict overrides scalar attempt for each record."""
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        r1 = _make_result("id-a")
+        r2 = _make_result("id-b")
+
+        apply_exhausted_reprompt(
+            results=[r1, r2],
+            failed_ids={"id-a", "id-b"},
+            validation_name="schema_check",
+            attempt=99,
+            on_exhausted="return_last",
+            per_record_attempts={"id-a": 3, "id-b": 5},
+        )
+
+        assert r1.recovery_metadata.reprompt.attempts == 3
+        assert r2.recovery_metadata.reprompt.attempts == 5
+        assert r1.recovery_metadata.reprompt.passed is False
+
+    def test_scalar_fallback_when_id_missing_from_per_record_dict(self):
+        """Falls back to scalar attempt when ID not in per_record_attempts."""
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        r1 = _make_result("id-not-in-dict")
+        apply_exhausted_reprompt(
+            results=[r1],
+            failed_ids={"id-not-in-dict"},
+            validation_name="check",
+            attempt=7,
+            on_exhausted="return_last",
+            per_record_attempts={"id-other": 2},
+        )
+
+        assert r1.recovery_metadata.reprompt.attempts == 7
+
+    def test_raise_with_per_record_attempts(self):
+        """on_exhausted='raise' raises even when per_record_attempts provided."""
+        import pytest
+
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):
+            apply_exhausted_reprompt(
+                results=[_make_result("id-x")],
+                failed_ids={"id-x"},
+                validation_name="strict",
+                attempt=3,
+                on_exhausted="raise",
+                per_record_attempts={"id-x": 3},
+            )
+
+    def test_preserves_existing_retry_metadata(self):
+        """Pre-existing retry metadata is not clobbered when adding reprompt metadata."""
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+        from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
+
+        r1 = _make_result("id-1")
+        r1.recovery_metadata = RecoveryMetadata(
+            retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="missing")
+        )
+
+        apply_exhausted_reprompt(
+            results=[r1],
+            failed_ids={"id-1"},
+            validation_name="check",
+            attempt=2,
+            on_exhausted="return_last",
+        )
+
+        assert r1.recovery_metadata.reprompt.attempts == 2
+        assert r1.recovery_metadata.reprompt.passed is False
+        assert r1.recovery_metadata.retry.attempts == 3
+        assert r1.recovery_metadata.retry.succeeded is False
