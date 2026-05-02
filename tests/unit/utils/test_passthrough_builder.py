@@ -64,7 +64,6 @@ class TestBuildItemBatchMode:
                 action_name="test_action",
             )
 
-        assert item["_unprocessed"] is True
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item["metadata"]["skipped_by_where_clause"] is True
         # Batch mode should NOT have a 'reason' string in metadata
@@ -255,7 +254,6 @@ class TestBuildItemOnlineMode:
                 action_name="a",
                 mode="online",
             )
-        assert item["_unprocessed"] is True
         assert item["metadata"]["agent_type"] == "tombstone"
 
 
@@ -273,7 +271,6 @@ class TestBuildItemEdgeCases:
             item = PassthroughItemBuilder.build_item(
                 row={}, reason="where_clause_not_matched", action_name="a"
             )
-        assert item["_unprocessed"] is True
         assert item["metadata"]["agent_type"] == "tombstone"
         assert item["target_id"] == FIXED_TARGET_ID
         assert item["content"] == {"a": None}

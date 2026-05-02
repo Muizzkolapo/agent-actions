@@ -760,8 +760,8 @@ class TestParseErrorDisposition:
             reason="parse_error",
         )
 
-    def test_parse_error_record_marked_unprocessed(self):
-        """Parse error items get _unprocessed=True so downstream guards skip them."""
+    def test_parse_error_record_stamped_failed(self):
+        """Parse error items get _state=failed so downstream cascades them."""
         result = ProcessingResult.success(
             data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
             source_guid="guid-pe",
@@ -775,7 +775,7 @@ class TestParseErrorDisposition:
         )
 
         assert len(output) == 1
-        assert output[0]["_unprocessed"] is True
+        assert output[0]["_state"] == "failed"
 
     def test_parse_error_stats_counted_as_failed(self):
         """Parse error reclassifies from success to failed in stats."""
@@ -829,7 +829,6 @@ class TestParseErrorDisposition:
 
         assert stats.success == 1
         assert stats.failed == 0
-        assert "_unprocessed" not in output[0]
         # Normal SUCCESS writes DISPOSITION_SUCCESS, not FAILED
         backend.set_disposition.assert_called_once_with(
             "action",
@@ -863,8 +862,6 @@ class TestParseErrorDisposition:
         assert stats.success == 1
         assert len(output) == 2
         # Parse error item is marked, normal is not
-        assert output[0]["_unprocessed"] is True
-        assert "_unprocessed" not in output[1]
         # Parse error gets FAILED disposition, normal gets SUCCESS disposition
         assert backend.set_disposition.call_count == 2
         calls = backend.set_disposition.call_args_list
@@ -888,7 +885,6 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True
         backend.set_disposition.assert_not_called()
 
     def test_parse_error_no_backend_no_crash(self):
@@ -907,4 +903,3 @@ class TestParseErrorDisposition:
         )
 
         assert stats.failed == 1
-        assert output[0]["_unprocessed"] is True

@@ -22,7 +22,7 @@ class PassthroughItemBuilder:
     ) -> dict[str, Any]:
         """Build a passthrough (tombstone) item with required fields and metadata.
 
-        The returned item has ``_unprocessed = True`` and
+        The returned item has
         ``metadata.agent_type = "tombstone"`` so downstream processing
         skips it. Metadata format varies by *mode* (batch uses legacy flags,
         online adds a ``reason`` string).
@@ -70,7 +70,6 @@ class PassthroughItemBuilder:
             processed_item["metadata"][flag_name] = True
 
         processed_item["metadata"]["agent_type"] = "tombstone"
-        processed_item["_unprocessed"] = True
 
         return processed_item
 

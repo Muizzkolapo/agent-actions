@@ -45,7 +45,6 @@ class TestExhaustedRecordBuilderActionName:
         assert item["node_id"].startswith("classify_sentiment_")
         assert item["source_guid"] == "sg-123"
         assert item["metadata"]["retry_exhausted"] is True
-        assert item["_unprocessed"] is True
 
     def test_action_name_missing_raises(self):
         """When action_name is empty, RecordEnvelopeError is raised."""

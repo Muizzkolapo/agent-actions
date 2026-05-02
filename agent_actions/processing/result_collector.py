@@ -201,18 +201,15 @@ def write_record_dispositions(
                 DISPOSITION_EXHAUSTED,
                 reason=RETRY_EXHAUSTED,
             )
-        elif item.get("_unprocessed"):
-            reason = metadata.get("reason", UNPROCESSED)
-            if metadata.get("skipped_by_where_clause"):
-                disposition = DISPOSITION_FILTERED
-            else:
-                disposition = DISPOSITION_PASSTHROUGH
+        elif item.get("_state") in (RecordState.CASCADE_SKIPPED.value, RecordState.GUARD_SKIPPED.value):
+            from agent_actions.record.disposition import derive_disposition
+
             _safe_set_disposition(
                 storage_backend,
                 action_name,
                 source_guid,
-                disposition,
-                reason=reason,
+                derive_disposition(item),
+                reason=metadata.get("reason", UNPROCESSED),
             )
         elif item.get("error"):
             _safe_set_disposition(
@@ -272,7 +269,6 @@ class ResultCollector:
                 if data and _data_has_parse_error(data):
                     result.status = ProcessingStatus.FAILED
                     for d in data:
-                        d["_unprocessed"] = True
                         _stamp(d, RecordState.FAILED, agent_name, PARSE_ERROR)
                     output.extend(data)
                     stats[status_key] -= 1
