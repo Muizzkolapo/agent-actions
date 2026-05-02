@@ -12,18 +12,14 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
-from agent_actions.record.reasons import GUARD_FILTER, GUARD_PREFILTER_SKIP, GUARD_SKIP
+from agent_actions.record.state import CASCADE_BLOCKING_STATES
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 
 logger = logging.getLogger(__name__)
 
-GUARD_EXEMPT_REASONS: frozenset[str] = frozenset(
-    {
-        GUARD_SKIP,
-        GUARD_PREFILTER_SKIP,
-        GUARD_FILTER,
-    }
+_CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(
+    s.value for s in CASCADE_BLOCKING_STATES
 )
 
 
@@ -51,13 +47,12 @@ class TaskPreparer:
             skip_guard,
         )
 
-        if self._is_upstream_unprocessed(item):
+        if isinstance(item, dict) and item.get("_state") in _CASCADE_BLOCKING_VALUES:
             target_id = existing_target_id or self._generate_target_id()
-            source_guid = item.get("source_guid") if isinstance(item, dict) else None
             return PreparedTask(
                 target_id=target_id,
-                source_guid=source_guid,
-                original_content=get_existing_content(item) if isinstance(item, dict) else item,
+                source_guid=item.get("source_guid"),
+                original_content=get_existing_content(item),
                 guard_status=GuardStatus.UPSTREAM_UNPROCESSED,
             )
 
@@ -304,27 +299,6 @@ class TaskPreparer:
             field_context=field_context,
             tools_path=context.tools_path,
         )
-
-    @staticmethod
-    def _is_upstream_unprocessed(item: Any) -> bool:
-        """Return True only for cascade-failure tombstones, not guard-skip tombstones.
-
-        Guard-skipped records are valid pipeline data — the action was
-        intentionally skipped but downstream should still process.  All guard
-        outcome variants (online ``guard_skip``, FILE ``guard_prefilter_skip``,
-        ``guard_filter``) are exempt from cascade propagation.
-
-        Only true upstream failures (``upstream_unprocessed``, ``batch_not_returned``,
-        etc.) should propagate as unprocessed.
-        """
-        if not isinstance(item, dict):
-            return False
-        if item.get("_unprocessed") is not True:
-            return False
-        metadata = item.get("metadata")
-        if isinstance(metadata, dict) and metadata.get("reason") in GUARD_EXEMPT_REASONS:
-            return False
-        return True
 
     def _generate_target_id(self) -> str:
         """Generate a new target_id."""
