@@ -315,7 +315,9 @@ class BatchRetryService:
         on_exhausted: str,
     ) -> list[BatchResult]:
         """Apply reprompt exhaustion metadata to failed records."""
-        return _reprompt.apply_exhausted_reprompt_metadata(
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        return apply_exhausted_reprompt(
             results=results,
             failed_ids=failed_ids,
             validation_name=validation_name,
