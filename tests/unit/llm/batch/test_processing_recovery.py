@@ -580,9 +580,10 @@ class TestFinalizeBatchOutput:
         _, manager, _, _ = self._run_finalize(batch_id="batch-789")
         manager.update_status.assert_called_once_with("batch-789", BatchStatus.COMPLETED)
 
-    def test_recovery_entries_cleaned_up(self):
-        service, manager, _, _ = self._run_finalize()
-        service._cleanup_recovery_entries.assert_called_once_with(manager, "test_file")
+    def test_finalize_does_not_handle_recovery_cleanup(self):
+        """Cleanup is the caller's responsibility — finalize only does processing."""
+        service, _, _, _ = self._run_finalize()
+        service._cleanup_recovery_entries.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

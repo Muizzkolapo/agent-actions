@@ -207,7 +207,7 @@ def handle_retry_recovery(
         return None  # Reprompt submitted, processing paused
 
     RecoveryStateManager.delete(output_directory, parent_file_name)
-    return finalize_batch_output(
+    output_path = finalize_batch_output(
         service,
         batch_results=merged,
         exhausted_recovery=exhausted_recovery,
@@ -220,6 +220,8 @@ def handle_retry_recovery(
         action_name=action_name,
         start_time=start_time,
     )
+    cleanup_recovery(service, manager, output_directory, parent_file_name)
+    return output_path
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +258,8 @@ def handle_reprompt_recovery(
         on_exhausted=state.on_exhausted,
     )
     if setup is None:
-        return finalize_batch_output(
+        RecoveryStateManager.delete(output_directory, parent_file_name)
+        output_path = finalize_batch_output(
             service,
             batch_results=recovery_results,
             exhausted_recovery=None,
@@ -269,6 +272,8 @@ def handle_reprompt_recovery(
             action_name=action_name,
             start_time=start_time,
         )
+        cleanup_recovery(service, manager, output_directory, parent_file_name)
+        return output_path
 
     loop, strategy, _ = setup
 
@@ -340,7 +345,7 @@ def handle_reprompt_recovery(
         )
 
     RecoveryStateManager.delete(output_directory, parent_file_name)
-    return finalize_batch_output(
+    output_path = finalize_batch_output(
         service,
         batch_results=final_results,
         exhausted_recovery=exhausted_recovery,
@@ -353,6 +358,8 @@ def handle_reprompt_recovery(
         action_name=action_name,
         start_time=start_time,
     )
+    cleanup_recovery(service, manager, output_directory, parent_file_name)
+    return output_path
 
 
 # ---------------------------------------------------------------------------
@@ -524,9 +531,28 @@ def finalize_batch_output(
     )
 
     manager.update_status(batch_id, BatchStatus.COMPLETED)
-    service._cleanup_recovery_entries(manager, file_name)
 
     return str(output_file)
+
+
+# ---------------------------------------------------------------------------
+# Recovery cleanup
+# ---------------------------------------------------------------------------
+
+
+def cleanup_recovery(
+    service: "BatchProcessingService",
+    manager: BatchRegistryManager,
+    output_directory: str,
+    parent_file_name: str,
+) -> None:
+    """Clean up recovery state after finalization.
+
+    Removes recovery batch entries from the registry for this parent file.
+    Recovery state file deletion is handled by callers before finalize
+    (RecoveryStateManager.delete).
+    """
+    service._cleanup_recovery_entries(manager, parent_file_name)
 
 
 # ---------------------------------------------------------------------------
