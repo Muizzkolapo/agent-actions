@@ -530,3 +530,91 @@ class TestUnifiedProcessorFileModePath:
         # Guard-skipped record should appear in output as UNPROCESSED
         assert stats.unprocessed == 1
         assert stats.success == 1
+
+    def test_file_mode_ordering_invocation_before_guard_skips(self):
+        """FILE mode: invocation results appear BEFORE guard-skipped results.
+
+        This is the FM13 invariant. FILE mode uses:
+            all_results = invocation_results + guard_results
+        so processed records come first, guard-skipped tombstones come after.
+        """
+        from agent_actions.processing.unified import UnifiedProcessor
+
+        records = [
+            {"content": {"score": 90}, "source_guid": "sg-pass"},
+            {"content": {"score": 40}, "source_guid": "sg-skip-1"},
+            {"content": {"score": 30}, "source_guid": "sg-skip-2"},
+        ]
+        raw = list(records)
+        context = ProcessingContext(
+            agent_config={"guard": {"clause": "score >= 80", "behavior": "skip"}},
+            agent_name="my_tool",
+        )
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
+
+        class OrderStrategy:
+            def invoke(self, recs, ctx):
+                from agent_actions.processing.types import ProcessingResult
+
+                return [
+                    ProcessingResult.success(
+                        data=[{"content": {"my_tool": {"out": i}}, "source_guid": r["source_guid"]}],
+                        source_guid=r["source_guid"],
+                    )
+                    for i, r in enumerate(recs)
+                ]
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            output, stats = UnifiedProcessor().process(
+                records, context, OrderStrategy(), raw_records=raw
+            )
+
+        # 1 invocation success + 2 guard skips = 3 output records
+        assert len(output) == 3
+        assert stats.success == 1
+        assert stats.unprocessed == 2
+
+        # FM13: invocation results first, guard skips after
+        assert output[0]["source_guid"] == "sg-pass"
+        assert output[0]["content"]["my_tool"] == {"out": 0}
+        assert output[1]["source_guid"] == "sg-skip-1"
+        assert output[1]["content"]["my_tool"] is None  # null namespace tombstone
+        assert output[2]["source_guid"] == "sg-skip-2"
+        assert output[2]["content"]["my_tool"] is None
+
+    def test_file_mode_guard_skips_use_unprocessed_not_skipped(self):
+        """FILE guard prefilter produces UNPROCESSED (not SKIPPED).
+
+        This is intentional for FM13: guard_results and invocation_results
+        are separate lists concatenated in order. Using unprocessed() keeps
+        them in the guard_results list. Using skipped() would change the
+        ResultCollector disposition path.
+        """
+        from agent_actions.processing.unified import UnifiedProcessor
+
+        records = [
+            {"content": {"score": 40}, "source_guid": "sg-1"},
+        ]
+        context = ProcessingContext(
+            agent_config={"guard": {"clause": "score >= 80", "behavior": "skip"}},
+            agent_name="my_tool",
+        )
+        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
+
+        class NoOpStrategy:
+            def invoke(self, recs, ctx):
+                return []
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            output, stats = UnifiedProcessor().process(
+                records, context, NoOpStrategy(), raw_records=records
+            )
+
+        assert stats.unprocessed == 1
+        assert stats.skipped == 0  # NOT skipped — must be unprocessed
