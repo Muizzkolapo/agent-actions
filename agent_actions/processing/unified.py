@@ -20,6 +20,8 @@ from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 logger = logging.getLogger(__name__)
 
+_LIFECYCLE_KEYS: frozenset[str] = frozenset({"_state", "_state_history", "_state_schema_version"})
+
 
 @runtime_checkable
 class ProcessingStrategy(Protocol):
@@ -189,7 +191,7 @@ class UnifiedProcessor:
                 if isinstance(content, dict) and action_name not in content:
                     skipped_record = RecordEnvelope.build_skipped(action_name, item)
                     for key in item:
-                        if key not in skipped_record:
+                        if key not in skipped_record and key not in _LIFECYCLE_KEYS:
                             skipped_record[key] = item[key]
                     item = skipped_record
             guard_results.append(
