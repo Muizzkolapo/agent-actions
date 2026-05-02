@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Phase H+I: Retry reset ADR (keep target, use _state), skip matrix documenting action-level vs record-level semantics, parallel cascade rule verified, UPSTREAM_SKIP_PREFIX kept as display adapter"
-time: 2026-05-02T07:00:00.000000Z

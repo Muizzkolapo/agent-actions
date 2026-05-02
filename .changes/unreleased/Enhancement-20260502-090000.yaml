@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Phase J: Remove _unprocessed as parallel authority (_state is sole source). Add lifecycle fields to prompt/UI exclusion sets. Zero _unprocessed writes remain in production code."
-time: 2026-05-02T09:00:00.000000Z

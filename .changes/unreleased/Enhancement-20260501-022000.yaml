@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Add RecordEnvelope.transition() as the single sanctioned mutator for record lifecycle state (_state, _state_history, _state_schema_version)"
-time: 2026-05-01T02:20:00.000000Z

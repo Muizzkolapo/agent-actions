@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Document and enforce lifecycle carry rules: _state_history carries forward across actions (audit trail), _state does not (per-action; executor resets it)"
-time: 2026-05-02T02:40:00.000000Z
