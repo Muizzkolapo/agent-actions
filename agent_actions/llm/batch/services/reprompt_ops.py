@@ -577,25 +577,3 @@ def process_reprompt_results(
         result_map[reprompt_result.custom_id] = reprompt_result
 
     return list(result_map.values())
-
-
-def apply_exhausted_reprompt_metadata(
-    results: list[BatchResult],
-    failed_ids: set[str],
-    validation_name: str,
-    attempt: int,
-    on_exhausted: str,
-) -> list[BatchResult]:
-    """Apply reprompt exhaustion metadata to failed records.
-
-    Delegates to the consolidated exhaustion module.
-    """
-    from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-
-    return apply_exhausted_reprompt(
-        results=results,
-        failed_ids=failed_ids,
-        validation_name=validation_name,
-        attempt=attempt,
-        on_exhausted=on_exhausted,
-    )

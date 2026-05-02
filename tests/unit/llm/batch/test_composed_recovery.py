@@ -208,13 +208,11 @@ class TestComposedRecoveryPaths:
         loop.split.return_value = ([], [failing_result])
         mock_build_loop.return_value = (loop, strategy, None)
 
-        # Wire the real apply_exhausted_reprompt_metadata to get the raise
-        from agent_actions.llm.batch.services.reprompt_ops import (
-            apply_exhausted_reprompt_metadata,
-        )
+        # Wire the real exhaustion function to get the raise
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
 
         service._retry_service.apply_exhausted_reprompt_metadata.side_effect = (
-            lambda **kwargs: apply_exhausted_reprompt_metadata(**kwargs)
+            lambda **kwargs: apply_exhausted_reprompt(**kwargs)
         )
 
         with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):

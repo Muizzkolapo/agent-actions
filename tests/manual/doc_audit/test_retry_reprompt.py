@@ -30,7 +30,6 @@ if __name__ == "__main__":
 # --- project imports ---
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.llm.batch.services.reprompt_ops import (
-    apply_exhausted_reprompt_metadata,
     process_reprompt_results,
     validate_results,
 )
@@ -43,6 +42,9 @@ from agent_actions.llm.batch.services.retry_serialization import (
     serialize_results,
 )
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.processing.evaluation.exhaustion import (
+    apply_exhausted_reprompt as apply_exhausted_reprompt_metadata,
+)
 from agent_actions.processing.recovery.reprompt import (
     RepromptService,
 )
