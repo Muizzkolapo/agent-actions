@@ -188,19 +188,19 @@ def validate_and_reprompt(
             reprompted_ids[r.custom_id] = reprompted_ids.get(r.custom_id, 0) + 1
 
         if attempt == max_attempts - 1:
-            if on_exhausted == "raise" and still_failing:
-                raise RuntimeError(
-                    f"Reprompt validation exhausted for {still_failing[0].custom_id} "
-                    f"after {attempt + 1} attempts (validation: {validation_name})"
-                )
-            for r in still_failing:
-                if not r.recovery_metadata:
-                    r.recovery_metadata = RecoveryMetadata()
-                r.recovery_metadata.reprompt = RepromptMetadata(
-                    attempts=reprompted_ids[r.custom_id],
-                    passed=False,
-                    validation=validation_name,
-                )
+            from agent_actions.processing.evaluation.exhaustion import (
+                apply_exhausted_reprompt,
+            )
+
+            failed_ids = {r.custom_id for r in still_failing}
+            apply_exhausted_reprompt(
+                results=still_failing,
+                failed_ids=failed_ids,
+                validation_name=validation_name,
+                attempt=attempt + 1,
+                on_exhausted=on_exhausted,
+                per_record_attempts=reprompted_ids,
+            )
             all_graduated.extend(still_failing)
             break
 
@@ -577,52 +577,3 @@ def process_reprompt_results(
         result_map[reprompt_result.custom_id] = reprompt_result
 
     return list(result_map.values())
-
-
-def apply_exhausted_reprompt_metadata(
-    results: list[BatchResult],
-    failed_ids: set[str],
-    validation_name: str,
-    attempt: int,
-    on_exhausted: str,
-) -> list[BatchResult]:
-    """Apply reprompt exhaustion metadata to failed records.
-
-    Mutates results in-place (sets recovery_metadata on individual items)
-    and returns the same list for convenience.
-
-    Args:
-        results: All accumulated results (mutated in-place)
-        failed_ids: IDs that still fail validation
-        validation_name: Name of the validation UDF
-        attempt: Number of attempts made
-        on_exhausted: Policy — "return_last" or "raise"
-
-    Returns:
-        The same results list with exhaustion metadata applied
-
-    Raises:
-        RuntimeError: If on_exhausted == "raise"
-    """
-    from agent_actions.processing.types import RepromptMetadata
-
-    for result in results:
-        if result.custom_id not in failed_ids:
-            continue
-
-        if on_exhausted == "raise":
-            raise RuntimeError(
-                f"Reprompt validation exhausted for {result.custom_id} "
-                f"after {attempt} attempts (validation: {validation_name})"
-            )
-
-        if not result.recovery_metadata:
-            result.recovery_metadata = RecoveryMetadata()
-
-        result.recovery_metadata.reprompt = RepromptMetadata(
-            attempts=attempt,
-            passed=False,
-            validation=validation_name,
-        )
-
-    return results

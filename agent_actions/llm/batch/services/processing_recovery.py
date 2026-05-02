@@ -1,14 +1,19 @@
-"""Recovery and finalization functions extracted from BatchProcessingService.
+"""Async recovery orchestration for batch processing.
 
-These are standalone functions that take a ``service: BatchProcessingService``
-instance as their first argument.  Within this module the functions call each
-other directly; methods that remain on the class are reached via ``service.*``.
+State machine:
+    Initial batch → retry (if missing_ids) → reprompt (if configured) → finalize
+
+Entry points:
+    process_recovery_batch() — dispatches on recovery_type
+    check_and_submit_reprompt() — initial evaluation + reprompt submission
+    finalize_batch_output() — convert, write, event, status
+    cleanup_recovery() — remove registry entries after finalization
 """
 
 import logging
 import time
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
@@ -50,10 +55,7 @@ def process_recovery_batch(
 ) -> str | None:
     """Process a recovery batch (retry or reprompt).
 
-    Loads recovery state, merges new results, and determines next action.
-
-    Returns:
-        Output file path if processing is complete, None if more recovery is needed
+    Returns output file path if complete, None if more recovery is needed.
     """
     start_time = time.time()
     parent_file_name = entry.parent_file_name
@@ -141,14 +143,12 @@ def handle_retry_recovery(
     start_time: float,
 ) -> str | None:
     """Handle retry recovery batch completion."""
-    missing_ids = set(state.missing_ids)
-
     merged, still_missing, updated_counts, _ = service._retry_service.process_retry_results(
         results=recovery_results,
         accumulated_results=accumulated,
         context_map=context_map,
         record_failure_counts=state.record_failure_counts,
-        missing_ids=missing_ids,
+        missing_ids=set(state.missing_ids),
     )
 
     if still_missing and state.retry_attempt < state.retry_max_attempts:
@@ -162,27 +162,15 @@ def handle_retry_recovery(
             agent_config=agent_config,
         )
         if submission:
-            retry_batch_id, record_count = submission
-            recovery_file_name = f"{parent_file_name}_retry_{next_attempt}"
-            recovery_entry = BatchJobEntry(
-                batch_id=retry_batch_id,
-                status=BatchStatus.SUBMITTED,
-                timestamp=datetime.now(UTC).isoformat(),
-                provider=entry.provider,
-                record_count=record_count,
-                file_name=recovery_file_name,
-                parent_file_name=parent_file_name,
-                recovery_type="retry",
-                recovery_attempt=next_attempt,
+            _register_recovery_batch(
+                manager, submission, parent_file_name, entry.provider, "retry", next_attempt
             )
-            manager.save_batch_job(recovery_file_name, recovery_entry)
-
             state.retry_attempt = next_attempt
             state.missing_ids = list(still_missing)
             state.record_failure_counts = updated_counts
             state.accumulated_results = BatchRetryService.serialize_results(merged)
             RecoveryStateManager.save(output_directory, parent_file_name, state)
-            return None  # More retries pending
+            return None
 
     exhausted_recovery = None
     if still_missing:
@@ -204,21 +192,20 @@ def handle_retry_recovery(
         exhausted_recovery=exhausted_recovery,
     )
     if not should_continue:
-        return None  # Reprompt submitted, processing paused
+        return None
 
-    RecoveryStateManager.delete(output_directory, parent_file_name)
-    return finalize_batch_output(
+    return _finalize_and_cleanup(
         service,
-        batch_results=merged,
-        exhausted_recovery=exhausted_recovery,
-        context_map=context_map,
-        output_directory=output_directory,
-        file_name=parent_file_name,
-        batch_id=entry.batch_id,
-        agent_config=agent_config,
-        manager=manager,
-        action_name=action_name,
-        start_time=start_time,
+        merged,
+        exhausted_recovery,
+        context_map,
+        output_directory,
+        parent_file_name,
+        entry.batch_id,
+        agent_config,
+        manager,
+        action_name,
+        start_time,
     )
 
 
@@ -245,8 +232,8 @@ def handle_reprompt_recovery(
     """Handle reprompt recovery batch completion.
 
     Uses the graduated pool pattern: only recovery_results are evaluated
-    (never the full accumulated set).  Results that pass are graduated and
-    persisted to ``state.graduated_results`` so they are never re-evaluated.
+    (never the full accumulated set). Graduated records are persisted to
+    state and never re-evaluated.
     """
     from agent_actions.llm.batch.services.reprompt_ops import build_evaluation_loop
 
@@ -256,22 +243,24 @@ def handle_reprompt_recovery(
         on_exhausted=state.on_exhausted,
     )
     if setup is None:
-        return finalize_batch_output(
+        # Merge prior graduated results with current cycle before finalizing.
+        final_results = BatchRetryService.deserialize_results(state.graduated_results)
+        final_results.extend(recovery_results)
+        return _finalize_and_cleanup(
             service,
-            batch_results=recovery_results,
-            exhausted_recovery=None,
-            context_map=context_map,
-            output_directory=output_directory,
-            file_name=parent_file_name,
-            batch_id=entry.batch_id,
-            agent_config=agent_config,
-            manager=manager,
-            action_name=action_name,
-            start_time=start_time,
+            final_results,
+            None,
+            context_map,
+            output_directory,
+            parent_file_name,
+            entry.batch_id,
+            agent_config,
+            manager,
+            action_name,
+            start_time,
         )
 
     loop, strategy, _ = setup
-
     graduated, still_failing = loop.split(recovery_results)
     loop.tag_graduated(graduated)
     state.graduated_results.extend(BatchRetryService.serialize_results(graduated))
@@ -289,29 +278,16 @@ def handle_reprompt_recovery(
             attempt=next_attempt,
         )
         if submission:
-            reprompt_batch_id, record_count = submission
-            recovery_file_name = f"{parent_file_name}_reprompt_{next_attempt}"
-            recovery_entry = BatchJobEntry(
-                batch_id=reprompt_batch_id,
-                status=BatchStatus.SUBMITTED,
-                timestamp=datetime.now(UTC).isoformat(),
-                provider=entry.provider,
-                record_count=record_count,
-                file_name=recovery_file_name,
-                parent_file_name=parent_file_name,
-                recovery_type="reprompt",
-                recovery_attempt=next_attempt,
+            _register_recovery_batch(
+                manager, submission, parent_file_name, entry.provider, "reprompt", next_attempt
             )
-            manager.save_batch_job(recovery_file_name, recovery_entry)
-
             for fr in still_failing:
                 state.reprompt_attempts_per_record[fr.custom_id] = (
                     state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
                 )
-
             state.reprompt_attempt = next_attempt
             RecoveryStateManager.save(output_directory, parent_file_name, state)
-            return None  # More reprompts pending
+            return None
 
     # Exhausted or all graduated — finalize.
     if still_failing:
@@ -323,35 +299,30 @@ def handle_reprompt_recovery(
             attempt=state.reprompt_attempt,
             on_exhausted=state.on_exhausted,
         )
-    # Deserialize prior-cycle graduated results; append current cycle's objects
-    # directly to avoid a redundant serialize→deserialize round-trip.
+
     final_results = BatchRetryService.deserialize_results(state.graduated_results)
     if still_failing:
         final_results.extend(still_failing)
-    # Rebuild exhausted_recovery from state if retry had exhausted records.
-    # Invariant: state.missing_ids and state.record_failure_counts are frozen
-    # at the end of the retry phase (set in handle_retry_recovery or
-    # check_and_submit_reprompt). The reprompt phase never modifies them —
-    # it only tracks reprompt_attempts_per_record for validation failures.
+
+    # Rebuild exhausted_recovery from retry phase state (frozen at phase transition).
     exhausted_recovery = None
     if state.missing_ids:
         exhausted_recovery = service._retry_service.build_exhausted_recovery(
             set(state.missing_ids), state.record_failure_counts
         )
 
-    RecoveryStateManager.delete(output_directory, parent_file_name)
-    return finalize_batch_output(
+    return _finalize_and_cleanup(
         service,
-        batch_results=final_results,
-        exhausted_recovery=exhausted_recovery,
-        context_map=context_map,
-        output_directory=output_directory,
-        file_name=parent_file_name,
-        batch_id=entry.batch_id,
-        agent_config=agent_config,
-        manager=manager,
-        action_name=action_name,
-        start_time=start_time,
+        final_results,
+        exhausted_recovery,
+        context_map,
+        output_directory,
+        parent_file_name,
+        entry.batch_id,
+        agent_config,
+        manager,
+        action_name,
+        start_time,
     )
 
 
@@ -375,12 +346,8 @@ def check_and_submit_reprompt(
 ) -> bool:
     """Check if reprompt is needed and submit async batch if so.
 
-    Uses the graduated pool pattern: splits batch_results via EvaluationLoop
-    into graduated (pass) and still_failing.  Graduated results are persisted
-    to ``state.graduated_results`` and never re-evaluated.
-
     Returns:
-        True if processing should continue (no reprompt, or reprompt exhausted/failed).
+        True if processing should continue (no reprompt needed or exhausted).
         False if a reprompt batch was submitted (caller should return None).
     """
     from agent_actions.llm.batch.services.reprompt_ops import build_evaluation_loop
@@ -397,11 +364,9 @@ def check_and_submit_reprompt(
     loop.tag_graduated(graduated)
 
     if not still_failing:
-        return True  # All passed, no reprompt needed
+        return True
 
-    current_attempt = 0
-    if recovery_state:
-        current_attempt = recovery_state.reprompt_attempt
+    current_attempt = recovery_state.reprompt_attempt if recovery_state else 0
 
     if current_attempt >= max_attempts:
         failed_ids = {r.custom_id for r in still_failing}
@@ -426,22 +391,11 @@ def check_and_submit_reprompt(
     )
 
     if not submission:
-        return True  # Submission failed, continue with current results
+        return True
 
-    reprompt_batch_id, record_count = submission
-    recovery_file_name = f"{file_name}_reprompt_{next_attempt}"
-    recovery_entry = BatchJobEntry(
-        batch_id=reprompt_batch_id,
-        status=BatchStatus.SUBMITTED,
-        timestamp=datetime.now(UTC).isoformat(),
-        provider=entry.provider,
-        record_count=record_count,
-        file_name=recovery_file_name,
-        parent_file_name=file_name,
-        recovery_type="reprompt",
-        recovery_attempt=next_attempt,
+    _register_recovery_batch(
+        manager, submission, file_name, entry.provider, "reprompt", next_attempt
     )
-    manager.save_batch_job(recovery_file_name, recovery_entry)
 
     state = recovery_state or RecoveryState(phase="reprompt")
     state.phase = "reprompt"
@@ -467,13 +421,13 @@ def check_and_submit_reprompt(
         "Async reprompt submitted for %s: %d failed records, batch %s",
         file_name,
         len(still_failing),
-        reprompt_batch_id,
+        submission[0],
     )
-    return False  # Recovery pending — caller should return None
+    return False
 
 
 # ---------------------------------------------------------------------------
-# Output finalization
+# Finalization + cleanup
 # ---------------------------------------------------------------------------
 
 
@@ -510,7 +464,6 @@ def finalize_batch_output(
     elapsed_time = time.time() - start_time
     total_count = len(batch_results)
     successful_count = sum(1 for r in batch_results if r.success)
-    failed_count = total_count - successful_count
 
     fire_event(
         BatchCompleteEvent(
@@ -518,16 +471,82 @@ def finalize_batch_output(
             action_name=file_name or "default",
             total=total_count,
             completed=successful_count,
-            failed=failed_count,
+            failed=total_count - successful_count,
             elapsed_time=elapsed_time,
         )
     )
 
     manager.update_status(batch_id, BatchStatus.COMPLETED)
-    service._cleanup_recovery_entries(manager, file_name)
-
     return str(output_file)
 
 
+def cleanup_recovery(
+    service: "BatchProcessingService",
+    manager: BatchRegistryManager,
+    output_directory: str,
+    parent_file_name: str,
+) -> None:
+    """Remove recovery batch entries from registry after finalization."""
+    service._cleanup_recovery_entries(manager, parent_file_name)
+
+
 # ---------------------------------------------------------------------------
-# Record dispositions — delegated to result_collector.write_record_dispositions
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _finalize_and_cleanup(
+    service: "BatchProcessingService",
+    batch_results: list[BatchResult],
+    exhausted_recovery: dict[str, RecoveryMetadata] | None,
+    context_map: dict[str, Any],
+    output_directory: str,
+    parent_file_name: str,
+    batch_id: str,
+    agent_config: dict[str, Any] | None,
+    manager: BatchRegistryManager,
+    action_name: str | None,
+    start_time: float,
+) -> str:
+    """Delete recovery state, finalize output, then clean up registry entries."""
+    RecoveryStateManager.delete(output_directory, parent_file_name)
+    output_path = finalize_batch_output(
+        service,
+        batch_results=batch_results,
+        exhausted_recovery=exhausted_recovery,
+        context_map=context_map,
+        output_directory=output_directory,
+        file_name=parent_file_name,
+        batch_id=batch_id,
+        agent_config=agent_config,
+        manager=manager,
+        action_name=action_name,
+        start_time=start_time,
+    )
+    cleanup_recovery(service, manager, output_directory, parent_file_name)
+    return output_path
+
+
+def _register_recovery_batch(
+    manager: BatchRegistryManager,
+    submission: tuple[str, int],
+    parent_file_name: str,
+    provider: str,
+    recovery_type: Literal["retry", "reprompt"],
+    attempt: int,
+) -> None:
+    """Register a new recovery batch entry in the manager."""
+    batch_id, record_count = submission
+    recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
+    recovery_entry = BatchJobEntry(
+        batch_id=batch_id,
+        status=BatchStatus.SUBMITTED,
+        timestamp=datetime.now(UTC).isoformat(),
+        provider=provider,
+        record_count=record_count,
+        file_name=recovery_file_name,
+        parent_file_name=parent_file_name,
+        recovery_type=recovery_type,
+        recovery_attempt=attempt,
+    )
+    manager.save_batch_job(recovery_file_name, recovery_entry)
