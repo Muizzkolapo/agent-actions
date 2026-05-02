@@ -420,9 +420,7 @@ class TestScanSqliteReadonlyTraceAttachment:
         record = json.dumps(
             [{"source_guid": "sg-001", "target_id": "tgt-001", "issue_type": "bug"}]
         )
-        conn.execute(
-            "INSERT INTO target_data VALUES (?, ?, ?, ?)", ("act", "f.json", record, 1)
-        )
+        conn.execute("INSERT INTO target_data VALUES (?, ?, ?, ?)", ("act", "f.json", record, 1))
         conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("sg-001", "f.json", "{}"))
         conn.execute(
             "CREATE TABLE prompt_trace ("
