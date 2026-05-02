@@ -276,15 +276,10 @@ class OnlineLLMStrategy:
         recovery_metadata = invocation_result.recovery_metadata
 
         # Update prompt trace in storage
-        if (
-            context.storage_backend is not None
-            and executed
-            and response is not None
-            and source_guid is not None
-        ):
+        if context.storage_backend is not None and executed and response is not None:
             context.storage_backend.update_prompt_trace_response(
                 action_name=context.agent_name,
-                record_id=source_guid,
+                record_id=prepared.target_id,
                 response_text=json.dumps(response, ensure_ascii=False, default=str),
             )
 
@@ -397,6 +392,13 @@ class OnlineLLMStrategy:
             existing_content=item_existing_content,
             input_record=input_record,
         )
+
+        # Carry prepared.target_id to output records so the prompt trace
+        # (keyed by target_id) can be matched by the scanner.
+        # Mirrors batch_result_strategy's carry_framework_fields() pattern.
+        for record in transformed:
+            if isinstance(record, dict):
+                record["target_id"] = prepared.target_id
 
         input_size = 1 if not isinstance(response, list) else len(response)
         output_size = len(transformed) if isinstance(transformed, list) else 1

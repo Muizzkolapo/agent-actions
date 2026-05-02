@@ -579,7 +579,7 @@ function NodeDetail({
           >
             {pageRecords.map((row, i) => {
               const idx = page * RECORDS_PER_PAGE + i
-              const key = typeof row.source_guid === "string" ? row.source_guid : idx
+              const key = typeof row.target_id === "string" ? row.target_id : idx
               return (
                 <DataCard
                   key={key}
