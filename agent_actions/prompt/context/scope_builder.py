@@ -93,11 +93,6 @@ def _load_source_namespace(
             source_namespace = dict(source_content)
 
     if source_namespace:
-        from agent_actions.input.preprocessing.staging.field_validation import (
-            validate_staging_field_names,
-        )
-
-        validate_staging_field_names(source_namespace, f"action:{agent_name}")
         field_context["source"] = source_namespace
         logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
         fire_event(
