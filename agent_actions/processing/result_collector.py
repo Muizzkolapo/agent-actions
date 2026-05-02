@@ -110,19 +110,23 @@ def _safe_set_disposition(
     disposition: str,
     **kwargs: Any,
 ) -> None:
-    """Write a disposition record, logging and swallowing errors.
+    """Write a disposition record — log ERROR on failure, do not crash pipeline.
 
-    Disposition writes are telemetry — they must not crash the data pipeline.
+    Error policy (P5-053): disposition writes are must-not-lose metadata but
+    must not abort the batch. On failure: log ERROR with full context so
+    operators can detect disposition/state divergence. The record's _state in
+    target JSON remains the authoritative source; dispositions can be
+    re-derived from _state on the next run.
     """
     try:
         backend.set_disposition(action_name, record_id, disposition, **kwargs)
     except Exception:
-        logger.warning(
-            "Failed to write disposition action=%s record=%s disp=%s",
+        logger.exception(
+            "Failed to write disposition action=%s record=%s disp=%s — "
+            "disposition may diverge from _state until next run",
             action_name,
             record_id,
             disposition,
-            exc_info=True,
         )
 
 

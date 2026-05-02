@@ -805,8 +805,8 @@ class ActionExecutor:
             try:
                 submitted_dt = datetime.fromisoformat(submitted_at)
                 return (datetime.now() - submitted_dt).total_seconds()
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logger.debug("Could not parse submitted_at %r: %s", submitted_at, e)
         return fallback
 
     def _handle_batch_check(
