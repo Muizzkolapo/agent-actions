@@ -13,7 +13,7 @@ Entry points:
 import logging
 import time
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
@@ -84,26 +84,39 @@ def process_recovery_batch(
     )
 
     accumulated = BatchRetryService.deserialize_results(state.accumulated_results)
-    kwargs = dict(
-        service=service,
-        state=state,
-        recovery_results=recovery_results,
-        accumulated=accumulated,
-        context_map=context_map,
-        output_directory=output_directory,
-        parent_file_name=parent_file_name,
-        entry=entry,
-        agent_config=agent_config,
-        manager=manager,
-        provider=provider,
-        action_name=action_name,
-        start_time=start_time,
-    )
 
     if entry.recovery_type == "retry":
-        return handle_retry_recovery(**kwargs)
+        return handle_retry_recovery(
+            service,
+            state=state,
+            recovery_results=recovery_results,
+            accumulated=accumulated,
+            context_map=context_map,
+            output_directory=output_directory,
+            parent_file_name=parent_file_name,
+            entry=entry,
+            agent_config=agent_config,
+            manager=manager,
+            provider=provider,
+            action_name=action_name,
+            start_time=start_time,
+        )
     elif entry.recovery_type == "reprompt":
-        return handle_reprompt_recovery(**kwargs)
+        return handle_reprompt_recovery(
+            service,
+            state=state,
+            recovery_results=recovery_results,
+            accumulated=accumulated,
+            context_map=context_map,
+            output_directory=output_directory,
+            parent_file_name=parent_file_name,
+            entry=entry,
+            agent_config=agent_config,
+            manager=manager,
+            provider=provider,
+            action_name=action_name,
+            start_time=start_time,
+        )
 
     logger.error("Unknown recovery_type: %s", entry.recovery_type)
     return None
@@ -519,7 +532,7 @@ def _register_recovery_batch(
     submission: tuple[str, int],
     parent_file_name: str,
     provider: str,
-    recovery_type: str,
+    recovery_type: Literal["retry", "reprompt"],
     attempt: int,
 ) -> None:
     """Register a new recovery batch entry in the manager."""
