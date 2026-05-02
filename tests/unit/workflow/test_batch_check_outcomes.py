@@ -47,19 +47,13 @@ def executor(mock_deps):
 class TestBatchCheckCompleteEvent:
     """BatchCompleteEvent fields verified on successful batch completion."""
 
-    def test_completed_event_has_correct_counts(self, executor, mock_deps):
-        """Successful batch fires event with total=10, completed=8, failed=2."""
+    def test_completed_event_has_correct_fields(self, executor, mock_deps):
+        """Successful batch fires BatchCompleteEvent with action_name and elapsed_time."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = ("/output/file.json", "completed")
-        # Simulate batch with 10 records: 8 success, 2 failed
-        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
-            {"id": "x"},
-            {"id": "y"},
-        ]
         mock_deps.state_manager.get_status_details.return_value = {
             "status": ActionStatus.BATCH_SUBMITTED,
             "batch_submitted_at": "2026-05-01T10:00:00",
-            "total_records": 10,
         }
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
@@ -68,7 +62,7 @@ class TestBatchCheckCompleteEvent:
             )
 
         assert result.status in (ActionStatus.COMPLETED, ActionStatus.COMPLETED_WITH_FAILURES)
-        # Find the BatchCompleteEvent
+        assert result.output_folder == "/output/file.json"
         complete_events = [
             call[0][0]
             for call in mock_fire.call_args_list
@@ -77,14 +71,17 @@ class TestBatchCheckCompleteEvent:
         assert len(complete_events) == 1
         event = complete_events[0]
         assert event.action_name == "agent_a"
+        assert event.total == 1
+        assert event.completed == 1
+        assert event.failed == 0
+        assert event.elapsed_time > 0
 
-    def test_failed_batch_fires_event_and_writes_disposition(self, executor, mock_deps):
-        """Failed batch: fires BatchCompleteEvent with failed count + writes disposition."""
+    def test_failed_batch_fires_event_writes_disposition_sets_error(self, executor, mock_deps):
+        """Failed batch: event with failed=1, disposition written, result.error set."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = (None, "failed")
         mock_deps.state_manager.get_status_details.return_value = {
             "status": ActionStatus.BATCH_SUBMITTED,
-            "batch_submitted_at": "2026-05-01T10:00:00",
         }
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
@@ -93,16 +90,21 @@ class TestBatchCheckCompleteEvent:
             )
 
         assert result.status == ActionStatus.FAILED
-        # Disposition written
+        assert result.error is not None
+        assert "agent_a" in str(result.error)
+        # Disposition written with failure reason
         mock_deps.action_runner.storage_backend.set_disposition.assert_called()
-        # Event fired
+        call_args = mock_deps.action_runner.storage_backend.set_disposition.call_args
+        assert "failed" in str(call_args).lower()
+        # Event with failed count
         complete_events = [
             call[0][0]
             for call in mock_fire.call_args_list
             if isinstance(call[0][0], BatchCompleteEvent)
         ]
         assert len(complete_events) == 1
-        assert complete_events[0].failed > 0
+        assert complete_events[0].failed == 1
+        assert complete_events[0].completed == 0
 
 
 class TestBatchCheckStatusTransitions:

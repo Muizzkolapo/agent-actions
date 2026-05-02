@@ -819,6 +819,7 @@ class ActionExecutor:
         """Handle batch job status checking (synchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
+        # Required by RecordEnvelope.build_content() for namespace resolution
         action_config["action_name"] = action_name
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
@@ -840,6 +841,7 @@ class ActionExecutor:
         """Handle batch job status checking (asynchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
+        # Required by RecordEnvelope.build_content() for namespace resolution
         action_config["action_name"] = action_name
 
         output_folder, batch_status = await asyncio.to_thread(
