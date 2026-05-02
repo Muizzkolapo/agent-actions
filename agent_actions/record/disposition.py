@@ -22,18 +22,14 @@ _STATE_TO_DISPOSITION: dict[RecordState, Disposition] = {
 
 def derive_disposition(record: dict[str, Any]) -> str:
     """Map a record's ``_state`` to its storage disposition value."""
-    raw = record.get("_state")
-    if raw is None:
-        raise RecordEnvelopeError("Cannot derive disposition: record has no '_state' field")
     try:
-        state = RecordState(raw)
-    except ValueError:
+        state = RecordState(record["_state"])
+    except KeyError:
         raise RecordEnvelopeError(
-            f"Cannot derive disposition: unknown _state value {raw!r}"
+            "Cannot derive disposition: record has no '_state' field"
         ) from None
-    disposition = _STATE_TO_DISPOSITION.get(state)
-    if disposition is None:
+    except ValueError as e:
         raise RecordEnvelopeError(
-            f"Cannot derive disposition: no mapping for state {state.value!r}"
-        )
-    return disposition.value
+            f"Cannot derive disposition: unknown _state value {record['_state']!r}"
+        ) from e
+    return _STATE_TO_DISPOSITION[state].value
