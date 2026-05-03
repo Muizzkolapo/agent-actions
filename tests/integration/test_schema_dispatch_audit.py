@@ -303,7 +303,16 @@ class TestVendorCompilation:
 
     def test_all_vendors_receive_required_fields(self):
         """Every supported vendor includes required field info in compiled output."""
-        vendors = ["openai", "anthropic", "gemini", "ollama_local", "groq", "mistral", "cohere"]
+        vendors = [
+            "openai",
+            "anthropic",
+            "gemini",
+            "ollama_local",
+            "ollama_cloud",
+            "groq",
+            "mistral",
+            "cohere",
+        ]
         for vendor in vendors:
             compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
             assert compiled is not None, f"{vendor} returned None"
@@ -641,6 +650,7 @@ class TestDispatchInSchema:
             "anthropic",
             "gemini",
             "ollama_local",
+            "ollama_cloud",
             "groq",
             "mistral",
             "cohere",
@@ -1012,7 +1022,16 @@ class TestFullPipelineIntegration:
 
     def test_every_vendor_compiles_same_schema(self):
         """All vendors compile the same unified schema without errors."""
-        vendors = ["openai", "anthropic", "gemini", "ollama_local", "groq", "mistral", "cohere"]
+        vendors = [
+            "openai",
+            "anthropic",
+            "gemini",
+            "ollama_local",
+            "ollama_cloud",
+            "groq",
+            "mistral",
+            "cohere",
+        ]
         for vendor in vendors:
             compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
             assert compiled is not None, f"Vendor {vendor} failed to compile"

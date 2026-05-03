@@ -50,7 +50,7 @@ def is_batch_injection_enabled() -> bool:
     return int(os.getenv("OLLAMA_FAIL_FIRST_N", "0")) > 0
 
 
-def maybe_inject_online_failure(model: str, vendor_slug: str = "ollama") -> None:
+def maybe_inject_online_failure(model: str, vendor_slug: str = "ollama_local") -> None:
     """
     Inject failure for online calls if configured.
 

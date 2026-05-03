@@ -405,3 +405,31 @@ class TestOllamaBatchClientVendorSplit:
 
         build_call = mock_mb.build_for_batch.call_args
         assert build_call.args[0] == "ollama_cloud"
+
+    @patch("agent_actions.llm.providers.ollama.batch_client.Client")
+    def test_local_base_url_from_config(self, mock_client_cls):
+        """OllamaBatchClient(base_url=..., cloud=False) passes the URL to Client(host=...)."""
+        mock_client_cls.return_value = MagicMock()
+        OllamaBatchClient(base_url="http://custom:11434", cloud=False, vendor_slug="ollama_local")
+
+        call_kwargs = mock_client_cls.call_args.kwargs
+        assert call_kwargs["host"] == "http://custom:11434"
+
+    @patch("agent_actions.llm.providers.ollama.batch_client.Client")
+    def test_cloud_base_url_defaults_to_ollama_com(self, mock_client_cls):
+        """OllamaBatchClient(cloud=True) uses https://ollama.com as default host."""
+        mock_client_cls.return_value = MagicMock()
+        OllamaBatchClient(api_key="k", cloud=True, vendor_slug="ollama_cloud")
+
+        call_kwargs = mock_client_cls.call_args.kwargs
+        assert call_kwargs["host"] == "https://ollama.com"
+
+    @patch("agent_actions.llm.providers.ollama.batch_client.Client")
+    @patch.dict("os.environ", {"OLLAMA_CLOUD_HOST": "https://env-cloud.example.com"})
+    def test_cloud_base_url_from_env(self, mock_client_cls):
+        """OLLAMA_CLOUD_HOST env var is respected for cloud batch client."""
+        mock_client_cls.return_value = MagicMock()
+        OllamaBatchClient(api_key="k", cloud=True, vendor_slug="ollama_cloud")
+
+        call_kwargs = mock_client_cls.call_args.kwargs
+        assert call_kwargs["host"] == "https://env-cloud.example.com"

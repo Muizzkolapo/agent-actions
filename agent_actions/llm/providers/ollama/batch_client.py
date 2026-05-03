@@ -194,7 +194,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     "response": None,
                     "error": {
                         "message": str(e),
-                        "type": "ollama_error",
+                        "type": f"{self.vendor_slug}_error",
                         "code": "inference_error",
                     },
                 }
