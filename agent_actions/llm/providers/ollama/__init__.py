@@ -2,9 +2,10 @@
 # pyright: reportImportCycles=false
 
 from agent_actions.llm.providers.ollama.batch_client import OllamaBatchClient
-from agent_actions.llm.providers.ollama.client import OllamaClient
+from agent_actions.llm.providers.ollama.client import OllamaCloudClient, OllamaLocalClient
 
 __all__ = [
-    "OllamaClient",
+    "OllamaLocalClient",
+    "OllamaCloudClient",
     "OllamaBatchClient",
 ]
