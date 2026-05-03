@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -12,7 +13,17 @@ from rich.table import Table
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.record.state import CASCADE_BLOCKING_STATES, RecordState
 from agent_actions.storage import get_storage_backend
+
+_TOMBSTONE_STATES: frozenset[str] = frozenset(
+    s.value for s in CASCADE_BLOCKING_STATES | {RecordState.GUARD_SKIPPED}
+)
+
+
+def _is_tombstone(record: dict[str, Any]) -> bool:
+    """Detect non-content records that should render as labeled placeholders."""
+    return record.get("_state") in _TOMBSTONE_STATES
 
 
 class PreviewCommand:
@@ -159,9 +170,9 @@ class PreviewCommand:
         {"action_a": {...}, "action_b": {...}, ...}. When previewing a
         specific action, unwrap so all formats show that action's fields.
 
-        Guard-skipped actions have ``content[action] = None`` and carry
-        ``_unprocessed: True`` with ``metadata.reason``.  Content is set
-        to ``{}`` so json/raw formats show the real record structure
+        Guard-skipped actions have ``content[action] = None`` and a
+        non-processable ``_state`` with ``metadata.reason``.  Content is
+        set to ``{}`` so json/raw formats show the real record structure
         (empty content + metadata) rather than an invented sentinel.
         """
         if not self.action:
@@ -190,7 +201,7 @@ class PreviewCommand:
 
         all_keys: set[str] = set()
         for record in records:
-            if isinstance(record, dict) and not record.get("_unprocessed"):
+            if isinstance(record, dict) and not _is_tombstone(record):
                 if "content" in record and isinstance(record["content"], dict):
                     all_keys.update(record["content"].keys())
                 else:
@@ -211,9 +222,8 @@ class PreviewCommand:
 
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):
-                if record.get("_unprocessed"):
-                    reason = record.get("metadata", {}).get("reason", "skipped")
-                    label = f"[{reason.replace('_', '-')}]"
+                if _is_tombstone(record):
+                    label = f"[{record['_state'].replace('_', '-')}]"
                     values = [str(idx), rich_escape(label)]
                     values.extend("" for _ in display_keys[1:])
                     table.add_row(*values)
