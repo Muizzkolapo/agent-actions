@@ -10,6 +10,7 @@ Practical guides for common tasks and workflows.
 
 | Guide | Description |
 |-------|-------------|
+| [Record Lifecycle](./record-lifecycle.md) | How records flow through actions — states, transitions, and the audit trail |
 | [Design Patterns](./design-patterns.md) | Agentic workflow patterns (sequential, parallel, coordinator) |
 | [Non-JSON Mode](./non-json-mode.md) | Use local models and field-by-field construction without JSON |
 | [Custom Tools](./custom-tools.md) | Add Python functions to your workflows |
