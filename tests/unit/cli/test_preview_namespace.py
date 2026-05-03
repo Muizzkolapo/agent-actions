@@ -7,7 +7,7 @@ guard-skipped actions (null namespace).
 
 import json
 
-from agent_actions.cli.preview import PreviewCommand
+from agent_actions.cli.preview import PreviewCommand, _is_tombstone
 
 NAMESPACED_RECORDS = [
     {
@@ -33,7 +33,7 @@ GUARD_SKIPPED_RECORDS = [
             "classify": {"genre": "fiction"},
             "review": None,
         },
-        "_unprocessed": True,
+        "_state": "guard_skipped",
         "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
     },
     {
@@ -42,8 +42,37 @@ GUARD_SKIPPED_RECORDS = [
             "classify": {"genre": "nonfiction"},
             "review": {"quality": "good"},
         },
+        "_state": "processed",
     },
 ]
+
+
+class TestIsTombstone:
+    """_is_tombstone detects non-content records via _state."""
+
+    def test_guard_skipped_state(self):
+        assert _is_tombstone({"_state": "guard_skipped"}) is True
+
+    def test_cascade_skipped_state(self):
+        assert _is_tombstone({"_state": "cascade_skipped"}) is True
+
+    def test_failed_state(self):
+        assert _is_tombstone({"_state": "failed"}) is True
+
+    def test_exhausted_state(self):
+        assert _is_tombstone({"_state": "exhausted"}) is True
+
+    def test_processed_state_is_not_tombstone(self):
+        assert _is_tombstone({"_state": "processed"}) is False
+
+    def test_committed_state_is_not_tombstone(self):
+        assert _is_tombstone({"_state": "committed"}) is False
+
+    def test_active_state_is_not_tombstone(self):
+        assert _is_tombstone({"_state": "active"}) is False
+
+    def test_missing_state_is_not_tombstone(self):
+        assert _is_tombstone({"content": {"field": "value"}}) is False
 
 
 class TestUnwrapRecords:
@@ -101,7 +130,7 @@ class TestUnwrapRecords:
         """Batch with both skipped and normal records."""
         result = self._cmd("review")._unwrap_records(GUARD_SKIPPED_RECORDS)
         assert result[0]["content"] == {}
-        assert result[0]["_unprocessed"] is True
+        assert result[0]["_state"] == "guard_skipped"
         assert result[1]["content"] == {"quality": "good"}
 
 
@@ -144,14 +173,14 @@ class TestShowTableNamespaceUnwrap:
 
 
 class TestGuardSkippedDisplay:
-    """Display methods render guard-skipped records using real metadata."""
+    """Display methods render guard-skipped records with _state as label."""
 
-    def test_table_shows_reason_from_metadata(self, capsys):
+    def test_table_shows_state_as_label(self, capsys):
         cmd = PreviewCommand(workflow="test_wf", action="review")
         records = cmd._unwrap_records(GUARD_SKIPPED_RECORDS)
         cmd._show_table(records)
         output = capsys.readouterr().out
-        assert "[guard-skip]" in output
+        assert "[guard-skipped]" in output
         assert "good" in output  # non-skipped record renders normally
 
     def test_table_skipped_row_does_not_pollute_columns(self, capsys):
@@ -161,15 +190,27 @@ class TestGuardSkippedDisplay:
         cmd._show_table(records)
         output = capsys.readouterr().out
         assert "quality" in output  # column from normal record
-        assert "_unprocessed" not in output
+        assert "_state" not in output
         assert "metadata" not in output
+
+    def test_cascade_skipped_renders_as_tombstone(self, capsys):
+        """cascade_skipped state renders with _state as label."""
+        records = [
+            {"content": {}, "_state": "cascade_skipped"},
+            {"content": {"name": "Alice"}, "_state": "processed"},
+        ]
+        cmd = PreviewCommand(workflow="test_wf", action=None)
+        cmd._show_table(records)
+        output = capsys.readouterr().out
+        assert "[cascade-skipped]" in output
+        assert "Alice" in output
 
     def test_json_shows_real_record_structure(self, capsys):
         cmd = PreviewCommand(workflow="test_wf", action="review")
         records = cmd._unwrap_records(GUARD_SKIPPED_RECORDS)
         cmd._show_json(records)
         output = capsys.readouterr().out
-        assert '"_unprocessed": true' in output
+        assert '"guard_skipped"' in output
         assert '"guard_skip"' in output
         assert "quality" in output
 
@@ -180,7 +221,7 @@ class TestGuardSkippedDisplay:
         output = capsys.readouterr().out
         parsed = json.loads(output)
         assert parsed[0]["content"] == {}
-        assert parsed[0]["_unprocessed"] is True
+        assert parsed[0]["_state"] == "guard_skipped"
         assert parsed[0]["metadata"]["reason"] == "guard_skip"
         assert parsed[1]["content"] == {"quality": "good"}
 
