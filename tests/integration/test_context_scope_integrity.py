@@ -905,9 +905,14 @@ class TestFileModeObserve:
         assert result[0]["content"]["extract"]["length"] == 500
         assert result[0]["source_guid"] == "sg1"
 
-    def test_file_mode_missing_field_raises(self):
-        """FILE-mode: explicit observe ref to missing field raises ConfigurationError
-        (unified behavior — same as RECORD mode)."""
+    def test_file_mode_missing_field_skips_record(self):
+        """FILE-mode: missing observe field skips enrichment for that record.
+
+        Unlike RECORD mode (which raises immediately), FILE mode gracefully
+        skips records where upstream failed and left empty namespaces.
+        The record passes through unenriched so downstream can handle it
+        based on its _state.
+        """
         data = [
             {
                 "content": {
@@ -918,12 +923,14 @@ class TestFileModeObserve:
         ]
         context_scope = {"observe": ["dep.title", "dep.nonexistent_field"]}
 
-        with pytest.raises(ConfigurationError):
-            apply_context_scope_for_records(
-                records=data,
-                context_scope=context_scope,
-                action_name="consumer",
-            )
+        result = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="consumer",
+        )
+
+        # Record passes through unenriched (no flat keys injected)
+        assert result[0] is data[0]
 
     def test_file_mode_wildcard_on_partial_namespace_graceful(self):
         """FILE-mode: wildcard on namespace with missing fields is graceful."""

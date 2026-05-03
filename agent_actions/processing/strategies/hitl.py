@@ -16,6 +16,7 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,23 @@ class HITLStrategy:
                 hitl_agent_config["_hitl_state_dir"] = hitl_state_dir
                 hitl_agent_config["_hitl_file_stem"] = file_stem
 
+            context_scope = context.agent_config.get("context_scope") or {}
+            filtered_records = [extract_tool_input(r, context_scope) for r in records]
+
+            empty_count = sum(1 for r in filtered_records if not r)
+            if empty_count:
+                logger.warning(
+                    "[%s] %d/%d records have no visible fields after observe filtering — "
+                    "check context_scope.observe references match upstream namespaces",
+                    context.agent_name,
+                    empty_count,
+                    len(filtered_records),
+                )
+
             raw_response, executed = run_dynamic_agent(
                 agent_config=hitl_agent_config,
                 agent_name=context.agent_name,
-                context=records,
+                context=filtered_records,
                 formatted_prompt="",
                 tools_path=cast(str | None, hitl_agent_config.get("tools_path")),
                 skip_guard_eval=True,
