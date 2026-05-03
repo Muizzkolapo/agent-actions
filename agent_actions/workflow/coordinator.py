@@ -138,7 +138,7 @@ class AgentWorkflow:
 
         # Session
         self.workflow_session_id = self._generate_workflow_session_id()
-        self._inject_workflow_session_id()
+        self._prepare_action_configs()
 
         # Event logger (after services are ready)
         self.event_logger = WorkflowEventLogger(
@@ -340,13 +340,18 @@ class AgentWorkflow:
         config_hash = hashlib.sha256(config_content.encode()).hexdigest()[:16]
         return f"workflow_{config_hash}"
 
-    def _inject_workflow_session_id(self):
-        """Inject workflow session ID into all action configurations."""
+    def _prepare_action_configs(self):
+        """Inject workflow-level metadata into all action configurations.
+
+        Sets action_name and workflow_session_id on each config so both
+        online and batch paths resolve identity from the same source.
+        """
         from agent_actions.utils.correlation import VersionIdGenerator
 
         VersionIdGenerator.clear_version_correlation_registry()
 
-        for action_config in self.action_configs.values():
+        for action_name, action_config in self.action_configs.items():
+            action_config["action_name"] = action_name
             action_config["workflow_session_id"] = self.workflow_session_id
 
     def _initialize_event_context(self) -> None:

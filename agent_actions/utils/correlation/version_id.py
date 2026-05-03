@@ -107,9 +107,9 @@ class VersionIdGenerator:
         if not version_base_name:
             if not force:
                 return obj
-            # Expansion fallback: use action_name as the base name so each
+            # Expansion path: use action_name as the base name so each
             # expanding action produces a distinct ID namespace.
-            version_base_name = agent_config.get("action_name") or agent_config.get("name")
+            version_base_name = agent_config.get("action_name")
             if not version_base_name:
                 return obj
 
