@@ -56,6 +56,8 @@ dependencies: [write_question, rewrite]   # write_question guarantees input exis
 
 All dependencies must also appear in `context_scope.observe`.
 
+**Bus snapshot rule:** Each record carries the bus state from when it was written. If you observe `review.issues` but depend on `write_question` (which ran before `review`), that field won't exist on the record. Your observe fields must exist on the bus at the point your dependency's output was written — list the latest action in the chain as your dependency.
+
 ```yaml
 dependencies: [parent_action]                    # Single
 dependencies: [action_a, action_b, action_c]     # Merge pattern
