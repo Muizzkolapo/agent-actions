@@ -137,6 +137,44 @@ class TestVersionIdEnricherPassthrough:
         # No version_correlation_id should be set — action is not versioned
         assert "version_correlation_id" not in enriched.data[0]
 
+    def test_name_key_alone_does_not_trigger_expansion_id(self):
+        """Regression: removed 'name' fallback — only 'action_name' is used.
+
+        If agent_config has 'name' but not 'action_name', force=True must
+        NOT assign a version_correlation_id (returns obj unchanged).
+        """
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        obj = {"source_guid": "g1"}
+        config = {
+            "name": "flatten_questions",
+            "workflow_session_id": "sess-123",
+        }
+
+        result = VersionIdGenerator.add_version_correlation_id(
+            obj, config, record_index=0, force=True
+        )
+
+        assert "version_correlation_id" not in result
+
+    def test_action_name_key_triggers_expansion_id(self):
+        """action_name is the canonical key for expansion ID assignment."""
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        VersionIdGenerator.clear()
+        obj = {"source_guid": "g1"}
+        config = {
+            "action_name": "flatten_questions",
+            "workflow_session_id": "sess-123",
+        }
+
+        result = VersionIdGenerator.add_version_correlation_id(
+            obj, config, record_index=0, force=True
+        )
+
+        assert "version_correlation_id" in result
+        assert result["version_correlation_id"] != ""
+
     def test_negative_record_index_skipped(self):
         data = [{"source_guid": "g1"}]
         result = _make_result(data)

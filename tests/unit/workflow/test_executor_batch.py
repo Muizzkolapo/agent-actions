@@ -1,9 +1,9 @@
-"""Tests for batch action_name injection in executor batch-check paths.
+"""Tests for batch action_name availability in executor batch-check paths.
 
 The batch result processor needs action_name on action_config for
-RecordEnvelope.build_content() namespacing. executor.py:827 (sync)
-and :913 (async) inject it before calling handle_batch_agent.
-If these lines are removed, batch namespacing breaks silently.
+RecordEnvelope.build_content() namespacing. The coordinator injects
+action_name into all action_configs at workflow init time, so it is
+always present when the executor runs.
 """
 
 from unittest.mock import MagicMock, patch
@@ -43,11 +43,15 @@ def executor(mock_deps):
     return ActionExecutor(mock_deps)
 
 
-class TestBatchActionNameInjectionSync:
-    """action_name must be on action_config before handle_batch_agent is called (sync)."""
+class TestBatchActionNamePresent:
+    """action_name must be on action_config when handle_batch_agent is called.
 
-    def test_batch_check_injects_action_name_into_config(self, executor, mock_deps):
-        """Sync batch-check path injects action_name before calling handle_batch_agent."""
+    The coordinator injects action_name at workflow init. These tests verify
+    the executor does NOT mutate action_name — it relies on the coordinator.
+    """
+
+    def test_executor_does_not_inject_action_name_sync(self, executor, mock_deps):
+        """Sync batch-check does NOT mutate action_name — coordinator owns injection."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
 
@@ -58,37 +62,12 @@ class TestBatchActionNameInjectionSync:
                 "my_extract", action_idx=0, action_config=config, is_last_action=False
             )
 
-        assert config["action_name"] == "my_extract"
-
-    def test_action_name_present_before_handle_batch_agent_called(self, executor, mock_deps):
-        """action_name injection must happen BEFORE handle_batch_agent, not after."""
-        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
-        captured_config = {}
-
-        def capture_config(action_name, output_dir, agent_config):
-            # Snapshot the config at the moment handle_batch_agent is called
-            captured_config.update(agent_config)
-            return ("/output", "completed")
-
-        mock_deps.batch_manager.handle_batch_agent.side_effect = capture_config
-
-        with patch("agent_actions.workflow.executor.fire_event"):
-            executor.execute_action_sync(
-                "my_extract",
-                action_idx=0,
-                action_config={"kind": "llm"},
-                is_last_action=False,
-            )
-
-        assert captured_config["action_name"] == "my_extract"
-
-
-class TestBatchActionNameInjectionAsync:
-    """action_name must be on action_config before handle_batch_agent is called (async)."""
+        # Executor must NOT inject action_name (that's coordinator's job)
+        assert "action_name" not in config
 
     @pytest.mark.asyncio
-    async def test_batch_check_async_injects_action_name_into_config(self, executor, mock_deps):
-        """Async batch-check path injects action_name before calling handle_batch_agent."""
+    async def test_executor_does_not_inject_action_name_async(self, executor, mock_deps):
+        """Async batch-check does NOT mutate action_name — coordinator owns injection."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
 
@@ -99,8 +78,24 @@ class TestBatchActionNameInjectionAsync:
                 "my_extract", action_idx=0, action_config=config, is_last_action=False
             )
 
-        assert config["action_name"] == "my_extract"
+        assert "action_name" not in config
 
-        call_args = mock_deps.batch_manager.handle_batch_agent.call_args
-        passed_config = call_args[0][2]
-        assert passed_config["action_name"] == "my_extract"
+    def test_action_name_reaches_batch_manager_when_present(self, executor, mock_deps):
+        """When coordinator has set action_name, it flows through to handle_batch_agent."""
+        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
+        captured_config = {}
+
+        def capture_config(action_name, output_dir, agent_config):
+            captured_config.update(agent_config)
+            return ("/output", "completed")
+
+        mock_deps.batch_manager.handle_batch_agent.side_effect = capture_config
+
+        config = {"kind": "llm", "action_name": "my_extract"}
+
+        with patch("agent_actions.workflow.executor.fire_event"):
+            executor.execute_action_sync(
+                "my_extract", action_idx=0, action_config=config, is_last_action=False
+            )
+
+        assert captured_config["action_name"] == "my_extract"
