@@ -198,6 +198,12 @@ class WorkflowStaticAnalyzer:
         for warning in self._check_json_mode_schema_mismatch():
             result.add_warning(warning)
 
+        # Step 6: Observe field reachability from dependencies (warning-level:
+        # version expansion and additive bus accumulation create valid patterns
+        # that this check can't fully resolve statically)
+        for warning in self._check_observe_reachability():
+            result.add_warning(warning)
+
         return result
 
     def _build_graph(self) -> None:
@@ -973,6 +979,49 @@ class WorkflowStaticAnalyzer:
                 )
             )
 
+        return warnings
+
+    def _check_observe_reachability(self) -> list[StaticTypeWarning]:
+        """Check that observe fields reference actions reachable from dependencies.
+
+        If an action observes a field from an action that runs AFTER its
+        declared dependency, the record snapshot won't carry that field.
+
+        Returns warnings (not errors) because version expansion and the additive
+        bus model create valid patterns that static analysis can't fully resolve.
+        """
+        from agent_actions.validation.static_analyzer.observe_reachability import (
+            check_observe_reachability,
+        )
+
+        actions_list = self.workflow_config.get("actions", [])
+        actions_map = {}
+        for action in actions_list:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name")
+            if not name:
+                continue
+            actions_map[name] = action
+
+        error_messages = check_observe_reachability(actions_map)
+        warnings = []
+        for msg in error_messages:
+            parts = msg.split("'")
+            action_name = parts[1] if len(parts) > 1 else "unknown"
+            observed_ref = parts[3] if len(parts) > 3 else ""
+            warnings.append(
+                StaticTypeWarning(
+                    message=msg,
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="context_scope.observe",
+                        raw_reference=observed_ref,
+                    ),
+                    referenced_agent=observed_ref.split(".")[0] if observed_ref else "",
+                    referenced_field=observed_ref.split(".")[1] if "." in observed_ref else "",
+                )
+            )
         return warnings
 
     def _check_guard_nullable_fields(self) -> list[StaticTypeWarning]:

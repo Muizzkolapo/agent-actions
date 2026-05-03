@@ -57,7 +57,7 @@ def check_observe_reachability(actions: dict[str, dict[str, Any]]) -> list[str]:
                 continue  # Reachable — the record will have this field
 
             # Unreachable: observed action is NOT transitively before any dependency
-            latest_dep = _find_latest_dep(deps, actions)
+            latest_dep = _find_latest_dep(deps, ancestors)
             errors.append(
                 f"Action '{action_name}' observes '{field_ref}' but "
                 f"'{ns_name}' is not transitively before dependency "
@@ -88,7 +88,7 @@ def _build_ancestor_map(actions: dict[str, dict[str, Any]]) -> dict[str, set[str
     return ancestors
 
 
-def _find_latest_dep(deps: list[str], actions: dict[str, dict[str, Any]]) -> str:
+def _find_latest_dep(deps: list[str], ancestors: dict[str, set[str]]) -> str:
     """Find the dependency that is latest (deepest) in the DAG.
 
     Simple heuristic: the dep with the most ancestors is latest.
@@ -96,5 +96,4 @@ def _find_latest_dep(deps: list[str], actions: dict[str, dict[str, Any]]) -> str
     if len(deps) == 1:
         return deps[0]
 
-    ancestors = _build_ancestor_map(actions)
     return max(deps, key=lambda d: len(ancestors.get(d, set())))
