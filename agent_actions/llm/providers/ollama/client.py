@@ -122,7 +122,8 @@ def _call_ollama_json(
     )
     messages = envelope.to_dicts()
 
-    ollama_schema = _extract_ollama_schema(schema)
+    # Only extract schema for local — cloud uses prompt-injected schema instead.
+    ollama_schema = _extract_ollama_schema(schema) if not cloud else None
     request_id = str(uuid.uuid4())
 
     fire_event(LLMRequestEvent(provider=vendor_slug, model=model, request_id=request_id))

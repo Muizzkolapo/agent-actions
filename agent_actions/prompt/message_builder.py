@@ -12,6 +12,7 @@ Architecture invariant: all prompt-to-message assembly MUST go through
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
@@ -272,9 +273,7 @@ class MessageBuilder:
         # output support ships (ollama/ollama#12362).
         effective_prompt = prompt_config
         if schema_injection == SchemaInjection.PROMPT and schema is not None:
-            import json as _json
-
-            schema_text = _json.dumps(schema, indent=2, ensure_ascii=False)
+            schema_text = json.dumps(schema, indent=2, ensure_ascii=False)
             effective_prompt = (
                 f"{prompt_config}\n\n"
                 f"You MUST respond with valid JSON matching this schema:\n"
@@ -349,9 +348,6 @@ class MessageBuilder:
     ) -> str:
         """Convert context_data to a string for prompt embedding."""
         if provider in {"ollama_local", "ollama_cloud"}:
-            # Ollama handles its own serialisation (json.dumps)
-            import json
-
             if isinstance(context_data, str):
                 return context_data
             return json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
