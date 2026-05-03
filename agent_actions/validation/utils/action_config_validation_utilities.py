@@ -74,7 +74,15 @@ class ActionConfigValidationUtilities:
         "tool": {MODEL_NAME_KEY},
     }
 
-    _VALID_BATCH_VENDORS: set[str] = {"openai", "gemini", "anthropic", "groq", "mistral"}
+    _VALID_BATCH_VENDORS: set[str] = {
+        "openai",
+        "gemini",
+        "anthropic",
+        "groq",
+        "mistral",
+        "ollama_local",
+        "ollama_cloud",
+    }
 
     _VALID_GRANULARITY_VALUES: set[str] = {"record", "file"}
 
