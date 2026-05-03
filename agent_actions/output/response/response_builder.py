@@ -86,7 +86,8 @@ PROVIDER_RESPONSE_CONFIGS: dict[str, ProviderResponseConfig] = {
     "gemini": ProviderResponseConfig(usage_shape=UsageShape.GEMINI),
     "groq": ProviderResponseConfig(usage_shape=UsageShape.OPENAI_COMPAT),
     "cohere": ProviderResponseConfig(usage_shape=UsageShape.COHERE),
-    "ollama": ProviderResponseConfig(usage_shape=UsageShape.OLLAMA),
+    "ollama_local": ProviderResponseConfig(usage_shape=UsageShape.OLLAMA),
+    "ollama_cloud": ProviderResponseConfig(usage_shape=UsageShape.OLLAMA),
     "agac-fake-provider": ProviderResponseConfig(usage_shape=UsageShape.NONE),
 }
 

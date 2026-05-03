@@ -197,12 +197,22 @@ PROVIDER_MESSAGE_CONFIGS: dict[str, ProviderMessageConfig] = {
         json_rules=("RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT",),
         blank_line_before_rules=False,
     ),
-    "ollama": ProviderMessageConfig(
+    "ollama_local": ProviderMessageConfig(
         json_prompt_style=PromptStyle.RAW,
         non_json_prompt_style=PromptStyle.RAW,
         json_role=MessageRole.SYSTEM_PLUS_USER,
         non_json_role=MessageRole.SYSTEM_PLUS_USER,
         schema_injection=SchemaInjection.NONE,
+    ),
+    "ollama_cloud": ProviderMessageConfig(
+        json_prompt_style=PromptStyle.RAW,
+        non_json_prompt_style=PromptStyle.RAW,
+        json_role=MessageRole.SYSTEM_PLUS_USER,
+        non_json_role=MessageRole.SYSTEM_PLUS_USER,
+        # Cloud does not support structured outputs via format param yet.
+        # Change to SchemaInjection.NONE when Ollama Cloud adds support.
+        # See: https://github.com/ollama/ollama/issues/12362
+        schema_injection=SchemaInjection.PROMPT,
     ),
 }
 
@@ -316,7 +326,7 @@ class MessageBuilder:
         provider: str,
     ) -> str:
         """Convert context_data to a string for prompt embedding."""
-        if provider == "ollama":
+        if provider in {"ollama_local", "ollama_cloud"}:
             # Ollama handles its own serialisation (json.dumps)
             import json
 

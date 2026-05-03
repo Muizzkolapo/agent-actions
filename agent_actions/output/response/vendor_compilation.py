@@ -84,7 +84,7 @@ def compile_unified_schema(
                 "required": required,
             },
         }
-    elif target == "ollama":
+    elif target in {"ollama_local", "ollama_cloud"}:
         compiled = {
             "title": unified.get("name", ""),
             "type": "object",
@@ -109,7 +109,8 @@ def compile_unified_schema(
                     "openai",
                     "anthropic",
                     "gemini",
-                    "ollama",
+                    "ollama_local",
+                    "ollama_cloud",
                     "agac-provider",
                     "groq",
                     "mistral",
