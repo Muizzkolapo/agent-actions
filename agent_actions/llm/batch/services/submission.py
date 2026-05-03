@@ -7,6 +7,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
@@ -223,11 +224,20 @@ class BatchSubmissionService:
         Returns:
             SubmissionResult with passthrough dict
         """
+        has_guard_skipped = any(
+            BatchContextMetadata.is_skipped(row) for row in context_map.values()
+        )
+        if has_guard_skipped:
+            passthrough = BatchPassthroughBuilder(output_directory).from_context(
+                context_map, reason="guard_skip"
+            )
+            return SubmissionResult(passthrough=passthrough)
+
         where_config = agent_config.get("where_clause") or {}
         behavior = where_config.get("behavior", "filter")
 
         if behavior == "filter":
-            passthrough: dict[str, Any] = {
+            passthrough = {
                 "type": "tombstone",
                 "data": [],
                 "output_directory": output_directory,
