@@ -46,7 +46,15 @@ UDFs have no `schema` -- output defined by return value.
 ## Key Fields
 
 ### dependencies
-Controls execution order. All dependencies must also appear in `context_scope.observe`.
+Controls execution order AND determines which records your action processes. The executor walks your dependency's output to find input records — your action runs once per record found. If a dependency was guard-skipped (produced no output), there are zero records and your action completes immediately as passthrough.
+
+**If your action should run regardless of whether an upstream was skipped**, list a dependency that always produces output. For example, if `rewrite` is conditional but `write_question` always runs, depend on both:
+
+```yaml
+dependencies: [write_question, rewrite]   # write_question guarantees input exists
+```
+
+All dependencies must also appear in `context_scope.observe`.
 
 ```yaml
 dependencies: [parent_action]                    # Single

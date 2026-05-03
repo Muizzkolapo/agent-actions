@@ -44,7 +44,7 @@ source -->|                            |--> assign_response_team
       - assess_system_impact.*
 ```
 
-No merge operator needed. The bus has both namespaces. `dependencies` controls when, `observe` controls what.
+No merge operator needed. The bus has both namespaces. `dependencies` controls when (and provides input records to iterate), `observe` controls what data the LLM sees. If a dependency is guard-skipped, your action gets zero records — list a guaranteed-output dependency if you need the action to always run.
 
 ---
 
