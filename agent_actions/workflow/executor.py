@@ -187,59 +187,49 @@ class ActionExecutor:
     ) -> tuple[bool, ActionExecutionResult | None]:
         """Verify a completed action has actual output in storage.
 
-        Returns:
-            (should_skip, result) -- if should_skip is False, agent is re-run.
+        Returns (should_skip, result). If should_skip is False, action is re-run.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        if storage_backend is not None:
-            try:
-                # Check disposition FIRST — a failed action may have partial
-                # results in storage.  The disposition is the authoritative
-                # signal; output existence is irrelevant when it's set.
-                for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
-                    if storage_backend.has_disposition(
-                        action_name,
-                        disp,
-                        record_id=NODE_LEVEL_RECORD_ID,
-                    ):
-                        logger.info(
-                            "Action %s has %s from prior run — re-running",
-                            action_name,
-                            disp,
-                        )
-                        storage_backend.clear_disposition(
-                            action_name,
-                            disp,
-                            record_id=NODE_LEVEL_RECORD_ID,
-                        )
-                        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-                        return (False, None)
+        if storage_backend is None:
+            return (
+                True,
+                ActionExecutionResult(
+                    success=True,
+                    status=ActionStatus.COMPLETED,
+                    metrics=ExecutionMetrics(duration=0.0),
+                ),
+            )
 
-                target_files = storage_backend.list_target_files(action_name)
-                if not target_files:
-                    logger.info(
-                        "Action %s completed but no output in storage - re-running",
-                        action_name,
-                    )
-                    self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-                    return (False, None)
-                return (
-                    True,
-                    ActionExecutionResult(
-                        success=True,
-                        status=ActionStatus.COMPLETED,
-                        metrics=ExecutionMetrics(duration=0.0),
-                    ),
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to verify output for %s, resetting to pending: %s",
-                    action_name,
-                    e,
-                    exc_info=True,
-                )
+        try:
+            return self._check_prior_output(storage_backend, action_name)
+        except Exception as e:
+            logger.warning(
+                "Failed to verify output for %s, resetting to pending: %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
+            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            return (False, None)
+
+    def _check_prior_output(
+        self, storage_backend: Any, action_name: str
+    ) -> tuple[bool, ActionExecutionResult | None]:
+        """Check if prior run left valid output or a blocking disposition."""
+        # Disposition is authoritative — a failed/skipped action must re-run
+        # even if partial output exists.
+        for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
+            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
+                logger.info("Action %s has %s from prior run — re-running", action_name, disp)
+                storage_backend.clear_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID)
                 self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                 return (False, None)
+
+        if not storage_backend.list_target_files(action_name):
+            logger.info("Action %s completed but no output in storage — re-running", action_name)
+            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            return (False, None)
+
         return (
             True,
             ActionExecutionResult(
@@ -346,14 +336,7 @@ class ActionExecutor:
             )
             logger.info(
                 "Action completed (passthrough)",
-                extra={
-                    "operation": "execute_action_run",
-                    "action_name": params.action_name,
-                    "action_idx": params.action_idx,
-                    "duration": duration,
-                    "status": "passthrough",
-                    "is_last_action": params.is_last_action,
-                },
+                extra={"action_name": params.action_name, "duration": duration},
             )
             return ActionExecutionResult(
                 success=True,
@@ -362,45 +345,10 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
-        # Normal completion — check for guard-all-filtered or partial item failures
         final_status = self._resolve_completion_status(params.action_name)
 
         if final_status == ActionStatus.SKIPPED:
-            self.deps.state_manager.update_status(
-                params.action_name,
-                ActionStatus.SKIPPED,
-                execution_time=duration,
-                skip_reason=GUARD_FILTERED_ALL,
-            )
-            total_actions = (
-                len(self.deps.action_runner.execution_order)
-                if hasattr(self.deps.action_runner, "execution_order")
-                else 0
-            )
-            fire_event(
-                ActionSkipEvent(
-                    action_name=params.action_name,
-                    action_index=params.action_idx,
-                    total_actions=total_actions,
-                    skip_reason=GUARD_FILTERED_ALL,
-                    mode=params.action_config.get("run_mode", ""),
-                )
-            )
-            if self.run_tracker is not None and self.run_id is not None:
-                config = ActionCompleteConfig(
-                    run_id=self.run_id,
-                    action_name=params.action_name,
-                    status="skipped",
-                    duration_seconds=duration,
-                    skip_reason=GUARD_FILTERED_ALL,
-                )
-                self.run_tracker.record_action_complete(config=config)
-            return ActionExecutionResult(
-                success=True,
-                output_folder=output_folder,
-                status=ActionStatus.SKIPPED,
-                metrics=ExecutionMetrics(duration=duration),
-            )
+            return self._handle_guard_all_filtered(params, output_folder, duration)
 
         self.deps.state_manager.update_status(
             params.action_name,
@@ -409,18 +357,7 @@ class ActionExecutor:
             **self._limit_metadata(params.action_config),
         )
         tokens = get_last_usage()
-
-        tracker_status = "success" if final_status == ActionStatus.COMPLETED else "partial"
-        if self.run_tracker is not None and self.run_id is not None:
-            config = ActionCompleteConfig(
-                run_id=self.run_id,
-                action_name=params.action_name,
-                status=tracker_status,
-                duration_seconds=duration,
-                tokens=tokens,
-                files_processed=0,
-            )
-            self.run_tracker.record_action_complete(config=config)
+        self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
 
         return ActionExecutionResult(
             success=True,
@@ -434,6 +371,72 @@ class ActionExecutor:
                 files_processed=0,
             ),
         )
+
+    def _handle_guard_all_filtered(
+        self,
+        params: ActionRunParams,
+        output_folder: str,
+        duration: float,
+    ) -> ActionExecutionResult:
+        """Handle the case where all records were guard-filtered (action resolves as SKIPPED)."""
+        self.deps.state_manager.update_status(
+            params.action_name,
+            ActionStatus.SKIPPED,
+            execution_time=duration,
+            skip_reason=GUARD_FILTERED_ALL,
+        )
+        total_actions = (
+            len(self.deps.action_runner.execution_order)
+            if hasattr(self.deps.action_runner, "execution_order")
+            else 0
+        )
+        fire_event(
+            ActionSkipEvent(
+                action_name=params.action_name,
+                action_index=params.action_idx,
+                total_actions=total_actions,
+                skip_reason=GUARD_FILTERED_ALL,
+                mode=params.action_config.get("run_mode", ""),
+            )
+        )
+        self._track_action_complete(
+            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=GUARD_FILTERED_ALL
+        )
+        return ActionExecutionResult(
+            success=True,
+            output_folder=output_folder,
+            status=ActionStatus.SKIPPED,
+            metrics=ExecutionMetrics(duration=duration),
+        )
+
+    def _track_action_complete(
+        self,
+        action_name: str,
+        duration: float,
+        status: ActionStatus,
+        *,
+        tokens: dict[str, int] | None = None,
+        skip_reason: str | None = None,
+    ) -> None:
+        """Record action completion in run_tracker if available."""
+        if self.run_tracker is None or self.run_id is None:
+            return
+        if status == ActionStatus.SKIPPED:
+            tracker_status = "skipped"
+        elif status == ActionStatus.COMPLETED:
+            tracker_status = "success"
+        else:
+            tracker_status = "partial"
+        config = ActionCompleteConfig(
+            run_id=self.run_id,
+            action_name=action_name,
+            status=tracker_status,
+            duration_seconds=duration,
+            tokens=tokens,
+            skip_reason=skip_reason,
+            files_processed=0,
+        )
+        self.run_tracker.record_action_complete(config=config)
 
     def _write_failed_disposition(self, action_name: str, reason: str) -> None:
         """Write DISPOSITION_FAILED to storage so downstream and future runs detect the failure."""
@@ -542,26 +545,35 @@ class ActionExecutor:
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
     ) -> str | None:
-        """Return the name of a failed or skipped upstream dependency, or None if all healthy.
+        """Return the name of a failed/skipped upstream dependency, or None if healthy.
 
-        Checks both explicit dependencies and version sources.  For
-        version-correlation actions (e.g. ``aggregate_votes`` consuming
-        ``filter_learning_quality_1/2/3``), the version sources are
-        checked so that cascade failures propagate as SKIPPED instead of
-        raising "Version correlation failed" errors.
+        Checks explicit dependencies and version sources (for merge/reduce actions).
         """
-        deps_to_check: list[str] = list(action_config.get("dependencies", []))
+        deps_to_check = self._collect_upstream_deps(action_name, action_config)
+        if not deps_to_check:
+            return None
 
-        # Also check version sources for merge/reduce actions.  If the
-        # version agents (e.g. extract_raw_qa_1, _2, _3) are failed or
-        # skipped, this action cannot correlate — it should be skipped,
-        # not error with "Version correlation failed".
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        for dep in deps_to_check:
+            if self.deps.state_manager.is_failed(dep) or self.deps.state_manager.is_skipped(dep):
+                return dep
+            if storage_backend and self._has_blocking_disposition(
+                storage_backend, dep, action_name
+            ):
+                return dep
+        return None
+
+    def _collect_upstream_deps(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> list[str]:
+        """Build list of upstream dependencies including version sources."""
+        deps: list[str] = list(action_config.get("dependencies", []))
+
+        # Version sources: {base}_{N} agents for merge/reduce actions
         vc_config = action_config.get("version_consumption_config")
         if vc_config and isinstance(vc_config, dict):
             source_base = vc_config.get("source")
             if source_base:
-                # Find expanded version agents in the execution order.
-                # Version agents are named {base}_{N} where N is a digit.
                 prefix = f"{source_base}_"
                 for action in self.deps.state_manager.execution_order:
                     if (
@@ -569,53 +581,34 @@ class ActionExecutor:
                         and action[len(prefix) :].isdigit()
                         and action != action_name
                     ):
-                        deps_to_check.append(action)
+                        deps.append(action)
+        return deps
 
-        if not deps_to_check:
-            return None
-        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        for dep in deps_to_check:
-            if self.deps.state_manager.is_failed(dep) or self.deps.state_manager.is_skipped(dep):
-                return dep
-            if storage_backend is None:
-                continue
-            if storage_backend.has_disposition(
-                dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
-            ):
-                target_files = storage_backend.list_target_files(dep)
-                if not target_files:
-                    return dep
-                storage_backend.clear_disposition(
-                    dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
-                )
-                logger.warning(
-                    "Stale upstream FAILED disposition on '%s' — "
-                    "upstream has %d target file(s). "
-                    "Clearing disposition; downstream '%s' will proceed.",
-                    dep,
-                    len(target_files),
-                    action_name,
-                )
+    def _has_blocking_disposition(self, storage_backend: Any, dep: str, action_name: str) -> bool:
+        """Check if dep has a blocking disposition (FAILED/SKIPPED without output).
+
+        Stale dispositions (disposition set but output exists) are cleared as a
+        defense-in-depth measure for reruns with lingering pre-Phase-5 state.
+        """
+        for disposition in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
             if not storage_backend.has_disposition(
-                dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+                dep, disposition, record_id=NODE_LEVEL_RECORD_ID
             ):
                 continue
             target_files = storage_backend.list_target_files(dep)
             if not target_files:
-                return dep
-            storage_backend.clear_disposition(
-                dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-            )
+                return True
+            # Stale: disposition exists but output also exists — clear it
+            storage_backend.clear_disposition(dep, disposition, record_id=NODE_LEVEL_RECORD_ID)
             logger.warning(
-                "Stale upstream SKIPPED disposition on '%s' — "
-                "upstream has %d target file(s). "
-                "A write path set SKIPPED despite output existing. "
-                "Clearing disposition; downstream '%s' will proceed.",
+                "Stale upstream %s disposition on '%s' — upstream has %d target file(s). "
+                "Clearing; downstream '%s' will proceed.",
+                disposition,
                 dep,
                 len(target_files),
                 action_name,
             )
-        return None
+        return False
 
     def _handle_dependency_skip(
         self,
@@ -818,13 +811,9 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle batch job status checking (synchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
-        workflow_name = self.deps.action_runner.workflow_name
-        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / action_name)
-
-        # Ensure action_name is on the config dict — batch result processor needs it
-        # for RecordEnvelope.build_content() namespacing. The config system uses
-        # "agent_type" as the key, but the additive model needs "action_name".
+        output_directory = self._batch_output_directory(action_name)
+        # Config uses "agent_type" but additive model needs "action_name" for
+        # RecordEnvelope.build_content() namespace resolution.
         action_config["action_name"] = action_name
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
@@ -832,68 +821,8 @@ class ActionExecutor:
         )
 
         duration = (datetime.now() - start_time).total_seconds()
-
-        if batch_status == "completed":
-            wall_clock = self._compute_batch_wall_clock(action_name, duration)
-            final_status = self._resolve_completion_status(action_name)
-            self.deps.state_manager.update_status(
-                action_name,
-                final_status,
-                execution_time=wall_clock,
-                execution_mode="batch",
-                **self._limit_metadata(action_config),
-            )
-            fire_event(
-                BatchCompleteEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    total=1,
-                    completed=1,
-                    failed=0,
-                    elapsed_time=wall_clock,
-                )
-            )
-            return ActionExecutionResult(
-                success=True,
-                output_folder=output_folder,
-                status=final_status,
-                metrics=ExecutionMetrics(duration=wall_clock),
-            )
-
-        if batch_status == "in_progress":
-            self.deps.state_manager.update_status(action_name, ActionStatus.BATCH_SUBMITTED)
-            fire_event(
-                BatchSubmittedEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    request_count=0,
-                    provider=action_config.get("model_vendor", ""),
-                )
-            )
-            return ActionExecutionResult(
-                success=True,
-                status=ActionStatus.BATCH_SUBMITTED,
-                metrics=ExecutionMetrics(duration=duration),
-            )
-
-        self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
-        self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
-        fire_event(
-            BatchCompleteEvent(
-                batch_id=action_config.get("batch_id", ""),
-                action_name=action_name,
-                total=1,
-                completed=0,
-                failed=1,
-                elapsed_time=duration,
-            )
-        )
-        error = Exception(f"Batch job for {action_name} failed")
-        return ActionExecutionResult(
-            success=False,
-            status=ActionStatus.FAILED,
-            error=error,
-            metrics=ExecutionMetrics(duration=duration),
+        return self._resolve_batch_outcome(
+            action_name, action_config, output_folder, batch_status, duration
         )
 
     async def _handle_batch_check_async(
@@ -905,12 +834,9 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle batch job status checking (asynchronous)."""
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
-        workflow_name = self.deps.action_runner.workflow_name
-        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / action_name)
-
-        # Ensure action_name is on the config dict — batch result processor needs it
-        # for RecordEnvelope.build_content() namespacing.
+        output_directory = self._batch_output_directory(action_name)
+        # Config uses "agent_type" but additive model needs "action_name" for
+        # RecordEnvelope.build_content() namespace resolution.
         action_config["action_name"] = action_name
 
         output_folder, batch_status = await asyncio.to_thread(
@@ -921,7 +847,25 @@ class ActionExecutor:
         )
 
         duration = (datetime.now() - start_time).total_seconds()
+        return self._resolve_batch_outcome(
+            action_name, action_config, output_folder, batch_status, duration
+        )
 
+    def _batch_output_directory(self, action_name: str) -> str:
+        """Resolve the target output directory for a batch action."""
+        workflow_name = self.deps.action_runner.workflow_name
+        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
+        return str(agent_io_path / "target" / action_name)
+
+    def _resolve_batch_outcome(
+        self,
+        action_name: str,
+        action_config: ActionConfigDict,
+        output_folder: str | None,
+        batch_status: str,
+        duration: float,
+    ) -> ActionExecutionResult:
+        """Map batch_manager result to status, events, and ActionExecutionResult."""
         if batch_status == "completed":
             wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
@@ -965,6 +909,7 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
+        # Failed
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
         fire_event(
@@ -977,11 +922,10 @@ class ActionExecutor:
                 elapsed_time=duration,
             )
         )
-        error = Exception(f"Batch job for {action_name} failed")
         return ActionExecutionResult(
             success=False,
             status=ActionStatus.FAILED,
-            error=error,
+            error=Exception(f"Batch job for {action_name} failed"),
             metrics=ExecutionMetrics(duration=duration),
         )
 

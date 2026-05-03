@@ -17,7 +17,11 @@ from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
-    from agent_actions.workflow.runner import ActionRunner, FileProcessParams
+    from agent_actions.workflow.runner import (
+        ActionRunner,
+        FileProcessParams,
+        SingleFileProcessParams,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +64,38 @@ def should_skip_item(
     if file_type_filter and item.suffix.lstrip(".").lower() not in file_type_filter:
         return True
     return False
+
+
+def _build_file_params(
+    params: FileProcessParams,
+    item: Path,
+    input_path: Path,
+    output_path: Path,
+    input_directory: str,
+    *,
+    source_relative_path: str | None = None,
+    data: Any = None,
+) -> SingleFileProcessParams:
+    """Build SingleFileProcessParams with shared fields from FileProcessParams."""
+    from agent_actions.workflow.runner import FileLocationParams, SingleFileProcessParams
+
+    kwargs: dict[str, Any] = {
+        "locations": FileLocationParams(
+            item=item,
+            input_path=input_path,
+            output_path=output_path,
+            input_directory=input_directory,
+        ),
+        "action_config": params.action_config,
+        "action_name": params.action_name,
+        "strategy": params.strategy,
+        "idx": params.idx,
+    }
+    if source_relative_path is not None:
+        kwargs["source_relative_path"] = source_relative_path
+    if data is not None:
+        kwargs["data"] = data
+    return SingleFileProcessParams(**kwargs)
 
 
 def collect_files_from_upstream(upstream_data_dirs: list[str]) -> dict[Path, list[Path]]:
@@ -118,8 +154,6 @@ def process_directory_files(
     processed_paths: set,
 ) -> int:
     """Process all files in a single directory. Returns count of files processed."""
-    from agent_actions.workflow.runner import FileLocationParams, SingleFileProcessParams
-
     count = 0
     for item in input_path.rglob("*"):
         if runner._should_skip_item(item, input_path, processed_paths, params.file_type_filter):
@@ -129,18 +163,7 @@ def process_directory_files(
         processed_paths.add(relative_path)
 
         runner._process_single_file(
-            SingleFileProcessParams(
-                locations=FileLocationParams(
-                    item=item,
-                    input_path=input_path,
-                    output_path=output_path,
-                    input_directory=input_directory,
-                ),
-                action_config=params.action_config,
-                action_name=params.action_name,
-                strategy=params.strategy,
-                idx=params.idx,
-            )
+            _build_file_params(params, item, input_path, output_path, input_directory)
         )
         count += 1
         if _file_limit_reached(params.action_config, count, params.action_name):
@@ -150,8 +173,6 @@ def process_directory_files(
 
 def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int:
     """Process files from multiple upstream directories with content merging."""
-    from agent_actions.workflow.runner import FileLocationParams, SingleFileProcessParams
-
     output_path = Path(params.output_directory)
     files_by_path = runner._collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
@@ -159,67 +180,30 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
     for relative_path, file_paths in files_by_path.items():
         if len(file_paths) == 1:
             file_path = file_paths[0]
-            input_path = file_path.parent
-            while input_path.name != "target" and input_path.parent != input_path:
-                input_path = input_path.parent
-            if input_path.name == "target":
-                input_path = file_path.parent
-
-            # Find the upstream directory this file belongs to
-            for upstream_dir in params.upstream_data_dirs:
-                upstream_path = Path(upstream_dir)
-                if file_path.is_relative_to(upstream_path):
-                    input_path = upstream_path
-                    break
+            input_path = _resolve_upstream_root(file_path, params.upstream_data_dirs)
 
             runner._process_single_file(
-                SingleFileProcessParams(
-                    locations=FileLocationParams(
-                        item=file_path,
-                        input_path=input_path,
-                        output_path=output_path,
-                        input_directory=str(input_path),
-                    ),
-                    action_config=params.action_config,
-                    action_name=params.action_name,
-                    strategy=params.strategy,
-                    idx=params.idx,
-                )
+                _build_file_params(params, file_path, input_path, output_path, str(input_path))
             )
         else:
             reduce_key = params.action_config.get("reduce_key")
             logger.debug(
-                "Merging %d files for %s from parallel branches (reduce_key=%s)",
+                "Merging %d files for %s (reduce_key=%s)",
                 len(file_paths),
                 relative_path,
                 reduce_key or "auto",
             )
             merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
 
-            # Write merged data to a temp directory instead of mutating the
-            # upstream file in-place.  The old approach (overwrite + restore
-            # in finally) left corrupt files on SIGKILL because the finally
-            # block never ran.  Using TemporaryDirectory preserves the
-            # relative_path structure so _process_single_file computes the
-            # correct output filename.
+            # TemporaryDirectory instead of in-place overwrite: the old approach
+            # (overwrite + restore in finally) left corrupt files on SIGKILL.
             with tempfile.TemporaryDirectory() as td:
                 tmp_file = Path(td) / relative_path
                 tmp_file.parent.mkdir(parents=True, exist_ok=True)
                 atomic_json_write(tmp_file, merged_data, fsync=False)
 
                 runner._process_single_file(
-                    SingleFileProcessParams(
-                        locations=FileLocationParams(
-                            item=tmp_file,
-                            input_path=Path(td),
-                            output_path=output_path,
-                            input_directory=str(Path(td)),
-                        ),
-                        action_config=params.action_config,
-                        action_name=params.action_name,
-                        strategy=params.strategy,
-                        idx=params.idx,
-                    )
+                    _build_file_params(params, tmp_file, Path(td), output_path, td)
                 )
 
         files_processed_count += 1
@@ -227,6 +211,15 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
             break
 
     return files_processed_count
+
+
+def _resolve_upstream_root(file_path: Path, upstream_data_dirs: list[str]) -> Path:
+    """Find which upstream directory a file belongs to."""
+    for upstream_dir in upstream_data_dirs:
+        upstream_path = Path(upstream_dir)
+        if file_path.is_relative_to(upstream_path):
+            return upstream_path
+    return file_path.parent
 
 
 def process_from_storage_backend(
@@ -238,7 +231,6 @@ def process_from_storage_backend(
         (files_found, files_processed) to distinguish "no data" from
         "data found but processing failed".
     """
-    from agent_actions.workflow.runner import FileLocationParams, SingleFileProcessParams
 
     if runner.storage_backend is None:
         return (0, 0)
@@ -314,17 +306,12 @@ def process_from_storage_backend(
                 record_count,
             )
             runner._process_single_file(
-                SingleFileProcessParams(
-                    locations=FileLocationParams(
-                        item=virtual_input_path,
-                        input_path=output_path,
-                        output_path=output_path,
-                        input_directory=str(output_path),
-                    ),
-                    action_config=params.action_config,
-                    action_name=params.action_name,
-                    strategy=params.strategy,
-                    idx=params.idx,
+                _build_file_params(
+                    params,
+                    virtual_input_path,
+                    output_path,
+                    output_path,
+                    str(output_path),
                     source_relative_path=source_key,
                     data=data,
                 )
@@ -386,31 +373,23 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             # Fall through to filesystem if backend had no data
 
     if len(params.upstream_data_dirs) > 1:
-        # Check if this is parallel branches (same action) or multiple deps
         upstream_paths = [Path(d) for d in params.upstream_data_dirs]
         dep_names = [p.name for p in upstream_paths]
         unique_names = set(dep_names)
 
         if len(unique_names) == 1:
-            # Parallel branches from same action - merge them
             logger.info(
-                f"Detected parallel branches from '{unique_names.pop()}'. "
-                f"Merging {len(upstream_paths)} outputs."
+                "Parallel branches from '%s': merging %d outputs.",
+                next(iter(unique_names)),
+                len(upstream_paths),
             )
-            files_processed_count = process_merged_files(runner, params)
-            if files_processed_count == 0:
-                warn_no_files_found(params)
-            return
         else:
-            # Multiple dependencies: merge all inputs by root_target_id
-            logger.info(
-                "Multiple dependency directories detected: %s. Merging all inputs.",
-                dep_names,
-            )
-            files_processed_count = process_merged_files(runner, params)
-            if files_processed_count == 0:
-                warn_no_files_found(params)
-            return
+            logger.info("Multiple dependencies detected: %s. Merging all inputs.", dep_names)
+
+        files_processed_count = process_merged_files(runner, params)
+        if files_processed_count == 0:
+            warn_no_files_found(params)
+        return
 
     files_processed_count = 0
     output_path = Path(params.output_directory)
