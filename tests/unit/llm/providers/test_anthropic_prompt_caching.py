@@ -76,7 +76,15 @@ class TestMessageBuilderCacheControl:
 
     def test_non_anthropic_provider_caching_ignored(self):
         """cache_control is NOT injected for non-Anthropic providers."""
-        for provider in ("openai", "groq", "mistral", "cohere", "ollama", "gemini"):
+        for provider in (
+            "openai",
+            "groq",
+            "mistral",
+            "cohere",
+            "ollama_local",
+            "ollama_cloud",
+            "gemini",
+        ):
             envelope = MessageBuilder.build(provider, PROMPT, CONTEXT, enable_prompt_caching=True)
             for msg in envelope.messages:
                 assert msg.cache_control is None, f"{provider} should not get cache_control"

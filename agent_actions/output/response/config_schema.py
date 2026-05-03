@@ -186,7 +186,7 @@ class AgentConfig(BaseModel):
         default=None,
         description=(
             "Model vendor/provider: 'openai', 'anthropic', 'gemini', 'groq', "
-            "'mistral', 'cohere', 'ollama', 'tool', 'hitl', or 'agac-provider'"
+            "'mistral', 'cohere', 'ollama_local', 'ollama_cloud', 'tool', 'hitl', or 'agac-provider'"
         ),
     )
     api_key: SecretStr | None = None

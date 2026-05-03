@@ -58,7 +58,7 @@ class TestArraySchemaConversion:
         """Array with primitive number items should work."""
         schema = {"name": "scores", "type": "array", "items": {"type": "number"}}
 
-        result = compile_unified_schema(schema, "ollama")
+        result = compile_unified_schema(schema, "ollama_local")
 
         assert result["properties"], "Properties should not be empty"
         assert "scores" in result["properties"], "Should have 'scores' property"
@@ -150,7 +150,7 @@ class TestArraySchemaConversion:
             "items": {"type": "object", "properties": {"value": {"type": "string"}}},
         }
 
-        vendors = ["openai", "anthropic", "gemini", "ollama"]
+        vendors = ["openai", "anthropic", "gemini", "ollama_local"]
 
         for vendor in vendors:
             result = compile_unified_schema(schema, vendor)
@@ -165,7 +165,7 @@ class TestArraySchemaConversion:
                 assert result["schema"]["properties"], f"{vendor} should have properties"
             elif vendor == "gemini":
                 assert "schema" in result, f"{vendor} should have schema key"
-            elif vendor == "ollama":
+            elif vendor == "ollama_local":
                 assert result["properties"], f"{vendor} should have properties"
 
     def test_array_schema_optional_required_flag(self):

@@ -12,6 +12,7 @@ Architecture invariant: all prompt-to-message assembly MUST go through
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
@@ -62,6 +63,10 @@ class SchemaInjection(Enum):
 
     INLINE_FIELDS = "inline_fields"
     """Only field names injected (Cohere style)."""
+
+    PROMPT = "prompt"
+    """Schema injected into the prompt text for providers without native
+    structured output support (e.g., Ollama Cloud)."""
 
 
 class MessageRole(Enum):
@@ -197,12 +202,22 @@ PROVIDER_MESSAGE_CONFIGS: dict[str, ProviderMessageConfig] = {
         json_rules=("RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT",),
         blank_line_before_rules=False,
     ),
-    "ollama": ProviderMessageConfig(
+    "ollama_local": ProviderMessageConfig(
         json_prompt_style=PromptStyle.RAW,
         non_json_prompt_style=PromptStyle.RAW,
         json_role=MessageRole.SYSTEM_PLUS_USER,
         non_json_role=MessageRole.SYSTEM_PLUS_USER,
         schema_injection=SchemaInjection.NONE,
+    ),
+    "ollama_cloud": ProviderMessageConfig(
+        json_prompt_style=PromptStyle.RAW,
+        non_json_prompt_style=PromptStyle.RAW,
+        json_role=MessageRole.SYSTEM_PLUS_USER,
+        non_json_role=MessageRole.SYSTEM_PLUS_USER,
+        # Cloud does not support structured outputs via format param yet.
+        # Change to SchemaInjection.NONE when Ollama Cloud adds support.
+        # See: https://github.com/ollama/ollama/issues/12362
+        schema_injection=SchemaInjection.PROMPT,
     ),
 }
 
@@ -240,17 +255,33 @@ class MessageBuilder:
         context_str = MessageBuilder._serialise_context(context_data, provider)
         rules = list(rules_tuple)
 
+        schema_injection = config.schema_injection if json_mode else SchemaInjection.NONE
+
         body = MessageBuilder._assemble_body(
             style=style,
             prompt_config=prompt_config,
             context_str=context_str,
             schema=schema,
-            schema_injection=config.schema_injection if json_mode else SchemaInjection.NONE,
+            schema_injection=schema_injection,
             rules=rules,
             blank_line_before_rules=config.blank_line_before_rules,
         )
 
-        messages = MessageBuilder._wrap_in_roles(role, prompt_config, context_str, body)
+        # SchemaInjection.PROMPT: inject schema into the prompt text so it
+        # lands in the system message for providers that use RAW style
+        # (no body assembly). Used by ollama_cloud until native structured
+        # output support ships (ollama/ollama#12362).
+        effective_prompt = prompt_config
+        if schema_injection == SchemaInjection.PROMPT and schema is not None:
+            schema_text = json.dumps(schema, indent=2, ensure_ascii=False)
+            effective_prompt = (
+                f"{prompt_config}\n\n"
+                f"You MUST respond with valid JSON matching this schema:\n"
+                f"{schema_text}\n\n"
+                f"Return ONLY the JSON object, no extra text."
+            )
+
+        messages = MessageBuilder._wrap_in_roles(role, effective_prompt, context_str, body)
 
         if enable_prompt_caching and provider == "anthropic":
             messages = [
@@ -316,10 +347,7 @@ class MessageBuilder:
         provider: str,
     ) -> str:
         """Convert context_data to a string for prompt embedding."""
-        if provider == "ollama":
-            # Ollama handles its own serialisation (json.dumps)
-            import json
-
+        if provider in {"ollama_local", "ollama_cloud"}:
             if isinstance(context_data, str):
                 return context_data
             return json.dumps(ensure_json_safe(context_data), ensure_ascii=False)

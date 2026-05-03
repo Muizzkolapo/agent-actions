@@ -219,7 +219,7 @@ class TestMessageBuilderStructure:
         assert env.messages[0].role == "user"
 
     def test_ollama_system_plus_user(self):
-        env = MessageBuilder.build("ollama", PROMPT, CONTEXT_STR, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR, json_mode=True)
         assert len(env.messages) == 2
         assert env.messages[0].role == "system"
         assert env.messages[1].role == "user"
@@ -378,20 +378,20 @@ class TestOllamaRaw:
     """Verify Ollama's system+user message structure."""
 
     def test_ollama_system_is_prompt(self):
-        env = MessageBuilder.build("ollama", PROMPT, CONTEXT_STR, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR, json_mode=True)
         assert env.messages[0].content == PROMPT
 
     def test_ollama_user_is_context(self):
-        env = MessageBuilder.build("ollama", PROMPT, CONTEXT_STR, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR, json_mode=True)
         assert env.messages[1].content == CONTEXT_STR
 
     def test_ollama_dict_context_serialised(self):
         ctx = {"text": "hello"}
-        env = MessageBuilder.build("ollama", PROMPT, ctx, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, ctx, json_mode=True)
         assert env.messages[1].content == '{"text": "hello"}'
 
     def test_ollama_no_tags(self):
-        env = MessageBuilder.build("ollama", PROMPT, CONTEXT_STR, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR, json_mode=True)
         for msg in env.messages:
             assert "<|begin_of_user_instruction|>" not in msg.content
 
@@ -405,7 +405,7 @@ class TestNonJsonSkipsSchema:
     """In non-json mode no provider should inject schema into the prompt."""
 
     @pytest.mark.parametrize(
-        "provider", ["anthropic", "openai", "mistral", "gemini", "groq", "cohere", "ollama"]
+        "provider", ["anthropic", "openai", "mistral", "gemini", "groq", "cohere", "ollama_local"]
     )
     def test_non_json_no_schema_tags(self, provider):
         env = MessageBuilder.build(
@@ -454,7 +454,7 @@ class TestToDicts:
     """Verify LLMMessageEnvelope.to_dicts() helper."""
 
     def test_to_dicts_returns_all_messages(self):
-        env = MessageBuilder.build("ollama", PROMPT, CONTEXT_STR, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR, json_mode=True)
         dicts = env.to_dicts()
         assert len(dicts) == 2
         assert dicts[0] == {"role": "system", "content": PROMPT}
@@ -498,7 +498,7 @@ class TestEnvelopeMetadata:
         assert env.rules == []
 
     def test_prompt_body_empty_for_ollama(self):
-        env = MessageBuilder.build("ollama", PROMPT, CONTEXT_STR, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR, json_mode=True)
         assert env.prompt_body == ""
 
     def test_prompt_body_non_empty_for_tagged(self):
@@ -653,7 +653,7 @@ class TestContextSerialisationJsonSafety:
 
     def test_ollama_dict_with_nan_serialises(self):
         ctx = {"temperature": float("nan"), "text": "hello"}
-        env = MessageBuilder.build("ollama", PROMPT, ctx, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, ctx, json_mode=True)
         content = env.messages[1].content
         parsed = json.loads(content)
         assert parsed["temperature"] is None
@@ -661,14 +661,14 @@ class TestContextSerialisationJsonSafety:
 
     def test_ollama_dict_with_datetime_serialises(self):
         ctx = {"created": datetime(2026, 4, 19), "text": "hello"}
-        env = MessageBuilder.build("ollama", PROMPT, ctx, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, ctx, json_mode=True)
         content = env.messages[1].content
         parsed = json.loads(content)
         assert parsed["created"] == "2026-04-19T00:00:00"
 
     def test_ollama_dict_with_bytes_serialises(self):
         ctx = {"data": b"binary", "text": "hello"}
-        env = MessageBuilder.build("ollama", PROMPT, ctx, json_mode=True)
+        env = MessageBuilder.build("ollama_local", PROMPT, ctx, json_mode=True)
         content = env.messages[1].content
         parsed = json.loads(content)
         assert parsed["data"] == "binary"

@@ -196,14 +196,14 @@ actions:
     api_key: GROQ_API_KEY
 
   - name: score_quality
-    model_vendor: ollama              # Parallel voting compensates for weaker model
+    model_vendor: ollama_local        # Parallel voting compensates for weaker model
     model_name: llama3.2:latest
 
   - name: generate_response           # Uses default (OpenAI) -- needs reasoning
   - name: extract_product_insights    # Uses default (OpenAI) -- needs reasoning
 ```
 
-Not every step needs the same model. Extraction is high-volume, low-complexity -- Groq's small Llama handles it at a fraction of the cost. Scoring runs three parallel voters, so the consensus compensates for a weaker local model -- Ollama's Llama 3.2 keeps that cost at zero. Response generation and product insight extraction need reasoning, so they stay on the OpenAI default. Match the model to the task.
+Not every step needs the same model. Extraction is high-volume, low-complexity -- Groq's small Llama handles it at a fraction of the cost. Scoring runs three parallel voters, so the consensus compensates for a weaker local model -- Ollama Local's Llama 3.2 keeps that cost at zero. Response generation and product insight extraction need reasoning, so they stay on the OpenAI default. Match the model to the task.
 
 ### Parallel Consensus Voting
 

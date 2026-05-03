@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic import SecretStr
 
-from agent_actions.config.defaults import OllamaDefaults
+from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
 
 from .batch_base import BaseBatchClient
 
@@ -86,11 +86,26 @@ def _create_gemini(config: dict[str, Any]) -> BaseBatchClient:
     return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
-def _create_ollama(config: dict[str, Any]) -> BaseBatchClient:
+def _create_ollama_local(config: dict[str, Any]) -> BaseBatchClient:
     from .ollama.batch_client import OllamaBatchClient
 
     base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
-    return OllamaBatchClient(base_url=base_url)
+    return OllamaBatchClient(base_url=base_url, vendor_slug="ollama_local", cloud=False)
+
+
+def _create_ollama_cloud(config: dict[str, Any]) -> BaseBatchClient:
+    from .ollama.batch_client import OllamaBatchClient
+
+    _raw = config.get("api_key")
+    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
+        "OLLAMA_API_KEY"
+    )
+    base_url = config.get("base_url") or os.getenv(
+        "OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL
+    )
+    return OllamaBatchClient(
+        base_url=base_url, api_key=api_key, vendor_slug="ollama_cloud", cloud=True
+    )
 
 
 def _create_anthropic(config: dict[str, Any]) -> BaseBatchClient:
@@ -139,7 +154,8 @@ def _create_agac(config: dict[str, Any]) -> BaseBatchClient:
 _BATCH_CLIENT_REGISTRY: dict[str, _BatchClientRegistration] = {
     "openai": _BatchClientRegistration(factory=_create_openai),
     "gemini": _BatchClientRegistration(factory=_create_gemini, package="google-genai"),
-    "ollama": _BatchClientRegistration(factory=_create_ollama),
+    "ollama_local": _BatchClientRegistration(factory=_create_ollama_local),
+    "ollama_cloud": _BatchClientRegistration(factory=_create_ollama_cloud),
     "anthropic": _BatchClientRegistration(factory=_create_anthropic, package="anthropic"),
     "groq": _BatchClientRegistration(factory=_create_groq, package="groq"),
     "mistral": _BatchClientRegistration(factory=_create_mistral, package="mistralai"),

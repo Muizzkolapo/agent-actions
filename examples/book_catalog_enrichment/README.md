@@ -124,14 +124,14 @@ When an LLM produces output that fails a registered validation function, the fra
 
 Two actions use reprompt validation in this workflow:
 
-**`classify_genre`** (Ollama `llama3.2:latest`) -- validates BISAC code format:
+**`classify_genre`** (Ollama Local `llama3.2:latest`) -- validates BISAC code format:
 
 ```yaml
 - name: classify_genre
   intent: "Classify book into BISAC categories based on title, author, and description"
   schema: classify_genre
   prompt: $book_catalog_enrichment.Classify_Book_Genre
-  model_vendor: ollama                 # Fixed BISAC taxonomy -- local model suffices
+  model_vendor: ollama_local           # Fixed BISAC taxonomy -- local model suffices
   model_name: llama3.2:latest
   prompt_debug: true
   reprompt:

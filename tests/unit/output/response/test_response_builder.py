@@ -112,7 +112,7 @@ class TestExtractUsage:
 
     def test_ollama(self):
         resp = _ollama_response(10, 20)
-        usage = ResponseBuilder.extract_usage(resp, "ollama")
+        usage = ResponseBuilder.extract_usage(resp, "ollama_local")
         assert usage == UsageResult(10, 20, 30)
 
     def test_none_shape(self):
@@ -164,12 +164,12 @@ class TestExtractUsageEdgeCases:
 
     def test_ollama_missing_attrs(self):
         resp = SimpleNamespace()  # no prompt_eval_count or eval_count
-        usage = ResponseBuilder.extract_usage(resp, "ollama")
+        usage = ResponseBuilder.extract_usage(resp, "ollama_local")
         assert usage == UsageResult(0, 0, 0)
 
     def test_ollama_none_values(self):
         resp = SimpleNamespace(prompt_eval_count=None, eval_count=None)
-        usage = ResponseBuilder.extract_usage(resp, "ollama")
+        usage = ResponseBuilder.extract_usage(resp, "ollama_local")
         assert usage == UsageResult(0, 0, 0)
 
 

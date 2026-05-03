@@ -28,7 +28,7 @@ The key pattern: instead of one action producing a complex JSON object with many
 ```yaml
 defaults:
   json_mode: false
-  model_vendor: ollama
+  model_vendor: ollama_local
   model_name: llama3
 
 actions:
@@ -73,7 +73,7 @@ Non-JSON mode works with per-action model overrides. Use a cheap local model for
 ```yaml
 defaults:
   json_mode: false
-  model_vendor: ollama
+  model_vendor: ollama_local
   model_name: llama3                 # Cheap: local, no API cost
 
 actions:

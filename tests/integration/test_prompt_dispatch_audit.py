@@ -293,12 +293,21 @@ class TestMessageBuilder:
 
     def test_ollama_format_correct(self):
         """Ollama uses RAW style and SYSTEM_PLUS_USER role."""
-        config = PROVIDER_MESSAGE_CONFIGS["ollama"]
+        config = PROVIDER_MESSAGE_CONFIGS["ollama_local"]
         assert config.json_role == MessageRole.SYSTEM_PLUS_USER
 
     def test_all_providers_have_config(self):
         """Every expected provider has a MessageBuilder config entry."""
-        expected = {"anthropic", "openai", "groq", "mistral", "gemini", "cohere", "ollama"}
+        expected = {
+            "anthropic",
+            "openai",
+            "groq",
+            "mistral",
+            "gemini",
+            "cohere",
+            "ollama_local",
+            "ollama_cloud",
+        }
         assert expected.issubset(set(PROVIDER_MESSAGE_CONFIGS.keys()))
 
     def test_json_mode_role_assignment(self):

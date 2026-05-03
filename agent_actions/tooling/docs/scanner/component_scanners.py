@@ -84,7 +84,8 @@ def scan_vendors(project_root: Path) -> dict[str, Any]:
             "GROQ": "GroqConfig",
             "COHERE": "CohereConfig",
             "MISTRAL": "MistralConfig",
-            "OLLAMA": "OllamaConfig",
+            "OLLAMA_LOCAL": "OllamaLocalConfig",
+            "OLLAMA_CLOUD": "OllamaCloudConfig",
             "TOOL": "ToolVendorConfig",
             "AGAC_PROVIDER": "AgacProviderConfig",
         }

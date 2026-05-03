@@ -34,7 +34,7 @@ actions:
     intent: "Classify book into BISAC categories based on title, author, and description"
     schema: classify_genre
     prompt: $book_catalog_enrichment.Classify_Book_Genre
-    model_vendor: ollama                          # BISAC classification — fixed taxonomy, works with local models
+    model_vendor: ollama_local                     # BISAC classification — fixed taxonomy, works with local models
     model_name: llama3.2:latest
     prompt_debug: true
     context_scope:

@@ -50,7 +50,7 @@ def is_batch_injection_enabled() -> bool:
     return int(os.getenv("OLLAMA_FAIL_FIRST_N", "0")) > 0
 
 
-def maybe_inject_online_failure(model: str) -> None:
+def maybe_inject_online_failure(model: str, vendor_slug: str = "ollama_local") -> None:
     """
     Inject failure for online calls if configured.
 
@@ -59,6 +59,7 @@ def maybe_inject_online_failure(model: str) -> None:
 
     Args:
         model: Model name for error context
+        vendor_slug: Vendor identifier for error context
 
     Raises:
         NetworkError: If this call should fail (within first N calls)
@@ -73,14 +74,15 @@ def maybe_inject_online_failure(model: str) -> None:
 
     if _online_call_count <= fail_n:
         logger.info(
-            "[INJECTION] Online failure %d/%d for model=%s",
+            "[INJECTION] Online failure %d/%d for model=%s vendor=%s",
             _online_call_count,
             fail_n,
             model,
+            vendor_slug,
         )
         raise NetworkError(
             f"Injected timeout (attempt {_online_call_count}/{fail_n})",
-            context={"vendor": "ollama", "model": model, "injected": True},
+            context={"vendor": vendor_slug, "model": model, "injected": True},
         )
 
 

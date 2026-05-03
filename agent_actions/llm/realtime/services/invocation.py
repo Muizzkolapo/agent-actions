@@ -19,7 +19,8 @@ _VENDOR_PACKAGES: dict[str, str] = {
     "anthropic": "anthropic",
     "cohere": "cohere",
     "groq": "groq",
-    "ollama": "ollama",
+    "ollama_local": "ollama",
+    "ollama_cloud": "ollama",
     "gemini": "google-genai",
     "mistral": "mistralai",
 }
@@ -28,7 +29,8 @@ _VENDOR_PACKAGES: dict[str, str] = {
 # so the CLI doesn't crash when an unused provider's SDK is absent or broken.
 CLIENT_REGISTRY: dict[str, Any] = {
     "openai": "agent_actions.llm.providers.openai.client:OpenAIClient",
-    "ollama": "agent_actions.llm.providers.ollama.client:OllamaClient",
+    "ollama_local": "agent_actions.llm.providers.ollama.client:OllamaLocalClient",
+    "ollama_cloud": "agent_actions.llm.providers.ollama.client:OllamaCloudClient",
     "gemini": "agent_actions.llm.providers.gemini.client:GeminiClient",
     "cohere": "agent_actions.llm.providers.cohere.client:CohereClient",
     "mistral": "agent_actions.llm.providers.mistral.client:MistralClient",

@@ -74,7 +74,7 @@ class BatchClientResolver:
                 "'tool' vendor does not support batch processing",
                 context={
                     "client_type": client_type,
-                    "supported_clients": ["openai", "gemini", "anthropic", "groq", "mistral"],
+                    "supported_clients": BatchClientFactory.get_supported_clients(),
                 },
             )
 
@@ -91,9 +91,11 @@ class BatchClientResolver:
         )
 
         try:
-            client_config = {}
+            client_config: dict[str, Any] = {}
             if agent_config.get(API_KEY_KEY):
                 client_config["api_key"] = BaseClient.get_api_key(agent_config)
+            if agent_config.get("base_url"):
+                client_config["base_url"] = agent_config["base_url"]
 
             client = BatchClientFactory.create_client(client_type, client_config)
 
@@ -180,8 +182,10 @@ class BatchClientResolver:
     def _build_cache_key(client_type: str, agent_config: dict[str, Any]) -> str:
         _raw = agent_config.get(API_KEY_KEY) or ""
         api_key = _raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw
-        if api_key:
-            key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:12]
+        base_url = agent_config.get("base_url") or ""
+        discriminator = f"{api_key}|{base_url}"
+        if api_key or base_url:
+            key_hash = hashlib.sha256(discriminator.encode()).hexdigest()[:12]
             return f"{client_type}:{key_hash}"
         return client_type
 

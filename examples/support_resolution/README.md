@@ -98,10 +98,10 @@ The defaults configure Ollama as the model vendor:
 
 ```yaml
 defaults:
-  model_vendor: ollama
+  model_vendor: ollama_local
   model_name: llama3.2:latest
   api_key: OLLAMA_API_KEY
-  run_mode: online                    # Ollama doesn't support batch mode
+  run_mode: online                    # Ollama Local doesn't support batch mode
 ```
 
 Every action runs against a model on your local machine. No API keys for hosted services needed. The `run_mode: online` setting is required because Ollama doesn't support batch/async request queuing.

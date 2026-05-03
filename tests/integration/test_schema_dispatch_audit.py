@@ -250,7 +250,7 @@ class TestVendorCompilation:
 
     def test_ollama_schema_format(self):
         """Ollama gets {title, type: object, properties, required, additionalProperties}."""
-        compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "ollama")
+        compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "ollama_local")
         assert isinstance(compiled, dict)
         assert compiled["title"] == "test_schema"
         assert compiled["type"] == "object"
@@ -303,7 +303,16 @@ class TestVendorCompilation:
 
     def test_all_vendors_receive_required_fields(self):
         """Every supported vendor includes required field info in compiled output."""
-        vendors = ["openai", "anthropic", "gemini", "ollama", "groq", "mistral", "cohere"]
+        vendors = [
+            "openai",
+            "anthropic",
+            "gemini",
+            "ollama_local",
+            "ollama_cloud",
+            "groq",
+            "mistral",
+            "cohere",
+        ]
         for vendor in vendors:
             compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
             assert compiled is not None, f"{vendor} returned None"
@@ -636,7 +645,16 @@ class TestDispatchInSchema:
         compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
         config = {"schema": schema, "name": "test_action"}
 
-        for vendor in ["openai", "anthropic", "gemini", "ollama", "groq", "mistral", "cohere"]:
+        for vendor in [
+            "openai",
+            "anthropic",
+            "gemini",
+            "ollama_local",
+            "ollama_cloud",
+            "groq",
+            "mistral",
+            "cohere",
+        ]:
             compiled, _ = compiler.compile(config, vendor)
             assert compiled is not None, (
                 f"{vendor} failed to compile schema with unresolved dispatch_task"
@@ -1004,7 +1022,16 @@ class TestFullPipelineIntegration:
 
     def test_every_vendor_compiles_same_schema(self):
         """All vendors compile the same unified schema without errors."""
-        vendors = ["openai", "anthropic", "gemini", "ollama", "groq", "mistral", "cohere"]
+        vendors = [
+            "openai",
+            "anthropic",
+            "gemini",
+            "ollama_local",
+            "ollama_cloud",
+            "groq",
+            "mistral",
+            "cohere",
+        ]
         for vendor in vendors:
             compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
             assert compiled is not None, f"Vendor {vendor} failed to compile"
