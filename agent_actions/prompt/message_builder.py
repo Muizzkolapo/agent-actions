@@ -63,6 +63,10 @@ class SchemaInjection(Enum):
     INLINE_FIELDS = "inline_fields"
     """Only field names injected (Cohere style)."""
 
+    PROMPT = "prompt"
+    """Schema injected into the prompt text for providers without native
+    structured output support (e.g., Ollama Cloud)."""
+
 
 class MessageRole(Enum):
     """How messages are structured for the provider."""
