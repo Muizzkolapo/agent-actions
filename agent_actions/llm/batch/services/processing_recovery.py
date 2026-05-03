@@ -10,9 +10,11 @@ Entry points:
     cleanup_recovery() — remove registry entries after finalization
 """
 
+import json
 import logging
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
@@ -31,6 +33,7 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
 from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.record.envelope import RecordEnvelope
 
 if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -454,12 +457,24 @@ def finalize_batch_output(
     )
 
     effective_action_name = action_name if action_name is not None else service._action_name
+
+    # Stamp _state on batch records before writing — batch results bypass the
+    # online ResultCollector._stamp() path and arrive without lifecycle fields.
+    _stamp_batch_records(processed_data, effective_action_name or file_name)
+
     if service._storage_backend and effective_action_name:
         write_record_dispositions(service._storage_backend, processed_data, effective_action_name)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
 
     output_file = service._determine_output_path(output_directory, file_name, batch_id)
     service._write_batch_output(output_file, processed_data, output_directory, action_name)
+
+    # Remove batch placeholder file if storage backend wrote to SQLite instead.
+    # The placeholder (written at batch submission) persists on disk when
+    # write_target goes to the backend, causing downstream reads to hit it.
+    output_path = Path(output_file) if not isinstance(output_file, Path) else output_file
+    if service._storage_backend and output_path.exists():
+        _remove_batch_placeholder(output_path)
 
     elapsed_time = time.time() - start_time
     total_count = len(batch_results)
@@ -550,3 +565,48 @@ def _register_recovery_batch(
         recovery_attempt=attempt,
     )
     manager.save_batch_job(recovery_file_name, recovery_entry)
+
+
+def _remove_batch_placeholder(output_file: Path) -> None:
+    """Remove a batch placeholder file from disk after results are in the backend.
+
+    Only removes if the file matches the placeholder shape (batch_job_id + status=submitted).
+    """
+    try:
+        with open(output_file, encoding="utf-8") as f:
+            data = json.load(f)
+    except OSError:
+        return  # File already gone
+    except json.JSONDecodeError:
+        logger.warning("Malformed JSON at %s during placeholder cleanup", output_file)
+        return
+
+    if isinstance(data, dict) and "batch_job_id" in data and data.get("status") == "submitted":
+        try:
+            output_file.unlink()
+            logger.debug("Removed batch placeholder: %s", output_file)
+        except OSError:
+            pass  # Already removed by concurrent worker
+
+
+def _stamp_batch_records(records: list[dict[str, Any]], action_name: str) -> None:
+    """Stamp _state on batch output records that lack lifecycle fields.
+
+    Batch results bypass the online ResultCollector._stamp() path. This ensures
+    every record written to target has a valid _state for Phase 5 fail-closed reads.
+    """
+    from agent_actions.record.state import RecordState
+
+    for record in records:
+        if "_state" in record:
+            continue
+        # Determine state from record content
+        content = record.get("content")
+        metadata = record.get("metadata", {})
+        if metadata.get("retry_exhausted") or metadata.get("reason") == "exhausted":
+            state = RecordState.EXHAUSTED
+        elif content is None and metadata.get("reason"):
+            state = RecordState.FAILED
+        else:
+            state = RecordState.PROCESSED
+        RecordEnvelope.transition(record, state, action_name, "batch_completion")

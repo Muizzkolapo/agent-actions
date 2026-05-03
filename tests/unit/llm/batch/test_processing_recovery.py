@@ -11,6 +11,7 @@ Mock boundaries: provider calls, disk I/O (RecoveryStateManager), event bus.
 Do NOT mock internal functions — only external boundaries.
 """
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
@@ -73,7 +74,7 @@ def _mock_service():
     service._action_name = "test_action"
     service._apply_workflow_session_id = MagicMock(return_value={"kind": "llm"})
     service._convert_batch_results_to_workflow_format = MagicMock(return_value=[])
-    service._determine_output_path = MagicMock(return_value="/tmp/output.json")
+    service._determine_output_path = MagicMock(return_value=Path("/tmp/output.json"))
     service._write_batch_output = MagicMock()
     service._cleanup_recovery_entries = MagicMock()
     service._update_prompt_trace_responses = MagicMock()
@@ -754,3 +755,149 @@ class TestApplyExhaustedReprompt:
         assert r1.recovery_metadata.reprompt.passed is False
         assert r1.recovery_metadata.retry.attempts == 3
         assert r1.recovery_metadata.retry.succeeded is False
+
+
+# ---------------------------------------------------------------------------
+# TestStampBatchRecords (direct unit tests)
+# ---------------------------------------------------------------------------
+
+
+class TestStampBatchRecords:
+    """Direct tests for _stamp_batch_records."""
+
+    def test_stamps_processed_on_record_with_content(self):
+        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
+
+        record = {"content": {"action": {"field": "value"}}, "source_guid": "g1"}
+        _stamp_batch_records([record], "test_action")
+
+        assert record["_state"] == "processed"
+        assert "_state_history" in record
+
+    def test_stamps_exhausted_on_retry_exhausted(self):
+        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
+
+        record = {"content": {"a": {}}, "metadata": {"retry_exhausted": True}, "source_guid": "g1"}
+        _stamp_batch_records([record], "test_action")
+
+        assert record["_state"] == "exhausted"
+
+    def test_stamps_exhausted_on_reason_exhausted(self):
+        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
+
+        record = {"content": {"a": {}}, "metadata": {"reason": "exhausted"}, "source_guid": "g1"}
+        _stamp_batch_records([record], "test_action")
+
+        assert record["_state"] == "exhausted"
+
+    def test_stamps_failed_on_none_content_with_reason(self):
+        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
+
+        record = {"content": None, "metadata": {"reason": "api_error"}, "source_guid": "g1"}
+        _stamp_batch_records([record], "test_action")
+
+        assert record["_state"] == "failed"
+
+    def test_empty_dict_content_is_processed_not_failed(self):
+        """Empty dict {} is valid content — must NOT be classified as FAILED."""
+        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
+
+        record = {"content": {}, "metadata": {"reason": "something"}, "source_guid": "g1"}
+        _stamp_batch_records([record], "test_action")
+
+        assert record["_state"] == "processed"
+
+    def test_skips_record_with_existing_state(self):
+        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
+
+        record = {"_state": "committed", "content": {"a": {}}, "source_guid": "g1"}
+        _stamp_batch_records([record], "test_action")
+
+        assert record["_state"] == "committed"  # unchanged
+
+    def test_stamps_multiple_records(self):
+        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
+
+        records = [
+            {"content": {"a": {}}, "source_guid": "g1"},
+            {"content": None, "metadata": {"reason": "timeout"}, "source_guid": "g2"},
+        ]
+        _stamp_batch_records(records, "test_action")
+
+        assert records[0]["_state"] == "processed"
+        assert records[1]["_state"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# TestRemoveBatchPlaceholder (direct unit tests)
+# ---------------------------------------------------------------------------
+
+
+class TestRemoveBatchPlaceholder:
+    """Direct tests for _remove_batch_placeholder."""
+
+    def test_removes_valid_placeholder(self, tmp_path):
+        import json
+
+        from agent_actions.llm.batch.services.processing_recovery import (
+            _remove_batch_placeholder,
+        )
+
+        placeholder = tmp_path / "output.json"
+        placeholder.write_text(
+            json.dumps({"batch_job_id": "batch_123", "status": "submitted", "agent": "test"})
+        )
+
+        _remove_batch_placeholder(placeholder)
+
+        assert not placeholder.exists()
+
+    def test_leaves_non_placeholder_json(self, tmp_path):
+        import json
+
+        from agent_actions.llm.batch.services.processing_recovery import (
+            _remove_batch_placeholder,
+        )
+
+        real_output = tmp_path / "output.json"
+        real_output.write_text(json.dumps([{"content": {"data": "real"}}]))
+
+        _remove_batch_placeholder(real_output)
+
+        assert real_output.exists()  # NOT deleted
+
+    def test_leaves_completed_batch_file(self, tmp_path):
+        import json
+
+        from agent_actions.llm.batch.services.processing_recovery import (
+            _remove_batch_placeholder,
+        )
+
+        completed = tmp_path / "output.json"
+        completed.write_text(
+            json.dumps({"batch_job_id": "batch_123", "status": "completed", "agent": "test"})
+        )
+
+        _remove_batch_placeholder(completed)
+
+        assert completed.exists()  # status != submitted, not removed
+
+    def test_handles_missing_file(self, tmp_path):
+        from agent_actions.llm.batch.services.processing_recovery import (
+            _remove_batch_placeholder,
+        )
+
+        missing = tmp_path / "nonexistent.json"
+        _remove_batch_placeholder(missing)  # no error
+
+    def test_handles_malformed_json(self, tmp_path):
+        from agent_actions.llm.batch.services.processing_recovery import (
+            _remove_batch_placeholder,
+        )
+
+        bad_file = tmp_path / "corrupt.json"
+        bad_file.write_text("not json{{{")
+
+        _remove_batch_placeholder(bad_file)
+
+        assert bad_file.exists()  # not deleted, just warned
