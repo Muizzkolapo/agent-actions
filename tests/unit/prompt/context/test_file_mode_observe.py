@@ -6,9 +6,6 @@ Observe refs select fields from these namespaces — no storage lookup needed.
 The only cross-record reference is ``source.*`` (resolved from source_data).
 """
 
-import pytest
-
-from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     _resolve_observe_refs_for_flat_keys,
     apply_context_scope_for_records,
@@ -229,8 +226,13 @@ class TestApplyContextScopeForRecords:
         assert result[0]["content"]["text"] == "Q"
         assert result[0]["content"]["url"] == "https://example.com"
 
-    def test_explicit_ref_to_missing_namespace_raises(self):
-        """Explicit ref to absent namespace raises ConfigurationError (unified behavior)."""
+    def test_explicit_ref_to_missing_namespace_skips_record(self):
+        """Explicit ref to absent namespace skips enrichment for that record.
+
+        FILE mode is tolerant of missing fields because individual records
+        may have failed upstream (empty namespaces). The record passes through
+        unenriched rather than crashing the entire action.
+        """
         data = [
             {
                 "content": {
@@ -240,10 +242,11 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["rewrite.output", "generate.question"]}
-        with pytest.raises(ConfigurationError):
-            apply_context_scope_for_records(
-                records=data, context_scope=context_scope, action_name="review"
-            )
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="review"
+        )
+        # Record passes through unenriched
+        assert result[0] is data[0]
 
     def test_wildcard_on_missing_namespace_graceful(self):
         """Wildcard on absent namespace is graceful — no crash, no fields injected."""
@@ -263,8 +266,8 @@ class TestApplyContextScopeForRecords:
         # rewrite namespace absent — no fields injected
         assert "output" not in result[0]["content"]
 
-    def test_missing_namespace_explicit_ref_raises(self):
-        """Explicit ref to a guard-skipped action's namespace raises ConfigurationError."""
+    def test_missing_namespace_explicit_ref_skips_record(self):
+        """Explicit ref to a guard-skipped action's namespace skips that record."""
         data = [
             {
                 "content": {
@@ -273,10 +276,10 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["rewrite.output", "generate.question"]}
-        with pytest.raises(ConfigurationError):
-            apply_context_scope_for_records(
-                records=data, context_scope=context_scope, action_name="review"
-            )
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="review"
+        )
+        assert result[0] is data[0]
 
     def test_no_observe_returns_data_as_is(self):
         data = [{"content": {"extract": {"a": 1}}}]
@@ -529,14 +532,14 @@ class TestVersionNamespaceObserve:
 class TestEdgeCases:
     """Edge case tests for file-mode context_scope."""
 
-    def test_empty_content_explicit_ref_raises(self):
-        """Record with empty content {} — explicit ref raises ConfigurationError."""
+    def test_empty_content_explicit_ref_skips(self):
+        """Record with empty content {} — explicit ref skips enrichment."""
         data = [{"content": {}}]
         context_scope = {"observe": ["extract.text"]}
-        with pytest.raises(ConfigurationError):
-            apply_context_scope_for_records(
-                records=data, context_scope=context_scope, action_name="test"
-            )
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
+        assert result[0] is data[0]
 
     def test_empty_content_wildcard_graceful(self):
         """Record with empty content {} — wildcard is graceful, no fields extracted."""
@@ -547,14 +550,14 @@ class TestEdgeCases:
         )
         assert result[0]["content"] == {}
 
-    def test_no_content_key_explicit_ref_raises(self):
-        """Record without content key — explicit ref raises ConfigurationError."""
+    def test_no_content_key_explicit_ref_skips(self):
+        """Record without content key — explicit ref skips enrichment."""
         data = [{"source_guid": "sg-1"}]
         context_scope = {"observe": ["extract.text"]}
-        with pytest.raises(ConfigurationError):
-            apply_context_scope_for_records(
-                records=data, context_scope=context_scope, action_name="test"
-            )
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
+        assert result[0] is data[0]
 
     def test_no_content_key_wildcard_graceful(self):
         """Record without content key — wildcard is graceful."""
@@ -565,14 +568,14 @@ class TestEdgeCases:
         )
         assert result[0]["content"] == {}
 
-    def test_namespace_is_not_dict_explicit_ref_raises(self):
-        """Namespace value is not a dict — explicit ref raises ConfigurationError."""
+    def test_namespace_is_not_dict_explicit_ref_skips(self):
+        """Namespace value is not a dict — explicit ref skips enrichment."""
         data = [{"content": {"extract": "not_a_dict"}}]
         context_scope = {"observe": ["extract.text"]}
-        with pytest.raises(ConfigurationError):
-            apply_context_scope_for_records(
-                records=data, context_scope=context_scope, action_name="test"
-            )
+        result = apply_context_scope_for_records(
+            records=data, context_scope=context_scope, action_name="test"
+        )
+        assert result[0] is data[0]
 
     def test_namespace_is_not_dict_wildcard_graceful(self):
         """Namespace value is not a dict — wildcard is graceful."""

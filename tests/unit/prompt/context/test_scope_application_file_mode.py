@@ -6,9 +6,6 @@ source resolution, empty observe, None namespace, and directive interactions.
 
 from copy import deepcopy
 
-import pytest
-
-from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope_for_records,
 )
@@ -215,12 +212,14 @@ class TestSourceResolution:
         )
         assert result[0]["content"]["url"] == "http://1.com"
 
-    def test_no_source_data_with_source_refs_raises(self):
-        """Explicit source ref without source_data raises ConfigurationError."""
+    def test_no_source_data_with_source_refs_skips_record(self):
+        """Explicit source ref without source_data skips enrichment for that record."""
         records = [{"content": {"dep": {"f": 1}}}]
         scope = {"observe": ["source.url"]}
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope_for_records(records, scope, action_name="test", source_data=None)
+        result = apply_context_scope_for_records(
+            records, scope, action_name="test", source_data=None
+        )
+        assert result[0] is records[0]
 
     def test_no_source_refs_skips_resolution(self):
         """If no directive references source, source_data is ignored."""
@@ -251,12 +250,12 @@ class TestNoneNamespace:
         assert content["field"] == "value"
         assert "skipped" in content  # None namespace preserved for guards
 
-    def test_explicit_ref_on_none_namespace_raises(self):
-        """Explicit field ref on guard-skipped namespace raises ConfigurationError."""
+    def test_explicit_ref_on_none_namespace_skips_record(self):
+        """Explicit field ref on guard-skipped namespace skips enrichment."""
         record = {"content": {"skipped": None}}
         scope = {"observe": ["skipped.field"]}
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope_for_records([record], scope, action_name="test")
+        result = apply_context_scope_for_records([record], scope, action_name="test")
+        assert result[0] is record
 
 
 # ── Drop + passthrough interaction ────────────────────────────────────

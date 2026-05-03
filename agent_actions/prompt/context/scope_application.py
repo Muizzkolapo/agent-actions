@@ -490,8 +490,20 @@ def apply_context_scope_for_records(
             if source_content:
                 field_context["source"] = source_content
 
-        # Call unified bus filter (validates refs, fires events)
-        apply_context_scope(field_context, context_scope, action_name=action_name)
+        # Call unified bus filter (validates refs, fires events).
+        # Records where an upstream action failed may have empty namespaces —
+        # skip enrichment for those rather than failing the entire file.
+        try:
+            apply_context_scope(field_context, context_scope, action_name=action_name)
+        except ConfigurationError as e:
+            logger.warning(
+                "[%s] Skipping record %s — observe field missing (likely upstream failure): %s",
+                action_name,
+                sguid,
+                e,
+            )
+            enriched.append(record)
+            continue
 
         # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
         enriched_content = deepcopy(content)

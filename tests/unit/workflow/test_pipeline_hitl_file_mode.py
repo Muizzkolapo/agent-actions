@@ -346,7 +346,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
         source_data=original_data,
     )
 
-    # Verify HITL receives filtered data but merge uses original_data
+    # Verify HITL receives only observe-filtered fields (flat dict, not full bus)
     captured_context = {}
 
     def mock_run_dynamic_agent(**kwargs):
@@ -362,8 +362,12 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     ):
         results = HITLStrategy().invoke(filtered, context)
 
-    # HITL UI receives full enriched records
-    assert captured_context["context"][0]["content"]["question"] == "What is X?"
+    # HITL UI receives only observed fields — flat dict, no full bus
+    assert captured_context["context"][0] == {"question": "What is X?", "answer": "X is Y"}
+    assert captured_context["context"][1] == {"question": "What is Z?", "answer": "Z is W"}
+    # Non-observed fields must NOT be shown to the reviewer
+    assert "selectedAnswerer" not in captured_context["context"][0]
+    assert "validity" not in captured_context["context"][0]
 
     # Output merge should preserve ALL original content fields
     assert len(results) == 1
@@ -378,6 +382,119 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     assert result.data[0]["content"]["review_data"]["hitl_status"] == "approved"
     assert result.data[1]["content"]["upstream"]["answer"] == "Z is W"
     assert result.data[1]["content"]["upstream"]["selectedAnswerer"] == "Bob"
+
+
+def test_file_mode_hitl_no_observe_flattens_all_namespaces():
+    """Without observe config, HITL receives all content fields flattened."""
+    action_config = {"kind": "hitl", "granularity": "file"}
+
+    records = [
+        {
+            "source_guid": "sg-1",
+            "content": {
+                "upstream": {"question": "What?", "answer": "Yes"},
+            },
+        },
+    ]
+
+    context = ProcessingContext(
+        agent_config=action_config,
+        agent_name="review",
+        source_data=records,
+    )
+
+    captured_context = {}
+
+    def mock_run(**kwargs):
+        captured_context["context"] = kwargs["context"]
+        return ({"hitl_status": "approved", "timestamp": "2026-01-01T00:00:00Z"}, True)
+
+    with patch(
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+        side_effect=mock_run,
+    ):
+        HITLStrategy().invoke(records, context)
+
+    # All fields flattened (no observe = show everything)
+    assert captured_context["context"][0] == {"question": "What?", "answer": "Yes"}
+
+
+def test_file_mode_hitl_empty_observe_flattens_all():
+    """observe: [] is treated same as no observe — flattens all namespaces."""
+    action_config = {
+        "kind": "hitl",
+        "granularity": "file",
+        "context_scope": {"observe": []},
+    }
+
+    records = [
+        {
+            "source_guid": "sg-1",
+            "content": {"upstream": {"question": "What?", "answer": "Yes"}},
+        },
+    ]
+
+    context = ProcessingContext(
+        agent_config=action_config,
+        agent_name="review",
+        source_data=records,
+    )
+
+    captured_context = {}
+
+    def mock_run(**kwargs):
+        captured_context["context"] = kwargs["context"]
+        return ({"hitl_status": "approved", "timestamp": "2026-01-01T00:00:00Z"}, True)
+
+    with patch(
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+        side_effect=mock_run,
+    ):
+        HITLStrategy().invoke(records, context)
+
+    # Empty observe = falsy = flatten all (same as no observe)
+    assert captured_context["context"][0] == {"question": "What?", "answer": "Yes"}
+
+
+def test_file_mode_hitl_bad_namespace_in_observe_warns():
+    """Misspelled namespace in observe produces empty context and logs warning."""
+    action_config = {
+        "kind": "hitl",
+        "granularity": "file",
+        "context_scope": {"observe": ["nonexistent.field"]},
+    }
+
+    records = [
+        {
+            "source_guid": "sg-1",
+            "content": {"upstream": {"question": "What?"}},
+        },
+    ]
+
+    context = ProcessingContext(
+        agent_config=action_config,
+        agent_name="review",
+        source_data=records,
+    )
+
+    captured_context = {}
+
+    def mock_run(**kwargs):
+        captured_context["context"] = kwargs["context"]
+        return ({"hitl_status": "approved", "timestamp": "2026-01-01T00:00:00Z"}, True)
+
+    with (
+        patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            side_effect=mock_run,
+        ),
+        patch("agent_actions.processing.strategies.hitl.logger") as mock_logger,
+    ):
+        HITLStrategy().invoke(records, context)
+
+    # Reviewer sees empty dict
+    assert captured_context["context"][0] == {}
+    mock_logger.warning.assert_called_once()
 
 
 # --- Tests for apply_context_scope_for_records ---
