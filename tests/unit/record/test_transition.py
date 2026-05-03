@@ -4,6 +4,7 @@ import pytest
 
 from agent_actions.record.envelope import (
     RECORD_FRAMEWORK_FIELDS,
+    RECORD_LIFECYCLE_FIELDS,
     RECORD_STAGE_FIELDS,
     STATE_HISTORY_CAP,
     RecordEnvelope,
@@ -183,12 +184,16 @@ class TestTransitionHistoryCap:
 
 
 class TestFrameworkFields:
-    def test_state_fields_in_record_stage_fields(self):
+    def test_state_in_stage_fields(self):
         assert "_state" in RECORD_STAGE_FIELDS
-        assert "_state_history" in RECORD_STAGE_FIELDS
-        assert "_state_schema_version" in RECORD_STAGE_FIELDS
 
-    def test_state_fields_in_framework_fields(self):
+    def test_lifecycle_fields_in_lifecycle_not_stage(self):
+        assert "_state_history" in RECORD_LIFECYCLE_FIELDS
+        assert "_state_schema_version" in RECORD_LIFECYCLE_FIELDS
+        assert "_state_history" not in RECORD_STAGE_FIELDS
+        assert "_state_schema_version" not in RECORD_STAGE_FIELDS
+
+    def test_all_state_fields_in_framework_fields(self):
         assert "_state" in RECORD_FRAMEWORK_FIELDS
         assert "_state_history" in RECORD_FRAMEWORK_FIELDS
         assert "_state_schema_version" in RECORD_FRAMEWORK_FIELDS

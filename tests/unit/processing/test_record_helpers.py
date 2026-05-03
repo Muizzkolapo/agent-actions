@@ -63,6 +63,37 @@ class TestBuildTombstone:
         assert result["content"]["ns_b"] == {"y": 2}
         assert result["content"]["ns_c"] is None
 
+    def test_carries_state_history_from_input(self):
+        history = [
+            {
+                "timestamp": "t",
+                "action": "prior",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        input_record = {"content": {}, "target_id": "tid-1", "_state_history": history}
+        result = build_tombstone("act", input_record, "guard_skip")
+        assert result["_state_history"] == history
+
+    def test_carried_history_isolated_from_input(self):
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        input_record = {"content": {}, "_state_history": history}
+        result = build_tombstone("act", input_record, "guard_skip")
+        result["_state_history"].append({"extra": True})
+        assert len(input_record["_state_history"]) == 1
+
 
 # ---------------------------------------------------------------------------
 # build_exhausted_tombstone
@@ -104,6 +135,37 @@ class TestBuildExhaustedTombstone:
         result = build_exhausted_tombstone("act", None, {"f": None})
         assert result["content"] == {"act": {"f": None}}
 
+    def test_carries_state_history_from_input(self):
+        history = [
+            {
+                "timestamp": "t",
+                "action": "prior",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        input_record = {"content": {}, "target_id": "tid-1", "_state_history": history}
+        result = build_exhausted_tombstone("act", input_record, {})
+        assert result["_state_history"] == history
+
+    def test_carried_history_isolated_from_input(self):
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        input_record = {"content": {}, "_state_history": history}
+        result = build_exhausted_tombstone("act", input_record, {})
+        result["_state_history"].append({"extra": True})
+        assert len(input_record["_state_history"]) == 1
+
 
 # ---------------------------------------------------------------------------
 # carry_framework_fields
@@ -124,14 +186,12 @@ class TestCarryFrameworkFields:
             "target_id": "tid",
             "_recovery": {"attempt": 1},
             "metadata": {"reason": "test"},
-            "_state_history": [{"action": "a"}],
         }
         target: dict = {}
         carry_framework_fields(source, target)
         assert target["target_id"] == "tid"
         assert target["_recovery"] == {"attempt": 1}
         assert target["metadata"]["reason"] == "test"
-        assert target["_state_history"] == [{"action": "a"}]
 
     def test_skips_missing_fields(self):
         source = {"content": {"x": 1}}
@@ -166,27 +226,14 @@ class TestCarryFrameworkFields:
             "target_id",
             "_recovery",
             "metadata",
-            "_state_history",
         )
 
-    def test_state_history_is_carried(self):
-        history = [
-            {
-                "timestamp": "t",
-                "action": "a",
-                "from": None,
-                "to": "active",
-                "reason": "r",
-                "detail": None,
-            }
-        ]
-        source = {"_state": "processed", "_state_history": history}
-        target: dict = {}
-        carry_framework_fields(source, target)
-        assert target["_state_history"] == history
+    def test_state_history_not_in_carry_forward(self):
+        """_state_history is now carried by RecordEnvelope.build*() via RECORD_LIFECYCLE_FIELDS."""
+        assert "_state_history" not in CARRY_FORWARD_FIELDS
 
     def test_state_is_not_carried(self):
-        source = {"_state": "processed", "_state_history": []}
+        source = {"_state": "processed"}
         target: dict = {}
         carry_framework_fields(source, target)
         assert "_state" not in target
