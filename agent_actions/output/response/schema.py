@@ -63,7 +63,7 @@ class ResponseSchemaCompiler:
 
         Args:
             agent_config: Agent configuration dictionary containing schema settings
-            vendor: Vendor name (e.g., 'openai', 'anthropic', 'gemini', 'ollama')
+            vendor: Vendor name (e.g., 'openai', 'anthropic', 'gemini', 'ollama_local')
             context_data: Context data for dispatch_task (optional)
 
         Returns:

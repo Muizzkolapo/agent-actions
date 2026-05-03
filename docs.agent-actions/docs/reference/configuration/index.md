@@ -125,7 +125,7 @@ actions:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `model_vendor` | string | Provider: openai, anthropic, google, groq, mistral, cohere, ollama |
+| `model_vendor` | string | Provider: openai, anthropic, google, groq, mistral, cohere, ollama_local, ollama_cloud |
 | `model_name` | string | Model identifier (e.g., gpt-4o-mini) |
 | `api_key` | string | Environment variable name for API key |
 | `temperature` | float | LLM temperature (0.0-2.0) |

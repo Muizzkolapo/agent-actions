@@ -15,7 +15,7 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `llm_context` | JSON-serialized context dict (template variables) |
 | `response_text` | Raw LLM response text |
 | `model_name` | Model identifier (e.g., `llama3.2:latest`, `gpt-4o-mini`) |
-| `model_vendor` | Provider name (e.g., `ollama`, `openai`) |
+| `model_vendor` | Provider name (e.g., `ollama_local`, `openai`) |
 | `run_mode` | `online` (real-time) or `batch` |
 | `prompt_length` | Character count of the compiled prompt |
 | `response_length` | Character count of the LLM response |

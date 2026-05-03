@@ -9,7 +9,7 @@ function getProvider(model?: string): string {
   if (model.includes("gpt") || model.includes("o1") || model.includes("o3")) return "openai"
   if (model.includes("claude")) return "anthropic"
   if (model.includes("gemini")) return "google"
-  if (model.includes("llama") || model.includes("mistral")) return "ollama"
+  if (model.includes("llama") || model.includes("mistral")) return "ollama_local"
   return "unknown"
 }
 

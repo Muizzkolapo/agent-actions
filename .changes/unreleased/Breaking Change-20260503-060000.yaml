@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: "model_vendor: ollama removed. Use ollama_local (local daemon, no auth) or ollama_cloud (ollama.com, requires OLLAMA_API_KEY)."
+time: 2026-05-03T06:00:00.000000Z
