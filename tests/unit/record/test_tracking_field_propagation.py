@@ -2,6 +2,7 @@
 
 from agent_actions.record.envelope import (
     RECORD_FRAMEWORK_FIELDS,
+    RECORD_LIFECYCLE_FIELDS,
     RECORD_STAGE_FIELDS,
     RECORD_TRACKING_FIELDS,
     RecordEnvelope,
@@ -12,14 +13,25 @@ class TestFieldSets:
     def test_tracking_fields_are_subset_of_framework(self):
         assert RECORD_TRACKING_FIELDS < RECORD_FRAMEWORK_FIELDS
 
+    def test_lifecycle_fields_are_subset_of_framework(self):
+        assert RECORD_LIFECYCLE_FIELDS < RECORD_FRAMEWORK_FIELDS
+
     def test_stage_fields_are_subset_of_framework(self):
         assert RECORD_STAGE_FIELDS < RECORD_FRAMEWORK_FIELDS
 
     def test_framework_is_union(self):
-        assert RECORD_FRAMEWORK_FIELDS == RECORD_TRACKING_FIELDS | RECORD_STAGE_FIELDS
+        assert RECORD_FRAMEWORK_FIELDS == (
+            RECORD_TRACKING_FIELDS | RECORD_LIFECYCLE_FIELDS | RECORD_STAGE_FIELDS
+        )
 
-    def test_sets_are_disjoint(self):
+    def test_tracking_and_lifecycle_are_disjoint(self):
+        assert RECORD_TRACKING_FIELDS.isdisjoint(RECORD_LIFECYCLE_FIELDS)
+
+    def test_tracking_and_stage_are_disjoint(self):
         assert RECORD_TRACKING_FIELDS.isdisjoint(RECORD_STAGE_FIELDS)
+
+    def test_lifecycle_and_stage_are_disjoint(self):
+        assert RECORD_LIFECYCLE_FIELDS.isdisjoint(RECORD_STAGE_FIELDS)
 
     def test_tracking_contains_source_guid(self):
         assert "source_guid" in RECORD_TRACKING_FIELDS
@@ -82,6 +94,106 @@ class TestEnvelopeBuildCarriesTrackingFields:
 
         assert r3["version_correlation_id"] == "vcid-xyz"
         assert r3["source_guid"] == "g1"
+
+
+class TestEnvelopeBuildCarriesLifecycleFields:
+    def test_carries_state_history(self):
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        inp = {"source_guid": "g1", "_state_history": history, "content": {}}
+        result = RecordEnvelope.build("act", {"x": 1}, inp)
+        assert result["_state_history"] == history
+
+    def test_carries_state_schema_version(self):
+        inp = {"source_guid": "g1", "_state_schema_version": 1, "content": {}}
+        result = RecordEnvelope.build("act", {"x": 1}, inp)
+        assert result["_state_schema_version"] == 1
+
+    def test_build_skipped_carries_state_history(self):
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        inp = {"source_guid": "g1", "_state_history": history, "content": {"prior": {"x": 1}}}
+        result = RecordEnvelope.build_skipped("skipped_action", inp)
+        assert result["_state_history"] == history
+
+    def test_does_not_carry_state(self):
+        """_state is a per-stage field — must not be carried by build()."""
+        inp = {"source_guid": "g1", "_state": "processed", "content": {}}
+        result = RecordEnvelope.build("act", {"x": 1}, inp)
+        assert "_state" not in result
+
+    def test_carried_history_is_isolated_copy(self):
+        """Mutating output history must not corrupt input record."""
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        inp = {"source_guid": "g1", "_state_history": history, "content": {}}
+        result = RecordEnvelope.build("act", {"x": 1}, inp)
+        result["_state_history"].append({"extra": True})
+        assert len(inp["_state_history"]) == 1  # input unchanged
+
+    def test_build_skipped_history_is_isolated_copy(self):
+        """Mutating skipped output history must not corrupt input record."""
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        inp = {"source_guid": "g1", "_state_history": history, "content": {"prior": {"x": 1}}}
+        result = RecordEnvelope.build_skipped("skipped_action", inp)
+        result["_state_history"].append({"extra": True})
+        assert len(inp["_state_history"]) == 1
+
+    def test_cumulative_growth_across_build_transition_build(self):
+        """History must grow across build → transition → build chain."""
+        from agent_actions.record.state import RecordState
+
+        r1 = RecordEnvelope.build("stage1", {"a": 1}, {"source_guid": "g1", "content": {}})
+        RecordEnvelope.transition(r1, RecordState.PROCESSED, "stage1", "done")
+        assert len(r1["_state_history"]) == 1
+
+        RecordEnvelope.transition(r1, RecordState.ACTIVE, "reset", "downstream_reset")
+        r2 = RecordEnvelope.build("stage2", {"b": 2}, r1)
+        RecordEnvelope.transition(r2, RecordState.PROCESSED, "stage2", "done")
+        assert len(r2["_state_history"]) == 3  # stage1 + reset + stage2
+
+    def test_build_skipped_carries_state_schema_version(self):
+        inp = {"source_guid": "g1", "_state_schema_version": 1, "content": {"prior": {"x": 1}}}
+        result = RecordEnvelope.build_skipped("skipped_action", inp)
+        assert result["_state_schema_version"] == 1
+
+    def test_empty_history_list_carried(self):
+        inp = {"source_guid": "g1", "_state_history": [], "content": {}}
+        result = RecordEnvelope.build("act", {"x": 1}, inp)
+        assert result["_state_history"] == []
 
 
 class TestBuildSkippedCarriesTrackingFields:

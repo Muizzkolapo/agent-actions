@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix _state_history lost on tombstone records — add RECORD_LIFECYCLE_FIELDS so RecordEnvelope.build*() carries cumulative lifecycle fields automatically"
+time: 2026-05-03T14:48:06.000000Z

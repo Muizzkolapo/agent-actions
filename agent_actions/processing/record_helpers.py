@@ -16,11 +16,12 @@ from agent_actions.utils.content import get_existing_content, is_version_merge
 # Framework fields carried from input to output when the envelope builder
 # does not manage them automatically.
 # _state is intentionally absent — it resets per-action at the executor boundary.
+# _state_history: carried by RecordEnvelope.build*() via RECORD_LIFECYCLE_FIELDS
+# to preserve cumulative state transitions on tombstone records.
 CARRY_FORWARD_FIELDS: tuple[str, ...] = (
     "target_id",
     "_recovery",
     "metadata",
-    "_state_history",
 )
 
 
@@ -66,17 +67,16 @@ def build_exhausted_tombstone(
     the existing content (upstream namespaces) merged with an empty
     action output so downstream can see what was accumulated before
     exhaustion.
+
+    Routes through :meth:`RecordEnvelope.build` so lifecycle fields
+    (``_state_history``, ``_state_schema_version``) are carried automatically.
     """
-    existing = get_existing_content(input_record) if input_record else {}
-    content = RecordEnvelope.build_content(action_name, empty_content, existing)
-    item: dict[str, Any] = {
-        "content": content,
-        "source_guid": source_guid,
-        "metadata": {
-            "reason": RETRY_EXHAUSTED,
-            "retry_exhausted": True,
-            "agent_type": "tombstone",
-        },
+    item = RecordEnvelope.build(action_name, empty_content, input_record)
+    item["source_guid"] = source_guid
+    item["metadata"] = {
+        "reason": RETRY_EXHAUSTED,
+        "retry_exhausted": True,
+        "agent_type": "tombstone",
     }
     if extra_metadata:
         item["metadata"].update(extra_metadata)
@@ -102,7 +102,12 @@ def carry_framework_fields(
         return target
     for field in fields:
         if field in source:
-            target[field] = source[field]
+            value = source[field]
+            # Shallow-copy lists to prevent aliasing (transition()
+            # appends in-place to _state_history).
+            if isinstance(value, list):
+                value = list(value)
+            target[field] = value
     return target
 
 

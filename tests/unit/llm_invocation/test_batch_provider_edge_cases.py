@@ -64,6 +64,35 @@ class TestExhaustedRecordBuilderActionName:
                 action_name="",
             )
 
+    def test_carries_state_history_from_original_row(self):
+        """Exhausted items must preserve the cumulative state audit trail."""
+        from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+
+        history = [
+            {
+                "timestamp": "t",
+                "action": "a",
+                "from": None,
+                "to": "active",
+                "reason": "r",
+                "detail": None,
+            }
+        ]
+        recovery = RecoveryMetadata(
+            retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="api_error")
+        )
+        item = ExhaustedRecordBuilder.build_exhausted_item(
+            source_guid="sg-hist",
+            original_row={"text": "hello", "target_id": "tid-1", "_state_history": history},
+            recovery_metadata=recovery,
+            agent_config={"action_name": "act"},
+            action_name="act",
+        )
+        assert item["_state_history"] == history
+        # Verify isolation — mutating output must not corrupt input
+        item["_state_history"].append({"extra": True})
+        assert len(history) == 1
+
     def test_action_name_empty_when_agent_config_is_none_raises(self):
         """When action_name is empty (derived from None config), RecordEnvelopeError is raised."""
         from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder

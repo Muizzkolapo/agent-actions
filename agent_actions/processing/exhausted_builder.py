@@ -4,7 +4,6 @@ from typing import Any
 
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.lineage.builder import LineageBuilder
 
@@ -41,20 +40,23 @@ class ExhaustedRecordBuilder:
         agent_config: dict[str, Any],
         action_name: str,
     ) -> dict[str, Any]:
-        """Build an exhausted retry record with empty content and recovery metadata."""
+        """Build an exhausted retry record with empty content and recovery metadata.
+
+        Routes through :meth:`RecordEnvelope.build` so lifecycle fields
+        (``_state_history``, ``_state_schema_version``) are carried automatically.
+        """
         resolved_source_guid = LineageBuilder.resolve_source_guid(source_guid, original_row)
-
         empty_content = ExhaustedRecordBuilder.build_empty_content(agent_config)
-        existing = get_existing_content(original_row) if isinstance(original_row, dict) else {}
 
+        exhausted_item = RecordEnvelope.build(
+            action_name, empty_content, original_row if isinstance(original_row, dict) else None
+        )
+
+        exhausted_item["source_guid"] = resolved_source_guid
         node_id = IDGenerator.generate_node_id(action_name)
-        exhausted_item: dict[str, Any] = {
-            "source_guid": resolved_source_guid,
-            "content": RecordEnvelope.build_content(action_name, empty_content, existing),
-            "node_id": node_id,
-            "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
-            "_recovery": recovery_metadata.to_dict(),
-        }
+        exhausted_item["node_id"] = node_id
+        exhausted_item["metadata"] = {"retry_exhausted": True, "agent_type": "tombstone"}
+        exhausted_item["_recovery"] = recovery_metadata.to_dict()
 
         if isinstance(original_row, dict):
             if "target_id" in original_row and original_row["target_id"]:

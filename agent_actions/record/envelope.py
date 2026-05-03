@@ -30,6 +30,16 @@ RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+# Lifecycle fields: cumulative across stages — carried forward AND appended to.
+# _state_history grows via transition(); _state_schema_version tags the format.
+# Carried by _carry_persistent_fields() so tombstone builders get them automatically.
+RECORD_LIFECYCLE_FIELDS: frozenset[str] = frozenset(
+    {
+        "_state_history",
+        "_state_schema_version",
+    }
+)
+
 # Per-stage fields: rebuilt by enrichers at each stage. NOT carried forward.
 # parent_target_id and root_target_id are set by LineageEnricher from the
 # parent's target_id — they're derived per-stage, not stable identity.
@@ -46,14 +56,16 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         "root_target_id",
         "chunk_info",
         "_state",
-        "_state_history",
-        "_state_schema_version",
     }
 )
 
+# Persistent fields: carried from input → output by RecordEnvelope.build*().
+# Tracking (stable identity) + lifecycle (cumulative).
+_PERSISTENT_FIELDS: frozenset[str] = RECORD_TRACKING_FIELDS | RECORD_LIFECYCLE_FIELDS
+
 # Union of all framework fields. Used by record_processor (first-stage source wrapping),
 # pipeline_file_mode (tool input stripping), and scope_namespace (metadata exclusion).
-RECORD_FRAMEWORK_FIELDS: frozenset[str] = RECORD_TRACKING_FIELDS | RECORD_STAGE_FIELDS
+RECORD_FRAMEWORK_FIELDS: frozenset[str] = _PERSISTENT_FIELDS | RECORD_STAGE_FIELDS
 
 
 class RecordEnvelopeError(Exception):
@@ -90,7 +102,7 @@ class RecordEnvelope:
 
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: action_output}}
-        return _carry_tracking_fields(result, input_record)
+        return _carry_persistent_fields(result, input_record)
 
     @staticmethod
     def build_content(
@@ -121,7 +133,7 @@ class RecordEnvelope:
             raise RecordEnvelopeError("action_name is required")
         existing = _extract_existing(input_record)
         result: dict[str, Any] = {"content": {**existing, action_name: None}}
-        return _carry_tracking_fields(result, input_record)
+        return _carry_persistent_fields(result, input_record)
 
     @staticmethod
     def transition(
@@ -197,21 +209,33 @@ def _validate_transition(from_state: RecordState | None, to_state: RecordState) 
     )
 
 
-def _carry_tracking_fields(
+def _carry_persistent_fields(
     result: dict[str, Any], input_record: dict[str, Any] | None
 ) -> dict[str, Any]:
-    """Copy tracking fields from *input_record* into *result*.
+    """Copy persistent fields from *input_record* into *result*.
 
-    Tracking fields (``source_guid``, ``version_correlation_id``) are the
-    record's stable identity — set once at creation and preserved through all
-    downstream 1:1 stages. Per-stage fields (metadata, lineage, etc.) are not
-    carried; enrichers rebuild those each stage.
+    Persistent fields fall into two categories:
+
+    1. **Tracking fields** (``source_guid``, ``version_correlation_id``) —
+       the record's stable identity, set once at creation.
+    2. **Lifecycle fields** (``_state_history``, ``_state_schema_version``) —
+       metadata tied to the record's state machine; ``_state_history`` grows
+       across stages, ``_state_schema_version`` tags the history format.
+
+    Per-stage fields (metadata, lineage, etc.) are not carried; enrichers
+    rebuild those each stage.
     """
     if input_record is None:
         return result
-    for field in RECORD_TRACKING_FIELDS:
+    for field in _PERSISTENT_FIELDS:
         if field in input_record:
-            result[field] = input_record[field]
+            value = input_record[field]
+            # Deep-copy mutable lifecycle fields to prevent aliasing —
+            # transition() appends in-place, so shared references between
+            # input and output records would corrupt the audit trail.
+            if isinstance(value, list):
+                value = list(value)
+            result[field] = value
     return result
 
 
