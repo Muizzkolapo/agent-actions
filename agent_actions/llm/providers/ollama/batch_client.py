@@ -21,6 +21,7 @@ from ollama import Client
 
 from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
 from agent_actions.errors import ConfigurationError, VendorAPIError
+from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
 from agent_actions.llm.providers.ollama.failure_injection import (
     should_fail_batch_record,
 )
@@ -113,16 +114,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     ) -> Path:
         return self._write_jsonl_file(tasks, batch_dir, batch_name, self.vendor_slug)
 
-    def _extract_ollama_schema(self, schema: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Extract inner JSON schema for Ollama's format parameter."""
-        if not schema:
-            return None
-        if "schema" in schema and isinstance(schema["schema"], dict):
-            return schema["schema"]
-        if "type" in schema or "properties" in schema:
-            return schema
-        return schema
-
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Process batch synchronously (no actual API submission)."""
         batch_id = f"batch_{uuid.uuid4().hex}"
@@ -163,7 +154,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     if response_format and isinstance(response_format, dict):
                         if response_format.get("type") == "json_schema":
                             json_schema = response_format.get("json_schema", {})
-                            format_param = self._extract_ollama_schema(json_schema)
+                            format_param = _extract_ollama_schema(json_schema)
                             if not format_param:
                                 format_param = "json"
 

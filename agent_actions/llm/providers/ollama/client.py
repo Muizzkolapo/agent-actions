@@ -43,14 +43,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _error_mapping(vendor_slug: str) -> VendorErrorMapping:
-    return VendorErrorMapping(
-        vendor_name=vendor_slug,
-        extra_network_types=(httpx.ConnectError, httpx.TimeoutException),
-        status_code_error_types=(httpx.HTTPStatusError,),
-        base_api_error_type=ResponseError,
-        supports_retry_after=False,
-    )
+_ERROR_MAPPING_LOCAL = VendorErrorMapping(
+    vendor_name="ollama_local",
+    extra_network_types=(httpx.ConnectError, httpx.TimeoutException),
+    status_code_error_types=(httpx.HTTPStatusError,),
+    base_api_error_type=ResponseError,
+    supports_retry_after=False,
+)
+
+_ERROR_MAPPING_CLOUD = VendorErrorMapping(
+    vendor_name="ollama_cloud",
+    extra_network_types=(httpx.ConnectError, httpx.TimeoutException),
+    status_code_error_types=(httpx.HTTPStatusError,),
+    base_api_error_type=ResponseError,
+    supports_retry_after=False,
+)
 
 
 def _build_ollama_client(
@@ -148,7 +155,9 @@ def _call_ollama_json(
         httpx.HTTPStatusError,
         ResponseError,
     ) as e:
-        raise wrap_vendor_error(e, model, _error_mapping(vendor_slug), request_id) from e
+        raise wrap_vendor_error(
+            e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
+        ) from e
 
     latency_ms = (datetime.now() - start_time).total_seconds() * 1000
     ResponseBuilder.record_usage_and_event(response, vendor_slug, model, latency_ms, request_id)
@@ -205,7 +214,9 @@ def _call_ollama_non_json(
         httpx.HTTPStatusError,
         ResponseError,
     ) as e:
-        raise wrap_vendor_error(e, model, _error_mapping(vendor_slug), request_id) from e
+        raise wrap_vendor_error(
+            e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
+        ) from e
 
     latency_ms = (datetime.now() - start_time).total_seconds() * 1000
     ResponseBuilder.record_usage_and_event(response, vendor_slug, model, latency_ms, request_id)
