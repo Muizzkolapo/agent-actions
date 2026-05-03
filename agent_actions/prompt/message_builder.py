@@ -254,17 +254,35 @@ class MessageBuilder:
         context_str = MessageBuilder._serialise_context(context_data, provider)
         rules = list(rules_tuple)
 
+        schema_injection = config.schema_injection if json_mode else SchemaInjection.NONE
+
         body = MessageBuilder._assemble_body(
             style=style,
             prompt_config=prompt_config,
             context_str=context_str,
             schema=schema,
-            schema_injection=config.schema_injection if json_mode else SchemaInjection.NONE,
+            schema_injection=schema_injection,
             rules=rules,
             blank_line_before_rules=config.blank_line_before_rules,
         )
 
-        messages = MessageBuilder._wrap_in_roles(role, prompt_config, context_str, body)
+        # SchemaInjection.PROMPT: inject schema into the prompt text so it
+        # lands in the system message for providers that use RAW style
+        # (no body assembly). Used by ollama_cloud until native structured
+        # output support ships (ollama/ollama#12362).
+        effective_prompt = prompt_config
+        if schema_injection == SchemaInjection.PROMPT and schema is not None:
+            import json as _json
+
+            schema_text = _json.dumps(schema, indent=2, ensure_ascii=False)
+            effective_prompt = (
+                f"{prompt_config}\n\n"
+                f"You MUST respond with valid JSON matching this schema:\n"
+                f"{schema_text}\n\n"
+                f"Return ONLY the JSON object, no extra text."
+            )
+
+        messages = MessageBuilder._wrap_in_roles(role, effective_prompt, context_str, body)
 
         if enable_prompt_caching and provider == "anthropic":
             messages = [

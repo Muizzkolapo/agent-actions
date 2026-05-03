@@ -310,6 +310,64 @@ class TestOllamaCloudClient:
             call_kwargs = mock_cls.call_args.kwargs
             assert call_kwargs["host"] == "https://env-cloud.example.com"
 
+    def test_cloud_schema_injected_into_prompt(self):
+        """Cloud JSON mode injects schema into the system message text.
+
+        This is the positive counterpart to test_call_json_omits_format_param:
+        cloud omits format param BUT injects the schema into the prompt so
+        the model sees it. Without this, cloud JSON calls have no schema signal.
+        """
+        from agent_actions.prompt.message_builder import MessageBuilder
+
+        schema = {
+            "name": "test_schema",
+            "schema": {
+                "type": "object",
+                "properties": {"label": {"type": "string"}},
+                "required": ["label"],
+            },
+        }
+        envelope = MessageBuilder.build(
+            "ollama_cloud",
+            "Classify the item.",
+            "A red apple",
+            schema=schema,
+            json_mode=True,
+        )
+        messages = envelope.to_dicts()
+        # System message should contain the schema
+        system_msgs = [m for m in messages if m["role"] == "system"]
+        assert system_msgs, "Expected a system message for ollama_cloud"
+        system_text = system_msgs[0]["content"]
+        assert "label" in system_text, "Schema field 'label' must appear in system message"
+        assert "JSON" in system_text, "JSON instruction must appear in system message"
+
+    def test_local_schema_not_in_prompt(self):
+        """Local JSON mode does NOT inject schema into prompt (uses format param instead)."""
+        from agent_actions.prompt.message_builder import MessageBuilder
+
+        schema = {
+            "name": "test_schema",
+            "schema": {
+                "type": "object",
+                "properties": {"label": {"type": "string"}},
+                "required": ["label"],
+            },
+        }
+        envelope = MessageBuilder.build(
+            "ollama_local",
+            "Classify the item.",
+            "A red apple",
+            schema=schema,
+            json_mode=True,
+        )
+        messages = envelope.to_dicts()
+        system_msgs = [m for m in messages if m["role"] == "system"]
+        assert system_msgs, "Expected a system message for ollama_local"
+        system_text = system_msgs[0]["content"]
+        # Local uses SchemaInjection.NONE — schema should NOT be in the prompt
+        assert "required" not in system_text, "Local should not inject schema into prompt"
+
 
 # ---------------------------------------------------------------------------
 # OllamaBatchClient — vendor split
