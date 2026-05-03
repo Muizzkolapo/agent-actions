@@ -313,15 +313,28 @@ class MessageBuilder:
         separate ``system`` param plus a single user message.  Gemini
         combines prompt and content into one text string.
         """
+        # Inject schema into prompt for providers using SchemaInjection.PROMPT
+        # (e.g., ollama_cloud — no native structured output support).
+        effective_prompt = prompt
+        config = PROVIDER_MESSAGE_CONFIGS.get(provider)
+        if config and config.schema_injection == SchemaInjection.PROMPT and schema is not None:
+            schema_text = json.dumps(schema, indent=2, ensure_ascii=False)
+            effective_prompt = (
+                f"{prompt}\n\n"
+                f"You MUST respond with valid JSON matching this schema:\n"
+                f"{schema_text}\n\n"
+                f"Return ONLY the JSON object, no extra text."
+            )
+
         if provider == "gemini":
             # Gemini batch: single combined text
-            combined = f"{prompt}\n\n{user_content}"
+            combined = f"{effective_prompt}\n\n{user_content}"
             messages = [LLMMessage(role="user", content=combined)]
         else:
             # Standard (including Anthropic): system + user messages.
             # Anthropic batch consumers split system out as a top-level param.
             messages = [
-                LLMMessage(role="system", content=prompt),
+                LLMMessage(role="system", content=effective_prompt),
                 LLMMessage(role="user", content=user_content),
             ]
         return LLMMessageEnvelope(
