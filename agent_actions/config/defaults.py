@@ -20,6 +20,12 @@ class OllamaDefaults:
     BASE_URL: str = "http://localhost:11434"
 
 
+class OllamaCloudDefaults:
+    """Defaults for Ollama Cloud provider (ollama.com)."""
+
+    BASE_URL: str = "https://ollama.com"
+
+
 class ApiDefaults:
     """Defaults for HTTP/API data-source fetching."""
 

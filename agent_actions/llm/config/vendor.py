@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from agent_actions.config.defaults import OllamaDefaults
+from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
 
 
 class VendorType(str, Enum):
@@ -22,7 +22,8 @@ class VendorType(str, Enum):
     GROQ = "groq"
     COHERE = "cohere"
     MISTRAL = "mistral"
-    OLLAMA = "ollama"
+    OLLAMA_LOCAL = "ollama_local"
+    OLLAMA_CLOUD = "ollama_cloud"
     TOOL = "tool"
     HITL = "hitl"
     AGAC_PROVIDER = "agac-provider"
@@ -110,12 +111,28 @@ class MistralConfig(BaseVendorConfig):
     api_key_env_name: str = "MISTRAL_API_KEY"
 
 
-class OllamaConfig(BaseVendorConfig):
-    """Configuration specific to Ollama (local models)."""
+class OllamaLocalConfig(BaseVendorConfig):
+    """Configuration specific to Ollama local daemon.
 
-    vendor_type: Literal[VendorType.OLLAMA] = VendorType.OLLAMA
+    No API key required — the local daemon does not use Bearer auth.
+    """
+
+    vendor_type: Literal[VendorType.OLLAMA_LOCAL] = VendorType.OLLAMA_LOCAL
+    api_key_env_name: str = "NO_KEY_REQUIRED"
+    base_url: str = Field(default=OllamaDefaults.BASE_URL, description="Ollama local server URL")
+
+
+class OllamaCloudConfig(BaseVendorConfig):
+    """Configuration specific to Ollama Cloud (ollama.com).
+
+    Requires OLLAMA_API_KEY for Bearer authentication.
+    """
+
+    vendor_type: Literal[VendorType.OLLAMA_CLOUD] = VendorType.OLLAMA_CLOUD
     api_key_env_name: str = "OLLAMA_API_KEY"
-    base_url: str = Field(default=OllamaDefaults.BASE_URL, description="Ollama server URL")
+    base_url: str = Field(
+        default=OllamaCloudDefaults.BASE_URL, description="Ollama Cloud server URL"
+    )
 
 
 class ToolVendorConfig(BaseVendorConfig):
@@ -159,7 +176,8 @@ VendorConfig = (
     | GroqConfig
     | CohereConfig
     | MistralConfig
-    | OllamaConfig
+    | OllamaLocalConfig
+    | OllamaCloudConfig
     | ToolVendorConfig
     | HitlVendorConfig
     | AgacProviderConfig
@@ -214,7 +232,8 @@ __all__ = [
     "GroqConfig",
     "CohereConfig",
     "MistralConfig",
-    "OllamaConfig",
+    "OllamaLocalConfig",
+    "OllamaCloudConfig",
     "ToolVendorConfig",
     "HitlVendorConfig",
     "AgacProviderConfig",
