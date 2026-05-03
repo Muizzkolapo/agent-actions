@@ -187,59 +187,49 @@ class ActionExecutor:
     ) -> tuple[bool, ActionExecutionResult | None]:
         """Verify a completed action has actual output in storage.
 
-        Returns:
-            (should_skip, result) -- if should_skip is False, agent is re-run.
+        Returns (should_skip, result). If should_skip is False, action is re-run.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        if storage_backend is not None:
-            try:
-                # Check disposition FIRST — a failed action may have partial
-                # results in storage.  The disposition is the authoritative
-                # signal; output existence is irrelevant when it's set.
-                for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
-                    if storage_backend.has_disposition(
-                        action_name,
-                        disp,
-                        record_id=NODE_LEVEL_RECORD_ID,
-                    ):
-                        logger.info(
-                            "Action %s has %s from prior run — re-running",
-                            action_name,
-                            disp,
-                        )
-                        storage_backend.clear_disposition(
-                            action_name,
-                            disp,
-                            record_id=NODE_LEVEL_RECORD_ID,
-                        )
-                        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-                        return (False, None)
+        if storage_backend is None:
+            return (
+                True,
+                ActionExecutionResult(
+                    success=True,
+                    status=ActionStatus.COMPLETED,
+                    metrics=ExecutionMetrics(duration=0.0),
+                ),
+            )
 
-                target_files = storage_backend.list_target_files(action_name)
-                if not target_files:
-                    logger.info(
-                        "Action %s completed but no output in storage - re-running",
-                        action_name,
-                    )
-                    self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-                    return (False, None)
-                return (
-                    True,
-                    ActionExecutionResult(
-                        success=True,
-                        status=ActionStatus.COMPLETED,
-                        metrics=ExecutionMetrics(duration=0.0),
-                    ),
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to verify output for %s, resetting to pending: %s",
-                    action_name,
-                    e,
-                    exc_info=True,
-                )
+        try:
+            return self._check_prior_output(storage_backend, action_name)
+        except Exception as e:
+            logger.warning(
+                "Failed to verify output for %s, resetting to pending: %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
+            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            return (False, None)
+
+    def _check_prior_output(
+        self, storage_backend: Any, action_name: str
+    ) -> tuple[bool, ActionExecutionResult | None]:
+        """Check if prior run left valid output or a blocking disposition."""
+        # Disposition is authoritative — a failed/skipped action must re-run
+        # even if partial output exists.
+        for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
+            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
+                logger.info("Action %s has %s from prior run — re-running", action_name, disp)
+                storage_backend.clear_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID)
                 self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                 return (False, None)
+
+        if not storage_backend.list_target_files(action_name):
+            logger.info("Action %s completed but no output in storage — re-running", action_name)
+            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            return (False, None)
+
         return (
             True,
             ActionExecutionResult(
@@ -555,26 +545,35 @@ class ActionExecutor:
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
     ) -> str | None:
-        """Return the name of a failed or skipped upstream dependency, or None if all healthy.
+        """Return the name of a failed/skipped upstream dependency, or None if healthy.
 
-        Checks both explicit dependencies and version sources.  For
-        version-correlation actions (e.g. ``aggregate_votes`` consuming
-        ``filter_learning_quality_1/2/3``), the version sources are
-        checked so that cascade failures propagate as SKIPPED instead of
-        raising "Version correlation failed" errors.
+        Checks explicit dependencies and version sources (for merge/reduce actions).
         """
-        deps_to_check: list[str] = list(action_config.get("dependencies", []))
+        deps_to_check = self._collect_upstream_deps(action_name, action_config)
+        if not deps_to_check:
+            return None
 
-        # Also check version sources for merge/reduce actions.  If the
-        # version agents (e.g. extract_raw_qa_1, _2, _3) are failed or
-        # skipped, this action cannot correlate — it should be skipped,
-        # not error with "Version correlation failed".
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        for dep in deps_to_check:
+            if self.deps.state_manager.is_failed(dep) or self.deps.state_manager.is_skipped(dep):
+                return dep
+            if storage_backend and self._has_blocking_disposition(
+                storage_backend, dep, action_name
+            ):
+                return dep
+        return None
+
+    def _collect_upstream_deps(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> list[str]:
+        """Build list of upstream dependencies including version sources."""
+        deps: list[str] = list(action_config.get("dependencies", []))
+
+        # Version sources: {base}_{N} agents for merge/reduce actions
         vc_config = action_config.get("version_consumption_config")
         if vc_config and isinstance(vc_config, dict):
             source_base = vc_config.get("source")
             if source_base:
-                # Find expanded version agents in the execution order.
-                # Version agents are named {base}_{N} where N is a digit.
                 prefix = f"{source_base}_"
                 for action in self.deps.state_manager.execution_order:
                     if (
@@ -582,53 +581,34 @@ class ActionExecutor:
                         and action[len(prefix) :].isdigit()
                         and action != action_name
                     ):
-                        deps_to_check.append(action)
+                        deps.append(action)
+        return deps
 
-        if not deps_to_check:
-            return None
-        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        for dep in deps_to_check:
-            if self.deps.state_manager.is_failed(dep) or self.deps.state_manager.is_skipped(dep):
-                return dep
-            if storage_backend is None:
-                continue
-            if storage_backend.has_disposition(
-                dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
-            ):
-                target_files = storage_backend.list_target_files(dep)
-                if not target_files:
-                    return dep
-                storage_backend.clear_disposition(
-                    dep, DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
-                )
-                logger.warning(
-                    "Stale upstream FAILED disposition on '%s' — "
-                    "upstream has %d target file(s). "
-                    "Clearing disposition; downstream '%s' will proceed.",
-                    dep,
-                    len(target_files),
-                    action_name,
-                )
+    def _has_blocking_disposition(self, storage_backend: Any, dep: str, action_name: str) -> bool:
+        """Check if dep has a blocking disposition (FAILED/SKIPPED without output).
+
+        Stale dispositions (disposition set but output exists) are cleared as a
+        defense-in-depth measure for reruns with lingering pre-Phase-5 state.
+        """
+        for disposition in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
             if not storage_backend.has_disposition(
-                dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+                dep, disposition, record_id=NODE_LEVEL_RECORD_ID
             ):
                 continue
             target_files = storage_backend.list_target_files(dep)
             if not target_files:
-                return dep
-            storage_backend.clear_disposition(
-                dep, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-            )
+                return True
+            # Stale: disposition exists but output also exists — clear it
+            storage_backend.clear_disposition(dep, disposition, record_id=NODE_LEVEL_RECORD_ID)
             logger.warning(
-                "Stale upstream SKIPPED disposition on '%s' — "
-                "upstream has %d target file(s). "
-                "A write path set SKIPPED despite output existing. "
-                "Clearing disposition; downstream '%s' will proceed.",
+                "Stale upstream %s disposition on '%s' — upstream has %d target file(s). "
+                "Clearing; downstream '%s' will proceed.",
+                disposition,
                 dep,
                 len(target_files),
                 action_name,
             )
-        return None
+        return False
 
     def _handle_dependency_skip(
         self,
