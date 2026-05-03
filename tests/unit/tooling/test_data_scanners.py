@@ -364,7 +364,7 @@ def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
                 "You are a classifier...",
                 '[{"issue_type":"bug"}]',
                 "llama3.2:latest",
-                "ollama",
+                "ollama_local",
                 "batch",
                 200,
                 25,

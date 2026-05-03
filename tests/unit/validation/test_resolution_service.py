@@ -273,7 +273,7 @@ class TestVendorRunModeCompatibility:
         """Online mode passes for any vendor (no batch mode check needed)."""
         svc = WorkflowResolutionService(
             action_configs={
-                "my_action": {"model_vendor": "ollama", "run_mode": "online"},
+                "my_action": {"model_vendor": "ollama_local", "run_mode": "online"},
             },
         )
         result = svc.resolve_all()
