@@ -25,6 +25,34 @@ _JSON_PARSE_FEEDBACK = (
 )
 
 
+def _build_json_parse_feedback(validator: Any) -> str:
+    """Build JSON parse error feedback, including expected schema fields if available."""
+    base = _JSON_PARSE_FEEDBACK
+
+    # If the validator is a SchemaValidator, extract field names to guide the model
+    schema = getattr(validator, "_schema", None)
+    if not isinstance(schema, dict):
+        return base
+
+    # Try fields-style schema (agent-actions format)
+    fields = schema.get("fields")
+    if isinstance(fields, list):
+        names = [f.get("id") or f.get("name", "") for f in fields if isinstance(f, dict)]
+        if names:
+            return f"{base}\n\nExpected JSON fields: {', '.join(names)}"
+
+    # Try properties-style schema (JSON Schema format)
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        return f"{base}\n\nExpected JSON fields: {', '.join(props.keys())}"
+
+    # Inline schema: keys are field names directly
+    if all(isinstance(v, str) for v in schema.values()):
+        return f"{base}\n\nExpected JSON fields: {', '.join(schema.keys())}"
+
+    return base
+
+
 def _get_parse_error(response: Any) -> str | None:
     """Return ``_parse_error`` string if *response* signals a provider JSON parse failure."""
     if isinstance(response, list) and response and isinstance(response[0], dict):
@@ -251,7 +279,7 @@ class RepromptService:
             )
 
             if parse_error is not None:
-                feedback = _JSON_PARSE_FEEDBACK
+                feedback = _build_json_parse_feedback(self._validator)
             else:
                 feedback = build_validation_feedback(
                     response, self._validator.feedback_message, strategies=self._strategies
