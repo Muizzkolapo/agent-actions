@@ -833,6 +833,47 @@ class TestOpenAITopPStopForwarding:
         assert call_kwargs["presence_penalty"] == 0.3
 
 
+class TestOpenAICallJsonParseErrors:
+    """OpenAI call_json returns error dict instead of raising on bad JSON."""
+
+    @patch("agent_actions.llm.providers.openai.client.fire_event")
+    @patch("agent_actions.llm.providers.openai.client.OpenAI")
+    def test_empty_response_returns_error_dict(self, mock_openai_cls, mock_fire):
+        from agent_actions.llm.providers.openai.client import OpenAIClient
+
+        mock_response = _make_openai_style_mocks(None)
+        mock_response.choices[0].message.content = None
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai_cls.return_value = mock_client
+
+        config = {"model_name": "gpt-4"}
+        schema = {"name": "test", "strict": True, "schema": {"type": "object", "properties": {}}}
+        result = OpenAIClient.call_json("key", config, "prompt", "data", schema)
+
+        assert len(result) == 1
+        assert result[0]["_parse_error"] == "Empty response from API"
+        assert result[0]["raw_response"] == ""
+
+    @patch("agent_actions.llm.providers.openai.client.fire_event")
+    @patch("agent_actions.llm.providers.openai.client.OpenAI")
+    def test_invalid_json_returns_error_dict(self, mock_openai_cls, mock_fire):
+        from agent_actions.llm.providers.openai.client import OpenAIClient
+
+        mock_response = _make_openai_style_mocks("not valid json {{{")
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai_cls.return_value = mock_client
+
+        config = {"model_name": "gpt-4"}
+        schema = {"name": "test", "strict": True, "schema": {"type": "object", "properties": {}}}
+        result = OpenAIClient.call_json("key", config, "prompt", "data", schema)
+
+        assert len(result) == 1
+        assert "Expecting value" in result[0]["_parse_error"]
+        assert result[0]["raw_response"] == "not valid json {{{"
+
+
 class TestAnthropicStopForwarding:
     """Anthropic maps stop → stop_sequences (as list)."""
 

@@ -11,6 +11,7 @@ import pytest
 
 from agent_actions.processing.recovery.reprompt import (
     RepromptService,
+    _get_parse_error,
     create_reprompt_service_from_config,
     parse_reprompt_config,
 )
@@ -738,3 +739,152 @@ class TestRepromptServiceRetryExhaustion:
 
         assert "Retry exhausted" in str(exc_info.value)
         assert "429 throttled" in str(exc_info.value)
+
+
+class TestGetParseError:
+    """Tests for _get_parse_error helper."""
+
+    def test_list_with_parse_error(self):
+        assert _get_parse_error([{"_parse_error": "bad json"}]) == "bad json"
+
+    def test_bare_dict_with_parse_error(self):
+        assert _get_parse_error({"_parse_error": "bad json"}) == "bad json"
+
+    def test_list_without_parse_error(self):
+        assert _get_parse_error([{"value": 10}]) is None
+
+    def test_bare_dict_without_parse_error(self):
+        assert _get_parse_error({"value": 10}) is None
+
+    def test_empty_list(self):
+        assert _get_parse_error([]) is None
+
+    def test_empty_dict(self):
+        """[{}] is the exhaustion sentinel — must not re-trigger parse error detection."""
+        assert _get_parse_error([{}]) is None
+
+    def test_none(self):
+        assert _get_parse_error(None) is None
+
+    def test_empty_string_parse_error_returns_none(self):
+        """An empty _parse_error value should not be treated as a parse error."""
+        assert _get_parse_error([{"_parse_error": ""}]) is None
+        assert _get_parse_error({"_parse_error": ""}) is None
+
+    def test_nested_parse_error_not_detected(self):
+        """_parse_error inside nested content must not be detected."""
+        assert _get_parse_error([{"content": {"ns": {"_parse_error": "oops"}}}]) is None
+
+
+class TestRepromptServiceParseError:
+    """Tests for _parse_error detection and recovery in the reprompt loop."""
+
+    def setup_method(self):
+        _VALIDATION_REGISTRY.clear()
+
+        @reprompt_validation("Must be valid")
+        def always_pass(response: dict) -> bool:
+            return True
+
+    def test_parse_error_forces_retry(self):
+        """A _parse_error response should force retry even when validator always passes."""
+        service = RepromptService(
+            validation_name="always_pass", max_attempts=3, on_exhausted="return_last"
+        )
+
+        llm_operation = Mock(
+            side_effect=[
+                ([{"raw_response": "", "_parse_error": "Expecting value"}], True),
+                ({"value": 42}, True),  # valid on attempt 2
+            ]
+        )
+
+        result = service.execute(
+            llm_operation=llm_operation, original_prompt="Test prompt", context="test"
+        )
+
+        assert llm_operation.call_count == 2
+        assert result.response == {"value": 42}
+        assert result.passed is True
+        assert result.attempts == 2
+
+    def test_parse_error_uses_json_feedback(self):
+        """When parse error occurs, the reprompt prompt should contain JSON feedback."""
+        service = RepromptService(
+            validation_name="always_pass", max_attempts=2, on_exhausted="return_last"
+        )
+
+        llm_operation = Mock(
+            side_effect=[
+                ([{"raw_response": "", "_parse_error": "Expecting value"}], True),
+                ({"value": 42}, True),
+            ]
+        )
+
+        service.execute(llm_operation=llm_operation, original_prompt="Test prompt", context="test")
+
+        # Second call should include JSON feedback in the prompt
+        second_call_prompt = llm_operation.call_args_list[1][0][0]
+        assert "not valid JSON" in second_call_prompt
+        assert "no markdown" in second_call_prompt
+
+    def test_parse_error_exhaustion_returns_empty(self):
+        """On exhaustion with persistent parse errors, return [{}] not the error dict."""
+        service = RepromptService(
+            validation_name="always_pass", max_attempts=2, on_exhausted="return_last"
+        )
+
+        llm_operation = Mock(
+            side_effect=[
+                ([{"raw_response": "", "_parse_error": "Expecting value"}], True),
+                ([{"raw_response": "", "_parse_error": "Expecting value"}], True),
+            ]
+        )
+
+        result = service.execute(
+            llm_operation=llm_operation, original_prompt="Test prompt", context="test"
+        )
+
+        assert llm_operation.call_count == 2
+        assert result.response == [{}]
+        assert result.passed is False
+        assert result.exhausted is True
+
+    def test_parse_error_exhaustion_with_raise(self):
+        """on_exhausted='raise' should raise RuntimeError, not return [{}]."""
+        service = RepromptService(
+            validation_name="always_pass", max_attempts=2, on_exhausted="raise"
+        )
+
+        llm_operation = Mock(
+            side_effect=[
+                ([{"raw_response": "", "_parse_error": "Expecting value"}], True),
+                ([{"raw_response": "", "_parse_error": "Expecting value"}], True),
+            ]
+        )
+
+        with pytest.raises(RuntimeError, match="exhausted"):
+            service.execute(
+                llm_operation=llm_operation, original_prompt="Test prompt", context="test"
+            )
+
+    def test_good_response_after_parse_error_not_corrupted(self):
+        """parse_error must not carry across iterations — good response on attempt 2 uses validator."""
+        service = RepromptService(
+            validation_name="always_pass", max_attempts=3, on_exhausted="return_last"
+        )
+
+        llm_operation = Mock(
+            side_effect=[
+                ([{"raw_response": "", "_parse_error": "bad"}], True),
+                ({"value": 10}, True),  # valid, no _parse_error
+            ]
+        )
+
+        result = service.execute(
+            llm_operation=llm_operation, original_prompt="Test prompt", context="test"
+        )
+
+        assert result.response == {"value": 10}
+        assert result.passed is True
+        assert result.attempts == 2
