@@ -823,10 +823,11 @@ class TestRepromptServiceParseError:
 
         service.execute(llm_operation=llm_operation, original_prompt="Test prompt", context="test")
 
-        # Second call should include JSON feedback in the prompt
+        # Second call should include forceful JSON feedback in the prompt
         second_call_prompt = llm_operation.call_args_list[1][0][0]
+        assert "CRITICAL" in second_call_prompt
         assert "not valid JSON" in second_call_prompt
-        assert "no markdown" in second_call_prompt
+        assert "No markdown" in second_call_prompt
 
     def test_parse_error_exhaustion_returns_empty(self):
         """On exhaustion with persistent parse errors, return [{}] not the error dict."""

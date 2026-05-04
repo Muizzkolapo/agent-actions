@@ -19,38 +19,46 @@ from .response_validator import (
 )
 from .retry import RetryExhaustedException
 
-_JSON_PARSE_FEEDBACK = (
-    "Your previous response was not valid JSON. "
-    "Return only a JSON object — no markdown, no explanation, no code fences."
-)
+
+def _extract_field_names(schema: dict) -> list[str]:
+    """Extract field names from any schema format."""
+    # fields-style (agent-actions format)
+    fields = schema.get("fields")
+    if isinstance(fields, list):
+        return [f.get("id") or f.get("name", "") for f in fields if isinstance(f, dict)]
+    # properties-style (JSON Schema format)
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        return list(props.keys())
+    # Inline schema: keys are field names directly
+    if all(isinstance(v, str) for v in schema.values()):
+        return list(schema.keys())
+    return []
 
 
 def _build_json_parse_feedback(validator: Any) -> str:
-    """Build JSON parse error feedback, including expected schema fields if available."""
-    base = _JSON_PARSE_FEEDBACK
-
-    # If the validator is a SchemaValidator, extract field names to guide the model
+    """Build forceful JSON parse error feedback with expected schema fields."""
     schema = getattr(validator, "_schema", None)
-    if not isinstance(schema, dict):
-        return base
+    field_names = _extract_field_names(schema) if isinstance(schema, dict) else []
 
-    # Try fields-style schema (agent-actions format)
-    fields = schema.get("fields")
-    if isinstance(fields, list):
-        names = [f.get("id") or f.get("name", "") for f in fields if isinstance(f, dict)]
-        if names:
-            return f"{base}\n\nExpected JSON fields: {', '.join(names)}"
+    if field_names:
+        fields_str = ", ".join(field_names)
+        return (
+            "CRITICAL: Your previous response was empty or not valid JSON. "
+            "This is a strict JSON pipeline — every response MUST be a single "
+            "JSON object. No markdown. No code fences. No explanation. No "
+            "preamble. Just the raw JSON object.\n\n"
+            f"You MUST return a JSON object with these fields: {fields_str}\n\n"
+            "Example structure:\n"
+            "{\n" + "".join(f'  "{name}": "...",\n' for name in field_names) + "}"
+        )
 
-    # Try properties-style schema (JSON Schema format)
-    props = schema.get("properties")
-    if isinstance(props, dict):
-        return f"{base}\n\nExpected JSON fields: {', '.join(props.keys())}"
-
-    # Inline schema: keys are field names directly
-    if all(isinstance(v, str) for v in schema.values()):
-        return f"{base}\n\nExpected JSON fields: {', '.join(schema.keys())}"
-
-    return base
+    return (
+        "CRITICAL: Your previous response was empty or not valid JSON. "
+        "This is a strict JSON pipeline — every response MUST be a single "
+        "JSON object. No markdown. No code fences. No explanation. No "
+        "preamble. Just the raw JSON object."
+    )
 
 
 def _get_parse_error(response: Any) -> str | None:
