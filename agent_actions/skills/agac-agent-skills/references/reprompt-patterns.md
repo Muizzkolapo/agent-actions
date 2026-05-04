@@ -28,9 +28,13 @@ How to configure automatic retry with feedback when LLM output fails validation.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `on_schema_mismatch` | string | None | `"reprompt"` (retry on schema fail) or `"reject"` (hard fail) |
 | `validation` | string | None | Name of `@reprompt_validation` function |
 | `max_attempts` | int | 2 | Total attempts including first try (1-10) |
 | `on_exhausted` | string | `"return_last"` | What to do when all attempts fail |
+| `use_self_reflection` | bool | false | Add self-analysis prompt before retry |
+| `use_llm_critique` | bool | false | Use a second LLM call to critique failures |
+| `critique_after_attempt` | int | 2 | Critique starts on this attempt number |
 
 **`on_exhausted` options:**
 - `"return_last"` — Accept the last response even though it failed validation. Downstream actions receive potentially invalid data.
@@ -38,14 +42,14 @@ How to configure automatic retry with feedback when LLM output fails validation.
 
 ## Schema-Based Reprompt (No Custom UDF)
 
-For simple schema validation without writing Python, use `on_schema_mismatch`:
+For simple schema validation without writing Python, set `on_schema_mismatch` inside the `reprompt` block:
 
 ```yaml
 - name: classify_issue
   schema: issue_classification
   json_mode: true
-  on_schema_mismatch: reprompt         # "warn" | "reprompt" | "reject"
   reprompt:
+    on_schema_mismatch: reprompt       # "reprompt" | "reject"
     max_attempts: 3
 ```
 
@@ -101,13 +105,13 @@ tools/
 
 ## Composed Validators
 
-When both `validation` (custom UDF) and `on_schema_mismatch: reprompt` are configured, validators are composed — the schema check runs first, then the custom UDF. Fails on the first failure.
+When both `validation` (custom UDF) and `on_schema_mismatch: reprompt` are configured in the same `reprompt` block, validators are composed — the schema check runs first, then the custom UDF. Fails on the first failure.
 
 ```yaml
 - name: generate_catalog_entry
   schema: catalog_entry
-  on_schema_mismatch: reprompt         # Layer 1: schema check
   reprompt:
+    on_schema_mismatch: reprompt       # Layer 1: schema check
     validation: "check_valid_bisac"    # Layer 2: custom business logic
     max_attempts: 3
 ```
@@ -189,8 +193,8 @@ def check_genre_classification(response: dict) -> bool:
     entities: array[string]!           # Required array of strings
     confidence: number!                # Required number
   json_mode: true
-  on_schema_mismatch: reprompt
   reprompt:
+    on_schema_mismatch: reprompt
     max_attempts: 2
     on_exhausted: raise                # Fail if schema still violated
 ```

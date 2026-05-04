@@ -19,10 +19,46 @@ from .response_validator import (
 )
 from .retry import RetryExhaustedException
 
-_JSON_PARSE_FEEDBACK = (
-    "Your previous response was not valid JSON. "
-    "Return only a JSON object — no markdown, no explanation, no code fences."
-)
+
+def _extract_field_names(schema: dict) -> list[str]:
+    """Extract field names from any schema format."""
+    # fields-style (agent-actions format)
+    fields = schema.get("fields")
+    if isinstance(fields, list):
+        return [f.get("id") or f.get("name", "") for f in fields if isinstance(f, dict)]
+    # properties-style (JSON Schema format)
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        return list(props.keys())
+    # Inline schema: keys are field names directly
+    if all(isinstance(v, str) for v in schema.values()):
+        return list(schema.keys())
+    return []
+
+
+def _build_json_parse_feedback(validator: Any) -> str:
+    """Build forceful JSON parse error feedback with expected schema fields."""
+    schema = getattr(validator, "_schema", None)
+    field_names = _extract_field_names(schema) if isinstance(schema, dict) else []
+
+    if field_names:
+        fields_str = ", ".join(field_names)
+        return (
+            "CRITICAL: Your previous response was empty or not valid JSON. "
+            "This is a strict JSON pipeline — every response MUST be a single "
+            "JSON object. No markdown. No code fences. No explanation. No "
+            "preamble. Just the raw JSON object.\n\n"
+            f"You MUST return a JSON object with these fields: {fields_str}\n\n"
+            "Example structure:\n"
+            "{\n" + "".join(f'  "{name}": "...",\n' for name in field_names) + "}"
+        )
+
+    return (
+        "CRITICAL: Your previous response was empty or not valid JSON. "
+        "This is a strict JSON pipeline — every response MUST be a single "
+        "JSON object. No markdown. No code fences. No explanation. No "
+        "preamble. Just the raw JSON object."
+    )
 
 
 def _get_parse_error(response: Any) -> str | None:
@@ -206,7 +242,7 @@ class RepromptService:
             if parse_error is not None:
                 is_valid = False
                 logger.warning(
-                    "[%s] Provider returned invalid JSON on attempt %d/%d: %s",
+                    "[%s] Invalid JSON on attempt %d/%d — %s",
                     context,
                     attempts,
                     self.max_attempts,
@@ -216,12 +252,13 @@ class RepromptService:
                 is_valid = safe_validate(self._validator.validate, response, context=context)
 
             if is_valid:
-                logger.info(
-                    "[%s] Validation passed on attempt %d/%d",
-                    context,
-                    attempts,
-                    self.max_attempts,
-                )
+                if attempts > 1:
+                    logger.info(
+                        "[%s] Reprompt passed on attempt %d/%d",
+                        context,
+                        attempts,
+                        self.max_attempts,
+                    )
                 return RepromptResult(
                     response=response,
                     executed=True,
@@ -231,18 +268,26 @@ class RepromptService:
                     exhausted=False,
                 )
 
-            logger.warning(
-                "[%s] Validation failed on attempt %d/%d",
-                context,
-                attempts,
-                self.max_attempts,
-            )
+            if parse_error is None:
+                logger.warning(
+                    "[%s] Schema validation failed on attempt %d/%d",
+                    context,
+                    attempts,
+                    self.max_attempts,
+                )
 
             if attempts >= self.max_attempts:
                 break
 
+            logger.info(
+                "[%s] Retrying with feedback (attempt %d/%d)",
+                context,
+                attempts + 1,
+                self.max_attempts,
+            )
+
             if parse_error is not None:
-                feedback = _JSON_PARSE_FEEDBACK
+                feedback = _build_json_parse_feedback(self._validator)
             else:
                 feedback = build_validation_feedback(
                     response, self._validator.feedback_message, strategies=self._strategies

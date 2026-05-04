@@ -22,7 +22,7 @@ class TestSchemaValidationKeyErrorPropagates:
         from agent_actions.processing.helpers import _validate_llm_output_schema
 
         response = {"result": "value"}
-        agent_config = {"schema": {"type": "object"}, "on_schema_mismatch": "warn"}
+        agent_config = {"schema": {"type": "object"}}
 
         mock_mod = self._make_mock_validator(KeyError("unexpected_key"))
 
@@ -37,12 +37,12 @@ class TestSchemaValidationKeyErrorPropagates:
             else:
                 sys.modules["agent_actions.validation.schema_output_validator"] = saved
 
-    def test_value_error_in_warn_mode_is_swallowed(self):
-        """ValueError in non-strict mode must be caught (not propagate)."""
+    def test_value_error_in_default_mode_is_swallowed(self):
+        """ValueError in default mode (no reprompt config) must be caught (not propagate)."""
         from agent_actions.processing.helpers import _validate_llm_output_schema
 
         response = {"result": "value"}
-        agent_config = {"schema": {"type": "object"}, "on_schema_mismatch": "warn"}
+        agent_config = {"schema": {"type": "object"}}
 
         mock_mod = self._make_mock_validator(ValueError("bad_value"))
 

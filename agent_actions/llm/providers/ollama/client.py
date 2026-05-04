@@ -170,7 +170,7 @@ def _call_ollama_json(
             parsed = json.loads(content)
             return [parsed] if isinstance(parsed, dict) else [{"response": parsed}]
         except json.JSONDecodeError as e:
-            logger.warning(
+            logger.debug(
                 "%s/%s returned invalid JSON: %s",
                 vendor_slug,
                 model,

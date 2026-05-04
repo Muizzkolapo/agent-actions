@@ -36,12 +36,13 @@ Guards run last because they evaluate semantic conditions that require valid, sc
 
 ## Layer 1: JSON Validation
 
-Ensures the LLM returns valid JSON. If parsing fails, the LLM is reprompted with the error:
+Ensures the LLM returns valid JSON. If parsing fails and reprompt is configured, the LLM is retried with forceful JSON feedback including the expected field names:
 
 ```yaml
 - name: extract_data
   schema: my_schema
   reprompt:
+    on_schema_mismatch: reprompt    # enables JSON + schema reprompt
     max_attempts: 3
     on_exhausted: return_last
 ```
@@ -138,38 +139,40 @@ properties:
 
 ### Reprompt on Schema Failure
 
-When schema validation fails, reprompting retries with error context:
+When schema validation fails, reprompting retries with error context. Set `on_schema_mismatch: reprompt` inside the `reprompt` block to enable this:
 
 ```yaml
 - name: generate_analysis
   schema: analysis_schema
   reprompt:
+    on_schema_mismatch: reprompt
     max_attempts: 4
     on_exhausted: return_last
 ```
 
 The retry prompt includes:
 - Original response that failed
-- Specific validation errors
-- Field/constraint that failed
+- Specific validation errors (missing fields, wrong types)
+- Expected field names from the schema
 
 ### Schema Mismatch Behavior
 
-Control what happens when an LLM response doesn't match the expected schema using `on_schema_mismatch`:
+Control what happens when an LLM response doesn't match the expected schema using `on_schema_mismatch` inside the `reprompt` block:
 
 ```yaml
 - name: extract_entities
   schema: entity_schema
-  on_schema_mismatch: reprompt   # "warn" | "reprompt" | "reject"
   reprompt:
+    on_schema_mismatch: reprompt   # "reprompt" | "reject"
     max_attempts: 3
 ```
 
 | Value | Behavior |
 |-------|----------|
-| `warn` | Log a warning, accept the response anyway (default) |
 | `reprompt` | Trigger reprompt with schema errors as feedback |
 | `reject` | Reject the response, action fails |
+
+When not set, schema is not enforced — the output is accepted regardless of schema conformance.
 
 When set to `reprompt`, no custom validation UDF is needed — the schema errors are used directly as feedback to the LLM.
 
@@ -243,6 +246,7 @@ actions:
     prompt: $prompts.extract_facts
     schema: candidate_facts_list  # Layer 2: type/structure
     reprompt:
+      on_schema_mismatch: reprompt
       max_attempts: 4
       on_exhausted: return_last
 
@@ -258,6 +262,7 @@ actions:
     dependencies: validate_facts  # Input source
     schema: quality_score  # Ensures score is 0-100
     reprompt:
+      on_schema_mismatch: reprompt
       max_attempts: 3
       on_exhausted: return_last
 
@@ -280,6 +285,7 @@ actions:
     prompt: $prompts.generate
     schema: content_schema
     reprompt:
+      on_schema_mismatch: reprompt
       max_attempts: 4
       on_exhausted: return_last
 
@@ -322,6 +328,7 @@ properties:
 - name: classify_content
   schema: classification
   reprompt:
+    on_schema_mismatch: reprompt
     max_attempts: 3
     on_exhausted: return_last
 
@@ -355,6 +362,7 @@ properties:
     Scores below 70 indicate low confidence.
   schema: score_schema
   reprompt:
+    on_schema_mismatch: reprompt
     max_attempts: 5
     on_exhausted: return_last
 
@@ -377,6 +385,7 @@ actions:
   - name: generate_content
     schema: content_schema
     reprompt:
+      on_schema_mismatch: reprompt
       max_attempts: 3
       on_exhausted: return_last
 
@@ -421,7 +430,7 @@ def validate_content(data: dict) -> dict:
 
 | Want to Reject | Use | Example |
 |----------------|-----|---------|
-| Invalid JSON | `reprompt: { max_attempts: 3 }` | Malformed response |
+| Invalid JSON | `reprompt: { on_schema_mismatch: reprompt }` | Malformed response |
 | Wrong type | Schema `type` | String instead of number |
 | Missing field | Schema `required` | No "title" field |
 | Wrong value | Schema `enum` | "maybe" not in ["yes", "no"] |
@@ -465,6 +474,7 @@ The limitation here: reprompting costs API tokens. Guards are free. If you're fi
 - name: extract
   schema: extraction_schema
   reprompt:
+    on_schema_mismatch: reprompt
     max_attempts: 4
     on_exhausted: return_last
 
@@ -503,11 +513,13 @@ properties:
 ```yaml
 # Simple schema: fewer attempts
 reprompt:
+  on_schema_mismatch: reprompt
   max_attempts: 3
   on_exhausted: return_last
 
 # Complex schema: more attempts, fail on exhaustion
 reprompt:
+  on_schema_mismatch: reprompt
   max_attempts: 5
   on_exhausted: raise
 ```

@@ -89,11 +89,17 @@ class RetryConfig(BaseModel):
 class RepromptConfig(BaseModel):
     """Configuration for reprompt behavior on validation failures.
 
-    ``validation`` is optional when an external validator is provided
-    (e.g. via ``on_schema_mismatch: reprompt``).
+    ``validation`` is optional when ``on_schema_mismatch`` is set — the schema
+    itself serves as the validator.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     validation: str | None = Field(default=None, description="Name of validation UDF function")
+    on_schema_mismatch: Literal["reject", "reprompt"] | None = Field(
+        default=None,
+        description="Schema conformance check: reject (hard fail) or reprompt (retry on mismatch)",
+    )
     max_attempts: int = Field(
         default=2,
         ge=1,
@@ -186,12 +192,6 @@ class ActionConfig(BaseModel):
     )
     reprompt: RepromptConfig | None = Field(
         default=None, description="Reprompt configuration for validation failures"
-    )
-    strict_schema: bool | None = Field(
-        default=None, description="Enable strict schema validation (reject on mismatch)"
-    )
-    on_schema_mismatch: Literal["warn", "reprompt", "reject"] | None = Field(
-        default=None, description="Schema mismatch mode: warn, reprompt, or reject"
     )
     idempotency_key: str | None = Field(default=None, description="Idempotency key template")
     prompt: str | None = Field(default=None, description="Prompt template or reference")
@@ -361,10 +361,6 @@ class DefaultsConfig(BaseModel):
     )
     constraints: Any | None = Field(default=None, description="Default constraints")
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
-    strict_schema: bool | None = Field(default=None, description="Default strict schema flag")
-    on_schema_mismatch: Literal["warn", "reprompt", "reject"] | None = Field(
-        default=None, description="Default schema mismatch mode"
-    )
 
     # --- Expander-consumed keys ---
     context_scope: dict[str, Any] | None = Field(default=None, description="Default ctx scope")

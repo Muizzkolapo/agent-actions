@@ -12,8 +12,6 @@ API_KEY_KEY = "api_key"
 PROMPT_KEY = "prompt"
 SCHEMA_NAME_KEY = "schema_name"
 SCHEMA_KEY = "schema"
-STRICT_SCHEMA_KEY = "strict_schema"
-ON_SCHEMA_MISMATCH_KEY = "on_schema_mismatch"
 CHUNK_CONFIG_KEY = "chunk_config"
 
 # Reserved agent/action names that cannot be used in workflows.

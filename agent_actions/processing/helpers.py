@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utils.constants import ON_SCHEMA_MISMATCH_KEY, SCHEMA_KEY, STRICT_SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY
 from agent_actions.utils.transformation import PassthroughTransformer
 
 logger = logging.getLogger(__name__)
@@ -70,20 +70,14 @@ def run_dynamic_agent(
 
 
 def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
-    """Resolve on_schema_mismatch to 'warn', 'reprompt', or 'reject'."""
-    explicit = agent_config.get(ON_SCHEMA_MISMATCH_KEY)
-    if explicit in ("warn", "reprompt", "reject"):
-        return str(explicit)
+    """Resolve schema mismatch mode from reprompt.on_schema_mismatch.
 
-    if explicit is not None:
-        logger.warning(
-            "Unrecognized on_schema_mismatch value '%s', defaulting to 'warn'",
-            explicit,
-        )
-
-    if agent_config.get(STRICT_SCHEMA_KEY, False):
-        return "reject"
-
+    Returns ``"reject"``, ``"reprompt"``, or ``"warn"`` (internal signal for
+    no enforcement).
+    """
+    reprompt = agent_config.get("reprompt")
+    if isinstance(reprompt, dict) and reprompt.get("on_schema_mismatch"):
+        return str(reprompt["on_schema_mismatch"])
     return "warn"
 
 
@@ -96,9 +90,9 @@ def _validate_llm_output_schema(
 ) -> Any:
     """Validate LLM output against expected schema if defined.
 
-    Returns the response unchanged. When ``on_schema_mismatch`` is "reprompt"
-    and ``skip_schema_validation`` is True, validation is deferred to the
-    outer reprompt loop.
+    Returns the response unchanged. When ``reprompt.on_schema_mismatch`` is
+    "reprompt" and ``skip_schema_validation`` is True, validation is deferred
+    to the outer reprompt loop.
 
     Raises:
         SchemaValidationError: If on_schema_mismatch="reject" and validation fails.
@@ -108,9 +102,8 @@ def _validate_llm_output_schema(
         mismatch_mode = _resolve_schema_mismatch_mode(agent_config)
         if mismatch_mode in ("reject", "reprompt"):
             logger.warning(
-                "Action '%s': on_schema_mismatch is '%s' but no schema is defined — "
-                "schema validation will be skipped. Define a schema or set "
-                "on_schema_mismatch to 'warn'.",
+                "Action '%s': reprompt.on_schema_mismatch is '%s' but no schema is "
+                "defined — schema validation will be skipped.",
                 agent_name,
                 mismatch_mode,
             )
@@ -141,8 +134,8 @@ def _validate_llm_output_schema(
         if not report.is_compliant:
             if strict_mode:
                 hint = (
-                    "Enable strict_schema: false to allow schema mismatches, "
-                    "or update the prompt to match expected schema"
+                    "Remove reprompt.on_schema_mismatch: reject to allow schema "
+                    "mismatches, or update the prompt to match expected schema"
                 )
                 if report.namespace_hint:
                     hint = f"{hint}. {report.namespace_hint}"
