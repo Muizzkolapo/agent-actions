@@ -136,8 +136,9 @@ class OpenAIClient(BaseClient):
             response_data: dict[str, Any] | list[dict[str, Any]] = json.loads(response_content)
         except json.JSONDecodeError as e:
             logger.warning(
-                "Failed to parse JSON from OpenAI response: %s",
+                "Failed to parse JSON from OpenAI response: %s (snippet: %.200s)",
                 e,
+                response_content,
                 extra={"model": model_name, "operation": "call_json"},
             )
             fire_event(
