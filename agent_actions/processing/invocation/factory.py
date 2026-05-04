@@ -77,7 +77,7 @@ class InvocationStrategyFactory:
             SchemaValidator,
             UdfValidator,
         )
-        from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY
+        from agent_actions.utils.constants import SCHEMA_KEY
 
         validators: list[ResponseValidator] = []
 
@@ -92,8 +92,7 @@ class InvocationStrategyFactory:
             mode = _resolve_schema_mismatch_mode(agent_config)
             if mode == "reprompt":
                 action_name = agent_config.get("name", "unknown")
-                strict = agent_config.get(STRICT_SCHEMA_KEY, False)
-                validators.append(SchemaValidator(schema, action_name, strict_mode=strict))
+                validators.append(SchemaValidator(schema, action_name))
 
         if not validators:
             return None
