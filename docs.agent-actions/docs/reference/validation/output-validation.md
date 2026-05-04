@@ -155,21 +155,22 @@ The retry prompt includes:
 
 ### Schema Mismatch Behavior
 
-Control what happens when an LLM response doesn't match the expected schema using `on_schema_mismatch`:
+Control what happens when an LLM response doesn't match the expected schema using `on_schema_mismatch` inside the `reprompt` block:
 
 ```yaml
 - name: extract_entities
   schema: entity_schema
-  on_schema_mismatch: reprompt   # "warn" | "reprompt" | "reject"
   reprompt:
+    on_schema_mismatch: reprompt   # "reprompt" | "reject"
     max_attempts: 3
 ```
 
 | Value | Behavior |
 |-------|----------|
-| `warn` | Log a warning, accept the response anyway (default) |
 | `reprompt` | Trigger reprompt with schema errors as feedback |
 | `reject` | Reject the response, action fails |
+
+When not set, schema is not enforced — the output is accepted regardless of schema conformance.
 
 When set to `reprompt`, no custom validation UDF is needed — the schema errors are used directly as feedback to the LLM.
 

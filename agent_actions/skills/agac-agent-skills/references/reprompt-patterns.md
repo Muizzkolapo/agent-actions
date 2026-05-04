@@ -38,14 +38,14 @@ How to configure automatic retry with feedback when LLM output fails validation.
 
 ## Schema-Based Reprompt (No Custom UDF)
 
-For simple schema validation without writing Python, use `on_schema_mismatch`:
+For simple schema validation without writing Python, set `on_schema_mismatch` inside the `reprompt` block:
 
 ```yaml
 - name: classify_issue
   schema: issue_classification
   json_mode: true
-  on_schema_mismatch: reprompt         # "warn" | "reprompt" | "reject"
   reprompt:
+    on_schema_mismatch: reprompt       # "reprompt" | "reject"
     max_attempts: 3
 ```
 
@@ -101,13 +101,13 @@ tools/
 
 ## Composed Validators
 
-When both `validation` (custom UDF) and `on_schema_mismatch: reprompt` are configured, validators are composed — the schema check runs first, then the custom UDF. Fails on the first failure.
+When both `validation` (custom UDF) and `on_schema_mismatch: reprompt` are configured in the same `reprompt` block, validators are composed — the schema check runs first, then the custom UDF. Fails on the first failure.
 
 ```yaml
 - name: generate_catalog_entry
   schema: catalog_entry
-  on_schema_mismatch: reprompt         # Layer 1: schema check
   reprompt:
+    on_schema_mismatch: reprompt       # Layer 1: schema check
     validation: "check_valid_bisac"    # Layer 2: custom business logic
     max_attempts: 3
 ```
@@ -189,8 +189,8 @@ def check_genre_classification(response: dict) -> bool:
     entities: array[string]!           # Required array of strings
     confidence: number!                # Required number
   json_mode: true
-  on_schema_mismatch: reprompt
   reprompt:
+    on_schema_mismatch: reprompt
     max_attempts: 2
     on_exhausted: raise                # Fail if schema still violated
 ```
