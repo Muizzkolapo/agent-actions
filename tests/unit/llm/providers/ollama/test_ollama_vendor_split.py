@@ -266,6 +266,37 @@ class TestOllamaCloudClient:
             "Cloud JSON call must NOT pass 'format' to chat() (structured output not supported yet)"
         )
 
+    @patch("agent_actions.llm.providers.ollama.client.ResponseBuilder")
+    @patch("agent_actions.llm.providers.ollama.client.fire_event")
+    @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
+    @patch("agent_actions.llm.providers.ollama.client.MessageBuilder")
+    def test_call_json_returns_error_dict_on_invalid_json(
+        self, mock_mb, mock_build, mock_fire, mock_rb
+    ):
+        """Invalid JSON returns error dict instead of raising VendorAPIError."""
+        mock_envelope = MagicMock()
+        mock_envelope.to_dicts.return_value = [{"role": "user", "content": "hi"}]
+        mock_mb.build.return_value = mock_envelope
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = _fake_chat_response(content="not json at all")
+        mock_build.return_value = mock_client
+
+        config = _make_agent_config()
+        result = _call_ollama_json(
+            "some-api-key",
+            config,
+            PROMPT,
+            CONTEXT,
+            SCHEMA,
+            vendor_slug="ollama_cloud",
+            cloud=True,
+        )
+
+        assert len(result) == 1
+        assert result[0]["_parse_error"]
+        assert result[0]["raw_response"] == "not json at all"
+
     def test_missing_api_key_raises_configuration_error(self):
         """_build_ollama_client(cloud=True) without api_key raises ConfigurationError."""
         config = _make_agent_config()
