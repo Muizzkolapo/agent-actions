@@ -1,10 +1,9 @@
-"""Integration tests for on_schema_mismatch: reprompt.
+"""Integration tests for reprompt.on_schema_mismatch.
 
 Covers:
-- _resolve_schema_mismatch_mode returns correct mode
+- _resolve_schema_mismatch_mode returns correct mode from reprompt config
 - _validate_llm_output_schema skips when mode is "reprompt"
-- _validate_llm_output_schema still raises when strict_schema: true (reject)
-- _validate_llm_output_schema still warns when default (warn)
+- _validate_llm_output_schema still raises when mode is "reject"
 - _validate_llm_output_schema reprompt fallback logs warning
 - Factory builds SchemaValidator when mode is "reprompt"
 - Factory composes UDF + schema when both configured
@@ -42,35 +41,22 @@ from agent_actions.processing.recovery.validation import (
 
 
 class TestResolveSchemaMode:
-    """Tests for _resolve_schema_mismatch_mode."""
+    """Tests for _resolve_schema_mismatch_mode reading from reprompt config."""
 
-    def test_default_is_warn(self):
+    def test_default_is_warn_when_no_reprompt(self):
         assert _resolve_schema_mismatch_mode({}) == "warn"
 
     def test_explicit_reprompt(self):
-        assert _resolve_schema_mismatch_mode({"on_schema_mismatch": "reprompt"}) == "reprompt"
-
-    def test_explicit_reject(self):
-        assert _resolve_schema_mismatch_mode({"on_schema_mismatch": "reject"}) == "reject"
-
-    def test_explicit_warn(self):
-        assert _resolve_schema_mismatch_mode({"on_schema_mismatch": "warn"}) == "warn"
-
-    def test_strict_schema_true_becomes_reject(self):
-        assert _resolve_schema_mismatch_mode({"strict_schema": True}) == "reject"
-
-    def test_explicit_overrides_strict(self):
-        """on_schema_mismatch takes precedence over strict_schema."""
-        config = {"strict_schema": True, "on_schema_mismatch": "reprompt"}
+        config = {"reprompt": {"on_schema_mismatch": "reprompt"}}
         assert _resolve_schema_mismatch_mode(config) == "reprompt"
 
-    def test_invalid_explicit_falls_through_to_strict(self):
-        """Invalid on_schema_mismatch value falls through."""
-        config = {"strict_schema": True, "on_schema_mismatch": "invalid"}
+    def test_explicit_reject(self):
+        config = {"reprompt": {"on_schema_mismatch": "reject"}}
         assert _resolve_schema_mismatch_mode(config) == "reject"
 
-    def test_invalid_explicit_no_strict(self):
-        config = {"on_schema_mismatch": "invalid"}
+    def test_reprompt_dict_without_on_schema_mismatch_defaults_to_warn(self):
+        """Reprompt config without on_schema_mismatch falls through to warn."""
+        config = {"reprompt": {"validation": "check_fn"}}
         assert _resolve_schema_mismatch_mode(config) == "warn"
 
 
@@ -82,7 +68,7 @@ class TestResolveSchemaMode:
 class TestValidateSchemaSkip:
     """Tests for _validate_llm_output_schema skip/fallback behavior."""
 
-    def _make_config(self, **overrides):
+    def _make_config(self, on_schema_mismatch=None):
         config = {
             "schema": {
                 "fields": [
@@ -91,7 +77,8 @@ class TestValidateSchemaSkip:
                 ]
             },
         }
-        config.update(overrides)
+        if on_schema_mismatch:
+            config["reprompt"] = {"on_schema_mismatch": on_schema_mismatch}
         return config
 
     def test_reprompt_mode_skips_when_flag_set(self):
@@ -112,20 +99,13 @@ class TestValidateSchemaSkip:
         assert result == response  # warn mode returns response, no exception
 
     def test_reject_mode_raises(self):
-        """strict_schema / reject still raises."""
+        """on_schema_mismatch: reject still raises."""
         from agent_actions.errors import SchemaValidationError
 
-        config = self._make_config(strict_schema=True)
+        config = self._make_config(on_schema_mismatch="reject")
         response = {"wrong_field": "value"}
         with pytest.raises(SchemaValidationError):
             _validate_llm_output_schema(response, config, "test_action")
-
-    def test_warn_mode_returns_response(self):
-        """Default warn mode returns response (just logs warning)."""
-        config = self._make_config()  # default = warn
-        response = {"wrong_field": "value"}
-        result = _validate_llm_output_schema(response, config, "test_action")
-        assert result == response  # returned, no exception
 
     def test_no_schema_returns_immediately(self):
         """No schema configured -- skip entirely."""
@@ -161,15 +141,15 @@ class TestFactoryBuildValidator:
     def test_schema_reprompt_only(self):
         config = {
             "schema": {"fields": [{"name": "x", "type": "string", "required": True}]},
-            "on_schema_mismatch": "reprompt",
+            "reprompt": {"on_schema_mismatch": "reprompt"},
             "name": "my_action",
         }
         result = InvocationStrategyFactory._build_validator(config)
         assert isinstance(result, SchemaValidator)
         assert result.name == "schema:my_action"
 
-    def test_schema_warn_not_included(self):
-        """Schema with default warn mode should NOT produce a validator."""
+    def test_schema_without_reprompt_mismatch_not_included(self):
+        """Schema without on_schema_mismatch in reprompt should NOT produce a validator."""
         config = {
             "schema": {"fields": [{"name": "x", "type": "string", "required": True}]},
             "name": "my_action",
@@ -179,9 +159,11 @@ class TestFactoryBuildValidator:
 
     def test_both_udf_and_schema(self):
         config = {
-            "reprompt": {"validation": "check_positive"},
+            "reprompt": {
+                "validation": "check_positive",
+                "on_schema_mismatch": "reprompt",
+            },
             "schema": {"fields": [{"name": "x", "type": "string", "required": True}]},
-            "on_schema_mismatch": "reprompt",
             "name": "my_action",
         }
         result = InvocationStrategyFactory._build_validator(config)
@@ -325,7 +307,7 @@ class TestCreateRepromptServiceWithValidator:
 class TestRepromptFallbackWarning:
     """Test that reprompt mode without skip_schema_validation logs a warning."""
 
-    def _make_config(self, **overrides):
+    def _make_config(self, on_schema_mismatch=None):
         config = {
             "schema": {
                 "fields": [
@@ -334,7 +316,8 @@ class TestRepromptFallbackWarning:
                 ]
             },
         }
-        config.update(overrides)
+        if on_schema_mismatch:
+            config["reprompt"] = {"on_schema_mismatch": on_schema_mismatch}
         return config
 
     @patch("agent_actions.processing.helpers.logger")

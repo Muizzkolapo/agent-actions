@@ -38,9 +38,7 @@ class TestActionConfigForbidsUnknownKeys:
             "versions": None,
             "version_consumption": None,
             "retry": {"max_attempts": 3},
-            "reprompt": {"validation": "check_fn"},
-            "strict_schema": True,
-            "on_schema_mismatch": "reject",
+            "reprompt": {"validation": "check_fn", "on_schema_mismatch": "reject"},
             "idempotency_key": "key-{id}",
             "prompt": "Do something",
             "dependencies": ["dep_a"],
@@ -118,7 +116,7 @@ class TestActionConfigForbidsUnknownKeys:
         assert config.reprompt.validation == "check"
 
     def test_reprompt_without_validation_accepted(self):
-        """Reprompt without validation (used with on_schema_mismatch: reprompt)."""
+        """Reprompt without validation (used with reprompt.on_schema_mismatch: reprompt)."""
         data = {"name": "a", "intent": "i", "reprompt": {"max_attempts": 3}}
         config = ActionConfig.model_validate(data)
         assert config.reprompt.max_attempts == 3
@@ -152,13 +150,21 @@ class TestActionConfigForbidsUnknownKeys:
         with pytest.raises(ValidationError, match="max_tokens"):
             ActionConfig.model_validate(data)
 
-    def test_on_schema_mismatch_rejects_invalid_value(self):
-        data = {"name": "a", "intent": "i", "on_schema_mismatch": "ignore"}
+    def test_on_schema_mismatch_rejects_invalid_value_in_reprompt(self):
+        """Invalid on_schema_mismatch inside reprompt dict is rejected."""
+        data = {"name": "a", "intent": "i", "reprompt": {"on_schema_mismatch": "ignore"}}
         with pytest.raises(ValidationError, match="on_schema_mismatch"):
             ActionConfig.model_validate(data)
 
-    def test_strict_schema_rejects_non_bool(self):
-        data = {"name": "a", "intent": "i", "strict_schema": "banana"}
+    def test_top_level_on_schema_mismatch_rejected(self):
+        """Top-level on_schema_mismatch is no longer a valid key."""
+        data = {"name": "a", "intent": "i", "on_schema_mismatch": "reject"}
+        with pytest.raises(ValidationError, match="on_schema_mismatch"):
+            ActionConfig.model_validate(data)
+
+    def test_top_level_strict_schema_rejected(self):
+        """Top-level strict_schema is no longer a valid key."""
+        data = {"name": "a", "intent": "i", "strict_schema": True}
         with pytest.raises(ValidationError, match="strict_schema"):
             ActionConfig.model_validate(data)
 
@@ -215,16 +221,15 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.kind.value == "llm"
 
-    def test_strict_schema_and_on_schema_mismatch_accepted(self):
+    def test_on_schema_mismatch_in_reprompt_accepted(self):
+        """on_schema_mismatch inside reprompt dict is accepted."""
         data = {
             "name": "a",
             "intent": "i",
-            "strict_schema": True,
-            "on_schema_mismatch": "reject",
+            "reprompt": {"on_schema_mismatch": "reject"},
         }
         config = ActionConfig.model_validate(data)
-        assert config.strict_schema is True
-        assert config.on_schema_mismatch == "reject"
+        assert config.reprompt.on_schema_mismatch == "reject"
 
     # --- Version config ---
 
@@ -313,11 +318,9 @@ class TestDefaultsConfigValidation:
             "max_tokens": 1000,
             "top_p": 0.9,
             "stop": ["\n"],
-            "reprompt": False,
+            "reprompt": {"on_schema_mismatch": "reject"},
             "constraints": [],
             "retry": None,
-            "strict_schema": False,
-            "on_schema_mismatch": "warn",
             # Expander-consumed
             "context_scope": {"input": "seed_data"},
             "chunk_config": {"size": 100},
@@ -345,9 +348,10 @@ class TestDefaultsConfigValidation:
         with pytest.raises(ValidationError, match="temperature"):
             DefaultsConfig.model_validate({"temperature": "warm"})
 
-    def test_on_schema_mismatch_rejects_invalid_value(self):
+    def test_on_schema_mismatch_rejects_invalid_value_in_reprompt(self):
+        """Invalid on_schema_mismatch inside reprompt dict is rejected in defaults."""
         with pytest.raises(ValidationError, match="on_schema_mismatch"):
-            DefaultsConfig.model_validate({"on_schema_mismatch": "ignore"})
+            DefaultsConfig.model_validate({"reprompt": {"on_schema_mismatch": "ignore"}})
 
     def test_retry_false_converts_to_none(self):
         config = DefaultsConfig.model_validate({"retry": False})

@@ -3,7 +3,7 @@
 Tests the full schema pipeline:
 - Resolution: inline vs named vs tool-derived vs HITL auto-generated
 - Compilation: vendor-specific format per provider
-- Validation: on_schema_mismatch modes (warn, reprompt, reject)
+- Validation: reprompt.on_schema_mismatch modes (reprompt, reject)
 - Edge cases: json_mode interaction, schemaless actions, dispatch_task()
 """
 
@@ -406,10 +406,10 @@ class TestVendorCompilation:
 
 
 class TestSchemaMismatchModes:
-    """Tests for on_schema_mismatch: warn, reprompt, reject."""
+    """Tests for reprompt.on_schema_mismatch: reprompt, reject."""
 
-    def _config(self, **overrides) -> dict[str, Any]:
-        base = {
+    def _config(self, on_schema_mismatch=None) -> dict[str, Any]:
+        base: dict[str, Any] = {
             "schema": {
                 "fields": [
                     {"name": "title", "type": "string", "required": True},
@@ -417,30 +417,23 @@ class TestSchemaMismatchModes:
                 ]
             },
         }
-        base.update(overrides)
+        if on_schema_mismatch:
+            base["reprompt"] = {"on_schema_mismatch": on_schema_mismatch}
         return base
 
-    def test_default_is_warn(self):
+    def test_default_is_warn_when_no_reprompt(self):
         assert _resolve_schema_mismatch_mode({}) == "warn"
 
-    def test_explicit_warn(self):
-        assert _resolve_schema_mismatch_mode({"on_schema_mismatch": "warn"}) == "warn"
-
     def test_explicit_reprompt(self):
-        assert _resolve_schema_mismatch_mode({"on_schema_mismatch": "reprompt"}) == "reprompt"
+        config = {"reprompt": {"on_schema_mismatch": "reprompt"}}
+        assert _resolve_schema_mismatch_mode(config) == "reprompt"
 
     def test_explicit_reject(self):
-        assert _resolve_schema_mismatch_mode({"on_schema_mismatch": "reject"}) == "reject"
+        config = {"reprompt": {"on_schema_mismatch": "reject"}}
+        assert _resolve_schema_mismatch_mode(config) == "reject"
 
-    def test_strict_schema_maps_to_reject(self):
-        assert _resolve_schema_mismatch_mode({"strict_schema": True}) == "reject"
-
-    def test_explicit_overrides_strict_schema(self):
-        config = {"strict_schema": True, "on_schema_mismatch": "warn"}
-        assert _resolve_schema_mismatch_mode(config) == "warn"
-
-    def test_warn_logs_and_continues(self):
-        """Warn mode returns response unchanged (does not raise)."""
+    def test_no_mismatch_mode_returns_response(self):
+        """No on_schema_mismatch set returns response unchanged (no raise)."""
         config = self._config()
         response = {"wrong_field": "value"}
         result = _validate_llm_output_schema(response, config, "test")
@@ -473,13 +466,6 @@ class TestSchemaMismatchModes:
         response = {"wrong": "data"}
         result = _validate_llm_output_schema(response, config, "test")
         assert result == response
-
-    def test_invalid_mode_defaults_to_warn(self):
-        """Unrecognized on_schema_mismatch value defaults to warn."""
-        config = self._config(on_schema_mismatch="invalid_mode")
-        response = {"wrong": "data"}
-        result = _validate_llm_output_schema(response, config, "test")
-        assert result == response  # warn mode, no raise
 
 
 # ===================================================================
@@ -707,22 +693,15 @@ class TestSchemalessActions:
         assert result == response
 
     def test_schemaless_with_reject_not_enforced(self):
-        """Schemaless action + on_schema_mismatch=reject does NOT raise.
+        """Schemaless action + reprompt.on_schema_mismatch=reject does NOT raise.
 
         This is a known gap: when no schema is defined, _validate_llm_output_schema
         returns early before checking mismatch mode. The intent of 'reject' is
         violated silently.
         """
-        config = {"on_schema_mismatch": "reject"}  # no schema key
+        config = {"reprompt": {"on_schema_mismatch": "reject"}}  # no schema key
         response = {"any_field": "any_value"}
         # Does NOT raise — schema check is bypassed when schema is None
-        result = _validate_llm_output_schema(response, config, "test")
-        assert result == response
-
-    def test_schemaless_with_strict_not_enforced(self):
-        """Schemaless action + strict_schema=true does NOT raise."""
-        config = {"strict_schema": True}  # no schema key
-        response = {"any_field": "any_value"}
         result = _validate_llm_output_schema(response, config, "test")
         assert result == response
 
