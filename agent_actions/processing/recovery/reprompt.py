@@ -206,7 +206,7 @@ class RepromptService:
             if parse_error is not None:
                 is_valid = False
                 logger.warning(
-                    "[%s] Provider returned invalid JSON on attempt %d/%d: %s",
+                    "[%s] Invalid JSON on attempt %d/%d — %s",
                     context,
                     attempts,
                     self.max_attempts,
@@ -216,12 +216,13 @@ class RepromptService:
                 is_valid = safe_validate(self._validator.validate, response, context=context)
 
             if is_valid:
-                logger.info(
-                    "[%s] Validation passed on attempt %d/%d",
-                    context,
-                    attempts,
-                    self.max_attempts,
-                )
+                if attempts > 1:
+                    logger.info(
+                        "[%s] Reprompt passed on attempt %d/%d",
+                        context,
+                        attempts,
+                        self.max_attempts,
+                    )
                 return RepromptResult(
                     response=response,
                     executed=True,
@@ -231,15 +232,23 @@ class RepromptService:
                     exhausted=False,
                 )
 
-            logger.warning(
-                "[%s] Validation failed on attempt %d/%d",
-                context,
-                attempts,
-                self.max_attempts,
-            )
+            if parse_error is None:
+                logger.warning(
+                    "[%s] Schema validation failed on attempt %d/%d",
+                    context,
+                    attempts,
+                    self.max_attempts,
+                )
 
             if attempts >= self.max_attempts:
                 break
+
+            logger.info(
+                "[%s] Retrying with feedback (attempt %d/%d)",
+                context,
+                attempts + 1,
+                self.max_attempts,
+            )
 
             if parse_error is not None:
                 feedback = _JSON_PARSE_FEEDBACK

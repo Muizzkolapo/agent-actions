@@ -127,7 +127,7 @@ class OpenAIClient(BaseClient):
                     request_id=request_id,
                 )
             )
-            logger.warning(
+            logger.debug(
                 "Empty response content from OpenAI API, model=%s",
                 model_name,
             )
@@ -135,7 +135,7 @@ class OpenAIClient(BaseClient):
         try:
             response_data: dict[str, Any] | list[dict[str, Any]] = json.loads(response_content)
         except json.JSONDecodeError as e:
-            logger.warning(
+            logger.debug(
                 "Failed to parse JSON from OpenAI response: %s (snippet: %.200s)",
                 e,
                 response_content,
