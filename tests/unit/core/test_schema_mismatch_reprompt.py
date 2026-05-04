@@ -61,6 +61,26 @@ class TestResolveSchemaMode:
 
 
 # ---------------------------------------------------------------------------
+# Shared test helper
+# ---------------------------------------------------------------------------
+
+
+def _make_schema_config(on_schema_mismatch=None):
+    """Build a minimal config with a two-field schema and optional mismatch mode."""
+    config = {
+        "schema": {
+            "fields": [
+                {"name": "title", "type": "string", "required": True},
+                {"name": "score", "type": "number", "required": True},
+            ]
+        },
+    }
+    if on_schema_mismatch:
+        config["reprompt"] = {"on_schema_mismatch": on_schema_mismatch}
+    return config
+
+
+# ---------------------------------------------------------------------------
 # _validate_llm_output_schema skip behavior
 # ---------------------------------------------------------------------------
 
@@ -68,22 +88,9 @@ class TestResolveSchemaMode:
 class TestValidateSchemaSkip:
     """Tests for _validate_llm_output_schema skip/fallback behavior."""
 
-    def _make_config(self, on_schema_mismatch=None):
-        config = {
-            "schema": {
-                "fields": [
-                    {"name": "title", "type": "string", "required": True},
-                    {"name": "score", "type": "number", "required": True},
-                ]
-            },
-        }
-        if on_schema_mismatch:
-            config["reprompt"] = {"on_schema_mismatch": on_schema_mismatch}
-        return config
-
     def test_reprompt_mode_skips_when_flag_set(self):
         """With skip_schema_validation=True, returns response unchanged."""
-        config = self._make_config(on_schema_mismatch="reprompt")
+        config = _make_schema_config(on_schema_mismatch="reprompt")
         response = {"wrong_field": "value"}
         result = _validate_llm_output_schema(
             response, config, "test_action", skip_schema_validation=True
@@ -92,7 +99,7 @@ class TestValidateSchemaSkip:
 
     def test_reprompt_mode_falls_back_to_warn_without_flag(self):
         """Without skip_schema_validation, reprompt mode falls back to warn."""
-        config = self._make_config(on_schema_mismatch="reprompt")
+        config = _make_schema_config(on_schema_mismatch="reprompt")
         response = {"wrong_field": "value"}
         # Should NOT skip -- falls back to warn (returns response, logs warning)
         result = _validate_llm_output_schema(response, config, "test_action")
@@ -102,7 +109,7 @@ class TestValidateSchemaSkip:
         """on_schema_mismatch: reject still raises."""
         from agent_actions.errors import SchemaValidationError
 
-        config = self._make_config(on_schema_mismatch="reject")
+        config = _make_schema_config(on_schema_mismatch="reject")
         response = {"wrong_field": "value"}
         with pytest.raises(SchemaValidationError):
             _validate_llm_output_schema(response, config, "test_action")
@@ -307,23 +314,10 @@ class TestCreateRepromptServiceWithValidator:
 class TestRepromptFallbackWarning:
     """Test that reprompt mode without skip_schema_validation logs a warning."""
 
-    def _make_config(self, on_schema_mismatch=None):
-        config = {
-            "schema": {
-                "fields": [
-                    {"name": "title", "type": "string", "required": True},
-                    {"name": "score", "type": "number", "required": True},
-                ]
-            },
-        }
-        if on_schema_mismatch:
-            config["reprompt"] = {"on_schema_mismatch": on_schema_mismatch}
-        return config
-
     @patch("agent_actions.processing.helpers.logger")
     def test_reprompt_fallback_logs_warning(self, mock_logger):
         """Reprompt mode without flag falls back to warn and logs."""
-        config = self._make_config(on_schema_mismatch="reprompt")
+        config = _make_schema_config(on_schema_mismatch="reprompt")
         response = {"wrong_field": "value"}
 
         result = _validate_llm_output_schema(response, config, "test_action")
