@@ -93,6 +93,8 @@ class RepromptConfig(BaseModel):
     itself serves as the validator.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     validation: str | None = Field(default=None, description="Name of validation UDF function")
     on_schema_mismatch: Literal["reject", "reprompt"] | None = Field(
         default=None,

@@ -55,7 +55,8 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
             if json_mode:
                 errors.append(f"{desc} 'output_field' can only be used when 'json_mode' is false.")
 
-        reprompt_cfg = normalized_entry.get("reprompt") or {}
+        reprompt_raw = normalized_entry.get("reprompt")
+        reprompt_cfg = reprompt_raw if isinstance(reprompt_raw, dict) else {}
         schema_mismatch_mode = reprompt_cfg.get("on_schema_mismatch")
         if schema_mismatch_mode in ("reprompt", "reject"):
             has_schema = bool(
