@@ -28,9 +28,13 @@ How to configure automatic retry with feedback when LLM output fails validation.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `on_schema_mismatch` | string | None | `"reprompt"` (retry on schema fail) or `"reject"` (hard fail) |
 | `validation` | string | None | Name of `@reprompt_validation` function |
 | `max_attempts` | int | 2 | Total attempts including first try (1-10) |
 | `on_exhausted` | string | `"return_last"` | What to do when all attempts fail |
+| `use_self_reflection` | bool | false | Add self-analysis prompt before retry |
+| `use_llm_critique` | bool | false | Use a second LLM call to critique failures |
+| `critique_after_attempt` | int | 2 | Critique starts on this attempt number |
 
 **`on_exhausted` options:**
 - `"return_last"` — Accept the last response even though it failed validation. Downstream actions receive potentially invalid data.
