@@ -127,14 +127,11 @@ class OpenAIClient(BaseClient):
                     request_id=request_id,
                 )
             )
-            raise VendorAPIError(
-                "Empty response content from OpenAI API",
-                context={
-                    "model_name": model_name,
-                    "vendor": "openai",
-                    "api_operation": "chat.completions.create",
-                },
+            logger.warning(
+                "Empty response content from OpenAI API, model=%s",
+                model_name,
             )
+            return [{"raw_response": "", "_parse_error": "Empty response from API"}]
         try:
             response_data: dict[str, Any] | list[dict[str, Any]] = json.loads(response_content)
         except json.JSONDecodeError as e:
@@ -152,15 +149,7 @@ class OpenAIClient(BaseClient):
                     request_id=request_id,
                 )
             )
-            raise VendorAPIError(
-                f"Failed to parse JSON response from OpenAI: {e}",
-                context={
-                    "model_name": model_name,
-                    "vendor": "openai",
-                    "api_operation": "chat.completions.create",
-                    "raw_response_snippet": response_content[:200],
-                },
-            ) from e
+            return [{"raw_response": response_content, "_parse_error": str(e)}]
         response_list: list[dict[str, Any]] = (
             response_data if isinstance(response_data, list) else [response_data]
         )

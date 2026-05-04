@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Return error dict instead of raising VendorAPIError on JSON parse failure in ollama cloud and openai online clients, enabling reprompt loop to retry with JSON-specific feedback"
+time: 2026-05-04T14:49:10.000000Z

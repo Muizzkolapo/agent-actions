@@ -19,6 +19,21 @@ from .response_validator import (
 )
 from .retry import RetryExhaustedException
 
+_JSON_PARSE_FEEDBACK = (
+    "Your previous response was not valid JSON. "
+    "Return only a JSON object — no markdown, no explanation, no code fences."
+)
+
+
+def _get_parse_error(response: Any) -> str | None:
+    """Return ``_parse_error`` string if *response* signals a provider JSON parse failure."""
+    if isinstance(response, list) and response and isinstance(response[0], dict):
+        return response[0].get("_parse_error") or None
+    if isinstance(response, dict):
+        return response.get("_parse_error") or None
+    return None
+
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -187,7 +202,18 @@ class RepromptService:
 
             last_response = response
 
-            is_valid = safe_validate(self._validator.validate, response, context=context)
+            parse_error = _get_parse_error(response)
+            if parse_error is not None:
+                is_valid = False
+                logger.warning(
+                    "[%s] Provider returned invalid JSON on attempt %d/%d: %s",
+                    context,
+                    attempts,
+                    self.max_attempts,
+                    parse_error,
+                )
+            else:
+                is_valid = safe_validate(self._validator.validate, response, context=context)
 
             if is_valid:
                 logger.info(
@@ -215,9 +241,12 @@ class RepromptService:
             if attempts >= self.max_attempts:
                 break
 
-            feedback = build_validation_feedback(
-                response, self._validator.feedback_message, strategies=self._strategies
-            )
+            if parse_error is not None:
+                feedback = _JSON_PARSE_FEEDBACK
+            else:
+                feedback = build_validation_feedback(
+                    response, self._validator.feedback_message, strategies=self._strategies
+                )
 
             if self._critique_fn is not None and attempts >= self._critique_after_attempt:
                 try:
@@ -256,6 +285,15 @@ class RepromptService:
                 f"Reprompt validation exhausted after {attempts} attempts "
                 f"(validation: {self.validation_name})"
             )
+
+        if _get_parse_error(last_response) is not None:
+            logger.warning(
+                "[%s] Exhausted after %d attempts with persistent parse errors "
+                "— returning empty fields so downstream actions are not blocked",
+                context,
+                attempts,
+            )
+            last_response = [{}]
 
         return RepromptResult(
             response=last_response,

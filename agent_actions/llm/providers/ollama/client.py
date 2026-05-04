@@ -21,7 +21,7 @@ import httpx
 from ollama import Client, ResponseError
 
 from agent_actions.config.defaults import OllamaCloudDefaults
-from agent_actions.errors import ConfigurationError, VendorAPIError
+from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -170,13 +170,14 @@ def _call_ollama_json(
             parsed = json.loads(content)
             return [parsed] if isinstance(parsed, dict) else [{"response": parsed}]
         except json.JSONDecodeError as e:
-            logger.debug("JSON parse failed: %s, request_id=%s", e, request_id)
+            logger.warning(
+                "%s/%s returned invalid JSON: %s",
+                vendor_slug,
+                model,
+                e,
+            )
             fire_event(LLMJSONParseErrorEvent(provider=vendor_slug, model=model, error=str(e)))
-            raise VendorAPIError(
-                f"Ollama returned invalid JSON: {e}",
-                context={"vendor": vendor_slug, "request_id": request_id},
-                cause=e,
-            ) from e
+            return [{"raw_response": content or "", "_parse_error": str(e)}]
     if isinstance(content, dict):
         return [content]
     return [{"response": content}]
