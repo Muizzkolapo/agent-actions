@@ -338,8 +338,12 @@ export class QueryResultsPanel implements vscode.Disposable {
                         dr[actionName] = actionNs;
                         nsExtracted = true;
                     }
+                } else if (Object.keys(content).length > 0) {
+                    // Content already unwrapped by backend — use directly (matches docs getDisplayFields)
+                    dr = content;
+                    nsExtracted = true;
                 } else if (actionName) {
-                    // Action namespace not in content — record passed through without this action producing output
+                    // Empty content = guard skipped
                     dr = {};
                     guardSkipped = true;
                 } else {
@@ -549,7 +553,8 @@ function formatCell(value: unknown): string {
         const str = JSON.stringify(value);
         return str.length > 80 ? str.slice(0, 80) + '\u2026' : str;
     }
-    return String(value);
+    const str = String(value).replace(/\n/g, ' ').replace(/\t/g, ' ');
+    return str.length > 80 ? str.slice(0, 80) + '\u2026' : str;
 }
 
 /** Compute common pagination display variables. */
