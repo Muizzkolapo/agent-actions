@@ -298,11 +298,32 @@ try:
         print(result)
 
     elif command == 'preview':
+        action_name_arg = args['action_name']
         result = backend.preview_target(
-            action_name=args['action_name'],
+            action_name=action_name_arg,
             limit=args.get('limit', 50),
             offset=args.get('offset', 0),
         )
+        # Unwrap namespaced content — match docs scanner's _unwrap_record_content.
+        # Replaces record["content"] with only the action's namespace fields,
+        # stripping sibling namespaces (e.g. source.page_content) from display.
+        def _unwrap(rec):
+            if not isinstance(rec, dict):
+                return rec
+            content = rec.get('content')
+            if not isinstance(content, dict):
+                return rec
+            if action_name_arg in content:
+                ns = content[action_name_arg]
+                if ns is None:
+                    return {**rec, 'content': {}}
+                if isinstance(ns, dict):
+                    return {**rec, 'content': ns}
+                return {**rec, 'content': {action_name_arg: ns}}
+            if any(isinstance(v, (dict, type(None))) for v in content.values()):
+                return {**rec, 'content': {}}
+            return rec
+        result['records'] = [_unwrap(r) for r in result.get('records', [])]
         result['storagePath'] = str(backend.db_path) if hasattr(backend, 'db_path') else workflow_path
         result['backendType'] = backend.backend_type
         print(json.dumps(result, ensure_ascii=False, default=str))
