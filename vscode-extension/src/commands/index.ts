@@ -193,10 +193,7 @@ async function navigatePreviewPage(
     panel.showResults(result, actionName, workflowPath, workflowName, limit, newOffset);
 }
 
-/**
- * Attach prompt traces to preview records by source_guid.
- * Fetches traces from the storage backend and merges them in-place.
- */
+/** Attach prompt traces to preview records by target_id. */
 async function attachTracesToRecords(
     reader: StorageReader,
     actionName: string,
@@ -208,9 +205,9 @@ async function attachTracesToRecords(
 
         for (const record of result.records) {
             const rec = record as Record<string, unknown>;
-            const guid = rec.source_guid;
-            if (typeof guid === 'string' && traceMap.has(guid)) {
-                rec._trace = traceMap.get(guid);
+            const tid = rec.target_id;
+            if (typeof tid === 'string' && traceMap.has(tid)) {
+                rec._trace = traceMap.get(tid);
             }
         }
     } catch {
