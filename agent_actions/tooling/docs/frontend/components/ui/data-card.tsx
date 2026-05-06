@@ -211,7 +211,6 @@ function JsonHighlighter({ text }: { text: string }) {
 
 function CollapsibleSection({
   label,
-  accentClass,
   badge,
   hint,
   open,
