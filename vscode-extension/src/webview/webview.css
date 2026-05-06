@@ -1,0 +1,757 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Field-manual styling for the agent-actions data preview webview.
+   Tracked-out section labels, segmented identifiers, dot-grid page
+   texture, blueprint-cyan accent, monospace chrome. Page surface
+   blends with VS Code's editor background; chrome reads as native. */
+
+/* Tokens */
+@layer base {
+  :root {
+    --background:           225 28%  6%;
+    --foreground:           210 20% 93%;
+    --card:                 225 22% 11%;
+    --card-foreground:      210 20% 93%;
+    --card-elevated:        225 22% 14%;
+    --popover:              225 22%  9%;
+    --popover-foreground:   210 20% 93%;
+
+    /* Blueprint cyan — the chrome accent. */
+    --primary:              192 78% 62%;
+    --primary-foreground:   225 28%  6%;
+    --primary-soft:         192 60% 24%;
+
+    --secondary:            225 18% 14%;
+    --secondary-foreground: 210 15% 78%;
+    --muted:                225 16% 14%;
+    --muted-foreground:     218 12% 56%;
+    --accent:               225 18% 17%;
+    --accent-foreground:    210 20% 93%;
+    --destructive:          0 72% 55%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border:               225 14% 26%;
+    --border-strong:        225 14% 34%;
+    --input:                225 14% 26%;
+    --ring:                 192 78% 62%;
+    --radius:               6px;
+
+    --success:              152 56% 46%;
+    --success-foreground:   0 0% 98%;
+    --warning:              38 92% 54%;
+    --warning-foreground:   0 0% 5%;
+
+    /* Motion — single ease, two durations. */
+    --motion-ease:          cubic-bezier(0.32, 0.72, 0.24, 1);
+    --motion-snappy:        140ms;
+    --motion-deliberate:    240ms;
+
+    /* Typography — the body inherits VS Code's UI font (always wins);
+       chrome elements force monospace via the chrome stack. */
+    --font-ui:    var(--vscode-font-family, system-ui, -apple-system, sans-serif);
+    --font-mono:  var(--vscode-editor-font-family, ui-monospace,
+                   "SF Mono", "JetBrains Mono", "Cascadia Code",
+                   "Consolas", monospace);
+    --font-chrome: ui-monospace, "SF Mono", "JetBrains Mono",
+                   "Cascadia Code", "Consolas", monospace;
+
+    color-scheme: dark;
+  }
+
+  /* ─── Light theme ─── */
+  .theme-light {
+    --background:           220 18% 96%;
+    --foreground:           225 30%  9%;
+    --card:                 0 0% 100%;
+    --card-foreground:      225 30%  9%;
+    --card-elevated:        220 18% 98%;
+    --popover:              0 0% 100%;
+    --popover-foreground:   225 30%  9%;
+
+    --primary:              198 88% 38%;
+    --primary-foreground:   0 0% 100%;
+    --primary-soft:         198 70% 92%;
+
+    --secondary:            220 18% 92%;
+    --secondary-foreground: 225 28% 16%;
+    --muted:                220 18% 92%;
+    --muted-foreground:     220 12% 42%;
+    --accent:               220 18% 90%;
+    --accent-foreground:    225 30%  9%;
+    --destructive:          0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border:               220 14% 80%;
+    --border-strong:        220 14% 68%;
+    --input:                220 14% 86%;
+    --ring:                 198 88% 38%;
+
+    --success:              152 50% 36%;
+    --warning:              38 80% 44%;
+
+    color-scheme: light;
+  }
+
+  *,
+  *::before,
+  *::after {
+    border-color: hsl(var(--border) / 0.7);
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--vscode-editor-background, hsl(var(--background)));
+    color: var(--vscode-editor-foreground, hsl(var(--foreground)));
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Schematic dot grid — 22px grid, 4.5% alpha. The masthead is solid so
+     it covers the grid in the chrome zone; the grid only shows in the
+     content gutter and below the last record. */
+  body {
+    background-image:
+      radial-gradient(
+        circle at 1px 1px,
+        hsl(var(--foreground) / 0.045) 1px,
+        transparent 0
+      );
+    background-size: 22px 22px;
+    background-attachment: fixed;
+  }
+  .theme-light body {
+    background-image:
+      radial-gradient(
+        circle at 1px 1px,
+        hsl(var(--foreground) / 0.06) 1px,
+        transparent 0
+      );
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.32);
+    color: hsl(var(--foreground));
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
+    border-radius: 3px;
+  }
+}
+
+/* Cards */
+@layer components {
+  .data-card {
+    position: relative;
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border) / 0.85);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition:
+      border-color var(--motion-snappy) var(--motion-ease);
+  }
+  .data-card:hover {
+    border-color: hsl(var(--border-strong));
+  }
+  .data-card:focus-within {
+    border-color: hsl(var(--primary) / 0.6);
+  }
+
+  /* Stagger reveal — tightened cascade so pagination doesn't feel laggy.
+     30ms × 6, capped at index 7 — total reveal completes in ~600ms. */
+  .data-card {
+    animation: card-reveal 0.32s var(--motion-ease) backwards;
+  }
+  .data-card:nth-child(1) { animation-delay: 0ms; }
+  .data-card:nth-child(2) { animation-delay: 30ms; }
+  .data-card:nth-child(3) { animation-delay: 60ms; }
+  .data-card:nth-child(4) { animation-delay: 90ms; }
+  .data-card:nth-child(5) { animation-delay: 120ms; }
+  .data-card:nth-child(6) { animation-delay: 150ms; }
+  .data-card:nth-child(n+7) { animation-delay: 180ms; }
+  @keyframes card-reveal {
+    from { opacity: 0; transform: translateY(3px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Card title bar */
+  .data-card > button:first-of-type {
+    position: relative;
+    background: hsl(var(--card-elevated));
+    border-bottom: 1px solid hsl(var(--border) / 0.6);
+    padding: 0.5rem 0.875rem;
+    transition: background var(--motion-snappy) var(--motion-ease);
+  }
+  .data-card > button:first-of-type:hover {
+    background: hsl(var(--accent));
+  }
+  /* Expanded-card cyan rail */
+  .data-card > button:first-of-type::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 2px;
+    background: hsl(var(--primary));
+    opacity: 0;
+    transition: opacity var(--motion-snappy) var(--motion-ease);
+  }
+  .data-card[data-record-open="true"] > button:first-of-type::before,
+  .data-card:has(> .data-card-drawer[data-open="true"]) > button:first-of-type::before {
+    opacity: 1;
+  }
+
+  .data-card > button:first-of-type > span {
+    font-family: var(--font-chrome);
+    font-feature-settings: "tnum", "zero";
+    letter-spacing: 0.02em;
+  }
+  /* Leading "#1" — softened (smaller bg / border alpha) so 50 cards don't
+     accumulate into color noise. */
+  .data-card > button:first-of-type > span:first-of-type {
+    color: hsl(var(--foreground));
+    font-weight: 600;
+    padding: 1px 6px;
+    background: hsl(var(--primary) / 0.06);
+    border: 1px solid hsl(var(--primary) / 0.18);
+    border-radius: 3px;
+    margin-right: 0.25rem;
+  }
+  .data-card > button:first-of-type > span:not(:first-of-type) {
+    position: relative;
+    color: hsl(var(--foreground) / 0.78);
+    padding-left: 0.5rem;
+  }
+  .data-card > button:first-of-type > span:nth-of-type(n+3)::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 18%;
+    bottom: 18%;
+    width: 1px;
+    background: hsl(var(--border));
+  }
+  .data-card > button:first-of-type > span.ml-auto {
+    color: hsl(var(--muted-foreground));
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 1px 7px;
+    background: hsl(var(--muted) / 0.55);
+    border: 1px solid hsl(var(--border) / 0.5);
+    border-radius: 999px;
+  }
+
+  .data-card > button:first-of-type > svg {
+    transition: transform var(--motion-snappy) var(--motion-ease);
+    color: hsl(var(--foreground) / 0.55);
+    flex-shrink: 0;
+  }
+}
+
+/* Section headers */
+@layer components {
+  .dc-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.5rem 0.875rem;
+    border: 0;
+    border-top: 1px solid hsl(var(--border) / 0.5);
+    background: transparent;
+    color: hsl(var(--foreground));
+    cursor: pointer;
+    font-family: var(--font-chrome);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    line-height: 1;
+    transition: background var(--motion-snappy) var(--motion-ease);
+  }
+  .dc-section-header:hover {
+    background: hsl(var(--accent));
+  }
+  .dc-section-header:first-of-type {
+    border-top: 0;
+  }
+  .dc-section-header > svg {
+    transition: transform var(--motion-snappy) var(--motion-ease);
+    color: hsl(var(--foreground) / 0.5);
+    flex-shrink: 0;
+  }
+
+  .dc-section-header > span:first-of-type {
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    color: inherit !important;
+    letter-spacing: inherit !important;
+    text-transform: inherit !important;
+    font-family: inherit !important;
+  }
+
+  .dc-section-header > span:nth-of-type(2),
+  .dc-section-header > span.ml-auto {
+    margin-left: auto;
+    font-family: var(--font-chrome) !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.04em !important;
+    text-transform: none !important;
+    color: hsl(var(--muted-foreground)) !important;
+    font-feature-settings: "tnum";
+  }
+
+}
+
+/* Badges */
+@layer components {
+  .dc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-family: var(--font-chrome);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .dc-badge-model {
+    color: hsl(var(--foreground) / 0.85);
+    background: hsl(var(--background) / 0.6);
+    border: 1px solid hsl(var(--border) / 0.7);
+    text-transform: none;
+    letter-spacing: 0.02em;
+  }
+  .dc-badge-mode {
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.12);
+    border: 1px solid hsl(var(--primary) / 0.4);
+  }
+  /* Static dot — no glow. */
+  .dc-badge-mode::before {
+    content: "";
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: hsl(var(--primary));
+    margin-right: 0.125rem;
+  }
+}
+
+/* Prose */
+@layer components {
+  .dc-prose {
+    padding: 0.625rem 0.875rem 0.875rem;
+    font-family: var(--font-ui);
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: hsl(var(--foreground) / 0.85);
+  }
+  .dc-prose > :first-child { margin-top: 0; }
+  .dc-prose > :last-child { margin-bottom: 0; }
+  .dc-prose h1,
+  .dc-prose h2,
+  .dc-prose h3 {
+    font-family: var(--font-ui);
+    color: hsl(var(--foreground));
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    margin-top: 1em;
+    margin-bottom: 0.4em;
+  }
+  .dc-prose h1 { font-size: 1.08em; }
+  .dc-prose h2 { font-size: 1.02em; }
+  .dc-prose h3 { font-size: 1em; }
+  .dc-prose p { margin: 0.4em 0; }
+  .dc-prose strong { color: hsl(var(--foreground)); font-weight: 600; }
+  .dc-prose em { color: hsl(var(--foreground) / 0.92); }
+  .dc-prose blockquote {
+    margin: 0.6em 0;
+    padding: 0.1em 0 0.1em 0.85em;
+    border-left: 2px solid hsl(var(--primary) / 0.55);
+    color: hsl(var(--foreground) / 0.78);
+    font-style: normal;
+  }
+  .dc-prose ul,
+  .dc-prose ol { margin: 0.5em 0; padding-left: 1.4em; }
+  .dc-prose li { margin: 0.2em 0; }
+  .dc-prose hr {
+    border: 0;
+    border-top: 1px solid hsl(var(--border) / 0.5);
+    margin: 1em 0;
+  }
+  .dc-prose a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--primary) / 0.4);
+    text-underline-offset: 2px;
+  }
+  .dc-prose a:hover { text-decoration-color: hsl(var(--primary)); }
+  .dc-prose code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: hsl(var(--secondary) / 0.7);
+    color: hsl(var(--primary));
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+  /* Code blocks in prose — no decorative stamp; the monospace + dark bg
+     already signals "code". */
+  .dc-prose pre {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.55;
+    margin: 0.6em 0;
+    padding: 0.7em 0.9em;
+    border-radius: 4px;
+    background: hsl(var(--background) / 0.55);
+    border: 1px solid hsl(var(--border) / 0.5);
+    overflow-x: auto;
+  }
+  .dc-prose pre code {
+    background: transparent;
+    padding: 0;
+    border: 0;
+    color: hsl(var(--foreground) / 0.92);
+    font-size: inherit;
+  }
+  .dc-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.6em 0;
+    font-size: 11.5px;
+  }
+  .dc-prose th, .dc-prose td {
+    padding: 0.35em 0.55em;
+    border-bottom: 1px solid hsl(var(--border) / 0.4);
+    text-align: left;
+  }
+  .dc-prose th {
+    font-family: var(--font-chrome);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--background) / 0.4);
+  }
+}
+
+/* JSON code block — RAW stamp differentiates literal LLM output from parsed action output */
+@layer components {
+  .dc-json {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    background: hsl(var(--background) / 0.5);
+    border: 1px solid hsl(var(--border) / 0.5);
+    border-radius: 4px;
+    padding: 0.5rem 0;
+    margin: 0.375rem 0.875rem 0.875rem;
+    overflow-x: auto;
+    position: relative;
+  }
+  .dc-json::before {
+    content: "raw";
+    position: absolute;
+    top: 4px;
+    right: 10px;
+    font-family: var(--font-chrome);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground) / 0.22);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .dc-json-line { display: flex; padding: 0 0.875rem; }
+  .dc-json-line:hover { background: hsl(var(--accent) / 0.4); }
+  .dc-json-gutter {
+    flex-shrink: 0;
+    min-width: 2.25rem;
+    padding-right: 0.75rem;
+    text-align: right;
+    color: hsl(var(--foreground) / 0.18);
+    user-select: none;
+    font-feature-settings: "tnum";
+  }
+  .dc-json-code { white-space: pre-wrap; word-break: break-word; flex: 1; }
+  .dc-json-key    { color: hsl(192 78% 70%); font-weight: 500; }
+  .dc-json-string { color: hsl(28 88% 70%); }
+  .dc-json-number { color: hsl(264 72% 78%); font-feature-settings: "tnum"; }
+  .dc-json-brace  { color: hsl(150 50% 65%); }
+  .dc-json-bool   { color: hsl(264 72% 78%); font-style: italic; }
+  .dc-json-null   { color: hsl(264 72% 78%); font-style: italic; opacity: 0.7; }
+
+  .theme-light .dc-json-key    { color: hsl(198 88% 36%); }
+  .theme-light .dc-json-string { color: hsl(28 75% 38%); }
+  .theme-light .dc-json-number { color: hsl(264 60% 42%); }
+  .theme-light .dc-json-brace  { color: hsl(150 50% 28%); }
+  .theme-light .dc-json-bool   { color: hsl(264 60% 42%); }
+  .theme-light .dc-json-null   { color: hsl(264 60% 42%); opacity: 0.6; }
+}
+
+/* Source quote + long prose blocks */
+@layer components {
+  .dc-source-quote {
+    margin: 0.25rem 0;
+    padding: 0.25rem 0 0.25rem 0.85rem;
+    border-left: 2px solid hsl(var(--primary) / 0.55);
+    color: hsl(var(--foreground) / 0.78);
+    font-family: var(--font-ui);
+    font-style: italic;
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .dc-source-quote::before {
+    content: "“";
+    color: hsl(var(--primary) / 0.6);
+    font-size: 1.4em;
+    line-height: 0;
+    vertical-align: -0.2em;
+    margin-right: 0.1em;
+  }
+  .dc-tree-prose {
+    padding: 0.55rem 0.75rem;
+    border-radius: 4px;
+    border: 1px solid hsl(var(--border) / 0.45);
+    background: hsl(var(--secondary) / 0.4);
+    font-family: var(--font-ui);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: hsl(var(--foreground) / 0.88);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
+/* Copy button */
+@layer components {
+  .dc-copy-btn {
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+    padding: 0.25rem;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: hsl(var(--foreground) / 0.32);
+    cursor: pointer;
+    transition:
+      background var(--motion-snappy) var(--motion-ease),
+      color var(--motion-snappy) var(--motion-ease),
+      transform var(--motion-snappy) var(--motion-ease);
+  }
+  .dc-copy-btn:hover {
+    color: hsl(var(--foreground) / 0.88);
+    background: hsl(var(--accent));
+  }
+  .dc-copy-btn:active { transform: scale(0.92); }
+  .dc-copy-btn.copied {
+    color: hsl(var(--success));
+    background: hsl(var(--success) / 0.15);
+  }
+}
+
+/* Drawer */
+@layer components {
+  .data-card-drawer {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--motion-snappy) var(--motion-ease);
+  }
+  .data-card-drawer[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+  .data-card-drawer > div {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+/* Tree fields */
+@layer components {
+  .data-card button:hover:not(.dc-section-header):not(.dc-copy-btn):not(.nav-btn) {
+    background: hsl(var(--accent) / 0.45);
+  }
+  .theme-light .data-card span[style*="#7dd3fc"],
+  .theme-light .data-card span[style*="#c084fc"],
+  .theme-light .data-card span[style*="#6ee7b7"] {
+    color: hsl(var(--foreground) / 0.85) !important;
+  }
+}
+
+/* Toolbar */
+@layer components {
+  .nav-btn {
+    height: 22px;
+    width: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    border: 1px solid hsl(var(--border) / 0.6);
+    background: hsl(var(--card) / 0.6);
+    color: hsl(var(--foreground) / 0.82);
+    font-family: var(--font-chrome);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background var(--motion-snappy) var(--motion-ease),
+      border-color var(--motion-snappy) var(--motion-ease),
+      transform var(--motion-snappy) var(--motion-ease),
+      opacity var(--motion-snappy) var(--motion-ease);
+  }
+  .nav-btn:hover:not(:disabled) {
+    background: hsl(var(--accent));
+    border-color: hsl(var(--border-strong));
+    color: hsl(var(--foreground));
+  }
+  .nav-btn:active:not(:disabled) { transform: scale(0.95); }
+  .nav-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+
+  .toolbar-action {
+    font-family: var(--font-chrome);
+    font-weight: 600;
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    color: hsl(var(--foreground));
+  }
+  .toolbar-meta {
+    font-family: var(--font-chrome);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    font-feature-settings: "tnum", "zero";
+  }
+  .toolbar-tick {
+    color: hsl(var(--border-strong));
+    font-family: var(--font-chrome);
+    font-size: 11px;
+    user-select: none;
+    opacity: 0.6;
+  }
+  .toolbar-chip {
+    font-family: var(--font-chrome);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: hsl(var(--foreground) / 0.72);
+    padding: 2px 7px;
+    background: hsl(var(--card) / 0.6);
+    border: 1px solid hsl(var(--border) / 0.6);
+    border-radius: 3px;
+  }
+  .toolbar-pageinfo {
+    font-family: var(--font-chrome);
+    font-size: 11px;
+    font-weight: 500;
+    color: hsl(var(--foreground) / 0.7);
+    font-feature-settings: "tnum", "zero";
+    letter-spacing: 0.02em;
+    padding: 0 0.5rem;
+  }
+
+  /* Count-drift warning — only renders when the storage backend's
+     reported totalCount disagrees with the records actually returned.
+     This is a debug surface; we don't hide upstream lies. */
+  .drift-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: var(--font-chrome);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: hsl(var(--warning));
+    background: hsl(var(--warning) / 0.12);
+    border: 1px solid hsl(var(--warning) / 0.4);
+    cursor: help;
+    line-height: 1.4;
+  }
+  .drift-chip .drift-mark {
+    font-size: 11px;
+    line-height: 1;
+  }
+}
+
+/* Empty state */
+@layer components {
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 4rem 1rem;
+    color: hsl(var(--muted-foreground));
+    font-family: var(--font-chrome);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .empty-state::before {
+    content: "";
+    width: 28px;
+    height: 28px;
+    border: 1.5px dashed hsl(var(--border-strong));
+    border-radius: 50%;
+    opacity: 0.7;
+  }
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────── */
+@layer base {
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.18);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+    background-clip: padding-box;
+  }
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .data-card,
+  .data-card-drawer,
+  .data-card-drawer *,
+  .dc-section-header,
+  .dc-section-header svg,
+  .dc-copy-btn,
+  .nav-btn,
+  .data-card > button:first-of-type,
+  .data-card > button:first-of-type svg {
+    animation: none !important;
+    transition-duration: 0ms !important;
+  }
+}

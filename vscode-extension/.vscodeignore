@@ -6,3 +6,6 @@ tsconfig.json
 esbuild.js
 .gitignore
 **/*.map
+out/test-harness.html
+ISSUE_SUMMARY.md
+tailwind.config.js

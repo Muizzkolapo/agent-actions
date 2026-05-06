@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "VS Code extension data-preview panel rebuilt as a React webview that mounts the docs UI's DataCard component directly, eliminating the divergent renderer and giving both surfaces a single source of truth"
+time: 2026-05-06T18:00:05.000000Z
