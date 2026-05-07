@@ -25,6 +25,45 @@ logger = logging.getLogger(__name__)
 # Sentinel distinguishing "field not found" from a field whose value is falsy (0, "", False, None).
 _MISSING = object()
 
+
+def _resolve_missing_field(
+    prompt_context: dict,
+    ns_name: str,
+    field_ref: str,
+    action_name: str,
+    directive: str,
+) -> None:
+    """Return if namespace is null (guard-skipped/filtered), else raise.
+
+    When a dependency's guard triggers skip/filter, the namespace is stored
+    as None in field_context.  This matches guard evaluation semantics where
+    missing fields resolve to None rather than raising.
+    """
+    if ns_name in prompt_context and prompt_context[ns_name] is None:
+        logger.debug(
+            "[%s NULL-SAFE] '%s' on action '%s': namespace '%s' is "
+            "null (guard-skipped/filtered), resolving field as None",
+            directive.upper(),
+            field_ref,
+            action_name,
+            ns_name,
+        )
+        return None
+
+    field_name = field_ref.split(".", 1)[1] if "." in field_ref else field_ref
+    raise ConfigurationError(
+        f"context_scope.{directive} field '{field_ref}' not found at runtime",
+        context={
+            "action": action_name,
+            "field_ref": field_ref,
+            "directive": directive,
+            "operation": "apply_context_scope",
+            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
+            f"Check the output schema of '{ns_name}'.",
+        },
+    )
+
+
 # Framework-injected namespaces that are always available for template rendering
 # regardless of context_scope.observe/passthrough. These are not user data —
 # they are iteration context, static reference data, and workflow metadata.
@@ -104,17 +143,10 @@ def apply_context_scope(
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
 
                 if value is _MISSING:
-                    raise ConfigurationError(
-                        f"context_scope.passthrough field '{field_ref}' not found at runtime",
-                        context={
-                            "action": action_name,
-                            "field_ref": field_ref,
-                            "directive": "passthrough",
-                            "operation": "apply_context_scope",
-                            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
-                            f"Check the output schema of '{ns_name}'.",
-                        },
+                    _resolve_missing_field(
+                        prompt_context, ns_name, field_ref, action_name, "passthrough"
                     )
+                    value = None
 
                 passthrough_fields.setdefault(ns_name, {})[field_name] = value
 
@@ -217,17 +249,10 @@ def apply_context_scope(
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
 
                 if value is _MISSING:
-                    raise ConfigurationError(
-                        f"context_scope.observe field '{field_ref}' not found at runtime",
-                        context={
-                            "action": action_name,
-                            "field_ref": field_ref,
-                            "directive": "observe",
-                            "operation": "apply_context_scope",
-                            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
-                            f"Check the output schema of '{ns_name}'.",
-                        },
+                    _resolve_missing_field(
+                        prompt_context, ns_name, field_ref, action_name, "observe"
                     )
+                    value = None
 
                 llm_context.setdefault(ns_name, {})[field_name] = value
 

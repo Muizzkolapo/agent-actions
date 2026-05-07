@@ -58,12 +58,13 @@ class TestMissingNamespaceLogging:
         assert "extract" in result
         assert result["extract"]["text"] == "hello"
 
-        # classify namespace absent — not in result, no error
-        assert "classify" not in result
+        # classify namespace marked as None (guard-skipped/filtered)
+        assert "classify" in result
+        assert result["classify"] is None
 
         # Should log at DEBUG, not WARNING or ERROR
         debug_messages = [r.message for r in caplog.records if r.levelno == logging.DEBUG]
-        assert any("classify" in msg and "not found" in msg for msg in debug_messages)
+        assert any("classify" in msg and "null/absent" in msg for msg in debug_messages)
 
     def test_all_namespaces_present(self, caplog):
         """When all namespaces are present, no missing-namespace log is emitted."""

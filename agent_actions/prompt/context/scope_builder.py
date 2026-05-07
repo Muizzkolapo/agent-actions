@@ -166,11 +166,17 @@ def _load_dependency_namespaces(
 
                 dep_data = namespaced_content.get(dep_name)
                 if dep_data is None:
+                    # Namespace is null (guard-skipped) or absent (guard-filtered /
+                    # arrived via a different branch).  Store None so downstream
+                    # observe/passthrough can distinguish "declared but absent" from
+                    # "undeclared" and yield None instead of crashing.
                     logger.debug(
-                        "[RECORD NAMESPACE] '%s' not found on record for action '%s'",
+                        "[RECORD NAMESPACE] '%s' null/absent on record for action '%s' "
+                        "(likely guard-skipped or guard-filtered)",
                         dep_name,
                         agent_name,
                     )
+                    field_context[dep_name] = None
                     continue
 
                 if not isinstance(dep_data, dict):
