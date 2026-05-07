@@ -11,1752 +11,1145 @@
             document.documentElement.setAttribute('data-theme',t);
         })();
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,600;12..96,700;12..96,800&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+/* ==========================================================================
+   DESIGN TOKENS
+   ========================================================================== */
+:root {
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
 
-        :root {
-            --radius: 16px;
-            --radius-sm: 10px;
-            --radius-xs: 6px;
-            --ease: cubic-bezier(0.4, 0, 0.2, 1);
-            --spring: cubic-bezier(0.22, 1, 0.36, 1);
-            --bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
-            --smooth: cubic-bezier(0.16, 1, 0.3, 1);
-        }
+[data-theme="light"] {
+    --bg: #fafaf9; --bg-raised: #ffffff; --bg-sunken: #f5f5f4;
+    --fg-1: #1c1917; --fg-2: #57534e; --fg-3: #78716c; --fg-4: #a8a29e;
+    --border: #e7e5e4; --border-strong: #d6d3d1;
+    --accent: #0d9488; --accent-hover: #0f766e; --accent-soft: #f0fdfa; --accent-border: #99f6e4;
+    --success: #16a34a; --success-bg: #dcfce7;
+    --danger: #dc2626; --danger-bg: #fee2e2;
+    --info: #2563eb; --info-bg: #dbeafe;
+    --amber-100: #fef3c7; --amber-300: #fcd34d; --amber-500: #f59e0b; --amber-600: #d97706; --amber-700: #b45309;
+    --stone-50: #fafaf9; --stone-100: #f5f5f4; --stone-200: #e7e5e4; --stone-300: #d6d3d1;
+    --stone-400: #a8a29e; --stone-500: #78716c; --stone-700: #44403c; --stone-800: #292524; --stone-900: #1c1917;
+    --shadow-lg: 0 12px 24px -6px rgba(28,25,23,0.10), 0 4px 8px -4px rgba(28,25,23,0.06);
+    --shadow-xl: 0 24px 48px -12px rgba(28,25,23,0.18);
+    color-scheme: light;
+}
+[data-theme="dark"] {
+    --bg: #0a0908; --bg-raised: #18161a; --bg-sunken: #0f0e10;
+    --fg-1: #ffffff; --fg-2: #d6d3d1; --fg-3: #a8a29e; --fg-4: #78716c;
+    --border: #3a3633; --border-strong: #5a544f;
+    --accent: #2dd4bf; --accent-hover: #5eead4; --accent-soft: rgba(45,212,191,0.18); --accent-border: rgba(45,212,191,0.4);
+    --success: #4ade80; --success-bg: rgba(74,222,128,0.22);
+    --danger: #f87171; --danger-bg: rgba(248,113,113,0.22);
+    --info: #60a5fa; --info-bg: rgba(96,165,250,0.22);
+    --amber-100: rgba(252,211,77,0.22); --amber-300: #fcd34d; --amber-500: #fcd34d; --amber-600: #fbbf24; --amber-700: #fcd34d;
+    --stone-50: #18161a; --stone-100: #1f1c1a; --stone-200: #3a3633; --stone-300: #57534e;
+    --stone-400: #78716c; --stone-500: #a8a29e; --stone-700: #d6d3d1; --stone-800: #e7e5e4; --stone-900: #fafaf9;
+    --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.4);
+    --shadow-xl: 0 24px 48px -12px rgba(0,0,0,0.5);
+    color-scheme: dark;
+}
 
-        [data-theme="dark"] {
-            --bg: #09090b;
-            --bg-subtle: #0e0e12;
-            --surface: #141418;
-            --surface-2: #1c1c22;
-            --surface-3: #26262e;
-            --surface-hover: #2e2e38;
-            --border: rgba(255,255,255,0.06);
-            --border-2: rgba(255,255,255,0.1);
-            --border-3: rgba(255,255,255,0.16);
-            --text: #ececf1;
-            --text-2: #a0a0b0;
-            --text-3: #62627a;
-            --text-4: #3e3e50;
-            --green: #22c55e;
-            --green-dim: #16a34a;
-            --green-soft: rgba(34,197,94,0.08);
-            --green-border: rgba(34,197,94,0.2);
-            --green-glow: rgba(34,197,94,0.12);
-            --red: #ef4444;
-            --red-dim: #dc2626;
-            --red-soft: rgba(239,68,68,0.08);
-            --red-border: rgba(239,68,68,0.18);
-            --red-glow: rgba(239,68,68,0.1);
-            --blue: #60a5fa;
-            --blue-soft: rgba(96,165,250,0.07);
-            --blue-border: rgba(96,165,250,0.16);
-            --amber: #fbbf24;
-            --code-bg: #0c0c10;
-            --overlay: rgba(0,0,0,0.8);
-            --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25);
-            --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
-            --shadow-glow-g: 0 0 20px rgba(34,197,94,0.15), 0 0 40px rgba(34,197,94,0.05);
-            --shadow-glow-r: 0 0 20px rgba(239,68,68,0.12), 0 0 40px rgba(239,68,68,0.04);
-            --glass: rgba(20,20,24,0.75);
-            --glass-border: rgba(255,255,255,0.06);
-            --jk: #93c5fd; --js: #86efac; --jn: #c4b5fd; --jb: #fca5a5; --jl: #52526a;
-            --dot-color: rgba(255,255,255,0.04);
-            --logo-bar-1: #94a3b8;
-            --logo-bar-2: #e2e8f0;
-            color-scheme: dark;
-        }
+/* ==========================================================================
+   RESET & BASE
+   ========================================================================== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; background: var(--bg); color: var(--fg-1);
+    font-family: var(--font-sans); font-size: 13px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+button { font-family: inherit; cursor: pointer; }
+.mono { font-family: var(--font-mono); }
+.caps { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px; font-weight: 500; color: var(--fg-3); }
+.tabnum { font-variant-numeric: tabular-nums; }
 
-        [data-theme="light"] {
-            --bg: #f7f7f8;
-            --bg-subtle: #eeeff2;
-            --surface: #ffffff;
-            --surface-2: #f3f3f6;
-            --surface-3: #e8e8ee;
-            --surface-hover: #e0e0e8;
-            --border: rgba(0,0,0,0.06);
-            --border-2: rgba(0,0,0,0.1);
-            --border-3: rgba(0,0,0,0.15);
-            --text: #111118;
-            --text-2: #55556a;
-            --text-3: #8888a0;
-            --text-4: #b0b0c4;
-            --green: #16a34a;
-            --green-dim: #15803d;
-            --green-soft: rgba(22,163,74,0.06);
-            --green-border: rgba(22,163,74,0.16);
-            --green-glow: rgba(22,163,74,0.08);
-            --red: #dc2626;
-            --red-dim: #b91c1c;
-            --red-soft: rgba(220,38,38,0.05);
-            --red-border: rgba(220,38,38,0.14);
-            --red-glow: rgba(220,38,38,0.06);
-            --blue: #2563eb;
-            --blue-soft: rgba(37,99,235,0.05);
-            --blue-border: rgba(37,99,235,0.12);
-            --amber: #d97706;
-            --code-bg: #f3f3f6;
-            --overlay: rgba(200,200,220,0.4);
-            --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
-            --shadow-lg: 0 8px 32px rgba(0,0,0,0.06);
-            --shadow-glow-g: 0 0 16px rgba(22,163,74,0.1), 0 0 32px rgba(22,163,74,0.04);
-            --shadow-glow-r: 0 0 16px rgba(220,38,38,0.08), 0 0 32px rgba(220,38,38,0.03);
-            --glass: rgba(247,247,248,0.72);
-            --glass-border: rgba(0,0,0,0.05);
-            --jk: #1d4ed8; --js: #15803d; --jn: #7c3aed; --jb: #dc2626; --jl: #9898b0;
-            --dot-color: rgba(0,0,0,0.03);
-            --logo-bar-1: #64748b;
-            --logo-bar-2: #334155;
-            color-scheme: light;
-        }
+/* ==========================================================================
+   APP SHELL — Three-panel grid
+   ========================================================================== */
+.app {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr) 320px;
+    grid-template-rows: 44px 1fr 48px;
+    grid-template-areas: "topbar topbar topbar" "queue main inspector" "queue cmdbar inspector";
+    height: 100vh;
+    background: var(--stone-100);
+}
+.app.hide-inspector { grid-template-columns: 264px minmax(0,1fr) 0; }
+.app.hide-inspector .inspector { display: none; }
+.app.hide-queue { grid-template-columns: 0 minmax(0,1fr) 320px; }
+.app.hide-queue .queue { display: none; }
+.app.hide-queue.hide-inspector { grid-template-columns: 0 minmax(0,1fr) 0; }
 
-        html { font-size: 15px; }
+/* ==========================================================================
+   TOP BAR
+   ========================================================================== */
+.topbar {
+    grid-area: topbar; background: var(--bg-raised); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 12px; gap: 12px; font-size: 12.5px; min-width: 0;
+}
+.topbar .brand { display: flex; align-items: center; gap: 8px; padding-right: 12px; border-right: 1px solid var(--border); flex-shrink: 0; height: 100%; }
+.topbar .brand-wordmark { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: -0.02em; color: var(--fg-1); }
+.topbar .brand-suffix { font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); padding: 1px 5px; background: var(--accent-soft); border-radius: 3px; }
+.topbar .crumbs { display: flex; align-items: center; gap: 8px; color: var(--fg-3); font-size: 12px; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; }
+.topbar .crumbs .current { color: var(--fg-1); font-weight: 500; flex-shrink: 0; }
+.topbar .crumbs .sep { color: var(--fg-4); flex-shrink: 0; }
+.topbar .progress { display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); }
+.topbar .progress .frac { font-variant-numeric: tabular-nums; }
+.topbar .progress .frac .reviewed { color: var(--fg-1); font-weight: 600; }
+.topbar .progress .frac .total { color: var(--fg-4); }
+.topbar .progress .bar { width: 80px; height: 4px; background: var(--stone-200); border-radius: 2px; overflow: hidden; }
+.topbar .progress .bar > div { height: 100%; background: var(--accent); border-radius: 2px; transition: width 280ms var(--ease-out); }
+.topbar .top-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.iconbtn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; border-radius: 5px; color: var(--fg-3); transition: background 120ms, color 120ms; }
+.iconbtn:hover { background: var(--stone-100); color: var(--fg-1); }
+.iconbtn.active { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border); }
+.iconbtn svg { width: 15px; height: 15px; }
 
-        body {
-            font-family: "Outfit", system-ui, -apple-system, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            transition: background 0.4s var(--ease), color 0.3s var(--ease);
-            position: relative;
-        }
+/* ==========================================================================
+   QUEUE
+   ========================================================================== */
+.queue { grid-area: queue; background: var(--bg-raised); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.queue-header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
+.queue-title-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.queue-title-row h2 { margin: 0; font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg-1); }
+.queue-title-row .subtitle { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: 0.08em; }
+.queue-filters { display: flex; gap: 4px; flex-wrap: wrap; }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; background: var(--bg-raised); border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--fg-2); letter-spacing: 0.01em; transition: all 120ms; }
+.filter-chip:hover { background: var(--stone-50); color: var(--fg-1); border-color: var(--border-strong); }
+.filter-chip.active { background: var(--fg-1); color: white; border-color: var(--fg-1); }
+.filter-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.filter-chip .dot.pending { background: var(--info); }
+.filter-chip .dot.approved { background: var(--success); }
+.filter-chip .dot.rejected { background: var(--danger); }
+.filter-chip .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px; opacity: 0.7; }
+.queue-search { position: relative; margin-top: 10px; }
+.queue-search input { width: 100%; padding: 7px 10px 7px 28px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-sunken); font-size: 12px; font-family: var(--font-sans); color: var(--fg-1); outline: none; transition: all 120ms; }
+.queue-search input::placeholder { color: var(--fg-4); }
+.queue-search input:focus { border-color: var(--accent); background: var(--bg-raised); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
+.queue-search .search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--fg-4); pointer-events: none; }
+.queue-search .search-icon svg { width: 13px; height: 13px; }
+.queue-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.queue-row { position: relative; display: grid; grid-template-columns: 26px 1fr; grid-template-rows: auto auto; grid-template-areas: "idx title" "idx meta"; column-gap: 8px; padding: 9px 14px 9px 12px; cursor: pointer; transition: background 100ms; border-left: 2px solid transparent; }
+.queue-row::after { content: ""; position: absolute; right: 14px; top: 14px; width: 6px; height: 6px; border-radius: 50%; background: var(--stone-300); }
+.queue-row.pending::after { background: var(--info); box-shadow: 0 0 0 3px color-mix(in srgb, var(--info) 18%, transparent); }
+.queue-row.approved::after { background: var(--success); }
+.queue-row.rejected::after { background: var(--danger); }
+.queue-row:hover { background: var(--stone-50); }
+.queue-row.selected { background: var(--accent-soft); border-left-color: var(--accent); }
+.queue-row .qidx { grid-area: idx; font-family: var(--font-mono); font-size: 10px; color: var(--fg-4); align-self: center; font-variant-numeric: tabular-nums; text-align: right; letter-spacing: 0.04em; }
+.queue-row.selected .qidx { color: var(--accent); font-weight: 600; }
+.queue-row .qtitle { grid-area: title; font-size: 12.5px; font-weight: 500; color: var(--fg-1); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 18px; }
+.queue-row .qmeta { grid-area: meta; display: flex; align-items: center; gap: 6px; margin-top: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); letter-spacing: 0.02em; }
+.queue-row .qmeta .sep { color: var(--fg-4); }
+.queue-row.reviewed .qtitle { color: var(--fg-3); font-weight: 400; }
+.queue-row.reviewed .qmeta .status-tag { font-weight: 600; }
+.queue-row .status-tag.approved { color: var(--success); }
+.queue-row .status-tag.rejected { color: var(--danger); }
 
-        /* ── Dot Grid Background (removed — too noisy at scale) ── */
+/* ==========================================================================
+   MAIN CONTENT
+   ========================================================================== */
+.main { grid-area: main; overflow-y: auto; background: var(--bg); min-width: 0; }
+.main-inner { max-width: 780px; margin: 0 auto; padding: 28px 40px 64px; }
 
-        /* ── Ambient Glow ── */
-        body::after {
-            content: '';
-            position: fixed;
-            top: -200px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 800px;
-            height: 500px;
-            background: radial-gradient(ellipse, var(--green-glow) 0%, transparent 70%);
-            pointer-events: none;
-            z-index: 0;
-            opacity: 0.6;
-            transition: opacity 0.6s var(--ease);
-        }
+/* Instructions banner */
+.instructions-banner { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 24px; padding: 10px 14px; background: var(--bg-sunken); border-left: 2px solid var(--stone-400); border-radius: 0 4px 4px 0; font-size: 12px; color: var(--fg-2); line-height: 1.6; cursor: pointer; user-select: none; }
+.instructions-banner .instructions-text { flex: 1; white-space: pre-wrap; }
+.instructions-banner.collapsed .instructions-text { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.instructions-banner .chevron { flex-shrink: 0; color: var(--fg-4); transition: transform 160ms var(--ease-out); }
+.instructions-banner .chevron svg { width: 13px; height: 13px; }
+.instructions-banner.collapsed .chevron { transform: rotate(-90deg); }
 
-        /* ── Progress Strip ── */
-        .prog-strip {
-            position: fixed;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            background: var(--border);
-            z-index: 50;
-            overflow: hidden;
-        }
-        .prog-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--green), #38bdf8, var(--green));
-            background-size: 200% 100%;
-            border-radius: 0 2px 2px 0;
-            transition: width 0.6s var(--spring);
-            box-shadow: 0 0 12px var(--green-glow);
-        }
+/* Record header */
+.rec-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); }
+.rec-meta .id-val { color: var(--fg-1); font-weight: 500; }
+.rec-meta .meta-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--fg-4); }
+.rec-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.rec-status-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.rec-status-pill.pending { background: var(--info-bg); color: var(--info); }
+.rec-status-pill.approved { background: var(--success-bg); color: var(--success); }
+.rec-status-pill.rejected { background: var(--danger-bg); color: var(--danger); }
+.rec-title { font-family: var(--font-display); font-weight: 600; font-size: 24px; line-height: 1.2; letter-spacing: -0.018em; color: var(--fg-1); margin: 0 0 24px; }
 
-        /* ── Page ── */
-        .page {
-            position: relative;
-            z-index: 1;
-            max-width: 880px;
-            margin: 0 auto;
-            padding: 2.2rem 2rem 0;
-            padding-bottom: 240px;
-        }
+/* Field sections */
+.field-section { margin-bottom: 20px; }
+.field-section-head { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; cursor: pointer; user-select: none; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.field-section-head:hover .field-label { color: var(--fg-1); }
+.field-section-head .chevron { color: var(--fg-4); transition: transform 160ms var(--ease-out); flex-shrink: 0; }
+.field-section-head:hover .chevron { color: var(--fg-2); }
+.field-section.collapsed .field-section-head { margin-bottom: 0; border-bottom-style: dashed; }
+.field-section.collapsed .field-section-head .chevron { transform: rotate(-90deg); }
+.field-section.collapsed .field-body { display: none; }
+.field-section-head .field-marker { display: inline-block; width: 18px; height: 2px; background: var(--stone-300); border-radius: 1px; }
+.field-label { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--fg-2); transition: color 120ms; }
+.field-body { font-size: 14px; line-height: 1.62; color: var(--fg-1); }
+.field-body p { margin: 0 0 10px; }
+.field-body p:last-child { margin-bottom: 0; }
+.field-body code { font-family: var(--font-mono); font-size: 0.86em; background: var(--stone-100); border: 1px solid var(--stone-200); padding: 1px 5px; border-radius: 3px; color: var(--stone-800); font-weight: 500; }
+.field-body pre { font-family: var(--font-mono); font-size: 12px; line-height: 1.65; background: var(--stone-900); color: var(--stone-100); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--stone-800); overflow-x: auto; white-space: pre; margin: 8px 0; }
+.field-body a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-border); text-underline-offset: 2px; }
+.field-inline { display: flex; align-items: baseline; gap: 10px; }
+.field-inline .field-label { flex-shrink: 0; margin-bottom: 0; }
+.fv { word-break: break-word; }
+.fv-long { white-space: pre-wrap; }
+.fv-mono { font-family: var(--font-mono); font-size: 0.86em; color: var(--fg-2); background: var(--bg-sunken); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
+.fv-link { color: var(--accent); font-size: 13px; text-decoration: underline; text-decoration-color: var(--accent-border); text-underline-offset: 3px; word-break: break-all; }
+.fv-empty { color: var(--fg-4); font-style: italic; font-size: 13px; }
+.fv-code { font-family: var(--font-mono); font-size: 11px; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-top: 6px; line-height: 1.8; overflow-x: auto; max-height: 280px; overflow-y: auto; white-space: pre; color: var(--fg-2); }
+.fields-empty { color: var(--fg-4); font-size: 13px; text-align: center; padding: 40px 16px; }
 
-        /* ── Staggered Page Load ── */
-        @keyframes revealUp {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .header { animation: revealUp 0.5s var(--spring) 0.05s both; }
-        .nav-row { animation: revealUp 0.5s var(--spring) 0.12s both; }
-        .card { animation: revealUp 0.5s var(--spring) 0.16s both; }
-        .action-bar { animation: revealUp 0.4s var(--spring) 0.3s both; }
+/* Comment area (inside main, below fields) */
+.comment-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.comment-section label { display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fg-3); }
+.comment-section textarea { width: 100%; min-height: 72px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); color: var(--fg-1); font-family: var(--font-sans); font-size: 13px; resize: vertical; outline: none; transition: all 200ms; line-height: 1.6; }
+.comment-section textarea::placeholder { color: var(--fg-4); }
+.comment-section textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
 
-        /* ── Header ── */
-        .header {
-            margin-bottom: 1.2rem;
-        }
-        .header-row {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 1.2rem;
-            margin-bottom: 0.85rem;
-        }
-        .header h1 {
-            font-family: "Bricolage Grotesque", serif;
-            font-size: 1.3rem;
-            font-weight: 700;
-            letter-spacing: -0.03em;
-            line-height: 1.15;
-            color: var(--text);
-        }
-        .header-sub {
-            font-size: 0.68rem;
-            color: var(--text-4);
-            font-weight: 600;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            margin-top: 0.3rem;
-        }
-        .header-right {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 0.55rem;
-            flex-shrink: 0;
-        }
-        .header-utils {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-        }
-        .prog-label {
-            font-size: 0.74rem;
-            font-weight: 600;
-            color: var(--text-3);
-            white-space: nowrap;
-        }
-        .prog-label strong { color: var(--green); font-weight: 800; }
-        .stats { display: flex; gap: 0.4rem; }
-        .stat {
-            font-size: 0.62rem;
-            font-weight: 700;
-            padding: 0.22rem 0.6rem;
-            border-radius: 100px;
-            transition: all 0.2s var(--ease);
-        }
-        .stat-p { color: var(--blue); background: var(--blue-soft); border: 1px solid var(--blue-border); }
-        .stat-a { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-border); }
-        .stat-r { color: var(--red); background: var(--red-soft); border: 1px solid var(--red-border); }
+/* ==========================================================================
+   COMMAND BAR
+   ========================================================================== */
+.cmdbar { grid-area: cmdbar; background: var(--bg-raised); border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 12px; min-width: 0; }
+.cmd-actions { grid-column: 2; display: flex; align-items: center; gap: 6px; justify-self: center; }
+.cmd-right { grid-column: 3; display: flex; align-items: center; gap: 6px; justify-self: end; }
+.cmd-btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 5px; border: 1px solid transparent; background: var(--bg-sunken); color: var(--fg-1); font-size: 12px; font-weight: 500; white-space: nowrap; transition: background 100ms, transform 60ms; flex-shrink: 0; }
+.cmd-btn:hover { background: var(--stone-200); }
+.cmd-btn:active { transform: translateY(1px); }
+.cmd-btn:disabled { opacity: 0.25; pointer-events: none; }
+.cmd-btn .kbd { font-family: var(--font-mono); font-size: 10px; font-weight: 600; background: var(--bg-raised); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; color: var(--fg-3); min-width: 14px; text-align: center; line-height: 1.4; }
+.cmd-approve { height: 36px; padding: 0 18px 0 14px; font-size: 13px; font-weight: 600; background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 35%, transparent), inset 0 1px 0 rgba(255,255,255,0.15); }
+.cmd-approve:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.cmd-approve .kbd { background: rgba(255,255,255,0.18); color: white; border-color: rgba(255,255,255,0.28); font-weight: 700; }
+.cmd-reject { height: 30px; background: transparent; color: var(--fg-1); border-color: var(--border-strong); font-weight: 500; }
+.cmd-reject:hover { background: var(--danger-bg); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.cmd-btn.ghost { background: transparent; color: var(--fg-2); border-color: transparent; }
+.cmd-btn.ghost:hover { background: var(--stone-100); color: var(--fg-1); }
+.cmd-btn.ghost .kbd { background: var(--bg-sunken); }
+.cmd-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+.cmd-status { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-3); flex-shrink: 0; }
+.cmd-status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 30%, transparent); }
+.cmd-status .reviewed-ct { color: var(--fg-2); font-weight: 500; }
 
-        /* ── Logo ── */
-        .logo-mark {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            flex-shrink: 0;
-            overflow: hidden;
-        }
+/* ==========================================================================
+   INSPECTOR
+   ========================================================================== */
+.inspector { grid-area: inspector; background: var(--bg-raised); border-left: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
+.insp-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 8px; background: var(--bg-raised); position: sticky; top: 0; z-index: 1; height: 40px; flex-shrink: 0; }
+.insp-tab { padding: 0 12px; background: transparent; border: none; border-bottom: 2px solid transparent; font-size: 11.5px; font-weight: 500; color: var(--fg-3); display: inline-flex; align-items: center; gap: 6px; margin-bottom: -1px; transition: color 120ms; }
+.insp-tab:hover { color: var(--fg-1); }
+.insp-tab.active { color: var(--fg-1); border-bottom-color: var(--accent); }
+.insp-body { padding: 16px 14px; flex: 1; }
+.insp-section { margin-bottom: 20px; }
+.insp-section:last-child { margin-bottom: 0; }
+.insp-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.insp-section-head h4 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--fg-3); font-family: var(--font-mono); font-weight: 600; }
+.insp-section-head .inline-action { font-family: var(--font-mono); background: transparent; border: none; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-3); padding: 0; transition: color 100ms; }
+.insp-section-head .inline-action:hover { color: var(--accent); }
 
-        /* ── Theme Toggle ── */
-        .theme-btn {
-            width: 36px; height: 36px;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
-            background: var(--surface);
-            color: var(--text-3);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s var(--ease);
-            flex-shrink: 0;
-        }
-        .theme-btn:hover { color: var(--text); background: var(--surface-2); border-color: var(--border-2); box-shadow: var(--shadow); }
-        .theme-btn svg { width: 16px; height: 16px; transition: transform 0.4s var(--bounce); }
-        .theme-btn:hover svg { transform: rotate(25deg) scale(1.05); }
-        [data-theme="dark"] .ico-sun { display: block; }
-        [data-theme="dark"] .ico-moon { display: none; }
-        [data-theme="light"] .ico-sun { display: none; }
-        [data-theme="light"] .ico-moon { display: block; }
+/* Reason grid */
+.reason-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.reason-btn { padding: 7px 9px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; font-weight: 500; color: var(--fg-2); text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 6px; transition: all 100ms; }
+.reason-btn:hover { border-color: var(--border-strong); color: var(--fg-1); }
+.reason-btn .reason-label { flex: 1; min-width: 0; }
+.reason-btn .reason-key { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.reason-btn .reason-key-prefix { font-family: var(--font-mono); font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-4); }
+.reason-btn .reason-key-val { font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; background: var(--bg-sunken); border: 1px solid var(--border); padding: 0 4px; border-radius: 2px; color: var(--fg-2); min-width: 13px; text-align: center; line-height: 1.5; }
+.reason-grid.has-pick .reason-btn:not(.active) { opacity: 0.4; }
+.reason-grid.has-pick .reason-btn:not(.active):hover { opacity: 1; }
+.reason-btn.active { background: var(--danger); border-color: var(--danger); color: white; box-shadow: 0 1px 4px color-mix(in srgb, var(--danger) 30%, transparent); }
+.reason-btn.active .reason-key-prefix { color: rgba(255,255,255,0.6); }
+.reason-btn.active .reason-key-val { background: rgba(255,255,255,0.18); color: white; border-color: rgba(255,255,255,0.25); }
 
-        /* ── Instructions (collapsible) ── */
-        .instructions {
-            background: var(--blue-soft);
-            border: 1px solid var(--blue-border);
-            border-radius: var(--radius);
-            padding: 1rem 1.2rem;
-            color: var(--text-2);
-            font-size: 0.84rem;
-            line-height: 1.7;
-            position: relative;
-            cursor: pointer;
-            transition: max-height 0.4s var(--spring), padding 0.3s var(--ease);
-            user-select: none;
-        }
-        .instructions::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; bottom: 0;
-            width: 3px;
-            background: var(--blue);
-            border-radius: 3px 0 0 3px;
-            opacity: 0.6;
-        }
-        .instructions-inner { display: flex; align-items: flex-start; gap: 0.7rem; }
-        .instructions-text { flex: 1; min-width: 0; white-space: pre-wrap; }
-        .instructions-chevron {
-            flex-shrink: 0;
-            width: 18px; height: 18px;
-            display: flex; align-items: center; justify-content: center;
-            color: var(--text-4);
-            transition: transform 0.3s var(--spring);
-            margin-top: 0.15rem;
-        }
-        .instructions-chevron svg { width: 14px; height: 14px; }
-        .instructions.collapsed { padding-top: 0.7rem; padding-bottom: 0.7rem; }
-        .instructions.collapsed .instructions-text {
-            display: -webkit-box;
-            -webkit-line-clamp: 1;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-        }
-        .instructions.collapsed .instructions-chevron { transform: rotate(-90deg); }
+/* Reviewer note */
+.note-area { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; font: inherit; font-size: 12px; resize: vertical; min-height: 60px; background: white; color: var(--fg-1); outline: none; transition: border-color 120ms, box-shadow 120ms; }
+.note-area::placeholder { color: var(--fg-4); }
+.note-area:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
 
-        /* ── Nav Row ── */
-        .nav-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin: 1rem 0 0.5rem;
-            gap: 0.7rem;
-        }
-        .nav-left { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-        .nav-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+/* Decision card */
+.decision-card { background: var(--bg-sunken); border: 1px solid var(--border); border-left: 2px solid var(--stone-400); border-radius: 4px; padding: 10px 12px; font-size: 12px; }
+.decision-card.approved { border-left-color: var(--success); }
+.decision-card.rejected { border-left-color: var(--danger); }
+.decision-card .meta-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.decision-card .action { font-weight: 700; letter-spacing: 0.1em; }
+.decision-card.approved .action { color: var(--success); }
+.decision-card.rejected .action { color: var(--danger); }
+.decision-card .note { color: var(--fg-2); font-style: italic; padding-left: 10px; border-left: 2px solid var(--stone-300); }
 
-        .rec-nav {
-            display: flex;
-            align-items: center;
-            gap: 0;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 3px;
-        }
-        .nav-btn {
-            width: 32px; height: 32px;
-            border-radius: 9px;
-            border: none;
-            background: transparent;
-            color: var(--text-3);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s var(--ease);
-        }
-        .nav-btn:hover { background: var(--surface-2); color: var(--text); }
-        .nav-btn:active { background: var(--surface-3); transform: scale(0.95); }
-        .nav-btn:disabled { opacity: 0.15; pointer-events: none; }
-        .nav-btn svg { width: 14px; height: 14px; }
-        .nav-num {
-            font-size: 0.76rem;
-            font-weight: 700;
-            color: var(--text-3);
-            min-width: 62px;
-            text-align: center;
-            white-space: nowrap;
-            padding: 0 0.15rem;
-            font-variant-numeric: tabular-nums;
-        }
-        .nav-num strong { color: var(--text); }
+/* JSON viewer */
+.json-view { background: var(--stone-900); color: var(--stone-100); padding: 12px 14px; border-radius: 5px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; overflow-x: auto; white-space: pre; margin: 0; }
+.json-view .jk { color: #5eead4; } .json-view .js { color: #fcd34d; }
+.json-view .jn { color: #fdba74; } .json-view .jb { color: #f9a8d4; font-weight: 500; }
 
-        .ghost-btn {
-            font-family: "Outfit", sans-serif;
-            font-size: 0.7rem;
-            font-weight: 600;
-            padding: 0.42rem 0.8rem;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
-            background: var(--surface);
-            color: var(--text-3);
-            cursor: pointer;
-            transition: all 0.15s var(--ease);
-        }
-        .ghost-btn:hover { border-color: var(--border-2); color: var(--text-2); background: var(--surface-2); }
+/* ==========================================================================
+   HELP OVERLAY
+   ========================================================================== */
+.kbd-overlay { position: fixed; inset: 0; background: rgba(28,25,23,0.4); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 32px; }
+.kbd-card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-xl); padding: 26px 30px; width: min(580px, 100%); max-height: 80vh; overflow-y: auto; }
+.kbd-card h3 { margin: 0 0 4px; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.kbd-card .subtitle { margin: 0 0 20px; font-size: 13px; color: var(--fg-3); }
+.kbd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; }
+.kbd-section h4 { margin: 0 0 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); font-weight: 600; }
+.kbd-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; color: var(--fg-2); border-bottom: 1px solid var(--stone-100); }
+.kbd-row:last-child { border-bottom: none; }
+.kbd-row .keys { display: inline-flex; gap: 3px; }
+.kbd-row .keys .k { font-family: var(--font-mono); font-size: 10px; font-weight: 600; background: var(--bg-sunken); border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; color: var(--fg-1); min-width: 18px; text-align: center; }
 
-        .view-toggle {
-            display: flex;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 3px;
-            gap: 2px;
-        }
-        .vt-btn {
-            font-family: "Outfit", sans-serif;
-            font-size: 0.68rem;
-            font-weight: 700;
-            padding: 0.38rem 0.8rem;
-            border-radius: 9px;
-            border: none;
-            background: transparent;
-            color: var(--text-4);
-            cursor: pointer;
-            transition: all 0.2s var(--ease);
-        }
-        .vt-btn:hover { color: var(--text-3); }
-        .vt-btn.on {
-            background: var(--surface-3);
-            color: var(--text);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
+/* ==========================================================================
+   TOAST
+   ========================================================================== */
+.toast-wrap { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); z-index: 90; pointer-events: none; }
+.toast { background: var(--stone-900); color: white; padding: 8px 14px; border-radius: 999px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; box-shadow: var(--shadow-lg); opacity: 0; transform: translateY(8px); transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out); }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.tg { background: color-mix(in srgb, var(--success) 15%, var(--stone-900)); }
+.toast.tr { background: color-mix(in srgb, var(--danger) 15%, var(--stone-900)); }
+.toast .kbd { font-family: var(--font-mono); font-size: 10px; background: rgba(255,255,255,0.14); padding: 1px 5px; border-radius: 3px; margin-left: 4px; opacity: 0.9; }
 
-        /* ── Editor Controls ── */
-        .ctrl-pill {
-            display: flex;
-            align-items: center;
-            gap: 0;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 3px;
-        }
-        .ctrl-btn {
-            width: 30px; height: 30px;
-            border-radius: 9px;
-            border: none;
-            background: transparent;
-            color: var(--text-3);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s var(--ease);
-            font-family: "Outfit", sans-serif;
-            font-weight: 700;
-            line-height: 1;
-        }
-        .ctrl-btn:hover { background: var(--surface-2); color: var(--text); }
-        .ctrl-btn:active { background: var(--surface-3); transform: scale(0.93); }
-        .ctrl-btn:disabled { opacity: 0.15; pointer-events: none; }
-        .ctrl-btn svg { width: 13px; height: 13px; }
-        .ctrl-a-sm { font-size: 0.56rem; }
-        .ctrl-a-lg { font-size: 0.78rem; }
-        .ctrl-val {
-            font-size: 0.62rem;
-            font-weight: 700;
-            color: var(--text-3);
-            min-width: 26px;
-            text-align: center;
-            font-variant-numeric: tabular-nums;
-            user-select: none;
-        }
-        .ctrl-sep {
-            width: 1px;
-            height: 16px;
-            background: var(--border-2);
-            margin: 0 1px;
-            flex-shrink: 0;
-        }
-        .ctrl-label {
-            font-size: 0.56rem;
-            color: var(--text-4);
-            min-width: auto;
-            padding: 0 0.25rem;
-        }
+/* ==========================================================================
+   DARK MODE OVERRIDES
+   ========================================================================== */
+[data-theme="dark"] .reason-btn { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
+[data-theme="dark"] .reason-btn:hover { color: white; border-color: var(--fg-3); }
+[data-theme="dark"] .note-area { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
+[data-theme="dark"] .filter-chip { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
+[data-theme="dark"] .filter-chip.active { background: white; color: #0a0908; border-color: white; }
+[data-theme="dark"] .queue-search input { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
+[data-theme="dark"] .cmd-btn { color: var(--fg-1); }
+[data-theme="dark"] .cmd-btn .kbd { background: var(--bg-sunken); color: var(--fg-2); border-color: var(--border-strong); }
+[data-theme="dark"] .cmd-reject { color: var(--fg-1); border-color: var(--border-strong); }
+[data-theme="dark"] .field-body code { background: var(--bg-sunken); border-color: var(--border-strong); color: var(--fg-1); }
+[data-theme="dark"] .comment-section textarea { background: var(--bg-sunken); border-color: var(--border-strong); }
 
-        /* ── Button Flash (keyboard feedback) ── */
-        @keyframes flashGreen {
-            0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
-            100% { box-shadow: 0 0 0 10px rgba(34,197,94,0); }
-        }
-        @keyframes flashRed {
-            0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
-            100% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
-        }
-        .flash-approve { animation: flashGreen 0.45s var(--ease) !important; }
-        .flash-reject { animation: flashRed 0.45s var(--ease) !important; }
+/* Scrollbars */
+.queue-list::-webkit-scrollbar, .main::-webkit-scrollbar, .inspector::-webkit-scrollbar { width: 8px; }
+.queue-list::-webkit-scrollbar-thumb, .main::-webkit-scrollbar-thumb, .inspector::-webkit-scrollbar-thumb { background: var(--stone-300); border-radius: 4px; border: 2px solid var(--bg-raised); }
+.queue-list::-webkit-scrollbar-track, .main::-webkit-scrollbar-track, .inspector::-webkit-scrollbar-track { background: transparent; }
 
-        /* ── Skip to Unreviewed ── */
-        .skip-btn {
-            font-family: "Outfit", sans-serif;
-            font-size: 0.66rem;
-            font-weight: 700;
-            padding: 0.38rem 0.7rem;
-            border-radius: 9px;
-            border: 1px solid var(--blue-border);
-            background: var(--blue-soft);
-            color: var(--blue);
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            gap: 0.3rem;
-            transition: all 0.15s var(--ease);
-            white-space: nowrap;
-        }
-        .skip-btn:hover { background: var(--blue); color: #fff; border-color: var(--blue); }
-        .skip-btn svg { width: 12px; height: 12px; }
+/* ==========================================================================
+   ANIMATIONS
+   ========================================================================== */
+@keyframes flashGreen { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); } 100% { box-shadow: 0 0 0 10px rgba(34,197,94,0); } }
+@keyframes flashRed { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); } 100% { box-shadow: 0 0 0 10px rgba(239,68,68,0); } }
+.flash-approve { animation: flashGreen 0.45s var(--ease-out) !important; }
+.flash-reject { animation: flashRed 0.45s var(--ease-out) !important; }
+@keyframes cardSlide { 0% { opacity: 1; } 30% { opacity: 0.5; } 100% { opacity: 1; } }
+.card-switch { animation: cardSlide 0.25s var(--ease-out); }
 
-        /* ── Submit Ready Glow ── */
-        @keyframes readyPulse {
-            0%, 100% { box-shadow: var(--shadow); }
-            50% { box-shadow: var(--shadow), 0 0 20px var(--green-glow), 0 0 0 3px rgba(34,197,94,0.1); }
-        }
-        .btn-submit.ready {
-            background: var(--green);
-            color: #fff;
-            border-color: var(--green);
-            animation: readyPulse 2s var(--ease) infinite;
-        }
-        .btn-submit.ready:hover {
-            background: var(--green-dim);
-            animation: none;
-            box-shadow: 0 4px 16px var(--green-glow), inset 0 1px 0 rgba(255,255,255,0.15);
-        }
+/* Responsive */
+/* Theme icon toggle */
+[data-theme="dark"] .ico-sun { display: block; } [data-theme="dark"] .ico-moon { display: none; }
+[data-theme="light"] .ico-sun { display: none; } [data-theme="light"] .ico-moon { display: block; }
 
-        /* ── Batch Actions ── */
-        .batch-row {
-            display: none;
-            justify-content: center;
-            gap: 0.45rem;
-            margin-bottom: 0.45rem;
-        }
-        .batch-btn {
-            font-family: "Outfit", sans-serif;
-            font-size: 0.64rem;
-            font-weight: 600;
-            padding: 0.32rem 0.7rem;
-            border-radius: var(--radius-xs);
-            border: 1px solid var(--border);
-            background: var(--surface);
-            color: var(--text-3);
-            cursor: pointer;
-            transition: all 0.15s var(--ease);
-        }
-        .batch-btn:hover { border-color: var(--border-2); color: var(--text-2); background: var(--surface-2); }
-        .batch-btn:disabled { opacity: 0.3; pointer-events: none; }
-        .batch-approve:hover { color: var(--green) !important; border-color: var(--green-border) !important; }
-        .batch-reject:hover { color: var(--red) !important; border-color: var(--red-border) !important; }
-
-        /* ── Status Dots (removed — not useful at scale) ── */
-
-        /* ── Review Card ── */
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            overflow: hidden;
-            box-shadow: var(--shadow);
-            margin-bottom: 1rem;
-            transition: box-shadow 0.35s var(--ease), border-color 0.35s var(--ease);
-            position: relative;
-        }
-        .card::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; bottom: 0;
-            width: 3px;
-            border-radius: 3px 0 0 3px;
-            background: var(--border-2);
-            transition: background 0.3s var(--ease), box-shadow 0.3s var(--ease);
-            z-index: 2;
-        }
-        .card[data-state="approved"]::before { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
-        .card[data-state="rejected"]::before { background: var(--red); box-shadow: 0 0 8px var(--red-glow); }
-        .card[data-state="pending"]::before { background: var(--blue); opacity: 0.4; }
-
-        .card[data-state="approved"] { border-color: var(--green-border); box-shadow: var(--shadow), var(--shadow-glow-g); }
-        .card[data-state="rejected"] { border-color: var(--red-border); box-shadow: var(--shadow), var(--shadow-glow-r); }
-
-        .card-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.95rem 1.4rem 0.95rem 1.6rem;
-            border-bottom: 1px solid var(--border);
-        }
-        .card-title {
-            font-family: "Bricolage Grotesque", serif;
-            font-size: 0.82rem;
-            font-weight: 700;
-            letter-spacing: -0.01em;
-            color: var(--text-2);
-        }
-        .status-pill {
-            font-size: 0.58rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.07em;
-            padding: 0.22rem 0.65rem;
-            border-radius: 100px;
-            transition: all 0.3s var(--spring);
-        }
-        .status-pill.s-pending { color: var(--blue); background: var(--blue-soft); border: 1px solid var(--blue-border); }
-        .status-pill.s-approved { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-border); }
-        .status-pill.s-rejected { color: var(--red); background: var(--red-soft); border: 1px solid var(--red-border); }
-
-        .card-meta {
-            padding: 0.6rem 1.4rem 0 1.6rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.15rem;
-        }
-        .meta-hint { color: var(--text-3); font-size: 0.76rem; line-height: 1.55; }
-        .meta-progress { color: var(--text-2); font-size: 0.74rem; font-weight: 700; }
-
-        /* ── Panels ── */
-        .panel { display: none; }
-        .panel.on { display: block; }
-
-        /* ── Fields Panel ── */
-        .fields-list { padding: 0.2rem 0; }
-        .fields-list:empty { padding: 0; }
-
-        .field {
-            padding: 0.75rem 1.4rem 0.75rem 1.6rem;
-            border-bottom: 1px solid var(--border);
-            transition: background 0.15s var(--ease);
-        }
-        .field:last-child { border-bottom: none; }
-        .field:hover { background: var(--surface-2); }
-
-        /* Inline: label and value on same line */
-        .field-compact {
-            display: flex;
-            align-items: baseline;
-            gap: 0.75rem;
-        }
-
-        .field-key {
-            font-size: 0.72rem;
-            font-weight: 700;
-            color: var(--text-3);
-            letter-spacing: 0.01em;
-            flex-shrink: 0;
-            line-height: 1.55;
-        }
-
-        .field:not(.field-compact) .field-key {
-            margin-bottom: 0.5rem;
-        }
-
-        /* Field values */
-        .fv {
-            font-size: 0.92rem;
-            line-height: 1.75;
-            color: var(--text);
-            word-break: break-word;
-        }
-        .fv-long {
-            font-size: 0.92rem;
-            line-height: 1.85;
-            color: var(--text);
-            white-space: pre-wrap;
-        }
-        .fv-mono {
-            font-family: "JetBrains Mono", monospace;
-            font-size: 0.82rem;
-            color: var(--text-2);
-            background: var(--surface-2);
-            padding: 0.14rem 0.45rem;
-            border-radius: var(--radius-xs);
-            border: 1px solid var(--border);
-        }
-        .fv-link {
-            color: var(--blue);
-            font-size: 0.88rem;
-            text-decoration: underline;
-            text-decoration-color: var(--blue-border);
-            text-underline-offset: 3px;
-            text-decoration-thickness: 1px;
-            word-break: break-all;
-            transition: text-decoration-color 0.15s var(--ease);
-        }
-        .fv-link:hover { text-decoration-color: var(--blue); }
-        .fv-empty {
-            color: var(--text-4);
-            font-style: italic;
-            font-size: 0.84rem;
-        }
-        .fv-code {
-            font-family: "JetBrains Mono", monospace;
-            font-size: 0.72rem;
-            background: var(--code-bg);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 0.65rem 0.95rem;
-            margin-top: 0.4rem;
-            line-height: 1.85;
-            overflow-x: auto;
-            max-height: 280px;
-            overflow-y: auto;
-            white-space: pre;
-            color: var(--text-2);
-        }
-
-        .fields-empty {
-            color: var(--text-4);
-            font-size: 0.84rem;
-            text-align: center;
-            padding: 2.6rem 1rem;
-        }
-
-        /* ── JSON Panel ── */
-        .json-wrap { padding: 0.95rem 1.4rem 1.1rem 1.6rem; }
-        .json-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 0.5rem;
-        }
-        .json-label {
-            font-size: 0.65rem;
-            font-weight: 700;
-            color: var(--text-4);
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-        }
-        .copy-btn {
-            font-family: "Outfit", sans-serif;
-            font-size: 0.62rem;
-            font-weight: 600;
-            padding: 0.32rem 0.65rem;
-            border-radius: var(--radius-xs);
-            border: 1px solid var(--border);
-            background: var(--surface-2);
-            color: var(--text-3);
-            cursor: pointer;
-            transition: all 0.15s var(--ease);
-            display: flex;
-            align-items: center;
-            gap: 0.35rem;
-        }
-        .copy-btn:hover { color: var(--text-2); border-color: var(--border-2); background: var(--surface-3); }
-        .copy-btn.copied { color: var(--green); border-color: var(--green-border); background: var(--green-soft); }
-        .copy-btn svg { width: 12px; height: 12px; }
-        .json-pre {
-            background: var(--code-bg);
-            padding: 1rem 1.1rem;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            font-family: "JetBrains Mono", monospace;
-            font-size: 0.72rem;
-            line-height: 1.9;
-            color: var(--text-2);
-            overflow-x: auto;
-            min-height: 100px;
-            max-height: 55vh;
-            tab-size: 2;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .jk { color: var(--jk); } .js { color: var(--js); }
-        .jn { color: var(--jn); } .jb { color: var(--jb); }
-        .jl { color: var(--jl); font-style: italic; }
-
-        /* ── Comment ── */
-        .comment-section { padding: 0 1.4rem 1.2rem 1.6rem; }
-        .comment-section label {
-            display: block;
-            margin-bottom: 0.45rem;
-            font-size: 0.74rem;
-            font-weight: 600;
-            color: var(--text-3);
-        }
-        textarea {
-            width: 100%;
-            min-height: 80px;
-            padding: 0.75rem 0.95rem;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            background: var(--surface-2);
-            color: var(--text);
-            font-family: "Outfit", sans-serif;
-            font-size: 0.86rem;
-            resize: vertical;
-            outline: none;
-            transition: all 0.2s var(--ease);
-            line-height: 1.65;
-        }
-        textarea::placeholder { color: var(--text-4); }
-        textarea:focus {
-            border-color: var(--blue-border);
-            box-shadow: 0 0 0 3px var(--blue-soft), 0 0 0 1px var(--blue-border);
-            background: var(--surface);
-        }
-
-
-        /* ── Status ── */
-        .status-msg {
-            margin: 0 1.4rem 1.1rem 1.6rem;
-            padding: 0.75rem 1rem;
-            border-radius: 12px;
-            text-align: center;
-            font-weight: 700;
-            font-size: 0.84rem;
-            display: none;
-        }
-        .status-success { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
-        .status-error { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
-
-        /* ── Action Bar ── */
-        .action-bar {
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            z-index: 100;
-            padding: 0 2rem 0;
-            pointer-events: none;
-        }
-        .action-backdrop {
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(to top, var(--bg) 55%, transparent);
-            backdrop-filter: blur(20px) saturate(1.4);
-            -webkit-backdrop-filter: blur(20px) saturate(1.4);
-            mask-image: linear-gradient(to top, black 60%, transparent);
-            -webkit-mask-image: linear-gradient(to top, black 60%, transparent);
-        }
-        .action-inner {
-            max-width: 880px;
-            margin: 0 auto;
-            pointer-events: auto;
-            position: relative;
-            z-index: 1;
-            padding: 0.8rem 0 1.4rem;
-        }
-        .kb-row {
-            text-align: center;
-            font-size: 0.62rem;
-            color: var(--text-4);
-            font-weight: 600;
-            margin-bottom: 0.65rem;
-            letter-spacing: 0.01em;
-        }
-        .kb-row kbd {
-            font-family: "JetBrains Mono", monospace;
-            font-size: 0.52rem;
-            font-weight: 600;
-            padding: 0.15rem 0.38rem;
-            border-radius: 5px;
-            background: var(--surface-2);
-            border: 1px solid var(--border-2);
-            color: var(--text-3);
-            margin: 0 0.06rem;
-            box-shadow: 0 1px 0 var(--border);
-        }
-        .action-btns { display: flex; gap: 0.6rem; }
-        .act-btn {
-            font-family: "Outfit", sans-serif;
-            font-size: 0.88rem;
-            font-weight: 700;
-            padding: 0.75rem 1.1rem;
-            border-radius: 12px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.15s var(--ease);
-            flex: 1;
-            letter-spacing: -0.01em;
-            position: relative;
-            overflow: hidden;
-        }
-        .act-btn:active { transform: scale(0.975); }
-        .btn-approve {
-            background: var(--green);
-            color: #fff;
-            box-shadow: 0 2px 8px var(--green-glow), inset 0 1px 0 rgba(255,255,255,0.15);
-        }
-        .btn-approve:hover { background: var(--green-dim); box-shadow: 0 4px 16px var(--green-glow), inset 0 1px 0 rgba(255,255,255,0.15); }
-        .btn-reject {
-            background: var(--red);
-            color: #fff;
-            box-shadow: 0 2px 8px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.15);
-        }
-        .btn-reject:hover { background: var(--red-dim); box-shadow: 0 4px 16px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.15); }
-        .btn-submit {
-            background: var(--surface);
-            color: var(--text-2);
-            border: 1px solid var(--border-2);
-            box-shadow: var(--shadow);
-        }
-        .btn-submit:hover { background: var(--surface-2); border-color: var(--border-3); color: var(--text); }
-        .act-btn:disabled { opacity: 0.25; pointer-events: none; transform: none; filter: none; box-shadow: none; }
-
-        /* ── Toast ── */
-        .toast-wrap {
-            position: fixed;
-            top: 16px;
-            left: 50%; transform: translateX(-50%);
-            z-index: 300;
-            pointer-events: none;
-        }
-        .toast {
-            background: var(--surface);
-            border: 1px solid var(--border-2);
-            border-radius: 100px;
-            padding: 0.6rem 1.3rem;
-            font-size: 0.78rem;
-            font-weight: 700;
-            box-shadow: var(--shadow-lg);
-            opacity: 0;
-            transform: translateY(-18px) scale(0.92);
-            transition: all 0.4s var(--spring);
-            white-space: nowrap;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-        }
-        .toast.show { opacity: 1; transform: translateY(0) scale(1); }
-        .toast.tg { color: var(--green); border-color: var(--green-border); background: var(--green-soft); }
-        .toast.tr { color: var(--red); border-color: var(--red-border); background: var(--red-soft); }
-
-        /* ── Animations ── */
-        @keyframes cardSlide {
-            0% { opacity: 1; transform: translateX(0); }
-            30% { opacity: 0.4; transform: translateX(-6px); }
-            60% { opacity: 0.4; transform: translateX(6px); }
-            100% { opacity: 1; transform: translateX(0); }
-        }
-        .card-switch { animation: cardSlide 0.32s var(--ease); }
-
-        /* ── Completion Celebration ── */
-        @keyframes celebratePulse {
-            0%, 100% { box-shadow: var(--shadow), var(--shadow-glow-g); }
-            50% { box-shadow: var(--shadow), 0 0 30px var(--green-glow), 0 0 60px rgba(34,197,94,0.05); }
-        }
-
-        /* ── Scrollbar ── */
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--border-3); }
-
-        /* ── Responsive ── */
-        @media (max-width: 640px) {
-            .page { padding: 1.4rem 1rem 0; padding-bottom: 240px; }
-            .header-row { flex-direction: column; gap: 0.7rem; }
-            .header-right { align-items: flex-start; }
-            .stats { justify-content: flex-start; }
-            .nav-row { flex-direction: column; align-items: stretch; gap: 0.5rem; }
-            .nav-left { justify-content: space-between; }
-            .nav-right { justify-content: flex-start; }
-            .action-btns { flex-direction: column; gap: 0.5rem; }
-            .field { padding-left: 1.1rem; padding-right: 1rem; }
-            .card-head, .card-meta, .json-wrap, .comment-section, .status-msg {
-                padding-left: 1.1rem; padding-right: 1rem;
-            }
-            .header h1 { font-size: 1.15rem; }
-        }
+@media (max-width: 900px) {
+    .app { grid-template-columns: 0 1fr 0; }
+    .app .queue, .app .inspector { display: none; }
+}
     </style>
 </head>
 <body>
-    <div class="prog-strip"><div class="prog-fill" id="prog-fill"></div></div>
+    <div class="app" id="app">
 
-    <div class="page">
-        <header class="header">
-            <div class="header-row">
-                <div style="display:flex;align-items:center;gap:1rem">
-                    <div class="logo-mark">
-                        <svg width="22" height="22" viewBox="0 10 100 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="8" y="20" width="13" height="54" rx="4" fill="var(--logo-bar-1)" transform="rotate(-30 14 68)"/>
-                            <rect x="28" y="22" width="13" height="56" rx="4" fill="var(--logo-bar-2)" opacity="0.6" transform="rotate(-15 34 76)"/>
-                            <rect x="50" y="22" width="13" height="60" rx="4" fill="var(--logo-bar-2)" opacity="0.8" transform="rotate(-5 56 80)"/>
-                            <rect x="72" y="18" width="15" height="68" rx="4" fill="var(--logo-bar-2)"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1>Approval Required</h1>
-                        <div class="header-sub">Human-in-the-loop review</div>
-                    </div>
-                </div>
-                <div class="header-right">
-                    <div class="header-utils">
-                        <div class="prog-label" id="prog-text"><strong>0</strong> of 0 reviewed</div>
-                        <button class="theme-btn" id="theme-toggle" type="button" aria-label="Toggle theme">
-                            <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-                            <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-                        </button>
-                    </div>
-                    <div class="stats">
-                        <span class="stat stat-p" id="stat-pending">0 pending</span>
-                        <span class="stat stat-a" id="stat-approved">0 approved</span>
-                        <span class="stat stat-r" id="stat-rejected">0 rejected</span>
-                    </div>
-                </div>
+    <!-- TOP BAR -->
+    <div class="topbar">
+        <div class="brand">
+            <span class="brand-wordmark">HITL</span>
+            <span class="brand-suffix">Inspector</span>
+        </div>
+        <div class="crumbs">
+            <span class="current">Approval Required</span>
+            <span class="sep">/</span>
+            <span style="color:var(--fg-3);font-size:11px" id="crumb-detail">Loading…</span>
+        </div>
+        <div class="progress">
+            <span class="frac"><span class="reviewed tabnum" id="top-reviewed">0</span><span class="total tabnum" id="top-total"> / 0</span></span>
+            <div class="bar"><div id="top-prog-bar" style="width:0%"></div></div>
+        </div>
+        <div class="top-actions">
+            <button class="iconbtn active" id="toggle-queue" type="button" title="Toggle queue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="18" rx="1"/><line x1="14" y1="4" x2="21" y2="4"/><line x1="14" y1="9" x2="21" y2="9"/><line x1="14" y1="14" x2="21" y2="14"/></svg>
+            </button>
+            <button class="iconbtn active" id="toggle-inspector" type="button" title="Toggle inspector">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="4" x2="10" y2="4"/><line x1="3" y1="9" x2="10" y2="9"/><line x1="3" y1="14" x2="10" y2="14"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
+            </button>
+            <button class="iconbtn" id="help-btn" type="button" title="Keyboard shortcuts (?)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+            </button>
+            <button class="iconbtn" id="theme-toggle" type="button" title="Toggle theme">
+                <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- QUEUE -->
+    <aside class="queue">
+        <div class="queue-header">
+            <div class="queue-title-row">
+                <h2>Queue</h2>
+                <span class="subtitle" id="queue-subtitle">0/0</span>
             </div>
-            {% if instructions %}<div class="instructions" id="instructions-box">
-                <div class="instructions-inner">
-                    <span class="instructions-text">{{ instructions }}</span>
-                    <span class="instructions-chevron" id="instructions-chevron">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
-                    </span>
-                </div>
+            <div class="queue-filters" id="queue-filters"></div>
+            <div class="queue-search">
+                <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+                <input type="text" placeholder="Search records…" id="queue-search-input" />
+            </div>
+        </div>
+        <div class="queue-list" id="queue-list"></div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+        <div class="main-inner" id="main-inner">
+            {% if instructions %}<div class="instructions-banner" id="instructions-box">
+                <span class="instructions-text">{{ instructions }}</span>
+                <span class="chevron"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></span>
             </div>{% endif %}
-        </header>
-
-        <div class="nav-row">
-            <div class="nav-left">
-                <div class="rec-nav" id="record-toolbar" style="display:none">
-                    <button class="nav-btn" id="prev-record" type="button" aria-label="Previous">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 3L5 8l5 5"/></svg>
-                    </button>
-                    <span class="nav-num" id="record-counter"><strong>1</strong> / 1</span>
-                    <button class="nav-btn" id="next-record" type="button" aria-label="Next">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
-                    </button>
-                </div>
-                <button class="skip-btn" id="skip-unreviewed" type="button">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 3l5 5-5 5M9 3l5 5-5 5"/></svg>
-                    Next unreviewed
-                </button>
-            </div>
-            <div class="nav-right">
-                <div class="ctrl-pill" title="Font size (+ / -)">
-                    <button class="ctrl-btn" id="font-down" type="button" aria-label="Decrease font size"><span class="ctrl-a-sm">A</span></button>
-                    <span class="ctrl-val" id="font-label">15</span>
-                    <button class="ctrl-btn" id="font-up" type="button" aria-label="Increase font size"><span class="ctrl-a-lg">A</span></button>
-                    <span class="ctrl-sep"></span>
-                    <span class="ctrl-val ctrl-label">Font</span>
-                </div>
-                <div class="ctrl-pill" title="Page width ([ / ])">
-                    <button class="ctrl-btn" id="width-down" type="button" aria-label="Narrower page">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 8h5M10 8h5"/><path d="M4 5.5L6 8 4 10.5M12 5.5L10 8l2 2.5"/></svg>
-                    </button>
-                    <span class="ctrl-val" id="width-label">M</span>
-                    <button class="ctrl-btn" id="width-up" type="button" aria-label="Wider page">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 8h5M10 8h5"/><path d="M3.5 5.5L1 8l2.5 2.5M12.5 5.5L15 8l-2.5 2.5"/></svg>
-                    </button>
-                    <span class="ctrl-sep"></span>
-                    <span class="ctrl-val ctrl-label">Width</span>
-                </div>
-                <div class="view-toggle">
-                    <button class="vt-btn on" data-view="fields" id="view-fields-btn" type="button">Fields</button>
-                    <button class="vt-btn" data-view="json" id="view-json-btn" type="button">JSON</button>
-                </div>
-            </div>
-        </div>
-
-
-        <section class="card" id="review-card" data-state="pending">
-            <div class="card-head">
-                <div class="card-title">Review Data</div>
-                <span class="status-pill s-pending" id="rv-tag">PENDING</span>
-            </div>
-
-            <div class="card-meta">
-                <div id="record-hint" class="meta-hint" style="display:none"></div>
-                <div id="review-progress" class="meta-progress" style="display:none"></div>
-            </div>
-
-            <div class="panel on" id="panel-fields">
-                <div class="fields-list" id="fields-wrap"></div>
-            </div>
-
-            <div class="panel" id="panel-json">
-                <div class="json-wrap">
-                    <div class="json-head">
-                        <span class="json-label">Raw JSON</span>
-                        <button class="copy-btn" id="copy-json-btn" type="button">
-                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M3 10.5V3a1.5 1.5 0 011.5-1.5H11"/></svg>
-                            <span id="copy-btn-text">Copy</span>
-                        </button>
-                    </div>
-                    <pre class="json-pre" id="data-display">Loading...</pre>
-                </div>
-            </div>
-
+            <div id="record-view"></div>
             <div class="comment-section">
-                <label for="comment">Comment for current record (optional for approve{% if require_comment_on_reject %}, required for reject{% endif %})</label>
-                <textarea id="comment" placeholder="Add your feedback..."></textarea>
+                <label for="comment">Reviewer comment{% if require_comment_on_reject %} <span style="font-weight:400;text-transform:none;letter-spacing:0">(required for reject)</span>{% endif %}</label>
+                <textarea id="comment" placeholder="Add your feedback…"></textarea>
             </div>
+        </div>
+    </main>
 
+    <!-- INSPECTOR -->
+    <aside class="inspector">
+        <div class="insp-tabs">
+            <button class="insp-tab active" data-tab="review" type="button">Review</button>
+            <button class="insp-tab" data-tab="json" type="button">JSON</button>
+        </div>
+        <div class="insp-body">
+            <div id="insp-review">
+                <div class="insp-section" id="decision-section" style="display:none">
+                    <div class="insp-section-head"><h4>Decision</h4></div>
+                    <div id="decision-card-wrap"></div>
+                </div>
+                <div class="insp-section">
+                    <div class="insp-section-head">
+                        <h4>Reject reason</h4>
+                        <button class="inline-action" id="clear-reason" type="button" style="display:none">clear</button>
+                    </div>
+                    <div class="reason-grid" id="reason-grid"></div>
+                </div>
+                <div class="insp-section">
+                    <div class="insp-section-head"><h4>Reviewer note</h4><span class="caps">N to focus</span></div>
+                    <textarea class="note-area" id="reviewer-note" placeholder="Optional reviewer note…" rows="3"></textarea>
+                </div>
+            </div>
+            <div id="insp-json" style="display:none">
+                <div class="insp-section">
+                    <div class="insp-section-head"><h4>Record JSON</h4></div>
+                    <pre class="json-view" id="json-display">Loading…</pre>
+                </div>
+            </div>
+        </div>
+    </aside>
 
-            <div id="status" class="status-msg"></div>
-        </section>
+    <!-- COMMAND BAR -->
+    <div class="cmdbar">
+        <div></div>
+        <div class="cmd-actions">
+            <button class="cmd-btn cmd-approve" id="btn-approve" type="button">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+                <span>Approve</span><span class="kbd">A</span>
+            </button>
+            <button class="cmd-btn cmd-reject" id="btn-reject" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                <span>Reject</span><span class="kbd">R</span>
+            </button>
+            <button class="cmd-btn ghost" id="btn-skip" type="button" style="display:none">Skip to next pending<span class="kbd">S</span></button>
+            <div class="cmd-divider"></div>
+            <button class="cmd-btn ghost" id="btn-prev" type="button" title="Previous">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                <span class="kbd">K</span>
+            </button>
+            <button class="cmd-btn ghost" id="btn-next" type="button" title="Next">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+                <span class="kbd">J</span>
+            </button>
+        </div>
+        <div class="cmd-right">
+            <div class="cmd-status">
+                <span class="dot"></span><span>autosaved</span>
+                <span style="color:var(--fg-4)">·</span>
+                <span class="reviewed-ct tabnum" id="cmd-reviewed">0/0</span>
+            </div>
+            <button class="cmd-btn ghost" id="btn-submit" type="button" disabled>Submit All</button>
+        </div>
     </div>
 
-    <div class="action-bar">
-        <div class="action-backdrop"></div>
-        <div class="action-inner">
-            <div class="batch-row" id="batch-row">
-                <button class="batch-btn batch-approve" id="batch-approve" type="button">Approve remaining</button>
-                <button class="batch-btn batch-reject" id="batch-reject" type="button">Reject remaining</button>
-            </div>
-            <div class="kb-row"><kbd>A</kbd> Approve &nbsp; <kbd>R</kbd> Reject &nbsp; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>N</kbd> Skip &nbsp; <kbd>+</kbd><kbd>&minus;</kbd> Font &nbsp; <kbd>[</kbd><kbd>]</kbd> Width</div>
-            <div class="action-btns">
-                <button id="approve-record-btn" class="act-btn btn-approve" type="button">Approve</button>
-                <button id="reject-record-btn" class="act-btn btn-reject" type="button">Reject</button>
-                <button id="submit-review-btn" class="act-btn btn-submit" type="button" disabled>Submit All</button>
+    </div><!-- .app -->
+
+    <!-- HELP OVERLAY (hidden) -->
+    <div class="kbd-overlay" id="help-overlay" style="display:none">
+        <div class="kbd-card">
+            <h3>Keyboard shortcuts</h3>
+            <p class="subtitle">Power-tool review. Most actions are one key away.</p>
+            <div class="kbd-grid">
+                <div class="kbd-section"><h4>Decisions</h4>
+                    <div class="kbd-row"><span>Approve</span><span class="keys"><span class="k">A</span></span></div>
+                    <div class="kbd-row"><span>Reject (with reason)</span><span class="keys"><span class="k">R</span></span></div>
+                    <div class="kbd-row"><span>Skip to next pending</span><span class="keys"><span class="k">S</span></span></div>
+                </div>
+                <div class="kbd-section"><h4>Navigation</h4>
+                    <div class="kbd-row"><span>Next record</span><span class="keys"><span class="k">J</span><span class="k">↓</span></span></div>
+                    <div class="kbd-row"><span>Previous record</span><span class="keys"><span class="k">K</span><span class="k">↑</span></span></div>
+                    <div class="kbd-row"><span>Focus reviewer note</span><span class="keys"><span class="k">N</span></span></div>
+                </div>
+                <div class="kbd-section"><h4>Reject reasons</h4>
+                    <div class="kbd-row"><span>Not grounded</span><span class="keys"><span class="k">1</span></span></div>
+                    <div class="kbd-row"><span>Ambiguous</span><span class="keys"><span class="k">2</span></span></div>
+                    <div class="kbd-row"><span>Trivial</span><span class="keys"><span class="k">3</span></span></div>
+                    <div class="kbd-row"><span>Incomplete</span><span class="keys"><span class="k">4</span></span></div>
+                    <div class="kbd-row"><span>Duplicate</span><span class="keys"><span class="k">5</span></span></div>
+                    <div class="kbd-row"><span>Factual error</span><span class="keys"><span class="k">6</span></span></div>
+                </div>
+                <div class="kbd-section"><h4>Misc</h4>
+                    <div class="kbd-row"><span>Toggle this help</span><span class="keys"><span class="k">?</span></span></div>
+                    <div class="kbd-row"><span>Close / unfocus</span><span class="keys"><span class="k">Esc</span></span></div>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- TOAST -->
     <div class="toast-wrap"><div id="toast" class="toast"></div></div>
 
     <script nonce="{{ csp_nonce }}">
-        const requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
-        const HITL_TOKEN = {{ hitl_token | tojson }};
+    /* =========================================================================
+       HITL INSPECTOR — Main Application Script
+       ========================================================================= */
+    (function() {
+        'use strict';
 
-        /* ── DOM ── */
-        const dataDisplay = document.getElementById('data-display');
-        const recordToolbar = document.getElementById('record-toolbar');
-        const recordCounter = document.getElementById('record-counter');
-        const recordHint = document.getElementById('record-hint');
-        const reviewProgress = document.getElementById('review-progress');
-        const prevRecordButton = document.getElementById('prev-record');
-        const nextRecordButton = document.getElementById('next-record');
-        const panelFields = document.getElementById('panel-fields');
-        const panelJson = document.getElementById('panel-json');
-        const fieldsWrap = document.getElementById('fields-wrap');
-        const viewButtons = document.querySelectorAll('.vt-btn');
-        const approveRecordButton = document.getElementById('approve-record-btn');
-        const rejectRecordButton = document.getElementById('reject-record-btn');
-        const submitReviewButton = document.getElementById('submit-review-btn');
-        const commentInput = document.getElementById('comment');
-        const statusEl = document.getElementById('status');
-        const rvTag = document.getElementById('rv-tag');
-        const progFill = document.getElementById('prog-fill');
-        const progText = document.getElementById('prog-text');
-        const statPending = document.getElementById('stat-pending');
-        const statApproved = document.getElementById('stat-approved');
-        const statRejected = document.getElementById('stat-rejected');
-        const toastEl = document.getElementById('toast');
-        const reviewCard = document.getElementById('review-card');
-        const copyJsonBtn = document.getElementById('copy-json-btn');
-        const copyBtnText = document.getElementById('copy-btn-text');
-        const themeToggle = document.getElementById('theme-toggle');
-        const skipUnreviewedBtn = document.getElementById('skip-unreviewed');
-        const batchRow = document.getElementById('batch-row');
-        const batchApproveBtn = document.getElementById('batch-approve');
-        const batchRejectBtn = document.getElementById('batch-reject');
-        const instructionsBox = document.getElementById('instructions-box');
+        var requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
+        var HITL_TOKEN = {{ hitl_token | tojson }};
+        var METADATA_KEYS = {{ metadata_keys | tojson }};
 
-        let records = [];
-        let recordDecisions = [];
-        let fullDataset = null;
-        let fieldOrder = [];
-        let currentIndex = 0;
-        let currentView = 'fields';
-        let isPersistingDecision = false;
+        var REJECTION_REASONS = [
+            { id: 'ungrounded', label: 'Not grounded in source', key: '1' },
+            { id: 'ambiguous',  label: 'Ambiguous wording',      key: '2' },
+            { id: 'trivial',    label: 'Trivial / no value',      key: '3' },
+            { id: 'incomplete', label: 'Incomplete answer',       key: '4' },
+            { id: 'duplicate',  label: 'Duplicate',               key: '5' },
+            { id: 'factual',    label: 'Factual error',           key: '6' },
+        ];
 
-        /* ── Theme ── */
-        function setTheme(t) {
-            document.documentElement.setAttribute('data-theme', t);
-            localStorage.setItem('hitl-theme', t);
-        }
-        themeToggle.addEventListener('click', function () {
-            var cur = document.documentElement.getAttribute('data-theme');
-            setTheme(cur === 'dark' ? 'light' : 'dark');
-        });
+        /* ── DOM refs ── */
+        var app = document.getElementById('app');
+        var crumbDetail = document.getElementById('crumb-detail');
+        var topReviewed = document.getElementById('top-reviewed');
+        var topTotal = document.getElementById('top-total');
+        var topProgBar = document.getElementById('top-prog-bar');
+        var queueSubtitle = document.getElementById('queue-subtitle');
+        var queueFilters = document.getElementById('queue-filters');
+        var queueSearchInput = document.getElementById('queue-search-input');
+        var queueList = document.getElementById('queue-list');
+        var recordView = document.getElementById('record-view');
+        var commentInput = document.getElementById('comment');
+        var instructionsBox = document.getElementById('instructions-box');
+        var reasonGrid = document.getElementById('reason-grid');
+        var clearReasonBtn = document.getElementById('clear-reason');
+        var reviewerNote = document.getElementById('reviewer-note');
+        var decisionSection = document.getElementById('decision-section');
+        var decisionCardWrap = document.getElementById('decision-card-wrap');
+        var jsonDisplay = document.getElementById('json-display');
+        var inspReview = document.getElementById('insp-review');
+        var inspJson = document.getElementById('insp-json');
+        var toastEl = document.getElementById('toast');
+        var helpOverlay = document.getElementById('help-overlay');
+        var cmdReviewed = document.getElementById('cmd-reviewed');
+        var btnApprove = document.getElementById('btn-approve');
+        var btnReject = document.getElementById('btn-reject');
+        var btnSkip = document.getElementById('btn-skip');
+        var btnPrev = document.getElementById('btn-prev');
+        var btnNext = document.getElementById('btn-next');
+        var btnSubmit = document.getElementById('btn-submit');
+
+        /* ── State ── */
+        var records = [];
+        var recordDecisions = [];
+        var fieldOrder = [];
+        var currentIndex = 0;
+        var currentFilter = 'all';
+        var searchQuery = '';
+        var pendingReason = null;
+        var isPersisting = false;
+        var showQueue = true;
+        var showInspector = true;
 
         /* ── Utilities ── */
+        function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+        function humanizeKey(key) {
+            return key.replace(/^_+/, '').replace(/_+/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+        }
+
+        function isUrl(val) { return typeof val === 'string' && /^https?:\/\/.+/i.test(val.trim()); }
+
+        function linkify(escaped) {
+            return escaped.replace(/(https?:\/\/[^\s&lt;]+)/g, function(url) {
+                return '<a class="fv-link" href="' + url.replace(/&amp;/g, '&') + '" target="_blank" rel="noopener">' + url + '</a>';
+            });
+        }
+
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') { try { json = JSON.stringify(json, null, 2); } catch(_) { json = String(json); } }
+            if (!json) json = 'null';
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(
+                /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+                function(match) {
+                    var cls = 'jn';
+                    if (/^"/.test(match)) { cls = /:$/.test(match) ? 'jk' : 'js'; }
+                    else if (/true|false/.test(match)) { cls = 'jb'; }
+                    else if (/null/.test(match)) { cls = 'jb'; }
+                    return '<span class="' + cls + '">' + match + '</span>';
+                }
+            );
+        }
+
+        function getRecordTitle(record, index) {
+            if (!record || typeof record !== 'object') return 'Record ' + (index + 1);
+            var display = getDisplayRecord(record);
+            var keys = Object.keys(display);
+            for (var i = 0; i < keys.length; i++) {
+                var v = display[keys[i]];
+                if (typeof v === 'string' && v.length > 3 && v.length < 120 && !/^https?:\/\//.test(v)) {
+                    return v.length > 60 ? v.substring(0, 57) + '…' : v;
+                }
+            }
+            return 'Record ' + (index + 1);
+        }
+
+        function getDisplayRecord(record) {
+            if (!record || typeof record !== 'object' || Array.isArray(record)) return record;
+            if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) return record.content;
+            var filtered = {};
+            Object.keys(record).forEach(function(k) { if (METADATA_KEYS.indexOf(k) === -1) filtered[k] = record[k]; });
+            return Object.keys(filtered).length > 0 ? filtered : record;
+        }
+
         function normalizeRecords(data) {
             if (Array.isArray(data)) return data;
             if (data === null || data === undefined) return [];
             return [data];
         }
 
-        function escapeHtml(raw) {
-            return String(raw).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-        }
-
-        function formatFieldValue(value) {
-            if (value === undefined) return 'undefined';
-            if (value === null) return 'null';
-            if (typeof value === 'object') {
-                try { return JSON.stringify(value, null, 2); }
-                catch (_) { return String(value); }
-            }
-            return String(value);
-        }
-
-        function getFieldType(value) {
-            if (value === null || value === undefined) return 'null';
-            if (Array.isArray(value)) return 'arr';
-            if (typeof value === 'object') return 'obj';
-            if (typeof value === 'number') return 'num';
-            if (typeof value === 'boolean') return 'bool';
-            return 'str';
-        }
-
-        function humanizeKey(key) {
-            return key.replace(/^_+/, '').replace(/_+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
-        }
-
-        function isUrl(val) {
-            return typeof val === 'string' && /^https?:\/\/.+/i.test(val.trim());
-        }
-
-        function linkifyText(escaped) {
-            return escaped.replace(/(https?:\/\/[^\s&lt;]+)/g, function (url) {
-                return '<a class="fv-link" href="' + url.replace(/&amp;/g, '&') + '" target="_blank" rel="noopener">' + url + '</a>';
-            });
-        }
-
-        function isShort(value, type) {
-            if (type === 'obj' || type === 'arr') return false;
-            if (type === 'null' || type === 'bool' || type === 'num') return true;
-            var s = String(value);
-            return s.length < 50 && s.indexOf('\n') === -1;
-        }
-
-        /* ── JSON Syntax Highlighting ── */
-        function syntaxHighlight(json) {
-            if (typeof json !== 'string') {
-                try { json = JSON.stringify(json, null, 2); } catch (_) { json = String(json); }
-            }
-            if (!json) json = 'null';
-            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return json.replace(
-                /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-                function (match) {
-                    var cls = 'jn';
-                    if (/^"/.test(match)) { cls = /:$/.test(match) ? 'jk' : 'js'; }
-                    else if (/true|false/.test(match)) { cls = 'jb'; }
-                    else if (/null/.test(match)) { cls = 'jl'; }
-                    return '<span class="' + cls + '">' + match + '</span>';
-                }
-            );
-        }
-
-        /* ── Views ── */
-        function setView(view) {
-            if (view !== 'fields' && view !== 'json') view = 'fields';
-            currentView = view;
-            panelFields.classList.toggle('on', view === 'fields');
-            panelJson.classList.toggle('on', view === 'json');
-            viewButtons.forEach(function (btn) { btn.classList.toggle('on', btn.dataset.view === currentView); });
-        }
-
-        /* ── Fields Rendering ── */
-        /* METADATA_KEYS injected from Python (single source of truth) */
-        var METADATA_KEYS = {{ metadata_keys | tojson }};
-
-        function getDisplayRecord(record) {
-            if (!record || typeof record !== 'object' || Array.isArray(record)) return record;
-            if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) {
-                return record.content;
-            }
-            var filtered = {};
-            Object.keys(record).forEach(function (k) {
-                if (METADATA_KEYS.indexOf(k) === -1) filtered[k] = record[k];
-            });
-            return Object.keys(filtered).length > 0 ? filtered : record;
-        }
-
-        function renderFields(record) {
-            var display = getDisplayRecord(record);
-            if (!display || typeof display !== 'object' || Array.isArray(display)) {
-                fieldsWrap.innerHTML = '<div class="fields-empty">No fields available for this record.</div>';
-                return;
-            }
-            var allKeys = Object.keys(display);
-            /* field_order contains qualified refs like "action.field_name".
-               Strip only the leading action namespace (first dot) so nested
-               paths like "dep.nested.inner" resolve to "nested.inner", matching
-               the keys produced by apply_context_scope_for_records / parse_field_reference. */
-            var entries; /* [{key, label}] */
-            if (fieldOrder.length > 0) {
-                /* Match each ref to its data key. When apply_context_scope_for_records
-                   detects bare-key collisions (e.g. dep_a.title & dep_b.title),
-                   it uses the full qualified ref as the data key so both values
-                   are preserved. Non-colliding keys stay bare for compat. */
-                var keyLeaf = {};
-                var keyFullRef = {};
-                var keyOrder = [];
-                /* First pass: resolve data keys and compute leaf labels */
-                fieldOrder.forEach(function (ref) {
-                    var dot = ref.indexOf('.');
-                    var bareKey = dot >= 0 ? ref.substring(dot + 1) : ref;
-                    var dataKey = (ref in display) ? ref : ((bareKey in display) ? bareKey : null);
-                    if (dataKey === null) return;
-                    var lastDot = bareKey.lastIndexOf('.');
-                    var leafKey = lastDot >= 0 ? bareKey.substring(lastDot + 1) : bareKey;
-                    keyLeaf[dataKey] = humanizeKey(leafKey);
-                    keyFullRef[dataKey] = ref.replace(/\./g, ' > ');
-                    if (keyOrder.indexOf(dataKey) === -1) keyOrder.push(dataKey);
-                });
-                /* Second pass: detect duplicate leaf labels and promote to
-                   full qualified labels so collisions like dep_a.title and
-                   dep_b.title are visually distinguishable. */
-                var leafCounts = {};
-                keyOrder.forEach(function (k) {
-                    var lbl = keyLeaf[k];
-                    leafCounts[lbl] = (leafCounts[lbl] || 0) + 1;
-                });
-                var keyLabel = {};
-                keyOrder.forEach(function (k) {
-                    keyLabel[k] = leafCounts[keyLeaf[k]] > 1
-                        ? humanizeKey(keyFullRef[k].replace(/ > /g, '_'))
-                        : keyLeaf[k];
-                });
-                var usedKeys = new Set(keyOrder);
-                var ordered = keyOrder.map(function (k) { return { key: k, label: keyLabel[k], fullRef: keyFullRef[k] }; });
-                allKeys.forEach(function (k) {
-                    if (!usedKeys.has(k)) ordered.push({ key: k, label: humanizeKey(k) });
-                });
-                entries = ordered;
-            } else {
-                entries = allKeys.map(function (k) { return { key: k, label: humanizeKey(k) }; });
-            }
-            if (entries.length === 0) {
-                fieldsWrap.innerHTML = '<div class="fields-empty">No fields found.</div>';
-                return;
-            }
-            var html = entries.map(function (entry) {
-                var key = entry.key;
-                var value = display[key];
-                var type = getFieldType(value);
-                var isComplex = type === 'obj' || type === 'arr';
-                var isEmpty = value === undefined || value === null;
-                var short = isShort(value, type);
-                var label = escapeHtml(entry.label);
-                var titleAttr = entry.fullRef ? ' title="' + escapeHtml(entry.fullRef) + '"' : '';
-                var valueHtml;
-
-                if (isEmpty) {
-                    valueHtml = '<span class="fv fv-empty">Empty</span>';
-                } else if (isComplex) {
-                    valueHtml = '<pre class="fv-code">' + syntaxHighlight(formatFieldValue(value)) + '</pre>';
-                } else if (isUrl(value)) {
-                    var href = escapeHtml(String(value).trim());
-                    valueHtml = '<a class="fv fv-link" href="' + href + '" target="_blank" rel="noopener">' + href + '</a>';
-                } else if (type === 'bool' || type === 'num') {
-                    valueHtml = '<span class="fv fv-mono">' + escapeHtml(formatFieldValue(value)) + '</span>';
-                } else if (short) {
-                    valueHtml = '<span class="fv">' + linkifyText(escapeHtml(String(value))) + '</span>';
-                } else {
-                    valueHtml = '<div class="fv fv-long">' + linkifyText(escapeHtml(String(value))) + '</div>';
-                }
-
-                var cls = (short || isEmpty) && !isComplex ? 'field field-compact' : 'field';
-                return '<div class="' + cls + '">' +
-                    '<div class="field-key"' + titleAttr + '>' + label + '</div>' +
-                    valueHtml +
-                '</div>';
-            }).join('');
-            fieldsWrap.innerHTML = html;
-        }
-
-
-        /* ── Progress ── */
-        function reviewedCount() { return recordDecisions.filter(Boolean).length; }
-
-        function decisionStats() {
+        /* ── Stats (computed once per render cycle) ── */
+        var cachedStats = { approved: 0, rejected: 0, pending: 0, reviewed: 0, total: 0, allDone: false };
+        function computeStats() {
             var a = 0, r = 0;
-            for (var i = 0; i < recordDecisions.length; i++) {
-                var d = recordDecisions[i]; if (!d) continue;
-                if (d.hitl_status === 'approved') a++; else if (d.hitl_status === 'rejected') r++;
+            recordDecisions.forEach(function(d) { if (d) { if (d.hitl_status === 'approved') a++; else if (d.hitl_status === 'rejected') r++; } });
+            var reviewed = a + r;
+            cachedStats = { approved: a, rejected: r, pending: Math.max(records.length - reviewed, 0), reviewed: reviewed, total: records.length, allDone: records.length > 0 && reviewed === records.length };
+        }
+
+        /* ── Filtered records for queue ── */
+        function getFilteredIndices() {
+            var indices = [];
+            var q = searchQuery.toLowerCase();
+            for (var i = 0; i < records.length; i++) {
+                if (currentFilter !== 'all') {
+                    var st = recordDecisions[i] ? recordDecisions[i].hitl_status : 'pending';
+                    if (st !== currentFilter) continue;
+                }
+                if (q) {
+                    var title = getRecordTitle(records[i], i).toLowerCase();
+                    if (title.indexOf(q) === -1 && String(i + 1).indexOf(q) === -1) continue;
+                }
+                indices.push(i);
             }
-            return { approved: a, rejected: r, pending: Math.max(records.length - a - r, 0) };
+            return indices;
         }
 
-        function allReviewed() { return records.length > 0 && reviewedCount() === records.length; }
+        /* ── Render: Queue ── */
+        function renderQueue() {
+            var stats = cachedStats;
+            var allCount = stats.total;
+            var filters = [
+                { id: 'all', label: 'All', count: allCount, dot: null },
+                { id: 'pending', label: 'Pending', count: stats.pending, dot: 'pending' },
+                { id: 'approved', label: 'OK', count: stats.approved, dot: 'approved' },
+                { id: 'rejected', label: 'Rej', count: stats.rejected, dot: 'rejected' },
+            ];
+            queueFilters.innerHTML = filters.map(function(f) {
+                var cls = 'filter-chip' + (currentFilter === f.id ? ' active' : '');
+                var dot = f.dot ? '<span class="dot ' + f.dot + '"></span>' : '';
+                return '<button class="' + cls + '" data-filter="' + f.id + '" type="button">' + dot + f.label + ' <span class="num tabnum">' + f.count + '</span></button>';
+            }).join('');
 
-        function updateProgressUI() {
-            var done = reviewedCount(), total = records.length;
-            var pct = total > 0 ? Math.round((done / total) * 100) : 0;
-            var s = decisionStats();
-            progFill.style.width = pct + '%';
-            progText.innerHTML = '<strong>' + done + '</strong> of ' + total + ' reviewed';
-            statPending.textContent = s.pending + ' pending';
-            statApproved.textContent = s.approved + ' approved';
-            statRejected.textContent = s.rejected + ' rejected';
+            var filteredIndices = getFilteredIndices();
+            queueSubtitle.textContent = filteredIndices.length + '/' + allCount;
+
+            if (filteredIndices.length === 0) {
+                queueList.innerHTML = '<div style="padding:40px 16px;text-align:center;color:var(--fg-3);font-size:12px">No records match.</div>';
+                return;
+            }
+
+            queueList.innerHTML = filteredIndices.map(function(i) {
+                var rec = records[i];
+                var dec = recordDecisions[i];
+                var status = dec ? dec.hitl_status : 'pending';
+                var reviewed = status !== 'pending';
+                var cls = 'queue-row ' + status + (i === currentIndex ? ' selected' : '') + (reviewed ? ' reviewed' : '');
+                var title = esc(getRecordTitle(rec, i));
+                var meta = '<span class="qmeta"><span>' + String(i + 1) + '/' + records.length + '</span>';
+                if (reviewed) meta += '<span class="sep">·</span><span class="status-tag ' + status + '">' + status + '</span>';
+                meta += '</span>';
+                return '<div class="' + cls + '" data-index="' + i + '"><div class="qidx tabnum">' + String(i + 1).padStart(2, '0') + '</div><div class="qtitle" title="' + title + '">' + title + '</div>' + meta + '</div>';
+            }).join('');
         }
 
-        function setRecordTag(decision) {
-            var state = (decision && decision.hitl_status) || 'pending';
-            rvTag.textContent = state.toUpperCase();
-            rvTag.className = 'status-pill s-' + state;
-            reviewCard.setAttribute('data-state', state);
-        }
-
-        /* ── Render ── */
-        function renderCurrentRecord() {
-            updateProgressUI();
+        /* ── Render: Record Fields ── */
+        function renderRecordView() {
             if (records.length === 0) {
-                dataDisplay.textContent = 'No records found for review.';
-                fieldsWrap.innerHTML = '<div class="fields-empty">No records found for review.</div>';
-                recordToolbar.style.display = 'none';
-                recordHint.style.display = 'block';
-                recordHint.textContent = 'The payload is empty.';
-                reviewProgress.style.display = 'none';
-                submitReviewButton.disabled = true;
-                commentInput.value = '';
-                setRecordTag(null);
+                recordView.innerHTML = '<div class="fields-empty">No records found for review.</div>';
                 return;
             }
             var rec = records[currentIndex];
             var dec = recordDecisions[currentIndex];
-            try { dataDisplay.innerHTML = syntaxHighlight(JSON.stringify(rec, null, 2)); }
-            catch (_) { dataDisplay.textContent = String(rec); }
-            renderFields(rec);
-            commentInput.value = dec ? dec.user_comment : '';
-            if (records.length > 1) {
-                recordToolbar.style.display = 'flex';
-                recordCounter.innerHTML = '<strong>' + (currentIndex + 1) + '</strong> / ' + records.length;
-                prevRecordButton.disabled = currentIndex === 0;
-                nextRecordButton.disabled = currentIndex === records.length - 1;
+            var status = dec ? dec.hitl_status : 'pending';
+            var display = getDisplayRecord(rec);
+
+            var html = '';
+            /* Record meta */
+            html += '<div class="rec-meta"><span class="id-val"># ' + (currentIndex + 1) + '</span><span class="meta-sep"></span>';
+            html += '<span class="rec-status-pill ' + status + '"><span class="dot"></span> ' + status.toUpperCase() + '</span>';
+            html += '</div>';
+
+            /* Title */
+            html += '<h1 class="rec-title">' + esc(getRecordTitle(rec, currentIndex)) + '</h1>';
+
+            /* Fields */
+            if (!display || typeof display !== 'object' || Array.isArray(display)) {
+                html += '<div class="fields-empty">No fields available.</div>';
             } else {
-                recordToolbar.style.display = 'none';
+                var entries = buildFieldEntries(display);
+                entries.forEach(function(entry, idx) {
+                    var value = display[entry.key];
+                    html += renderFieldSection(entry.label, value, idx > 3);
+                });
             }
-            recordHint.style.display = 'block';
-            recordHint.textContent = dec
-                ? 'Current decision: ' + dec.hitl_status + '. Use Approve/Reject to update it.'
-                : 'Set a decision for this record.';
-            reviewProgress.style.display = 'block';
-            reviewProgress.textContent = 'Reviewed ' + reviewedCount() + ' of ' + records.length + ' record(s).';
-            var isAllDone = allReviewed();
-            submitReviewButton.disabled = !isAllDone;
-            submitReviewButton.classList.toggle('ready', isAllDone && records.length > 1);
-            setRecordTag(dec);
 
-            /* Skip + batch visibility */
-            var hasUnreviewed = recordDecisions.some(function (d) { return !d; });
-            skipUnreviewedBtn.style.display = (records.length > 1 && hasUnreviewed) ? 'flex' : 'none';
-            batchRow.style.display = (records.length > 1 && hasUnreviewed) ? 'flex' : 'none';
-            if (requireCommentOnReject) {
-                batchRejectBtn.disabled = true;
-                batchRejectBtn.title = 'Cannot batch reject when comments are required';
-            }
+            recordView.innerHTML = html;
+
+            /* Wire collapsible sections */
+            recordView.querySelectorAll('.field-section-head').forEach(function(head) {
+                head.addEventListener('click', function() {
+                    head.parentElement.classList.toggle('collapsed');
+                });
+            });
         }
 
-        function setSubmitButtonsDisabled(d) {
-            approveRecordButton.disabled = d;
-            rejectRecordButton.disabled = d;
-            submitReviewButton.disabled = d || !allReviewed();
+        function buildFieldEntries(display) {
+            var allKeys = Object.keys(display);
+            if (fieldOrder.length > 0) {
+                var ordered = [];
+                var usedKeys = new Set();
+                fieldOrder.forEach(function(ref) {
+                    var dot = ref.indexOf('.');
+                    var bareKey = dot >= 0 ? ref.substring(dot + 1) : ref;
+                    var dataKey = (ref in display) ? ref : ((bareKey in display) ? bareKey : null);
+                    if (dataKey === null) return;
+                    if (usedKeys.has(dataKey)) return;
+                    usedKeys.add(dataKey);
+                    var lastDot = bareKey.lastIndexOf('.');
+                    var leafKey = lastDot >= 0 ? bareKey.substring(lastDot + 1) : bareKey;
+                    ordered.push({ key: dataKey, label: humanizeKey(leafKey) });
+                });
+                allKeys.forEach(function(k) { if (!usedKeys.has(k)) ordered.push({ key: k, label: humanizeKey(k) }); });
+                return ordered;
+            }
+            return allKeys.map(function(k) { return { key: k, label: humanizeKey(k) }; });
         }
 
-        function goToNextRecordAfterDecision() {
-            if (records.length <= 1) { renderCurrentRecord(); return; }
-            reviewCard.classList.remove('card-switch');
-            void reviewCard.offsetWidth;
-            reviewCard.classList.add('card-switch');
-            if (currentIndex < records.length - 1) {
-                currentIndex += 1;
+        function renderFieldSection(label, value, collapsed) {
+            var isEmpty = value === undefined || value === null;
+            var isComplex = !isEmpty && typeof value === 'object';
+            var isLong = typeof value === 'string' && (value.length > 80 || value.indexOf('\n') >= 0);
+            var isShort = !isEmpty && !isComplex && !isLong;
+
+            if (isShort) {
+                /* Inline compact field */
+                var valHtml;
+                if (isUrl(value)) {
+                    valHtml = '<a class="fv fv-link" href="' + esc(String(value).trim()) + '" target="_blank" rel="noopener">' + esc(value) + '</a>';
+                } else if (typeof value === 'boolean' || typeof value === 'number') {
+                    valHtml = '<span class="fv fv-mono">' + esc(String(value)) + '</span>';
+                } else {
+                    valHtml = '<span class="fv">' + linkify(esc(String(value))) + '</span>';
+                }
+                return '<div class="field-inline" style="margin-bottom:8px"><span class="field-label" style="font-size:10.5px">' + esc(label) + '</span>' + valHtml + '</div>';
+            }
+
+            /* Full section */
+            var cls = 'field-section' + (collapsed ? ' collapsed' : '');
+            var bodyHtml;
+            if (isEmpty) {
+                bodyHtml = '<span class="fv-empty">Empty</span>';
+            } else if (isComplex) {
+                bodyHtml = '<pre class="fv-code">' + syntaxHighlight(value) + '</pre>';
             } else {
-                var first = recordDecisions.findIndex(function (d) { return !d; });
-                if (first >= 0) currentIndex = first;
+                bodyHtml = '<div class="fv fv-long">' + linkify(esc(String(value))) + '</div>';
             }
-            renderCurrentRecord();
+
+            return '<div class="' + cls + '">' +
+                '<div class="field-section-head">' +
+                    '<span class="chevron"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></span>' +
+                    '<span class="field-marker"></span>' +
+                    '<span class="field-label">' + esc(label) + '</span>' +
+                '</div>' +
+                '<div class="field-body">' + bodyHtml + '</div>' +
+            '</div>';
         }
 
-        function showToast(message, kind) {
-            toastEl.textContent = message;
+        /* ── Render: Inspector ── */
+        function renderInspector() {
+            var dec = records.length > 0 ? recordDecisions[currentIndex] : null;
+
+            /* Decision card */
+            if (dec) {
+                decisionSection.style.display = '';
+                decisionCardWrap.innerHTML = '<div class="decision-card ' + dec.hitl_status + '">' +
+                    '<div class="meta-row"><span class="action">' + dec.hitl_status + '</span></div>' +
+                    (dec.user_comment ? '<div class="note">"' + esc(dec.user_comment) + '"</div>' : '') +
+                '</div>';
+            } else {
+                decisionSection.style.display = 'none';
+            }
+
+            /* JSON — only highlight when tab is visible */
+            if (inspJson.style.display !== 'none') {
+                var rec = records.length > 0 ? records[currentIndex] : null;
+                if (rec) {
+                    jsonDisplay.innerHTML = syntaxHighlight(rec);
+                } else {
+                    jsonDisplay.textContent = 'No record selected.';
+                }
+            }
+
+            /* Reviewer note + comment */
+            if (dec) {
+                commentInput.value = dec.user_comment || '';
+                reviewerNote.value = dec.user_comment || '';
+            } else {
+                commentInput.value = '';
+                reviewerNote.value = '';
+            }
+        }
+
+        function renderReasonGrid() {
+            reasonGrid.innerHTML = REJECTION_REASONS.map(function(rr) {
+                var cls = 'reason-btn' + (pendingReason === rr.label ? ' active' : '');
+                return '<button class="' + cls + '" data-reason="' + esc(rr.label) + '" type="button">' +
+                    '<span class="reason-label">' + esc(rr.label) + '</span>' +
+                    '<span class="reason-key"><span class="reason-key-prefix">key</span><span class="reason-key-val">' + rr.key + '</span></span>' +
+                '</button>';
+            }).join('');
+            reasonGrid.classList.toggle('has-pick', !!pendingReason);
+            clearReasonBtn.style.display = pendingReason ? '' : 'none';
+        }
+
+        /* ── Render: Progress ── */
+        function updateProgress() {
+            var s = cachedStats;
+            var pct = s.total > 0 ? Math.round((s.reviewed / s.total) * 100) : 0;
+            topReviewed.textContent = s.reviewed;
+            topTotal.textContent = ' / ' + s.total;
+            topProgBar.style.width = pct + '%';
+            cmdReviewed.textContent = s.reviewed + '/' + s.total;
+            crumbDetail.textContent = s.total + ' record' + (s.total !== 1 ? 's' : '') + ' · ' + pct + '% reviewed';
+
+            btnSubmit.disabled = !s.allDone;
+            btnSkip.style.display = (s.total > 1 && !s.allDone) ? '' : 'none';
+            btnPrev.disabled = currentIndex === 0;
+            btnNext.disabled = currentIndex >= records.length - 1;
+        }
+
+        /* ── Master render ── */
+        function renderAll() {
+            computeStats();
+            renderQueue();
+            renderRecordView();
+            renderInspector();
+            renderReasonGrid();
+            updateProgress();
+        }
+
+        /* ── Navigation ── */
+        function goTo(index) {
+            if (index < 0 || index >= records.length) return;
+            currentIndex = index;
+            renderAll();
+            /* Scroll queue row into view */
+            var row = queueList.querySelector('.queue-row.selected');
+            if (row) row.scrollIntoView({ block: 'nearest' });
+        }
+
+        function skipToUnreviewed() {
+            for (var i = currentIndex + 1; i < records.length; i++) {
+                if (!recordDecisions[i]) { goTo(i); return; }
+            }
+            for (var j = 0; j < currentIndex; j++) {
+                if (!recordDecisions[j]) { goTo(j); return; }
+            }
+        }
+
+        /* ── Toast ── */
+        var toastTimer = null;
+        function showToast(msg, kind) {
+            if (toastTimer) clearTimeout(toastTimer);
+            toastEl.textContent = msg;
             toastEl.className = 'toast t' + kind + ' show';
-            setTimeout(function () { toastEl.classList.remove('show'); }, 2000);
+            toastTimer = setTimeout(function() { toastEl.classList.remove('show'); toastTimer = null; }, 2000);
         }
 
         /* ── API ── */
-        async function persistRecordDecision(index, decision) {
-            var resp = await fetch('/api/review-record', {
+        function apiPost(url, data) {
+            return fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN },
-                body: JSON.stringify({ index: index, hitl_status: decision.hitl_status, user_comment: decision.user_comment || '' }),
+                body: JSON.stringify(data),
+            });
+        }
+
+        async function persistRecordDecision(index, decision) {
+            var resp = await apiPost('/api/review-record', {
+                index: index,
+                hitl_status: decision.hitl_status,
+                user_comment: decision.user_comment || '',
             });
             if (!resp.ok) {
-                var p = await resp.json().catch(function () { return {}; });
-                throw new Error(p.error || 'Failed to save record review');
+                var p = await resp.json().catch(function() { return {}; });
+                throw new Error(p.error || 'Failed to save');
             }
-            console.log('Persisted decision for record ' + index + ':', decision.hitl_status);
         }
 
-        function normalizeDecision(decision) {
-            if (!decision || typeof decision !== 'object') return null;
-            var status = String(decision.hitl_status || '').toLowerCase();
-            if (status !== 'approved' && status !== 'rejected') return null;
-            return { hitl_status: status, user_comment: String(decision.user_comment || '') };
-        }
+        async function markCurrentRecord(status) {
+            if (records.length === 0 || isPersisting) return;
+            var reason = pendingReason || '';
+            var note = reviewerNote.value.trim();
+            var comment = (reason && note) ? reason + ' — ' + note : reason || note;
 
-        async function loadReviewState() {
-            var resp = await fetch('/api/review-state');
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            var payload = await resp.json();
-            console.log('Loaded review state from server:', payload);
-            var saved = Array.isArray(payload.record_reviews) ? payload.record_reviews : [];
-            var cnt = saved.filter(function (d) { return d !== null; }).length;
-            recordDecisions = records.map(function (_, i) { return normalizeDecision(saved[i]); });
-            console.log('Restored ' + cnt + ' of ' + records.length + ' reviews from server');
-        }
-
-        async function markCurrentRecord(decisionStatus) {
-            if (records.length === 0 || isPersistingDecision) return;
-            var comment = commentInput.value.trim();
-            if (decisionStatus === 'rejected' && requireCommentOnReject && !comment) {
-                alert('Please provide a comment explaining why you are rejecting this record.');
-                commentInput.focus();
+            if (status === 'rejected' && requireCommentOnReject && !comment) {
+                alert('Please provide a comment or select a reject reason.');
+                reviewerNote.focus();
                 return;
             }
             var prev = recordDecisions[currentIndex];
-            var next = { hitl_status: decisionStatus, user_comment: comment };
+            var next = { hitl_status: status, user_comment: comment };
             recordDecisions[currentIndex] = next;
-            renderCurrentRecord();
-            isPersistingDecision = true;
-            approveRecordButton.disabled = true;
-            rejectRecordButton.disabled = true;
+            renderAll();
+
+            isPersisting = true;
+            btnApprove.disabled = true;
+            btnReject.disabled = true;
             try {
                 await persistRecordDecision(currentIndex, next);
-            } catch (error) {
+            } catch(error) {
                 recordDecisions[currentIndex] = prev;
-                renderCurrentRecord();
-                alert('Error saving review: ' + error.message);
+                renderAll();
+                alert('Error: ' + error.message);
                 return;
             } finally {
-                isPersistingDecision = false;
-                approveRecordButton.disabled = false;
-                rejectRecordButton.disabled = false;
+                isPersisting = false;
+                btnApprove.disabled = false;
+                btnReject.disabled = false;
             }
-            showToast(decisionStatus === 'approved' ? 'Approved record' : 'Rejected record', decisionStatus === 'approved' ? 'g' : 'r');
+            showToast(status === 'approved' ? 'Approved' : 'Rejected', status === 'approved' ? 'g' : 'r');
+            pendingReason = null;
+            reviewerNote.value = '';
             if (records.length === 1) { submitReviews(); return; }
-            goToNextRecordAfterDecision();
+            /* Auto-advance */
+            setTimeout(function() {
+                if (currentIndex < records.length - 1) goTo(currentIndex + 1);
+                else skipToUnreviewed();
+            }, 120);
         }
 
         async function submitReviews() {
-            if (records.length === 0) { alert('No records available to submit.'); return; }
-            if (!allReviewed()) { alert('Please review all records before submitting.'); return; }
-            setSubmitButtonsDisabled(true);
+            computeStats();
+            if (!cachedStats.allDone) { alert('Please review all records before submitting.'); return; }
+            btnSubmit.disabled = true;
+            btnApprove.disabled = true;
+            btnReject.disabled = true;
             try {
-                var overall = recordDecisions.every(function (d) { return d.hitl_status === 'approved'; }) ? 'approved' : 'rejected';
-                var resp = await fetch('/api/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN },
-                    body: JSON.stringify({ hitl_status: overall, record_reviews: recordDecisions, comment: commentInput.value.trim() }),
+                var overall = recordDecisions.every(function(d) { return d.hitl_status === 'approved'; }) ? 'approved' : 'rejected';
+                var resp = await apiPost('/api/submit', {
+                    hitl_status: overall,
+                    record_reviews: recordDecisions,
+                    comment: commentInput.value.trim(),
                 });
                 if (!resp.ok) {
-                    var p = await resp.json().catch(function () { return {}; });
-                    throw new Error(p.error || 'Failed to submit reviews');
+                    var p = await resp.json().catch(function() { return {}; });
+                    throw new Error(p.error || 'Submit failed');
                 }
-                showStatus('Reviews submitted! Workflow continuing...', 'success');
-                showToast('Submitted reviews', 'g');
-                setTimeout(async function () {
-                    try { await fetch('/api/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN } }); console.log('Server shutdown initiated'); }
-                    catch (e) { console.log('Shutdown requested'); }
+                showToast('Submitted — workflow continuing', 'g');
+                setTimeout(async function() {
+                    try { await apiPost('/api/shutdown', {}); } catch(_) {}
                     window.close();
-                    /* window.close() is a no-op when the tab was not opened by script; always show the fallback message */
-                    setTimeout(function () { showStatus('Complete! Workflow is continuing. You can close this tab now.', 'success'); }, 500);
+                    setTimeout(function() { showToast('Complete! You can close this tab.', 'g'); }, 500);
                 }, 1500);
-            } catch (error) {
-                alert('Error submitting reviews: ' + error.message);
-                setSubmitButtonsDisabled(false);
+            } catch(error) {
+                alert('Error: ' + error.message);
+                btnSubmit.disabled = false;
+                btnApprove.disabled = false;
+                btnReject.disabled = false;
             }
         }
 
-        async function loadContextData() {
+        async function loadData() {
             try {
                 var resp = await fetch('/api/context');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 var payload = await resp.json();
-                /* /api/context returns {_envelope: true, data, field_order?} when wrapped,
-                   or raw context data for backwards compatibility. */
+                var data;
                 if (payload && typeof payload === 'object' && !Array.isArray(payload) && payload._envelope === true) {
-                    fullDataset = payload.data;
+                    data = payload.data;
                     fieldOrder = Array.isArray(payload.field_order) ? payload.field_order : [];
                 } else {
-                    fullDataset = payload;
+                    data = payload;
                     fieldOrder = [];
                 }
-                records = normalizeRecords(fullDataset);
-                recordDecisions = records.map(function () { return null; });
-                try { await loadReviewState(); }
-                catch (error) { console.error('Failed to restore review state:', error); showToast('Could not restore previous reviews', 'r'); }
+                records = normalizeRecords(data);
+                recordDecisions = records.map(function() { return null; });
+
+                /* Restore saved state */
+                try {
+                    var stResp = await fetch('/api/review-state');
+                    if (stResp.ok) {
+                        var stPayload = await stResp.json();
+                        var saved = Array.isArray(stPayload.record_reviews) ? stPayload.record_reviews : [];
+                        saved.forEach(function(d, i) {
+                            if (i < records.length && d && typeof d === 'object') {
+                                var st = String(d.hitl_status || '').toLowerCase();
+                                if (st === 'approved' || st === 'rejected') {
+                                    recordDecisions[i] = { hitl_status: st, user_comment: String(d.user_comment || '') };
+                                }
+                            }
+                        });
+                    }
+                } catch(_) {}
+
                 currentIndex = 0;
-                renderCurrentRecord();
-            } catch (error) {
-                dataDisplay.textContent = 'Error loading context data: ' + error.message;
-                recordToolbar.style.display = 'none';
-                recordHint.style.display = 'none';
-                reviewProgress.style.display = 'none';
-                submitReviewButton.disabled = true;
-                showStatus('Failed to load context data.', 'error');
+                renderAll();
+            } catch(error) {
+                recordView.innerHTML = '<div class="fields-empty">Error loading data: ' + esc(error.message) + '</div>';
             }
         }
-
-        function showStatus(message, type) {
-            statusEl.textContent = message;
-            statusEl.className = 'status-msg status-' + type;
-            statusEl.style.display = 'block';
-        }
-
-        /* ── Copy JSON ── */
-        copyJsonBtn.addEventListener('click', function () {
-            var rec = records[currentIndex];
-            if (!rec) return;
-            var text;
-            try { text = JSON.stringify(rec, null, 2); } catch (_) { text = String(rec); }
-            navigator.clipboard.writeText(text).then(function () {
-                copyBtnText.textContent = 'Copied!';
-                copyJsonBtn.classList.add('copied');
-                setTimeout(function () { copyBtnText.textContent = 'Copy'; copyJsonBtn.classList.remove('copied'); }, 1500);
-            }).catch(function () {
-                var ta = document.createElement('textarea');
-                ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-                document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-                copyBtnText.textContent = 'Copied!';
-                copyJsonBtn.classList.add('copied');
-                setTimeout(function () { copyBtnText.textContent = 'Copy'; copyJsonBtn.classList.remove('copied'); }, 1500);
-            });
-        });
 
         /* ── Events ── */
-        prevRecordButton.addEventListener('click', function () { if (currentIndex > 0) { currentIndex -= 1; renderCurrentRecord(); } });
-        nextRecordButton.addEventListener('click', function () { if (currentIndex < records.length - 1) { currentIndex += 1; renderCurrentRecord(); } });
-        approveRecordButton.addEventListener('click', function () { markCurrentRecord('approved'); });
-        rejectRecordButton.addEventListener('click', function () { markCurrentRecord('rejected'); });
-        submitReviewButton.addEventListener('click', function () { submitReviews(); });
-        viewButtons.forEach(function (btn) { btn.addEventListener('click', function () { setView(btn.dataset.view); }); });
 
-        /* ── Keyboard Flash ── */
-        function flashButton(btn, cls) {
-            btn.classList.remove(cls);
-            void btn.offsetWidth;
-            btn.classList.add(cls);
-            setTimeout(function () { btn.classList.remove(cls); }, 500);
-        }
+        /* Queue clicks */
+        queueList.addEventListener('click', function(e) {
+            var row = e.target.closest('.queue-row');
+            if (row) goTo(parseInt(row.dataset.index, 10));
+        });
+        queueFilters.addEventListener('click', function(e) {
+            var chip = e.target.closest('.filter-chip');
+            if (chip) { currentFilter = chip.dataset.filter; renderQueue(); }
+        });
+        queueSearchInput.addEventListener('input', function() { searchQuery = this.value; renderQueue(); });
 
-        /* ── Skip to Next Unreviewed ── */
-        function skipToUnreviewed() {
-            var next = -1;
-            for (var i = currentIndex + 1; i < records.length; i++) {
-                if (!recordDecisions[i]) { next = i; break; }
-            }
-            if (next < 0) {
-                for (var j = 0; j < currentIndex; j++) {
-                    if (!recordDecisions[j]) { next = j; break; }
-                }
-            }
-            if (next >= 0 && next !== currentIndex) {
-                currentIndex = next;
-                reviewCard.classList.remove('card-switch');
-                void reviewCard.offsetWidth;
-                reviewCard.classList.add('card-switch');
-                renderCurrentRecord();
-            }
-        }
-        skipUnreviewedBtn.addEventListener('click', skipToUnreviewed);
-
-        /* ── Batch Actions ── */
-        async function batchDecision(status) {
-            var remaining = [];
-            for (var i = 0; i < records.length; i++) {
-                if (!recordDecisions[i]) remaining.push(i);
-            }
-            if (remaining.length === 0) return;
-            if (!confirm('Set ' + remaining.length + ' remaining record(s) to ' + status + '?')) return;
-            setSubmitButtonsDisabled(true);
-            try {
-                for (var j = 0; j < remaining.length; j++) {
-                    var idx = remaining[j];
-                    var decision = { hitl_status: status, user_comment: '' };
-                    recordDecisions[idx] = decision;
-                    await persistRecordDecision(idx, decision);
-                }
-                renderCurrentRecord();
-                showToast((status === 'approved' ? 'Approved ' : 'Rejected ') + remaining.length + ' records', status === 'approved' ? 'g' : 'r');
-            } catch (error) {
-                alert('Error in batch operation: ' + error.message);
-                renderCurrentRecord();
-            } finally {
-                setSubmitButtonsDisabled(false);
-            }
-        }
-        batchApproveBtn.addEventListener('click', function () { batchDecision('approved'); });
-        batchRejectBtn.addEventListener('click', function () { batchDecision('rejected'); });
-
-        /* ── Collapsible Instructions ── */
-        if (instructionsBox) {
-            instructionsBox.addEventListener('click', function () {
-                instructionsBox.classList.toggle('collapsed');
+        /* Inspector tabs */
+        document.querySelectorAll('.insp-tab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                var selected = tab.dataset.tab;
+                document.querySelectorAll('.insp-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === selected); });
+                inspReview.style.display = selected === 'review' ? '' : 'none';
+                inspJson.style.display = selected === 'json' ? '' : 'none';
+                if (selected === 'json') renderInspector();
             });
-        }
-
-        /* ── Auto-resize Textarea ── */
-        commentInput.addEventListener('input', function () {
-            this.style.height = 'auto';
-            this.style.height = Math.max(80, this.scrollHeight) + 'px';
         });
 
-        /* ── Editor Controls (font size + page width) ── */
-        var FONT_SIZES = [12, 13, 14, 15, 16, 17, 18, 19, 20];
-        var WIDTH_PRESETS = [
-            { label: 'S', value: 640 },
-            { label: 'M', value: 880 },
-            { label: 'L', value: 1100 },
-            { label: 'XL', value: 1400 }
-        ];
-        var fontSizeIndex = 3;
-        var widthIndex = 1;
-
-        var fontLabelEl = document.getElementById('font-label');
-        var widthLabelEl = document.getElementById('width-label');
-        var fontDownBtn = document.getElementById('font-down');
-        var fontUpBtn = document.getElementById('font-up');
-        var widthDownBtn = document.getElementById('width-down');
-        var widthUpBtn = document.getElementById('width-up');
-        var pageEl = document.querySelector('.page');
-        var actionInnerEl = document.querySelector('.action-inner');
-
-        function loadEditorPrefs() {
-            var sf = localStorage.getItem('hitl-font-size');
-            var sw = localStorage.getItem('hitl-page-width');
-            if (sf !== null) {
-                var fi = FONT_SIZES.indexOf(parseInt(sf, 10));
-                if (fi >= 0) fontSizeIndex = fi;
+        /* Reason grid */
+        reasonGrid.addEventListener('click', function(e) {
+            var btn = e.target.closest('.reason-btn');
+            if (btn) {
+                var r = btn.dataset.reason;
+                pendingReason = (pendingReason === r) ? null : r;
+                renderReasonGrid();
             }
-            if (sw !== null) {
-                var wi = WIDTH_PRESETS.findIndex(function (p) { return p.value === parseInt(sw, 10); });
-                if (wi >= 0) widthIndex = wi;
-            }
-        }
-
-        function applyFontSize() {
-            var size = FONT_SIZES[fontSizeIndex];
-            document.documentElement.style.fontSize = size + 'px';
-            fontLabelEl.textContent = size;
-            fontDownBtn.disabled = fontSizeIndex === 0;
-            fontUpBtn.disabled = fontSizeIndex === FONT_SIZES.length - 1;
-            localStorage.setItem('hitl-font-size', size);
-        }
-
-        function applyPageWidth() {
-            var preset = WIDTH_PRESETS[widthIndex];
-            pageEl.style.maxWidth = preset.value + 'px';
-            actionInnerEl.style.maxWidth = preset.value + 'px';
-            widthLabelEl.textContent = preset.label;
-            widthDownBtn.disabled = widthIndex === 0;
-            widthUpBtn.disabled = widthIndex === WIDTH_PRESETS.length - 1;
-            localStorage.setItem('hitl-page-width', preset.value);
-        }
-
-        function stepFont(dir) {
-            var next = fontSizeIndex + dir;
-            if (next >= 0 && next < FONT_SIZES.length) { fontSizeIndex = next; applyFontSize(); }
-        }
-        function stepWidth(dir) {
-            var next = widthIndex + dir;
-            if (next >= 0 && next < WIDTH_PRESETS.length) { widthIndex = next; applyPageWidth(); }
-        }
-
-        fontDownBtn.addEventListener('click', function () { stepFont(-1); });
-        fontUpBtn.addEventListener('click', function () { stepFont(1); });
-        widthDownBtn.addEventListener('click', function () { stepWidth(-1); });
-        widthUpBtn.addEventListener('click', function () { stepWidth(1); });
-
-        document.addEventListener('keydown', function (event) {
-            var el = document.activeElement;
-            if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) return;
-            if (event.key === 'ArrowRight' && currentIndex < records.length - 1) { event.preventDefault(); currentIndex += 1; renderCurrentRecord(); }
-            if (event.key === 'ArrowLeft' && currentIndex > 0) { event.preventDefault(); currentIndex -= 1; renderCurrentRecord(); }
-            if (event.key === 'a' || event.key === 'A') { event.preventDefault(); flashButton(approveRecordButton, 'flash-approve'); markCurrentRecord('approved'); }
-            if (event.key === 'r' || event.key === 'R') { event.preventDefault(); flashButton(rejectRecordButton, 'flash-reject'); markCurrentRecord('rejected'); }
-            if (event.key === 'n' || event.key === 'N') { event.preventDefault(); skipToUnreviewed(); }
-            if (event.key === '=' || event.key === '+') { event.preventDefault(); stepFont(1); }
-            if (event.key === '-' || event.key === '_') { event.preventDefault(); stepFont(-1); }
-            if (event.key === ']') { event.preventDefault(); stepWidth(1); }
-            if (event.key === '[') { event.preventDefault(); stepWidth(-1); }
         });
+        clearReasonBtn.addEventListener('click', function() { pendingReason = null; renderReasonGrid(); });
+
+        /* Action buttons */
+        btnApprove.addEventListener('click', function() { markCurrentRecord('approved'); });
+        btnReject.addEventListener('click', function() { markCurrentRecord('rejected'); });
+        btnSubmit.addEventListener('click', function() { submitReviews(); });
+        btnSkip.addEventListener('click', skipToUnreviewed);
+        btnPrev.addEventListener('click', function() { goTo(currentIndex - 1); });
+        btnNext.addEventListener('click', function() { goTo(currentIndex + 1); });
+
+        /* Toggle panels */
+        document.getElementById('toggle-queue').addEventListener('click', function() {
+            showQueue = !showQueue;
+            app.classList.toggle('hide-queue', !showQueue);
+            this.classList.toggle('active', showQueue);
+        });
+        document.getElementById('toggle-inspector').addEventListener('click', function() {
+            showInspector = !showInspector;
+            app.classList.toggle('hide-inspector', !showInspector);
+            this.classList.toggle('active', showInspector);
+        });
+
+        /* Theme */
+        document.getElementById('theme-toggle').addEventListener('click', function() {
+            var cur = document.documentElement.getAttribute('data-theme');
+            var next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('hitl-theme', next);
+        });
+
+        /* Help overlay */
+        document.getElementById('help-btn').addEventListener('click', function() { helpOverlay.style.display = 'flex'; });
+        helpOverlay.addEventListener('click', function(e) { if (e.target === helpOverlay) helpOverlay.style.display = 'none'; });
+
+        /* Instructions collapsible */
+        if (instructionsBox) {
+            instructionsBox.addEventListener('click', function() { this.classList.toggle('collapsed'); });
+        }
+
+        /* Keyboard flash */
+        function flashButton(btn, cls) {
+            btn.classList.remove(cls); void btn.offsetWidth; btn.classList.add(cls);
+            setTimeout(function() { btn.classList.remove(cls); }, 500);
+        }
+
+        /* Keyboard shortcuts */
+        document.addEventListener('keydown', function(e) {
+            var tag = (e.target.tagName || '').toLowerCase();
+            var isTyping = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+            if (isTyping) { if (e.key === 'Escape') e.target.blur(); return; }
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+            switch (e.key.toLowerCase()) {
+                case 'j': case 'arrowdown': e.preventDefault(); goTo(currentIndex + 1); break;
+                case 'k': case 'arrowup': e.preventDefault(); goTo(currentIndex - 1); break;
+                case 'a': e.preventDefault(); flashButton(btnApprove, 'flash-approve'); markCurrentRecord('approved'); break;
+                case 'r': e.preventDefault(); flashButton(btnReject, 'flash-reject'); markCurrentRecord('rejected'); break;
+                case 's': e.preventDefault(); skipToUnreviewed(); break;
+                case 'n': e.preventDefault(); reviewerNote.focus(); break;
+                case '?': case '/': e.preventDefault(); helpOverlay.style.display = helpOverlay.style.display === 'flex' ? 'none' : 'flex'; break;
+                case 'escape': helpOverlay.style.display = 'none'; break;
+                case '1': case '2': case '3': case '4': case '5': case '6':
+                    var n = parseInt(e.key, 10);
+                    var reason = REJECTION_REASONS[n - 1];
+                    if (reason) { e.preventDefault(); pendingReason = pendingReason === reason.label ? null : reason.label; renderReasonGrid(); }
+                    break;
+            }
+        });
+
+        /* Sync comment → reviewer note */
+        commentInput.addEventListener('input', function() { reviewerNote.value = this.value; });
+        reviewerNote.addEventListener('input', function() { commentInput.value = this.value; });
 
         /* ── Init ── */
-        loadEditorPrefs();
-        applyFontSize();
-        applyPageWidth();
-        setView('fields');
-        loadContextData();
+        loadData();
+
+    })();
     </script>
 </body>
 </html>

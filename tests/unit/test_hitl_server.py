@@ -153,10 +153,11 @@ def test_index_includes_fields_json_view_toggle():
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert 'id="view-fields-btn"' in html
-    assert 'id="view-json-btn"' in html
-    assert 'id="panel-fields"' in html
-    assert 'id="panel-json"' in html
+    # Inspector has Review and JSON tabs, plus the record view and JSON display areas
+    assert 'data-tab="review"' in html
+    assert 'data-tab="json"' in html
+    assert 'id="record-view"' in html
+    assert 'id="json-display"' in html
 
 
 def test_review_record_persists_state_for_refresh():
