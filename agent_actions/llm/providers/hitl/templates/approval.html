@@ -172,8 +172,6 @@ button { font-family: inherit; cursor: pointer; }
 .rec-status-pill.pending { background: var(--info-bg); color: var(--info); }
 .rec-status-pill.approved { background: var(--success-bg); color: var(--success); }
 .rec-status-pill.rejected { background: var(--danger-bg); color: var(--danger); }
-.rec-title { font-family: var(--font-display); font-weight: 600; font-size: 24px; line-height: 1.2; letter-spacing: -0.018em; color: var(--fg-1); margin: 0 0 24px; }
-
 /* Field sections */
 .field-section { margin-bottom: 20px; }
 .field-section-head { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; cursor: pointer; user-select: none; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
@@ -191,8 +189,6 @@ button { font-family: inherit; cursor: pointer; }
 .field-body code { font-family: var(--font-mono); font-size: 0.86em; background: var(--stone-100); border: 1px solid var(--stone-200); padding: 1px 5px; border-radius: 3px; color: var(--stone-800); font-weight: 500; }
 .field-body pre { font-family: var(--font-mono); font-size: 12px; line-height: 1.65; background: var(--stone-900); color: var(--stone-100); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--stone-800); overflow-x: auto; white-space: pre; margin: 8px 0; }
 .field-body a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-border); text-underline-offset: 2px; }
-.field-inline { display: flex; align-items: baseline; gap: 10px; }
-.field-inline .field-label { flex-shrink: 0; margin-bottom: 0; }
 .fv { word-break: break-word; }
 .fv-long { white-space: pre-wrap; }
 .fv-mono { font-family: var(--font-mono); font-size: 0.86em; color: var(--fg-2); background: var(--bg-sunken); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
@@ -719,17 +715,14 @@ button { font-family: inherit; cursor: pointer; }
             html += '<span class="rec-status-pill ' + status + '"><span class="dot"></span> ' + status.toUpperCase() + '</span>';
             html += '</div>';
 
-            /* Title */
-            html += '<h1 class="rec-title">' + esc(getRecordTitle(rec, currentIndex)) + '</h1>';
-
-            /* Fields */
+            /* Fields — all rendered uniformly, first expanded, rest collapsed */
             if (!display || typeof display !== 'object' || Array.isArray(display)) {
                 html += '<div class="fields-empty">No fields available.</div>';
             } else {
                 var entries = buildFieldEntries(display);
                 entries.forEach(function(entry, idx) {
                     var value = display[entry.key];
-                    html += renderFieldSection(entry.label, value, idx > 3);
+                    html += renderFieldSection(entry.label, value, idx > 0);
                 });
             }
 
@@ -768,29 +761,17 @@ button { font-family: inherit; cursor: pointer; }
         function renderFieldSection(label, value, collapsed) {
             var isEmpty = value === undefined || value === null;
             var isComplex = !isEmpty && typeof value === 'object';
-            var isLong = typeof value === 'string' && (value.length > 80 || value.indexOf('\n') >= 0);
-            var isShort = !isEmpty && !isComplex && !isLong;
 
-            if (isShort) {
-                /* Inline compact field */
-                var valHtml;
-                if (isUrl(value)) {
-                    valHtml = '<a class="fv fv-link" href="' + esc(String(value).trim()) + '" target="_blank" rel="noopener">' + esc(value) + '</a>';
-                } else if (typeof value === 'boolean' || typeof value === 'number') {
-                    valHtml = '<span class="fv fv-mono">' + esc(String(value)) + '</span>';
-                } else {
-                    valHtml = '<span class="fv">' + linkify(esc(String(value))) + '</span>';
-                }
-                return '<div class="field-inline" style="margin-bottom:8px"><span class="field-label" style="font-size:10.5px">' + esc(label) + '</span>' + valHtml + '</div>';
-            }
-
-            /* Full section */
             var cls = 'field-section' + (collapsed ? ' collapsed' : '');
             var bodyHtml;
             if (isEmpty) {
                 bodyHtml = '<span class="fv-empty">Empty</span>';
             } else if (isComplex) {
                 bodyHtml = '<pre class="fv-code">' + syntaxHighlight(value) + '</pre>';
+            } else if (isUrl(value)) {
+                bodyHtml = '<a class="fv fv-link" href="' + esc(String(value).trim()) + '" target="_blank" rel="noopener">' + esc(value) + '</a>';
+            } else if (typeof value === 'boolean' || typeof value === 'number') {
+                bodyHtml = '<span class="fv fv-mono">' + esc(String(value)) + '</span>';
             } else {
                 bodyHtml = '<div class="fv fv-long">' + linkify(esc(String(value))) + '</div>';
             }
