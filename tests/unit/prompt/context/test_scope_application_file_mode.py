@@ -250,12 +250,13 @@ class TestNoneNamespace:
         assert content["field"] == "value"
         assert "skipped" in content  # None namespace preserved for guards
 
-    def test_explicit_ref_on_none_namespace_skips_record(self):
-        """Explicit field ref on guard-skipped namespace skips enrichment."""
+    def test_explicit_ref_on_none_namespace_enriches_with_null_safe(self):
+        """Explicit field ref on guard-skipped namespace resolves as None (null-safe)."""
         record = {"content": {"skipped": None}}
         scope = {"observe": ["skipped.field"]}
         result = apply_context_scope_for_records([record], scope, action_name="test")
-        assert result[0] is record
+        # Record is enriched (not skipped) — null namespace preserved in content
+        assert result[0]["content"]["skipped"] is None
 
 
 # ── Drop + passthrough interaction ────────────────────────────────────
