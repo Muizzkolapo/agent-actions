@@ -160,6 +160,44 @@ def test_index_includes_fields_json_view_toggle():
     assert 'id="json-display"' in html
 
 
+def test_index_renders_rejection_reasons_when_provided():
+    """Approval page includes configured rejection reasons in the JS payload."""
+    server = HitlServer(
+        port=3001,
+        instructions="Review",
+        context_data={"value": 1},
+        timeout=30,
+        rejection_reasons=["Not grounded", "Factual error"],
+    )
+    client = server.app.test_client()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Not grounded" in html
+    assert "Factual error" in html
+    assert 'id="reason-section"' in html
+
+
+def test_index_hides_reasons_when_empty():
+    """Approval page hides rejection reason section when no reasons configured."""
+    server = HitlServer(
+        port=3001,
+        instructions="Review",
+        context_data={"value": 1},
+        timeout=30,
+    )
+    client = server.app.test_client()
+
+    response = client.get("/")
+
+    html = response.get_data(as_text=True)
+    assert 'id="reason-section"' in html
+    # Section starts hidden — JS shows it only when REJECTION_REASONS.length > 0
+    assert 'style="display:none"' in html
+
+
 def test_review_record_persists_state_for_refresh():
     """Per-record decisions should be persisted server-side and returned by review-state."""
     server = HitlServer(

@@ -729,7 +729,7 @@ h4.md-heading { font-size: 13.5px; }
 
         function htmlToMarkdown(s) {
             /* Walk character by character, convert tags to markdown equivalents */
-            var out = '', i = 0, len = s.length;
+            var out = '', i = 0, len = s.length, pendingHref = null;
             while (i < len) {
                 if (s[i] !== '<') { out += s[i]; i++; continue; }
                 var close = s.indexOf('>', i);
@@ -749,13 +749,18 @@ h4.md-heading { font-size: 13.5px; }
                 else if (lower === '<li>' || lower.indexOf('<li ') === 0) { out += '- '; }
                 else if (lower === '</li>') { out += '\n'; }
                 else if (lower.indexOf('<a ') === 0) {
-                    var hi = lower.indexOf('href="');
+                    /* Extract href and append after link text closes */
+                    var hi = tag.indexOf('href="');
+                    if (hi < 0) hi = tag.indexOf("href='");
                     if (hi >= 0) {
-                        var he = lower.indexOf('"', hi + 6);
-                        if (he >= 0) { /* skip — just keep the link text */ }
+                        var qc = tag.charAt(hi + 5);
+                        var he = tag.indexOf(qc, hi + 6);
+                        if (he >= 0) { pendingHref = tag.substring(hi + 6, he); }
                     }
                 }
-                else if (lower === '</a>') { /* noop */ }
+                else if (lower === '</a>') {
+                    if (pendingHref) { out += ' (' + pendingHref + ')'; pendingHref = null; }
+                }
                 else if (lower.indexOf('</') === 0) { out += '\n'; }
                 /* else: skip the tag */
             }
@@ -915,6 +920,7 @@ h4.md-heading { font-size: 13.5px; }
 
         function renderValue(val, depth) {
             depth = depth || 0;
+            if (depth > 4) return '<pre class="fv-code">' + syntaxHighlight(val) + '</pre>';
             if (val === null || val === undefined) return '<span class="tv-null">null</span>';
             if (typeof val === 'boolean') return '<span class="tv-bool">' + val + '</span>';
             if (typeof val === 'number') return '<span class="tv-num">' + val + '</span>';
@@ -988,10 +994,11 @@ h4.md-heading { font-size: 13.5px; }
                     out += html.substring(i, httpIdx + 4); i = httpIdx + 4; continue;
                 }
                 out += html.substring(i, httpIdx);
-                /* Find end of URL: stop at whitespace or &lt; */
+                /* Find end of URL: stop at whitespace or HTML entities that signal attribute boundaries */
                 var urlEnd = httpIdx;
                 while (urlEnd < html.length && html[urlEnd] !== ' ' && html[urlEnd] !== '\n' && html[urlEnd] !== '\t') {
-                    if (html.substring(urlEnd, urlEnd + 4) === '&lt;') break;
+                    var chunk = html.substring(urlEnd, urlEnd + 6);
+                    if (chunk.indexOf('&lt;') === 0 || chunk.indexOf('&gt;') === 0 || chunk.indexOf('&quot;') === 0) break;
                     urlEnd++;
                 }
                 var urlText = html.substring(httpIdx, urlEnd);
