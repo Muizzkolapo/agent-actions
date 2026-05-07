@@ -150,6 +150,16 @@ class HitlConfig(BaseModel):
         default=True,
         description="Require comment when rejecting",
     )
+    rejection_reasons: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Optional list of rejection reason labels shown in the review UI",
+    )
+
+    @field_validator("rejection_reasons")
+    @classmethod
+    def _validate_rejection_reasons(cls, v: list[str]) -> list[str]:
+        return [r.strip() for r in v if r and r.strip()]
 
 
 class ActionConfig(BaseModel):

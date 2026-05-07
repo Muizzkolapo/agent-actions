@@ -113,18 +113,20 @@ button { font-family: inherit; cursor: pointer; }
    ========================================================================== */
 .queue { grid-area: queue; background: var(--bg-raised); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
 .queue-header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
-.queue-title-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.queue-title-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .queue-title-row h2 { margin: 0; font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg-1); }
 .queue-title-row .subtitle { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: 0.08em; }
-.queue-filters { display: flex; gap: 4px; flex-wrap: wrap; }
-.filter-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; background: var(--bg-raised); border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--fg-2); letter-spacing: 0.01em; transition: all 120ms; }
-.filter-chip:hover { background: var(--stone-50); color: var(--fg-1); border-color: var(--border-strong); }
+.queue-collapse-btn { width: 22px; height: 22px; opacity: 0; transition: opacity 150ms; }
+.queue-header:hover .queue-collapse-btn { opacity: 1; }
+.queue-filters { display: flex; gap: 3px; flex-wrap: nowrap; }
+.filter-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 5px; background: transparent; border: 1px solid var(--border); font-size: 10.5px; font-weight: 600; color: var(--fg-3); letter-spacing: 0.01em; transition: all 120ms; flex-shrink: 0; }
+.filter-chip:hover { color: var(--fg-1); border-color: var(--border-strong); }
 .filter-chip.active { background: var(--fg-1); color: white; border-color: var(--fg-1); }
-.filter-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.filter-chip .dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 .filter-chip .dot.pending { background: var(--info); }
 .filter-chip .dot.approved { background: var(--success); }
 .filter-chip .dot.rejected { background: var(--danger); }
-.filter-chip .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10px; opacity: 0.7; }
+.filter-chip .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 9px; opacity: 0.6; }
 .queue-search { position: relative; margin-top: 10px; }
 .queue-search input { width: 100%; padding: 7px 10px 7px 28px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-sunken); font-size: 12px; font-family: var(--font-sans); color: var(--fg-1); outline: none; transition: all 120ms; }
 .queue-search input::placeholder { color: var(--fg-4); }
@@ -132,8 +134,8 @@ button { font-family: inherit; cursor: pointer; }
 .queue-search .search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--fg-4); pointer-events: none; }
 .queue-search .search-icon svg { width: 13px; height: 13px; }
 .queue-list { flex: 1; overflow-y: auto; padding: 4px 0; }
-.queue-row { position: relative; display: grid; grid-template-columns: 26px 1fr; grid-template-rows: auto auto; grid-template-areas: "idx title" "idx meta"; column-gap: 8px; padding: 9px 14px 9px 12px; cursor: pointer; transition: background 100ms; border-left: 2px solid transparent; }
-.queue-row::after { content: ""; position: absolute; right: 14px; top: 14px; width: 6px; height: 6px; border-radius: 50%; background: var(--stone-300); }
+.queue-row { position: relative; display: grid; grid-template-columns: 22px 1fr; grid-template-rows: auto auto; grid-template-areas: "idx title" "idx meta"; column-gap: 6px; padding: 7px 14px 7px 10px; cursor: pointer; transition: background 100ms; border-left: 2px solid transparent; }
+.queue-row::after { content: ""; position: absolute; right: 12px; top: 12px; width: 6px; height: 6px; border-radius: 50%; background: var(--stone-300); }
 .queue-row.pending::after { background: var(--info); box-shadow: 0 0 0 3px color-mix(in srgb, var(--info) 18%, transparent); }
 .queue-row.approved::after { background: var(--success); }
 .queue-row.rejected::after { background: var(--danger); }
@@ -152,53 +154,165 @@ button { font-family: inherit; cursor: pointer; }
 /* ==========================================================================
    MAIN CONTENT
    ========================================================================== */
-.main { grid-area: main; overflow-y: auto; background: var(--bg); min-width: 0; }
-.main-inner { max-width: 780px; margin: 0 auto; padding: 28px 40px 64px; }
+.main { grid-area: main; overflow-y: auto; background: var(--bg); min-width: 0; scroll-behavior: smooth; }
+.main-inner { max-width: 920px; margin: 0 auto; padding: 16px 28px 80px; }
 
 /* Instructions banner */
-.instructions-banner { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 24px; padding: 10px 14px; background: var(--bg-sunken); border-left: 2px solid var(--stone-400); border-radius: 0 4px 4px 0; font-size: 12px; color: var(--fg-2); line-height: 1.6; cursor: pointer; user-select: none; }
+.instructions-banner { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; padding: 10px 14px; background: var(--bg-sunken); border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; font-size: 12.5px; color: var(--fg-2); line-height: 1.65; cursor: pointer; user-select: none; transition: padding 200ms var(--ease-out); }
 .instructions-banner .instructions-text { flex: 1; white-space: pre-wrap; }
+.instructions-banner.collapsed { padding: 7px 14px; }
 .instructions-banner.collapsed .instructions-text { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.instructions-banner .chevron { flex-shrink: 0; color: var(--fg-4); transition: transform 160ms var(--ease-out); }
+.instructions-banner .chevron { flex-shrink: 0; color: var(--fg-4); transition: transform 160ms var(--ease-out); margin-top: 1px; }
 .instructions-banner .chevron svg { width: 13px; height: 13px; }
 .instructions-banner.collapsed .chevron { transform: rotate(-90deg); }
 
+/* Record card wrapper */
+.rec-card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 6px 16px rgba(0,0,0,0.03);
+    position: relative;
+    overflow: hidden;
+    animation: cardReveal 0.4s var(--ease-out) both;
+}
+.rec-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--border);
+    transition: background 300ms;
+}
+.rec-card.status-pending::before { background: var(--info); opacity: 0.5; }
+.rec-card.status-approved::before { background: var(--success); }
+.rec-card.status-rejected::before { background: var(--danger); }
+@keyframes cardReveal {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* Record header */
-.rec-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); }
-.rec-meta .id-val { color: var(--fg-1); font-weight: 500; }
-.rec-meta .meta-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--fg-4); }
-.rec-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.rec-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+}
+.rec-header-left { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); }
+.rec-header-left .id-val { color: var(--fg-1); font-weight: 600; font-size: 12px; }
+.rec-header-left .meta-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--fg-4); }
+.rec-header-right { font-family: var(--font-mono); font-size: 11px; color: var(--fg-4); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.rec-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .rec-status-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .rec-status-pill.pending { background: var(--info-bg); color: var(--info); }
 .rec-status-pill.approved { background: var(--success-bg); color: var(--success); }
 .rec-status-pill.rejected { background: var(--danger-bg); color: var(--danger); }
+
 /* Field sections */
-.field-section { margin-bottom: 20px; }
-.field-section-head { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; cursor: pointer; user-select: none; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.rec-fields { padding: 4px 24px 20px; }
+.field-section {
+    margin-bottom: 0;
+    animation: fieldReveal 0.35s var(--ease-out) both;
+}
+@keyframes fieldReveal {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.field-section-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 0;
+    cursor: pointer; user-select: none;
+    border-bottom: 1px solid var(--border);
+    transition: all 100ms;
+}
+.field-section:last-child .field-section-head { border-bottom-color: transparent; }
 .field-section-head:hover .field-label { color: var(--fg-1); }
-.field-section-head .chevron { color: var(--fg-4); transition: transform 160ms var(--ease-out); flex-shrink: 0; }
+.field-section-head .chevron { color: var(--fg-4); transition: transform 200ms var(--ease-out); flex-shrink: 0; }
 .field-section-head:hover .chevron { color: var(--fg-2); }
-.field-section.collapsed .field-section-head { margin-bottom: 0; border-bottom-style: dashed; }
 .field-section.collapsed .field-section-head .chevron { transform: rotate(-90deg); }
 .field-section.collapsed .field-body { display: none; }
-.field-section-head .field-marker { display: inline-block; width: 18px; height: 2px; background: var(--stone-300); border-radius: 1px; }
-.field-label { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--fg-2); transition: color 120ms; }
-.field-body { font-size: 14px; line-height: 1.62; color: var(--fg-1); }
-.field-body p { margin: 0 0 10px; }
+.field-section-head .field-marker { display: inline-block; width: 16px; height: 3px; border-radius: 2px; transition: background 200ms; }
+.field-label { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fg-2); transition: color 120ms; flex: 1; }
+.field-body {
+    font-family: var(--font-sans);
+    font-size: 13.5px; line-height: 1.7; color: var(--fg-1);
+    padding: 10px 0 14px;
+    text-wrap: pretty;
+}
+.field-body p { margin: 0 0 12px; }
 .field-body p:last-child { margin-bottom: 0; }
-.field-body code { font-family: var(--font-mono); font-size: 0.86em; background: var(--stone-100); border: 1px solid var(--stone-200); padding: 1px 5px; border-radius: 3px; color: var(--stone-800); font-weight: 500; }
-.field-body pre { font-family: var(--font-mono); font-size: 12px; line-height: 1.65; background: var(--stone-900); color: var(--stone-100); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--stone-800); overflow-x: auto; white-space: pre; margin: 8px 0; }
+.field-body code { font-family: var(--font-mono); font-size: 0.84em; background: var(--stone-100); border: 1px solid var(--stone-200); padding: 1px 5px; border-radius: 3px; color: var(--stone-800); font-weight: 500; }
+.field-body pre { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; background: var(--stone-900); color: var(--stone-100); padding: 14px 16px; border-radius: 8px; border: 1px solid var(--stone-800); overflow-x: auto; white-space: pre; margin: 8px 0; }
 .field-body a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-border); text-underline-offset: 2px; }
 .fv { word-break: break-word; }
-.fv-long { white-space: pre-wrap; }
-.fv-mono { font-family: var(--font-mono); font-size: 0.86em; color: var(--fg-2); background: var(--bg-sunken); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
-.fv-link { color: var(--accent); font-size: 13px; text-decoration: underline; text-decoration-color: var(--accent-border); text-underline-offset: 3px; word-break: break-all; }
+.fv-rich { font-size: 13.5px; line-height: 1.7; }
+.fv-rich p { margin: 0 0 10px; }
+.fv-rich p:last-child { margin-bottom: 0; }
+.fv-rich code { font-family: var(--font-mono); font-size: 0.86em; background: var(--stone-100); border: 1px solid var(--stone-200); padding: 1px 5px; border-radius: 3px; color: var(--accent); font-weight: 500; }
+.fv-rich strong { font-weight: 600; color: var(--fg-1); }
+.fv-rich em { font-style: italic; color: var(--fg-2); }
+.fv-rich del { text-decoration: line-through; color: var(--fg-3); }
+
+/* Fenced code blocks */
+.md-codeblock { margin: 10px 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--stone-200); }
+.md-codeblock-lang { font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); padding: 6px 14px; background: var(--stone-100); border-bottom: 1px solid var(--stone-200); }
+.md-codeblock pre { margin: 0; padding: 12px 14px; background: var(--stone-900); color: var(--stone-100); font-family: var(--font-mono); font-size: 12px; line-height: 1.65; overflow-x: auto; white-space: pre; border: none; border-radius: 0; }
+.md-codeblock code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+
+/* Headings in markdown */
+.md-heading { font-family: var(--font-sans); font-weight: 600; color: var(--fg-1); margin: 16px 0 8px; }
+h3.md-heading { font-size: 15px; }
+h4.md-heading { font-size: 13.5px; }
+
+/* Blockquotes */
+.md-quote { border-left: 3px solid var(--accent-border); padding: 8px 14px; margin: 10px 0; color: var(--fg-2); font-style: italic; background: var(--bg-sunken); border-radius: 0 4px 4px 0; }
+
+/* Unordered lists */
+.md-ul { padding-left: 20px; margin: 8px 0; font-size: 13.5px; line-height: 1.7; }
+.md-ul li { margin-bottom: 4px; }
+.md-ul li:last-child { margin-bottom: 0; }
+.md-ul li code { font-family: var(--font-mono); font-size: 0.86em; background: var(--stone-100); border: 1px solid var(--stone-200); padding: 1px 5px; border-radius: 3px; color: var(--accent); font-weight: 500; }
+
+/* Horizontal rule */
+.md-hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.fv-long { white-space: pre-wrap; font-size: 13.5px; line-height: 1.7; }
+
+/* Tree view — recursive data rendering */
+.tv-null { color: var(--fg-4); font-style: italic; font-size: 13px; }
+.tv-bool { font-family: var(--font-mono); font-size: 12px; color: var(--amber-700); font-weight: 500; }
+.tv-num { font-family: var(--font-mono); font-size: 12px; color: var(--info); font-weight: 500; }
+.tv-str { font-size: 13.5px; line-height: 1.7; color: var(--fg-1); }
+.tv-str code { font-family: var(--font-mono); font-size: 0.86em; background: var(--stone-100); border: 1px solid var(--stone-200); padding: 1px 5px; border-radius: 3px; color: var(--accent); font-weight: 500; }
+
+/* Lists (string arrays, mixed arrays) */
+.tv-list { padding-left: 0; margin: 0; font-size: 13.5px; line-height: 1.7; list-style: none; counter-reset: tv-counter; }
+.tv-list > li { margin-bottom: 4px; padding: 6px 0 6px 32px; position: relative; counter-increment: tv-counter; border-bottom: 1px solid var(--border); }
+.tv-list > li:last-child { margin-bottom: 0; border-bottom: none; }
+.tv-list > li::before { content: counter(tv-counter); font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--fg-4); position: absolute; left: 0; top: 6px; width: 22px; text-align: right; }
+
+/* Object array (array of objects with index badges) */
+.tv-arr { display: flex; flex-direction: column; gap: 8px; }
+.tv-arr-item { position: relative; padding-left: 28px; padding-top: 2px; border-left: 2px solid var(--border); }
+.tv-arr-idx { position: absolute; left: -1px; top: 0; transform: translateX(-50%); font-family: var(--font-mono); font-size: 9px; font-weight: 700; color: var(--fg-4); background: var(--bg-raised); padding: 2px 4px; border-radius: 3px; border: 1px solid var(--border); line-height: 1; }
+
+/* Key-value object rendering */
+.tv-obj { margin: 0; display: grid; gap: 0; }
+.tv-row { display: grid; grid-template-columns: auto 1fr; gap: 0; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+.tv-row:last-child { border-bottom: none; }
+.tv-key { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.06em; padding-right: 14px; padding-top: 3px; white-space: nowrap; }
+.tv-val { min-width: 0; }
+.tv-val .tv-obj { padding-left: 12px; margin-left: 8px; border-left: 1px solid var(--border); }
+.tv-val .tv-list { padding-left: 0; }
+.tv-val .fv-rich { font-size: 13.5px; }
+.fv-mono { font-family: var(--font-mono); font-size: 12px; color: var(--fg-2); background: var(--bg-sunken); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); display: inline-block; }
+.fv-link { color: var(--accent); font-size: 13.5px; text-decoration: underline; text-decoration-color: var(--accent-border); text-underline-offset: 3px; word-break: break-all; }
 .fv-empty { color: var(--fg-4); font-style: italic; font-size: 13px; }
-.fv-code { font-family: var(--font-mono); font-size: 11px; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-top: 6px; line-height: 1.8; overflow-x: auto; max-height: 280px; overflow-y: auto; white-space: pre; color: var(--fg-2); }
-.fields-empty { color: var(--fg-4); font-size: 13px; text-align: center; padding: 40px 16px; }
+.fv-code { font-family: var(--font-mono); font-size: 11px; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-top: 6px; line-height: 1.8; overflow-x: auto; max-height: 320px; overflow-y: auto; white-space: pre; color: var(--fg-2); }
+.fields-empty { color: var(--fg-4); font-size: 13px; text-align: center; padding: 48px 16px; }
 
 /* Comment area (inside main, below fields) */
-.comment-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.comment-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .comment-section label { display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fg-3); }
 .comment-section textarea { width: 100%; min-height: 72px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); color: var(--fg-1); font-family: var(--font-sans); font-size: 13px; resize: vertical; outline: none; transition: all 200ms; line-height: 1.6; }
 .comment-section textarea::placeholder { color: var(--fg-4); }
@@ -259,7 +373,7 @@ button { font-family: inherit; cursor: pointer; }
 .reason-btn.active .reason-key-val { background: rgba(255,255,255,0.18); color: white; border-color: rgba(255,255,255,0.25); }
 
 /* Reviewer note */
-.note-area { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; font: inherit; font-size: 12px; resize: vertical; min-height: 60px; background: white; color: var(--fg-1); outline: none; transition: border-color 120ms, box-shadow 120ms; }
+.note-area { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; font: inherit; font-size: 12px; resize: vertical; min-height: 60px; background: var(--bg-raised); color: var(--fg-1); outline: none; transition: border-color 120ms, box-shadow 120ms; }
 .note-area::placeholder { color: var(--fg-4); }
 .note-area:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
 
@@ -308,14 +422,24 @@ button { font-family: inherit; cursor: pointer; }
 [data-theme="dark"] .reason-btn { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
 [data-theme="dark"] .reason-btn:hover { color: white; border-color: var(--fg-3); }
 [data-theme="dark"] .note-area { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
-[data-theme="dark"] .filter-chip { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
-[data-theme="dark"] .filter-chip.active { background: white; color: #0a0908; border-color: white; }
+[data-theme="dark"] .filter-chip { color: var(--fg-3); border-color: var(--border-strong); }
+[data-theme="dark"] .filter-chip:hover { color: var(--fg-1); }
+[data-theme="dark"] .filter-chip.active { background: var(--fg-1); color: var(--bg); border-color: var(--fg-1); }
 [data-theme="dark"] .queue-search input { background: var(--bg-sunken); color: var(--fg-1); border-color: var(--border-strong); }
 [data-theme="dark"] .cmd-btn { color: var(--fg-1); }
 [data-theme="dark"] .cmd-btn .kbd { background: var(--bg-sunken); color: var(--fg-2); border-color: var(--border-strong); }
 [data-theme="dark"] .cmd-reject { color: var(--fg-1); border-color: var(--border-strong); }
-[data-theme="dark"] .field-body code { background: var(--bg-sunken); border-color: var(--border-strong); color: var(--fg-1); }
+[data-theme="dark"] .field-body code, [data-theme="dark"] .fv-rich code, [data-theme="dark"] .tv-str code, [data-theme="dark"] .md-ul li code { background: var(--bg-sunken); border-color: var(--border-strong); color: var(--accent); }
+[data-theme="dark"] .md-codeblock { border-color: var(--border-strong); }
+[data-theme="dark"] .md-codeblock-lang { background: var(--bg-sunken); border-bottom-color: var(--border-strong); }
+[data-theme="dark"] .md-quote { background: var(--bg-sunken); border-left-color: var(--accent); }
+[data-theme="dark"] .tv-arr-idx { background: var(--bg-raised); border-color: var(--border-strong); }
+[data-theme="dark"] .tv-bool { color: var(--amber-500); }
+[data-theme="dark"] .tv-num { color: var(--info); }
 [data-theme="dark"] .comment-section textarea { background: var(--bg-sunken); border-color: var(--border-strong); }
+[data-theme="dark"] .rec-card { background: var(--bg-raised); border-color: var(--border-strong); box-shadow: 0 2px 6px rgba(0,0,0,0.2), 0 8px 20px rgba(0,0,0,0.15); }
+[data-theme="dark"] .tv-list > li { border-bottom-color: var(--border-strong); }
+[data-theme="dark"] .instructions-banner { background: var(--bg-sunken); border-left-color: var(--accent); }
 
 /* Scrollbars */
 .queue-list::-webkit-scrollbar, .main::-webkit-scrollbar, .inspector::-webkit-scrollbar { width: 8px; }
@@ -348,6 +472,9 @@ button { font-family: inherit; cursor: pointer; }
 
     <!-- TOP BAR -->
     <div class="topbar">
+        <button class="iconbtn active" id="toggle-queue" type="button" title="Toggle sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        </button>
         <div class="brand">
             <span class="brand-wordmark">HITL</span>
             <span class="brand-suffix">Inspector</span>
@@ -362,18 +489,15 @@ button { font-family: inherit; cursor: pointer; }
             <div class="bar"><div id="top-prog-bar" style="width:0%"></div></div>
         </div>
         <div class="top-actions">
-            <button class="iconbtn active" id="toggle-queue" type="button" title="Toggle queue">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="18" rx="1"/><line x1="14" y1="4" x2="21" y2="4"/><line x1="14" y1="9" x2="21" y2="9"/><line x1="14" y1="14" x2="21" y2="14"/></svg>
-            </button>
-            <button class="iconbtn active" id="toggle-inspector" type="button" title="Toggle inspector">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="4" x2="10" y2="4"/><line x1="3" y1="9" x2="10" y2="9"/><line x1="3" y1="14" x2="10" y2="14"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
-            </button>
             <button class="iconbtn" id="help-btn" type="button" title="Keyboard shortcuts (?)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
             </button>
             <button class="iconbtn" id="theme-toggle" type="button" title="Toggle theme">
-                <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-                <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
+            <button class="iconbtn active" id="toggle-inspector" type="button" title="Toggle inspector">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
             </button>
         </div>
     </div>
@@ -383,7 +507,12 @@ button { font-family: inherit; cursor: pointer; }
         <div class="queue-header">
             <div class="queue-title-row">
                 <h2>Queue</h2>
-                <span class="subtitle" id="queue-subtitle">0/0</span>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span class="subtitle" id="queue-subtitle">0/0</span>
+                    <button class="iconbtn queue-collapse-btn" id="queue-collapse" type="button" title="Collapse sidebar">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 19l-7-7 7-7"/><line x1="18" y1="12" x2="4" y2="12"/></svg>
+                    </button>
+                </div>
             </div>
             <div class="queue-filters" id="queue-filters"></div>
             <div class="queue-search">
@@ -397,7 +526,7 @@ button { font-family: inherit; cursor: pointer; }
     <!-- MAIN -->
     <main class="main">
         <div class="main-inner" id="main-inner">
-            {% if instructions %}<div class="instructions-banner" id="instructions-box">
+            {% if instructions %}<div class="instructions-banner collapsed" id="instructions-box">
                 <span class="instructions-text">{{ instructions }}</span>
                 <span class="chevron"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></span>
             </div>{% endif %}
@@ -421,7 +550,7 @@ button { font-family: inherit; cursor: pointer; }
                     <div class="insp-section-head"><h4>Decision</h4></div>
                     <div id="decision-card-wrap"></div>
                 </div>
-                <div class="insp-section">
+                <div class="insp-section" id="reason-section" style="display:none">
                     <div class="insp-section-head">
                         <h4>Reject reason</h4>
                         <button class="inline-action" id="clear-reason" type="button" style="display:none">clear</button>
@@ -493,13 +622,8 @@ button { font-family: inherit; cursor: pointer; }
                     <div class="kbd-row"><span>Previous record</span><span class="keys"><span class="k">K</span><span class="k">↑</span></span></div>
                     <div class="kbd-row"><span>Focus reviewer note</span><span class="keys"><span class="k">N</span></span></div>
                 </div>
-                <div class="kbd-section"><h4>Reject reasons</h4>
-                    <div class="kbd-row"><span>Not grounded</span><span class="keys"><span class="k">1</span></span></div>
-                    <div class="kbd-row"><span>Ambiguous</span><span class="keys"><span class="k">2</span></span></div>
-                    <div class="kbd-row"><span>Trivial</span><span class="keys"><span class="k">3</span></span></div>
-                    <div class="kbd-row"><span>Incomplete</span><span class="keys"><span class="k">4</span></span></div>
-                    <div class="kbd-row"><span>Duplicate</span><span class="keys"><span class="k">5</span></span></div>
-                    <div class="kbd-row"><span>Factual error</span><span class="keys"><span class="k">6</span></span></div>
+                <div class="kbd-section" id="help-reasons-section" style="display:none"><h4>Reject reasons</h4>
+                    <div id="help-reasons-list"></div>
                 </div>
                 <div class="kbd-section"><h4>Misc</h4>
                     <div class="kbd-row"><span>Toggle this help</span><span class="keys"><span class="k">?</span></span></div>
@@ -523,14 +647,10 @@ button { font-family: inherit; cursor: pointer; }
         var HITL_TOKEN = {{ hitl_token | tojson }};
         var METADATA_KEYS = {{ metadata_keys | tojson }};
 
-        var REJECTION_REASONS = [
-            { id: 'ungrounded', label: 'Not grounded in source', key: '1' },
-            { id: 'ambiguous',  label: 'Ambiguous wording',      key: '2' },
-            { id: 'trivial',    label: 'Trivial / no value',      key: '3' },
-            { id: 'incomplete', label: 'Incomplete answer',       key: '4' },
-            { id: 'duplicate',  label: 'Duplicate',               key: '5' },
-            { id: 'factual',    label: 'Factual error',           key: '6' },
-        ];
+        var RAW_REASONS = {{ rejection_reasons | tojson }};
+        var REJECTION_REASONS = (typeof RAW_REASONS === 'string' ? JSON.parse(RAW_REASONS) : RAW_REASONS).map(function(label, i) {
+            return { id: 'reason_' + i, label: label, key: String(i + 1) };
+        });
 
         /* ── DOM refs ── */
         var app = document.getElementById('app');
@@ -576,44 +696,384 @@ button { font-family: inherit; cursor: pointer; }
         var showInspector = true;
 
         /* ── Utilities ── */
-        function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-        function humanizeKey(key) {
-            return key.replace(/^_+/, '').replace(/_+/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+        function esc(s) {
+            var r = '', c, str = String(s);
+            for (var i = 0; i < str.length; i++) {
+                c = str[i];
+                if (c === '&') r += '&amp;';
+                else if (c === '<') r += '&lt;';
+                else if (c === '>') r += '&gt;';
+                else if (c === '"') r += '&quot;';
+                else r += c;
+            }
+            return r;
         }
 
-        function isUrl(val) { return typeof val === 'string' && /^https?:\/\/.+/i.test(val.trim()); }
+        function stripHtml(s) {
+            var out = '', inTag = false;
+            for (var i = 0; i < s.length; i++) {
+                if (s[i] === '<') { inTag = true; out += ' '; }
+                else if (s[i] === '>') { inTag = false; }
+                else if (!inTag) { out += s[i]; }
+            }
+            /* Collapse whitespace runs */
+            var collapsed = '', prevSpace = false;
+            for (var j = 0; j < out.length; j++) {
+                var ch = out[j];
+                if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+                    if (!prevSpace) { collapsed += ' '; prevSpace = true; }
+                } else { collapsed += ch; prevSpace = false; }
+            }
+            return collapsed.trim();
+        }
 
-        function linkify(escaped) {
-            return escaped.replace(/(https?:\/\/[^\s&lt;]+)/g, function(url) {
-                return '<a class="fv-link" href="' + url.replace(/&amp;/g, '&') + '" target="_blank" rel="noopener">' + url + '</a>';
-            });
+        function htmlToMarkdown(s) {
+            /* Walk character by character, convert tags to markdown equivalents */
+            var out = '', i = 0, len = s.length;
+            while (i < len) {
+                if (s[i] !== '<') { out += s[i]; i++; continue; }
+                var close = s.indexOf('>', i);
+                if (close === -1) { out += s[i]; i++; continue; }
+                var tag = s.substring(i, close + 1);
+                var lower = tag.toLowerCase();
+                i = close + 1;
+                /* Inline conversions */
+                if (lower === '<code>') { out += '`'; }
+                else if (lower === '</code>') { out += '`'; }
+                else if (lower === '<strong>' || lower === '<b>') { out += '**'; }
+                else if (lower === '</strong>' || lower === '</b>') { out += '**'; }
+                else if (lower === '<em>' || lower === '<i>') { out += '*'; }
+                else if (lower === '</em>' || lower === '</i>') { out += '*'; }
+                else if (lower.indexOf('<br') === 0) { out += '\n'; }
+                else if (lower === '</p>') { out += '\n\n'; }
+                else if (lower === '<li>' || lower.indexOf('<li ') === 0) { out += '- '; }
+                else if (lower === '</li>') { out += '\n'; }
+                else if (lower.indexOf('<a ') === 0) {
+                    var hi = lower.indexOf('href="');
+                    if (hi >= 0) {
+                        var he = lower.indexOf('"', hi + 6);
+                        if (he >= 0) { /* skip — just keep the link text */ }
+                    }
+                }
+                else if (lower === '</a>') { /* noop */ }
+                else if (lower.indexOf('</') === 0) { out += '\n'; }
+                /* else: skip the tag */
+            }
+            /* Collapse excessive newlines */
+            var lines = out.split('\n'), cleaned = [], prevEmpty = false;
+            for (var j = 0; j < lines.length; j++) {
+                var trimmed = lines[j].trim();
+                if (trimmed === '') { if (!prevEmpty) { cleaned.push(''); prevEmpty = true; } }
+                else { cleaned.push(lines[j]); prevEmpty = false; }
+            }
+            return cleaned.join('\n').trim();
+        }
+
+        /* ── Markdown renderer (minimal regex) ── */
+
+        function renderMarkdown(text) {
+            var s = String(text);
+            /* Convert HTML to markdown if present */
+            if (s.indexOf('<') >= 0 && s.indexOf('>') > s.indexOf('<')) s = htmlToMarkdown(s);
+            /* Split into fenced code blocks vs text */
+            var segments = splitFencedCode(s);
+            var html = '';
+            for (var i = 0; i < segments.length; i++) {
+                var seg = segments[i];
+                if (seg.kind === 'code') {
+                    html += '<div class="md-codeblock">';
+                    if (seg.lang) html += '<div class="md-codeblock-lang">' + esc(seg.lang) + '</div>';
+                    html += '<pre><code>' + esc(seg.body) + '</code></pre></div>';
+                } else {
+                    html += renderBlocks(seg.body);
+                }
+            }
+            return '<div class="fv fv-rich">' + (html || '<p>' + inlineFmt(s) + '</p>') + '</div>';
+        }
+
+        function splitFencedCode(s) {
+            var segments = [], start = 0;
+            while (true) {
+                var fence = s.indexOf('```', start);
+                if (fence === -1) break;
+                var nl = s.indexOf('\n', fence + 3);
+                if (nl === -1) break;
+                var lang = s.substring(fence + 3, nl).trim();
+                var end = s.indexOf('```', nl + 1);
+                if (end === -1) break;
+                if (fence > start) segments.push({ kind: 'text', body: s.substring(start, fence) });
+                var body = s.substring(nl + 1, end);
+                if (body.charAt(body.length - 1) === '\n') body = body.substring(0, body.length - 1);
+                segments.push({ kind: 'code', lang: lang, body: body });
+                start = end + 3;
+            }
+            if (start < s.length) segments.push({ kind: 'text', body: s.substring(start) });
+            return segments;
+        }
+
+        function renderBlocks(text) {
+            var paragraphs = text.split('\n\n'), html = '';
+            for (var p = 0; p < paragraphs.length; p++) {
+                var block = paragraphs[p].trim();
+                if (!block) continue;
+                var lines = [], raw = block.split('\n');
+                for (var i = 0; i < raw.length; i++) { if (raw[i].trim()) lines.push(raw[i]); }
+                if (lines.length === 0) continue;
+                var first = lines[0].trim();
+
+                /* Heading: starts with # */
+                if (first.charAt(0) === '#') {
+                    var lvl = 0;
+                    while (lvl < first.length && first.charAt(lvl) === '#') lvl++;
+                    if (first.charAt(lvl) === ' ') {
+                        var tag = lvl <= 2 ? 'h3' : 'h4';
+                        html += '<' + tag + ' class="md-heading">' + inlineFmt(first.substring(lvl + 1)) + '</' + tag + '>';
+                        continue;
+                    }
+                }
+                /* Horizontal rule: --- or *** or ___ */
+                if (lines.length === 1 && first.length >= 3) {
+                    var hrChar = first.charAt(0);
+                    if ((hrChar === '-' || hrChar === '*' || hrChar === '_') && first.split('').every(function(c) { return c === hrChar || c === ' '; })) {
+                        html += '<hr class="md-hr">';
+                        continue;
+                    }
+                }
+                /* Blockquote: every line starts with > */
+                var allQuote = lines.every(function(l) { return l.trim().charAt(0) === '>'; });
+                if (allQuote) {
+                    var qLines = lines.map(function(l) { var t = l.trim(); return inlineFmt(t.charAt(1) === ' ' ? t.substring(2) : t.substring(1)); });
+                    html += '<blockquote class="md-quote">' + qLines.join('<br>') + '</blockquote>';
+                    continue;
+                }
+                /* Ordered list: every line starts with digit. or digit) */
+                var allOL = lines.length > 1 && lines.every(function(l) { return isOrderedListItem(l.trim()); });
+                if (allOL) {
+                    html += '<ol class="tv-list">';
+                    for (var oi = 0; oi < lines.length; oi++) html += '<li>' + inlineFmt(stripListPrefix(lines[oi].trim())) + '</li>';
+                    html += '</ol>';
+                    continue;
+                }
+                /* Unordered list: every line starts with - or * or + followed by space */
+                var allUL = lines.length > 1 && lines.every(function(l) { var t = l.trim(); var c = t.charAt(0); return (c === '-' || c === '*' || c === '+') && t.charAt(1) === ' '; });
+                if (allUL) {
+                    html += '<ul class="md-ul">';
+                    for (var ui = 0; ui < lines.length; ui++) html += '<li>' + inlineFmt(lines[ui].trim().substring(2)) + '</li>';
+                    html += '</ul>';
+                    continue;
+                }
+                /* Paragraph */
+                html += '<p>' + inlineFmt(block.split('\n').join('<br>')) + '</p>';
+            }
+            return html;
+        }
+
+        function isOrderedListItem(s) {
+            var i = 0;
+            while (i < s.length && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57) i++;
+            if (i === 0) return false;
+            return (s.charAt(i) === '.' || s.charAt(i) === ')') && s.charAt(i + 1) === ' ';
+        }
+
+        function stripListPrefix(s) {
+            var i = 0;
+            while (i < s.length && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57) i++;
+            return s.substring(i + 2); /* skip digit(s) + '. ' */
+        }
+
+        function inlineFmt(s) {
+            var escaped = esc(s);
+            /* Pass 1: scan for inline formatting tokens */
+            var out = '', i = 0, len = escaped.length;
+            while (i < len) {
+                /* Backtick code: `...` */
+                if (escaped[i] === '`') {
+                    var ce = escaped.indexOf('`', i + 1);
+                    if (ce > i + 1) { out += '<code>' + escaped.substring(i + 1, ce) + '</code>'; i = ce + 1; continue; }
+                }
+                /* Bold: **...** */
+                if (escaped[i] === '*' && escaped[i + 1] === '*') {
+                    var be = escaped.indexOf('**', i + 2);
+                    if (be > i + 2) { out += '<strong>' + escaped.substring(i + 2, be) + '</strong>'; i = be + 2; continue; }
+                }
+                /* Italic: *...* (single, not followed by another *) */
+                if (escaped[i] === '*' && escaped[i + 1] !== '*') {
+                    var ie = escaped.indexOf('*', i + 1);
+                    if (ie > i + 1 && escaped[ie - 1] !== '*' && escaped[ie + 1] !== '*') {
+                        out += '<em>' + escaped.substring(i + 1, ie) + '</em>'; i = ie + 1; continue;
+                    }
+                }
+                /* Strikethrough: ~~...~~ */
+                if (escaped[i] === '~' && escaped[i + 1] === '~') {
+                    var se = escaped.indexOf('~~', i + 2);
+                    if (se > i + 2) { out += '<del>' + escaped.substring(i + 2, se) + '</del>'; i = se + 2; continue; }
+                }
+                out += escaped[i]; i++;
+            }
+            return linkify(out);
+        }
+
+        function renderValue(val, depth) {
+            depth = depth || 0;
+            if (val === null || val === undefined) return '<span class="tv-null">null</span>';
+            if (typeof val === 'boolean') return '<span class="tv-bool">' + val + '</span>';
+            if (typeof val === 'number') return '<span class="tv-num">' + val + '</span>';
+            if (typeof val === 'string') {
+                if (isUrl(val)) return '<a class="fv-link" href="' + esc(val.trim()) + '" target="_blank" rel="noopener">' + esc(val) + '</a>';
+                var clean = stripHtml(val);
+                if (clean.length < 80 && clean.indexOf('\n') === -1) return '<span class="tv-str">' + inlineFmt(clean) + '</span>';
+                return renderMarkdown(val);
+            }
+            if (Array.isArray(val)) return renderArray(val, depth);
+            if (typeof val === 'object') return renderObject(val, depth);
+            return '<span class="tv-str">' + esc(String(val)) + '</span>';
+        }
+
+        function renderArray(arr, depth) {
+            if (arr.length === 0) return '<span class="tv-null">[ ]</span>';
+            var allStrings = arr.every(function(v) { return typeof v === 'string'; });
+            if (allStrings) {
+                return '<ol class="tv-list">' + arr.map(function(item) {
+                    return '<li>' + renderValue(item, depth + 1) + '</li>';
+                }).join('') + '</ol>';
+            }
+            var allObjects = arr.every(function(v) { return v && typeof v === 'object' && !Array.isArray(v); });
+            if (allObjects) {
+                return '<div class="tv-arr">' + arr.map(function(item, i) {
+                    return '<div class="tv-arr-item"><span class="tv-arr-idx">' + (i + 1) + '</span>' + renderObject(item, depth + 1) + '</div>';
+                }).join('') + '</div>';
+            }
+            return '<ol class="tv-list">' + arr.map(function(item) {
+                return '<li>' + renderValue(item, depth + 1) + '</li>';
+            }).join('') + '</ol>';
+        }
+
+        function renderObject(obj, depth) {
+            var keys = Object.keys(obj);
+            if (keys.length === 0) return '<span class="tv-null">{ }</span>';
+            if (depth > 3) return '<pre class="fv-code">' + syntaxHighlight(obj) + '</pre>';
+            return '<dl class="tv-obj">' + keys.map(function(k) {
+                return '<div class="tv-row"><dt class="tv-key">' + esc(humanizeKey(k)) + '</dt><dd class="tv-val">' + renderValue(obj[k], depth + 1) + '</dd></div>';
+            }).join('') + '</dl>';
+        }
+
+        function humanizeKey(key) {
+            /* Strip leading underscores, convert snake_case to Title Case */
+            var s = key, i = 0;
+            while (i < s.length && s[i] === '_') i++;
+            s = s.substring(i);
+            var words = s.split('_'), out = [];
+            for (var w = 0; w < words.length; w++) {
+                var word = words[w];
+                if (word) out.push(word.charAt(0).toUpperCase() + word.substring(1));
+            }
+            return out.join(' ');
+        }
+
+        function isUrl(val) {
+            if (typeof val !== 'string') return false;
+            var t = val.trim();
+            return t.indexOf('http://') === 0 || t.indexOf('https://') === 0;
+        }
+
+        function linkify(html) {
+            /* Scan for http:// or https:// in already-escaped text and wrap in <a> tags */
+            var out = '', i = 0;
+            while (i < html.length) {
+                var httpIdx = html.indexOf('http', i);
+                if (httpIdx === -1) { out += html.substring(i); break; }
+                /* Check it's actually http:// or https:// */
+                var rest = html.substring(httpIdx);
+                if (rest.indexOf('http://') !== 0 && rest.indexOf('https://') !== 0) {
+                    out += html.substring(i, httpIdx + 4); i = httpIdx + 4; continue;
+                }
+                out += html.substring(i, httpIdx);
+                /* Find end of URL: stop at whitespace or &lt; */
+                var urlEnd = httpIdx;
+                while (urlEnd < html.length && html[urlEnd] !== ' ' && html[urlEnd] !== '\n' && html[urlEnd] !== '\t') {
+                    if (html.substring(urlEnd, urlEnd + 4) === '&lt;') break;
+                    urlEnd++;
+                }
+                var urlText = html.substring(httpIdx, urlEnd);
+                var href = urlText.split('&amp;').join('&');
+                out += '<a class="fv-link" href="' + href + '" target="_blank" rel="noopener">' + urlText + '</a>';
+                i = urlEnd;
+            }
+            return out;
         }
 
         function syntaxHighlight(json) {
             if (typeof json !== 'string') { try { json = JSON.stringify(json, null, 2); } catch(_) { json = String(json); } }
             if (!json) json = 'null';
-            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return json.replace(
-                /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-                function(match) {
-                    var cls = 'jn';
-                    if (/^"/.test(match)) { cls = /:$/.test(match) ? 'jk' : 'js'; }
-                    else if (/true|false/.test(match)) { cls = 'jb'; }
-                    else if (/null/.test(match)) { cls = 'jb'; }
-                    return '<span class="' + cls + '">' + match + '</span>';
+            var s = esc(json);
+            /* Scan for JSON tokens: strings, numbers, booleans, null */
+            var out = '', i = 0;
+            while (i < s.length) {
+                var c = s[i];
+                /* String: starts with &quot; */
+                if (s.substring(i, i + 6) === '&quot;') {
+                    var strEnd = i + 6;
+                    while (strEnd < s.length) {
+                        if (s.substring(strEnd, strEnd + 6) === '&quot;') { strEnd += 6; break; }
+                        if (s[strEnd] === '\\') strEnd++; /* skip escaped char */
+                        strEnd++;
+                    }
+                    var token = s.substring(i, strEnd);
+                    /* Check if key (followed by colon) */
+                    var afterStr = strEnd;
+                    while (afterStr < s.length && (s[afterStr] === ' ' || s[afterStr] === '\n')) afterStr++;
+                    var cls = s[afterStr] === ':' ? 'jk' : 'js';
+                    out += '<span class="' + cls + '">' + token + '</span>';
+                    i = strEnd; continue;
                 }
-            );
+                /* Keywords: true, false, null */
+                var kw = null;
+                if (s.substring(i, i + 4) === 'true') kw = 'true';
+                else if (s.substring(i, i + 5) === 'false') kw = 'false';
+                else if (s.substring(i, i + 4) === 'null') kw = 'null';
+                if (kw) {
+                    var after = s[i + kw.length];
+                    if (!after || ',]}\n '.indexOf(after) >= 0) {
+                        out += '<span class="jb">' + kw + '</span>'; i += kw.length; continue;
+                    }
+                }
+                /* Number: starts with digit or minus */
+                if ((c >= '0' && c <= '9') || (c === '-' && s[i + 1] >= '0' && s[i + 1] <= '9')) {
+                    var numEnd = i + 1;
+                    while (numEnd < s.length && '0123456789.eE+-'.indexOf(s[numEnd]) >= 0) numEnd++;
+                    out += '<span class="jn">' + s.substring(i, numEnd) + '</span>'; i = numEnd; continue;
+                }
+                out += c; i++;
+            }
+            return out;
+        }
+
+        var TITLE_HINTS = ['question', 'title', 'name', 'subject', 'prompt', 'topic', 'summary', 'description', 'text'];
+        function isTitleKey(key) {
+            var lower = key.toLowerCase();
+            for (var i = 0; i < TITLE_HINTS.length; i++) { if (lower.indexOf(TITLE_HINTS[i]) >= 0) return true; }
+            return false;
         }
 
         function getRecordTitle(record, index) {
             if (!record || typeof record !== 'object') return 'Record ' + (index + 1);
             var display = getDisplayRecord(record);
             var keys = Object.keys(display);
+            /* First pass: prefer keys that look like titles */
             for (var i = 0; i < keys.length; i++) {
+                if (!isTitleKey(keys[i])) continue;
                 var v = display[keys[i]];
-                if (typeof v === 'string' && v.length > 3 && v.length < 120 && !/^https?:\/\//.test(v)) {
-                    return v.length > 60 ? v.substring(0, 57) + '…' : v;
+                if (typeof v !== 'string') continue;
+                var clean = stripHtml(v);
+                if (clean.length >= 10) return clean.length > 70 ? clean.substring(0, 67) + '…' : clean;
+            }
+            /* Second pass: any string >= 20 chars */
+            for (var j = 0; j < keys.length; j++) {
+                var val = display[keys[j]];
+                if (typeof val !== 'string') continue;
+                var c = stripHtml(val);
+                if (c.length >= 20 && c.length <= 300 && !/^https?:\/\//.test(c)) {
+                    return c.length > 70 ? c.substring(0, 67) + '…' : c;
                 }
             }
             return 'Record ' + (index + 1);
@@ -668,7 +1128,7 @@ button { font-family: inherit; cursor: pointer; }
                 { id: 'all', label: 'All', count: allCount, dot: null },
                 { id: 'pending', label: 'Pending', count: stats.pending, dot: 'pending' },
                 { id: 'approved', label: 'OK', count: stats.approved, dot: 'approved' },
-                { id: 'rejected', label: 'Rej', count: stats.rejected, dot: 'rejected' },
+                { id: 'rejected', label: 'Rejected', count: stats.rejected, dot: 'rejected' },
             ];
             queueFilters.innerHTML = filters.map(function(f) {
                 var cls = 'filter-chip' + (currentFilter === f.id ? ' active' : '');
@@ -710,21 +1170,33 @@ button { font-family: inherit; cursor: pointer; }
             var display = getDisplayRecord(rec);
 
             var html = '';
-            /* Record meta */
-            html += '<div class="rec-meta"><span class="id-val"># ' + (currentIndex + 1) + '</span><span class="meta-sep"></span>';
+            html += '<div class="rec-card status-' + status + '">';
+
+            /* Record header */
+            var fieldCount = (display && typeof display === 'object' && !Array.isArray(display)) ? Object.keys(display).length : 0;
+            html += '<div class="rec-header">';
+            html += '<div class="rec-header-left">';
             html += '<span class="rec-status-pill ' + status + '"><span class="dot"></span> ' + status.toUpperCase() + '</span>';
+            html += '<span class="meta-sep"></span>';
+            html += '<span class="id-val">' + (currentIndex + 1) + ' / ' + records.length + '</span>';
+            if (fieldCount > 0) html += '<span class="meta-sep"></span><span style="color:var(--fg-4)">' + fieldCount + ' fields</span>';
+            html += '</div>';
             html += '</div>';
 
             /* Fields — all rendered uniformly, first expanded, rest collapsed */
+            html += '<div class="rec-fields">';
             if (!display || typeof display !== 'object' || Array.isArray(display)) {
                 html += '<div class="fields-empty">No fields available.</div>';
             } else {
                 var entries = buildFieldEntries(display);
                 entries.forEach(function(entry, idx) {
                     var value = display[entry.key];
-                    html += renderFieldSection(entry.label, value, idx > 0);
+                    html += renderFieldSection(entry.label, value, idx > 0, idx);
                 });
             }
+            html += '</div>';
+
+            html += '</div>';
 
             recordView.innerHTML = html;
 
@@ -758,28 +1230,24 @@ button { font-family: inherit; cursor: pointer; }
             return allKeys.map(function(k) { return { key: k, label: humanizeKey(k) }; });
         }
 
-        function renderFieldSection(label, value, collapsed) {
+        var MARKER_COLORS = ['var(--fg-1)', 'var(--accent)', 'var(--amber-500)', 'var(--info)', 'var(--success)', 'var(--danger)'];
+
+        function renderFieldSection(label, value, collapsed, idx) {
             var isEmpty = value === undefined || value === null;
-            var isComplex = !isEmpty && typeof value === 'object';
+            var markerColor = MARKER_COLORS[idx % MARKER_COLORS.length];
 
             var cls = 'field-section' + (collapsed ? ' collapsed' : '');
             var bodyHtml;
             if (isEmpty) {
                 bodyHtml = '<span class="fv-empty">Empty</span>';
-            } else if (isComplex) {
-                bodyHtml = '<pre class="fv-code">' + syntaxHighlight(value) + '</pre>';
-            } else if (isUrl(value)) {
-                bodyHtml = '<a class="fv fv-link" href="' + esc(String(value).trim()) + '" target="_blank" rel="noopener">' + esc(value) + '</a>';
-            } else if (typeof value === 'boolean' || typeof value === 'number') {
-                bodyHtml = '<span class="fv fv-mono">' + esc(String(value)) + '</span>';
             } else {
-                bodyHtml = '<div class="fv fv-long">' + linkify(esc(String(value))) + '</div>';
+                bodyHtml = renderValue(value, 0);
             }
 
-            return '<div class="' + cls + '">' +
+            return '<div class="' + cls + '" style="animation-delay:' + (idx * 30) + 'ms">' +
                 '<div class="field-section-head">' +
                     '<span class="chevron"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></span>' +
-                    '<span class="field-marker"></span>' +
+                    '<span class="field-marker" style="background:' + markerColor + '"></span>' +
                     '<span class="field-label">' + esc(label) + '</span>' +
                 '</div>' +
                 '<div class="field-body">' + bodyHtml + '</div>' +
@@ -821,12 +1289,19 @@ button { font-family: inherit; cursor: pointer; }
             }
         }
 
+        var reasonSection = document.getElementById('reason-section');
+
         function renderReasonGrid() {
+            if (REJECTION_REASONS.length === 0) {
+                reasonSection.style.display = 'none';
+                return;
+            }
+            reasonSection.style.display = '';
             reasonGrid.innerHTML = REJECTION_REASONS.map(function(rr) {
                 var cls = 'reason-btn' + (pendingReason === rr.label ? ' active' : '');
                 return '<button class="' + cls + '" data-reason="' + esc(rr.label) + '" type="button">' +
                     '<span class="reason-label">' + esc(rr.label) + '</span>' +
-                    '<span class="reason-key"><span class="reason-key-prefix">key</span><span class="reason-key-val">' + rr.key + '</span></span>' +
+                    (rr.key.length <= 2 ? '<span class="reason-key"><span class="reason-key-prefix">key</span><span class="reason-key-val">' + rr.key + '</span></span>' : '') +
                 '</button>';
             }).join('');
             reasonGrid.classList.toggle('has-pick', !!pendingReason);
@@ -1065,11 +1540,14 @@ button { font-family: inherit; cursor: pointer; }
         btnNext.addEventListener('click', function() { goTo(currentIndex + 1); });
 
         /* Toggle panels */
-        document.getElementById('toggle-queue').addEventListener('click', function() {
+        var toggleQueueBtn = document.getElementById('toggle-queue');
+        function toggleQueue() {
             showQueue = !showQueue;
             app.classList.toggle('hide-queue', !showQueue);
-            this.classList.toggle('active', showQueue);
-        });
+            toggleQueueBtn.classList.toggle('active', showQueue);
+        }
+        toggleQueueBtn.addEventListener('click', toggleQueue);
+        document.getElementById('queue-collapse').addEventListener('click', toggleQueue);
         document.getElementById('toggle-inspector').addEventListener('click', function() {
             showInspector = !showInspector;
             app.classList.toggle('hide-inspector', !showInspector);
@@ -1115,10 +1593,12 @@ button { font-family: inherit; cursor: pointer; }
                 case 'n': e.preventDefault(); reviewerNote.focus(); break;
                 case '?': case '/': e.preventDefault(); helpOverlay.style.display = helpOverlay.style.display === 'flex' ? 'none' : 'flex'; break;
                 case 'escape': helpOverlay.style.display = 'none'; break;
-                case '1': case '2': case '3': case '4': case '5': case '6':
-                    var n = parseInt(e.key, 10);
-                    var reason = REJECTION_REASONS[n - 1];
-                    if (reason) { e.preventDefault(); pendingReason = pendingReason === reason.label ? null : reason.label; renderReasonGrid(); }
+                case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+                    if (REJECTION_REASONS.length > 0) {
+                        var n = parseInt(e.key, 10);
+                        var reason = REJECTION_REASONS[n - 1];
+                        if (reason) { e.preventDefault(); pendingReason = pendingReason === reason.label ? null : reason.label; renderReasonGrid(); }
+                    }
                     break;
             }
         });
@@ -1128,6 +1608,14 @@ button { font-family: inherit; cursor: pointer; }
         reviewerNote.addEventListener('input', function() { commentInput.value = this.value; });
 
         /* ── Init ── */
+        if (REJECTION_REASONS.length > 0) {
+            var helpSection = document.getElementById('help-reasons-section');
+            var helpList = document.getElementById('help-reasons-list');
+            helpSection.style.display = '';
+            helpList.innerHTML = REJECTION_REASONS.slice(0, 9).map(function(rr) {
+                return '<div class="kbd-row"><span>' + esc(rr.label) + '</span><span class="keys"><span class="k">' + rr.key + '</span></span></div>';
+            }).join('');
+        }
         loadData();
 
     })();

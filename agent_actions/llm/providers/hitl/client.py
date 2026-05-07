@@ -64,6 +64,7 @@ class HitlClient:
         require_comment_on_reject = hitl_config.get(
             "require_comment_on_reject", _hitl_defaults["require_comment_on_reject"].default
         )
+        rejection_reasons = hitl_config.get("rejection_reasons", [])
 
         # Preserve observe field order for UI rendering (full qualified refs)
         context_scope = agent_config.get("context_scope") or {}
@@ -96,6 +97,7 @@ class HitlClient:
             require_comment_on_reject=require_comment_on_reject,
             field_order=field_order,
             state_file=state_file,
+            rejection_reasons=rejection_reasons,
         )
 
         response = server.start_and_wait()
