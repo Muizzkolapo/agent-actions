@@ -193,9 +193,18 @@ def test_index_hides_reasons_when_empty():
     response = client.get("/")
 
     html = response.get_data(as_text=True)
-    assert 'id="reason-section"' in html
-    # Section starts hidden — JS shows it only when REJECTION_REASONS.length > 0
-    assert 'style="display:none"' in html
+    # The reason-section element must exist AND be hidden when no reasons are provided.
+    # Scope the assertion to the specific element to avoid matching other display:none attrs.
+    idx = html.find('id="reason-section"')
+    assert idx >= 0, "reason-section element missing from template"
+    # The element's opening tag should contain style="display:none"
+    # Look backward from the id to find the opening <div
+    tag_start = html.rfind("<", 0, idx)
+    tag_end = html.find(">", idx)
+    reason_tag = html[tag_start : tag_end + 1]
+    assert 'style="display:none"' in reason_tag, (
+        f"reason-section should be hidden when no reasons configured, got: {reason_tag}"
+    )
 
 
 def test_review_record_persists_state_for_refresh():

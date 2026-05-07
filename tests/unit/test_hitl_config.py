@@ -251,6 +251,14 @@ def test_hitl_config_rejection_reasons_filters_empty():
 
 def test_hitl_config_rejection_reasons_max_length():
     """Rejection reasons list is capped at 20 items."""
+    # Boundary: 20 items accepted
+    config = HitlConfig(
+        instructions="Review",
+        rejection_reasons=["reason " + str(i) for i in range(20)],
+    )
+    assert len(config.rejection_reasons) == 20
+
+    # Over limit: 21 items rejected
     with pytest.raises(ValidationError):
         HitlConfig(
             instructions="Review",

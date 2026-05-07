@@ -85,6 +85,7 @@ class HitlConfigDict(TypedDict, total=False):
     instructions: str
     timeout: int
     require_comment_on_reject: bool
+    rejection_reasons: list[str]
 
 
 class ActionConfigDict(TypedDict, total=False):

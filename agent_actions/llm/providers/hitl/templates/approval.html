@@ -994,9 +994,11 @@ h4.md-heading { font-size: 13.5px; }
                     out += html.substring(i, httpIdx + 4); i = httpIdx + 4; continue;
                 }
                 out += html.substring(i, httpIdx);
-                /* Find end of URL: stop at whitespace or HTML entities that signal attribute boundaries */
+                /* Find end of URL: stop at whitespace, raw angle brackets, or HTML entities */
                 var urlEnd = httpIdx;
-                while (urlEnd < html.length && html[urlEnd] !== ' ' && html[urlEnd] !== '\n' && html[urlEnd] !== '\t') {
+                while (urlEnd < html.length) {
+                    var uc = html[urlEnd];
+                    if (uc === ' ' || uc === '\n' || uc === '\t' || uc === '<' || uc === '>') break;
                     var chunk = html.substring(urlEnd, urlEnd + 6);
                     if (chunk.indexOf('&lt;') === 0 || chunk.indexOf('&gt;') === 0 || chunk.indexOf('&quot;') === 0) break;
                     urlEnd++;
@@ -1345,6 +1347,7 @@ h4.md-heading { font-size: 13.5px; }
         function goTo(index) {
             if (index < 0 || index >= records.length) return;
             currentIndex = index;
+            pendingReason = null;
             renderAll();
             /* Scroll queue row into view */
             var row = queueList.querySelector('.queue-row.selected');
@@ -1392,7 +1395,7 @@ h4.md-heading { font-size: 13.5px; }
 
         async function markCurrentRecord(status) {
             if (records.length === 0 || isPersisting) return;
-            var reason = pendingReason || '';
+            var reason = (status === 'rejected' && pendingReason) ? pendingReason : '';
             var note = reviewerNote.value.trim();
             var comment = (reason && note) ? reason + ' — ' + note : reason || note;
 
@@ -1494,7 +1497,7 @@ h4.md-heading { font-size: 13.5px; }
                             }
                         });
                     }
-                } catch(_) {}
+                } catch(stErr) { console.warn('Could not restore review state:', stErr); }
 
                 currentIndex = 0;
                 renderAll();
