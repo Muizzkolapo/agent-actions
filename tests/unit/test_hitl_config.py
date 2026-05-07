@@ -16,6 +16,7 @@ def test_hitl_config_defaults():
     assert config.instructions == "Review the data"
     assert config.timeout == 300
     assert config.require_comment_on_reject is True
+    assert config.rejection_reasons == []
 
 
 def test_hitl_config_custom_values():
@@ -219,3 +220,47 @@ def test_hitl_timeout_default_rejects_float():
     """Fractional values are rejected instead of silently truncated."""
     with pytest.raises(ConfigurationError, match="must be an integer"):
         _expand_hitl({"instructions": "Review"}, defaults={"hitl_timeout": 5.9})
+
+
+def test_hitl_config_rejection_reasons_with_values():
+    """Rejection reasons round-trip with valid labels."""
+    config = HitlConfig(
+        instructions="Review",
+        rejection_reasons=["Not grounded", "Ambiguous"],
+    )
+    assert config.rejection_reasons == ["Not grounded", "Ambiguous"]
+
+
+def test_hitl_config_rejection_reasons_strips_whitespace():
+    """Validator strips leading/trailing whitespace from reason labels."""
+    config = HitlConfig(
+        instructions="Review",
+        rejection_reasons=["  padded  ", "clean"],
+    )
+    assert config.rejection_reasons == ["padded", "clean"]
+
+
+def test_hitl_config_rejection_reasons_filters_empty():
+    """Validator removes empty strings and whitespace-only entries."""
+    config = HitlConfig(
+        instructions="Review",
+        rejection_reasons=["good", "", "  ", "also good"],
+    )
+    assert config.rejection_reasons == ["good", "also good"]
+
+
+def test_hitl_config_rejection_reasons_max_length():
+    """Rejection reasons list is capped at 20 items."""
+    # Boundary: 20 items accepted
+    config = HitlConfig(
+        instructions="Review",
+        rejection_reasons=["reason " + str(i) for i in range(20)],
+    )
+    assert len(config.rejection_reasons) == 20
+
+    # Over limit: 21 items rejected
+    with pytest.raises(ValidationError):
+        HitlConfig(
+            instructions="Review",
+            rejection_reasons=["reason"] * 21,
+        )

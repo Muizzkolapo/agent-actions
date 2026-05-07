@@ -50,6 +50,7 @@ def test_hitl_client_invoke_with_config():
             require_comment_on_reject=True,
             field_order=[],
             state_file=None,
+            rejection_reasons=[],
         )
 
         # Verify start_and_wait was called
@@ -89,6 +90,30 @@ def test_hitl_client_invoke_with_string_context():
         assert call_args[1]["context_data"] == {"key": "value", "number": 123}
 
         assert result["hitl_status"] == "rejected"
+
+
+def test_hitl_client_forwards_rejection_reasons():
+    """Non-empty rejection_reasons from config reaches HitlServer."""
+    agent_config = {
+        "name": "test_action",
+        "hitl": {
+            "port": 3001,
+            "instructions": "Review",
+            "rejection_reasons": ["Bad data", "Wrong format"],
+        },
+    }
+    with patch("agent_actions.llm.providers.hitl.client.HitlServer") as mock_server_class:
+        mock_server = Mock()
+        mock_server.start_and_wait.return_value = {
+            "hitl_status": "approved",
+            "timestamp": "2026-02-12T10:00:00",
+        }
+        mock_server_class.return_value = mock_server
+
+        HitlClient.invoke(agent_config, {"value": 1})
+
+        call_args = mock_server_class.call_args
+        assert call_args[1]["rejection_reasons"] == ["Bad data", "Wrong format"]
 
 
 def test_hitl_client_invoke_with_invalid_json_string():
