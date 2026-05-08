@@ -90,7 +90,10 @@ def _create_ollama_local(config: dict[str, Any]) -> BaseBatchClient:
     from .ollama.batch_client import OllamaBatchClient
 
     base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
-    return OllamaBatchClient(base_url=base_url, vendor_slug="ollama_local", cloud=False)
+    max_workers = config.get("batch_max_workers")
+    return OllamaBatchClient(
+        base_url=base_url, vendor_slug="ollama_local", cloud=False, max_workers=max_workers
+    )
 
 
 def _create_ollama_cloud(config: dict[str, Any]) -> BaseBatchClient:
@@ -103,8 +106,13 @@ def _create_ollama_cloud(config: dict[str, Any]) -> BaseBatchClient:
     base_url = config.get("base_url") or os.getenv(
         "OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL
     )
+    max_workers = config.get("batch_max_workers")
     return OllamaBatchClient(
-        base_url=base_url, api_key=api_key, vendor_slug="ollama_cloud", cloud=True
+        base_url=base_url,
+        api_key=api_key,
+        vendor_slug="ollama_cloud",
+        cloud=True,
+        max_workers=max_workers,
     )
 
 
