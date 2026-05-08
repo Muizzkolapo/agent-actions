@@ -35,6 +35,8 @@ export type ActionType =
 export interface ActionInfo {
     /** Action name from config */
     name: string;
+    /** Name of the workflow this action belongs to */
+    workflowName: string;
     /** 1-based execution order index */
     index: number;
     /** Execution level (0-based, actions at same level can run in parallel) */
