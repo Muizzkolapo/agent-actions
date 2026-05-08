@@ -87,9 +87,10 @@ class OnlineStrategy(InvocationStrategy):
     ) -> tuple[Any, bool]:
         """Execute a single LLM call, returning (response, executed)."""
         from agent_actions.processing.helpers import run_dynamic_agent
+        from agent_actions.utils.tools_resolver import resolve_tools_path
 
         agent_config = cast(dict[str, Any], context.agent_config)
-        tools_path = agent_config.get("tools", {}).get("path")
+        tools_path = resolve_tools_path(agent_config)
         return run_dynamic_agent(
             agent_config,
             context.agent_name,
