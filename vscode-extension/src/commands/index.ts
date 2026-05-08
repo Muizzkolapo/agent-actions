@@ -237,11 +237,10 @@ async function previewData(
         return;
     }
 
-    // Find the workflow this action belongs to
+    // Find the workflow this action belongs to (match by workflowName to avoid
+    // collisions when multiple workflows have actions with the same name)
     const workflows = model.getWorkflows();
-    const workflow = workflows.find((w) =>
-        w.actions.some((a) => a.name === action.name)
-    );
+    const workflow = workflows.find((w) => w.name === action.workflowName);
 
     if (!workflow) {
         vscode.window.showErrorMessage(`Could not find workflow for action ${action.name}`);

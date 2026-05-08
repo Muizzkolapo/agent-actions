@@ -474,6 +474,7 @@ export class WorkflowModel implements vscode.Disposable {
 
             return {
                 name: actionConfig.name,
+                workflowName: manifest?.workflow_name ?? parsedConfig.name,
                 index: actionIndex,
                 level,
                 status,
