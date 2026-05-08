@@ -13,7 +13,7 @@ from agent_actions.utils.project_root import find_project_root
 logger = logging.getLogger(__name__)
 
 
-def _anchor_to_project_root(path: str) -> str:
+def anchor_to_project_root(path: str) -> str:
     """Anchor a relative path to the project root, or return as-is if absolute."""
     root = find_project_root()
     if root:
@@ -33,10 +33,10 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
     if tool_path:
         if isinstance(tool_path, list) and len(tool_path) > 0:
             logger.debug("Resolved tools_path from tool_path list: %s", tool_path[0])
-            return _anchor_to_project_root(cast(str, tool_path[0]))
+            return anchor_to_project_root(cast(str, tool_path[0]))
         if isinstance(tool_path, str):
             logger.debug("Resolved tools_path from tool_path string: %s", tool_path)
-            return _anchor_to_project_root(tool_path)
+            return anchor_to_project_root(tool_path)
 
     tools = agent_config.get("tools", [])
 
@@ -44,7 +44,7 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
         path = tools.get("path")
         if isinstance(path, str) and path:
             logger.debug("Resolved tools_path from tools.path: %s", path)
-            return _anchor_to_project_root(path)
+            return anchor_to_project_root(path)
         return None
 
     if isinstance(tools, list):
@@ -71,7 +71,7 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
                                     "Resolved tools_path from OpenAI tool config: %s", module_path
                                 )
                                 # module_path is a Python module name (e.g. "my.module"),
-                                # not a filesystem path — skip _anchor_to_project_root.
+                                # not a filesystem path — skip anchor_to_project_root.
                                 return cast(str, module_path)
                     except (
                         yaml.YAMLError,

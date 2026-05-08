@@ -1,6 +1,5 @@
 """String processing, tokenization, and text chunking utilities."""
 
-import importlib
 import os
 import re
 
@@ -8,6 +7,7 @@ import tiktoken
 
 from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.utils.module_loader import load_module_from_directory
+from agent_actions.utils.tools_resolver import anchor_to_project_root
 
 # Optional dependencies
 try:
@@ -47,10 +47,16 @@ class StringProcessor:
                 module_name = full_function_name
                 function_name = full_function_name
 
-            if tools_path:
-                module = load_module_from_directory(module_name, tools_path)
-            else:
-                module = importlib.import_module(module_name)
+            if not tools_path:
+                raise ConfigurationError(
+                    f"No tools_path configured — cannot import UDF '{module_name}'. "
+                    f"Set 'tool_path' or 'tools.path' in your agent config.",
+                    context={
+                        "function_name": full_function_name,
+                        "operation": "call_user_function",
+                    },
+                )
+            module = load_module_from_directory(module_name, tools_path)
             function = getattr(module, function_name)
 
             if context_data_str:
@@ -243,11 +249,8 @@ class Tokenizer:
         text: str, chunk_size: int, overlap: int, tokenizer_model: str, split_method: str
     ) -> list[str]:
         try:
-            tools_path = os.environ.get("TOOLS_PATH", "tools")
-            if tools_path:
-                module = load_module_from_directory(split_method, tools_path)
-            else:
-                module = importlib.import_module(split_method)
+            tools_path = os.environ.get("TOOLS_PATH") or anchor_to_project_root("tools")
+            module = load_module_from_directory(split_method, tools_path)
             function = getattr(module, split_method)
             result: list[str] = function(text, chunk_size, overlap, tokenizer_model)
             return result

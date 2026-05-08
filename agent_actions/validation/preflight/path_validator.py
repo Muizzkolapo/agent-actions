@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.preflight.error_formatter import (
     PreFlightErrorFormatter,
@@ -138,7 +139,7 @@ class PathValidator(BaseValidator):
         if prompt_path := agent_config.get("prompt_file"):
             paths_to_check.append((prompt_path, "prompt"))
 
-        if tools_path := agent_config.get("tools_path"):
+        if tools_path := resolve_tools_path(agent_config):
             paths_to_check.append((tools_path, "directory"))
 
         all_valid = True
