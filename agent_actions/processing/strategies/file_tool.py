@@ -14,6 +14,7 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.content import is_version_merge
+from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.workflow.pipeline_file_mode import (
     extract_tool_input,
     is_empty_response,
@@ -56,12 +57,13 @@ class FileToolStrategy:
                 business = extract_tool_input(record, context_scope)
                 clean_input.append(TrackedItem(business, source_index=i))
 
+            agent_config = cast(dict[str, Any], context.agent_config)
             raw_response, executed = run_dynamic_agent(
-                agent_config=cast(dict[str, Any], context.agent_config),
+                agent_config=agent_config,
                 agent_name=context.agent_name,
                 context=clean_input,
                 formatted_prompt="",
-                tools_path=context.agent_config.get("tools_path"),
+                tools_path=resolve_tools_path(agent_config),
                 skip_guard_eval=True,
             )
 

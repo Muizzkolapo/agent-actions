@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.helpers import run_dynamic_agent
@@ -16,6 +16,7 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class HITLStrategy:
                 agent_name=context.agent_name,
                 context=filtered_records,
                 formatted_prompt="",
-                tools_path=cast(str | None, hitl_agent_config.get("tools_path")),
+                tools_path=resolve_tools_path(hitl_agent_config),
                 skip_guard_eval=True,
             )
 
