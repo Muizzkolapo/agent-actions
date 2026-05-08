@@ -1,9 +1,13 @@
 """
-Ollama Batch Client — synchronous batch simulation for local and cloud.
+Ollama Batch Client — batch simulation for local and cloud.
 
-Both vendors use the same fake synchronous loop (no real batch API exists
-for either). The ``cloud`` flag controls client construction (Bearer auth)
+Both vendors use the same in-process loop (no real batch API exists for
+either). The ``cloud`` flag controls client construction (Bearer auth)
 and whether the ``format`` param is passed to ``client.chat()``.
+
+Records are processed concurrently via ``ThreadPoolExecutor``.  Concurrency
+is controlled by ``OLLAMA_BATCH_MAX_WORKERS`` (env var) or the constructor
+``max_workers`` parameter.  Default is 1 (sequential, matching prior behavior).
 
 When Ollama ships a real cloud batch API, add a
 ``_submit_to_cloud_batch_api`` branch inside ``_submit_to_provider_api``.
@@ -14,6 +18,7 @@ import logging
 import os
 import time
 import uuid
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -48,9 +53,11 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         *,
         vendor_slug: str = "ollama_local",
         cloud: bool = False,
+        max_workers: int | None = None,
     ):
         self.vendor_slug = vendor_slug
         self.cloud = cloud
+        self._max_workers = max_workers
 
         if cloud:
             self.base_url = base_url or os.getenv("OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL)
@@ -114,83 +121,134 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     ) -> Path:
         return self._write_jsonl_file(tasks, batch_dir, batch_name, self.vendor_slug)
 
+    _MAX_WORKERS_LIMIT: int = 32
+
+    def _get_max_workers(self) -> int:
+        """Resolve batch concurrency: constructor param > env var > class default."""
+        default = (
+            OllamaCloudDefaults.BATCH_MAX_WORKERS
+            if self.cloud
+            else OllamaDefaults.BATCH_MAX_WORKERS
+        )
+
+        if self._max_workers is not None:
+            val = self._max_workers
+        else:
+            env_val = os.getenv("OLLAMA_BATCH_MAX_WORKERS")
+            if env_val:
+                try:
+                    val = int(env_val)
+                except ValueError:
+                    logger.warning(
+                        "OLLAMA_BATCH_MAX_WORKERS=%s is not an integer, using default", env_val
+                    )
+                    return default
+            else:
+                return default
+
+        if val < 1:
+            logger.warning("batch_max_workers=%s invalid (must be >= 1), using default", val)
+            return default
+        if val > self._MAX_WORKERS_LIMIT:
+            logger.warning(
+                "batch_max_workers=%s exceeds limit of %s, clamping",
+                val,
+                self._MAX_WORKERS_LIMIT,
+            )
+            return self._MAX_WORKERS_LIMIT
+        return val
+
+    def _process_single_task(
+        self, task: dict[str, Any], idx: int, total: int
+    ) -> dict[str, Any] | None:
+        """Process one batch task. Returns result dict, or None if injection-dropped."""
+        custom_id = task["custom_id"]
+        logger.info("Processing request %d/%d: %s", idx + 1, total, custom_id)
+
+        try:
+            body = task["body"]
+            messages = body["messages"]
+            model = body.get("model", "llama2")
+
+            temperature = body.get("temperature")
+            options: dict[str, Any] = {
+                "temperature": temperature if temperature is not None else 1.0
+            }
+            max_tokens = body.get("max_tokens")
+            if max_tokens is not None:
+                options["num_predict"] = max_tokens
+
+            # Handle JSON mode with structured outputs.
+            # Cloud: format param not supported (ollama/ollama#12362).
+            format_param: str | dict[str, Any] | None = None
+            if not self.cloud:
+                response_format = body.get("response_format")
+                if response_format and isinstance(response_format, dict):
+                    if response_format.get("type") == "json_schema":
+                        json_schema = response_format.get("json_schema", {})
+                        format_param = _extract_ollama_schema(json_schema)
+                        if not format_param:
+                            format_param = "json"
+
+            ollama_response = self.client.chat(
+                model=model,
+                messages=messages,
+                options=options,
+                format=format_param,  # type: ignore[arg-type]
+            )
+
+            if should_fail_batch_record(custom_id, idx):
+                logger.debug("[INJECTION] Simulating missing result for %s", custom_id)
+                return None
+
+            return self._transform_ollama_response(
+                ollama_response,
+                custom_id,
+                model,  # type: ignore[arg-type]
+            )
+
+        except Exception as e:
+            logger.error("Error processing %s: %s", custom_id, e)
+            return {
+                "custom_id": custom_id,
+                "response": None,
+                "error": {
+                    "message": str(e),
+                    "type": f"{self.vendor_slug}_error",
+                    "code": "inference_error",
+                },
+            }
+
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
-        """Process batch synchronously (no actual API submission)."""
+        """Process batch with concurrent workers (default: 1 = sequential)."""
         batch_id = f"batch_{uuid.uuid4().hex}"
 
-        tasks = []
+        tasks: list[dict[str, Any]] = []
         with open(input_file, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     tasks.append(json.loads(line))
 
-        results = []
-        completed = 0
-        failed = 0
+        total = len(tasks)
+        max_workers = self._get_max_workers()
+        results: list[dict[str, Any]] = []
 
-        for idx, task in enumerate(tasks):
-            custom_id = task["custom_id"]
-            logger.info("Processing request %d/%d: %s", idx + 1, len(tasks), custom_id)
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ollama_batch") as pool:
+            futures: dict[Future[dict[str, Any] | None], str] = {
+                pool.submit(self._process_single_task, task, idx, total): task["custom_id"]
+                for idx, task in enumerate(tasks)
+            }
+            for future in as_completed(futures):
+                custom_id = futures[future]
+                try:
+                    result = future.result()
+                    if result is not None:
+                        results.append(result)
+                except Exception as e:
+                    logger.error("Unexpected error processing %s: %s", custom_id, e)
 
-            try:
-                body = task["body"]
-                messages = body["messages"]
-                model = body.get("model", "llama2")
-
-                options: dict[str, Any] = {
-                    "temperature": (
-                        body.get("temperature") if body.get("temperature") is not None else 1.0
-                    )
-                }
-                max_tokens = body.get("max_tokens")
-                if max_tokens is not None:
-                    options["num_predict"] = max_tokens
-
-                # Handle JSON mode with structured outputs.
-                # Cloud: format param not supported (ollama/ollama#12362).
-                format_param: str | dict[str, Any] | None = None
-                if not self.cloud:
-                    response_format = body.get("response_format")
-                    if response_format and isinstance(response_format, dict):
-                        if response_format.get("type") == "json_schema":
-                            json_schema = response_format.get("json_schema", {})
-                            format_param = _extract_ollama_schema(json_schema)
-                            if not format_param:
-                                format_param = "json"
-
-                ollama_response = self.client.chat(
-                    model=model,
-                    messages=messages,
-                    options=options,
-                    format=format_param,  # type: ignore[arg-type]
-                )
-
-                if should_fail_batch_record(custom_id, idx):
-                    logger.debug("[INJECTION] Simulating missing result for %s", custom_id)
-                    failed += 1
-                    continue
-
-                openai_response = self._transform_ollama_response(
-                    ollama_response,
-                    custom_id,
-                    model,  # type: ignore[arg-type]
-                )
-                results.append(openai_response)
-                completed += 1
-
-            except Exception as e:
-                logger.error("Error processing %s: %s", custom_id, e)
-                error_response = {
-                    "custom_id": custom_id,
-                    "response": None,
-                    "error": {
-                        "message": str(e),
-                        "type": f"{self.vendor_slug}_error",
-                        "code": "inference_error",
-                    },
-                }
-                results.append(error_response)
-                failed += 1
+        completed = sum(1 for r in results if r.get("error") is None)
+        failed = total - completed
 
         batch_dir = input_file.parent
         output_file_path = batch_dir / f"{batch_id}_results.jsonl"

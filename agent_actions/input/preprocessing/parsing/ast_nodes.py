@@ -182,6 +182,16 @@ def evaluate_node(
     if isinstance(node, FieldNode):
         value = get_nested_value(data, node.field_path)
         if value is None and not _field_exists(data, node.field_path):
+            # For dotted paths (ns.field), check if the top-level namespace exists
+            # but is None (guard-skipped/filtered) or empty dict (upstream failed).
+            # Return None instead of raising — the field is "expected absent."
+            if "." in node.field_path and isinstance(data, dict):
+                top_key = node.field_path.split(".", 1)[0]
+                if top_key in data:
+                    ns_value = data[top_key]
+                    if ns_value is None or (isinstance(ns_value, dict) and not ns_value):
+                        return None
+
             available = (
                 ", ".join(sorted(data.keys())) if isinstance(data, dict) else "(non-dict data)"
             )
