@@ -72,7 +72,9 @@ def build_field_context_with_history(
     _load_dependency_namespaces(
         field_context, agent_name, agent_config, agent_indices, current_item, context_scope
     )
-    _load_version_context(field_context, version_context, agent_name)
+    version_result = VersionNamespaceBuilder.build(version_context, agent_name)
+    if version_result:
+        field_context.update(version_result)
 
     workflow_ns = WorkflowMetadataBuilder.build(workflow_metadata, agent_name)
     if workflow_ns:
@@ -204,34 +206,47 @@ def _load_dependency_namespaces(
         )
 
 
-def _load_version_context(
-    field_context: dict, version_context: dict | None, agent_name: str
-) -> None:
-    """Load version iteration info and promote convenience variables to top level."""
-    if not version_context:
-        return
+class VersionNamespaceBuilder:
+    """Build the 'version' namespace and promote convenience variables."""
 
-    field_context["version"] = version_context
-    # Add common version variables at top level for convenience
-    # This enables {{ i }} instead of requiring {{ version.i }}
-    if "i" in version_context:
-        field_context["i"] = version_context["i"]
-    if "idx" in version_context:
-        field_context["idx"] = version_context["idx"]
-    # Add custom param names at top level (e.g., {{ classifier_id }})
-    reserved_keys = {"i", "idx", "length", "first", "last"}
-    for key, value in version_context.items():
-        if key not in reserved_keys:
-            field_context[key] = value
-    logger.debug("Added 'version' namespace with version context")
-    fire_event(
-        ContextNamespaceLoadedEvent(
-            action_name=agent_name,
-            namespace="version",
-            field_count=len(version_context),
-            fields=list(version_context.keys()),
+    _RESERVED_KEYS = frozenset({"i", "idx", "length", "first", "last"})
+
+    @staticmethod
+    def build(version_context: dict | None, agent_name: str) -> dict | None:
+        """Return dict with 'version' namespace and promoted top-level keys, or None.
+
+        Promotes ``i`` and ``idx`` to top level for Jinja2 convenience
+        (``{{ i }}`` instead of ``{{ version.i }}``). Custom params (non-reserved)
+        are also promoted to top level.
+
+        Fires ContextNamespaceLoadedEvent on success.
+        """
+        if not version_context:
+            return None
+
+        result: dict = {"version": version_context}
+
+        # Promote i/idx to top level for Jinja2 convenience
+        if "i" in version_context:
+            result["i"] = version_context["i"]
+        if "idx" in version_context:
+            result["idx"] = version_context["idx"]
+
+        # Promote custom param names (e.g., {{ classifier_id }})
+        for key, value in version_context.items():
+            if key not in VersionNamespaceBuilder._RESERVED_KEYS:
+                result[key] = value
+
+        logger.debug("Added 'version' namespace with version context")
+        fire_event(
+            ContextNamespaceLoadedEvent(
+                action_name=agent_name,
+                namespace="version",
+                field_count=len(version_context),
+                fields=list(version_context.keys()),
+            )
         )
-    )
+        return result
 
 
 class SourceNamespaceBuilder:
