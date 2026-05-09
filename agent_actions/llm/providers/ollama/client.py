@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 import httpx
+from json_repair import repair_json
 from ollama import Client, ResponseError
 
 from agent_actions.config.defaults import OllamaCloudDefaults
@@ -170,12 +171,34 @@ def _call_ollama_json(
             parsed = json.loads(content)
             return [parsed] if isinstance(parsed, dict) else [{"response": parsed}]
         except json.JSONDecodeError as e:
-            logger.debug(
-                "%s/%s returned invalid JSON: %s",
-                vendor_slug,
-                model,
-                e,
-            )
+            if not cloud:
+                logger.debug("%s/%s returned invalid JSON: %s", vendor_slug, model, e)
+                fire_event(LLMJSONParseErrorEvent(provider=vendor_slug, model=model, error=str(e)))
+                return [{"raw_response": content or "", "_parse_error": str(e)}]
+            # Cloud often wraps valid JSON in markdown fences or adds
+            # trailing commas. Use json_repair to recover the payload.
+            # Remove this branch when Ollama Cloud supports structured
+            # outputs (ollama/ollama#12362).
+            logger.debug("%s/%s: raw json.loads failed, attempting repair", vendor_slug, model)
+            repaired = repair_json(content, return_objects=True, skip_json_loads=True)
+            if isinstance(repaired, dict):
+                logger.info(
+                    "%s/%s: json_repair recovered valid dict from malformed response",
+                    vendor_slug,
+                    model,
+                )
+                return [repaired]
+            if isinstance(repaired, list):
+                logger.info(
+                    "%s/%s: json_repair recovered valid list from malformed response",
+                    vendor_slug,
+                    model,
+                )
+                return (
+                    repaired
+                    if all(isinstance(r, dict) for r in repaired)
+                    else [{"response": repaired}]
+                )
             fire_event(LLMJSONParseErrorEvent(provider=vendor_slug, model=model, error=str(e)))
             return [{"raw_response": content or "", "_parse_error": str(e)}]
     if isinstance(content, dict):
