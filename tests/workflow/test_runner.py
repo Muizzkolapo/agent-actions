@@ -4,13 +4,14 @@ file processing, storage backend, and orchestration methods."""
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from agent_actions.config.di.container import ProcessorFactory
-from agent_actions.errors import FileSystemError
+from agent_actions.errors import ConfigurationError, FileSystemError
 from agent_actions.workflow.runner import (
     ActionRunner,
     FileLocationParams,
@@ -162,8 +163,6 @@ class TestResolveSingleDependency:
 
     def test_storage_backend_exception_falls_through(self, runner_with_backend, tmp_path):
         """Storage backend raises I/O error → falls through gracefully."""
-        import sqlite3
-
         backend = runner_with_backend.storage_backend
         backend.list_target_files.side_effect = sqlite3.OperationalError("db error")
         target_dir = tmp_path / "target"
@@ -663,8 +662,6 @@ class TestProcessFromStorageBackend:
         assert processed == 1
 
     def test_list_target_files_exception_continues(self, runner_with_backend, tmp_path):
-        import sqlite3
-
         backend = runner_with_backend.storage_backend
         backend.list_target_files.side_effect = sqlite3.OperationalError("connection lost")
 
@@ -682,8 +679,6 @@ class TestProcessFromStorageBackend:
 
     def test_read_target_json_decode_error_skips_entry(self, runner_with_backend, tmp_path):
         """json.JSONDecodeError from corrupt stored data → entry skipped."""
-        import json
-
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = ["good.json", "bad.json"]
         backend.read_target.side_effect = [
@@ -728,8 +723,6 @@ class TestProcessFromStorageBackend:
 
     def test_configuration_error_propagates_from_read_target(self, runner_with_backend, tmp_path):
         """ConfigurationError (lifecycle violation) must NOT be caught."""
-        from agent_actions.errors import ConfigurationError
-
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = ["data.json"]
         backend.read_target.side_effect = ConfigurationError("missing _state")
@@ -749,8 +742,6 @@ class TestProcessFromStorageBackend:
         self, runner_with_backend, tmp_path
     ):
         """ConfigurationError from list_target_files must NOT be caught."""
-        from agent_actions.errors import ConfigurationError
-
         backend = runner_with_backend.storage_backend
         backend.list_target_files.side_effect = ConfigurationError("bad state")
 

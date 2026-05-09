@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -288,8 +289,6 @@ class ActionRunner:
             upstream_backend = self._get_upstream_backend(upstream_folder, upstream_workflow)
             target_files = upstream_backend.list_target_files(dep_name)
             if target_files:
-                import shutil
-
                 # Clean stale exports before writing fresh data
                 if upstream_target.exists():
                     shutil.rmtree(upstream_target)
@@ -327,8 +326,6 @@ class ActionRunner:
         """
         if self.storage_backend is None:
             return
-
-        import json
 
         for file_path in sorted(upstream_target.iterdir()):
             if not file_path.is_file() or file_path.suffix != ".json":
