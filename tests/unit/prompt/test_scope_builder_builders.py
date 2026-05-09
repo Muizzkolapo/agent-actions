@@ -136,7 +136,7 @@ class TestDependencyNamespace:
             agent_config={"agent_type": "test"},
             agent_indices=None,
         )
-        assert isinstance(result, dict)
+        assert result == {}
 
     def test_absent_namespace_marked_none(self):
         """Absent dependency namespace stored as None (guard-skipped)."""
