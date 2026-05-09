@@ -12,7 +12,7 @@ loaders for cataloging prompts at documentation time.
 | `__init__.py` | Module | Package init. Consumers import directly from submodules. | — |
 | `builder.py` | Module | `ContextBuilder` helpers that resolve field references into prompt context data. | `preprocessing`, `validation` |
 | ~~`scope.py`~~ | Deleted | Facade removed. Consumers import directly from the 6 `scope_*` modules. | — |
-| `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. | `preprocessing` |
+| `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. `parse_field_reference()` delegates to `ReferenceParser` from `field_resolution` package. | `preprocessing` |
 | `scope_inference.py` | Module | Dependency inference: fan-in detection, version branch expansion, input/context source resolution. | `preprocessing` |
 | `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. | `preprocessing` |
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. | `preprocessing` |
