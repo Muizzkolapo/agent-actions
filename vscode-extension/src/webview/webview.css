@@ -60,8 +60,10 @@
     color-scheme: dark;
   }
 
-  /* ─── Light theme ─── */
-  .theme-light {
+  /* ─── Light theme fallback — VS Code body class provides instant defaults;
+     the JS theme sync refines these to match the exact installed theme. ─── */
+  body.vscode-light,
+  body.vscode-high-contrast-light {
     --background:           220 18% 96%;
     --foreground:           225 30%  9%;
     --card:                 0 0% 100%;
@@ -90,8 +92,6 @@
 
     --success:              152 50% 36%;
     --warning:              38 80% 44%;
-
-    color-scheme: light;
   }
 
   *,
@@ -127,7 +127,8 @@
     background-size: 22px 22px;
     background-attachment: fixed;
   }
-  .theme-light body {
+  body.vscode-light,
+  body.vscode-high-contrast-light {
     background-image:
       radial-gradient(
         circle at 1px 1px,
@@ -501,12 +502,12 @@
   .dc-json-bool   { color: hsl(264 72% 78%); font-style: italic; }
   .dc-json-null   { color: hsl(264 72% 78%); font-style: italic; opacity: 0.7; }
 
-  .theme-light .dc-json-key    { color: hsl(198 88% 36%); }
-  .theme-light .dc-json-string { color: hsl(28 75% 38%); }
-  .theme-light .dc-json-number { color: hsl(264 60% 42%); }
-  .theme-light .dc-json-brace  { color: hsl(150 50% 28%); }
-  .theme-light .dc-json-bool   { color: hsl(264 60% 42%); }
-  .theme-light .dc-json-null   { color: hsl(264 60% 42%); opacity: 0.6; }
+  body.vscode-light .dc-json-key    { color: hsl(198 88% 36%); }
+  body.vscode-light .dc-json-string { color: hsl(28 75% 38%); }
+  body.vscode-light .dc-json-number { color: hsl(264 60% 42%); }
+  body.vscode-light .dc-json-brace  { color: hsl(150 50% 28%); }
+  body.vscode-light .dc-json-bool   { color: hsl(264 60% 42%); }
+  body.vscode-light .dc-json-null   { color: hsl(264 60% 42%); opacity: 0.6; }
 }
 
 /* Source quote + long prose blocks */
@@ -593,9 +594,9 @@
   .data-card button:hover:not(.dc-section-header):not(.dc-copy-btn):not(.nav-btn) {
     background: hsl(var(--accent) / 0.45);
   }
-  .theme-light .data-card span[style*="#7dd3fc"],
-  .theme-light .data-card span[style*="#c084fc"],
-  .theme-light .data-card span[style*="#6ee7b7"] {
+  body.vscode-light .data-card span[style*="#7dd3fc"],
+  body.vscode-light .data-card span[style*="#c084fc"],
+  body.vscode-light .data-card span[style*="#6ee7b7"] {
     color: hsl(var(--foreground) / 0.85) !important;
   }
 }

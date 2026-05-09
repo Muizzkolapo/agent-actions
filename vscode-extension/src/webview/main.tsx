@@ -17,19 +17,7 @@ declare global {
   }
 }
 
-type ThemeKind = "light" | "dark" | "high-contrast" | "high-contrast-light";
-
-const VALID_THEME_KINDS: ReadonlySet<string> = new Set([
-  "light",
-  "dark",
-  "high-contrast",
-  "high-contrast-light",
-]);
-
 interface PreviewPayload {
-  // Records are unknown shapes from the backend; the only contract is
-  // that DataCard accepts them. Match the host-side type to keep the
-  // host/webview pair in sync.
   records: unknown[];
   totalCount: number;
   nodeName: string;
@@ -41,7 +29,6 @@ interface PreviewPayload {
   limit: number;
   offset: number;
   actionInfo?: ActionInfo;
-  themeKind?: ThemeKind;
   /** Set when host detects records.length disagrees with backend-reported
    * totalCount (either direction). The masthead chip surfaces the lie so
    * we don't paper over stale storage counts. */
@@ -50,23 +37,10 @@ interface PreviewPayload {
 
 const vscode = window.acquireVsCodeApi();
 
-function applyTheme(kind: ThemeKind | undefined) {
-  // Guard against malformed theme:update payloads — unknown values fall
-  // through to dark rather than triggering a visible flip.
-  const safe: ThemeKind = kind && VALID_THEME_KINDS.has(kind) ? kind : "dark";
-  const isLight = safe === "light" || safe === "high-contrast-light";
-  document.documentElement.classList.toggle("theme-light", isLight);
-  document.documentElement.classList.toggle("dark", !isLight);
-}
-
 const Tick = () => <span className="toolbar-tick" aria-hidden>│</span>;
 
 function App({ initial }: { initial: PreviewPayload }) {
   const [data, setData] = useState<PreviewPayload>(initial);
-
-  useEffect(() => {
-    applyTheme(data.themeKind);
-  }, [data.themeKind]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -74,8 +48,6 @@ function App({ initial }: { initial: PreviewPayload }) {
       if (!msg || typeof msg !== "object") return;
       if (msg.type === "preview:update" && msg.payload) {
         setData(msg.payload as PreviewPayload);
-      } else if (msg.type === "theme:update") {
-        applyTheme(msg.kind);
       }
     };
     window.addEventListener("message", handler);
@@ -224,6 +196,104 @@ function App({ initial }: { initial: PreviewPayload }) {
     </div>
   );
 }
+
+/* ── VS Code theme sync ──────────────────────────────────────────────── */
+// Reads VS Code's native CSS variables (auto-updated on theme change) and
+// converts them to HSL component format so our variable-based CSS adapts
+// to any installed theme — light, dark, or high-contrast.
+
+function colorToHsl(raw: string): string | null {
+  let r: number, g: number, b: number;
+  const hex = raw.match(/^#([0-9a-f]{3,8})$/i);
+  if (hex) {
+    const h = hex[1];
+    if (h.length === 3) {
+      r = parseInt(h[0] + h[0], 16);
+      g = parseInt(h[1] + h[1], 16);
+      b = parseInt(h[2] + h[2], 16);
+    } else if (h.length >= 6) {
+      r = parseInt(h.slice(0, 2), 16);
+      g = parseInt(h.slice(2, 4), 16);
+      b = parseInt(h.slice(4, 6), 16);
+    } else return null;
+  } else {
+    const rgb = raw.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    if (rgb) {
+      r = parseInt(rgb[1]);
+      g = parseInt(rgb[2]);
+      b = parseInt(rgb[3]);
+    } else return null;
+  }
+  const rn = r / 255,
+    gn = g / 255,
+    bn = b / 255;
+  const max = Math.max(rn, gn, bn),
+    min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  let hue = 0,
+    sat = 0;
+  if (max !== min) {
+    const d = max - min;
+    sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === rn) hue = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+    else if (max === gn) hue = ((bn - rn) / d + 2) / 6;
+    else hue = ((rn - gn) / d + 4) / 6;
+  }
+  return `${Math.round(hue * 360)} ${Math.round(sat * 100)}% ${Math.round(l * 100)}%`;
+}
+
+const VSCODE_THEME_MAP: [string, ...string[]][] = [
+  ["--background", "--vscode-editor-background"],
+  ["--foreground", "--vscode-editor-foreground"],
+  ["--card", "--vscode-editorWidget-background", "--vscode-sideBar-background", "--vscode-editor-background"],
+  ["--card-foreground", "--vscode-editor-foreground"],
+  ["--card-elevated", "--vscode-editorHoverWidget-background", "--vscode-tab-activeBackground", "--vscode-editorWidget-background"],
+  ["--popover", "--vscode-editorWidget-background"],
+  ["--popover-foreground", "--vscode-editor-foreground"],
+  ["--primary", "--vscode-textLink-foreground"],
+  ["--primary-foreground", "--vscode-button-foreground", "--vscode-editor-background"],
+  ["--secondary", "--vscode-input-background", "--vscode-editor-background"],
+  ["--secondary-foreground", "--vscode-input-foreground", "--vscode-editor-foreground"],
+  ["--muted", "--vscode-input-background", "--vscode-editor-background"],
+  ["--muted-foreground", "--vscode-descriptionForeground"],
+  ["--accent", "--vscode-list-hoverBackground", "--vscode-editor-background"],
+  ["--accent-foreground", "--vscode-editor-foreground"],
+  ["--destructive", "--vscode-errorForeground"],
+  ["--border", "--vscode-panel-border", "--vscode-editorWidget-border"],
+  ["--border-strong", "--vscode-contrastBorder", "--vscode-panel-border"],
+  ["--input", "--vscode-input-background"],
+  ["--ring", "--vscode-focusBorder"],
+  ["--success", "--vscode-testing-iconPassed", "--vscode-debugIcon-startForeground"],
+  ["--warning", "--vscode-editorWarning-foreground"],
+];
+
+function syncVscodeTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const el = document.documentElement;
+  for (const [target, ...sources] of VSCODE_THEME_MAP) {
+    for (const src of sources) {
+      const raw = cs.getPropertyValue(src).trim();
+      if (raw) {
+        const hsl = colorToHsl(raw);
+        if (hsl) {
+          el.style.setProperty(target, hsl);
+          break;
+        }
+      }
+    }
+  }
+  const isDark =
+    document.body.classList.contains("vscode-dark") ||
+    document.body.classList.contains("vscode-high-contrast");
+  el.style.setProperty("color-scheme", isDark ? "dark" : "light");
+}
+
+// Run immediately; re-sync when VS Code flips the body class on theme change.
+syncVscodeTheme();
+new MutationObserver(() => syncVscodeTheme()).observe(document.body, {
+  attributes: true,
+  attributeFilter: ["class"],
+});
 
 /* ── Bootstrap ───────────────────────────────────────────────────────── */
 

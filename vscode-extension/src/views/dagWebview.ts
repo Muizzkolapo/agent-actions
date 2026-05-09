@@ -139,7 +139,9 @@ export class DagWebview implements vscode.Disposable {
         const direction = layout === 'horizontal' ? 'LR' : 'TD';
 
         const diagram = this.buildMermaidDiagram(workflow.actions, direction);
-        this.panel.webview.html = this.renderHtml(this.panel.webview, diagram, workflow.name);
+        const isDark = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
+                       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast;
+        this.panel.webview.html = this.renderHtml(this.panel.webview, diagram, workflow.name, isDark);
     }
 
     private buildMermaidDiagram(actions: ActionInfo[], direction: string): string {
@@ -202,7 +204,7 @@ export class DagWebview implements vscode.Disposable {
         return status;
     }
 
-    private renderHtml(webview: vscode.Webview, diagram: string, workflowName: string): string {
+    private renderHtml(webview: vscode.Webview, diagram: string, workflowName: string, isDark: boolean): string {
         const nonce = this.getNonce();
 
         // Use locally bundled Mermaid for security and offline support
@@ -292,7 +294,7 @@ ${diagram}
 
         mermaid.initialize({
             startOnLoad: true,
-            theme: 'dark',
+            theme: '${isDark ? 'dark' : 'default'}',
             flowchart: {
                 curve: 'basis',
                 htmlLabels: false,  // Disable HTML labels for security
