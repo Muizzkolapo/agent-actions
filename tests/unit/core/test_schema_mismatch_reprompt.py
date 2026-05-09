@@ -302,7 +302,7 @@ class TestCreateRepromptServiceWithValidator:
     def test_no_validator_no_validation_key_raises(self):
         """No validator and no 'validation' key → ValueError."""
         reprompt_config = {"max_attempts": 3}
-        with pytest.raises(ValueError, match="missing required 'validation' field"):
+        with pytest.raises(ValueError, match="Reprompt requires a validator"):
             create_reprompt_service_from_config(reprompt_config)
 
 

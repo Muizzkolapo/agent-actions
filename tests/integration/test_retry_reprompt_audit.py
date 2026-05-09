@@ -571,7 +571,7 @@ class TestRepromptServiceFactory:
         assert svc is not None
 
     def test_config_missing_validation_no_validator_raises(self):
-        with pytest.raises(ValueError, match="missing required 'validation'"):
+        with pytest.raises(ValueError, match="Reprompt requires a validator"):
             create_reprompt_service_from_config({"max_attempts": 2})
 
     def test_config_with_validation_name(self):
