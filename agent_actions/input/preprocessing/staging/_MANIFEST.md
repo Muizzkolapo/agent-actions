@@ -35,7 +35,7 @@ time (e.g., `source.page_content` resolves to the wrong data).
 
 The guard runs at two convergence points:
 1. **Staging file load** — `process_initial_stage()` calls it before any processing
-2. **Prompt context build** — `_load_source_namespace()` in `scope_builder.py` calls it
+2. **Prompt context build** — `SourceNamespaceBuilder.build()` in `scope_builder.py` calls it
    as a belt-and-suspenders check, catching data that entered through storage reads,
    batch resume, or FILE mode source resolution
 
