@@ -22,9 +22,14 @@ export class DagWebview implements vscode.Disposable {
         private readonly context: vscode.ExtensionContext,
         private readonly model: WorkflowModel
     ) {
-        // Auto-update when model changes
+        // Auto-update when model changes or theme switches
         this.disposables.push(
             this.model.onDidChange(() => {
+                if (this.panel) {
+                    this.update();
+                }
+            }),
+            vscode.window.onDidChangeActiveColorTheme(() => {
                 if (this.panel) {
                     this.update();
                 }

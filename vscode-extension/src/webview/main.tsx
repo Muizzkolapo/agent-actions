@@ -204,7 +204,7 @@ function App({ initial }: { initial: PreviewPayload }) {
 
 function colorToHsl(raw: string): string | null {
   let r: number, g: number, b: number;
-  const hex = raw.match(/^#([0-9a-f]{3,8})$/i);
+  const hex = raw.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
   if (hex) {
     const h = hex[1];
     if (h.length === 3) {
@@ -219,9 +219,9 @@ function colorToHsl(raw: string): string | null {
   } else {
     const rgb = raw.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
     if (rgb) {
-      r = parseInt(rgb[1]);
-      g = parseInt(rgb[2]);
-      b = parseInt(rgb[3]);
+      r = parseInt(rgb[1], 10);
+      g = parseInt(rgb[2], 10);
+      b = parseInt(rgb[3], 10);
     } else return null;
   }
   const rn = r / 255,
@@ -290,7 +290,20 @@ function syncVscodeTheme() {
 
 // Run immediately; re-sync when VS Code flips the body class on theme change.
 syncVscodeTheme();
-new MutationObserver(() => syncVscodeTheme()).observe(document.body, {
+let lastBodyClass = document.body.className;
+let rafPending = false;
+new MutationObserver(() => {
+  const cls = document.body.className;
+  if (cls === lastBodyClass) return;
+  lastBodyClass = cls;
+  if (!rafPending) {
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      syncVscodeTheme();
+    });
+  }
+}).observe(document.body, {
   attributes: true,
   attributeFilter: ["class"],
 });

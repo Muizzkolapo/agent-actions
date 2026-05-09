@@ -92,6 +92,8 @@
 
     --success:              152 50% 36%;
     --warning:              38 80% 44%;
+
+    color-scheme: light;
   }
 
   *,
@@ -502,12 +504,18 @@
   .dc-json-bool   { color: hsl(264 72% 78%); font-style: italic; }
   .dc-json-null   { color: hsl(264 72% 78%); font-style: italic; opacity: 0.7; }
 
-  body.vscode-light .dc-json-key    { color: hsl(198 88% 36%); }
-  body.vscode-light .dc-json-string { color: hsl(28 75% 38%); }
-  body.vscode-light .dc-json-number { color: hsl(264 60% 42%); }
-  body.vscode-light .dc-json-brace  { color: hsl(150 50% 28%); }
-  body.vscode-light .dc-json-bool   { color: hsl(264 60% 42%); }
-  body.vscode-light .dc-json-null   { color: hsl(264 60% 42%); opacity: 0.6; }
+  body.vscode-light .dc-json-key,
+  body.vscode-high-contrast-light .dc-json-key       { color: hsl(198 88% 36%); }
+  body.vscode-light .dc-json-string,
+  body.vscode-high-contrast-light .dc-json-string    { color: hsl(28 75% 38%); }
+  body.vscode-light .dc-json-number,
+  body.vscode-high-contrast-light .dc-json-number    { color: hsl(264 60% 42%); }
+  body.vscode-light .dc-json-brace,
+  body.vscode-high-contrast-light .dc-json-brace     { color: hsl(150 50% 28%); }
+  body.vscode-light .dc-json-bool,
+  body.vscode-high-contrast-light .dc-json-bool      { color: hsl(264 60% 42%); }
+  body.vscode-light .dc-json-null,
+  body.vscode-high-contrast-light .dc-json-null      { color: hsl(264 60% 42%); opacity: 0.6; }
 }
 
 /* Source quote + long prose blocks */
