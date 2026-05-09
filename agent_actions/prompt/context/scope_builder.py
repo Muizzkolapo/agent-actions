@@ -1,4 +1,11 @@
-"""Field context builder — reads from record's namespaced content."""
+"""Field context builder — reads from record's namespaced content.
+
+Assembles field_context from four composable namespace builders:
+- SourceNamespaceBuilder: user input data
+- DependencyNamespaceBuilder: upstream action outputs
+- VersionNamespaceBuilder: loop iteration info + promoted convenience vars
+- WorkflowMetadataBuilder: workflow-level metadata
+"""
 
 import logging
 from typing import Any
@@ -20,76 +27,41 @@ __all__ = [
 ]
 
 
-def build_field_context_with_history(
-    agent_name: str,
-    agent_config: dict | None,
-    agent_indices: dict[str, int] | None = None,
-    source_content: Any | None = None,
-    version_context: dict | None = None,
-    workflow_metadata: dict | None = None,
-    current_item: dict | None = None,
-    context_scope: dict | None = None,
-) -> dict:
-    """
-    Build field context with explicit namespace structure.
+# ---------------------------------------------------------------------------
+# Namespace builders
+# ---------------------------------------------------------------------------
 
-    Composes focused builders for each concern: source data, dependency
-    namespaces, version iteration info, and workflow metadata.
 
-    Architecture (per anatomy_action.md):
-    field_context = {
-        "source": {...},        # Original input data
-        "{dep_name}": {...},    # Dependency action outputs (FILTERED by context_scope)
-        "seed": {...},          # Static reference data (via static_data)
-        "version": {...},       # Version iteration info (i, idx, length, first, last)
-        "workflow": {...},      # Workflow metadata
-    }
+class SourceNamespaceBuilder:
+    """Build the 'source' namespace from input data."""
 
-    Args:
-        agent_name: Name of the current action
-        agent_config: Action configuration dict
-        agent_indices: REQUIRED if action has dependencies. Maps action names to positions.
-        source_content: Original input data for "source" namespace
-        version_context: Loop iteration info
-        workflow_metadata: Workflow metadata
-        current_item: Current record being processed (has lineage, content)
-        context_scope: Controls which fields to load (progressive data exposure)
+    @staticmethod
+    def build(source_content: Any | None, agent_name: str) -> dict | None:
+        """Return source namespace dict, or None if no source data.
 
-    Returns:
-        Dict with namespaces: source, {dep_names}, version, workflow.
-        May contain "_dependency_metadata" key with field-load diagnostics
-        (callers needing it should pop it before passing downstream).
+        Handles both wrapped (``{"content": {...}}``) and flat dict formats.
+        Fires ContextNamespaceLoadedEvent on success.
+        """
+        source_namespace: dict = {}
+        if source_content and isinstance(source_content, dict):
+            if "content" in source_content and isinstance(source_content["content"], dict):
+                source_namespace = source_content["content"]
+            else:
+                source_namespace = dict(source_content)
 
-    Raises:
-        ConfigurationError: If action has dependencies but agent_indices not provided
-    """
-    field_context: dict = {}
+        if not source_namespace:
+            return None
 
-    source_ns = SourceNamespaceBuilder.build(source_content, agent_name)
-    if source_ns:
-        field_context["source"] = source_ns
-
-    dep_namespaces, dep_metadata = DependencyNamespaceBuilder.build(
-        agent_name, agent_config, agent_indices, current_item, context_scope
-    )
-    field_context.update(dep_namespaces)
-    if dep_metadata:
-        field_context["_dependency_metadata"] = dep_metadata
-    version_result = VersionNamespaceBuilder.build(version_context, agent_name)
-    if version_result:
-        field_context.update(version_result)
-
-    workflow_ns = WorkflowMetadataBuilder.build(workflow_metadata, agent_name)
-    if workflow_ns:
-        field_context["workflow"] = workflow_ns
-
-    logger.debug(
-        "Built field_context for '%s' with namespaces: %s",
-        agent_name,
-        list(field_context.keys()),
-    )
-
-    return field_context
+        logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
+        fire_event(
+            ContextNamespaceLoadedEvent(
+                action_name=agent_name,
+                namespace="source",
+                field_count=len(source_namespace),
+                fields=list(source_namespace.keys()),
+            )
+        )
+        return source_namespace
 
 
 class DependencyNamespaceBuilder:
@@ -260,38 +232,6 @@ class VersionNamespaceBuilder:
         return result
 
 
-class SourceNamespaceBuilder:
-    """Build the 'source' namespace from input data."""
-
-    @staticmethod
-    def build(source_content: Any | None, agent_name: str) -> dict | None:
-        """Return source namespace dict, or None if no source data.
-
-        Handles both wrapped (``{"content": {...}}``) and flat dict formats.
-        Fires ContextNamespaceLoadedEvent on success.
-        """
-        source_namespace: dict = {}
-        if source_content and isinstance(source_content, dict):
-            if "content" in source_content and isinstance(source_content["content"], dict):
-                source_namespace = source_content["content"]
-            else:
-                source_namespace = dict(source_content)
-
-        if not source_namespace:
-            return None
-
-        logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
-        fire_event(
-            ContextNamespaceLoadedEvent(
-                action_name=agent_name,
-                namespace="source",
-                field_count=len(source_namespace),
-                fields=list(source_namespace.keys()),
-            )
-        )
-        return source_namespace
-
-
 class WorkflowMetadataBuilder:
     """Build the 'workflow' namespace from workflow metadata."""
 
@@ -314,3 +254,81 @@ class WorkflowMetadataBuilder:
             )
         )
         return workflow_metadata
+
+
+# ---------------------------------------------------------------------------
+# Assembler
+# ---------------------------------------------------------------------------
+
+
+def build_field_context_with_history(
+    agent_name: str,
+    agent_config: dict | None,
+    agent_indices: dict[str, int] | None = None,
+    source_content: Any | None = None,
+    version_context: dict | None = None,
+    workflow_metadata: dict | None = None,
+    current_item: dict | None = None,
+    context_scope: dict | None = None,
+) -> dict:
+    """
+    Build field context with explicit namespace structure.
+
+    Composes focused builders for each concern: source data, dependency
+    namespaces, version iteration info, and workflow metadata.
+
+    Architecture (per anatomy_action.md):
+    field_context = {
+        "source": {...},        # Original input data
+        "{dep_name}": {...},    # Dependency action outputs (FILTERED by context_scope)
+        "seed": {...},          # Static reference data (via static_data)
+        "version": {...},       # Version iteration info (i, idx, length, first, last)
+        "workflow": {...},      # Workflow metadata
+    }
+
+    Args:
+        agent_name: Name of the current action
+        agent_config: Action configuration dict
+        agent_indices: REQUIRED if action has dependencies. Maps action names to positions.
+        source_content: Original input data for "source" namespace
+        version_context: Loop iteration info
+        workflow_metadata: Workflow metadata
+        current_item: Current record being processed (has lineage, content)
+        context_scope: Controls which fields to load (progressive data exposure)
+
+    Returns:
+        Dict with namespaces: source, {dep_names}, version, workflow.
+        May contain "_dependency_metadata" key with field-load diagnostics
+        (callers needing it should pop it before passing downstream).
+
+    Raises:
+        ConfigurationError: If action has dependencies but agent_indices not provided
+    """
+    field_context: dict = {}
+
+    source_ns = SourceNamespaceBuilder.build(source_content, agent_name)
+    if source_ns:
+        field_context["source"] = source_ns
+
+    dep_namespaces, dep_metadata = DependencyNamespaceBuilder.build(
+        agent_name, agent_config, agent_indices, current_item, context_scope
+    )
+    field_context.update(dep_namespaces)
+    if dep_metadata:
+        field_context["_dependency_metadata"] = dep_metadata
+
+    version_result = VersionNamespaceBuilder.build(version_context, agent_name)
+    if version_result:
+        field_context.update(version_result)
+
+    workflow_ns = WorkflowMetadataBuilder.build(workflow_metadata, agent_name)
+    if workflow_ns:
+        field_context["workflow"] = workflow_ns
+
+    logger.debug(
+        "Built field_context for '%s' with namespaces: %s",
+        agent_name,
+        list(field_context.keys()),
+    )
+
+    return field_context
