@@ -149,7 +149,9 @@ class TestProcessAgentOutputBackend:
 
     def test_backend_exception_falls_back(self, tmp_path, make_manager, mock_storage_backend):
         """When backend raises an exception, falls back to filesystem."""
-        mock_storage_backend.list_target_files.side_effect = RuntimeError("db locked")
+        import sqlite3
+
+        mock_storage_backend.list_target_files.side_effect = sqlite3.OperationalError("db locked")
 
         output_dir = tmp_path / "target" / "extract"
         output_dir.mkdir(parents=True)

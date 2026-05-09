@@ -8,7 +8,9 @@ in tests (e.g. test_runner_merge.py) continues to work.
 
 from __future__ import annotations
 
+import json
 import logging
+import sqlite3
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -249,7 +251,7 @@ def process_from_storage_backend(
 
         try:
             target_files = runner.storage_backend.list_target_files(action_name)
-        except Exception as e:
+        except (OSError, sqlite3.Error) as e:
             logger.warning(
                 "Could not list target files from backend for %s: %s",
                 action_name,
@@ -264,7 +266,7 @@ def process_from_storage_backend(
                 if relative_path not in data_by_path:
                     data_by_path[relative_path] = []
                 data_by_path[relative_path].append((action_name, data))
-            except Exception as e:
+            except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
                 logger.warning(
                     "Failed to read backend entry %s/%s: %s",
                     action_name,
