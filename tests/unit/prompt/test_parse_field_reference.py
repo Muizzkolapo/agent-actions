@@ -42,33 +42,33 @@ class TestParseFieldReferenceErrors:
     """Malformed input raises ValueError with descriptive message."""
 
     def test_none_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="Invalid reference"):
             parse_field_reference(None)
 
     def test_empty_string_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="Invalid reference"):
             parse_field_reference("")
 
     def test_no_dot_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="Invalid selector"):
             parse_field_reference("nodot")
 
     def test_trailing_dot_raises(self):
-        with pytest.raises(ValueError, match="non-empty"):
+        with pytest.raises(ValueError, match="cannot be empty"):
             parse_field_reference("action.")
 
     def test_leading_dot_raises(self):
-        with pytest.raises(ValueError, match="non-empty"):
+        with pytest.raises(ValueError, match="cannot be empty"):
             parse_field_reference(".field")
 
     def test_just_dot_raises(self):
-        with pytest.raises(ValueError, match="non-empty"):
+        with pytest.raises(ValueError, match="cannot be empty"):
             parse_field_reference(".")
 
     def test_non_string_int_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="Invalid reference"):
             parse_field_reference(42)
 
     def test_non_string_list_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="Invalid reference"):
             parse_field_reference(["action", "field"])

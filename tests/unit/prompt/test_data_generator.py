@@ -22,7 +22,7 @@ class TestParseFieldReference:
             parse_field_reference("extract_qa_")
 
     def test_invalid_empty_string_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="Invalid reference"):
             parse_field_reference("")
 
     def test_invalid_none_raises(self):
@@ -30,15 +30,15 @@ class TestParseFieldReference:
             parse_field_reference(None)  # type: ignore[arg-type]
 
     def test_no_dot_no_underscore_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="Invalid selector"):
             parse_field_reference("justword")
 
     def test_empty_action_name_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="cannot be empty"):
             parse_field_reference(".field")
 
     def test_empty_field_name_raises(self):
-        with pytest.raises(ValueError, match="Invalid field reference"):
+        with pytest.raises(ValueError, match="cannot be empty"):
             parse_field_reference("action.")
 
     def test_underscore_only_raises(self):

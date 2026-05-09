@@ -15,30 +15,29 @@ __all__ = [
 
 
 def parse_field_reference(field_ref: str) -> tuple[str, str]:
+    """Parse field reference in 'action.field' format, returning (action_name, field_name).
+
+    Thin wrapper around ReferenceParser for backward compatibility.
+    Raises ValueError on malformed input (preserving existing contract).
     """
-    Parse field reference in 'action.field' format, returning (action_name, field_name).
-    """
-    if not field_ref or not isinstance(field_ref, str):
-        raise ValueError(
-            f"Invalid field reference: {field_ref!r}. "
-            f"Expected non-empty string in format 'action.field'"
+    # Lazy import: avoids circular dependency
+    # (scope_parsing -> field_resolution -> context_provider -> scope_builder -> scope_parsing)
+    from agent_actions.input.preprocessing.field_resolution.exceptions import (
+        InvalidReferenceError,
+    )
+    from agent_actions.input.preprocessing.field_resolution.reference_parser import (
+        ReferenceFormat,
+        ReferenceParser,
+    )
+
+    try:
+        parsed = ReferenceParser().parse(
+            field_ref, format_hint=ReferenceFormat.SELECTOR, strict=True
         )
+    except InvalidReferenceError as e:
+        raise ValueError(str(e)) from e
 
-    parts = field_ref.split(".", 1)
-    if len(parts) != 2:
-        raise ValueError(
-            f"Invalid field reference: '{field_ref}'. "
-            f"Expected format: 'action.field' (with exactly one dot)"
-        )
-
-    action_name, field_name = parts
-
-    if not action_name or not field_name:
-        raise ValueError(
-            f"Invalid field reference: '{field_ref}'. Both action and field must be non-empty"
-        )
-
-    return (action_name, field_name)
+    return (parsed.action_name, ".".join(parsed.field_path))
 
 
 def extract_field_names_from_references(
