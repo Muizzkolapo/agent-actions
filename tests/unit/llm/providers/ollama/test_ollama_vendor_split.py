@@ -297,6 +297,95 @@ class TestOllamaCloudClient:
         assert result[0]["_parse_error"]
         assert result[0]["raw_response"] == "not json at all"
 
+    @patch("agent_actions.llm.providers.ollama.client.ResponseBuilder")
+    @patch("agent_actions.llm.providers.ollama.client.fire_event")
+    @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
+    @patch("agent_actions.llm.providers.ollama.client.MessageBuilder")
+    def test_cloud_repair_recovers_fenced_json(self, mock_mb, mock_build, mock_fire, mock_rb):
+        """Cloud path recovers valid JSON wrapped in markdown fences."""
+        mock_envelope = MagicMock()
+        mock_envelope.to_dicts.return_value = [{"role": "user", "content": "hi"}]
+        mock_mb.build.return_value = mock_envelope
+
+        fenced = '```json\n{"label": "fruit"}\n```'
+        mock_client = MagicMock()
+        mock_client.chat.return_value = _fake_chat_response(content=fenced)
+        mock_build.return_value = mock_client
+
+        config = _make_agent_config()
+        result = _call_ollama_json(
+            "key",
+            config,
+            PROMPT,
+            CONTEXT,
+            SCHEMA,
+            vendor_slug="ollama_cloud",
+            cloud=True,
+        )
+
+        assert len(result) == 1
+        assert result[0]["label"] == "fruit"
+        assert "_parse_error" not in result[0]
+
+    @patch("agent_actions.llm.providers.ollama.client.ResponseBuilder")
+    @patch("agent_actions.llm.providers.ollama.client.fire_event")
+    @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
+    @patch("agent_actions.llm.providers.ollama.client.MessageBuilder")
+    def test_cloud_repair_recovers_trailing_comma(self, mock_mb, mock_build, mock_fire, mock_rb):
+        """Cloud path recovers JSON with trailing commas."""
+        mock_envelope = MagicMock()
+        mock_envelope.to_dicts.return_value = [{"role": "user", "content": "hi"}]
+        mock_mb.build.return_value = mock_envelope
+
+        bad_json = '{"label": "fruit",}'
+        mock_client = MagicMock()
+        mock_client.chat.return_value = _fake_chat_response(content=bad_json)
+        mock_build.return_value = mock_client
+
+        config = _make_agent_config()
+        result = _call_ollama_json(
+            "key",
+            config,
+            PROMPT,
+            CONTEXT,
+            SCHEMA,
+            vendor_slug="ollama_cloud",
+            cloud=True,
+        )
+
+        assert len(result) == 1
+        assert result[0]["label"] == "fruit"
+        assert "_parse_error" not in result[0]
+
+    @patch("agent_actions.llm.providers.ollama.client.ResponseBuilder")
+    @patch("agent_actions.llm.providers.ollama.client.fire_event")
+    @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
+    @patch("agent_actions.llm.providers.ollama.client.MessageBuilder")
+    def test_local_parse_failure_returns_error_dict(self, mock_mb, mock_build, mock_fire, mock_rb):
+        """Local path returns error dict without attempting repair."""
+        mock_envelope = MagicMock()
+        mock_envelope.to_dicts.return_value = [{"role": "user", "content": "hi"}]
+        mock_mb.build.return_value = mock_envelope
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = _fake_chat_response(content="not json")
+        mock_build.return_value = mock_client
+
+        config = _make_agent_config()
+        result = _call_ollama_json(
+            None,
+            config,
+            PROMPT,
+            CONTEXT,
+            None,
+            vendor_slug="ollama_local",
+            cloud=False,
+        )
+
+        assert len(result) == 1
+        assert result[0]["_parse_error"]
+        assert result[0]["raw_response"] == "not json"
+
     def test_missing_api_key_raises_configuration_error(self):
         """_build_ollama_client(cloud=True) without api_key raises ConfigurationError."""
         config = _make_agent_config()
