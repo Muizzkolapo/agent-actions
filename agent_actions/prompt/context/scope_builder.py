@@ -69,9 +69,12 @@ def build_field_context_with_history(
     if source_ns:
         field_context["source"] = source_ns
 
-    _load_dependency_namespaces(
-        field_context, agent_name, agent_config, agent_indices, current_item, context_scope
+    dep_namespaces, dep_metadata = DependencyNamespaceBuilder.build(
+        agent_name, agent_config, agent_indices, current_item, context_scope
     )
+    field_context.update(dep_namespaces)
+    if dep_metadata:
+        field_context["_dependency_metadata"] = dep_metadata
     version_result = VersionNamespaceBuilder.build(version_context, agent_name)
     if version_result:
         field_context.update(version_result)
@@ -89,121 +92,129 @@ def build_field_context_with_history(
     return field_context
 
 
-def _load_dependency_namespaces(
-    field_context: dict,
-    agent_name: str,
-    agent_config: dict | None,
-    agent_indices: dict[str, int] | None,
-    current_item: dict | None,
-    context_scope: dict | None,
-) -> None:
-    """Load dependency action outputs from record's namespaced content.
+class DependencyNamespaceBuilder:
+    """Build dependency namespaces from record's namespaced content."""
 
-    With the additive content model, every previous action's output is
-    stored under its namespace on the record: content = {"action_a": {...}, ...}.
+    @staticmethod
+    def build(
+        agent_name: str,
+        agent_config: dict | None,
+        agent_indices: dict[str, int] | None,
+        current_item: dict | None,
+        context_scope: dict | None,
+    ) -> tuple[dict[str, Any], dict]:
+        """Return (dep_namespaces, metadata).
 
-    Collects field-load metadata and stores it on field_context["_dependency_metadata"]
-    for downstream diagnostics.
-    """
-    from agent_actions.utils.constants import SPECIAL_NAMESPACES
+        dep_namespaces maps dep_name -> filtered data (or None for guard-skipped).
+        metadata maps dep_name -> {stored_fields, loaded_fields, stored_count, loaded_count}.
 
-    batch_mode_enabled = bool(agent_config and agent_indices and current_item)
-    logger.debug(
-        "[CONTEXT BUILD] Action '%s': batch_mode_enabled=%s",
-        agent_name,
-        batch_mode_enabled,
-    )
+        Raises:
+            ConfigurationError: If action has dependencies but agent_indices not provided.
+        """
+        from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
-    if batch_mode_enabled:
-        # Narrowed by batch_mode_enabled — all are truthy
-        if agent_config is None or agent_indices is None or current_item is None:
-            raise ValueError(
-                f"batch_mode requires agent_config, agent_indices, and current_item "
-                f"(action: '{agent_name}')"
-            )
-
-        workflow_actions = list(agent_indices.keys())
-        input_sources, context_sources = infer_dependencies(
-            agent_config, workflow_actions, agent_name, validate=False
-        )
-
-        logger.debug(
-            "[AUTO-INFER] Action '%s': input_sources=%s, context_sources=%s",
-            agent_name,
-            input_sources,
-            context_sources,
-        )
-
-        namespaced_content = _extract_content_data(current_item)
-        all_deps = input_sources + context_sources
+        dep_namespaces: dict[str, Any] = {}
         metadata_collector: dict = {}
 
-        if all_deps:
-            allowed_fields_map = _extract_allowed_fields_per_dependency(
-                all_deps, context_scope, agent_name
-            )
+        batch_mode_enabled = bool(agent_config and agent_indices and current_item)
+        logger.debug(
+            "[CONTEXT BUILD] Action '%s': batch_mode_enabled=%s",
+            agent_name,
+            batch_mode_enabled,
+        )
 
-            for dep_name in all_deps:
-                if dep_name in SPECIAL_NAMESPACES:
-                    logger.debug("Skipping special namespace '%s' (handled separately)", dep_name)
-                    continue
-
-                dep_data = namespaced_content.get(dep_name)
-                if dep_data is None:
-                    # Namespace is null (guard-skipped) or absent (guard-filtered /
-                    # arrived via a different branch).  Store None so downstream
-                    # observe/passthrough can distinguish "declared but absent" from
-                    # "undeclared" and yield None instead of crashing.
-                    logger.debug(
-                        "[RECORD NAMESPACE] '%s' null/absent on record for action '%s' "
-                        "(likely guard-skipped or guard-filtered)",
-                        dep_name,
-                        agent_name,
-                    )
-                    field_context[dep_name] = None
-                    continue
-
-                if not isinstance(dep_data, dict):
-                    logger.warning(
-                        "[RECORD NAMESPACE] '%s' for action '%s' is %s, not dict — skipping",
-                        dep_name,
-                        agent_name,
-                        type(dep_data).__name__,
-                    )
-                    continue
-
-                allowed_fields = allowed_fields_map.get(dep_name)
-                _filter_and_store_fields(
-                    field_context,
-                    dep_name,
-                    dep_data,
-                    allowed_fields,
-                    source_type="RECORD NAMESPACE",
-                    fail_on_missing=True,
-                    metadata_collector=metadata_collector,
+        if batch_mode_enabled:
+            # Narrowed by batch_mode_enabled — all are truthy
+            if agent_config is None or agent_indices is None or current_item is None:
+                raise ValueError(
+                    f"batch_mode requires agent_config, agent_indices, and current_item "
+                    f"(action: '{agent_name}')"
                 )
 
-        if metadata_collector:
-            field_context["_dependency_metadata"] = metadata_collector
+            workflow_actions = list(agent_indices.keys())
+            input_sources, context_sources = infer_dependencies(
+                agent_config, workflow_actions, agent_name, validate=False
+            )
 
-    else:
-        logger.debug(
-            "[CONTEXT BUILD SKIP] Action '%s': Batch mode condition not met.",
-            agent_name,
-        )
+            logger.debug(
+                "[AUTO-INFER] Action '%s': input_sources=%s, context_sources=%s",
+                agent_name,
+                input_sources,
+                context_sources,
+            )
 
-    if agent_config and agent_config.get("dependencies") and not agent_indices:
-        dependencies = agent_config.get("dependencies", [])
-        raise ConfigurationError(
-            f"Action '{agent_name}' has dependencies {dependencies} but agent_indices was not provided. "
-            f"agent_indices is required for dependency resolution.\n\n"
-            f"Ensure the workflow orchestrator passes agent_indices to build_field_context_with_history().",
-            context={
-                "action": agent_name,
-                "dependencies": dependencies,
-                "hint": "agent_indices must be a dict mapping action names to their positions",
-            },
-        )
+            namespaced_content = _extract_content_data(current_item)
+            all_deps = input_sources + context_sources
+
+            if all_deps:
+                allowed_fields_map = _extract_allowed_fields_per_dependency(
+                    all_deps, context_scope, agent_name
+                )
+
+                for dep_name in all_deps:
+                    if dep_name in SPECIAL_NAMESPACES:
+                        logger.debug(
+                            "Skipping special namespace '%s' (handled separately)", dep_name
+                        )
+                        continue
+
+                    dep_data = namespaced_content.get(dep_name)
+                    if dep_data is None:
+                        # Namespace is null (guard-skipped) or absent (guard-filtered /
+                        # arrived via a different branch).  Store None so downstream
+                        # observe/passthrough can distinguish "declared but absent" from
+                        # "undeclared" and yield None instead of crashing.
+                        logger.debug(
+                            "[RECORD NAMESPACE] '%s' null/absent on record for action '%s' "
+                            "(likely guard-skipped or guard-filtered)",
+                            dep_name,
+                            agent_name,
+                        )
+                        dep_namespaces[dep_name] = None
+                        continue
+
+                    if not isinstance(dep_data, dict):
+                        logger.warning(
+                            "[RECORD NAMESPACE] '%s' for action '%s' is %s, not dict — skipping",
+                            dep_name,
+                            agent_name,
+                            type(dep_data).__name__,
+                        )
+                        continue
+
+                    allowed_fields = allowed_fields_map.get(dep_name)
+                    _filter_and_store_fields(
+                        dep_namespaces,
+                        dep_name,
+                        dep_data,
+                        allowed_fields,
+                        source_type="RECORD NAMESPACE",
+                        fail_on_missing=True,
+                        metadata_collector=metadata_collector,
+                    )
+
+        else:
+            logger.debug(
+                "[CONTEXT BUILD SKIP] Action '%s': Batch mode condition not met.",
+                agent_name,
+            )
+
+        # ConfigurationError: MUST remain after batch-mode branch.
+        # Fires when deps are declared but agent_indices is missing.
+        if agent_config and agent_config.get("dependencies") and not agent_indices:
+            dependencies = agent_config.get("dependencies", [])
+            raise ConfigurationError(
+                f"Action '{agent_name}' has dependencies {dependencies} but agent_indices was not provided. "
+                f"agent_indices is required for dependency resolution.\n\n"
+                f"Ensure the workflow orchestrator passes agent_indices to build_field_context_with_history().",
+                context={
+                    "action": agent_name,
+                    "dependencies": dependencies,
+                    "hint": "agent_indices must be a dict mapping action names to their positions",
+                },
+            )
+
+        return dep_namespaces, metadata_collector
 
 
 class VersionNamespaceBuilder:
