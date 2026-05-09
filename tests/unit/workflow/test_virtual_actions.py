@@ -157,6 +157,7 @@ class TestRunnerVirtualActionResolution:
         runner.project_root = tmp_path
         runner.workflow_name = "enrich"
         runner.storage_backend = None
+        runner._upstream_backends = {}
         runner.virtual_actions = {
             "extract": VirtualAction(source_workflow="ingest", action_name="extract"),
         }
