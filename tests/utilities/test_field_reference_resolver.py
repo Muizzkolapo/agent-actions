@@ -471,3 +471,52 @@ class TestIntegration:
         assert eval_data["extract_facts"]["count"] == 2
         assert eval_data["source"]["title"] == "Test Document"
         assert eval_data["local_field"] == "local_value"
+
+
+# =============================================================================
+# Wildcard resolution
+# =============================================================================
+
+
+class TestWildcardResolution:
+    """Wildcard 'action.*' parsing and resolution."""
+
+    def test_parse_wildcard(self, resolver):
+        parsed = resolver.parse("action.*")
+        assert parsed is not None
+        assert parsed.action_name == "action"
+        assert parsed.field_path == ["*"]
+
+    def test_resolve_wildcard_returns_all_fields(self, resolver):
+        context = {"action": {"field1": "a", "field2": "b"}}
+        result = resolver.resolve("action.*", context)
+        assert result.success
+        assert result.value == {"field1": "a", "field2": "b"}
+        assert result.source_action == "action"
+        assert result.field_path == ["*"]
+
+    def test_resolve_wildcard_empty_dict(self, resolver):
+        context = {"action": {}}
+        result = resolver.resolve("action.*", context)
+        assert result.success
+        assert result.value == {}
+
+    def test_resolve_wildcard_non_dict_namespace(self, resolver):
+        context = {"action": "not_a_dict"}
+        result = resolver.resolve("action.*", context)
+        assert not result.success
+        assert "non-dict" in result.error
+
+    def test_resolve_wildcard_missing_namespace_lenient(self, resolver):
+        result = resolver.resolve("missing.*", {})
+        assert not result.success
+        assert "not found" in result.error
+
+    def test_resolve_wildcard_missing_namespace_strict(self, strict_resolver):
+        with pytest.raises(ReferenceNotFoundError):
+            strict_resolver.resolve("missing.*", {})
+
+    def test_resolve_wildcard_non_dict_strict(self, strict_resolver):
+        context = {"action": ["a", "b"]}
+        with pytest.raises(ReferenceNotFoundError, match="non-dict"):
+            strict_resolver.resolve("action.*", context)

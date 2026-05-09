@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Unify field reference parsing: parse_field_reference() delegates to ReferenceParser, add wildcard resolution to FieldReferenceResolver"
+time: 2026-05-09T12:20:00.000000Z

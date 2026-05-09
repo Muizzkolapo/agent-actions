@@ -100,6 +100,25 @@ class FieldReferenceResolver:
 
             action_data = field_context[reference.action_name]
 
+            if reference.field_path == ["*"]:
+                if isinstance(action_data, dict):
+                    return ResolvedReference(
+                        value=action_data,
+                        source_action=reference.action_name,
+                        field_path=reference.field_path,
+                        success=True,
+                    )
+                error_msg = f"Wildcard on non-dict namespace '{reference.action_name}'"
+                if self.strict_mode:
+                    raise ReferenceNotFoundError(error_msg)
+                return ResolvedReference(
+                    value=fallback_value,
+                    source_action=reference.action_name,
+                    field_path=reference.field_path,
+                    success=False,
+                    error=error_msg,
+                )
+
             value = self._resolve_nested_path(action_data, reference.field_path)
 
             if value is self._SENTINEL and self.strict_mode:
