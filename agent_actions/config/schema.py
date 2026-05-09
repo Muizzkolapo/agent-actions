@@ -296,7 +296,9 @@ class ActionConfig(BaseModel):
             return None
         if v is True:
             raise ValueError(
-                "reprompt: true is not valid; use reprompt: {validation: fn_name} or omit"
+                "reprompt: true is not valid. Use one of:\n"
+                "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
+                "  reprompt: {validation: fn_name}            # custom UDF validates"
             )
         return v
 
@@ -402,7 +404,9 @@ class DefaultsConfig(BaseModel):
             return None
         if v is True:
             raise ValueError(
-                "reprompt: true is not valid; use reprompt: {validation: fn_name} or omit"
+                "reprompt: true is not valid. Use one of:\n"
+                "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
+                "  reprompt: {validation: fn_name}            # custom UDF validates"
             )
         return v
 

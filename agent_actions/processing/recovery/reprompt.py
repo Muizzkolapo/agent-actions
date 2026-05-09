@@ -384,8 +384,9 @@ def create_reprompt_service_from_config(
             )
         if reprompt_config:
             raise ValueError(
-                "Reprompt configuration missing required 'validation' field. "
-                "Example: {'validation': 'check_no_forbidden_words', 'max_attempts': 2}"
+                "Reprompt requires a validator. Add one of:\n"
+                "  validation: check_fn_name            # custom UDF\n"
+                "  on_schema_mismatch: reprompt         # use the action's schema"
             )
         return None
 

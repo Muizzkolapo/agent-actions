@@ -590,7 +590,7 @@ class TestParameterValidation:
         """Should raise ValueError when 'validation' key is missing from config."""
         config = {"max_attempts": 3}  # Missing "validation" key
 
-        with pytest.raises(ValueError, match="missing required 'validation' field"):
+        with pytest.raises(ValueError, match="Reprompt requires a validator"):
             create_reprompt_service_from_config(config)
 
     def test_valid_on_exhausted_values_accepted(self):

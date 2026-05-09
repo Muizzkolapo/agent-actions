@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix reprompt error messages to mention schema-based validation alongside UDF-based"
+time: 2026-05-09T04:03:00.000000Z
