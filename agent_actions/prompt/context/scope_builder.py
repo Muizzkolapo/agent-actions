@@ -65,12 +65,18 @@ def build_field_context_with_history(
     """
     field_context: dict = {}
 
-    _load_source_namespace(field_context, source_content, agent_name)
+    source_ns = SourceNamespaceBuilder.build(source_content, agent_name)
+    if source_ns:
+        field_context["source"] = source_ns
+
     _load_dependency_namespaces(
         field_context, agent_name, agent_config, agent_indices, current_item, context_scope
     )
     _load_version_context(field_context, version_context, agent_name)
-    _load_workflow_metadata(field_context, workflow_metadata, agent_name)
+
+    workflow_ns = WorkflowMetadataBuilder.build(workflow_metadata, agent_name)
+    if workflow_ns:
+        field_context["workflow"] = workflow_ns
 
     logger.debug(
         "Built field_context for '%s' with namespaces: %s",
@@ -79,30 +85,6 @@ def build_field_context_with_history(
     )
 
     return field_context
-
-
-def _load_source_namespace(
-    field_context: dict, source_content: Any | None, agent_name: str
-) -> None:
-    """Load original input data into the 'source' namespace."""
-    source_namespace: dict = {}
-    if source_content and isinstance(source_content, dict):
-        if "content" in source_content and isinstance(source_content["content"], dict):
-            source_namespace = source_content["content"]
-        else:
-            source_namespace = dict(source_content)
-
-    if source_namespace:
-        field_context["source"] = source_namespace
-        logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
-        fire_event(
-            ContextNamespaceLoadedEvent(
-                action_name=agent_name,
-                namespace="source",
-                field_count=len(source_namespace),
-                fields=list(source_namespace.keys()),
-            )
-        )
 
 
 def _load_dependency_namespaces(
@@ -252,20 +234,57 @@ def _load_version_context(
     )
 
 
-def _load_workflow_metadata(
-    field_context: dict, workflow_metadata: dict | None, agent_name: str
-) -> None:
-    """Load workflow metadata into the 'workflow' namespace."""
-    if not workflow_metadata:
-        return
+class SourceNamespaceBuilder:
+    """Build the 'source' namespace from input data."""
 
-    field_context["workflow"] = workflow_metadata
-    logger.debug("Added 'workflow' namespace")
-    fire_event(
-        ContextNamespaceLoadedEvent(
-            action_name=agent_name,
-            namespace="workflow",
-            field_count=len(workflow_metadata),
-            fields=list(workflow_metadata.keys()),
+    @staticmethod
+    def build(source_content: Any | None, agent_name: str) -> dict | None:
+        """Return source namespace dict, or None if no source data.
+
+        Handles both wrapped (``{"content": {...}}``) and flat dict formats.
+        Fires ContextNamespaceLoadedEvent on success.
+        """
+        source_namespace: dict = {}
+        if source_content and isinstance(source_content, dict):
+            if "content" in source_content and isinstance(source_content["content"], dict):
+                source_namespace = source_content["content"]
+            else:
+                source_namespace = dict(source_content)
+
+        if not source_namespace:
+            return None
+
+        logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
+        fire_event(
+            ContextNamespaceLoadedEvent(
+                action_name=agent_name,
+                namespace="source",
+                field_count=len(source_namespace),
+                fields=list(source_namespace.keys()),
+            )
         )
-    )
+        return source_namespace
+
+
+class WorkflowMetadataBuilder:
+    """Build the 'workflow' namespace from workflow metadata."""
+
+    @staticmethod
+    def build(workflow_metadata: dict | None, agent_name: str) -> dict | None:
+        """Return workflow namespace dict, or None if no metadata.
+
+        Fires ContextNamespaceLoadedEvent on success.
+        """
+        if not workflow_metadata:
+            return None
+
+        logger.debug("Added 'workflow' namespace")
+        fire_event(
+            ContextNamespaceLoadedEvent(
+                action_name=agent_name,
+                namespace="workflow",
+                field_count=len(workflow_metadata),
+                fields=list(workflow_metadata.keys()),
+            )
+        )
+        return workflow_metadata
