@@ -461,6 +461,11 @@ class WorkflowResolutionService:
             resolved = PromptFormatter.get_raw_prompt(config)
             return {**config, "prompt": resolved}
         except Exception:
+            logger.debug(
+                "Cannot resolve prompt for seed field extraction in action '%s', "
+                "skipping template-level seed validation",
+                config.get("name", "unknown"),
+            )
             return config
 
     # ── Vendor run-mode compatibility ──────────────────────────────────
