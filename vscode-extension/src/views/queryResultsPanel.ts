@@ -29,15 +29,12 @@ interface PreviewPayload {
     workflowPath: string;
     limit: number;
     offset: number;
-    themeKind: ThemeKind;
     /** Set when the storage backend's totalCount disagrees with the actual
      * records length on this page. The backend's `record_count` column can
      * go stale relative to the JSON `data` array; we surface the lie so
      * the user can see when storage is misreporting. */
     countDrift?: { reported: number; actual: number };
 }
-
-type ThemeKind = 'light' | 'dark' | 'high-contrast' | 'high-contrast-light';
 
 export class QueryResultsPanel implements vscode.Disposable {
     private panel: vscode.WebviewPanel | undefined;
@@ -121,7 +118,6 @@ export class QueryResultsPanel implements vscode.Disposable {
             workflowPath,
             limit,
             offset,
-            themeKind: currentThemeKind(),
             countDrift: drift,
         };
     }
@@ -202,14 +198,6 @@ export class QueryResultsPanel implements vscode.Disposable {
             this.disposables
         );
 
-        // Reflect VS Code theme changes into the webview
-        const themeSub = vscode.window.onDidChangeActiveColorTheme(() => {
-            if (this.panel && this.webviewReady) {
-                this.panel.webview.postMessage({ type: 'theme:update', kind: currentThemeKind() });
-            }
-        });
-        this.disposables.push(themeSub);
-
         return this.panel;
     }
 }
@@ -233,10 +221,8 @@ function renderAppHtml(
     ].join('; ');
 
     const initialJson = JSON.stringify(payload).replace(/</g, '\\u003c');
-    const themeClass = payload.themeKind === 'light' || payload.themeKind === 'high-contrast-light' ? 'theme-light' : 'dark';
-
     return `<!DOCTYPE html>
-<html lang="en" class="${themeClass}">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -289,16 +275,3 @@ function escapeHtml(value: string): string {
         .replace(/"/g, '&quot;');
 }
 
-function currentThemeKind(): ThemeKind {
-    switch (vscode.window.activeColorTheme.kind) {
-        case vscode.ColorThemeKind.Light:
-            return 'light';
-        case vscode.ColorThemeKind.HighContrast:
-            return 'high-contrast';
-        case vscode.ColorThemeKind.HighContrastLight:
-            return 'high-contrast-light';
-        case vscode.ColorThemeKind.Dark:
-        default:
-            return 'dark';
-    }
-}
