@@ -37,6 +37,7 @@ def parse_field_reference(field_ref: str) -> tuple[str, str]:
     except InvalidReferenceError as e:
         raise ValueError(str(e)) from e
 
+    assert parsed is not None  # strict=True guarantees non-None return
     return (parsed.action_name, ".".join(parsed.field_path))
 
 
