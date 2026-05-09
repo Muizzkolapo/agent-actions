@@ -726,6 +726,45 @@ class TestProcessFromStorageBackend:
         assert found == 1
         assert processed == 1
 
+    def test_configuration_error_propagates_from_read_target(self, runner_with_backend, tmp_path):
+        """ConfigurationError (lifecycle violation) must NOT be caught."""
+        from agent_actions.errors import ConfigurationError
+
+        backend = runner_with_backend.storage_backend
+        backend.list_target_files.return_value = ["data.json"]
+        backend.read_target.side_effect = ConfigurationError("missing _state")
+
+        params = FileProcessParams(
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
+            strategy=_make_strategy(),
+            upstream_data_dirs=[str(tmp_path / "target" / "dep")],
+            output_directory=str(tmp_path / "output"),
+            idx=0,
+        )
+        with pytest.raises(ConfigurationError, match="missing _state"):
+            runner_with_backend._process_from_storage_backend(params)
+
+    def test_configuration_error_propagates_from_list_target_files(
+        self, runner_with_backend, tmp_path
+    ):
+        """ConfigurationError from list_target_files must NOT be caught."""
+        from agent_actions.errors import ConfigurationError
+
+        backend = runner_with_backend.storage_backend
+        backend.list_target_files.side_effect = ConfigurationError("bad state")
+
+        params = FileProcessParams(
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
+            strategy=_make_strategy(),
+            upstream_data_dirs=[str(tmp_path / "target" / "dep")],
+            output_directory=str(tmp_path / "output"),
+            idx=0,
+        )
+        with pytest.raises(ConfigurationError, match="bad state"):
+            runner_with_backend._process_from_storage_backend(params)
+
 
 # ---------------------------------------------------------------------------
 # _is_target_directory

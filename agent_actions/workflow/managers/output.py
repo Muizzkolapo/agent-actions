@@ -2,6 +2,7 @@
 
 import json
 import logging
+import sqlite3
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -163,7 +164,7 @@ class ActionOutputManager:
         """Load all target data for a node from storage backend."""
         try:
             target_files = self.storage_backend.list_target_files(action_name)
-        except Exception as e:
+        except (OSError, sqlite3.Error) as e:
             logger.warning("Failed to list target files for %s: %s", action_name, e, exc_info=True)
             return [], []
         outputs: list[Any] = []
@@ -174,7 +175,7 @@ class ActionOutputManager:
                     outputs.extend(data)
                 else:
                     outputs.append(data)  # type: ignore[unreachable]
-            except Exception as e:
+            except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
                 logger.warning(
                     "Failed to read backend target %s/%s: %s",
                     action_name,

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -232,7 +234,7 @@ class ActionRunner:
                     # The actual data will be loaded from SQLite, not filesystem
                     virtual_path = target_dir / dep_name
                     return virtual_path
-            except Exception as e:
+            except (OSError, sqlite3.Error) as e:
                 logger.warning("Storage backend check failed for %s: %s", dep_name, e)
         else:
             logger.debug("No storage backend available for dependency check: %s", dep_name)
@@ -286,7 +288,6 @@ class ActionRunner:
             upstream_backend = self._get_upstream_backend(upstream_folder, upstream_workflow)
             target_files = upstream_backend.list_target_files(dep_name)
             if target_files:
-                import json
                 import shutil
 
                 # Clean stale exports before writing fresh data
@@ -306,7 +307,7 @@ class ActionRunner:
                 )
                 self._sync_virtual_action_to_local_backend(dep_name, upstream_target)
                 return upstream_target
-        except Exception as e:
+        except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
             logger.debug("Upstream storage backend export failed for '%s': %s", dep_name, e)
 
         logger.warning(
