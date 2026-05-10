@@ -65,12 +65,18 @@ class InlineSchemaValidator(BaseActionEntryValidator):
 
             if not isinstance(field_type, str):
                 if isinstance(field_type, dict):
-                    # Dict values are valid nested JSON Schema property
-                    # definitions (e.g. {type: array, items: {type: string}}).
+                    errors.append(
+                        f"{desc} inline schema field '{field_name}' uses a nested "
+                        f"definition, which is not supported in shorthand format. "
+                        f"For simple nested objects, use the string shorthand: "
+                        f"\"array[object:{{'prop': 'type'}}]\". "
+                        f"For complex structures, use a schema file: "
+                        f"'schema: <schema_name>' referencing a file in schema/."
+                    )
                     continue
                 errors.append(
                     f"{desc} 'schema' value for field '{field_name}' must be "
-                    f"a string or dict type, found {type(field_type).__name__}."
+                    f"a string type, found {type(field_type).__name__}."
                 )
                 continue
 
