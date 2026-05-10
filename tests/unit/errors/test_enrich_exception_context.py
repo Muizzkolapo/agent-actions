@@ -5,7 +5,6 @@ from agent_actions.errors.base import enrich_exception_context as base_enrich
 
 
 class TestEnrichAgentActionsError:
-
     def test_updates_empty_context(self):
         e = AgentActionsError("msg")
         enrich_exception_context(e, key="val")
@@ -28,7 +27,6 @@ class TestEnrichAgentActionsError:
 
 
 class TestEnrichBareException:
-
     def test_bare_exception_gets_context_created(self):
         e = RuntimeError("msg")
         enrich_exception_context(e, key="val")
@@ -63,6 +61,5 @@ class TestEnrichBareException:
 
 
 class TestReExport:
-
     def test_importable_from_package(self):
         assert enrich_exception_context is base_enrich

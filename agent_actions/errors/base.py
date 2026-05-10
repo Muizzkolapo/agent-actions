@@ -44,9 +44,8 @@ def enrich_exception_context(exc: Exception, **context: Any) -> None:
     updated directly.  For other exception types, a ``.context`` dict
     attribute is created if it doesn't exist or isn't a dict.
 
-    This centralises the defensive pattern used in coordinator and
-    config_pipeline so callers avoid repeated ``hasattr`` / ``isinstance``
-    / ``type: ignore`` boilerplate.
+    Centralises defensive context-patching so callers avoid repeated
+    ``hasattr`` / ``isinstance`` / ``type: ignore`` boilerplate.
     """
     if isinstance(exc, AgentActionsError):
         exc.context.update(context)

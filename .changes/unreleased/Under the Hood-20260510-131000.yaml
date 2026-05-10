@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Extract duplicated exception context-patching into enrich_exception_context() helper; add debug logging to 2 silent fallback blocks"
+time: 2026-05-10T13:10:00.000000Z
