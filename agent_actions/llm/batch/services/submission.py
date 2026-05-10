@@ -28,6 +28,7 @@ from agent_actions.logging.events.batch_events import (
     BatchStatusCheckFailedEvent,
     BatchSubmissionFailedEvent,
 )
+from agent_actions.output.response.config_schema import WhereClauseBehavior
 
 logger = logging.getLogger(__name__)
 
@@ -234,21 +235,17 @@ class BatchSubmissionService:
             return SubmissionResult(passthrough=passthrough)
 
         where_config = agent_config.get("where_clause") or {}
-        behavior = where_config.get("behavior", "filter")
+        behavior = WhereClauseBehavior(where_config.get("behavior", "filter"))
 
-        if behavior == "filter":
+        if behavior == WhereClauseBehavior.FILTER:
             passthrough = {
                 "type": "tombstone",
                 "data": [],
                 "output_directory": output_directory,
             }
-        elif behavior == "skip":
+        else:
             passthrough = BatchPassthroughBuilder(output_directory).from_context(
                 context_map, reason="where_clause_not_matched"
-            )
-        else:
-            passthrough = BatchPassthroughBuilder(output_directory).from_data(
-                data, reason="conditional_clause_failed"
             )
         return SubmissionResult(passthrough=passthrough)
 

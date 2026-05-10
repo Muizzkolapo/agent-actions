@@ -10,7 +10,7 @@ Only depends on `errors` and `utils.constants` (leaf packages).
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `guard_parser.py` | Module | Guard expression parser for SQL-like and UDF conditions. | `GuardType`, `GuardExpression`, `GuardParser`, `parse_guard` |
-| `consolidated_guard.py` | Module | Guard configuration with behavior control (skip, filter, write_to, reprocess). | `GuardBehavior`, `GuardConfig`, `parse_guard_config` |
+| `consolidated_guard.py` | Module | Guard configuration with behavior control (skip, filter, warn). | `GuardBehavior`, `GuardConfig`, `parse_guard_config`, `_UNSUPPORTED_GUARD_BEHAVIORS` |
 
 ## Key Symbols
 
@@ -18,7 +18,7 @@ Only depends on `errors` and `utils.constants` (leaf packages).
 |--------|--------|------|-------------|
 | `guard_parser` | `GuardParser` | Class | Parses guard expression strings into typed `GuardExpression` objects. |
 | `guard_parser` | `GuardType` | Enum | Guard types: `SQL`, `UDF`. |
-| `consolidated_guard` | `GuardBehavior` | Enum | Behavior on guard failure: `SKIP`, `FILTER`, `WRITE_TO`, `REPROCESS`. |
+| `consolidated_guard` | `GuardBehavior` | Enum | Behavior on guard failure: `SKIP`, `FILTER`, `WARN`. Unsupported values (`write_to`, `reprocess`) are in `_UNSUPPORTED_GUARD_BEHAVIORS`. |
 | `consolidated_guard` | `parse_guard_config` | Function | Parses guard config from string or dict format. |
 
 ## Re-export Shims

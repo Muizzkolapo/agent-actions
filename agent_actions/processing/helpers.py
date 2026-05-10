@@ -32,8 +32,8 @@ def run_dynamic_agent(
     When skip conditions are met, returns the original context without executing.
     """
     if not skip_guard_eval:
+        from agent_actions.guards import GuardBehavior
         from agent_actions.input.preprocessing.filtering.evaluator import (
-            GuardBehavior,
             get_guard_evaluator,
         )
 

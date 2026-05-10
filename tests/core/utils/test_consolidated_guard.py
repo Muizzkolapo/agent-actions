@@ -64,8 +64,39 @@ class TestGuardConfig:
         """Test GuardBehavior enum has expected values."""
         assert GuardBehavior.SKIP.value == "skip"
         assert GuardBehavior.FILTER.value == "filter"
-        assert hasattr(GuardBehavior, "WRITE_TO")
-        assert hasattr(GuardBehavior, "REPROCESS")
+        assert GuardBehavior.WARN.value == "warn"
+        assert not hasattr(GuardBehavior, "WRITE_TO")
+        assert not hasattr(GuardBehavior, "REPROCESS")
+
+    def test_unsupported_guard_behaviors(self):
+        """Test that write_to and reprocess are rejected with clear errors."""
+        from agent_actions.guards.consolidated_guard import _UNSUPPORTED_GUARD_BEHAVIORS
+
+        assert "write_to" in _UNSUPPORTED_GUARD_BEHAVIORS
+        assert "reprocess" in _UNSUPPORTED_GUARD_BEHAVIORS
+
+        with pytest.raises(ConfigValidationError, match="not yet supported"):
+            GuardConfig(condition="score > 50", on_false="write_to")
+
+        with pytest.raises(ConfigValidationError, match="not yet supported"):
+            GuardConfig(condition="score > 50", on_false="reprocess")
+
+    def test_invalid_guard_behavior_raises(self):
+        """Test that unknown behavior values raise clear errors."""
+        with pytest.raises(ConfigValidationError, match="Invalid guard behavior"):
+            GuardConfig(condition="score > 50", on_false="explode")
+
+    def test_non_string_on_false_raises(self):
+        """Test that non-string, non-enum on_false raises type error."""
+        with pytest.raises(
+            ConfigValidationError, match="on_false must be a GuardBehavior or string"
+        ):
+            GuardConfig(condition="score > 50", on_false=123)
+
+        with pytest.raises(
+            ConfigValidationError, match="on_false must be a GuardBehavior or string"
+        ):
+            GuardConfig(condition="score > 50", on_false=None)
 
 
 class TestConsolidatedGuardParser:

@@ -3,10 +3,15 @@
 import logging
 import threading
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Any
 
 from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.guards.consolidated_guard import (
+    _UNSUPPORTED_GUARD_BEHAVIORS as _UNSUPPORTED_BEHAVIORS,
+)
+from agent_actions.guards.consolidated_guard import (
+    GuardBehavior,
+)
 from agent_actions.input.preprocessing.filtering.guard_filter import (
     ErrorCategory,
     FilterItemRequest,
@@ -16,17 +21,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
 )
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
-_UNSUPPORTED_BEHAVIORS = frozenset({"write_to", "reprocess"})
-
 logger = logging.getLogger(__name__)
-
-
-class GuardBehavior(StrEnum):
-    """Evaluation-valid guard behaviors; see also guards.consolidated_guard.GuardBehavior for config-layer."""
-
-    SKIP = "skip"
-    FILTER = "filter"
-    WARN = "warn"
 
 
 @dataclass
