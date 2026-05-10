@@ -7,6 +7,7 @@ from typing import Any
 from rich.console import Console
 
 from agent_actions.config.manager import ConfigManager
+from agent_actions.errors import enrich_exception_context
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -31,14 +32,7 @@ def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -
     except Exception as e:
         agent = getattr(manager, "agent_name", "unknown")
         logger.debug("Config stage '%s' failed for agent '%s': %s", stage, agent, e)
-        if not hasattr(e, "context") or not isinstance(e.context, dict):  # type: ignore[attr-defined]
-            e.context = {}  # type: ignore[attr-defined]
-        e.context.update(  # type: ignore[attr-defined]
-            {
-                "agent": agent,
-                "pipeline_stage": stage,
-            }
-        )
+        enrich_exception_context(e, agent=agent, pipeline_stage=stage)
         raise
 
 

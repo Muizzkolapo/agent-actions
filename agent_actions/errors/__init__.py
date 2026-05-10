@@ -1,7 +1,11 @@
 """Centralized error exports for agent-actions."""
 
 # Base error
-from agent_actions.errors.base import AgentActionsError, get_error_detail
+from agent_actions.errors.base import (
+    AgentActionsError,
+    enrich_exception_context,
+    get_error_detail,
+)
 
 # Common errors
 from agent_actions.errors.common import InvalidParameterError
@@ -77,6 +81,7 @@ from agent_actions.errors.validation import (
 __all__ = [
     # Base
     "AgentActionsError",
+    "enrich_exception_context",
     "get_error_detail",
     # Common
     "InvalidParameterError",

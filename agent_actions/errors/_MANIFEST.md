@@ -7,6 +7,7 @@
 | `base.py` | Module | Base exception classes for agent-actions. `AgentActionsError.__init__` defensively copies `context` (`dict(context) if context else {}`), preventing mutation by callers — inherited by all subclasses. | `utilities` |
 | `AgentActionsError` | Class | Base exception for all agent-actions errors. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `detailed_str` | Method | Return message with full context dict — use at debug/event boundaries. | - |
+| `enrich_exception_context` | Function | Attach key-value context to any exception. For `AgentActionsError`, updates `.context` directly. For other exceptions, creates `.context` if missing or non-dict. | - |
 | `get_error_detail` | Function | Return `detailed_str()` for `AgentActionsError`, else `str()`. Use instead of `str(error)` at structured-logging boundaries. | - |
 | `common.py` | Module | Common errors used across multiple domains. | `errors` |
 | `InvalidParameterError` | Class | Raised when invalid or missing parameters are provided. | - |

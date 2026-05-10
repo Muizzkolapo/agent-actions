@@ -37,6 +37,26 @@ class AgentActionsError(Exception):
             return super().__str__()
 
 
+def enrich_exception_context(exc: Exception, **context: Any) -> None:
+    """Attach key-value context to any exception.
+
+    If *exc* is an ``AgentActionsError``, its ``.context`` dict is
+    updated directly.  For other exception types, a ``.context`` dict
+    attribute is created if it doesn't exist or isn't a dict.
+
+    Centralises defensive context-patching so callers avoid repeated
+    ``hasattr`` / ``isinstance`` / ``type: ignore`` boilerplate.
+    """
+    if isinstance(exc, AgentActionsError):
+        exc.context.update(context)
+    else:
+        existing = getattr(exc, "context", None)
+        if not isinstance(existing, dict):
+            exc.context = dict(context)  # type: ignore[attr-defined]
+        else:
+            exc.context.update(context)  # type: ignore[attr-defined]
+
+
 def get_error_detail(error: Exception) -> str:
     """Return detailed_str() for AgentActionsError, else str()."""
     if isinstance(error, AgentActionsError):

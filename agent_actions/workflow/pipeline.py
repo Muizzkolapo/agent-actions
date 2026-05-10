@@ -478,12 +478,16 @@ class ProcessingPipeline:
 
                 logger.debug("Loaded source data via SourceDataLoader for %s", file_path)
 
-            except (FileNotFoundError, ValueError):
+            except (FileNotFoundError, ValueError) as e:
                 # FileNotFoundError: no source data for this path (normal for
                 # cross-workflow workflows that have no staging data).
                 # ValueError: empty/invalid path from storage backend validation.
                 # In both cases, input data is the correct source context.
-                pass
+                logger.debug(
+                    "Source data not loaded for %s (using input data as source context): %s",
+                    file_path,
+                    e,
+                )
 
         # ── per-action record_limit ──────────────────────────────────────
         record_limit = self.config.action_config.get("record_limit")
