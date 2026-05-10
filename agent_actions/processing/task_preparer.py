@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from agent_actions.input.preprocessing.filtering.evaluator import GuardBehavior
+from agent_actions.guards import GuardBehavior
 from agent_actions.processing.prepared_task import (
     GuardStatus,
     PreparationContext,

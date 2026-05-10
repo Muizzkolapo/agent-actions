@@ -340,8 +340,8 @@ def prefilter_by_guard(
     if not guard_config:
         return data, [], originals
 
+    from agent_actions.guards import GuardBehavior
     from agent_actions.input.preprocessing.filtering.evaluator import (
-        GuardBehavior,
         get_guard_evaluator,
     )
     from agent_actions.utils.content import get_existing_content
