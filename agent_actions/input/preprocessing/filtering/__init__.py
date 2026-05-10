@@ -1,7 +1,7 @@
 """Filtering submodule - Dataset filtering logic."""
 
+from agent_actions.guards import GuardBehavior
 from agent_actions.input.preprocessing.filtering.evaluator import (
-    GuardBehavior,
     GuardEvaluator,
     GuardResult,
     get_guard_evaluator,
