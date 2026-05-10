@@ -7,7 +7,7 @@ Verifies that:
 """
 
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -54,6 +54,37 @@ def _build_workflow(execution_order=None):
     wf.event_logger = MagicMock()
 
     return wf
+
+
+class TestAsyncErrorEnrichment:
+    """Verify enrichment ordering in async_run."""
+
+    @pytest.mark.asyncio
+    async def test_async_context_set_before_handle_workflow_error(self):
+        """The .context dict must be populated BEFORE the event logger fires (async path)."""
+        wf = _build_workflow()
+        error = RuntimeError("async kaboom")
+
+        orchestrator = wf.services.core.action_level_orchestrator
+        orchestrator.execute_level_async = AsyncMock(side_effect=error)
+
+        captured_context = {}
+
+        def capture_context(exc, **kwargs):
+            if hasattr(exc, "context") and isinstance(exc.context, dict):
+                captured_context.update(exc.context)
+
+        wf.event_logger.handle_workflow_error.side_effect = capture_context
+
+        with patch("agent_actions.workflow.coordinator.get_manager") as mock_gm:
+            mock_gm.return_value.context.return_value.__enter__ = MagicMock()
+            mock_gm.return_value.context.return_value.__exit__ = MagicMock(return_value=False)
+
+            with pytest.raises(RuntimeError):
+                await wf.async_run()
+
+        assert captured_context["workflow"] == "test_workflow"
+        assert captured_context["operation"] == "async_workflow_execution"
 
 
 class TestSequentialErrorEnrichment:

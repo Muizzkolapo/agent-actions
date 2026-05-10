@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from rich.console import Console
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 
@@ -420,13 +420,10 @@ class AgentWorkflow:
                 self.state.failed = True
                 # Enrich BEFORE firing the error event so the formatter
                 # has full context when it renders the user-facing message.
-                if not hasattr(e, "context") or not isinstance(e.context, dict):  # type: ignore[attr-defined]
-                    e.context = {}  # type: ignore[attr-defined]
-                e.context.update(  # type: ignore[attr-defined]
-                    {
-                        "workflow": self.metadata.agent_name,
-                        "operation": "async_workflow_execution",
-                    }
+                enrich_exception_context(
+                    e,
+                    workflow=self.metadata.agent_name,
+                    operation="async_workflow_execution",
                 )
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
@@ -515,13 +512,10 @@ class AgentWorkflow:
                 self.state.failed = True
                 # Enrich BEFORE firing the error event so the formatter
                 # has full context when it renders the user-facing message.
-                if not hasattr(e, "context") or not isinstance(e.context, dict):  # type: ignore[attr-defined]
-                    e.context = {}  # type: ignore[attr-defined]
-                e.context.update(  # type: ignore[attr-defined]
-                    {
-                        "workflow": self.metadata.agent_name,
-                        "operation": "sequential_workflow_execution",
-                    }
+                enrich_exception_context(
+                    e,
+                    workflow=self.metadata.agent_name,
+                    operation="sequential_workflow_execution",
                 )
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
