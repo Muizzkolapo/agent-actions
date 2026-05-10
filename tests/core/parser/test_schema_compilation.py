@@ -7,6 +7,9 @@ These tests verify that:
 3. Strict mode raises errors on schema load failures
 """
 
+import logging
+import unittest.mock
+
 import pytest
 import yaml
 
@@ -143,6 +146,7 @@ class TestIsInlineSchemaDict:
             ),
             pytest.param({}, False, id="empty_dict"),
             pytest.param({"field1": ["string", "null"]}, False, id="non_string_values"),
+            pytest.param({"field1": {"type": "string"}}, False, id="dict_values_nested_schema"),
             pytest.param({"field1": "invalid_type"}, False, id="invalid_types"),
             pytest.param({"tags": "array[string]", "count": "integer"}, True, id="array_types"),
         ],
@@ -304,6 +308,7 @@ class TestSchemaUtilsShared:
             pytest.param({"tags": "array[string]"}, True, id="array_type"),
             pytest.param({"name": "foo", "fields": []}, False, id="compiled_format"),
             pytest.param("schema_name", False, id="non_dict"),
+            pytest.param({"field1": {"type": "string"}}, False, id="dict_values_nested_schema"),
         ],
     )
     def test_is_inline_schema_shorthand(self, schema, expected):
@@ -311,3 +316,42 @@ class TestSchemaUtilsShared:
         from agent_actions.utils.schema_utils import is_inline_schema_shorthand
 
         assert is_inline_schema_shorthand(schema) is expected
+
+
+class TestCompileActionSchemasWarning:
+    """Compile-time warning for unrecognized dict schemas."""
+
+    def test_unrecognized_dict_schema_logs_warning(self, tmp_path):
+        """A dict schema that is neither shorthand nor compiled logs a warning."""
+        _setup_project(tmp_path)
+
+        action = {
+            "name": "test_action",
+            "schema": {
+                "questions": {"type": "array", "items": {"type": "string"}},
+            },
+        }
+
+        render_logger = logging.getLogger("agent_actions.prompt.render_workflow")
+        with unittest.mock.patch.object(render_logger, "warning") as mock_warn:
+            _compile_action_schemas(action, project_root=tmp_path)
+
+        mock_warn.assert_called_once()
+        assert "not in shorthand or compiled format" in mock_warn.call_args[0][0]
+
+    def test_valid_shorthand_no_warning(self, tmp_path):
+        """A valid shorthand dict schema does not trigger the warning."""
+        _setup_project(tmp_path)
+
+        action = {
+            "name": "test_action",
+            "schema": {"name": "string", "age": "integer"},
+        }
+
+        render_logger = logging.getLogger("agent_actions.prompt.render_workflow")
+        with unittest.mock.patch.object(render_logger, "warning") as mock_warn:
+            _compile_action_schemas(action, project_root=tmp_path)
+
+        # No warning should fire — valid shorthand gets expanded
+        for call in mock_warn.call_args_list:
+            assert "not in shorthand or compiled format" not in call[0][0]

@@ -190,13 +190,48 @@ class TestInvalidInlineSchemaTypes:
         ctx = _make_context({"schema": {"field1": 123}})
         result = validator.validate(ctx)
         assert len(result.errors) == 1
-        assert "must be a string or dict type" in result.errors[0]
+        assert "must be a string type" in result.errors[0]
 
-    def test_dict_field_type_value_accepted(self, validator):
-        """Dict values in inline schemas are valid (nested JSON Schema)."""
+    def test_dict_field_type_value_rejected(self, validator):
+        """Nested dict values in inline schemas produce an actionable error."""
         ctx = _make_context({"schema": {"tags": {"type": "array", "items": {"type": "string"}}}})
         result = validator.validate(ctx)
-        assert len(result.errors) == 0
+        assert len(result.errors) == 1
+        assert "nested" in result.errors[0].lower()
+        assert "schema file" in result.errors[0].lower() or "schema:" in result.errors[0]
+        assert "array[object:" in result.errors[0]
+
+    def test_dict_field_type_error_names_field(self, validator):
+        """Error message identifies the specific field with the nested dict."""
+        ctx = _make_context(
+            {"schema": {"questions": {"type": "object", "properties": {"q": {"type": "string"}}}}}
+        )
+        result = validator.validate(ctx)
+        assert len(result.errors) == 1
+        assert "'questions'" in result.errors[0]
+
+    def test_empty_nested_dict_rejected(self, validator):
+        """Even an empty dict value is rejected — not silently accepted."""
+        ctx = _make_context({"schema": {"metadata": {}}})
+        result = validator.validate(ctx)
+        assert len(result.errors) == 1
+        assert "'metadata'" in result.errors[0]
+
+    def test_mixed_flat_and_nested_reports_nested_field(self, validator):
+        """Mixed schemas with both string and dict values report only the nested field."""
+        ctx = _make_context(
+            {
+                "schema": {
+                    "name": "string",
+                    "questions": {"type": "array", "items": {"type": "string"}},
+                }
+            }
+        )
+        result = validator.validate(ctx)
+        assert len(result.errors) == 1
+        assert "'questions'" in result.errors[0]
+        # The string field "name" should not be flagged
+        assert "'name'" not in result.errors[0]
 
     def test_mixed_valid_and_invalid(self, validator):
         ctx = _make_context(

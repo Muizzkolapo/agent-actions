@@ -358,18 +358,35 @@ class SchemaStructureValidator:
         for field_name, field_type in schema.items():
             if not isinstance(field_type, str):
                 if isinstance(field_type, dict):
-                    # Dict values are valid nested JSON Schema property
-                    # definitions (e.g. {type: array, items: {type: string}}).
+                    errors.append(
+                        StaticTypeError(
+                            message=(
+                                f"Inline schema field '{field_name}' uses a nested definition, "
+                                f"which is not supported in shorthand format"
+                            ),
+                            location=FieldLocation(
+                                agent_name=action_name,
+                                config_field=f"{config_field}.{field_name}",
+                            ),
+                            referenced_agent=action_name,
+                            referenced_field=field_name,
+                            hint=(
+                                "For simple nested objects, use: "
+                                "\"array[object:{'prop': 'type'}]\". "
+                                "For complex structures, use a schema file."
+                            ),
+                        )
+                    )
                     continue
                 errors.append(
                     StaticTypeError(
-                        message=f"Inline schema field '{field_name}' type must be a string or dict",
+                        message=f"Inline schema field '{field_name}' type must be a string",
                         location=FieldLocation(
                             agent_name=action_name, config_field=f"{config_field}.{field_name}"
                         ),
                         referenced_agent=action_name,
                         referenced_field=field_name,
-                        hint="Example: {name: 'string!', age: 'number'} or {tags: {type: 'array', items: {type: 'string'}}}",
+                        hint="Example: {name: 'string!', age: 'number'}",
                     )
                 )
                 continue

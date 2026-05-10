@@ -15,6 +15,7 @@ from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
+from agent_actions.utils.schema_utils import is_compiled_schema
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,12 @@ def _compile_action_schemas(
     if schema_value and _is_inline_schema_dict(schema_value):
         action["schema"] = _expand_inline_schema(schema_value)
         logger.debug("Expanded inline schema for action '%s'", action_name)
+    elif schema_value and isinstance(schema_value, dict) and not is_compiled_schema(schema_value):
+        logger.warning(
+            "Action '%s' has an inline schema that is not in shorthand or compiled "
+            "format — it may contain nested dict values. Consider using a schema file.",
+            action_name,
+        )
 
     return action
 
