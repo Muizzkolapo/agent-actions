@@ -3,6 +3,7 @@
 import pytest
 import yaml
 
+from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 
 
@@ -95,3 +96,26 @@ class TestSchemaLoaderConstructSchemaFromDict:
         result = SchemaLoader.construct_schema_from_dict({})
         assert result["name"] == "InlineSchema"
         assert result["fields"] == []
+
+    def test_dict_value_raises_schema_validation_error(self):
+        """Dict values raise SchemaValidationError, not AttributeError."""
+        with pytest.raises(SchemaValidationError, match="non-string type"):
+            SchemaLoader.construct_schema_from_dict(
+                {"tags": {"type": "array", "items": {"type": "string"}}}
+            )
+
+    def test_mixed_string_and_dict_raises_on_first_dict(self):
+        """Mixed schemas raise on the dict field, not crash on .endswith()."""
+        with pytest.raises(SchemaValidationError, match="'questions'"):
+            SchemaLoader.construct_schema_from_dict(
+                {"name": "string", "questions": {"type": "array"}}
+            )
+
+
+class TestParseObjectPropertiesGuard:
+    """_parse_object_properties rejects non-string property types."""
+
+    def test_non_string_property_type_raises(self):
+        """Nested dict inside object properties raises SchemaValidationError."""
+        with pytest.raises(SchemaValidationError, match="non-string type"):
+            SchemaLoader._parse_object_properties("{'sub': {'type': 'string'}}")

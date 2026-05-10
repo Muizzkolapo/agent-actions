@@ -155,6 +155,14 @@ class SchemaLoader:
 
         fields = []
         for field_name, field_type in schema_dict.items():
+            if not isinstance(field_type, str):
+                raise SchemaValidationError(
+                    f"Inline schema field '{field_name}' has a non-string type "
+                    f"({type(field_type).__name__}). Inline shorthand only supports "
+                    f"string type descriptors (e.g., 'string', 'integer', 'array[string]').",
+                    validation_type="structure",
+                    hint="Use a schema file for complex nested definitions.",
+                )
             is_required = field_type.endswith("!")
             if is_required:
                 field_type = field_type[:-1]
@@ -210,6 +218,14 @@ class SchemaLoader:
             schema_properties = {}
             required_fields = []
             for prop_name, prop_type in properties_dict.items():
+                if not isinstance(prop_type, str):
+                    raise SchemaValidationError(
+                        f"Object property '{prop_name}' has a non-string type "
+                        f"({type(prop_type).__name__}). Property types must be "
+                        f"string descriptors (e.g., 'string', 'number!').",
+                        validation_type="structure",
+                        hint="Use a schema file for deeply nested object definitions.",
+                    )
                 is_required = prop_type.endswith("!")
                 if is_required:
                     prop_type = prop_type[:-1]
