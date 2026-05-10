@@ -1,6 +1,6 @@
 """Consolidated guard configuration with explicit behavior control."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
@@ -8,14 +8,16 @@ from agent_actions.errors import ConfigValidationError
 from .guard_parser import GuardParser, GuardType
 
 
-class GuardBehavior(str, Enum):
-    """Behavior options when guard condition fails."""
+class GuardBehavior(StrEnum):
+    """Guard behavior when condition evaluates to false."""
 
     SKIP = "skip"
     FILTER = "filter"
     WARN = "warn"
-    WRITE_TO = "write_to"
-    REPROCESS = "reprocess"
+
+
+# Values recognized during config loading but rejected as unsupported.
+_UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess"})
 
 
 class GuardConfig:
@@ -24,20 +26,30 @@ class GuardConfig:
     def __init__(self, condition: str, on_false: GuardBehavior | str):
         """Initialize guard configuration."""
         self.condition = condition
-        if not isinstance(on_false, GuardBehavior | str):
+        if isinstance(on_false, GuardBehavior):
+            self.on_false = on_false
+        elif isinstance(on_false, str):
+            if on_false in _UNSUPPORTED_GUARD_BEHAVIORS:
+                raise ConfigValidationError(
+                    "on_false",
+                    f"Guard behavior '{on_false}' is not yet supported. "
+                    f"Valid values: {[b.value for b in GuardBehavior]}",
+                    context={"on_false_value": on_false},
+                )
+            try:
+                self.on_false = GuardBehavior(on_false)
+            except ValueError as e:
+                raise ConfigValidationError(
+                    "on_false",
+                    f"Invalid guard behavior '{on_false}'. Valid values: {[b.value for b in GuardBehavior]}",
+                    context={"on_false_value": on_false},
+                ) from e
+        else:
             raise ConfigValidationError(
                 "on_false",
                 f"on_false must be a GuardBehavior or string, got {type(on_false).__name__}",
                 context={"on_false_type": str(type(on_false)), "on_false_value": repr(on_false)},
             )
-        try:
-            self.on_false = GuardBehavior(on_false) if isinstance(on_false, str) else on_false
-        except ValueError as e:
-            raise ConfigValidationError(
-                "on_false",
-                f"Invalid guard behavior '{on_false}'. Valid values: {[b.value for b in GuardBehavior]}",
-                context={"on_false_value": on_false},
-            ) from e
         self._parsed_condition = GuardParser.parse(condition)
 
     def is_udf_condition(self) -> bool:
