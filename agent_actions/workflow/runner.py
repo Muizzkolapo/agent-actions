@@ -247,7 +247,10 @@ class ActionRunner:
                 if dep_path.exists():
                     return dep_path
             except KeyError:
-                pass
+                logger.debug(
+                    "Manifest-based resolution failed for dependency '%s' — trying direct path",
+                    dep_name,
+                )
 
         # Direct path using simple name
         simple_path = target_dir / dep_name
