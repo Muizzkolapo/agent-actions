@@ -36,10 +36,10 @@ class TestHandleEmptyTasksWhereBehavior:
         assert result.passthrough["data"] == []
 
     def test_skip_behavior_returns_passthrough_from_context(self):
-        """where_clause behavior='skip' produces passthrough built from context map, not empty tombstone."""
+        """where_clause behavior='skip' builds passthrough from skipped rows, not empty tombstone."""
         service = _make_service()
         agent_config = {"where_clause": {"behavior": "skip"}}
-        context_map = {"row1": {"data": "val"}}
+        context_map = {"row1": {"data": "val", "_batch_filter_status": "skipped"}}
 
         result = service._handle_empty_tasks(
             agent_config=agent_config,
@@ -48,11 +48,8 @@ class TestHandleEmptyTasksWhereBehavior:
             output_directory="/tmp/out",
         )
 
-        assert result.passthrough is not None
-        # Skip path uses BatchPassthroughBuilder.from_context (processes skipped rows),
-        # filter path returns a bare tombstone with data=[].
-        # Both have type="tombstone" but the skip path goes through the builder.
-        assert result.passthrough["output_directory"] == "/tmp/out"
+        assert len(result.passthrough["data"]) == 1
+        assert result.passthrough["data"][0]["metadata"]["skipped_by_where_clause"] is True
 
     def test_default_behavior_is_filter(self):
         """Missing behavior key defaults to 'filter' (tombstone)."""

@@ -86,6 +86,18 @@ class TestGuardConfig:
         with pytest.raises(ConfigValidationError, match="Invalid guard behavior"):
             GuardConfig(condition="score > 50", on_false="explode")
 
+    def test_non_string_on_false_raises(self):
+        """Test that non-string, non-enum on_false raises type error."""
+        with pytest.raises(
+            ConfigValidationError, match="on_false must be a GuardBehavior or string"
+        ):
+            GuardConfig(condition="score > 50", on_false=123)
+
+        with pytest.raises(
+            ConfigValidationError, match="on_false must be a GuardBehavior or string"
+        ):
+            GuardConfig(condition="score > 50", on_false=None)
+
 
 class TestConsolidatedGuardParser:
     """Test parsing consolidated guard configurations."""
