@@ -38,6 +38,8 @@ def is_inline_schema_shorthand(schema_value: Any) -> bool:
     valid_types = {"string", "number", "integer", "boolean", "array", "object"}
     for value in schema_value.values():
         if not isinstance(value, str):
+            # Dict values (nested JSON Schema fragments) are intentionally
+            # rejected — inline shorthand only supports string type descriptors.
             return False
         check_type = value.rstrip("!")
         if check_type.startswith("array[") and check_type.endswith("]"):
