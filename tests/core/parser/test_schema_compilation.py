@@ -7,6 +7,7 @@ These tests verify that:
 3. Strict mode raises errors on schema load failures
 """
 
+import logging
 import unittest.mock
 
 import pytest
@@ -331,10 +332,8 @@ class TestCompileActionSchemasWarning:
             },
         }
 
-        import logging
-
-        logger = logging.getLogger("agent_actions.prompt.render_workflow")
-        with unittest.mock.patch.object(logger, "warning") as mock_warn:
+        render_logger = logging.getLogger("agent_actions.prompt.render_workflow")
+        with unittest.mock.patch.object(render_logger, "warning") as mock_warn:
             _compile_action_schemas(action, project_root=tmp_path)
 
         mock_warn.assert_called_once()
@@ -349,10 +348,8 @@ class TestCompileActionSchemasWarning:
             "schema": {"name": "string", "age": "integer"},
         }
 
-        import logging
-
-        logger = logging.getLogger("agent_actions.prompt.render_workflow")
-        with unittest.mock.patch.object(logger, "warning") as mock_warn:
+        render_logger = logging.getLogger("agent_actions.prompt.render_workflow")
+        with unittest.mock.patch.object(render_logger, "warning") as mock_warn:
             _compile_action_schemas(action, project_root=tmp_path)
 
         # No warning should fire — valid shorthand gets expanded

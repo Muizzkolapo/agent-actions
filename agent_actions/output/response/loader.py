@@ -224,7 +224,7 @@ class SchemaLoader:
                         f"({type(prop_type).__name__}). Property types must be "
                         f"string descriptors (e.g., 'string', 'number!').",
                         validation_type="structure",
-                        hint="Use a schema file for deeply nested object definitions.",
+                        hint="Use a schema file for complex nested definitions.",
                     )
                 is_required = prop_type.endswith("!")
                 if is_required:

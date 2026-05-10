@@ -184,7 +184,12 @@ class TestInlineShorthandFormat:
         [
             pytest.param({"name": "invalid_type"}, "invalid", id="invalid_type"),
             pytest.param({"items": "array[invalid]"}, "invalid", id="invalid_array_item_type"),
-            pytest.param({"name": 123}, "string or dict", id="non_string_type_value"),
+            pytest.param({"name": 123}, "must be a string", id="non_string_type_value"),
+            pytest.param(
+                {"tags": {"type": "array", "items": {"type": "string"}}},
+                "nested definition",
+                id="nested_dict_rejected",
+            ),
         ],
     )
     def test_inline_validation_errors(self, validator, schema, error_pattern):
