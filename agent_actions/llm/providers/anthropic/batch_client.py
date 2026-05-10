@@ -134,13 +134,16 @@ class AnthropicBatchClient(BaseBatchClient):
             return "Invalid response format from Anthropic"
 
         result_type = self._get_attribute_or_key(result, "type")
-        if result_type == "failed":
-            error_info = self._get_attribute_or_key(result, "error", {})
-            return str(error_info) if error_info else "Batch processing failed"
         if result_type == "succeeded":
             return None
-        else:
-            return f"Unknown result type: {result_type}"
+        if result_type == "errored":
+            error_info = self._get_attribute_or_key(result, "error", {})
+            return str(error_info) if error_info else "Batch processing errored"
+        if result_type == "expired":
+            return "Batch result expired before processing"
+        if result_type == "canceled":
+            return "Batch result was canceled"
+        return f"Unknown result type: {result_type}"
 
     def _extract_content_from_response(self, raw_response: Any) -> Any:
         """Extract content from Anthropic response."""

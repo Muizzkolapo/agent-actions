@@ -165,6 +165,58 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
         assert batch_id is not None
         assert "msgbatch" in batch_id
 
+    # -----------------------------------------------------------------
+    # Error extraction tests
+    # -----------------------------------------------------------------
+
+    def test_errored_result_extracts_error_info(self, provider, provider_error_response):
+        """Errored results return the actual error message, not 'Unknown result type'."""
+        error = provider._extract_error_from_response(provider_error_response)
+        assert error is not None
+        assert "invalid_request_error" in error
+        assert "Unknown result type" not in error
+
+    def test_succeeded_result_returns_none(self, provider, provider_success_response_json):
+        """Succeeded results return None (no error)."""
+        error = provider._extract_error_from_response(provider_success_response_json)
+        assert error is None
+
+    def test_expired_result_returns_clear_error(self, provider):
+        """Expired results produce a clear error, not 'Unknown result type'."""
+        response = {"custom_id": "test", "result": {"type": "expired"}}
+        error = provider._extract_error_from_response(response)
+        assert error is not None
+        assert "expired" in error.lower()
+        assert "Unknown result type" not in error
+
+    def test_canceled_result_returns_clear_error(self, provider):
+        """Canceled results produce a clear error."""
+        response = {"custom_id": "test", "result": {"type": "canceled"}}
+        error = provider._extract_error_from_response(response)
+        assert error is not None
+        assert "canceled" in error.lower()
+        assert "Unknown result type" not in error
+
+    def test_missing_result_returns_format_error(self, provider):
+        """Missing result field returns format error."""
+        error = provider._extract_error_from_response({"custom_id": "test"})
+        assert error is not None
+        assert "Invalid response format" in error
+
+    def test_unknown_result_type_includes_type_name(self, provider):
+        """Unknown result types include the type in the error message."""
+        response = {"custom_id": "test", "result": {"type": "new_type"}}
+        error = provider._extract_error_from_response(response)
+        assert error is not None
+        assert "new_type" in error
+
+    def test_errored_result_without_error_info_returns_fallback(self, provider):
+        """Errored result with no error details returns fallback message."""
+        response = {"custom_id": "test", "result": {"type": "errored"}}
+        error = provider._extract_error_from_response(response)
+        assert error is not None
+        assert "errored" in error.lower()
+
     def test_retrieve_invalid_batch_id_raises_error(self, tmp_path):
         """Override to test error handling with proper mock."""
         from agent_actions.errors import VendorAPIError
