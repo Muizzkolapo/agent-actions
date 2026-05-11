@@ -56,9 +56,7 @@ class TestOnlineMultiRecordContinuation:
             invocation_strategy=MagicMock(),
         )
         # Mock process_record: first call raises, rest succeed
-        strategy.process_record = MagicMock(
-            side_effect=[error, success_result, success_result]
-        )
+        strategy.process_record = MagicMock(side_effect=[error, success_result, success_result])
 
         context = _make_context()
         records = [
@@ -97,9 +95,7 @@ class TestOnlineMultiRecordContinuation:
         )
 
         context = _make_context()
-        results = strategy.invoke(
-            [{"source_guid": "sg_fail"}, {"source_guid": "sg_ok"}], context
-        )
+        results = strategy.invoke([{"source_guid": "sg_fail"}, {"source_guid": "sg_ok"}], context)
 
         assert len(results) == 2
         assert results[0].status == ProcessingStatus.UNPROCESSED
@@ -122,9 +118,7 @@ class TestCascadePropagation:
             reason=PREP_FAILED,
             source_guid="sg_001",
         )
-        RecordEnvelope.transition(
-            tombstone, RecordState.FAILED, "action_a", "missing field"
-        )
+        RecordEnvelope.transition(tombstone, RecordState.FAILED, "action_a", "missing field")
 
         # Downstream action sees this tombstone
         preparer = TaskPreparer()
@@ -175,11 +169,13 @@ class TestResultCollectorPrepFailedDisposition:
                 source_guid="sg_1",
             ),
             ProcessingResult.unprocessed(
-                data=[{
-                    "content": {"test_action": None},
-                    "_state": RecordState.FAILED.value,
-                    "source_guid": "sg_2",
-                }],
+                data=[
+                    {
+                        "content": {"test_action": None},
+                        "_state": RecordState.FAILED.value,
+                        "source_guid": "sg_2",
+                    }
+                ],
                 reason=PREP_FAILED,
                 source_guid="sg_2",
             ),

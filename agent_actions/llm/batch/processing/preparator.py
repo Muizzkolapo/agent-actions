@@ -124,7 +124,10 @@ class BatchTaskPreparator:
                 logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
                 self._mark_prep_failed(
-                    row, context_map_builder, prep_context.agent_name, e,
+                    row,
+                    context_map_builder,
+                    prep_context.agent_name,
+                    e,
                     storage_backend=self.storage_backend,
                 )
 
@@ -239,8 +242,11 @@ class BatchTaskPreparator:
             source_guid = row.get("source_guid")
             if source_guid:
                 _safe_set_disposition(
-                    storage_backend, agent_name, source_guid,
-                    DISPOSITION_FAILED, reason=error_str[:500],
+                    storage_backend,
+                    agent_name,
+                    source_guid,
+                    DISPOSITION_FAILED,
+                    reason=error_str[:500],
                 )
 
     def _validate_config(self, agent_config: dict[str, Any], provider) -> None:
