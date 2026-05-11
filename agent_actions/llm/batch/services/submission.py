@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -29,6 +29,7 @@ from agent_actions.logging.events.batch_events import (
     BatchSubmissionFailedEvent,
 )
 from agent_actions.output.response.config_schema import WhereClauseBehavior
+from agent_actions.record.reasons import PREP_FAILED
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +226,16 @@ class BatchSubmissionService:
         Returns:
             SubmissionResult with passthrough dict
         """
+        has_failed_prep = any(
+            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
+            for row in context_map.values()
+        )
+        if has_failed_prep:
+            passthrough = BatchPassthroughBuilder(output_directory).from_context(
+                context_map, reason=PREP_FAILED
+            )
+            return SubmissionResult(passthrough=passthrough)
+
         has_guard_skipped = any(
             BatchContextMetadata.is_skipped(row) for row in context_map.values()
         )

@@ -13,7 +13,11 @@ from agent_actions.llm.batch.core.batch_models import (
     PreparedBatchTasks,
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
+from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
+from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import RecordState
+from agent_actions.storage.backend import DISPOSITION_FAILED
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -119,6 +123,10 @@ class BatchTaskPreparator:
             except Exception as e:
                 logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
+                self._mark_prep_failed(
+                    row, context_map_builder, prep_context.agent_name, e,
+                    storage_backend=self.storage_backend,
+                )
 
         # Finalize tasks with provider
         provider_config = agent_config.copy()
@@ -200,6 +208,40 @@ class BatchTaskPreparator:
             "content": prepared.llm_context,
             "prompt": prepared.formatted_prompt,
         }
+
+    @staticmethod
+    def _mark_prep_failed(
+        row: dict[str, Any],
+        context_map_builder: dict[str, Any],
+        agent_name: str,
+        error: Exception,
+        *,
+        storage_backend: Any | None = None,
+    ) -> None:
+        """Stamp the context_map entry as FAILED with _state transition and disposition."""
+        custom_id = row.get("target_id")
+        if not custom_id or custom_id not in context_map_builder:
+            return
+        entry = context_map_builder[custom_id]
+        BatchContextMetadata.set_filter_status(entry, FilterStatus.FAILED)
+        error_str = str(error)
+        try:
+            RecordEnvelope.transition(entry, RecordState.FAILED, agent_name, error_str[:200])
+        except Exception:
+            logger.warning(
+                "Failed to transition record %s to FAILED state",
+                custom_id,
+                exc_info=True,
+            )
+            entry["_state"] = RecordState.FAILED.value
+
+        if storage_backend:
+            source_guid = row.get("source_guid")
+            if source_guid:
+                _safe_set_disposition(
+                    storage_backend, agent_name, source_guid,
+                    DISPOSITION_FAILED, reason=error_str[:500],
+                )
 
     def _validate_config(self, agent_config: dict[str, Any], provider) -> None:
         """Validate agent configuration."""
