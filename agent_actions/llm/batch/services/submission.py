@@ -94,12 +94,22 @@ class BatchSubmissionService:
             source_data=source_data,
             workflow_metadata=workflow_metadata,
         )
-        logger.debug(
-            "Task preparation complete: %d tasks, %d filtered, %d skipped",
-            prepared.task_count,
-            prepared.stats.total_filtered,
-            prepared.stats.total_skipped,
-        )
+        if prepared.stats.error_items:
+            logger.warning(
+                "Task preparation complete: %d tasks, %d filtered, %d skipped, "
+                "%d failed (prep errors)",
+                prepared.task_count,
+                prepared.stats.total_filtered,
+                prepared.stats.total_skipped,
+                prepared.stats.error_items,
+            )
+        else:
+            logger.debug(
+                "Task preparation complete: %d tasks, %d filtered, %d skipped",
+                prepared.task_count,
+                prepared.stats.total_filtered,
+                prepared.stats.total_skipped,
+            )
         return prepared.tasks, prepared.context_map
 
     def check_status(self, batch_id: str, output_directory: str | None = None) -> BatchStatus:
