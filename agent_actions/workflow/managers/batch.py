@@ -78,7 +78,7 @@ class BatchLifecycleManager:
             return (output_directory, "completed")
 
         if registry_status in ["in_progress", "partial_failed"]:
-            if self.job_manager.are_all_jobs_completed(output_directory):
+            if self.job_manager.are_all_jobs_completed(output_directory, agent_config):
                 fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
                 self._process_batch_results(output_directory, agent_config, agent_name)
                 # Re-check — processing may have submitted recovery batches
