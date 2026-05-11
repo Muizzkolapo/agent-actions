@@ -11,7 +11,7 @@ from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
 
-from ..batch_base import BaseBatchClient, BatchResult, BatchTask
+from ..batch_base import BaseBatchClient, BatchTask
 
 logger = logging.getLogger(__name__)
 
@@ -336,70 +336,21 @@ class AnthropicBatchClient(BaseBatchClient):
         }
         return status_mapping.get(raw_status, raw_status)
 
-    def retrieve_results(
-        self, batch_id: str, output_directory: str | None = None
-    ) -> list[BatchResult]:
-        """
-        Retrieve and transform Anthropic batch results to our format.
-
-        NOTE: Anthropic overrides the base template method because it streams
-        result objects directly instead of returning JSONL bytes. This is a
-        provider-specific optimization that doesn't fit the base template.
-
-        Args:
-            batch_id: Anthropic batch job ID
-            output_directory: Optional directory for caching results
-
-        Returns:
-            List of BatchResult objects
-        """
-        try:
-            status = self.check_status(batch_id)
-            if status != "completed":
-                return []
-            results_stream = self.client.messages.batches.results(batch_id)
-            batch_results = []
-            raw_entries = []
-            for entry in results_stream:
-                batch_result = self.parse_provider_response(entry)
-                batch_results.append(batch_result)
-                if hasattr(entry, "model_dump"):
-                    raw_entries.append(entry.model_dump())
-                elif hasattr(entry, "__dict__"):
-                    raw_entries.append(entry.__dict__)
-                else:
-                    raw_entries.append(entry)  # type: ignore[arg-type]
-            if output_directory and raw_entries:
-                batch_dir = self._get_batch_directory(output_directory)
-                raw_results_file = batch_dir / f"{batch_id}_anthropic_raw_results.jsonl"
-                with open(raw_results_file, "w", encoding="utf-8") as f:
-                    for entry in raw_entries:  # type: ignore[assignment]
-                        f.write(json.dumps(entry) + "\n")
-            return batch_results
-        except self.anthropic.APIError as e:
-            from agent_actions.errors import AnthropicError
-
-            raise AnthropicError(
-                "Anthropic API error retrieving batch results",
-                context={"operation": "retrieve_results", "batch_id": batch_id},
-                cause=e,
-            ) from e
-        except Exception as e:
-            from agent_actions.errors import AnthropicError
-
-            raise AnthropicError(
-                "Failed to retrieve Anthropic batch results",
-                context={"operation": "retrieve_results", "batch_id": batch_id},
-                cause=e,
-            ) from e
-
     def _get_result_file_name(self, batch_id: str) -> str:
-        """Not used by Anthropic (streams results instead of file-based)."""
+        """Return the result file name for Anthropic batch results."""
         return f"{batch_id}_anthropic_raw_results.jsonl"
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
-        """Not used by Anthropic (overrides retrieve_results entirely)."""
-        raise NotImplementedError("Anthropic uses custom streaming-based retrieve_results()")
+        """Stream results from Anthropic API and return as JSONL bytes."""
+        lines = []
+        for entry in self.client.messages.batches.results(batch_id):
+            if hasattr(entry, "model_dump"):
+                lines.append(json.dumps(entry.model_dump()))
+            elif hasattr(entry, "__dict__"):
+                lines.append(json.dumps(entry.__dict__))
+            else:
+                lines.append(json.dumps(entry))
+        return ("\n".join(lines) + "\n").encode("utf-8")
 
     def _create_json_tool_from_schema(self, schema: dict[str, Any]) -> list[dict[str, Any]]:
         """

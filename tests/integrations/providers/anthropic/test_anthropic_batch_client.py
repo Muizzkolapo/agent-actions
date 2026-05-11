@@ -228,9 +228,9 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
         with patch.dict("sys.modules", {"anthropic": mock_anthropic_module}):
             provider = AnthropicBatchClient(api_key="test-key")
             provider.client = mock_client
-            mock_client.messages.batches.retrieve.side_effect = VendorAPIError(
+            mock_client.messages.batches.results.side_effect = VendorAPIError(
                 vendor="anthropic",
-                endpoint="messages.batches.retrieve",
+                endpoint="messages.batches.results",
                 context={"message": "Batch not found"},
             )
             with pytest.raises(VendorAPIError):
