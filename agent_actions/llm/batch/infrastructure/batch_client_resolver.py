@@ -189,7 +189,12 @@ class BatchClientResolver:
                 if key:
                     return {"api_key": key}
             except Exception:
-                pass  # Fall through to vendor default
+                logger.debug(
+                    "Failed to resolve API key from agent_config for vendor '%s', "
+                    "falling back to vendor default env var",
+                    vendor,
+                    exc_info=True,
+                )
 
         # 2. Try vendor config class default
         from agent_actions.validation.preflight.resolution_service import (
