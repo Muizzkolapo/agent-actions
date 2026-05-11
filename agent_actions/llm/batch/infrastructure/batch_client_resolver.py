@@ -154,7 +154,8 @@ class BatchClientResolver:
                     reason="client not cached",
                 )
             )
-            return BatchClientFactory.create_client(client_type)
+            config = self._resolve_api_key_for_vendor(client_type)
+            return BatchClientFactory.create_client(client_type, config)
 
         if self._default_client:
             return self._default_client
@@ -163,6 +164,28 @@ class BatchClientResolver:
             f"Cannot determine client for batch_id {batch_id}",
             context={"batch_id": batch_id, "output_directory": output_directory},
         )
+
+    @staticmethod
+    def _resolve_api_key_for_vendor(vendor: str) -> dict[str, Any]:
+        """Resolve API key from vendor config's env var name.
+
+        Uses the same env var name that the online path reads (e.g.
+        ``CLAUDE_API_KEY`` if the user configured ``api_key: ${CLAUDE_API_KEY}``
+        in their vendor config).  Falls back to an empty dict so the factory
+        can still try its own hardcoded env var lookup.
+        """
+        import os
+
+        from agent_actions.validation.preflight.resolution_service import (
+            _get_api_key_env_name,
+        )
+
+        env_name = _get_api_key_env_name(vendor)
+        if env_name:
+            key = os.environ.get(env_name)
+            if key:
+                return {"api_key": key}
+        return {}
 
     def _find_cached_client(self, client_type: str) -> BaseBatchClient | None:
         if client_type in self._client_cache:
