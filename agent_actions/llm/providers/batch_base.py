@@ -331,24 +331,20 @@ class BaseBatchClient(ABC):
             target[key] = default
 
     def _parse_json_content(self, content_str: str) -> Any:
-        """
-        Parse JSON string, return as-is if parsing fails.
+        """Parse JSON string from an LLM response.
 
-        This helper eliminates duplicated JSON parsing logic across providers.
-
-        Args:
-            content_str: String to parse as JSON
-
-        Returns:
-            Parsed JSON object, or original string if parsing fails
+        Handles markdown code fences and common malformations (trailing
+        commas, unquoted keys) via the shared :func:`parse_llm_json`
+        utility.  Returns the original string when all strategies fail;
+        the caller decides how to handle it (e.g. wrapping in a
+        ``_parse_error`` dict when ``json_mode=True``).
         """
         if not isinstance(content_str, str):
             return content_str  # type: ignore[unreachable]
 
-        try:
-            return json.loads(content_str)
-        except json.JSONDecodeError:
-            return content_str
+        from agent_actions.utils.json_parsing import parse_llm_json
+
+        return parse_llm_json(content_str)
 
     def _get_attribute_or_key(self, obj: Any, key: str, default: Any = None) -> Any:
         """

@@ -244,8 +244,22 @@ class BatchResultStrategy:
                 "reconciler must be initialized before processing results"
             )
         generated_obj = batch_result.content
-        if not ctx.json_mode and isinstance(generated_obj, str):
-            generated_obj = {ctx.output_field: generated_obj}
+        if isinstance(generated_obj, str):
+            if ctx.json_mode:
+                # JSON mode but content is still a string — parsing failed.
+                # Wrap in _parse_error dict so batch reprompt can detect and
+                # retry, matching the online-path convention.
+                logger.warning(
+                    "Batch result for %s is unparsed string in json_mode; "
+                    "wrapping as _parse_error for reprompt",
+                    custom_id,
+                )
+                generated_obj = {
+                    "raw_response": generated_obj,
+                    "_parse_error": "Failed to parse JSON from LLM response",
+                }
+            else:
+                generated_obj = {ctx.output_field: generated_obj}
 
         generated_list = DataTransformer.ensure_list(generated_obj)
 
