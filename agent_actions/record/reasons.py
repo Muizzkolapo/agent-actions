@@ -19,6 +19,9 @@ LLM_LAYER_GUARD_FILTER = "llm_layer_guard_filter"
 # -- Cascade / upstream ------------------------------------------------------
 UPSTREAM_UNPROCESSED = "upstream_unprocessed"
 
+# -- Prep failures -----------------------------------------------------------
+PREP_FAILED = "prep_failed"
+
 # -- Batch -------------------------------------------------------------------
 BATCH_NOT_RETURNED = "batch_not_returned"
 
