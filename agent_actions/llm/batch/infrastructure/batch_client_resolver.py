@@ -119,7 +119,11 @@ class BatchClientResolver:
             ) from e
 
     def get_for_batch_id(
-        self, batch_id: str, registry_manager, output_directory: str | None = None
+        self,
+        batch_id: str,
+        registry_manager,
+        output_directory: str | None = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> BaseBatchClient:
         """
         Get the client that was used for a specific batch ID.
@@ -132,6 +136,8 @@ class BatchClientResolver:
             registry_manager: BatchRegistryManager instance to lookup batch info
             output_directory: Output directory (used as fallback when
                 registry_manager is None)
+            agent_config: Optional agent config for API key resolution on
+                cache miss (avoids falling back to hardcoded env var names)
 
         Returns:
             BaseBatchClient instance
@@ -154,7 +160,8 @@ class BatchClientResolver:
                     reason="client not cached",
                 )
             )
-            return BatchClientFactory.create_client(client_type)
+            config = self._resolve_api_key_config(client_type, agent_config)
+            return BatchClientFactory.create_client(client_type, config)
 
         if self._default_client:
             return self._default_client
@@ -163,6 +170,44 @@ class BatchClientResolver:
             f"Cannot determine client for batch_id {batch_id}",
             context={"batch_id": batch_id, "output_directory": output_directory},
         )
+
+    @staticmethod
+    def _resolve_api_key_config(vendor: str, agent_config: dict[str, Any] | None) -> dict[str, Any]:
+        """Build a config dict with the API key for creating a batch client.
+
+        Resolution order:
+        1. agent_config["api_key"] → resolve env var (same path online mode uses)
+        2. Vendor config class default env var name (e.g. ANTHROPIC_API_KEY)
+        3. Empty dict → factory tries its own hardcoded fallback
+        """
+        import os
+
+        # 1. Try agent_config (user's actual configured key name)
+        if agent_config and agent_config.get(API_KEY_KEY):
+            try:
+                key = BaseClient.get_api_key(agent_config)
+                if key:
+                    return {"api_key": key}
+            except Exception:
+                logger.debug(
+                    "Failed to resolve API key from agent_config for vendor '%s', "
+                    "falling back to vendor default env var",
+                    vendor,
+                    exc_info=True,
+                )
+
+        # 2. Try vendor config class default
+        from agent_actions.validation.preflight.resolution_service import (
+            _get_api_key_env_name,
+        )
+
+        env_name = _get_api_key_env_name(vendor)
+        if env_name:
+            key = os.environ.get(env_name)
+            if key:
+                return {"api_key": key}
+
+        return {}
 
     def _find_cached_client(self, client_type: str) -> BaseBatchClient | None:
         if client_type in self._client_cache:

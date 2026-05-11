@@ -870,7 +870,7 @@ class TestOpenAICallJsonParseErrors:
         result = OpenAIClient.call_json("key", config, "prompt", "data", schema)
 
         assert len(result) == 1
-        assert "Expecting value" in result[0]["_parse_error"]
+        assert "_parse_error" in result[0]
         assert result[0]["raw_response"] == "not valid json {{{"
 
 

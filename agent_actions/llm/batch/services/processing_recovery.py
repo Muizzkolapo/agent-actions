@@ -75,7 +75,9 @@ def process_recovery_batch(
         output_directory, parent_file_name
     )
     agent_config = service._apply_workflow_session_id(agent_config, entry)
-    provider = service._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
+    provider = service._client_resolver.get_for_batch_id(
+        batch_id, manager, output_directory, agent_config=agent_config
+    )
 
     recovery_results = retrieve_and_reconcile(
         provider,

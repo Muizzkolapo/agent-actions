@@ -5,7 +5,6 @@ This module provides common functionality that multiple vendor handlers share,
 eliminating duplicate code across different provider implementations.
 """
 
-import json
 import logging
 from typing import Any
 
@@ -32,10 +31,11 @@ class JSONResponseMixin:
         model_name: str,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """
-        Parse JSON response with error dict pattern for repair support.
+        Parse JSON response with code-fence stripping and repair support.
 
-        On parse failure, returns `{"raw_response": ..., "_parse_error": ...}` dict
-        instead of raising, allowing RepromptEngine to attempt JSON repair.
+        Uses the shared :func:`parse_llm_json` utility (strips markdown
+        fences, tries ``json_repair``) before falling back to a
+        ``_parse_error`` dict that lets RepromptEngine retry.
 
         Args:
             response_content: Raw JSON string from API
@@ -54,8 +54,10 @@ class JSONResponseMixin:
             )
             return [{"raw_response": "", "_parse_error": "Empty response from API"}]
 
-        try:
-            response_data = json.loads(response_content)
+        from agent_actions.utils.json_parsing import parse_llm_json
+
+        result = parse_llm_json(response_content)
+        if not isinstance(result, str):
             logger.debug(
                 "%s JSON response parsed successfully",
                 vendor_name,
@@ -65,27 +67,31 @@ class JSONResponseMixin:
                     "response_length": len(response_content),
                 },
             )
-            return response_data  # type: ignore[no-any-return]
-        except json.JSONDecodeError as e:
-            logger.warning(
-                "%s returned invalid JSON, returning error dict for repair",
-                vendor_name,
-                extra={
-                    "operation": f"{vendor_name}_{operation}",
-                    "model": model_name,
-                    "response_text": response_content[:200],
-                    "error": str(e),
-                    "line": e.lineno if hasattr(e, "lineno") else None,
-                },
+            return result  # type: ignore[return-value]
+
+        # All parse strategies failed — return error dict for reprompt
+        logger.warning(
+            "%s returned unparseable JSON, returning error dict for repair",
+            vendor_name,
+            extra={
+                "operation": f"{vendor_name}_{operation}",
+                "model": model_name,
+                "response_text": response_content[:200],
+            },
+        )
+        fire_event(
+            LLMJSONParseErrorEvent(
+                provider=vendor_name.lower(),
+                model=model_name,
+                error="Failed to parse JSON after all strategies",
             )
-            fire_event(
-                LLMJSONParseErrorEvent(
-                    provider=vendor_name.lower(),
-                    model=model_name,
-                    error=str(e),
-                )
-            )
-            return [{"raw_response": response_content, "_parse_error": str(e)}]
+        )
+        return [
+            {
+                "raw_response": response_content,
+                "_parse_error": "Failed to parse JSON from LLM response",
+            }
+        ]
 
 
 class GenericErrorHandlerMixin:

@@ -234,7 +234,7 @@ class BatchProcessingService:
             if entry.parent_file_name is not None:
                 continue
 
-            if not self._is_batch_ready_for_processing(batch_id, output_directory):
+            if not self._is_batch_ready_for_processing(batch_id, output_directory, agent_config):
                 continue
 
             try:
@@ -277,19 +277,27 @@ class BatchProcessingService:
             )
         return processed_files
 
-    def _is_batch_ready_for_processing(self, batch_id: str, output_directory: str) -> bool:
+    def _is_batch_ready_for_processing(
+        self,
+        batch_id: str,
+        output_directory: str,
+        agent_config: dict[str, Any] | None = None,
+    ) -> bool:
         """Check if batch is ready for processing (completed status).
 
         Args:
             batch_id: The batch job ID to check
             output_directory: Directory containing batch registry
+            agent_config: Optional agent config for API key resolution
 
         Returns:
             True if batch status is COMPLETED, False otherwise
         """
         try:
             manager = self._registry_manager_factory(output_directory)
-            provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
+            provider = self._client_resolver.get_for_batch_id(
+                batch_id, manager, output_directory, agent_config=agent_config
+            )
             status = provider.check_status(batch_id)
             return status == BatchStatus.COMPLETED
         except Exception as e:
@@ -417,7 +425,9 @@ class BatchProcessingService:
             output_directory, file_name or "default"
         )
         agent_config = self._apply_workflow_session_id(agent_config, entry)
-        provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
+        provider = self._client_resolver.get_for_batch_id(
+            batch_id, manager, output_directory, agent_config=agent_config
+        )
 
         batch_results = retrieve_and_reconcile(
             provider,

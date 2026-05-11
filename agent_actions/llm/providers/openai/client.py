@@ -8,7 +8,6 @@ SDK errors are wrapped into unified agent-actions error types to enable
 consistent retry handling across all providers.
 """
 
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -132,12 +131,12 @@ class OpenAIClient(BaseClient):
                 model_name,
             )
             return [{"raw_response": "", "_parse_error": "Empty response from API"}]
-        try:
-            response_data: dict[str, Any] | list[dict[str, Any]] = json.loads(response_content)
-        except json.JSONDecodeError as e:
+        from agent_actions.utils.json_parsing import parse_llm_json
+
+        response_data = parse_llm_json(response_content)
+        if isinstance(response_data, str):
             logger.debug(
-                "Failed to parse JSON from OpenAI response: %s (snippet: %.200s)",
-                e,
+                "Failed to parse JSON from OpenAI response (snippet: %.200s)",
                 response_content,
                 extra={"model": model_name, "operation": "call_json"},
             )
@@ -146,11 +145,16 @@ class OpenAIClient(BaseClient):
                     provider="openai",
                     model=model_name,
                     error_type="JSONDecodeError",
-                    error_message=f"Failed to parse JSON from response: {e}",
+                    error_message="Failed to parse JSON from response",
                     request_id=request_id,
                 )
             )
-            return [{"raw_response": response_content, "_parse_error": str(e)}]
+            return [
+                {
+                    "raw_response": response_content,
+                    "_parse_error": "Failed to parse JSON from LLM response",
+                }
+            ]
         response_list: list[dict[str, Any]] = (
             response_data if isinstance(response_data, list) else [response_data]
         )

@@ -50,6 +50,15 @@ class LineageEnricher(Enricher):
         for i, item in enumerate(result.data):
             node_id = f"{base_node_id}_{i}" if len(result.data) > 1 else base_node_id
 
+            # 1→N expansions: each child needs a unique target_id so that
+            # batch custom_ids are unique and context_map keys don't collide.
+            # The parent's target_id moves to parent_target_id for lineage.
+            if result.is_expansion:
+                old_target_id = item.get("target_id")
+                item["target_id"] = IDGenerator.generate_target_id()
+                if old_target_id:
+                    item["parent_target_id"] = old_target_id
+
             if (
                 result.source_mapping is not None
                 and context.source_data is not None
