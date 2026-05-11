@@ -29,7 +29,6 @@ from agent_actions.logging.events.batch_events import (
     BatchSubmissionFailedEvent,
 )
 from agent_actions.output.response.config_schema import WhereClauseBehavior
-from agent_actions.record.reasons import PREP_FAILED
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +241,7 @@ class BatchSubmissionService:
         )
         if has_failed_prep:
             passthrough = BatchPassthroughBuilder(output_directory).from_context(
-                context_map, reason=PREP_FAILED
+                context_map, reason="guard_skip"
             )
             return SubmissionResult(passthrough=passthrough)
 
