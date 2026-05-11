@@ -417,7 +417,9 @@ class BatchProcessingService:
             output_directory, file_name or "default"
         )
         agent_config = self._apply_workflow_session_id(agent_config, entry)
-        provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
+        provider = self._client_resolver.get_for_batch_id(
+            batch_id, manager, output_directory, agent_config=agent_config
+        )
 
         batch_results = retrieve_and_reconcile(
             provider,
