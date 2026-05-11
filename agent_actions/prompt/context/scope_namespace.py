@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, RecordContextError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
@@ -136,7 +136,7 @@ def _filter_and_store_fields(
                     continue
                 missing_fields.add(field)
             if missing_fields:
-                raise ConfigurationError(
+                raise RecordContextError(
                     f"[{source_type}] '{name}': declared fields {sorted(missing_fields)} "
                     f"not found. Available: {list(data.keys())}",
                     context={
