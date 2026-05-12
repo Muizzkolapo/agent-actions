@@ -39,9 +39,11 @@ logger = logging.getLogger(__name__)
 
 MAX_OVERRIDE_FILE_SIZE = 65_536  # 64 KB
 
-# Cache parsed overrides keyed by directory path.  Cleared implicitly when the
-# module is re-imported (new workflow run = new process in typical usage).
-_override_cache: dict[str, dict[str, str] | None] = {}
+# Cache parsed+type-checked overrides keyed by directory path.  Stores
+# ``(override_filename, parsed_dict)`` or ``None`` when no file exists.
+# Key validation is intentionally NOT cached — different actions sharing
+# a staging subfolder may have different seed_path schemas.
+_override_cache: dict[str, tuple[str, dict[str, str]] | None] = {}
 
 
 def _find_override_file(parent_dir: Path) -> Path | None:
@@ -53,10 +55,12 @@ def _find_override_file(parent_dir: Path) -> Path | None:
     return None
 
 
-def _load_and_validate_seed_overrides(
-    overrides_path: Path, agent_config: dict[str, Any]
-) -> dict[str, str]:
-    """Load, size-check, parse, and validate an override file.
+def _load_and_parse_seed_overrides(overrides_path: Path) -> dict[str, str]:
+    """Load, size-check, parse, and type-check an override file.
+
+    Validates structure (must be a ``dict[str, str]``) but does NOT validate
+    keys against a specific action's ``seed_path`` — that happens per-call
+    in :func:`_get_effective_config` so the cache stays action-agnostic.
 
     Raises ``ConfigValidationError`` on any validation failure.
     """
@@ -98,17 +102,24 @@ def _load_and_validate_seed_overrides(
                 config_key=str(overrides_path),
             )
 
+    return raw
+
+
+def _validate_override_keys(
+    overrides: dict[str, str],
+    agent_config: dict[str, Any],
+    overrides_path: str,
+) -> None:
+    """Raise if *overrides* contains keys absent from the action's ``seed_path``."""
     valid_keys = set(agent_config.get("context_scope", {}).get("seed_path", {}).keys())
-    unknown = set(raw.keys()) - valid_keys
+    unknown = set(overrides.keys()) - valid_keys
     if unknown:
         raise ConfigValidationError(
             reason=(
                 f"Unknown seed override keys: {sorted(unknown)}. Valid keys: {sorted(valid_keys)}"
             ),
-            config_key=str(overrides_path),
+            config_key=overrides_path,
         )
-
-    return raw
 
 
 def _apply_seed_overrides(
@@ -129,8 +140,9 @@ def _apply_seed_overrides(
 def _get_effective_config(file_path: str, agent_config: dict[str, Any]) -> dict[str, Any]:
     """Return *agent_config* with seed overrides merged in (if any).
 
-    Uses a module-level cache so that multiple files in the same directory
-    only parse the override file once.
+    Uses a module-level cache for parsed YAML so that multiple files in the
+    same directory only read the override file once.  Key validation runs on
+    every call because different actions may have different ``seed_path`` schemas.
     """
     parent_dir = Path(file_path).parent
     cache_key = str(parent_dir)
@@ -138,17 +150,18 @@ def _get_effective_config(file_path: str, agent_config: dict[str, Any]) -> dict[
     if cache_key not in _override_cache:
         override_file = _find_override_file(parent_dir)
         if override_file is not None:
-            _override_cache[cache_key] = _load_and_validate_seed_overrides(
-                override_file, agent_config
-            )
+            parsed = _load_and_parse_seed_overrides(override_file)
+            _override_cache[cache_key] = (override_file.name, parsed) if parsed else None
         else:
             _override_cache[cache_key] = None
 
-    overrides = _override_cache[cache_key]
-    if overrides:
+    cached = _override_cache[cache_key]
+    if cached is not None:
+        filename, overrides = cached
+        _validate_override_keys(overrides, agent_config, str(parent_dir / filename))
         logger.info(
             "Seed override applied: %s overrides keys %s for file %s",
-            parent_dir / next(n for n in SEED_OVERRIDE_FILENAMES if (parent_dir / n).is_file()),
+            parent_dir / filename,
             sorted(overrides.keys()),
             file_path,
         )

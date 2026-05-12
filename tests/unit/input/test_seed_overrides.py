@@ -92,10 +92,12 @@ class TestFindOverrideFile:
 # ===================================================================
 
 
-class TestLoadAndValidate:
+class TestLoadAndParse:
+    """Tests for _load_and_parse_seed_overrides (structure/type checks, no key validation)."""
+
     def test_valid_override(self, tmp_path, pipeline):
         p = _write(tmp_path / "_seed_overrides.yml", "exam_syllabus: $file:aws.json\n")
-        result = pipeline._load_and_validate_seed_overrides(p, _config())
+        result = pipeline._load_and_parse_seed_overrides(p)
         assert result == {"exam_syllabus": "$file:aws.json"}
 
     def test_multiple_keys(self, tmp_path, pipeline):
@@ -106,7 +108,7 @@ class TestLoadAndValidate:
             design_rules: $file:aws_rules.json
         """),
         )
-        result = pipeline._load_and_validate_seed_overrides(p, _config())
+        result = pipeline._load_and_parse_seed_overrides(p)
         assert len(result) == 2
         assert result["exam_syllabus"] == "$file:aws.json"
         assert result["design_rules"] == "$file:aws_rules.json"
@@ -115,27 +117,17 @@ class TestLoadAndValidate:
 
     def test_empty_file(self, tmp_path, pipeline):
         p = _write(tmp_path / "_seed_overrides.yml", "")
-        assert pipeline._load_and_validate_seed_overrides(p, _config()) == {}
+        assert pipeline._load_and_parse_seed_overrides(p) == {}
 
     def test_comment_only(self, tmp_path, pipeline):
         p = _write(tmp_path / "_seed_overrides.yml", "# nothing\n")
-        assert pipeline._load_and_validate_seed_overrides(p, _config()) == {}
+        assert pipeline._load_and_parse_seed_overrides(p) == {}
 
     def test_yaml_null(self, tmp_path, pipeline):
         p = _write(tmp_path / "_seed_overrides.yml", "---\n")
-        assert pipeline._load_and_validate_seed_overrides(p, _config()) == {}
+        assert pipeline._load_and_parse_seed_overrides(p) == {}
 
-    # -- Validation errors -------------------------------------------------
-
-    def test_unknown_key_rejected(self, tmp_path, pipeline):
-        p = _write(tmp_path / "_seed_overrides.yml", "typo_key: $file:x.json\n")
-        with pytest.raises(ConfigValidationError, match="Unknown seed override keys"):
-            pipeline._load_and_validate_seed_overrides(p, _config())
-
-    def test_unknown_key_lists_valid_keys(self, tmp_path, pipeline):
-        p = _write(tmp_path / "_seed_overrides.yml", "typo_key: $file:x.json\n")
-        with pytest.raises(ConfigValidationError, match="exam_syllabus"):
-            pipeline._load_and_validate_seed_overrides(p, _config())
+    # -- Type validation errors --------------------------------------------
 
     @pytest.mark.parametrize(
         "content,label",
@@ -150,7 +142,7 @@ class TestLoadAndValidate:
     def test_non_string_values_rejected(self, tmp_path, pipeline, content, label):
         p = _write(tmp_path / "_seed_overrides.yml", content)
         with pytest.raises(ConfigValidationError, match="string file reference"):
-            pipeline._load_and_validate_seed_overrides(p, _config())
+            pipeline._load_and_parse_seed_overrides(p)
 
     @pytest.mark.parametrize(
         "content",
@@ -163,12 +155,12 @@ class TestLoadAndValidate:
     def test_non_dict_content_rejected(self, tmp_path, pipeline, content):
         p = _write(tmp_path / "_seed_overrides.yml", content)
         with pytest.raises(ConfigValidationError, match="YAML mapping"):
-            pipeline._load_and_validate_seed_overrides(p, _config())
+            pipeline._load_and_parse_seed_overrides(p)
 
     def test_bad_yaml_rejected(self, tmp_path, pipeline):
         p = _write(tmp_path / "_seed_overrides.yml", "key: [broken {{\n")
         with pytest.raises(ConfigValidationError, match="Invalid YAML"):
-            pipeline._load_and_validate_seed_overrides(p, _config())
+            pipeline._load_and_parse_seed_overrides(p)
 
     def test_oversized_file_rejected(self, tmp_path, pipeline):
         p = _write(
@@ -176,12 +168,46 @@ class TestLoadAndValidate:
             "exam_syllabus: " + "x" * (pipeline.MAX_OVERRIDE_FILE_SIZE + 100),
         )
         with pytest.raises(ConfigValidationError, match="size limit"):
-            pipeline._load_and_validate_seed_overrides(p, _config())
+            pipeline._load_and_parse_seed_overrides(p)
 
     def test_file_prefix_optional(self, tmp_path, pipeline):
         p = _write(tmp_path / "_seed_overrides.yml", "exam_syllabus: bare_file.json\n")
-        result = pipeline._load_and_validate_seed_overrides(p, _config())
+        result = pipeline._load_and_parse_seed_overrides(p)
         assert result["exam_syllabus"] == "bare_file.json"
+
+
+# ===================================================================
+# _validate_override_keys — key validation against action's seed_path
+# ===================================================================
+
+
+class TestValidateOverrideKeys:
+    def test_unknown_key_rejected(self, pipeline):
+        overrides = {"typo_key": "$file:x.json"}
+        with pytest.raises(ConfigValidationError, match="Unknown seed override keys"):
+            pipeline._validate_override_keys(overrides, _config(), "test.yml")
+
+    def test_unknown_key_lists_valid_keys(self, pipeline):
+        overrides = {"typo_key": "$file:x.json"}
+        with pytest.raises(ConfigValidationError, match="exam_syllabus"):
+            pipeline._validate_override_keys(overrides, _config(), "test.yml")
+
+    def test_valid_keys_pass(self, pipeline):
+        overrides = {"exam_syllabus": "$file:x.json"}
+        pipeline._validate_override_keys(overrides, _config(), "test.yml")  # no raise
+
+    def test_revalidates_per_action(self, pipeline):
+        """Key valid for action_a but invalid for action_b is caught."""
+        config_a = _config({"key_a": "$file:a.json"})
+        config_b = _config({"key_b": "$file:b.json"})
+        overrides = {"key_a": "$file:override.json"}
+
+        # Valid for action_a
+        pipeline._validate_override_keys(overrides, config_a, "test.yml")
+
+        # Invalid for action_b
+        with pytest.raises(ConfigValidationError, match="Unknown seed override keys"):
+            pipeline._validate_override_keys(overrides, config_b, "test.yml")
 
 
 # ===================================================================

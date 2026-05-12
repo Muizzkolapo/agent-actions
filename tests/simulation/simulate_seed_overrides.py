@@ -357,7 +357,8 @@ try:
         SEED_OVERRIDE_FILENAMES,
         _apply_seed_overrides,
         _find_override_file,
-        _load_and_validate_seed_overrides,
+        _load_and_parse_seed_overrides,
+        _validate_override_keys,
     )
     from agent_actions.workflow.runner_file_processing import (
         is_framework_sidecar,
@@ -408,14 +409,15 @@ def partB_find_override_file_missing():
 
 
 def partB_load_validates_unknown_keys():
-    """B4: _load_and_validate_seed_overrides rejects unknown keys with valid key listing."""
+    """B4: _validate_override_keys rejects unknown keys with valid key listing."""
     print("\n-- B4: Unknown key rejection")
     config = make_workflow_config()
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp) / "_seed_overrides.yml"
         p.write_text("exm_syllabus: $file:typo.json\n")  # typo
+        overrides = _load_and_parse_seed_overrides(p)
         try:
-            _load_and_validate_seed_overrides(p, config)
+            _validate_override_keys(overrides, config, str(p))
             check("raises ConfigValidationError", False, "no exception")
         except ConfigValidationError as e:
             msg = str(e)
@@ -427,7 +429,7 @@ def partB_load_validates_unknown_keys():
 def partB_load_validates_non_string_values():
     """B5: Non-string override values are rejected (BUG-13)."""
     print("\n-- B5: Non-string value rejection")
-    config = make_workflow_config()
+    make_workflow_config()
     cases = [
         ("dict", "exam_syllabus:\n  nested: value\n"),
         ("list", "exam_syllabus:\n  - item\n"),
@@ -440,7 +442,7 @@ def partB_load_validates_non_string_values():
             p = Path(tmp) / "_seed_overrides.yml"
             p.write_text(content)
             try:
-                _load_and_validate_seed_overrides(p, config)
+                _load_and_parse_seed_overrides(p)
                 check(f"{label} rejected", False, "no exception")
             except ConfigValidationError:
                 check(f"{label} rejected", True)
@@ -449,25 +451,25 @@ def partB_load_validates_non_string_values():
 def partB_load_empty_file_returns_empty():
     """B6: Empty/null YAML returns empty dict (no overrides)."""
     print("\n-- B6: Empty override file")
-    config = make_workflow_config()
+    make_workflow_config()
     for label, content in [("empty", ""), ("comment", "# nothing\n"), ("null", "---\n")]:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "_seed_overrides.yml"
             p.write_text(content)
-            result = _load_and_validate_seed_overrides(p, config)
+            result = _load_and_parse_seed_overrides(p)
             check(f"{label} -> empty dict", result == {})
 
 
 def partB_load_non_dict_rejected():
     """B7: Non-dict YAML content is rejected."""
     print("\n-- B7: Non-dict content rejection")
-    config = make_workflow_config()
+    make_workflow_config()
     for label, content in [("list", "- a\n- b\n"), ("string", "just text\n"), ("number", "42\n")]:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "_seed_overrides.yml"
             p.write_text(content)
             try:
-                _load_and_validate_seed_overrides(p, config)
+                _load_and_parse_seed_overrides(p)
                 check(f"{label} rejected", False, "no exception")
             except ConfigValidationError:
                 check(f"{label} rejected", True)
@@ -476,12 +478,12 @@ def partB_load_non_dict_rejected():
 def partB_load_file_size_limit():
     """B8: Override file exceeding size limit is rejected (BUG-14)."""
     print("\n-- B8: File size limit")
-    config = make_workflow_config()
+    make_workflow_config()
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp) / "_seed_overrides.yml"
         p.write_text("exam_syllabus: " + "x" * (MAX_OVERRIDE_FILE_SIZE + 100) + "\n")
         try:
-            _load_and_validate_seed_overrides(p, config)
+            _load_and_parse_seed_overrides(p)
             check("oversized rejected", False, "no exception")
         except ConfigValidationError:
             check("oversized rejected", True)
@@ -490,12 +492,12 @@ def partB_load_file_size_limit():
 def partB_load_bad_yaml():
     """B9: Malformed YAML raises clear error."""
     print("\n-- B9: Bad YAML")
-    config = make_workflow_config()
+    make_workflow_config()
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp) / "_seed_overrides.yml"
         p.write_text("exam_syllabus: [invalid yaml\n  broken: {{\n")
         try:
-            _load_and_validate_seed_overrides(p, config)
+            _load_and_parse_seed_overrides(p)
             check("bad YAML rejected", False, "no exception")
         except (yaml.YAMLError, ConfigValidationError):
             check("bad YAML rejected", True)
@@ -678,7 +680,8 @@ def partB_full_staging_walk():
 
             override_file = _find_override_file(item.parent)
             if override_file:
-                overrides = _load_and_validate_seed_overrides(override_file, shared_config)
+                overrides = _load_and_parse_seed_overrides(override_file)
+                _validate_override_keys(overrides, shared_config, str(override_file))
                 effective = _apply_seed_overrides(shared_config, overrides)
             else:
                 effective = shared_config
@@ -733,7 +736,7 @@ def partB_multiple_overrides_merge():
             question_design_rules: $file:aws_design_rules.json
         """)
         )
-        overrides = _load_and_validate_seed_overrides(p, config)
+        overrides = _load_and_parse_seed_overrides(p)
         effective = _apply_seed_overrides(config, overrides)
         sp = effective["context_scope"]["seed_path"]
 
