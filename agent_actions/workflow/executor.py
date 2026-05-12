@@ -352,22 +352,7 @@ class ActionExecutor:
             return self._handle_guard_all_filtered(params, output_folder, duration)
 
         if final_status == ActionStatus.FAILED:
-            reason = f"Action '{params.action_name}' failed: all records produced errors"
-            self.deps.state_manager.update_status(
-                params.action_name,
-                ActionStatus.FAILED,
-                execution_time=duration,
-                error_message=reason,
-            )
-            self._write_failed_disposition(params.action_name, reason)
-            self._track_action_complete(params.action_name, duration, ActionStatus.FAILED)
-            return ActionExecutionResult(
-                success=False,
-                output_folder=output_folder,
-                status=ActionStatus.FAILED,
-                error=RuntimeError(reason),
-                metrics=ExecutionMetrics(duration=duration),
-            )
+            return self._finalize_total_failure(params.action_name, duration, output_folder)
 
         self.deps.state_manager.update_status(
             params.action_name,
@@ -459,6 +444,33 @@ class ActionExecutor:
         )
         self.run_tracker.record_action_complete(config=config)
 
+    def _finalize_total_failure(
+        self,
+        action_name: str,
+        duration: float,
+        output_folder: str | None = None,
+        *,
+        execution_mode: str | None = None,
+    ) -> ActionExecutionResult:
+        """Handle total item-level failure: update state, write disposition, track, return result."""
+        reason = f"Action '{action_name}' failed: all records produced errors"
+        status_kwargs: dict[str, Any] = {
+            "execution_time": duration,
+            "error_message": reason,
+        }
+        if execution_mode is not None:
+            status_kwargs["execution_mode"] = execution_mode
+        self.deps.state_manager.update_status(action_name, ActionStatus.FAILED, **status_kwargs)
+        self._write_failed_disposition(action_name, reason)
+        self._track_action_complete(action_name, duration, ActionStatus.FAILED)
+        return ActionExecutionResult(
+            success=False,
+            output_folder=output_folder,
+            status=ActionStatus.FAILED,
+            error=RuntimeError(reason),
+            metrics=ExecutionMetrics(duration=duration),
+        )
+
     def _write_failed_disposition(self, action_name: str, reason: str) -> None:
         """Write DISPOSITION_FAILED to storage so downstream and future runs detect the failure."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
@@ -523,14 +535,8 @@ class ActionExecutor:
                 )
             item_failures = storage_backend.get_failed_items(action_name)
             if item_failures:
-                success_dispositions = [
-                    d
-                    for d in storage_backend.get_disposition(
-                        action_name, disposition=DISPOSITION_SUCCESS
-                    )
-                    if d.get("record_id") != NODE_LEVEL_RECORD_ID
-                ]
-                if not success_dispositions and len(item_failures) > 0:
+                has_any_success = storage_backend.has_disposition(action_name, DISPOSITION_SUCCESS)
+                if not has_any_success:
                     logger.error(
                         "Action '%s' failed: 0 successful outputs out of %d records. "
                         "Halting workflow — all downstream actions will be skipped.",
@@ -901,16 +907,6 @@ class ActionExecutor:
             final_status = self._resolve_completion_status(action_name)
 
             if final_status == ActionStatus.FAILED:
-                reason = f"Action '{action_name}' failed: all records produced errors"
-                self.deps.state_manager.update_status(
-                    action_name,
-                    ActionStatus.FAILED,
-                    execution_time=wall_clock,
-                    execution_mode="batch",
-                    error_message=reason,
-                )
-                self._write_failed_disposition(action_name, reason)
-                self._track_action_complete(action_name, wall_clock, ActionStatus.FAILED)
                 fire_event(
                     BatchCompleteEvent(
                         batch_id=action_config.get("batch_id", ""),
@@ -921,12 +917,8 @@ class ActionExecutor:
                         elapsed_time=wall_clock,
                     )
                 )
-                return ActionExecutionResult(
-                    success=False,
-                    output_folder=output_folder,
-                    status=ActionStatus.FAILED,
-                    error=RuntimeError(reason),
-                    metrics=ExecutionMetrics(duration=wall_clock),
+                return self._finalize_total_failure(
+                    action_name, wall_clock, output_folder, execution_mode="batch"
                 )
 
             self.deps.state_manager.update_status(
