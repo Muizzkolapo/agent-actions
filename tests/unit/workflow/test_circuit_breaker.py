@@ -587,6 +587,10 @@ class TestResolveCompletionStatus:
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
         ]
+        # At least one record succeeded — partial failure, not total
+        mock_deps.action_runner.storage_backend.get_disposition.return_value = [
+            {"record_id": "guid-2", "disposition": "success"}
+        ]
         assert (
             executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED_WITH_FAILURES
         )
@@ -638,6 +642,136 @@ class TestResolveCompletionStatus:
         mock_deps.action_runner.storage_backend.clear_disposition.assert_called_once_with(
             "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         )
+
+
+class TestTotalFailureEscalation:
+    """100% item-level failure must escalate to FAILED, not COMPLETED_WITH_FAILURES."""
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_total_failure_returns_failed(self, mock_fire, executor, mock_deps):
+        """When all records fail and none succeed, status should be FAILED."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
+            {"record_id": "guid-2", "disposition": "failed", "reason": "503"},
+        ]
+        # No success dispositions — total failure
+        mock_deps.action_runner.storage_backend.get_disposition.return_value = []
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.FAILED
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_partial_failure_still_completed_with_failures(self, mock_fire, executor, mock_deps):
+        """When some records fail but others succeed, status stays COMPLETED_WITH_FAILURES."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
+        ]
+        mock_deps.action_runner.storage_backend.get_disposition.return_value = [
+            {"record_id": "guid-2", "disposition": "success"},
+        ]
+        assert (
+            executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED_WITH_FAILURES
+        )
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_empty_input_not_treated_as_failure(self, mock_fire, executor, mock_deps):
+        """Zero records processed (no failures, no successes) is COMPLETED, not FAILED."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = []
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_total_failure_ignores_node_level_success_sentinel(
+        self, mock_fire, executor, mock_deps
+    ):
+        """Node-level sentinels in success dispositions must not prevent total-failure detection."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
+        ]
+        # Only a node-level sentinel, no real success records
+        mock_deps.action_runner.storage_backend.get_disposition.return_value = [
+            {"record_id": NODE_LEVEL_RECORD_ID, "disposition": "success"},
+        ]
+        assert executor._resolve_completion_status("agent_a") == ActionStatus.FAILED
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_total_failure_handle_run_success_returns_failure_result(
+        self, mock_fire, executor, mock_deps
+    ):
+        """_handle_run_success must return success=False when _resolve_completion_status returns FAILED."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
+        ]
+        mock_deps.action_runner.storage_backend.get_disposition.return_value = []
+
+        from agent_actions.workflow.executor import ActionRunParams
+
+        params = ActionRunParams(
+            action_name="agent_a",
+            action_idx=0,
+            action_config={"kind": "llm"},
+            is_last_action=False,
+            start_time=datetime.now(),
+        )
+        result = executor._handle_run_success(params, "/output", 1.0, None)
+        assert result.success is False
+        assert result.status == ActionStatus.FAILED
+        assert result.error is not None
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_total_failure_writes_failed_disposition(self, mock_fire, executor, mock_deps):
+        """Total failure must write DISPOSITION_FAILED node-level sentinel for re-run safety."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
+        ]
+        mock_deps.action_runner.storage_backend.get_disposition.return_value = []
+
+        from agent_actions.workflow.executor import ActionRunParams
+
+        params = ActionRunParams(
+            action_name="agent_a",
+            action_idx=0,
+            action_config={"kind": "llm"},
+            is_last_action=False,
+            start_time=datetime.now(),
+        )
+        executor._handle_run_success(params, "/output", 1.0, None)
+        mock_deps.action_runner.storage_backend.set_disposition.assert_called_once_with(
+            action_name="agent_a",
+            record_id=NODE_LEVEL_RECORD_ID,
+            disposition=DISPOSITION_FAILED,
+            reason="Action 'agent_a' failed: all records produced errors"[:500],
+        )
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    def test_total_failure_tracker_records_failed_not_partial(self, mock_fire, executor, mock_deps):
+        """Run tracker must record 'failed', not 'partial', for total failure."""
+        run_tracker = MagicMock()
+        executor.run_tracker = run_tracker
+        executor.run_id = "test-run-id"
+
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
+        ]
+        mock_deps.action_runner.storage_backend.get_disposition.return_value = []
+
+        from agent_actions.workflow.executor import ActionRunParams
+
+        params = ActionRunParams(
+            action_name="agent_a",
+            action_idx=0,
+            action_config={"kind": "llm"},
+            is_last_action=False,
+            start_time=datetime.now(),
+        )
+        executor._handle_run_success(params, "/output", 1.0, None)
+        call_args = run_tracker.record_action_complete.call_args
+        assert call_args is not None
+        assert call_args.kwargs["config"].status == "failed"
 
 
 class TestCircuitBreakerIgnoresPartial:

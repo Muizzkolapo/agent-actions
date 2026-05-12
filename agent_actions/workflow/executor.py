@@ -22,6 +22,7 @@ from agent_actions.record.reasons import GUARD_FILTERED_ALL
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_SKIPPED,
+    DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
@@ -350,6 +351,24 @@ class ActionExecutor:
         if final_status == ActionStatus.SKIPPED:
             return self._handle_guard_all_filtered(params, output_folder, duration)
 
+        if final_status == ActionStatus.FAILED:
+            reason = f"Action '{params.action_name}' failed: all records produced errors"
+            self.deps.state_manager.update_status(
+                params.action_name,
+                ActionStatus.FAILED,
+                execution_time=duration,
+                error_message=reason,
+            )
+            self._write_failed_disposition(params.action_name, reason)
+            self._track_action_complete(params.action_name, duration, ActionStatus.FAILED)
+            return ActionExecutionResult(
+                success=False,
+                output_folder=output_folder,
+                status=ActionStatus.FAILED,
+                error=RuntimeError(reason),
+                metrics=ExecutionMetrics(duration=duration),
+            )
+
         self.deps.state_manager.update_status(
             params.action_name,
             final_status,
@@ -425,6 +444,8 @@ class ActionExecutor:
             tracker_status = "skipped"
         elif status == ActionStatus.COMPLETED:
             tracker_status = "success"
+        elif status == ActionStatus.FAILED:
+            tracker_status = "failed"
         else:
             tracker_status = "partial"
         config = ActionCompleteConfig(
@@ -502,6 +523,21 @@ class ActionExecutor:
                 )
             item_failures = storage_backend.get_failed_items(action_name)
             if item_failures:
+                success_dispositions = [
+                    d
+                    for d in storage_backend.get_disposition(
+                        action_name, disposition=DISPOSITION_SUCCESS
+                    )
+                    if d.get("record_id") != NODE_LEVEL_RECORD_ID
+                ]
+                if not success_dispositions and len(item_failures) > 0:
+                    logger.error(
+                        "Action '%s' failed: 0 successful outputs out of %d records. "
+                        "Halting workflow — all downstream actions will be skipped.",
+                        action_name,
+                        len(item_failures),
+                    )
+                    return ActionStatus.FAILED
                 logger.warning(
                     "Action '%s' completed with %d item-level failure(s)",
                     action_name,
