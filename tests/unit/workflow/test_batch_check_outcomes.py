@@ -107,6 +107,44 @@ class TestBatchCheckCompleteEvent:
         assert complete_events[0].completed == 0
 
 
+class TestBatchTotalFailure:
+    """Batch completion with 100% item-level failure must halt the workflow."""
+
+    def test_batch_total_failure_returns_failed(self, executor, mock_deps):
+        """Batch-completed action with all records failed returns success=False."""
+        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
+        mock_deps.batch_manager.handle_batch_agent.return_value = ("/output/file.json", "completed")
+        mock_deps.state_manager.get_status_details.return_value = {
+            "status": ActionStatus.BATCH_SUBMITTED,
+            "batch_submitted_at": "2026-05-01T10:00:00",
+        }
+        # All records failed, zero successes
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
+        ]
+        mock_deps.action_runner.storage_backend.has_successful_items.return_value = False
+
+        with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
+            result = executor.execute_action_sync(
+                "agent_a", action_idx=0, action_config={"kind": "llm"}, is_last_action=False
+            )
+
+        assert result.success is False
+        assert result.status == ActionStatus.FAILED
+        assert result.error is not None
+        # Disposition sentinel written
+        mock_deps.action_runner.storage_backend.set_disposition.assert_called()
+        # BatchCompleteEvent with failed=1
+        complete_events = [
+            call[0][0]
+            for call in mock_fire.call_args_list
+            if isinstance(call[0][0], BatchCompleteEvent)
+        ]
+        assert len(complete_events) == 1
+        assert complete_events[0].failed == 1
+        assert complete_events[0].completed == 0
+
+
 class TestBatchCheckStatusTransitions:
     """Status transitions during _handle_batch_check."""
 

@@ -80,6 +80,7 @@ class TestExecuteAgentSync:
         storage = MagicMock()
         storage.list_target_files.return_value = []
         storage.has_disposition.return_value = False
+        storage.get_failed_items.return_value = []
         mock_deps.action_runner.storage_backend = storage
 
         mock_deps.skip_evaluator.should_skip_action.return_value = False
@@ -106,6 +107,7 @@ class TestExecuteAgentSync:
         storage = MagicMock()
         storage.list_target_files.side_effect = OSError("SQLite lock")
         storage.has_disposition.return_value = False
+        storage.get_failed_items.return_value = []
         mock_deps.action_runner.storage_backend = storage
 
         mock_deps.skip_evaluator.should_skip_action.return_value = False

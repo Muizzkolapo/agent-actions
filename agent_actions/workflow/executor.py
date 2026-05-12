@@ -350,6 +350,9 @@ class ActionExecutor:
         if final_status == ActionStatus.SKIPPED:
             return self._handle_guard_all_filtered(params, output_folder, duration)
 
+        if final_status == ActionStatus.FAILED:
+            return self._finalize_total_failure(params.action_name, duration, output_folder)
+
         self.deps.state_manager.update_status(
             params.action_name,
             final_status,
@@ -425,6 +428,8 @@ class ActionExecutor:
             tracker_status = "skipped"
         elif status == ActionStatus.COMPLETED:
             tracker_status = "success"
+        elif status == ActionStatus.FAILED:
+            tracker_status = "failed"
         else:
             tracker_status = "partial"
         config = ActionCompleteConfig(
@@ -437,6 +442,33 @@ class ActionExecutor:
             files_processed=0,
         )
         self.run_tracker.record_action_complete(config=config)
+
+    def _finalize_total_failure(
+        self,
+        action_name: str,
+        duration: float,
+        output_folder: str | None = None,
+        *,
+        execution_mode: str | None = None,
+    ) -> ActionExecutionResult:
+        """Handle total item-level failure: update state, write disposition, track, return result."""
+        reason = f"Action '{action_name}' failed: all records produced errors"
+        status_kwargs: dict[str, Any] = {
+            "execution_time": duration,
+            "error_message": reason,
+        }
+        if execution_mode is not None:
+            status_kwargs["execution_mode"] = execution_mode
+        self.deps.state_manager.update_status(action_name, ActionStatus.FAILED, **status_kwargs)
+        self._write_failed_disposition(action_name, reason)
+        self._track_action_complete(action_name, duration, ActionStatus.FAILED)
+        return ActionExecutionResult(
+            success=False,
+            output_folder=output_folder,
+            status=ActionStatus.FAILED,
+            error=RuntimeError(reason),
+            metrics=ExecutionMetrics(duration=duration),
+        )
 
     def _write_failed_disposition(self, action_name: str, reason: str) -> None:
         """Write DISPOSITION_FAILED to storage so downstream and future runs detect the failure."""
@@ -475,7 +507,7 @@ class ActionExecutor:
                 )
 
     def _resolve_completion_status(self, action_name: str) -> ActionStatus:
-        """Return SKIPPED if all records guard-filtered, COMPLETED_WITH_FAILURES if item-level failures exist, else COMPLETED."""
+        """Classify action outcome: FAILED (all items failed), SKIPPED (all guard-filtered), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return ActionStatus.COMPLETED
@@ -502,6 +534,14 @@ class ActionExecutor:
                 )
             item_failures = storage_backend.get_failed_items(action_name)
             if item_failures:
+                if not storage_backend.has_successful_items(action_name):
+                    logger.error(
+                        "Action '%s' failed: 0 successful outputs out of %d records. "
+                        "Halting workflow — all downstream actions will be skipped.",
+                        action_name,
+                        len(item_failures),
+                    )
+                    return ActionStatus.FAILED
                 logger.warning(
                     "Action '%s' completed with %d item-level failure(s)",
                     action_name,
@@ -863,6 +903,22 @@ class ActionExecutor:
         if batch_status == "completed":
             wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
+
+            if final_status == ActionStatus.FAILED:
+                fire_event(
+                    BatchCompleteEvent(
+                        batch_id=action_config.get("batch_id", ""),
+                        action_name=action_name,
+                        total=1,
+                        completed=0,
+                        failed=1,
+                        elapsed_time=wall_clock,
+                    )
+                )
+                return self._finalize_total_failure(
+                    action_name, wall_clock, output_folder, execution_mode="batch"
+                )
+
             self.deps.state_manager.update_status(
                 action_name,
                 final_status,
