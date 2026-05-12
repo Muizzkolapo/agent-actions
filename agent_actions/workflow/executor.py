@@ -899,6 +899,36 @@ class ActionExecutor:
         if batch_status == "completed":
             wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
+
+            if final_status == ActionStatus.FAILED:
+                reason = f"Action '{action_name}' failed: all records produced errors"
+                self.deps.state_manager.update_status(
+                    action_name,
+                    ActionStatus.FAILED,
+                    execution_time=wall_clock,
+                    execution_mode="batch",
+                    error_message=reason,
+                )
+                self._write_failed_disposition(action_name, reason)
+                self._track_action_complete(action_name, wall_clock, ActionStatus.FAILED)
+                fire_event(
+                    BatchCompleteEvent(
+                        batch_id=action_config.get("batch_id", ""),
+                        action_name=action_name,
+                        total=1,
+                        completed=0,
+                        failed=1,
+                        elapsed_time=wall_clock,
+                    )
+                )
+                return ActionExecutionResult(
+                    success=False,
+                    output_folder=output_folder,
+                    status=ActionStatus.FAILED,
+                    error=RuntimeError(reason),
+                    metrics=ExecutionMetrics(duration=wall_clock),
+                )
+
             self.deps.state_manager.update_status(
                 action_name,
                 final_status,
