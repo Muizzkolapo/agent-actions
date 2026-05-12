@@ -69,7 +69,9 @@ def _write(path: Path, content: str = "") -> Path:
 class TestFindOverrideFile:
     def test_finds_yml(self, tmp_path, pipeline):
         _write(tmp_path / "_seed_overrides.yml", "k: v")
-        assert pipeline._find_override_file(tmp_path) is not None
+        result = pipeline._find_override_file(tmp_path)
+        assert result is not None
+        assert result.name == "_seed_overrides.yml"
 
     def test_finds_yaml(self, tmp_path, pipeline):
         _write(tmp_path / "_seed_overrides.yaml", "k: v")
@@ -427,8 +429,9 @@ class TestConstants:
         assert "_seed_overrides.yml" in SEED_OVERRIDE_FILENAMES
         assert "_seed_overrides.yaml" in SEED_OVERRIDE_FILENAMES
 
-    def test_is_frozenset(self):
-        assert isinstance(SEED_OVERRIDE_FILENAMES, frozenset)
+    def test_is_ordered_tuple(self):
+        assert isinstance(SEED_OVERRIDE_FILENAMES, tuple)
+        assert SEED_OVERRIDE_FILENAMES[0] == "_seed_overrides.yml"  # .yml has precedence
 
 
 # ===================================================================
