@@ -83,7 +83,6 @@ def scan_vendors(project_root: Path) -> dict[str, Any]:
             "GEMINI": "GoogleConfig",
             "GROQ": "GroqConfig",
             "COHERE": "CohereConfig",
-            "MISTRAL": "MistralConfig",
             "OLLAMA_LOCAL": "OllamaLocalConfig",
             "OLLAMA_CLOUD": "OllamaCloudConfig",
             "TOOL": "ToolVendorConfig",

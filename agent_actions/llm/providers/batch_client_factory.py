@@ -140,16 +140,6 @@ def _create_groq(config: dict[str, Any]) -> BaseBatchClient:
     return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
-def _create_mistral(config: dict[str, Any]) -> BaseBatchClient:
-    cls, available = _try_import(".mistral.batch_client", "MistralBatchClient")
-    cls = _require_class(cls, available, "mistral", "mistralai")
-    _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
-        "MISTRAL_API_KEY"
-    )
-    return cls(api_key=api_key)  # type: ignore[no-any-return]
-
-
 def _create_agac(config: dict[str, Any]) -> BaseBatchClient:
     from .agac.batch_client import AgacBatchClient
 
@@ -166,7 +156,6 @@ _BATCH_CLIENT_REGISTRY: dict[str, _BatchClientRegistration] = {
     "ollama_cloud": _BatchClientRegistration(factory=_create_ollama_cloud),
     "anthropic": _BatchClientRegistration(factory=_create_anthropic, package="anthropic"),
     "groq": _BatchClientRegistration(factory=_create_groq, package="groq"),
-    "mistral": _BatchClientRegistration(factory=_create_mistral, package="mistralai"),
     "agac-provider": _BatchClientRegistration(factory=_create_agac, aliases=("mock",)),
 }
 

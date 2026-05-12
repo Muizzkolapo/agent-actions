@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Honor top-level required array in fields-format schemas and warn when schema reprompt is silently disabled"
+time: 2026-05-12T04:13:00.000000Z

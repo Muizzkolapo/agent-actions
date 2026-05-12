@@ -2,7 +2,7 @@
 Vendor-specific schema compilation.
 
 Compiles unified schemas into the format required by each LLM vendor
-(OpenAI, Anthropic, Gemini, Ollama, Groq, Mistral, Cohere, etc.).
+(OpenAI, Anthropic, Gemini, Ollama, Groq, Cohere, etc.).
 """
 
 import logging
@@ -51,8 +51,8 @@ def compile_unified_schema(
             required.append(key)
     target = target_system.lower()
     compiled: dict[str, Any] | list[dict[str, Any]]
-    if target in ("openai", "groq", "mistral", "agac-provider"):
-        # OpenAI-compatible format — Groq, Mistral, and agac-provider use the same shape
+    if target in ("openai", "groq", "agac-provider"):
+        # OpenAI-compatible format — Groq and agac-provider use the same shape
         compiled = {
             "name": unified.get("name", ""),
             "schema": {
@@ -113,7 +113,6 @@ def compile_unified_schema(
                     "ollama_cloud",
                     "agac-provider",
                     "groq",
-                    "mistral",
                     "cohere",
                 ],
                 "operation": "compile_unified_schema",

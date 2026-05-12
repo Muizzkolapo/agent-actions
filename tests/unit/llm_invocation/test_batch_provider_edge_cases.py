@@ -2,7 +2,7 @@
 
 1. _create_exhausted_item() — action_name validation
 2. _submit_to_provider() — ExternalServiceError wrapping
-3. Cohere/Mistral token extraction — nullable token values
+3. Cohere token extraction — nullable token values
 """
 
 from unittest.mock import MagicMock, patch
@@ -191,7 +191,7 @@ class TestSubmitToProviderErrorPath:
 
 
 # =============================================================================
-# 3. Cohere/Mistral token extraction — nullable token values
+# 3. Cohere token extraction — nullable token values
 # =============================================================================
 
 
@@ -327,122 +327,3 @@ class TestCohereNullableTokens:
         usage = ResponseBuilder.extract_usage(mock_response, "cohere")
         assert usage.prompt_tokens == 0
         assert usage.completion_tokens == 0
-
-
-class TestMistralNullableTokens:
-    """Mistral client token extraction handles None token values via or 0."""
-
-    def test_none_usage_tokens_default_to_zero(self):
-        """When usage token fields are None, they default to 0.
-
-        The ``or 0`` coercion in ResponseBuilder._extract_openai_compat()
-        converts None to 0.  Because all tokens are zero, ``set_last_usage``
-        is intentionally skipped; we verify the coercion via ``extract_usage``.
-        """
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.message.content = '{"result": "ok"}'
-        mock_choice.message.tool_calls = None
-        mock_response.choices = [mock_choice]
-        mock_response.usage.prompt_tokens = None
-        mock_response.usage.completion_tokens = None
-        mock_response.usage.total_tokens = None
-
-        with (
-            patch("agent_actions.llm.providers.mistral.client.Mistral") as mock_mistral,
-            patch(f"{_RB}.set_last_usage") as mock_usage,
-            patch(f"{_RB}.fire_event"),
-            patch("agent_actions.llm.providers.mistral.client.fire_event"),
-        ):
-            mock_mistral.return_value.chat.complete.return_value = mock_response
-
-            from agent_actions.llm.providers.mistral.client import MistralClient
-
-            MistralClient.call_json(
-                api_key="test-key",
-                agent_config={"model_name": "mistral-large-latest"},
-                prompt_config="test prompt",
-                context_data="test data",
-                schema={"properties": {"result": {"type": "string"}}},
-            )
-
-        # All tokens are zero after coercion — set_last_usage is skipped
-        mock_usage.assert_not_called()
-
-        # Verify the or-0 coercion via extract_usage directly
-        usage = ResponseBuilder.extract_usage(mock_response, "mistral")
-        assert usage.prompt_tokens == 0
-        assert usage.completion_tokens == 0
-        assert usage.total_tokens == 0
-
-    def test_none_usage_object_defaults_to_zero(self):
-        """When usage object itself is None, token values default to 0."""
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.message.content = '{"result": "ok"}'
-        mock_choice.message.tool_calls = None
-        mock_response.choices = [mock_choice]
-        mock_response.usage = None
-
-        with (
-            patch("agent_actions.llm.providers.mistral.client.Mistral") as mock_mistral,
-            patch(f"{_RB}.set_last_usage") as mock_usage,
-            patch(f"{_RB}.fire_event"),
-            patch("agent_actions.llm.providers.mistral.client.fire_event"),
-        ):
-            mock_mistral.return_value.chat.complete.return_value = mock_response
-
-            from agent_actions.llm.providers.mistral.client import MistralClient
-
-            # Should not crash — or 0 handles None usage
-            result = MistralClient.call_json(
-                api_key="test-key",
-                agent_config={"model_name": "mistral-large-latest"},
-                prompt_config="test prompt",
-                context_data="test data",
-                schema={"properties": {"result": {"type": "string"}}},
-            )
-
-        assert result is not None
-        mock_usage.assert_not_called()
-
-    def test_none_usage_tokens_default_to_zero_call_non_json(self):
-        """call_non_json: None token fields default to 0.
-
-        Same as call_json — coercion verified via ``extract_usage``;
-        ``set_last_usage`` is skipped for all-zero usage.
-        """
-        mock_response = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.message.content = "plain text response"
-        mock_choice.message.tool_calls = None
-        mock_response.choices = [mock_choice]
-        mock_response.usage.prompt_tokens = None
-        mock_response.usage.completion_tokens = None
-        mock_response.usage.total_tokens = None
-
-        with (
-            patch("agent_actions.llm.providers.mistral.client.Mistral") as mock_mistral,
-            patch(f"{_RB}.set_last_usage") as mock_usage,
-            patch(f"{_RB}.fire_event"),
-            patch("agent_actions.llm.providers.mistral.client.fire_event"),
-        ):
-            mock_mistral.return_value.chat.complete.return_value = mock_response
-
-            from agent_actions.llm.providers.mistral.client import MistralClient
-
-            MistralClient.call_non_json(
-                api_key="test-key",
-                agent_config={"model_name": "mistral-large-latest"},
-                prompt_config="test prompt",
-                context_data="test data",
-            )
-
-        # All tokens are zero after coercion — set_last_usage is skipped
-        mock_usage.assert_not_called()
-
-        # Verify the or-0 coercion via extract_usage directly
-        usage = ResponseBuilder.extract_usage(mock_response, "mistral")
-        assert usage.prompt_tokens == 0
-        assert usage.completion_tokens == 0
-        assert usage.total_tokens == 0

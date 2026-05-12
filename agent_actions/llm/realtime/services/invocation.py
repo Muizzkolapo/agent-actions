@@ -22,7 +22,6 @@ _VENDOR_PACKAGES: dict[str, str] = {
     "ollama_local": "ollama",
     "ollama_cloud": "ollama",
     "gemini": "google-genai",
-    "mistral": "mistralai",
 }
 
 # Client registry — external SDK providers use lazy "module:Class" strings
@@ -33,7 +32,6 @@ CLIENT_REGISTRY: dict[str, Any] = {
     "ollama_cloud": "agent_actions.llm.providers.ollama.client:OllamaCloudClient",
     "gemini": "agent_actions.llm.providers.gemini.client:GeminiClient",
     "cohere": "agent_actions.llm.providers.cohere.client:CohereClient",
-    "mistral": "agent_actions.llm.providers.mistral.client:MistralClient",
     "anthropic": "agent_actions.llm.providers.anthropic.client:AnthropicClient",
     "groq": "agent_actions.llm.providers.groq.client:GroqClient",
     # Internal providers — no external SDK deps, safe to import eagerly.

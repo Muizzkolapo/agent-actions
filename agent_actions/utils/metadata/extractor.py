@@ -22,7 +22,6 @@ class MetadataExtractor:
         "gemini": "google",
         "vertexai": "google",
         "cohere": "cohere",
-        "mistral": "mistral",
         "tool": "tool",
     }
 

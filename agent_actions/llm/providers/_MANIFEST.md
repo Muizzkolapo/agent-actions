@@ -22,7 +22,7 @@ shared utilities (mixins, usage tracking) for each supported LLM vendor.
 | `cohere/__init__.py` | Module | Cohere provider adapter for embeddings/inference. | `llm.providers`, `cohere` |
 | `gemini/__init__.py` | Module | Gemini provider wiring (Google Gemini). | `llm.providers`, `google` |
 | `groq/__init__.py` | Module | Groq provider binding for Groq Cloud inference. | `llm.providers`, `groq` |
-| `mistral/__init__.py` | Module | Mistral provider integration. | `llm.providers`, `mistral` |
+
 | `ollama/__init__.py` | Module | Ollama provider with dual registration: `ollama_local` (no auth, `OLLAMA_HOST`, API-enforced structured output via `format` param) and `ollama_cloud` (Bearer auth via `OLLAMA_API_KEY`, `OLLAMA_CLOUD_HOST`, no structured output support yet). | `llm.providers`, `ollama` |
 | `openai/__init__.py` | Module | OpenAI provider adapter with tool/window shaping. | `llm.providers`, `openai` |
 | `tools/__init__.py` | Module | Tool discovery/registration for OpenAI function calling formats. | `llm.providers`, `tools` |

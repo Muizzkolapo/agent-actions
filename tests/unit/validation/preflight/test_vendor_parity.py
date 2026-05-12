@@ -123,24 +123,24 @@ class TestVendorParity:
         from agent_actions.llm.realtime.services.invocation import _resolve_client
 
         # Force a lazy string entry so the import path is exercised.
-        CLIENT_REGISTRY["mistral"] = _ORIGINAL_REGISTRY["mistral"]
+        CLIENT_REGISTRY["groq"] = _ORIGINAL_REGISTRY["groq"]
 
         with patch.object(importlib, "import_module", side_effect=ImportError("no module")):
             with pytest.raises(DependencyError) as exc_info:
-                _resolve_client("mistral")
+                _resolve_client("groq")
 
         err = exc_info.value
-        assert "mistralai" in str(err)
-        assert err.context["package"] == "mistralai"
-        assert err.context["install_command"] == "uv pip install mistralai"
-        assert err.context["client_type"] == "mistral"
+        assert "groq" in str(err)
+        assert err.context["package"] == "groq"
+        assert err.context["install_command"] == "uv pip install groq"
+        assert err.context["client_type"] == "groq"
 
     def test_resolve_capabilities_returns_none_on_missing_sdk(self):
         """_resolve_capabilities must return None (not crash) when SDK is missing."""
         # Force a lazy string entry.
-        CLIENT_REGISTRY["mistral"] = _ORIGINAL_REGISTRY["mistral"]
+        CLIENT_REGISTRY["groq"] = _ORIGINAL_REGISTRY["groq"]
 
         with patch.object(importlib, "import_module", side_effect=ImportError("no module")):
-            result = _resolve_capabilities("mistral")
+            result = _resolve_capabilities("groq")
 
         assert result is None

@@ -220,11 +220,17 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
 
     # Handle unified format with 'fields' array
     if "fields" in schema:
+        top_level_required = set(schema.get("required", []))
         for field_def in schema.get("fields", []):
             field_id = field_def.get("id") or field_def.get("name")
             if field_id:
                 all_fields.add(field_id)
-                if field_def.get("required", False):
+                if "required" in field_def:
+                    # Per-field annotation is authoritative
+                    if field_def["required"]:
+                        required_fields.add(field_id)
+                elif field_id in top_level_required:
+                    # Fall back to top-level required array
                     required_fields.add(field_id)
                 if "type" in field_def:
                     field_types[field_id] = field_def["type"]

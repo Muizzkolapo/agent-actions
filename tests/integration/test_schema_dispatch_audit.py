@@ -266,13 +266,6 @@ class TestVendorCompilation:
         assert inner["type"] == "object"
         assert inner["additionalProperties"] is False
 
-    def test_mistral_openai_compatible_format(self):
-        """Mistral gets OpenAI-compatible format."""
-        compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "mistral")
-        assert isinstance(compiled, dict)
-        inner = compiled["schema"]
-        assert inner["type"] == "object"
-
     def test_cohere_object_schema_format(self):
         """Cohere gets {type: object, properties, required} (no additionalProperties)."""
         compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "cohere")
@@ -310,7 +303,6 @@ class TestVendorCompilation:
             "ollama_local",
             "ollama_cloud",
             "groq",
-            "mistral",
             "cohere",
         ]
         for vendor in vendors:
@@ -638,7 +630,6 @@ class TestDispatchInSchema:
             "ollama_local",
             "ollama_cloud",
             "groq",
-            "mistral",
             "cohere",
         ]:
             compiled, _ = compiler.compile(config, vendor)
@@ -1008,7 +999,6 @@ class TestFullPipelineIntegration:
             "ollama_local",
             "ollama_cloud",
             "groq",
-            "mistral",
             "cohere",
         ]
         for vendor in vendors:

@@ -5,7 +5,7 @@ with the correct output_field key, matching the BaseClient contract.
 
 Also covers:
 - Cohere call_json schema.keys() fix (compiled schema format + schema=None)
-- compile_unified_schema for groq, mistral, cohere targets
+- compile_unified_schema for groq, cohere targets
 - Ollama token count extraction
 - Anthropic call_json return normalization
 """
@@ -53,17 +53,6 @@ def _make_gemini_mocks(text):
 
 def _make_openai_style_mocks(text, prompt_tokens=10, completion_tokens=5, total_tokens=15):
     """Build mock response for OpenAI-style providers (Groq, OpenAI)."""
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock()]
-    mock_response.choices[0].message.content = text
-    mock_response.usage.prompt_tokens = prompt_tokens
-    mock_response.usage.completion_tokens = completion_tokens
-    mock_response.usage.total_tokens = total_tokens
-    return mock_response
-
-
-def _make_mistral_mocks(text, prompt_tokens=20, completion_tokens=10, total_tokens=30):
-    """Build mock response for Mistral (uses chat.complete instead of chat.completions.create)."""
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = text
@@ -134,23 +123,6 @@ def _setup_groq(text):
     return patches, configure, GroqClient
 
 
-def _setup_mistral(text):
-    mock_response = _make_mistral_mocks(text)
-    patches = {
-        "fire": "agent_actions.llm.providers.mistral.client.fire_event",
-        "mod": "agent_actions.llm.providers.mistral.client.Mistral",
-    }
-
-    def configure(mock_mod, mock_fire):
-        mock_client = MagicMock()
-        mock_client.chat.complete.return_value = mock_response
-        mock_mod.return_value = mock_client
-
-    from agent_actions.llm.providers.mistral.client import MistralClient
-
-    return patches, configure, MistralClient
-
-
 def _setup_cohere(text):
     mock_response = _make_cohere_mocks(text)
     patches = {
@@ -188,7 +160,6 @@ def _setup_anthropic(text):
 PROVIDER_SETUPS = [
     pytest.param("gemini", _setup_gemini, id="gemini"),
     pytest.param("groq", _setup_groq, id="groq"),
-    pytest.param("mistral", _setup_mistral, id="mistral"),
     pytest.param("cohere", _setup_cohere, id="cohere"),
     pytest.param("anthropic", _setup_anthropic, id="anthropic"),
 ]
@@ -615,14 +586,14 @@ class TestOllamaTokenCounts:
 
 
 # ---------------------------------------------------------------------------
-# Schema compilation for new targets (groq + mistral parameterized)
+# Schema compilation for new targets (groq parameterized)
 # ---------------------------------------------------------------------------
 
 
 class TestCompileUnifiedSchemaNewTargets:
-    """compile_unified_schema supports groq, mistral, and cohere targets."""
+    """compile_unified_schema supports groq and cohere targets."""
 
-    @pytest.mark.parametrize("target", ["groq", "mistral"], ids=["groq", "mistral"])
+    @pytest.mark.parametrize("target", ["groq"], ids=["groq"])
     def test_openai_compatible_format(self, target):
         result = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, target)
 
@@ -657,7 +628,7 @@ class TestCompileUnifiedSchemaNewTargets:
 
         valid_systems = exc_info.value.context["valid_systems"]
         assert "groq" in valid_systems
-        assert "mistral" in valid_systems
+
         assert "cohere" in valid_systems
 
 
@@ -1028,7 +999,7 @@ class TestSingleResponseClients:
 
 
 class TestCallJsonDictWrapping:
-    """Cohere, Mistral, and Gemini call_json wrap single-dict response in a list."""
+    """Cohere and Gemini call_json wrap single-dict response in a list."""
 
     @patch("agent_actions.llm.providers.cohere.client.fire_event")
     @patch("agent_actions.llm.providers.cohere.client.cohere")
@@ -1041,22 +1012,6 @@ class TestCallJsonDictWrapping:
         mock_cohere_mod.ClientV2.return_value = mock_client
 
         result = CohereClient.call_json("key", {"model_name": "command-r"}, "prompt", "data", None)
-        assert isinstance(result, list)
-        assert result == [{"name": "Alice"}]
-
-    @patch("agent_actions.llm.providers.mistral.client.fire_event")
-    @patch("agent_actions.llm.providers.mistral.client.Mistral")
-    def test_mistral_dict_wrapped_in_list(self, mock_mistral_cls, mock_fire):
-        from agent_actions.llm.providers.mistral.client import MistralClient
-
-        mock_response = _make_mistral_mocks('{"name": "Alice"}')
-        mock_client = MagicMock()
-        mock_client.chat.complete.return_value = mock_response
-        mock_mistral_cls.return_value = mock_client
-
-        result = MistralClient.call_json(
-            "key", {"model_name": "mistral-large"}, "prompt", "data", None
-        )
         assert isinstance(result, list)
         assert result == [{"name": "Alice"}]
 

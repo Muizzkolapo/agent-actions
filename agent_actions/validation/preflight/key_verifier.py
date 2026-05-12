@@ -73,21 +73,6 @@ def _probe_groq(api_key: str) -> ProbeResult:
         return ProbeResult(vendor="groq", ok=True)
 
 
-def _probe_mistral(api_key: str) -> ProbeResult:
-    try:
-        from mistralai import Mistral
-
-        client = Mistral(api_key=api_key, timeout_ms=_PROBE_TIMEOUT_SECONDS * 1000)
-        client.models.list()
-        return ProbeResult(vendor="mistral", ok=True)
-    except Exception as e:
-        err_str = str(e).lower()
-        if "401" in err_str or "unauthorized" in err_str or "authentication" in err_str:
-            return ProbeResult(vendor="mistral", ok=False, error=str(e))
-        logger.warning("Could not verify mistral key: %s (proceeding)", e)
-        return ProbeResult(vendor="mistral", ok=True)
-
-
 def _probe_gemini(api_key: str) -> ProbeResult:
     try:
         from google import genai
@@ -110,7 +95,6 @@ _PROBE_REGISTRY: dict[str, Callable[[str], ProbeResult]] = {
     "openai": _probe_openai,
     "anthropic": _probe_anthropic,
     "groq": _probe_groq,
-    "mistral": _probe_mistral,
     "gemini": _probe_gemini,
     "google": _probe_gemini,
 }
