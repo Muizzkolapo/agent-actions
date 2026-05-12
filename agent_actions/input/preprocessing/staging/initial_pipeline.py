@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import yaml
+
 from agent_actions.config.types import RunMode
 from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
@@ -20,12 +22,139 @@ from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
+from agent_actions.utils.constants import (
+    CHUNK_CONFIG_KEY,
+    MODEL_VENDOR_KEY,
+    SEED_OVERRIDE_FILENAMES,
+)
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Seed override helpers
+# ---------------------------------------------------------------------------
+
+MAX_OVERRIDE_FILE_SIZE = 65_536  # 64 KB
+
+# Cache parsed overrides keyed by directory path.  Cleared implicitly when the
+# module is re-imported (new workflow run = new process in typical usage).
+_override_cache: dict[str, dict[str, str] | None] = {}
+
+
+def _find_override_file(parent_dir: Path) -> Path | None:
+    """Return the seed override file in *parent_dir*, or ``None``."""
+    for name in SEED_OVERRIDE_FILENAMES:
+        candidate = parent_dir / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _load_and_validate_seed_overrides(
+    overrides_path: Path, agent_config: dict[str, Any]
+) -> dict[str, str]:
+    """Load, size-check, parse, and validate an override file.
+
+    Raises ``ConfigValidationError`` on any validation failure.
+    """
+    file_size = overrides_path.stat().st_size
+    if file_size > MAX_OVERRIDE_FILE_SIZE:
+        raise ConfigValidationError(
+            reason=(
+                f"Seed override file exceeds size limit "
+                f"({file_size:,} bytes > {MAX_OVERRIDE_FILE_SIZE:,} byte limit)"
+            ),
+            config_key=str(overrides_path),
+        )
+
+    with open(overrides_path, encoding="utf-8") as fh:
+        try:
+            raw = yaml.safe_load(fh)
+        except yaml.YAMLError as exc:
+            raise ConfigValidationError(
+                reason=f"Invalid YAML in seed override file: {exc}",
+                config_key=str(overrides_path),
+            ) from exc
+
+    if raw is None:
+        return {}
+
+    if not isinstance(raw, dict):
+        raise ConfigValidationError(
+            reason=f"Seed override file must contain a YAML mapping, got {type(raw).__name__}",
+            config_key=str(overrides_path),
+        )
+
+    for key, value in raw.items():
+        if not isinstance(value, str):
+            raise ConfigValidationError(
+                reason=(
+                    f"Override key '{key}' must be a string file reference, "
+                    f"got {type(value).__name__}"
+                ),
+                config_key=str(overrides_path),
+            )
+
+    valid_keys = set(agent_config.get("context_scope", {}).get("seed_path", {}).keys())
+    unknown = set(raw.keys()) - valid_keys
+    if unknown:
+        raise ConfigValidationError(
+            reason=(
+                f"Unknown seed override keys: {sorted(unknown)}. Valid keys: {sorted(valid_keys)}"
+            ),
+            config_key=str(overrides_path),
+        )
+
+    return raw
+
+
+def _apply_seed_overrides(
+    agent_config: dict[str, Any], overrides: dict[str, str]
+) -> dict[str, Any]:
+    """Return a new config dict with *overrides* merged into ``seed_path``.
+
+    Reconstructs the full nested path so that the original *agent_config*,
+    its ``context_scope`` dict, and its ``seed_path`` dict are never mutated.
+    """
+    original_cs = agent_config.get("context_scope", {})
+    original_seed_path = original_cs.get("seed_path", {})
+    effective_seed_path = {**original_seed_path, **overrides}
+    effective_cs = {**original_cs, "seed_path": effective_seed_path}
+    return {**agent_config, "context_scope": effective_cs}
+
+
+def _get_effective_config(file_path: str, agent_config: dict[str, Any]) -> dict[str, Any]:
+    """Return *agent_config* with seed overrides merged in (if any).
+
+    Uses a module-level cache so that multiple files in the same directory
+    only parse the override file once.
+    """
+    parent_dir = Path(file_path).parent
+    cache_key = str(parent_dir)
+
+    if cache_key not in _override_cache:
+        override_file = _find_override_file(parent_dir)
+        if override_file is not None:
+            _override_cache[cache_key] = _load_and_validate_seed_overrides(
+                override_file, agent_config
+            )
+        else:
+            _override_cache[cache_key] = None
+
+    overrides = _override_cache[cache_key]
+    if overrides:
+        logger.info(
+            "Seed override applied: %s overrides keys %s for file %s",
+            parent_dir / next(n for n in SEED_OVERRIDE_FILENAMES if (parent_dir / n).is_file()),
+            sorted(overrides.keys()),
+            file_path,
+        )
+        return _apply_seed_overrides(agent_config, overrides)
+
+    return agent_config
 
 
 @dataclass
@@ -144,10 +273,15 @@ def process_initial_stage(ctx: InitialStageContext):
     """Process input files through the initial stage pipeline. Returns output file path."""
     from agent_actions.input.loaders.file_reader import FileReader
 
+    # Apply per-subfolder seed overrides.  _get_effective_config never mutates
+    # the original agent_config dict — it returns a new dict when overrides
+    # exist, or the original unchanged when they don't.
+    effective_config = _get_effective_config(ctx.file_path, ctx.agent_config)
+
     file_reader = FileReader(ctx.file_path)
     content = file_reader.read()
     file_type = file_reader.file_type
-    run_mode = ctx.agent_config.get("run_mode")
+    run_mode = effective_config.get("run_mode")
 
     logger.info(
         "Staging loader run_mode check: mode=%s, agent=%s, file=%s",
@@ -157,8 +291,8 @@ def process_initial_stage(ctx: InitialStageContext):
         extra={
             "run_mode": run_mode,
             "agent_name": ctx.agent_name,
-            "has_run_mode_in_config": "run_mode" in ctx.agent_config,
-            "agent_config_keys": list(ctx.agent_config.keys())[:10],
+            "has_run_mode_in_config": "run_mode" in effective_config,
+            "agent_config_keys": list(effective_config.keys())[:10],
         },
     )
 
@@ -171,7 +305,7 @@ def process_initial_stage(ctx: InitialStageContext):
     _validate_staged_data(
         raw_content=content,
         file_type=file_type,
-        agent_config=ctx.agent_config,
+        agent_config=effective_config,
         agent_name=ctx.agent_name,
         mode=run_mode or RunMode.ONLINE,
         file_path=ctx.file_path,
@@ -180,7 +314,7 @@ def process_initial_stage(ctx: InitialStageContext):
     prep_ctx = DataPreparationContext(
         content=content,
         file_type=file_type,
-        agent_config=ctx.agent_config,
+        agent_config=effective_config,
         file_path=ctx.file_path,
         agent_name=ctx.agent_name,
         idx=ctx.idx,
@@ -192,7 +326,7 @@ def process_initial_stage(ctx: InitialStageContext):
         data_chunk, src_text = _prepare_online_data(prep_ctx)
 
     # Slice BEFORE source save to prevent dedup poisoning
-    record_limit = ctx.agent_config.get("record_limit")
+    record_limit = effective_config.get("record_limit")
     if record_limit is not None and isinstance(data_chunk, list) and len(data_chunk) > 0:
         total = len(data_chunk)
         data_chunk = data_chunk[:record_limit]
@@ -217,7 +351,7 @@ def process_initial_stage(ctx: InitialStageContext):
 
     if run_mode == RunMode.BATCH:
         batch_ctx = BatchProcessingContext(
-            agent_config=ctx.agent_config,
+            agent_config=effective_config,
             agent_name=ctx.agent_name,
             data_chunk=data_chunk,
             file_path=ctx.file_path,
@@ -227,6 +361,11 @@ def process_initial_stage(ctx: InitialStageContext):
             storage_backend=ctx.storage_backend,
         )
         return _process_batch_mode(batch_ctx)
+
+    # Replace the config on the context so downstream helpers see the
+    # effective config (with seed overrides).  This is safe because ctx is
+    # a per-file dataclass instance, not a shared object.
+    ctx.agent_config = effective_config
 
     return _process_online_mode_with_record_processor(
         data_chunk, ctx, ctx.file_path, ctx.base_directory, ctx.output_directory

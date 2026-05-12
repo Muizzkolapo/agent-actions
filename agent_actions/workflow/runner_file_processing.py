@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.constants import SEED_OVERRIDE_FILENAMES
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
@@ -27,10 +28,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 # ---------------------------------------------------------------------------
 # Pure helpers (no runner param)
 # ---------------------------------------------------------------------------
+
+
+def is_framework_sidecar(item: Path) -> bool:
+    """Return True if *item* is a framework sidecar file (e.g. seed overrides)."""
+    return item.name in SEED_OVERRIDE_FILENAMES
 
 
 def is_target_directory(path: str) -> bool:
@@ -54,6 +59,8 @@ def should_skip_item(
     file_type_filter: set[str] | None = None,
 ) -> bool:
     """Check if an item should be skipped during processing."""
+    if is_framework_sidecar(item):
+        return True
     if "batch" in item.parts:
         return True
     if not item.is_file():
@@ -110,6 +117,8 @@ def collect_files_from_upstream(upstream_data_dirs: list[str]) -> dict[Path, lis
             continue
 
         for item in input_path.rglob("*"):
+            if is_framework_sidecar(item):
+                continue
             if "batch" in item.parts:
                 continue
             if not item.is_file():

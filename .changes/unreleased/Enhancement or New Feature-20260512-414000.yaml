@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Support per-subfolder seed overrides via _seed_overrides.yml in staging directories"
+time: 2026-05-12T04:14:00.000000Z

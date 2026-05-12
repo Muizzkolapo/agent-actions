@@ -98,6 +98,10 @@ SCHEMA_FILE_GLOBS = tuple(f"*{s}" for s in SCHEMA_SUFFIXES)
 # - Context scope processor
 SPECIAL_NAMESPACES = RESERVED_AGENT_NAMES - {"context_scope"}
 
+# Filenames recognised as seed override sidecar files in staging directories.
+# Used by runner_file_processing (exclusion) and initial_pipeline (detection).
+SEED_OVERRIDE_FILENAMES = frozenset({"_seed_overrides.yml", "_seed_overrides.yaml"})
+
 HITL_FILE_GRANULARITY_ERROR = (
     "HITL actions require FILE granularity. "
     "Record granularity launches a separate approval UI per record. "
