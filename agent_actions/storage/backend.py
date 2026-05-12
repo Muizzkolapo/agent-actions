@@ -182,6 +182,13 @@ class StorageBackend(ABC):
             if d.get("record_id") != NODE_LEVEL_RECORD_ID
         ]
 
+    def has_successful_items(self, action_name: str) -> bool:
+        """Return True if at least one item-level success disposition exists."""
+        return any(
+            d.get("record_id") != NODE_LEVEL_RECORD_ID
+            for d in self.get_disposition(action_name, disposition=DISPOSITION_SUCCESS)
+        )
+
     # ------------------------------------------------------------------
     # Prompt trace methods (compilation-level observability)
     # ------------------------------------------------------------------

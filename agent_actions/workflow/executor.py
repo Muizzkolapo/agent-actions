@@ -22,7 +22,6 @@ from agent_actions.record.reasons import GUARD_FILTERED_ALL
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_SKIPPED,
-    DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
@@ -508,7 +507,7 @@ class ActionExecutor:
                 )
 
     def _resolve_completion_status(self, action_name: str) -> ActionStatus:
-        """Return SKIPPED if all records guard-filtered, COMPLETED_WITH_FAILURES if item-level failures exist, else COMPLETED."""
+        """Classify action outcome: FAILED (all items failed), SKIPPED (all guard-filtered), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return ActionStatus.COMPLETED
@@ -535,8 +534,7 @@ class ActionExecutor:
                 )
             item_failures = storage_backend.get_failed_items(action_name)
             if item_failures:
-                has_any_success = storage_backend.has_disposition(action_name, DISPOSITION_SUCCESS)
-                if not has_any_success:
+                if not storage_backend.has_successful_items(action_name):
                     logger.error(
                         "Action '%s' failed: 0 successful outputs out of %d records. "
                         "Halting workflow — all downstream actions will be skipped.",

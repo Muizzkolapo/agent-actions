@@ -122,6 +122,7 @@ class TestBatchTotalFailure:
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
         ]
+        mock_deps.action_runner.storage_backend.has_successful_items.return_value = False
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
             result = executor.execute_action_sync(
