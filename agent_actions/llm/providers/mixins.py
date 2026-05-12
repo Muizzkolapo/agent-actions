@@ -20,7 +20,7 @@ class JSONResponseMixin:
 
     Returns error dict on parse failure to allow RepromptEngine to attempt repair
     via JSONRepairStrategy. This is appropriate for providers with variable JSON
-    quality (Groq, Gemini, Cohere, Mistral).
+    quality (Groq, Gemini, Cohere).
     """
 
     @staticmethod

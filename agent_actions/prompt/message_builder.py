@@ -56,7 +56,7 @@ class SchemaInjection(Enum):
     """Schema is NOT in the prompt — provider passes it via API parameter."""
 
     INLINE_FULL = "inline_full"
-    """Full schema repr injected with ``<|begin_of_output_schema|>`` tags (Mistral)."""
+    """Full schema repr injected with ``<|begin_of_output_schema|>`` tags."""
 
     INLINE_FULL_LIST = "inline_full_list"
     """Schema wrapped as ``list of this [...]`` (Gemini)."""
@@ -168,14 +168,6 @@ PROVIDER_MESSAGE_CONFIGS: dict[str, ProviderMessageConfig] = {
             "RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT",
             "RULES: ALWAYS READ INPUT AS STRING",
         ),
-    ),
-    "mistral": ProviderMessageConfig(
-        json_prompt_style=PromptStyle.TAGGED,
-        non_json_prompt_style=PromptStyle.TAGGED,
-        json_role=MessageRole.SINGLE_USER,
-        non_json_role=MessageRole.SINGLE_USER,
-        schema_injection=SchemaInjection.INLINE_FULL,
-        json_rules=("RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT",),
     ),
     "gemini": ProviderMessageConfig(
         json_prompt_style=PromptStyle.TAGGED,
@@ -432,7 +424,7 @@ class MessageBuilder:
         # Rules
         if rules:
             if blank_line_before_rules:
-                parts.append("")  # blank line before rules (OpenAI, Mistral, Gemini)
+                parts.append("")  # blank line before rules (OpenAI, Gemini)
             parts.extend(rules)
 
         # Wrap with \n...\n to match original dedent() output

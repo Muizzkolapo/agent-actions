@@ -118,7 +118,7 @@ class TestWrapVendorErrorTypeBased:
 
 
 class TestWrapVendorErrorStatusCodeBased:
-    """Tests for status-code-based error classification (Cohere/Mistral style)."""
+    """Tests for status-code-based error classification (Cohere style)."""
 
     @pytest.mark.parametrize(
         "status_code,expected_type",

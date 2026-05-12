@@ -1,6 +1,6 @@
 """Regression tests for Gemini client nullable token count handling.
 
-Mirrors TestCohereNullableTokens and TestMistralNullableTokens in
+Mirrors TestCohereNullableTokens in
 test_pr1108_bugfix_regressions.py. Exercises the `or 0` coercion
 when usage_metadata fields are None.
 """

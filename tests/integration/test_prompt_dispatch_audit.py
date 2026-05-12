@@ -302,7 +302,6 @@ class TestMessageBuilder:
             "anthropic",
             "openai",
             "groq",
-            "mistral",
             "gemini",
             "cohere",
             "ollama_local",

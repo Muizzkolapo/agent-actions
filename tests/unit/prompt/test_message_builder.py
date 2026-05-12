@@ -52,18 +52,6 @@ def _original_openai_non_json(prompt_config: str, context_data_str: str) -> str:
     return dedent(prompt)
 
 
-def _original_mistral_json(prompt_config: str, context_data_str: str, schema) -> str:
-    """Reproduce Mistral client.py call_json line 87."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            <|begin_of_output_schema|> : {schema} : <|end_of_output_schema|>\n\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            "
-    return dedent(prompt)
-
-
-def _original_mistral_non_json(prompt_config: str, context_data_str: str) -> str:
-    """Reproduce Mistral client.py call_non_json line 177."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            "
-    return dedent(prompt)
-
-
 def _original_gemini_json(prompt_config: str, context_data_str: str, schema) -> str:
     """Reproduce Gemini client.py call_json line 102."""
     prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
@@ -130,18 +118,6 @@ class TestStringEquivalence:
     def test_openai_non_json(self):
         expected = _original_openai_non_json(PROMPT, CONTEXT_STR)
         env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=False)
-        assert env.messages[0].content == expected
-
-    def test_mistral_json(self):
-        expected = _original_mistral_json(PROMPT, CONTEXT_STR, SCHEMA_DICT)
-        env = MessageBuilder.build(
-            "mistral", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
-        )
-        assert env.messages[0].content == expected
-
-    def test_mistral_non_json(self):
-        expected = _original_mistral_non_json(PROMPT, CONTEXT_STR)
-        env = MessageBuilder.build("mistral", PROMPT, CONTEXT_STR, json_mode=False)
         assert env.messages[0].content == expected
 
     def test_gemini_json(self):
@@ -249,7 +225,7 @@ class TestMessageBuilderStructure:
 class TestTaggedContent:
     """Verify tagged prompt bodies contain the expected markers."""
 
-    @pytest.mark.parametrize("provider", ["anthropic", "openai", "mistral", "gemini", "cohere"])
+    @pytest.mark.parametrize("provider", ["anthropic", "openai", "gemini", "cohere"])
     def test_tagged_providers_contain_instruction_tags(self, provider):
         env = MessageBuilder.build(
             provider, PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
@@ -260,14 +236,6 @@ class TestTaggedContent:
         assert "<|begin_of_text|>" in content
         assert "<|end_of_text|>" in content
 
-    def test_mistral_json_has_inline_schema(self):
-        env = MessageBuilder.build(
-            "mistral", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
-        )
-        content = env.messages[0].content
-        assert "<|begin_of_output_schema|>" in content
-        assert "<|end_of_output_schema|>" in content
-
     def test_gemini_json_has_inline_schema_with_list_wrapper(self):
         env = MessageBuilder.build(
             "gemini", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
@@ -275,13 +243,6 @@ class TestTaggedContent:
         content = env.messages[0].content
         assert "<|begin_of_output_schema|>" in content
         assert "list of this [" in content
-
-    def test_mistral_json_no_list_wrapper(self):
-        env = MessageBuilder.build(
-            "mistral", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
-        )
-        content = env.messages[0].content
-        assert "list of this" not in content
 
     def test_cohere_json_has_field_names_schema(self):
         env = MessageBuilder.build(
@@ -318,11 +279,6 @@ class TestTaggedContent:
         env = MessageBuilder.build(
             "anthropic", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
         )
-        content = env.messages[0].content
-        assert "<|begin_of_output_schema|>" not in content
-
-    def test_mistral_json_no_schema_skips_schema_tag(self):
-        env = MessageBuilder.build("mistral", PROMPT, CONTEXT_STR, json_mode=True, schema=None)
         content = env.messages[0].content
         assert "<|begin_of_output_schema|>" not in content
 
@@ -405,7 +361,7 @@ class TestNonJsonSkipsSchema:
     """In non-json mode no provider should inject schema into the prompt."""
 
     @pytest.mark.parametrize(
-        "provider", ["anthropic", "openai", "mistral", "gemini", "groq", "cohere", "ollama_local"]
+        "provider", ["anthropic", "openai", "gemini", "groq", "cohere", "ollama_local"]
     )
     def test_non_json_no_schema_tags(self, provider):
         env = MessageBuilder.build(

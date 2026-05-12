@@ -79,7 +79,6 @@ class TestMessageBuilderCacheControl:
         for provider in (
             "openai",
             "groq",
-            "mistral",
             "cohere",
             "ollama_local",
             "ollama_cloud",

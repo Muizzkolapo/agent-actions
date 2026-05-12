@@ -33,7 +33,7 @@ class UsageShape(Enum):
 
     OPENAI_COMPAT = "openai_compat"
     """``response.usage.prompt_tokens`` / ``.completion_tokens`` / ``.total_tokens``
-    (OpenAI, Groq, Mistral)."""
+    (OpenAI, Groq)."""
 
     ANTHROPIC = "anthropic"
     """``response.usage.input_tokens`` / ``.output_tokens`` (total computed)."""
@@ -82,7 +82,6 @@ class ProviderResponseConfig:
 PROVIDER_RESPONSE_CONFIGS: dict[str, ProviderResponseConfig] = {
     "anthropic": ProviderResponseConfig(usage_shape=UsageShape.ANTHROPIC),
     "openai": ProviderResponseConfig(usage_shape=UsageShape.OPENAI_COMPAT),
-    "mistral": ProviderResponseConfig(usage_shape=UsageShape.OPENAI_COMPAT),
     "gemini": ProviderResponseConfig(usage_shape=UsageShape.GEMINI),
     "groq": ProviderResponseConfig(usage_shape=UsageShape.OPENAI_COMPAT),
     "cohere": ProviderResponseConfig(usage_shape=UsageShape.COHERE),
@@ -184,7 +183,7 @@ class ResponseBuilder:
 
     @staticmethod
     def _extract_openai_compat(response: Any) -> UsageResult:
-        """OpenAI / Groq / Mistral: ``response.usage.prompt_tokens`` etc."""
+        """OpenAI / Groq: ``response.usage.prompt_tokens`` etc."""
         if response is None or not response.usage:
             return UsageResult()
         return UsageResult(
