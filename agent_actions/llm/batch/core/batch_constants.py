@@ -43,6 +43,7 @@ class FilterStatus(str, Enum):
     INCLUDED = "included"
     SKIPPED = "skipped"
     FILTERED = "filtered"
+    FAILED = "failed"
 
     def __str__(self) -> str:
         """Return the string value for str() conversion."""

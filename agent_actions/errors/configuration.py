@@ -115,3 +115,9 @@ class ProjectNotFoundError(ConfigurationError):
     """Raised when a command requires being in a project but agent_actions.yml is not found."""
 
     pass
+
+
+class RecordContextError(ConfigurationError):
+    """Raised when a record's context data is incomplete (per-record recoverable)."""
+
+    pass

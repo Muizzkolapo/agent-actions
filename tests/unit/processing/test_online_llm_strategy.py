@@ -18,6 +18,7 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.processing.unified import ProcessingStrategy
+from agent_actions.record.state import RecordState
 
 
 def _make_context(
@@ -415,8 +416,10 @@ class TestInvokeBatchLoop:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
-    def test_reraises_template_variable_error(self, mock_fire, mock_get_preparer):
-        """TemplateVariableError propagates through invoke() — it's a code bug, not a data error."""
+    def test_template_variable_error_with_missing_vars_produces_tombstone(
+        self, mock_fire, mock_get_preparer
+    ):
+        """TemplateVariableError with non-empty missing_variables is per-record — tombstone."""
         from jinja2 import UndefinedError
 
         from agent_actions.errors.operations import TemplateVariableError
@@ -436,8 +439,58 @@ class TestInvokeBatchLoop:
         )
 
         context = _make_context()
+        results = strategy.invoke([{"f": "1"}], context)
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].data[0]["_state"] == RecordState.FAILED.value
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_template_syntax_error_still_reraises(self, mock_fire, mock_get_preparer):
+        """TemplateVariableError with empty missing_variables (syntax error) is action-fatal."""
+        from agent_actions.errors.operations import TemplateVariableError
+
+        mock_get_preparer.return_value.prepare.side_effect = TemplateVariableError(
+            missing_variables=[],
+            available_variables=["source"],
+            agent_name="test",
+            mode="online",
+            cause=Exception("invalid syntax"),
+        )
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+            invocation_strategy=MagicMock(),
+        )
+
+        context = _make_context()
         with pytest.raises(TemplateVariableError):
             strategy.invoke([{"f": "1"}], context)
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_record_context_error_produces_tombstone(self, mock_fire, mock_get_preparer):
+        """RecordContextError is per-record — tombstone, remaining records continue."""
+        from agent_actions.errors import RecordContextError
+
+        mock_get_preparer.return_value.prepare.side_effect = RecordContextError(
+            "declared fields ['question'] not found"
+        )
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+            invocation_strategy=MagicMock(),
+        )
+
+        context = _make_context()
+        results = strategy.invoke([{"f": "1"}], context)
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].data[0]["_state"] == RecordState.FAILED.value
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")

@@ -6,7 +6,7 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, RecordContextError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
@@ -51,7 +51,7 @@ def _resolve_missing_field(
         return None
 
     field_name = field_ref.split(".", 1)[1] if "." in field_ref else field_ref
-    raise ConfigurationError(
+    raise RecordContextError(
         f"context_scope.{directive} field '{field_ref}' not found at runtime",
         context={
             "action": action_name,

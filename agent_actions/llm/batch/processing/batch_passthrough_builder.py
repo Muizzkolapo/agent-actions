@@ -3,8 +3,9 @@
 from pathlib import Path
 from typing import Any
 
-from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
+from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.record.reasons import PREP_FAILED
 from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
 
 
@@ -36,8 +37,10 @@ class BatchPassthroughBuilder:
     def from_context(self, context_map: dict[str, Any], reason: str) -> dict[str, Any]:
         processed_data = []
         for custom_id, original_row in context_map.items():
-            if BatchContextMetadata.is_skipped(original_row):
-                item = self._build_item(original_row, reason, custom_id)
+            status = BatchContextMetadata.get_filter_status(original_row)
+            if status in (FilterStatus.SKIPPED, FilterStatus.FAILED):
+                entry_reason = PREP_FAILED if status == FilterStatus.FAILED else reason
+                item = self._build_item(original_row, entry_reason, custom_id)
                 item.pop(ContextMetaKeys.FILTER_STATUS, None)
                 processed_data.append(item)
 

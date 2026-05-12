@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError, SchemaValidationError
+from agent_actions.errors import ConfigurationError, RecordContextError, SchemaValidationError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.logging.core.manager import fire_event
@@ -33,19 +33,24 @@ from agent_actions.processing.record_helpers import (
     build_tombstone,
     extract_existing_content,
 )
+from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
     ProcessingStatus,
 )
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     GUARD_FILTER,
     GUARD_SKIP,
     LLM_LAYER_GUARD_FILTER,
     LLM_LAYER_GUARD_SKIP,
+    PREP_FAILED,
     UPSTREAM_UNPROCESSED,
 )
+from agent_actions.record.state import RecordState
+from agent_actions.storage.backend import DISPOSITION_FAILED
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +72,40 @@ def _create_item_context(
         base_context,
         record_index=index,
         current_item=item if isinstance(item, dict) else None,
+    )
+
+
+def _build_prep_failed_result(
+    item: Any,
+    context: ProcessingContext,
+    error_msg: str,
+) -> ProcessingResult:
+    """Build a tombstone ProcessingResult for a record that failed prompt preparation."""
+    input_record = item if isinstance(item, dict) else None
+    source_guid = input_record.get("source_guid") if input_record else None
+
+    tombstone = build_tombstone(
+        action_name=context.agent_name,
+        input_record=input_record,
+        reason=PREP_FAILED,
+        source_guid=source_guid,
+    )
+    RecordEnvelope.transition(tombstone, RecordState.FAILED, context.agent_name, error_msg[:200])
+
+    if context.storage_backend and source_guid:
+        _safe_set_disposition(
+            context.storage_backend,
+            context.agent_name,
+            source_guid,
+            DISPOSITION_FAILED,
+            reason=error_msg[:500],
+        )
+
+    return ProcessingResult.unprocessed(
+        data=[tombstone],
+        reason=PREP_FAILED,
+        source_guid=source_guid,
+        input_record=input_record,
     )
 
 
@@ -97,10 +136,10 @@ class OnlineLLMStrategy:
     ) -> list[ProcessingResult]:
         """Process records through the online LLM pipeline.
 
-        Iterates records, calling process_record() for each. Handles
-        per-item exceptions: re-raises critical errors (ConfigurationError,
-        EmptyOutputError, TemplateVariableError, SchemaValidationError),
-        wraps others as ProcessingResult.failed().
+        Iterates records, calling process_record() for each. Record-specific
+        errors (RecordContextError, TemplateVariableError with missing vars)
+        produce tombstones and continue. Action-fatal errors (ConfigurationError,
+        TemplateSyntaxError, EmptyOutputError, SchemaValidationError) re-raise.
         """
         start_time = datetime.now(UTC)
 
@@ -137,10 +176,17 @@ class OnlineLLMStrategy:
                         )
                     )
 
-            except ConfigurationError:
-                raise
-            except EmptyOutputError:
-                raise
+            except RecordContextError as e:
+                # Per-record recoverable — build tombstone, continue processing
+                logger.warning(
+                    "[%s] Record %d prep failed (context incomplete): %s",
+                    context.agent_name,
+                    idx,
+                    e,
+                )
+                result = _build_prep_failed_result(item, context, str(e))
+                results.append(result)
+                failures += 1
             except TemplateVariableError as e:
                 fire_event(
                     TemplateRenderingFailedEvent(
@@ -149,6 +195,22 @@ class OnlineLLMStrategy:
                         error_message=str(e),
                     )
                 )
+                if not e.missing_variables:
+                    # TemplateSyntaxError wrapped — broken template, action-fatal
+                    raise
+                # Missing variables — per-record recoverable
+                logger.warning(
+                    "[%s] Record %d prep failed (missing template vars): %s",
+                    context.agent_name,
+                    idx,
+                    e,
+                )
+                result = _build_prep_failed_result(item, context, str(e))
+                results.append(result)
+                failures += 1
+            except ConfigurationError:
+                raise
+            except EmptyOutputError:
                 raise
             except SchemaValidationError:
                 raise

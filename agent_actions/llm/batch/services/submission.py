@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -93,12 +93,22 @@ class BatchSubmissionService:
             source_data=source_data,
             workflow_metadata=workflow_metadata,
         )
-        logger.debug(
-            "Task preparation complete: %d tasks, %d filtered, %d skipped",
-            prepared.task_count,
-            prepared.stats.total_filtered,
-            prepared.stats.total_skipped,
-        )
+        if prepared.stats.error_items:
+            logger.warning(
+                "Task preparation complete: %d tasks, %d filtered, %d skipped, "
+                "%d failed (prep errors)",
+                prepared.task_count,
+                prepared.stats.total_filtered,
+                prepared.stats.total_skipped,
+                prepared.stats.error_items,
+            )
+        else:
+            logger.debug(
+                "Task preparation complete: %d tasks, %d filtered, %d skipped",
+                prepared.task_count,
+                prepared.stats.total_filtered,
+                prepared.stats.total_skipped,
+            )
         return prepared.tasks, prepared.context_map
 
     def check_status(self, batch_id: str, output_directory: str | None = None) -> BatchStatus:
@@ -225,6 +235,16 @@ class BatchSubmissionService:
         Returns:
             SubmissionResult with passthrough dict
         """
+        has_failed_prep = any(
+            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
+            for row in context_map.values()
+        )
+        if has_failed_prep:
+            passthrough = BatchPassthroughBuilder(output_directory).from_context(
+                context_map, reason="guard_skip"
+            )
+            return SubmissionResult(passthrough=passthrough)
+
         has_guard_skipped = any(
             BatchContextMetadata.is_skipped(row) for row in context_map.values()
         )

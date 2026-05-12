@@ -347,12 +347,12 @@ class TestNestedDictFieldResolution:
         assert "action_a" in field_context
 
     def test_filter_and_store_fields_raises_on_missing_field(self):
-        """fail_on_missing=True raises ConfigurationError when declared fields are absent."""
-        from agent_actions.errors import ConfigurationError
+        """fail_on_missing=True raises RecordContextError when declared fields are absent."""
+        from agent_actions.errors import RecordContextError
 
         field_context = {}
         data = {"existing": "value"}
-        with pytest.raises(ConfigurationError, match="declared fields.*missing_field"):
+        with pytest.raises(RecordContextError, match="declared fields.*missing_field"):
             _filter_and_store_fields(
                 field_context,
                 "action_a",
