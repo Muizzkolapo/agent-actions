@@ -100,7 +100,8 @@ SPECIAL_NAMESPACES = RESERVED_AGENT_NAMES - {"context_scope"}
 
 # Filenames recognised as seed override sidecar files in staging directories.
 # Used by runner_file_processing (exclusion) and initial_pipeline (detection).
-SEED_OVERRIDE_FILENAMES = frozenset({"_seed_overrides.yml", "_seed_overrides.yaml"})
+# Ordered tuple so _find_override_file has deterministic precedence (.yml wins).
+SEED_OVERRIDE_FILENAMES = ("_seed_overrides.yml", "_seed_overrides.yaml")
 
 HITL_FILE_GRANULARITY_ERROR = (
     "HITL actions require FILE granularity. "
