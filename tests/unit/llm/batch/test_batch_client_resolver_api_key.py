@@ -52,7 +52,7 @@ class TestBatchApiKeyResolution:
 
     @pytest.mark.parametrize(
         "vendor",
-        ["openai", "gemini", "anthropic", "groq", "mistral"],
+        ["openai", "gemini", "anthropic", "groq"],
     )
     def test_generic_api_key_resolved_for_all_vendors(
         self,

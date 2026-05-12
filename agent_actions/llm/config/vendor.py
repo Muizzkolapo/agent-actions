@@ -21,7 +21,7 @@ class VendorType(str, Enum):
     GOOGLE = "gemini"
     GROQ = "groq"
     COHERE = "cohere"
-    MISTRAL = "mistral"
+
     OLLAMA_LOCAL = "ollama_local"
     OLLAMA_CLOUD = "ollama_cloud"
     TOOL = "tool"
@@ -104,13 +104,6 @@ class CohereConfig(BaseVendorConfig):
     p: float | None = Field(default=None, ge=0.0, le=1.0, description="Top-p sampling")
 
 
-class MistralConfig(BaseVendorConfig):
-    """Configuration specific to Mistral."""
-
-    vendor_type: Literal[VendorType.MISTRAL] = VendorType.MISTRAL
-    api_key_env_name: str = "MISTRAL_API_KEY"
-
-
 class OllamaLocalConfig(BaseVendorConfig):
     """Configuration specific to Ollama local daemon.
 
@@ -175,7 +168,6 @@ VendorConfig = (
     | GoogleConfig
     | GroqConfig
     | CohereConfig
-    | MistralConfig
     | OllamaLocalConfig
     | OllamaCloudConfig
     | ToolVendorConfig
@@ -231,7 +223,6 @@ __all__ = [
     "GoogleConfig",
     "GroqConfig",
     "CohereConfig",
-    "MistralConfig",
     "OllamaLocalConfig",
     "OllamaCloudConfig",
     "ToolVendorConfig",

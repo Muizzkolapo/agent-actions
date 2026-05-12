@@ -156,7 +156,7 @@ class TestCompileUnifiedSchemaJsonSafety:
         }
 
     @pytest.mark.parametrize(
-        "target", ["openai", "anthropic", "gemini", "ollama_local", "groq", "cohere", "mistral"]
+        "target", ["openai", "anthropic", "gemini", "ollama_local", "groq", "cohere"]
     )
     def test_compiled_schema_json_serialisable(self, schema_with_unsafe_values, target):
         compiled = compile_unified_schema(schema_with_unsafe_values, target)

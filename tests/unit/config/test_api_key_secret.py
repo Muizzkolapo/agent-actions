@@ -83,7 +83,6 @@ class TestBatchClientFactorySecretStr:
             "_create_gemini",
             "_create_anthropic",
             "_create_groq",
-            "_create_mistral",
         ],
     )
     def test_optional_vendor_factories_unwrap_secret_str(self, factory_name):

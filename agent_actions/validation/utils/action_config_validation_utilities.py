@@ -79,7 +79,6 @@ class ActionConfigValidationUtilities:
         "gemini",
         "anthropic",
         "groq",
-        "mistral",
         "ollama_local",
         "ollama_cloud",
     }

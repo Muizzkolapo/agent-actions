@@ -90,11 +90,6 @@ class TestExtractUsage:
         usage = ResponseBuilder.extract_usage(resp, "groq")
         assert usage == UsageResult(5, 15, 20)
 
-    def test_openai_compat_mistral(self):
-        resp = _openai_response(8, 12, 20)
-        usage = ResponseBuilder.extract_usage(resp, "mistral")
-        assert usage == UsageResult(8, 12, 20)
-
     def test_anthropic(self):
         resp = _anthropic_response(10, 20)
         usage = ResponseBuilder.extract_usage(resp, "anthropic")

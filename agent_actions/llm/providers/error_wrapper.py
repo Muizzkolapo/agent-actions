@@ -47,7 +47,7 @@ class VendorErrorMapping:
     Supports two classification strategies:
     1. **Type-based** (OpenAI, Anthropic, Groq): specific exception classes
        for rate-limit, connection, timeout, server-error, and base API error.
-    2. **Status-code-based** (Cohere, Gemini, Mistral, Ollama-HTTP): a single SDK error
+    2. **Status-code-based** (Cohere, Gemini, Ollama-HTTP): a single SDK error
        type with a `.status_code` or `.code` attribute inspected at runtime.
 
     Attributes:
@@ -120,7 +120,7 @@ def wrap_vendor_error(
         )
         return NetworkError(f"{vendor} network error: {e}", context=context, cause=e)
 
-    # --- Status-code-based classification (Cohere, Mistral, Ollama HTTP) ---
+    # --- Status-code-based classification (Cohere, Ollama HTTP) ---
     if mapping.status_code_error_types and isinstance(e, mapping.status_code_error_types):
         status_code = getattr(e, "status_code", None)
         # google-genai uses .code instead of .status_code
