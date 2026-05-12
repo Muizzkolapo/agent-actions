@@ -191,6 +191,93 @@ class TestValidateOutputAgainstSchema:
 
         assert report.is_compliant
 
+    def test_fields_format_top_level_required_array(self):
+        """Top-level required array is honored for fields-format schemas."""
+        schema = {
+            "name": "test_schema",
+            "required": ["name", "age"],
+            "fields": [
+                {"id": "name", "type": "string"},
+                {"id": "age", "type": "number"},
+                {"id": "nickname", "type": "string"},
+            ],
+        }
+        output = {"name": "John", "nickname": "JD"}  # Missing required 'age'
+
+        report = validate_output_against_schema(output, schema, "test_action")
+
+        assert not report.is_compliant
+        assert "age" in report.missing_required
+        assert "nickname" not in report.missing_required
+
+    def test_fields_format_per_field_overrides_top_level(self):
+        """Per-field required: false overrides top-level required array."""
+        schema = {
+            "name": "test_schema",
+            "required": ["name", "age"],
+            "fields": [
+                {"id": "name", "type": "string"},
+                {"id": "age", "type": "number", "required": False},
+            ],
+        }
+        output = {"name": "John"}  # Missing 'age' but per-field says optional
+
+        report = validate_output_against_schema(output, schema, "test_action")
+
+        assert report.is_compliant
+        assert "age" in report.missing_optional
+
+    def test_fields_format_per_field_required_true_without_top_level(self):
+        """Per-field required: true works without top-level array (existing behavior)."""
+        schema = {
+            "name": "test_schema",
+            "fields": [
+                {"id": "name", "type": "string", "required": True},
+                {"id": "age", "type": "number"},
+            ],
+        }
+        output = {"age": 30}  # Missing required 'name'
+
+        report = validate_output_against_schema(output, schema, "test_action")
+
+        assert not report.is_compliant
+        assert "name" in report.missing_required
+
+    def test_fields_format_no_required_anywhere(self):
+        """Fields with no required annotation and no top-level array are optional."""
+        schema = {
+            "name": "test_schema",
+            "fields": [
+                {"id": "name", "type": "string"},
+                {"id": "age", "type": "number"},
+            ],
+        }
+        output = {}  # All missing but all optional
+
+        report = validate_output_against_schema(output, schema, "test_action")
+
+        assert report.is_compliant
+        assert "name" in report.missing_optional
+        assert "age" in report.missing_optional
+
+    def test_fields_format_top_level_unknown_field_ignored(self):
+        """Top-level required referencing a non-existent field ID is ignored."""
+        schema = {
+            "name": "test_schema",
+            "required": ["nonexistent"],
+            "fields": [
+                {"id": "name", "type": "string"},
+            ],
+        }
+        output = {"name": "John"}
+
+        report = validate_output_against_schema(output, schema, "test_action")
+
+        # nonexistent is not in all_fields, so it won't appear in missing_required
+        # (missing_required = required_fields that are not in actual_fields,
+        #  but nonexistent is not in all_fields either)
+        assert report.is_compliant
+
     def test_nested_openai_schema_format(self):
         """Test validation with nested OpenAI-style schema format."""
         schema = {
