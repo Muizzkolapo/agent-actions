@@ -1,7 +1,7 @@
-"""Tests for SchemaRepromptValidator preflight warning."""
+"""Tests for schema reprompt preflight warning in GranularityAndOutputFieldValidator."""
 
-from agent_actions.validation.action_validators.schema_reprompt_validator import (
-    SchemaRepromptValidator,
+from agent_actions.validation.action_validators.granularity_output_field_validator import (
+    GranularityAndOutputFieldValidator,
 )
 from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
     ActionEntryValidationContext,
@@ -12,7 +12,7 @@ def _make_context(entry: dict) -> ActionEntryValidationContext:
     return ActionEntryValidationContext(entry=entry, agent_name_context="test_workflow")
 
 
-class TestSchemaRepromptValidator:
+class TestSchemaRepromptWarning:
     """Tests for the schema reprompt preflight warning."""
 
     def test_warns_when_reprompt_and_schema_without_on_schema_mismatch(self):
@@ -21,7 +21,7 @@ class TestSchemaRepromptValidator:
             "reprompt": {"validation": "check_fn", "max_attempts": 2},
             "schema": {"fields": [{"id": "x", "type": "string"}]},
         }
-        result = SchemaRepromptValidator().validate(_make_context(entry))
+        result = GranularityAndOutputFieldValidator().validate(_make_context(entry))
         assert len(result.warnings) == 1
         assert "on_schema_mismatch" in result.warnings[0]
         assert len(result.errors) == 0
@@ -32,7 +32,7 @@ class TestSchemaRepromptValidator:
             "reprompt": {"on_schema_mismatch": "reprompt", "max_attempts": 2},
             "schema": {"fields": [{"id": "x", "type": "string"}]},
         }
-        result = SchemaRepromptValidator().validate(_make_context(entry))
+        result = GranularityAndOutputFieldValidator().validate(_make_context(entry))
         assert len(result.warnings) == 0
         assert len(result.errors) == 0
 
@@ -41,7 +41,7 @@ class TestSchemaRepromptValidator:
         entry = {
             "reprompt": {"validation": "check_fn", "max_attempts": 2},
         }
-        result = SchemaRepromptValidator().validate(_make_context(entry))
+        result = GranularityAndOutputFieldValidator().validate(_make_context(entry))
         assert len(result.warnings) == 0
 
     def test_no_warning_when_no_reprompt(self):
@@ -49,7 +49,7 @@ class TestSchemaRepromptValidator:
         entry = {
             "schema": {"fields": [{"id": "x", "type": "string"}]},
         }
-        result = SchemaRepromptValidator().validate(_make_context(entry))
+        result = GranularityAndOutputFieldValidator().validate(_make_context(entry))
         assert len(result.warnings) == 0
 
     def test_no_warning_when_reprompt_is_not_dict(self):
@@ -58,7 +58,7 @@ class TestSchemaRepromptValidator:
             "reprompt": True,
             "schema": {"fields": [{"id": "x", "type": "string"}]},
         }
-        result = SchemaRepromptValidator().validate(_make_context(entry))
+        result = GranularityAndOutputFieldValidator().validate(_make_context(entry))
         assert len(result.warnings) == 0
 
     def test_warns_with_schema_name_instead_of_schema(self):
@@ -67,6 +67,6 @@ class TestSchemaRepromptValidator:
             "reprompt": {"validation": "check_fn"},
             "schema_name": "my_schema",
         }
-        result = SchemaRepromptValidator().validate(_make_context(entry))
+        result = GranularityAndOutputFieldValidator().validate(_make_context(entry))
         assert len(result.warnings) == 1
         assert "on_schema_mismatch" in result.warnings[0]

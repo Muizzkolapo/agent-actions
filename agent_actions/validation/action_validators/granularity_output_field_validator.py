@@ -57,18 +57,23 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
 
         reprompt_raw = normalized_entry.get("reprompt")
         reprompt_cfg = reprompt_raw if isinstance(reprompt_raw, dict) else {}
+        has_schema = bool(normalized_entry.get(SCHEMA_KEY) or normalized_entry.get(SCHEMA_NAME_KEY))
         schema_mismatch_mode = reprompt_cfg.get("on_schema_mismatch")
-        if schema_mismatch_mode in ("reprompt", "reject"):
-            has_schema = bool(
-                normalized_entry.get(SCHEMA_KEY) or normalized_entry.get(SCHEMA_NAME_KEY)
+        if schema_mismatch_mode in ("reprompt", "reject") and not has_schema:
+            errors.append(
+                f"{desc} reprompt.on_schema_mismatch: {schema_mismatch_mode} requires "
+                "a schema to validate against. Define 'schema' or 'schema_name'."
             )
-            if not has_schema:
-                errors.append(
-                    f"{desc} reprompt.on_schema_mismatch: {schema_mismatch_mode} requires "
-                    "a schema to validate against. Define 'schema' or 'schema_name'."
-                )
 
-        if errors:
-            return ActionEntryValidationResult.with_errors(errors)
+        warnings = []
+        if reprompt_cfg and has_schema and not schema_mismatch_mode:
+            warnings.append(
+                f"{desc} has 'reprompt' and 'schema' configured but no "
+                "'on_schema_mismatch'. Schema validation is disabled during reprompt. "
+                "Add 'on_schema_mismatch: reprompt' under 'reprompt:' to enable it."
+            )
+
+        if errors or warnings:
+            return ActionEntryValidationResult(errors=errors, warnings=warnings)
 
         return ActionEntryValidationResult.success()

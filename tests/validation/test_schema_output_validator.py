@@ -273,9 +273,6 @@ class TestValidateOutputAgainstSchema:
 
         report = validate_output_against_schema(output, schema, "test_action")
 
-        # nonexistent is not in all_fields, so it won't appear in missing_required
-        # (missing_required = required_fields that are not in actual_fields,
-        #  but nonexistent is not in all_fields either)
         assert report.is_compliant
 
     def test_nested_openai_schema_format(self):

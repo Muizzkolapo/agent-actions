@@ -24,9 +24,6 @@ from agent_actions.validation.action_validators.inline_schema_validator import (
 from agent_actions.validation.action_validators.optional_field_type_validator import (
     OptionalFieldTypeValidator,
 )
-from agent_actions.validation.action_validators.schema_reprompt_validator import (
-    SchemaRepromptValidator,
-)
 from agent_actions.validation.action_validators.unknown_keys_detector import (
     UnknownKeysDetector,
 )
@@ -81,7 +78,6 @@ class ActionEntryValidationOrchestrator:
             OptionalFieldTypeValidator(),  # Optional field type checks
             GranularityAndOutputFieldValidator(),  # Granularity + output
             InlineSchemaValidator(),  # Complex schema validation
-            SchemaRepromptValidator(),  # Warn on silently disabled schema reprompt
             UnknownKeysDetector(),  # Typo detection (warnings)
         ]
 
