@@ -334,8 +334,10 @@ class TestExecuteWriteErrors:
 
         with patch.object(writer, "handle_processing_error") as mock_handler:
             mock_handler.side_effect = Exception("handled")
-            # json.dump will fail on non-serializable data
-            with patch("agent_actions.output.writer.json.dump", side_effect=TypeError("bad")):
+            with patch(
+                "agent_actions.output.writer.atomic_json_write",
+                side_effect=TypeError("bad"),
+            ):
                 with pytest.raises(Exception, match="handled"):
                     writer.write_staging({"x": 1})
             mock_handler.assert_called_once()
