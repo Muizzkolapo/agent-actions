@@ -458,8 +458,34 @@ class TestMetaKeyFalsePositive:
         }
         output = {"answer": "yes", "type": "object"}  # 'type' is extra but 'answer' matches
         report = validate_output_against_schema(output, schema, "test_action")
-        # Has at least one declared field → not a zero-declared-fields failure
-        assert any("answer" in f for f in report.actual_fields)
+        assert report.is_compliant
+        assert not any("Schema-echo" in e for e in report.validation_errors)
+        assert not any("No declared fields" in e for e in report.validation_errors)
+
+
+class TestInlineSchemaFormat:
+    """Inline schema shorthand: keys are field names, values are type strings."""
+
+    def test_inline_schema_extracts_fields(self):
+        schema = {"optimal_code": "string", "score": "number"}
+        output = {"optimal_code": "const x = 1;", "score": 95}
+        report = validate_output_against_schema(output, schema, "generate_code")
+        assert report.is_compliant
+        assert report.expected_fields == {"optimal_code", "score"}
+
+    def test_inline_schema_rejects_empty_output(self):
+        schema = {"optimal_code": "string"}
+        report = validate_output_against_schema({}, schema, "generate_code")
+        assert not report.is_compliant
+        assert any("Empty object" in e for e in report.validation_errors)
+
+    def test_inline_schema_excludes_name_and_description(self):
+        """'name' and 'description' are meta-keys, not output fields."""
+        schema = {"name": "my_schema", "description": "does stuff", "result": "string"}
+        output = {"result": "hello"}
+        report = validate_output_against_schema(output, schema, "test_action")
+        assert report.is_compliant
+        assert report.expected_fields == {"result"}
 
 
 class TestNamespacedKeyHint:
