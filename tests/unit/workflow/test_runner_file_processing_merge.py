@@ -263,3 +263,37 @@ class TestProcessMergedFilesIsolation:
         assert files_found == 2
         assert files_processed == 1  # good.json processed, bad.json skipped
         assert runner._process_single_file.call_count == 2
+
+    def test_continues_after_merge_branch_failure(self, tmp_path):
+        """Error in the len>1 merge path (merge_json_files + tempfile) is isolated."""
+        upstream_a = tmp_path / "upstream_a"
+        upstream_b = tmp_path / "upstream_b"
+        output = tmp_path / "output"
+        for d in [upstream_a, upstream_b, output]:
+            d.mkdir()
+
+        (upstream_a / "good.json").write_text(json.dumps([{"id": 1}]))
+        (upstream_a / "bad.json").write_text(json.dumps([{"id": 10}]))
+        (upstream_b / "bad.json").write_text(json.dumps([{"id": 20}]))
+
+        def _process(single_params):
+            rel = single_params.locations.item.name
+            if rel == "bad.json":
+                raise RuntimeError("merge branch failure")
+
+        runner = MagicMock()
+        runner._collect_files_from_upstream.return_value = {
+            # good.json: single-file path (len==1)
+            Path("good.json"): [upstream_a / "good.json"],
+            # bad.json: merge path (len==2)
+            Path("bad.json"): [upstream_a / "bad.json", upstream_b / "bad.json"],
+        }
+        runner._process_single_file.side_effect = _process
+
+        params = _make_params([str(upstream_a), str(upstream_b)], output)
+
+        files_found, files_processed = process_merged_files(runner, params)
+
+        assert files_found == 2
+        assert files_processed == 1  # good.json ok, bad.json (merged) failed
+        assert runner._process_single_file.call_count == 2

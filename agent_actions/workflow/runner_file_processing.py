@@ -51,18 +51,23 @@ def _log_processing_errors(
     """Log a summary when some files failed processing."""
     if not processing_errors or total == 0:
         return
+    error_count = len(processing_errors)
+    sample = "; ".join(processing_errors[:3])
+    suffix = f" (and {error_count - 3} more)" if error_count > 3 else ""
     logger.error(
-        "%s incomplete for %s: %d/%d files processed. Errors: %s",
+        "%s incomplete for %s: %d/%d files processed (%d errors). Errors: %s%s",
         context,
         action_name,
         processed,
         total,
-        "; ".join(processing_errors[:3]),
+        error_count,
+        sample,
+        suffix,
         extra={
             "action_name": action_name,
             "files_found": total,
             "files_processed": processed,
-            "error_count": len(processing_errors),
+            "error_count": error_count,
         },
     )
 
