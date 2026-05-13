@@ -9,9 +9,10 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
-from agent_actions.workflow.runner_file_processing import process_merged_files
+from agent_actions.workflow.runner_file_processing import (
+    process_directory_files,
+    process_merged_files,
+)
 
 
 def _make_params(upstream_dirs, output_dir, action_config=None):
@@ -78,8 +79,9 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
 
-        with pytest.raises(RuntimeError, match="processing failed"):
-            process_merged_files(runner, params)
+        # Error is now caught per-file (no propagation), returns 0 processed
+        result = process_merged_files(runner, params)
+        assert result == 0
 
         # Upstream files must still be unchanged
         assert json.loads((upstream_a / "data.json").read_text()) == original_a
@@ -129,8 +131,8 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
 
-        with pytest.raises(RuntimeError, match="boom"):
-            process_merged_files(runner, params)
+        # Error is now caught per-file (no propagation)
+        process_merged_files(runner, params)
 
         remaining = list(upstream_a.glob("tmp*"))
         assert remaining == [], f"Temp files leaked on error: {remaining}"
@@ -163,3 +165,97 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         assert relative == Path("data.json"), (
             f"Output filename should be 'data.json', got '{relative}'"
         )
+
+
+# ---------------------------------------------------------------------------
+# File-level error isolation (spec #43 Fix 2)
+# ---------------------------------------------------------------------------
+
+
+class TestProcessDirectoryFilesIsolation:
+    """One failing file must not block processing of remaining files."""
+
+    def test_continues_after_single_file_failure(self, tmp_path):
+        """3 files, middle one fails → 2 processed, 1 error logged."""
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+
+        for name in ["a.json", "b.json", "c.json"]:
+            (input_dir / name).write_text(json.dumps([{"id": name}]))
+
+        call_count = 0
+
+        def _process(single_params):
+            nonlocal call_count
+            call_count += 1
+            rel = single_params.locations.item.name
+            if rel == "b.json":
+                raise RuntimeError("record namespace failure on b.json")
+
+        runner = MagicMock()
+        runner._should_skip_item.return_value = False
+        runner._process_single_file.side_effect = _process
+
+        params = _make_params([str(input_dir)], output_dir)
+
+        processed = process_directory_files(
+            runner, input_dir, output_dir, str(input_dir), params, set()
+        )
+
+        assert processed == 2  # a.json + c.json
+        assert call_count == 3  # all 3 attempted
+
+    def test_all_files_succeed_returns_full_count(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+        output_dir.mkdir()
+
+        for name in ["a.json", "b.json"]:
+            (input_dir / name).write_text(json.dumps([{"id": name}]))
+
+        runner = MagicMock()
+        runner._should_skip_item.return_value = False
+        runner._process_single_file = MagicMock()
+
+        params = _make_params([str(input_dir)], output_dir)
+
+        processed = process_directory_files(
+            runner, input_dir, output_dir, str(input_dir), params, set()
+        )
+
+        assert processed == 2
+
+
+class TestProcessMergedFilesIsolation:
+    """One failing merged file must not block the rest."""
+
+    def test_continues_after_one_merged_file_fails(self, tmp_path):
+        upstream = tmp_path / "upstream"
+        output = tmp_path / "output"
+        upstream.mkdir()
+        output.mkdir()
+
+        (upstream / "good.json").write_text(json.dumps([{"id": 1}]))
+        (upstream / "bad.json").write_text(json.dumps([{"id": 2}]))
+
+        def _process(single_params):
+            rel = str(single_params.locations.item.relative_to(single_params.locations.input_path))
+            if "bad" in rel:
+                raise RuntimeError("poisoned record")
+
+        runner = MagicMock()
+        runner._collect_files_from_upstream.return_value = {
+            Path("good.json"): [upstream / "good.json"],
+            Path("bad.json"): [upstream / "bad.json"],
+        }
+        runner._process_single_file.side_effect = _process
+
+        params = _make_params([str(upstream)], output)
+
+        result = process_merged_files(runner, params)
+
+        assert result == 1  # good.json processed, bad.json skipped
+        assert runner._process_single_file.call_count == 2

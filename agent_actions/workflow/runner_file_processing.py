@@ -157,19 +157,43 @@ def process_directory_files(
 ) -> int:
     """Process all files in a single directory. Returns count of files processed."""
     count = 0
+    processing_errors: list[str] = []
+    files_seen = 0
     for item in input_path.rglob("*"):
         if runner._should_skip_item(item, input_path, processed_paths, params.file_type_filter):
             continue
 
         relative_path = item.relative_to(input_path)
         processed_paths.add(relative_path)
+        files_seen += 1
 
-        runner._process_single_file(
-            _build_file_params(params, item, input_path, output_path, input_directory)
-        )
-        count += 1
+        try:
+            runner._process_single_file(
+                _build_file_params(params, item, input_path, output_path, input_directory)
+            )
+            count += 1
+        except Exception as e:
+            error_msg = f"{relative_path}: {e}"
+            processing_errors.append(error_msg)
+            logger.warning(
+                "Failed to process file %s: %s",
+                relative_path,
+                e,
+                exc_info=True,
+            )
+
         if _file_limit_reached(params.action_config, count, params.action_name):
             break
+
+    if processing_errors and files_seen > 0:
+        logger.error(
+            "Directory processing incomplete for %s: %d/%d files processed. Errors: %s",
+            params.action_name,
+            count,
+            files_seen,
+            "; ".join(processing_errors[:3]),
+        )
+
     return count
 
 
@@ -178,39 +202,62 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
     output_path = Path(params.output_directory)
     files_by_path = runner._collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
+    processing_errors: list[str] = []
+    files_seen = 0
 
     for relative_path, file_paths in files_by_path.items():
-        if len(file_paths) == 1:
-            file_path = file_paths[0]
-            input_path = _resolve_upstream_root(file_path, params.upstream_data_dirs)
-
-            runner._process_single_file(
-                _build_file_params(params, file_path, input_path, output_path, str(input_path))
-            )
-        else:
-            reduce_key = params.action_config.get("reduce_key")
-            logger.debug(
-                "Merging %d files for %s (reduce_key=%s)",
-                len(file_paths),
-                relative_path,
-                reduce_key or "auto",
-            )
-            merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
-
-            # TemporaryDirectory instead of in-place overwrite: the old approach
-            # (overwrite + restore in finally) left corrupt files on SIGKILL.
-            with tempfile.TemporaryDirectory() as td:
-                tmp_file = Path(td) / relative_path
-                tmp_file.parent.mkdir(parents=True, exist_ok=True)
-                atomic_json_write(tmp_file, merged_data, fsync=False)
+        files_seen += 1
+        try:
+            if len(file_paths) == 1:
+                file_path = file_paths[0]
+                input_path = _resolve_upstream_root(file_path, params.upstream_data_dirs)
 
                 runner._process_single_file(
-                    _build_file_params(params, tmp_file, Path(td), output_path, td)
+                    _build_file_params(params, file_path, input_path, output_path, str(input_path))
                 )
+            else:
+                reduce_key = params.action_config.get("reduce_key")
+                logger.debug(
+                    "Merging %d files for %s (reduce_key=%s)",
+                    len(file_paths),
+                    relative_path,
+                    reduce_key or "auto",
+                )
+                merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
 
-        files_processed_count += 1
+                # TemporaryDirectory instead of in-place overwrite: the old approach
+                # (overwrite + restore in finally) left corrupt files on SIGKILL.
+                with tempfile.TemporaryDirectory() as td:
+                    tmp_file = Path(td) / relative_path
+                    tmp_file.parent.mkdir(parents=True, exist_ok=True)
+                    atomic_json_write(tmp_file, merged_data, fsync=False)
+
+                    runner._process_single_file(
+                        _build_file_params(params, tmp_file, Path(td), output_path, td)
+                    )
+
+            files_processed_count += 1
+        except Exception as e:
+            error_msg = f"{relative_path}: {e}"
+            processing_errors.append(error_msg)
+            logger.warning(
+                "Failed to process merged file %s: %s",
+                relative_path,
+                e,
+                exc_info=True,
+            )
+
         if _file_limit_reached(params.action_config, files_processed_count, params.action_name):
             break
+
+    if processing_errors and files_seen > 0:
+        logger.error(
+            "Merged file processing incomplete for %s: %d/%d files processed. Errors: %s",
+            params.action_name,
+            files_processed_count,
+            files_seen,
+            "; ".join(processing_errors[:3]),
+        )
 
     return files_processed_count
 
