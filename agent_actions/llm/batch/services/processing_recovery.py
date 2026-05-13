@@ -368,7 +368,10 @@ def check_and_submit_reprompt(
     graduated, still_failing = loop.split(batch_results)
     loop.tag_graduated(graduated)
 
-    if not still_failing:
+    # Filter out records with None content (provider failures, not content quality issues)
+    repromptable = [r for r in still_failing if r.content is not None]
+
+    if not repromptable:
         return True
 
     current_attempt = recovery_state.reprompt_attempt if recovery_state else 0
@@ -387,7 +390,7 @@ def check_and_submit_reprompt(
     next_attempt = current_attempt + 1
     submission = service._retry_service.submit_reprompt_batch(
         provider=provider,
-        failed_results=still_failing,
+        failed_results=repromptable,
         context_map=context_map,
         output_directory=output_directory,
         file_name=file_name,
@@ -402,15 +405,22 @@ def check_and_submit_reprompt(
         manager, submission, file_name, entry.provider, "reprompt", next_attempt
     )
 
-    state = recovery_state or RecoveryState(phase="reprompt")
-    state.phase = "reprompt"
-    state.reprompt_attempt = next_attempt
-    state.reprompt_max_attempts = max_attempts
-    state.validation_name = strategy.name
-    state.on_exhausted = on_exhausted
-    state.evaluation_strategy_name = strategy.name
-    state.graduated_results = BatchRetryService.serialize_results(graduated)
-    for fr in still_failing:
+    state = RecoveryState(
+        phase="reprompt",
+        reprompt_attempt=next_attempt,
+        reprompt_max_attempts=max_attempts,
+        validation_name=strategy.name,
+        on_exhausted=on_exhausted,
+        evaluation_strategy_name=strategy.name,
+        graduated_results=BatchRetryService.serialize_results(graduated),
+        reprompt_attempts_per_record=(
+            dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {}
+        ),
+        retry_attempt=recovery_state.retry_attempt if recovery_state else 0,
+        retry_max_attempts=recovery_state.retry_max_attempts if recovery_state else 3,
+        accumulated_results=recovery_state.accumulated_results if recovery_state else [],
+    )
+    for fr in repromptable:
         state.reprompt_attempts_per_record[fr.custom_id] = (
             state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
         )
@@ -425,7 +435,7 @@ def check_and_submit_reprompt(
     logger.info(
         "Async reprompt submitted for %s: %d failed records, batch %s",
         file_name,
-        len(still_failing),
+        len(repromptable),
         submission[0],
     )
     return False

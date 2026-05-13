@@ -79,6 +79,9 @@ class BatchRegistryStats:
         if self.completed == self.total_jobs:
             return "completed"
 
+        if self.completed + self.cancelled == self.total_jobs:
+            return "completed" if self.completed > 0 else "cancelled"
+
         if self.failed > 0:
             return "partial_failed"
 
