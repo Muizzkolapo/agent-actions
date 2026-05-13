@@ -132,7 +132,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
             ensure_directory_exists(file_path, is_file=True)
             atomic_json_write(file_path, data)
 
-            return len(json.dumps(data))
+            return file_path.stat().st_size
 
         self._execute_write("Write target file", do_write)
 
