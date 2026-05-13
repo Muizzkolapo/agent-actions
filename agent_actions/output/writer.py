@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
