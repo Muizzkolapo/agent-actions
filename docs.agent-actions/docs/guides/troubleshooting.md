@@ -48,6 +48,25 @@ ProcessingError: Failed to process item
 | `source_guid` | UUID of the record being processed |
 | `agent_name` | Action that failed |
 
+### RecordContextError (Record Namespace)
+
+Occurs when a downstream action tries to read fields from an upstream action's output, but the expected fields are missing. This typically means the upstream action stored corrupted or empty data.
+
+```
+[RECORD NAMESPACE] 'generate_optimal_code': declared fields ['optimal_code'] not found.
+Available: ['title', 'type', 'properties', 'required', 'additionalProperties']
+```
+
+**Common causes:**
+
+| Cause | What happened | Fix |
+|-------|--------------|-----|
+| Schema-echo | LLM returned the JSON Schema definition instead of data | Enable `on_schema_mismatch: reprompt` — the validator now detects schema-echo payloads and triggers reprompt |
+| Empty object | LLM returned `{}` | Same fix — empty objects are now rejected when the schema declares fields |
+| Existing poison | Bad data already in `target_data` from a previous run | Re-run the upstream action with reprompt enabled, or manually clean the SQLite row |
+
+**Behavior:** When a single record has corrupted namespace data, that record is skipped and processing continues for the remaining records in the file. The skipped record is logged at WARNING level. This prevents one bad record from failing an entire file of valid records.
+
 ### AgentActionsError
 
 Top-level agentic workflow failure. This wraps other errors to provide the full context of what went wrong.

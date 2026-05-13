@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Prevent schema-echo/empty JSON from poisoning target_data; isolate file-level failures so one bad record does not fail the whole directory"
+time: 2026-05-13T04:30:00.000000Z
