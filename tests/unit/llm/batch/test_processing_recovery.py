@@ -918,18 +918,12 @@ class TestRemoveBatchPlaceholder:
         assert bad_file.exists()  # not deleted, just warned
 
 
-# ---------------------------------------------------------------------------
-# TestRecoveryLoopRootCauses — Bug 1 & Bug 2
-# ---------------------------------------------------------------------------
-
-
 def _make_parent_entry(
     batch_id: str = "batch-parent",
     file_name: str = "my_action",
     record_count: int = 10,
     status: str = BatchStatus.COMPLETED,
 ) -> BatchJobEntry:
-    """Create a parent (non-recovery) batch entry."""
     return BatchJobEntry(
         batch_id=batch_id,
         status=status,
@@ -941,7 +935,6 @@ def _make_parent_entry(
 
 
 def _make_eval_loop_mocks(max_attempts: int = 2, on_exhausted: str = "return_last"):
-    """Create mock evaluation loop + strategy for check_and_submit_reprompt tests."""
     loop = MagicMock()
     strategy = MagicMock()
     strategy.name = "validation"
@@ -951,19 +944,9 @@ def _make_eval_loop_mocks(max_attempts: int = 2, on_exhausted: str = "return_las
 
 
 class TestRecoveryLoopRootCauses:
-    """Tests for the two root causes of the infinite recovery loop.
-
-    Bug 1: process_all_batch_results unconditionally skips recovery entries,
-           so completed recovery batches are never consumed.
-
-    Bug 2: _process_original_batch calls check_and_submit_reprompt without
-           loading RecoveryState from disk, so attempt counter resets to 0.
-
-    These tests are written to FAIL on current code and PASS after the fix.
-    """
+    """Recovery entries consumed + RecoveryState loaded from disk."""
 
     def test_completed_recovery_entry_is_processed(self):
-        """Bug 1: recovery entries must reach _process_single_batch_file, not be skipped."""
         parent_entry = _make_parent_entry()
         recovery_entry = _make_entry(
             recovery_type="reprompt",
@@ -991,10 +974,7 @@ class TestRecoveryLoopRootCauses:
 
         svc.process_all_batch_results("/tmp/output", action_name="test_action")
 
-        assert "my_action_reprompt_1" in calls_received, (
-            "Bug 1: recovery entry was skipped by process_all_batch_results. "
-            f"Only these entries were processed: {calls_received}"
-        )
+        assert "my_action_reprompt_1" in calls_received
 
     @patch("agent_actions.llm.batch.services.processing.retrieve_and_reconcile")
     @patch(
@@ -1005,7 +985,6 @@ class TestRecoveryLoopRootCauses:
     def test_process_original_batch_loads_recovery_state_from_disk(
         self, mock_state_mgr, mock_check_reprompt, mock_reconcile
     ):
-        """Bug 2: _process_original_batch must load RecoveryState and pass it through."""
         persisted_state = _make_state(
             phase="reprompt",
             reprompt_attempt=1,
@@ -1038,14 +1017,10 @@ class TestRecoveryLoopRootCauses:
 
         mock_check_reprompt.assert_called_once()
         recovery_state_arg = mock_check_reprompt.call_args.kwargs.get("recovery_state")
-        assert recovery_state_arg is not None, (
-            "Bug 2: _process_original_batch called check_and_submit_reprompt "
-            "without recovery_state. The attempt counter will reset to 0 on every run."
-        )
+        assert recovery_state_arg is not None
         assert recovery_state_arg.reprompt_attempt == 1
 
     def test_attempt_counter_not_reset_across_runs(self):
-        """Bug 2 consequence: with state loaded (attempt=1), next attempt must be 2, not 1."""
         persisted_state = _make_state(
             phase="reprompt",
             reprompt_attempt=1,
@@ -1084,16 +1059,11 @@ class TestRecoveryLoopRootCauses:
             )
 
         assert not should_continue
-        # Verify the state saved to disk has the incremented attempt
         mock_state_mgr.save.assert_called_once()
         saved_state = mock_state_mgr.save.call_args[0][2]
-        assert saved_state.reprompt_attempt == 2, (
-            f"Expected saved reprompt_attempt=2, got {saved_state.reprompt_attempt}. "
-            "If this is 1, the attempt counter reset (Bug 2)."
-        )
+        assert saved_state.reprompt_attempt == 2
 
     def test_max_attempts_enforced_when_state_loaded(self):
-        """Bug 2 contract: when attempt >= max_attempts, exhaustion fires immediately."""
         exhausted_state = _make_state(phase="reprompt", reprompt_attempt=2, reprompt_max_attempts=2)
         service = _mock_service()
         results = [_make_result("id-fail", success=False)]
@@ -1118,41 +1088,22 @@ class TestRecoveryLoopRootCauses:
                 recovery_state=exhausted_state,
             )
 
-        assert should_continue is True, (
-            "Expected exhaustion (should_continue=True) when attempt >= max_attempts, "
-            "but got False (reprompt submitted). max_attempts not enforced."
-        )
+        assert should_continue is True
         service._retry_service.apply_exhausted_reprompt_metadata.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# TestDownstreamBugs — Bugs 4, 5, 7, 8, 10, 11
-# ---------------------------------------------------------------------------
-
-
 class TestDownstreamBugs:
-    """Tests for downstream bugs in the recovery path.
-
-    Bugs 3 and 6 were consequences of Bug 2 and are already fixed.
-    These tests cover the remaining independent defects (5, 8, 10, 11).
-    """
-
-    # -- Bug 11: overall_status must handle cancelled entries ---------------
+    """Cancelled status, RuntimeError propagation, state mutation, None-content filter."""
 
     def test_completed_plus_cancelled_returns_completed(self):
-        """Bug 11: completed + cancelled should return 'completed', not 'error'."""
         stats = BatchRegistryStats(total_jobs=2, completed=1, failed=0, in_progress=0, cancelled=1)
         assert stats.overall_status == "completed"
 
     def test_all_cancelled_returns_cancelled(self):
-        """Bug 11: all jobs cancelled should return 'cancelled', not 'error'."""
         stats = BatchRegistryStats(total_jobs=2, completed=0, failed=0, in_progress=0, cancelled=2)
         assert stats.overall_status == "cancelled"
 
-    # -- Bug 5: on_exhausted='raise' must not be swallowed ------------------
-
     def test_on_exhausted_raise_propagates_through_process_all(self):
-        """Bug 5: RuntimeError from on_exhausted='raise' is swallowed by broad except."""
         svc = BatchProcessingService.__new__(BatchProcessingService)
         manager = MagicMock()
 
@@ -1168,20 +1119,12 @@ class TestDownstreamBugs:
             side_effect=RuntimeError("Reprompt validation exhausted")
         )
 
-        try:
+        with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):
             svc.process_all_batch_results("/tmp/output", action_name="test_action")
-            pytest.fail("Expected an exception to be raised")
-        except RuntimeError:
-            pass  # Correct behavior after fix
-        except Exception as e:
-            pytest.fail(f"Bug 5: RuntimeError was swallowed. Got {type(e).__name__}: {e}")
-
-    # -- Bug 8: state mutation in retry→reprompt transition -----------------
 
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_retry_to_reprompt_does_not_mutate_retry_state(self, mock_mgr, mock_build_loop):
-        """Bug 8: check_and_submit_reprompt mutates the retry-phase state in-place."""
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
         loop.split.return_value = ([], [_make_result("id-1", success=False)])
         mock_build_loop.return_value = (loop, strategy, None)
@@ -1195,7 +1138,6 @@ class TestDownstreamBugs:
             retry_max_attempts=3,
             accumulated_results=[{"custom_id": "id-1", "content": "retry-data", "success": True}],
         )
-        original_phase = state.phase
 
         check_and_submit_reprompt(
             service,
@@ -1210,14 +1152,9 @@ class TestDownstreamBugs:
             recovery_state=state,
         )
 
-        assert state.phase == original_phase, (
-            f"Bug 8: state.phase was mutated from '{original_phase}' to '{state.phase}'."
-        )
-
-    # -- Bug 10: None-content records must be filtered from reprompt --------
+        assert state.phase == "retry"
 
     def test_none_content_records_filtered_from_reprompt(self):
-        """Bug 10: records with None content (retry-exhausted) should not be reprompted."""
         service = _mock_service()
         results = [
             _make_result("id-real-fail", content="bad output", success=False),
@@ -1247,9 +1184,6 @@ class TestDownstreamBugs:
                 provider=MagicMock(),
             )
 
-        call_kwargs = service._retry_service.submit_reprompt_batch.call_args.kwargs
-        submitted_results = call_kwargs["failed_results"]
-        none_content_ids = [r.custom_id for r in submitted_results if r.content is None]
-        assert not none_content_ids, (
-            f"Bug 10: None-content records sent to reprompt: {none_content_ids}"
-        )
+        submitted = service._retry_service.submit_reprompt_batch.call_args.kwargs["failed_results"]
+        none_ids = [r.custom_id for r in submitted if r.content is None]
+        assert not none_ids
