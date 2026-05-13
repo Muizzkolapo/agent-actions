@@ -6,32 +6,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agent_actions.errors import SchemaValidationError
+from agent_actions.validation.schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
 
-# Top-level keys that appear in JSON Schema definitions.  When an LLM "echoes"
-# the schema instead of conforming to it, these are the keys that show up.
-_JSON_SCHEMA_META_KEYS = frozenset(
-    {
-        "title",
-        "type",
-        "properties",
-        "required",
-        "additionalProperties",
-        "description",
-        "$schema",
-        "$id",
-        "definitions",
-        "$defs",
-        "items",
-        "enum",
-        "const",
-        "allOf",
-        "anyOf",
-        "oneOf",
-        "not",
-    }
-)
+# Reuse the canonical set of JSON Schema keywords defined in SchemaValidator
+# rather than maintaining a separate list.  When an LLM "echoes" the schema
+# instead of conforming to it, these are the keys that show up.
+_JSON_SCHEMA_META_KEYS: frozenset[str] = frozenset(SchemaValidator.JSON_SCHEMA_RESERVED_KEYWORDS)
 
 
 @dataclass

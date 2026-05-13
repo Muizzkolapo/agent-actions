@@ -38,6 +38,35 @@ def is_target_directory(path: str) -> bool:
     return "target" in path and "staging" not in path
 
 
+_MAX_TRACKED_ERRORS = 10  # Cap to avoid unbounded memory on mass failure
+
+
+def _log_processing_errors(
+    processing_errors: list[str],
+    processed: int,
+    total: int,
+    action_name: str,
+    context: str,
+) -> None:
+    """Log a summary when some files failed processing."""
+    if not processing_errors or total == 0:
+        return
+    logger.error(
+        "%s incomplete for %s: %d/%d files processed. Errors: %s",
+        context,
+        action_name,
+        processed,
+        total,
+        "; ".join(processing_errors[:3]),
+        extra={
+            "action_name": action_name,
+            "files_found": total,
+            "files_processed": processed,
+            "error_count": len(processing_errors),
+        },
+    )
+
+
 def _file_limit_reached(action_config: dict, count: int, action_name: str) -> bool:
     """Return True (and log) if file_limit has been reached."""
     file_limit = action_config.get("file_limit")
@@ -173,8 +202,8 @@ def process_directory_files(
             )
             count += 1
         except Exception as e:
-            error_msg = f"{relative_path}: {e}"
-            processing_errors.append(error_msg)
+            if len(processing_errors) < _MAX_TRACKED_ERRORS:
+                processing_errors.append(f"{relative_path}: {e}")
             logger.warning(
                 "Failed to process file %s: %s",
                 relative_path,
@@ -185,15 +214,9 @@ def process_directory_files(
         if _file_limit_reached(params.action_config, count, params.action_name):
             break
 
-    if processing_errors and files_seen > 0:
-        logger.error(
-            "Directory processing incomplete for %s: %d/%d files processed. Errors: %s",
-            params.action_name,
-            count,
-            files_seen,
-            "; ".join(processing_errors[:3]),
-        )
-
+    _log_processing_errors(
+        processing_errors, count, files_seen, params.action_name, "Directory processing"
+    )
     return count
 
 
@@ -238,8 +261,8 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
 
             files_processed_count += 1
         except Exception as e:
-            error_msg = f"{relative_path}: {e}"
-            processing_errors.append(error_msg)
+            if len(processing_errors) < _MAX_TRACKED_ERRORS:
+                processing_errors.append(f"{relative_path}: {e}")
             logger.warning(
                 "Failed to process merged file %s: %s",
                 relative_path,
@@ -250,15 +273,13 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
         if _file_limit_reached(params.action_config, files_processed_count, params.action_name):
             break
 
-    if processing_errors and files_seen > 0:
-        logger.error(
-            "Merged file processing incomplete for %s: %d/%d files processed. Errors: %s",
-            params.action_name,
-            files_processed_count,
-            files_seen,
-            "; ".join(processing_errors[:3]),
-        )
-
+    _log_processing_errors(
+        processing_errors,
+        files_processed_count,
+        files_seen,
+        params.action_name,
+        "Merged file processing",
+    )
     return files_processed_count
 
 
@@ -370,8 +391,8 @@ def process_from_storage_backend(
                 break
 
         except Exception as e:
-            error_msg = f"{relative_path}: {e}"
-            processing_errors.append(error_msg)
+            if len(processing_errors) < _MAX_TRACKED_ERRORS:
+                processing_errors.append(f"{relative_path}: {e}")
             logger.warning(
                 "Failed to process backend entry %s: %s",
                 relative_path,
@@ -379,21 +400,13 @@ def process_from_storage_backend(
                 exc_info=True,
             )
 
-    if files_found > 0 and files_processed < files_found:
-        logger.error(
-            "Storage backend processing incomplete: %d/%d files processed for %s. Errors: %s",
-            files_processed,
-            files_found,
-            params.action_name,
-            "; ".join(processing_errors[:3]),  # Show first 3 errors
-            extra={
-                "action_name": params.action_name,
-                "files_found": files_found,
-                "files_processed": files_processed,
-                "error_count": len(processing_errors),
-            },
-        )
-
+    _log_processing_errors(
+        processing_errors,
+        files_processed,
+        files_found,
+        params.action_name,
+        "Storage backend processing",
+    )
     return (files_found, files_processed)
 
 
