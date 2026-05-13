@@ -244,7 +244,12 @@ class TestValidateOutputAgainstSchema:
         assert "name" in report.missing_required
 
     def test_fields_format_no_required_anywhere(self):
-        """Fields with no required annotation and no top-level array are optional."""
+        """Empty output fails when schema declares fields, even if none are required.
+
+        An empty object is semantically useless when fields are declared — the
+        LLM produced nothing.  This guards against {} slipping through when
+        ``required`` is empty (see spec #43).
+        """
         schema = {
             "name": "test_schema",
             "fields": [
@@ -252,13 +257,12 @@ class TestValidateOutputAgainstSchema:
                 {"id": "age", "type": "number"},
             ],
         }
-        output = {}  # All missing but all optional
+        output = {}  # All missing — now rejected even without required
 
         report = validate_output_against_schema(output, schema, "test_action")
 
-        assert report.is_compliant
-        assert "name" in report.missing_optional
-        assert "age" in report.missing_optional
+        assert not report.is_compliant
+        assert any("Empty object" in e for e in report.validation_errors)
 
     def test_fields_format_top_level_unknown_field_ignored(self):
         """Top-level required referencing a non-existent field ID is ignored."""
@@ -338,6 +342,124 @@ class TestValidateAndRaiseIfInvalid:
 
         error = exc_info.value
         assert "extra" in error.extra_fields
+
+
+# ---------------------------------------------------------------------------
+# Schema-echo / empty-object detection (spec #43)
+# ---------------------------------------------------------------------------
+
+# Fixture: exact schema-echo payload from bug evidence
+SCHEMA_ECHO_PAYLOAD = {
+    "title": "InlineSchema",
+    "type": "object",
+    "properties": {"optimal_code": {"type": "string"}},
+    "required": [],
+    "additionalProperties": False,
+}
+
+
+class TestSchemaEchoRejection:
+    """LLM returns the JSON Schema definition itself instead of conforming data."""
+
+    def test_schema_echo_is_non_compliant(self):
+        schema = {
+            "name": "code_schema",
+            "properties": {"optimal_code": {"type": "string"}},
+            "required": ["optimal_code"],
+        }
+        report = validate_output_against_schema(
+            SCHEMA_ECHO_PAYLOAD, schema, "generate_optimal_code"
+        )
+        assert not report.is_compliant
+        assert any("Schema-echo" in e for e in report.validation_errors)
+        assert "optimal_code" not in report.actual_fields
+
+    def test_schema_echo_with_optional_fields(self):
+        """Schema-echo fails even when no fields are required."""
+        schema = {
+            "name": "code_schema",
+            "properties": {"optimal_code": {"type": "string"}},
+        }
+        report = validate_output_against_schema(
+            SCHEMA_ECHO_PAYLOAD, schema, "generate_optimal_code"
+        )
+        assert not report.is_compliant
+        assert any("Schema-echo" in e for e in report.validation_errors)
+
+    def test_schema_echo_fields_format(self):
+        """Schema-echo detected for fields-format schemas too."""
+        schema = {
+            "name": "code_schema",
+            "fields": [{"id": "optimal_code", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            SCHEMA_ECHO_PAYLOAD, schema, "generate_optimal_code"
+        )
+        assert not report.is_compliant
+        assert any("Schema-echo" in e for e in report.validation_errors)
+
+
+class TestEmptyObjectRejection:
+    """LLM returns {} when schema declares fields."""
+
+    def test_empty_dict_rejected_with_required_fields(self):
+        schema = {
+            "name": "quote_schema",
+            "properties": {"final_source_quote": {"type": "string"}},
+            "required": ["final_source_quote"],
+        }
+        report = validate_output_against_schema({}, schema, "consolidate_answer")
+        assert not report.is_compliant
+        assert any("Empty object" in e for e in report.validation_errors)
+
+    def test_empty_dict_rejected_even_without_required(self):
+        """Empty {} fails even when schema has no required fields (spec #43)."""
+        schema = {
+            "name": "quote_schema",
+            "properties": {"final_source_quote": {"type": "string"}},
+        }
+        report = validate_output_against_schema({}, schema, "consolidate_answer")
+        assert not report.is_compliant
+        assert any("Empty object" in e for e in report.validation_errors)
+
+    def test_empty_dict_ok_when_schema_has_no_fields(self):
+        """Schema with no declared fields: {} is valid (nothing expected)."""
+        schema = {"name": "empty_schema", "properties": {}}
+        report = validate_output_against_schema({}, schema, "noop_action")
+        assert report.is_compliant
+
+
+class TestMetaKeyFalsePositive:
+    """Schema that legitimately declares a field named 'type' or other meta-key."""
+
+    def test_legitimate_type_field_allowed(self):
+        """If schema declares 'type' as an output field, output with 'type' is valid."""
+        schema = {
+            "name": "classify_schema",
+            "properties": {
+                "type": {"type": "string"},
+                "confidence": {"type": "number"},
+            },
+            "required": ["type"],
+        }
+        output = {"type": "question", "confidence": 0.95}
+        report = validate_output_against_schema(output, schema, "classify")
+        assert report.is_compliant
+        assert not any("Schema-echo" in e for e in report.validation_errors)
+
+    def test_partial_declared_fields_present(self):
+        """Output has some declared fields — not a schema-echo even with extra meta-keys."""
+        schema = {
+            "name": "test_schema",
+            "properties": {
+                "answer": {"type": "string"},
+                "score": {"type": "number"},
+            },
+        }
+        output = {"answer": "yes", "type": "object"}  # 'type' is extra but 'answer' matches
+        report = validate_output_against_schema(output, schema, "test_action")
+        # Has at least one declared field → not a zero-declared-fields failure
+        assert any("answer" in f for f in report.actual_fields)
 
 
 class TestNamespacedKeyHint:

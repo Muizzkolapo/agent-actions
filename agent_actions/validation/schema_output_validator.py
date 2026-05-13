@@ -9,6 +9,30 @@ from agent_actions.errors import SchemaValidationError
 
 logger = logging.getLogger(__name__)
 
+# Top-level keys that appear in JSON Schema definitions.  When an LLM "echoes"
+# the schema instead of conforming to it, these are the keys that show up.
+_JSON_SCHEMA_META_KEYS = frozenset(
+    {
+        "title",
+        "type",
+        "properties",
+        "required",
+        "additionalProperties",
+        "description",
+        "$schema",
+        "$id",
+        "definitions",
+        "$defs",
+        "items",
+        "enum",
+        "const",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+    }
+)
+
 
 @dataclass
 class SchemaValidationReport:
@@ -133,6 +157,33 @@ def validate_output_against_schema(
         is_compliant = False
 
     validation_errors: list[str] = schema_structure_errors
+
+    # --- Schema-echo / empty-object guard ---
+    # If the schema declares fields but the output contains NONE of them,
+    # the response is unusable (catches both {} and schema-echo payloads).
+    declared_fields_present = expected_fields & actual_fields
+    if expected_fields and not declared_fields_present:
+        is_compliant = False
+        # Determine whether this is specifically a schema-echo
+        undeclared_actual = actual_fields - expected_fields
+        if undeclared_actual and undeclared_actual <= _JSON_SCHEMA_META_KEYS:
+            validation_errors.append(
+                f"Schema-echo detected: output contains JSON Schema meta-keys "
+                f"{sorted(undeclared_actual)} instead of declared fields "
+                f"{sorted(expected_fields)}. The model returned the schema "
+                f"definition itself rather than conforming data."
+            )
+        elif not actual_fields:
+            validation_errors.append(
+                f"Empty object: output has no fields but schema declares {sorted(expected_fields)}"
+            )
+        else:
+            validation_errors.append(
+                f"No declared fields found in output. "
+                f"Expected at least one of {sorted(expected_fields)}, "
+                f"got {sorted(actual_fields)}"
+            )
+
     if missing_required:
         validation_errors.append(f"Missing required fields: {', '.join(missing_required)}")
     if type_errors:
@@ -271,6 +322,16 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
                 for prop_name, prop_def in properties.items():
                     if isinstance(prop_def, dict) and "type" in prop_def:
                         field_types[prop_name] = prop_def["type"]
+
+    # Handle inline schema: keys are field names, values are type strings
+    # e.g. {"optimal_code": "string", "score": "number"}
+    elif schema and all(isinstance(v, str) for v in schema.values() if v is not None):
+        # Exclude known meta-keys (name, description) that aren't field definitions
+        meta = {"name", "description"}
+        for k, v in schema.items():
+            if k not in meta and isinstance(v, str):
+                all_fields.add(k)
+                field_types[k] = v
 
     return all_fields, required_fields, field_types
 
