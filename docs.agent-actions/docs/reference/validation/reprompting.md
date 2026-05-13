@@ -284,6 +284,10 @@ Options:
 - Improve prompt clarity
 - Use more capable model
 
+### Schema-Echo or Empty Response
+
+If the LLM returns the JSON Schema definition itself (a "schema-echo") or an empty `{}`, the validator treats this as a schema failure and triggers reprompt. The retry feedback includes the expected field names so the model understands what to produce. This is most common with smaller/local models (e.g., via Ollama) that have weaker instruction following.
+
 ### Persistent Validation Failure
 
 Some responses may never validate—this is a limitation of reprompting. If the model fundamentally can't produce what you're asking for, no amount of retries will help. Consider:

@@ -21,19 +21,15 @@ from .retry import RetryExhaustedException
 
 
 def _extract_field_names(schema: dict) -> list[str]:
-    """Extract field names from any schema format."""
-    # fields-style (agent-actions format)
-    fields = schema.get("fields")
-    if isinstance(fields, list):
-        return [f.get("id") or f.get("name", "") for f in fields if isinstance(f, dict)]
-    # properties-style (JSON Schema format)
-    props = schema.get("properties")
-    if isinstance(props, dict):
-        return list(props.keys())
-    # Inline schema: keys are field names directly
-    if all(isinstance(v, str) for v in schema.values()):
-        return list(schema.keys())
-    return []
+    """Extract field names from any schema format.
+
+    Delegates to the canonical ``_extract_schema_fields`` in
+    ``schema_output_validator`` so field-extraction logic lives in one place.
+    """
+    from agent_actions.validation.schema_output_validator import _extract_schema_fields
+
+    all_fields, _required, _types = _extract_schema_fields(schema)
+    return sorted(all_fields)
 
 
 def _build_json_parse_feedback(validator: Any) -> str:

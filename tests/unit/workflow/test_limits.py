@@ -64,8 +64,10 @@ class TestFileLimitDirectoryFiles:
         params.idx = 0
         params.file_type_filter = None
 
-        count = process_directory_files(runner, input_dir, output, str(input_dir), params, set())
-        assert count == 2
+        _found, processed = process_directory_files(
+            runner, input_dir, output, str(input_dir), params, set()
+        )
+        assert processed == 2
         assert runner._process_single_file.call_count == 2
 
     def test_no_file_limit_processes_all(self, tmp_path):
@@ -85,8 +87,10 @@ class TestFileLimitDirectoryFiles:
         params.idx = 0
         params.file_type_filter = None
 
-        count = process_directory_files(runner, input_dir, output, str(input_dir), params, set())
-        assert count == 5
+        _found, processed = process_directory_files(
+            runner, input_dir, output, str(input_dir), params, set()
+        )
+        assert processed == 5
 
     def test_file_limit_greater_than_total(self, tmp_path):
         input_dir = tmp_path / "input"
@@ -105,8 +109,10 @@ class TestFileLimitDirectoryFiles:
         params.idx = 0
         params.file_type_filter = None
 
-        count = process_directory_files(runner, input_dir, output, str(input_dir), params, set())
-        assert count == 3
+        _found, processed = process_directory_files(
+            runner, input_dir, output, str(input_dir), params, set()
+        )
+        assert processed == 3
 
 
 # ── file_limit in process_merged_files ────────────────────────────────
@@ -136,8 +142,8 @@ class TestFileLimitMergedFiles:
         params.strategy = MagicMock()
         params.idx = 0
 
-        count = process_merged_files(runner, params)
-        assert count == 2
+        _found, processed = process_merged_files(runner, params)
+        assert processed == 2
         assert runner._process_single_file.call_count == 2
 
 

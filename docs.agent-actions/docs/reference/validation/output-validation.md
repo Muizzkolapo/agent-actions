@@ -137,6 +137,26 @@ properties:
     # Rejects: [] (empty) or arrays with 11+ items
 ```
 
+### Schema-Echo and Empty-Object Detection
+
+Beyond type and field checks, schema validation detects two common LLM failure modes that produce valid JSON but useless data:
+
+**Schema-echo** — The model returns the JSON Schema definition itself instead of conforming data. For example, given a schema expecting `{ optimal_code: string }`, the LLM returns:
+
+```json
+{"title": "InlineSchema", "type": "object", "properties": {"optimal_code": {"type": "string"}}, "required": [], "additionalProperties": false}
+```
+
+This is valid JSON and structurally matches a JSON object, but contains zero declared fields. The validator detects this by checking whether the output's top-level keys are JSON Schema meta-keys (`title`, `type`, `properties`, `required`, `additionalProperties`) rather than the expected output fields.
+
+**Empty object** — The model returns `{}`. This passes structural validation when no fields are `required`, but is semantically useless. The validator now rejects empty objects when the schema declares any output fields, even if none are marked required.
+
+Both failures trigger reprompt when `on_schema_mismatch: reprompt` is configured, giving the model another chance to produce valid output.
+
+:::note Meta-key nuance
+If your schema legitimately declares a field named `type` (or another JSON Schema keyword), outputs containing that field are **not** rejected. The check only triggers when the output has *zero* declared schema fields.
+:::
+
 ### Reprompt on Schema Failure
 
 When schema validation fails, reprompting retries with error context. Set `on_schema_mismatch: reprompt` inside the `reprompt` block to enable this:
