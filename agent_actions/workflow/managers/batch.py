@@ -89,6 +89,16 @@ class BatchLifecycleManager:
                 return (output_directory, "completed")
             return (None, "in_progress")
 
+        if registry_status == "cancelled":
+            fire_event(
+                BatchStatusEvent(
+                    action_name=agent_name,
+                    status_message=f"All batch jobs cancelled for {agent_name}",
+                    status_type="warning",
+                )
+            )
+            return (None, "failed")
+
         if registry_status == "no_batches":
             has_passthrough = self.storage_backend.has_disposition(
                 agent_name, DISPOSITION_PASSTHROUGH

@@ -230,10 +230,6 @@ class BatchProcessingService:
             if not batch_id:
                 continue
 
-            # Skip recovery entries — processed via their parent
-            if entry.parent_file_name is not None:
-                continue
-
             if not self._is_batch_ready_for_processing(batch_id, output_directory, agent_config):
                 continue
 
@@ -249,6 +245,8 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
+            except RuntimeError:
+                raise
             except Exception as e:
                 logger.exception(
                     "Failed to process batch %s (%s): %s",
@@ -499,6 +497,7 @@ class BatchProcessingService:
                     )
                     return None  # Recovery pending
 
+        recovery_state = RecoveryStateManager.load(output_directory, file_name)
         should_continue = self._check_and_submit_reprompt(
             batch_results=batch_results,
             context_map=context_map,
@@ -508,6 +507,7 @@ class BatchProcessingService:
             agent_config=agent_config,
             manager=manager,
             provider=provider,
+            recovery_state=recovery_state,
         )
         if not should_continue:
             return None  # Reprompt submitted, processing paused

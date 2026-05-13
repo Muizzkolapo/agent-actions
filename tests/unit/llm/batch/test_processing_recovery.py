@@ -14,10 +14,14 @@ Do NOT mock internal functions — only external boundaries.
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
+from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.processing_recovery import (
+    check_and_submit_reprompt,
     finalize_batch_output,
     handle_reprompt_recovery,
     handle_retry_recovery,
@@ -34,15 +38,26 @@ def _make_result(custom_id: str, content: str = "response", success: bool = True
     return BatchResult(custom_id=custom_id, content=content, success=success)
 
 
-def _make_entry(recovery_type: str = "retry", attempt: int = 1) -> BatchJobEntry:
+def _make_entry(
+    recovery_type: str = "retry",
+    attempt: int = 1,
+    *,
+    batch_id: str = "batch-123",
+    file_name: str | None = None,
+    parent_file_name: str = "test_file",
+    record_count: int = 3,
+    status: str = BatchStatus.SUBMITTED,
+) -> BatchJobEntry:
+    if file_name is None:
+        file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
     return BatchJobEntry(
-        batch_id="batch-123",
-        status=BatchStatus.SUBMITTED,
+        batch_id=batch_id,
+        status=status,
         timestamp="2026-05-01T00:00:00Z",
         provider="openai",
-        record_count=3,
-        file_name="test_file_retry_1",
-        parent_file_name="test_file",
+        record_count=record_count,
+        file_name=file_name,
+        parent_file_name=parent_file_name,
         recovery_type=recovery_type,
         recovery_attempt=attempt,
     )
@@ -901,3 +916,274 @@ class TestRemoveBatchPlaceholder:
         _remove_batch_placeholder(bad_file)
 
         assert bad_file.exists()  # not deleted, just warned
+
+
+def _make_parent_entry(
+    batch_id: str = "batch-parent",
+    file_name: str = "my_action",
+    record_count: int = 10,
+    status: str = BatchStatus.COMPLETED,
+) -> BatchJobEntry:
+    return BatchJobEntry(
+        batch_id=batch_id,
+        status=status,
+        timestamp="2026-05-01T00:00:00Z",
+        provider="openai",
+        record_count=record_count,
+        file_name=file_name,
+    )
+
+
+def _make_eval_loop_mocks(max_attempts: int = 2, on_exhausted: str = "return_last"):
+    loop = MagicMock()
+    strategy = MagicMock()
+    strategy.name = "validation"
+    strategy.max_attempts = max_attempts
+    strategy.on_exhausted = on_exhausted
+    return loop, strategy
+
+
+class TestRecoveryLoopRootCauses:
+    """Recovery entries consumed + RecoveryState loaded from disk."""
+
+    def test_completed_recovery_entry_is_processed(self):
+        parent_entry = _make_parent_entry()
+        recovery_entry = _make_entry(
+            recovery_type="reprompt",
+            batch_id="batch-recovery",
+            parent_file_name="my_action",
+            status=BatchStatus.COMPLETED,
+        )
+
+        manager = MagicMock()
+        manager.get_all_jobs.return_value = {
+            "my_action": parent_entry,
+            "my_action_reprompt_1": recovery_entry,
+        }
+
+        svc = BatchProcessingService.__new__(BatchProcessingService)
+        svc._registry_manager_factory = MagicMock(return_value=manager)
+        svc._action_name = "test_action"
+        svc._is_batch_ready_for_processing = MagicMock(return_value=True)
+
+        calls_received = []
+        svc._process_single_batch_file = MagicMock(
+            side_effect=lambda **kwargs: calls_received.append(kwargs["file_name"])
+            or "/tmp/output.json"
+        )
+
+        svc.process_all_batch_results("/tmp/output", action_name="test_action")
+
+        assert "my_action_reprompt_1" in calls_received
+
+    @patch("agent_actions.llm.batch.services.processing.retrieve_and_reconcile")
+    @patch(
+        "agent_actions.llm.batch.services.processing._check_and_submit_reprompt_impl",
+        return_value=True,
+    )
+    @patch("agent_actions.llm.batch.services.processing.RecoveryStateManager")
+    def test_process_original_batch_loads_recovery_state_from_disk(
+        self, mock_state_mgr, mock_check_reprompt, mock_reconcile
+    ):
+        persisted_state = _make_state(
+            phase="reprompt",
+            reprompt_attempt=1,
+            reprompt_max_attempts=2,
+            graduated_results=[{"custom_id": "id-grad", "content": "ok", "success": True}],
+        )
+        mock_state_mgr.load.return_value = persisted_state
+        mock_reconcile.return_value = [_make_result("id-1")]
+
+        svc = BatchProcessingService.__new__(BatchProcessingService)
+        svc._context_manager = MagicMock()
+        svc._context_manager.load_batch_context_map.return_value = {"id-1": {"user_content": "x"}}
+        svc._apply_workflow_session_id = MagicMock(return_value={"kind": "llm"})
+        svc._client_resolver = MagicMock()
+        svc._retry_service = MagicMock()
+        svc._storage_backend = MagicMock()
+        svc._action_name = "test_action"
+        svc._update_prompt_trace_responses = MagicMock()
+        svc._finalize_batch_output = MagicMock(return_value="/tmp/output.json")
+
+        svc._process_original_batch(
+            batch_id="batch-parent",
+            file_name="my_action",
+            entry=_make_parent_entry(record_count=1),
+            output_directory="/tmp/output",
+            agent_config={"kind": "llm"},
+            manager=MagicMock(),
+            action_name="test_action",
+        )
+
+        mock_check_reprompt.assert_called_once()
+        recovery_state_arg = mock_check_reprompt.call_args.kwargs.get("recovery_state")
+        assert recovery_state_arg is not None
+        assert recovery_state_arg.reprompt_attempt == 1
+
+    def test_attempt_counter_not_reset_across_runs(self):
+        persisted_state = _make_state(
+            phase="reprompt",
+            reprompt_attempt=1,
+            reprompt_max_attempts=2,
+            graduated_results=[{"custom_id": "id-ok", "content": "good", "success": True}],
+            reprompt_attempts_per_record={"id-fail": 1},
+        )
+
+        service = _mock_service()
+        results = [_make_result("id-fail", success=False)]
+
+        with (
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
+            ) as mock_build_loop,
+            patch(
+                "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
+            ) as mock_state_mgr,
+        ):
+            loop, strategy = _make_eval_loop_mocks(max_attempts=2)
+            loop.split.return_value = ([], results)
+            mock_build_loop.return_value = (loop, strategy, None)
+            service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch-2", 1)
+
+            should_continue = check_and_submit_reprompt(
+                service,
+                batch_results=results,
+                context_map={"id-fail": {"user_content": "test"}},
+                output_directory="/tmp",
+                file_name="my_action",
+                entry=_make_parent_entry(record_count=1),
+                agent_config={"kind": "llm"},
+                manager=MagicMock(),
+                provider=MagicMock(),
+                recovery_state=persisted_state,
+            )
+
+        assert not should_continue
+        mock_state_mgr.save.assert_called_once()
+        saved_state = mock_state_mgr.save.call_args[0][2]
+        assert saved_state.reprompt_attempt == 2
+
+    def test_max_attempts_enforced_when_state_loaded(self):
+        exhausted_state = _make_state(phase="reprompt", reprompt_attempt=2, reprompt_max_attempts=2)
+        service = _mock_service()
+        results = [_make_result("id-fail", success=False)]
+
+        with patch(
+            "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
+        ) as mock_build_loop:
+            loop, strategy = _make_eval_loop_mocks(max_attempts=2)
+            loop.split.return_value = ([], results)
+            mock_build_loop.return_value = (loop, strategy, None)
+
+            should_continue = check_and_submit_reprompt(
+                service,
+                batch_results=results,
+                context_map={},
+                output_directory="/tmp",
+                file_name="my_action",
+                entry=_make_parent_entry(record_count=1),
+                agent_config={"kind": "llm"},
+                manager=MagicMock(),
+                provider=MagicMock(),
+                recovery_state=exhausted_state,
+            )
+
+        assert should_continue is True
+        service._retry_service.apply_exhausted_reprompt_metadata.assert_called_once()
+
+
+class TestDownstreamBugs:
+    """Cancelled status, RuntimeError propagation, state mutation, None-content filter."""
+
+    def test_completed_plus_cancelled_returns_completed(self):
+        stats = BatchRegistryStats(total_jobs=2, completed=1, failed=0, in_progress=0, cancelled=1)
+        assert stats.overall_status == "completed"
+
+    def test_all_cancelled_returns_cancelled(self):
+        stats = BatchRegistryStats(total_jobs=2, completed=0, failed=0, in_progress=0, cancelled=2)
+        assert stats.overall_status == "cancelled"
+
+    def test_on_exhausted_raise_propagates_through_process_all(self):
+        svc = BatchProcessingService.__new__(BatchProcessingService)
+        manager = MagicMock()
+
+        manager.get_all_jobs.return_value = {"my_action": _make_parent_entry()}
+        manager.get_registry_stats.return_value = BatchRegistryStats(
+            total_jobs=1, completed=0, failed=1, in_progress=0, cancelled=0
+        )
+
+        svc._registry_manager_factory = MagicMock(return_value=manager)
+        svc._action_name = "test_action"
+        svc._is_batch_ready_for_processing = MagicMock(return_value=True)
+        svc._process_single_batch_file = MagicMock(
+            side_effect=RuntimeError("Reprompt validation exhausted")
+        )
+
+        with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):
+            svc.process_all_batch_results("/tmp/output", action_name="test_action")
+
+    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
+    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
+    def test_retry_to_reprompt_does_not_mutate_retry_state(self, mock_mgr, mock_build_loop):
+        loop, strategy = _make_eval_loop_mocks(max_attempts=2)
+        loop.split.return_value = ([], [_make_result("id-1", success=False)])
+        mock_build_loop.return_value = (loop, strategy, None)
+
+        service = _mock_service()
+        service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
+
+        state = _make_state(
+            phase="retry",
+            retry_attempt=3,
+            retry_max_attempts=3,
+            accumulated_results=[{"custom_id": "id-1", "content": "retry-data", "success": True}],
+        )
+
+        check_and_submit_reprompt(
+            service,
+            batch_results=[_make_result("id-1", success=False)],
+            context_map={},
+            output_directory="/tmp",
+            file_name="my_action",
+            entry=_make_parent_entry(record_count=1),
+            agent_config={"kind": "llm"},
+            manager=MagicMock(),
+            provider=MagicMock(),
+            recovery_state=state,
+        )
+
+        assert state.phase == "retry"
+
+    def test_none_content_records_filtered_from_reprompt(self):
+        service = _mock_service()
+        results = [
+            _make_result("id-real-fail", content="bad output", success=False),
+            BatchResult(custom_id="id-none", content=None, success=False, error="provider_error"),
+        ]
+
+        with (
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
+            ) as mock_build_loop,
+            patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
+        ):
+            loop, strategy = _make_eval_loop_mocks(max_attempts=3)
+            loop.split.return_value = ([], results)
+            mock_build_loop.return_value = (loop, strategy, None)
+            service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
+
+            check_and_submit_reprompt(
+                service,
+                batch_results=results,
+                context_map={"id-real-fail": {}, "id-none": {}},
+                output_directory="/tmp",
+                file_name="my_action",
+                entry=_make_parent_entry(record_count=2),
+                agent_config={"kind": "llm"},
+                manager=MagicMock(),
+                provider=MagicMock(),
+            )
+
+        submitted = service._retry_service.submit_reprompt_batch.call_args.kwargs["failed_results"]
+        none_ids = [r.custom_id for r in submitted if r.content is None]
+        assert not none_ids
