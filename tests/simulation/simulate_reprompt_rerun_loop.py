@@ -312,12 +312,11 @@ def run_graduated_pool_persists(work_dir):
         )
 
         saved_state = mgr.save.call_args[0][2]
-        grad_ids = {r["custom_id"] for r in saved_state.graduated_results}
 
         check(
-            "id-ok" not in grad_ids or len(saved_state.graduated_results) >= 0,
-            "Graduated results carried forward in new state",
-            "Graduated results lost",
+            len(saved_state.graduated_results) > 0,
+            f"Graduated results present in saved state ({len(saved_state.graduated_results)} records)",
+            "Graduated results lost — empty list saved",
         )
         check(
             saved_state.reprompt_attempt == 2,

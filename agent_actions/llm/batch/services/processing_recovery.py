@@ -412,13 +412,14 @@ def check_and_submit_reprompt(
         validation_name=strategy.name,
         on_exhausted=on_exhausted,
         evaluation_strategy_name=strategy.name,
-        graduated_results=BatchRetryService.serialize_results(graduated),
+        graduated_results=(list(recovery_state.graduated_results) if recovery_state else [])
+        + BatchRetryService.serialize_results(graduated),
         reprompt_attempts_per_record=(
             dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {}
         ),
         retry_attempt=recovery_state.retry_attempt if recovery_state else 0,
         retry_max_attempts=recovery_state.retry_max_attempts if recovery_state else 3,
-        accumulated_results=recovery_state.accumulated_results if recovery_state else [],
+        accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
     )
     for fr in repromptable:
         state.reprompt_attempts_per_record[fr.custom_id] = (

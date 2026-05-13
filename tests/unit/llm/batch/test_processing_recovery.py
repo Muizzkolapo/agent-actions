@@ -1139,19 +1139,15 @@ class TestDownstreamBugs:
 
     # -- Bug 11: overall_status must handle cancelled entries ---------------
 
-    def test_cancelled_entries_not_returned_as_error(self):
-        """Bug 11: cancelled entries fall through to 'error' in overall_status."""
+    def test_completed_plus_cancelled_returns_completed(self):
+        """Bug 11: completed + cancelled should return 'completed', not 'error'."""
         stats = BatchRegistryStats(total_jobs=2, completed=1, failed=0, in_progress=0, cancelled=1)
-        assert stats.overall_status != "error", (
-            f"Bug 11: overall_status returned '{stats.overall_status}' when cancelled=1."
-        )
+        assert stats.overall_status == "completed"
 
-    def test_all_cancelled_returns_meaningful_status(self):
-        """Bug 11: all jobs cancelled should not return 'error'."""
+    def test_all_cancelled_returns_cancelled(self):
+        """Bug 11: all jobs cancelled should return 'cancelled', not 'error'."""
         stats = BatchRegistryStats(total_jobs=2, completed=0, failed=0, in_progress=0, cancelled=2)
-        assert stats.overall_status != "error", (
-            f"Bug 11: overall_status returned '{stats.overall_status}' when all cancelled."
-        )
+        assert stats.overall_status == "cancelled"
 
     # -- Bug 5: on_exhausted='raise' must not be swallowed ------------------
 
