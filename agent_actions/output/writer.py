@@ -108,7 +108,16 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self._execute_write("Write staging file", do_write)
 
     def write_target(self, data: list[dict[str, Any]]) -> None:
-        """Write data to target via storage backend (raises ValueError if backend is missing)."""
+        """Write data to target via storage backend and materialize to disk.
+
+        Writes to the storage backend (SQLite/TinyDB) first, then materializes
+        the processed JSON to the filesystem so that downstream consumers
+        reading from target directories (version_consumption merge, cross-workflow
+        deps) find the data.
+
+        Raises:
+            ValueError: If storage backend is not configured.
+        """
 
         def do_write() -> int:
             if self.storage_backend is None or self.action_name is None:
@@ -125,7 +134,16 @@ class FileWriter(ProcessorErrorHandlerMixin):
                     relative_path = file_path.name
             else:
                 relative_path = file_path.name
+
+            # 1. Persist to storage backend (SQLite/TinyDB)
             self.storage_backend.write_target(self.action_name, relative_path, data)
+
+            # 2. Materialize to disk: downstream consumers (version_consumption
+            # merge, cross-workflow dependencies) expect processed JSON files
+            # at agent_io/target/{action_name}/{file}.json.
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_json_write(file_path, data)
+
             return len(json.dumps(data))
 
         self._execute_write("Write target file", do_write)
