@@ -20,16 +20,20 @@ import {
 import "@xyflow/react/dist/style.css"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import {
-  transformWorkflowToReactFlow,
+  adaptDocsActionsToDAGActions,
+  transformActionsToReactFlow,
+  DAG_LAYOUT_DEFAULTS,
+  type DAGAction,
   type DAGNodeData,
 } from "@/lib/dag-transformer"
 import type { Action } from "@/lib/mock-data"
 
 // ─── DAG Node (expandable to show fields) ────────────────────────
 
-function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAGNodeData; isConnectable: boolean; isLlm: boolean; selected: boolean }) {
+function ExpandableDAGNode({ data, isConnectable, selected }: { data: DAGNodeData; isConnectable: boolean; selected: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const hasFields = data.inputFields.length > 0 || data.outputFields.length > 0
+  const isLlm = data.kind === "llm"
 
   return (
     <div className={`rounded-lg border-2 bg-card shadow hover:shadow-md transition-shadow w-[320px] ${
@@ -120,23 +124,26 @@ function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAG
 }
 
 function ModelNode({ data, isConnectable, selected }: NodeProps<Node<DAGNodeData>>) {
-  return <ExpandableDAGNode data={data} isConnectable={isConnectable ?? false} isLlm selected={selected ?? false} />
+  return <ExpandableDAGNode data={data} isConnectable={isConnectable ?? false} selected={selected ?? false} />
 }
 
 function ToolNode({ data, isConnectable, selected }: NodeProps<Node<DAGNodeData>>) {
-  return <ExpandableDAGNode data={data} isConnectable={isConnectable ?? false} isLlm={false} selected={selected ?? false} />
+  return <ExpandableDAGNode data={data} isConnectable={isConnectable ?? false} selected={selected ?? false} />
 }
 
 // ─── DAG Content ────────────────────────────────────────────────────────────
 
-function DAGContent({
-  actions,
-  workflowId,
+/** Shared ReactFlow DAG body for Docs and the VS Code webview (same transform path). */
+export function WorkflowDAGRuntime({
+  dagActions,
+  direction,
   onNodeClick,
+  disableMinimap,
 }: {
-  actions: Record<string, Action>
-  workflowId: string
+  dagActions: DAGAction[]
+  direction: "LR" | "TB"
   onNodeClick?: (name: string) => void
+  disableMinimap?: boolean
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -151,7 +158,11 @@ function DAGContent({
   )
 
   useEffect(() => {
-    const transformed = transformWorkflowToReactFlow(actions, workflowId)
+    const transformed = transformActionsToReactFlow(dagActions, {
+      direction,
+      unknownDeps: "filter",
+      ...DAG_LAYOUT_DEFAULTS,
+    })
 
     setNodes(transformed.nodes)
     setEdges(transformed.edges)
@@ -163,7 +174,7 @@ function DAGContent({
         // fitView can fail before render
       }
     }, 100)
-  }, [actions, workflowId, fitView, setNodes, setEdges])
+  }, [dagActions, direction, fitView, setNodes, setEdges])
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -195,15 +206,17 @@ function DAGContent({
     >
       <Background gap={24} size={1} className="!bg-background" />
       <Controls className="!bg-card !border-border !shadow-md !rounded-lg" showInteractive={false} />
-      <MiniMap
-        nodeColor={(n) =>
-          n.type === "modelNode" ? "hsl(var(--chart-2))"
-          : n.type === "toolNode" ? "hsl(var(--success))"
-          : "hsl(var(--muted-foreground))"
-        }
-        className="!bg-card !border-border !rounded-lg"
-        nodeBorderRadius={4}
-      />
+      {!disableMinimap && (
+        <MiniMap
+          nodeColor={(n) =>
+            n.type === "modelNode" ? "hsl(var(--chart-2))"
+            : n.type === "toolNode" ? "hsl(var(--success))"
+            : "hsl(var(--muted-foreground))"
+          }
+          className="!bg-card !border-border !rounded-lg"
+          nodeBorderRadius={4}
+        />
+      )}
     </ReactFlow>
   )
 }
@@ -219,11 +232,16 @@ export function WorkflowDAGView({
   workflowId: string
   onNodeClick?: (name: string) => void
 }) {
+  const dagActions = useMemo(
+    () => adaptDocsActionsToDAGActions(actions, workflowId),
+    [actions, workflowId],
+  )
+
   // 280px ≈ top header (48px) + workflow detail header/tabs (~120px) + outer padding (112px)
   return (
     <div className="w-full rounded-xl border border-border bg-card overflow-hidden" style={{ height: 'clamp(300px, calc(100vh - 280px), 100vh)' }}>
       <ReactFlowProvider>
-        <DAGContent actions={actions} workflowId={workflowId} onNodeClick={onNodeClick} />
+        <WorkflowDAGRuntime dagActions={dagActions} direction="LR" onNodeClick={onNodeClick} />
       </ReactFlowProvider>
     </div>
   )

@@ -1,28 +1,51 @@
 /**
  * DAG Webview
  *
- * Displays a Mermaid-based visual DAG of the workflow.
- *
- * Combines best approaches:
- * - PR #820: Layout configuration (vertical/horizontal)
- * - PR #821: Click-to-navigate callbacks
- * - PR #823: Status-colored nodes, multi-workflow support
+ * Renders the workflow dependency graph in a VS Code webview. When
+ * `agentActions.dagRenderer` is `reactflow`, the panel loads a React bundle that
+ * shares the docs DAG transformer. When set to `mermaid`, the legacy Mermaid
+ * diagram is used instead.
  */
 
 import * as vscode from 'vscode';
 import { ActionInfo, ActionStatus, WorkflowInfo } from '../model/types';
 import { WorkflowModel } from '../model/workflowModel';
+import { logger } from '../utils/logger';
+
+type DagRendererMode = 'reactflow' | 'mermaid';
+
+/** Host → webview payload for React Flow mode (mirrors contract). */
+export interface DagUpdatePayload {
+    workflowName: string;
+    layout: 'vertical' | 'horizontal';
+    actions: Array<{
+        name: string;
+        deps: string[];
+        kind: 'llm' | 'tool' | 'unknown';
+        status?: ActionInfo['status'];
+        model?: string;
+        impl?: string;
+        intent?: string;
+        inputs?: string[];
+        observe?: string[];
+        outputs?: string[];
+        outputFields?: string[];
+        drops?: string[];
+    }>;
+}
 
 export class DagWebview implements vscode.Disposable {
     private panel: vscode.WebviewPanel | undefined;
     private readonly disposables: vscode.Disposable[] = [];
     private currentWorkflowName: string | undefined;
+    private webviewReady = false;
+    private pendingReactPayload: DagUpdatePayload | undefined;
+    private activeMode: DagRendererMode | undefined;
 
     constructor(
         private readonly context: vscode.ExtensionContext,
         private readonly model: WorkflowModel
     ) {
-        // Auto-update when model changes or theme switches
         this.disposables.push(
             this.model.onDidChange(() => {
                 if (this.panel) {
@@ -31,6 +54,15 @@ export class DagWebview implements vscode.Disposable {
             }),
             vscode.window.onDidChangeActiveColorTheme(() => {
                 if (this.panel) {
+                    this.update();
+                }
+            }),
+            vscode.workspace.onDidChangeConfiguration((e) => {
+                if (
+                    this.panel &&
+                    (e.affectsConfiguration('agentActions.dagLayout') ||
+                        e.affectsConfiguration('agentActions.dagRenderer'))
+                ) {
                     this.update();
                 }
             })
@@ -42,9 +74,6 @@ export class DagWebview implements vscode.Disposable {
         this.disposables.forEach((d) => d.dispose());
     }
 
-    /**
-     * Show the DAG panel
-     */
     async show(): Promise<void> {
         const workflows = this.model.getWorkflows();
 
@@ -53,7 +82,6 @@ export class DagWebview implements vscode.Disposable {
             return;
         }
 
-        // If multiple workflows, let user select
         let workflow: WorkflowInfo;
         if (workflows.length === 1) {
             workflow = workflows[0];
@@ -75,11 +103,7 @@ export class DagWebview implements vscode.Disposable {
         this.showWorkflow(workflow);
     }
 
-    /**
-     * Show DAG for a specific workflow
-     */
     showWorkflow(workflow: WorkflowInfo): void {
-        // Track which workflow we're showing
         this.currentWorkflowName = workflow.name;
 
         if (this.panel) {
@@ -92,36 +116,71 @@ export class DagWebview implements vscode.Disposable {
                 {
                     enableScripts: true,
                     retainContextWhenHidden: true,
-                    localResourceRoots: [
-                        vscode.Uri.joinPath(this.context.extensionUri, 'media')
-                    ],
+                    localResourceRoots: [this.context.extensionUri],
                 }
             );
 
             this.panel.onDidDispose(() => {
                 this.panel = undefined;
                 this.currentWorkflowName = undefined;
+                this.webviewReady = false;
+                this.pendingReactPayload = undefined;
+                this.activeMode = undefined;
             }, null, this.disposables);
 
-            // Handle messages from webview
             this.panel.webview.onDidReceiveMessage(
                 (message) => {
+                    if (!message || typeof message !== 'object') {
+                        return;
+                    }
+                    if (message.type === 'ready') {
+                        this.onWebviewReady();
+                        return;
+                    }
                     if (message.type === 'openAction') {
-                        const action = this.model.getActionByName(message.actionName);
+                        const actionName = message.actionName;
+                        if (typeof actionName !== 'string' || actionName.length === 0) {
+                            logger.warn('DAG webview: openAction ignored (invalid actionName)');
+                            return;
+                        }
+                        const action = this.model.getActionByName(actionName);
                         if (action) {
                             vscode.commands.executeCommand('agentActions.openConfig', action);
                         } else {
-                            vscode.window.showWarningMessage(`Action "${message.actionName}" not found`);
+                            logger.warn(`DAG webview: openAction for unknown action "${actionName}"`);
+                            vscode.window.showWarningMessage(`Action "${actionName}" not found`);
                         }
                     }
                 },
                 null,
                 this.disposables
             );
+
+            logger.debug('DAG webview: panel created');
         }
 
         this.panel.title = `${workflow.name} - Workflow DAG`;
         this.update();
+    }
+
+    private getRendererMode(): DagRendererMode {
+        const v = vscode.workspace
+            .getConfiguration('agentActions')
+            .get<string>('dagRenderer', 'reactflow');
+        return v === 'mermaid' ? 'mermaid' : 'reactflow';
+    }
+
+    private onWebviewReady(): void {
+        this.webviewReady = true;
+        if (!this.panel) {
+            return;
+        }
+        const payload = this.pendingReactPayload ?? this.buildReactPayload();
+        this.pendingReactPayload = undefined;
+        this.panel.webview.postMessage({ type: 'dag:update', payload });
+        logger.debug(
+            `DAG webview: ready → dag:update (${payload.workflowName}, ${payload.actions.length} actions)`
+        );
     }
 
     private update(): void {
@@ -129,7 +188,6 @@ export class DagWebview implements vscode.Disposable {
             return;
         }
 
-        // Find the workflow we're currently showing (not just the first one)
         const workflows = this.model.getWorkflows();
         const workflow = this.currentWorkflowName
             ? workflows.find((w) => w.name === this.currentWorkflowName) ?? workflows[0]
@@ -139,14 +197,72 @@ export class DagWebview implements vscode.Disposable {
             return;
         }
 
-        const config = vscode.workspace.getConfiguration('agentActions');
-        const layout = config.get<string>('dagLayout', 'vertical');
-        const direction = layout === 'horizontal' ? 'LR' : 'TD';
+        const mode = this.getRendererMode();
 
-        const diagram = this.buildMermaidDiagram(workflow.actions, direction);
-        const isDark = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
-                       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast;
-        this.panel.webview.html = this.renderHtml(this.panel.webview, diagram, workflow.name, isDark);
+        if (mode === 'mermaid') {
+            this.webviewReady = false;
+            this.pendingReactPayload = undefined;
+            if (this.activeMode !== 'mermaid') {
+                this.activeMode = 'mermaid';
+            }
+            const config = vscode.workspace.getConfiguration('agentActions');
+            const layout = config.get<string>('dagLayout', 'vertical');
+            const direction = layout === 'horizontal' ? 'LR' : 'TD';
+            const diagram = this.buildMermaidDiagram(workflow.actions, direction);
+            const isDark =
+                vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
+                vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast;
+            this.panel.webview.html = this.renderMermaidHtml(
+                this.panel.webview,
+                diagram,
+                workflow.name,
+                isDark
+            );
+            return;
+        }
+
+        // React Flow path
+        if (this.activeMode !== 'reactflow') {
+            this.activeMode = 'reactflow';
+            this.webviewReady = false;
+            this.pendingReactPayload = undefined;
+            this.panel.webview.html = renderReactDagShell(this.panel.webview, this.context.extensionUri);
+            logger.debug('DAG webview: React shell loaded');
+        }
+
+        const payload = this.buildReactPayload();
+        if (this.webviewReady) {
+            this.panel.webview.postMessage({ type: 'dag:update', payload });
+            logger.debug(
+                `DAG webview: dag:update (${payload.workflowName}, ${payload.actions.length} actions)`
+            );
+        } else {
+            this.pendingReactPayload = payload;
+        }
+    }
+
+    private buildReactPayload(): DagUpdatePayload {
+        const workflows = this.model.getWorkflows();
+        const workflow = this.currentWorkflowName
+            ? workflows.find((w) => w.name === this.currentWorkflowName) ?? workflows[0]
+            : workflows[0];
+        if (!workflow) {
+            return { workflowName: '', layout: 'vertical', actions: [] };
+        }
+        const config = vscode.workspace.getConfiguration('agentActions');
+        const layout = config.get<string>('dagLayout', 'vertical') === 'horizontal' ? 'horizontal' : 'vertical';
+
+        return {
+            workflowName: workflow.name,
+            layout,
+            actions: workflow.actions.map((a) => ({
+                name: a.name,
+                deps: [...a.dependencies],
+                kind: 'tool' as const,
+                status: a.status,
+                outputFields: [...a.outputFields],
+            })),
+        };
     }
 
     private buildMermaidDiagram(actions: ActionInfo[], direction: string): string {
@@ -156,7 +272,6 @@ export class DagWebview implements vscode.Disposable {
 
         const lines: string[] = [`flowchart ${direction}`];
 
-        // Define nodes with status styling
         for (const action of actions) {
             const nodeId = this.sanitizeId(action.name);
             const label = action.name.replace(/["\]\\]/g, '_');
@@ -165,7 +280,6 @@ export class DagWebview implements vscode.Disposable {
             lines.push(`  ${nodeId}["[${action.index}] ${label}"]:::${statusClass}`);
         }
 
-        // Define edges
         for (const action of actions) {
             const nodeId = this.sanitizeId(action.name);
             for (const dep of action.dependencies) {
@@ -174,15 +288,12 @@ export class DagWebview implements vscode.Disposable {
             }
         }
 
-        // Add click handlers using sanitized action names for security
         for (const action of actions) {
             const nodeId = this.sanitizeId(action.name);
-            // Use sanitized name in callback to prevent XSS
             const sanitizedName = this.sanitizeForCallback(action.name);
             lines.push(`  click ${nodeId} callback "${sanitizedName}"`);
         }
 
-        // Add style definitions
         lines.push('');
         lines.push('  classDef completed fill:#28a745,stroke:#1e7e34,color:#fff');
         lines.push('  classDef running fill:#ffc107,stroke:#e0a800,color:#000');
@@ -197,11 +308,7 @@ export class DagWebview implements vscode.Disposable {
         return name.replace(/[^a-zA-Z0-9_]/g, '_');
     }
 
-    /**
-     * Sanitize action name for use in Mermaid callback to prevent XSS
-     */
     private sanitizeForCallback(name: string): string {
-        // Remove any characters that could break out of the string or execute code
         return name.replace(/[<>"'`\\]/g, '').replace(/\s+/g, '_');
     }
 
@@ -209,10 +316,14 @@ export class DagWebview implements vscode.Disposable {
         return status;
     }
 
-    private renderHtml(webview: vscode.Webview, diagram: string, workflowName: string, isDark: boolean): string {
-        const nonce = this.getNonce();
+    private renderMermaidHtml(
+        webview: vscode.Webview,
+        diagram: string,
+        workflowName: string,
+        isDark: boolean
+    ): string {
+        const nonce = getNonce();
 
-        // Use locally bundled Mermaid for security and offline support
         const mermaidUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'media', 'mermaid.min.js')
         );
@@ -223,7 +334,7 @@ export class DagWebview implements vscode.Disposable {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}'; style-src 'unsafe-inline';">
-    <title>${this.escapeHtml(workflowName)} - Workflow DAG</title>
+    <title>${escapeHtml(workflowName)} - Workflow DAG</title>
     <style>
         body {
             margin: 0;
@@ -272,7 +383,6 @@ export class DagWebview implements vscode.Disposable {
             max-width: 100%;
             height: auto;
         }
-        /* Make nodes clickable */
         .node { cursor: pointer; }
         .node:hover rect, .node:hover polygon {
             filter: brightness(1.2);
@@ -281,7 +391,7 @@ export class DagWebview implements vscode.Disposable {
 </head>
 <body>
     <div class="header">
-        <h1>${this.escapeHtml(workflowName)}</h1>
+        <h1>${escapeHtml(workflowName)}</h1>
         <div class="legend">
             <div class="legend-item"><div class="legend-dot completed"></div> Completed</div>
             <div class="legend-item"><div class="legend-dot running"></div> Running</div>
@@ -302,16 +412,13 @@ ${diagram}
             theme: '${isDark ? 'dark' : 'default'}',
             flowchart: {
                 curve: 'basis',
-                htmlLabels: false,  // Disable HTML labels for security
+                htmlLabels: false,
                 padding: 15
             },
             securityLevel: 'strict'
         });
 
-        // Handle click events - Mermaid will call this via the callback mechanism
-        // With securityLevel: 'strict', we use mermaid's built-in click handler
         window.callback = function(actionName) {
-            // Validate actionName contains only safe characters
             if (/^[a-zA-Z0-9_-]+$/.test(actionName)) {
                 vscode.postMessage({ type: 'openAction', actionName });
             }
@@ -320,21 +427,55 @@ ${diagram}
 </body>
 </html>`;
     }
+}
 
-    private getNonce(): string {
-        let text = '';
-        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        for (let i = 0; i < 32; i++) {
-            text += possible.charAt(Math.floor(Math.random() * possible.length));
-        }
-        return text;
-    }
+function renderReactDagShell(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+    const nonce = getNonce();
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'dagWebview.js'));
+    const styleBaseUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview.css'));
+    const dagStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'dagWebview.css'));
+    const csp = [
+        `default-src 'none'`,
+        `style-src ${webview.cspSource} 'unsafe-inline'`,
+        `script-src 'nonce-${nonce}' ${webview.cspSource}`,
+        `img-src ${webview.cspSource} data:`,
+        `font-src ${webview.cspSource}`,
+    ].join('; ');
 
-    private escapeHtml(value: string): string {
-        return value
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="${csp}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="${styleBaseUri}">
+    <link rel="stylesheet" href="${dagStyleUri}">
+    <title>Workflow DAG</title>
+    <style>
+        html, body { height: 100%; margin: 0; }
+        #root { height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+}
+
+function getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
+    return text;
+}
+
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }

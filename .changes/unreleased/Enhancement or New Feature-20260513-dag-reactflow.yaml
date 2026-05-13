@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Workflow DAG panel can render with React Flow using the same DAG→ReactFlow transformer as the docs site; optional Mermaid renderer remains via agentActions.dagRenderer."
+time: 2026-05-13T12:00:00.000000Z

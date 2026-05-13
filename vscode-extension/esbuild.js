@@ -76,6 +76,15 @@ const reactSingletonAliases = {
   ),
 };
 
+const webviewShimBanner = {
+  js: [
+    `var process=(typeof globalThis!=='undefined'&&globalThis.process)||{env:{NODE_ENV:${production ? '"production"' : '"development"'}},platform:"browser",browser:true,cwd:function(){return"/"},versions:{},nextTick:function(cb){Promise.resolve().then(cb)},emit:function(){}};`,
+    `var global=(typeof globalThis!=='undefined')?globalThis:self;`,
+    `var setImmediate=(typeof globalThis!=='undefined'&&globalThis.setImmediate)||function(cb){return setTimeout(cb,0)};`,
+    `var clearImmediate=(typeof globalThis!=='undefined'&&globalThis.clearImmediate)||function(id){clearTimeout(id)};`,
+  ].join(""),
+};
+
 async function buildWebview() {
   return esbuild.context({
     entryPoints: ["src/webview/main.tsx"],
@@ -95,12 +104,30 @@ async function buildWebview() {
     banner: {
       // Shim Node globals that some transitive deps (react-markdown, remark-gfm,
       // micromark) reference. These are unbounded globals in the bundle if not shimmed.
-      js: [
-        `var process=(typeof globalThis!=='undefined'&&globalThis.process)||{env:{NODE_ENV:${production ? '"production"' : '"development"'}},platform:"browser",browser:true,cwd:function(){return"/"},versions:{},nextTick:function(cb){Promise.resolve().then(cb)},emit:function(){}};`,
-        `var global=(typeof globalThis!=='undefined')?globalThis:self;`,
-        `var setImmediate=(typeof globalThis!=='undefined'&&globalThis.setImmediate)||function(cb){return setTimeout(cb,0)};`,
-        `var clearImmediate=(typeof globalThis!=='undefined'&&globalThis.clearImmediate)||function(id){clearTimeout(id)};`,
-      ].join(""),
+      js: webviewShimBanner.js,
+    },
+    plugins: [aliasPlugin],
+  });
+}
+
+async function buildDagWebview() {
+  return esbuild.context({
+    entryPoints: ["src/webview/dag.tsx"],
+    bundle: true,
+    format: "iife",
+    platform: "browser",
+    target: "ES2020",
+    outfile: "out/dagWebview.js",
+    alias: reactSingletonAliases,
+    sourcemap: !production,
+    minify: production,
+    logLevel: "info",
+    jsx: "automatic",
+    define: {
+      "process.env.NODE_ENV": production ? '"production"' : '"development"',
+    },
+    banner: {
+      js: webviewShimBanner.js,
     },
     plugins: [aliasPlugin],
   });
@@ -144,18 +171,20 @@ function buildCss() {
 }
 
 async function main() {
-  const [extCtx, webCtx] = await Promise.all([
+  const [extCtx, webCtx, dagCtx] = await Promise.all([
     buildExtension(),
     buildWebview(),
+    buildDagWebview(),
   ]);
 
   if (watch) {
-    await Promise.all([extCtx.watch(), webCtx.watch(), buildCss()]);
+    await Promise.all([extCtx.watch(), webCtx.watch(), dagCtx.watch(), buildCss()]);
     console.log("[esbuild] watching for changes...");
   } else {
-    await Promise.all([extCtx.rebuild(), webCtx.rebuild(), buildCss()]);
+    await Promise.all([extCtx.rebuild(), webCtx.rebuild(), dagCtx.rebuild(), buildCss()]);
     await extCtx.dispose();
     await webCtx.dispose();
+    await dagCtx.dispose();
   }
 }
 

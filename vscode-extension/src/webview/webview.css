@@ -23,6 +23,9 @@
     --primary-foreground:   225 28%  6%;
     --primary-soft:         192 60% 24%;
 
+    /* Docs DAG parity — LLM node accent in shared ReactFlow graph */
+    --chart-2:              192 78% 62%;
+
     --secondary:            225 18% 14%;
     --secondary-foreground: 210 15% 78%;
     --muted:                225 16% 14%;
@@ -75,6 +78,8 @@
     --primary:              198 88% 38%;
     --primary-foreground:   0 0% 100%;
     --primary-soft:         198 70% 92%;
+
+    --chart-2:              198 88% 38%;
 
     --secondary:            220 18% 92%;
     --secondary-foreground: 225 28% 16%;

@@ -118,6 +118,15 @@
           "default": "vertical",
           "description": "Layout direction for the workflow DAG visualization."
         },
+        "agentActions.dagRenderer": {
+          "type": "string",
+          "enum": [
+            "reactflow",
+            "mermaid"
+          ],
+          "default": "reactflow",
+          "description": "Renderer for the workflow DAG panel: React Flow (shared with docs) or Mermaid (legacy)."
+        },
         "agentActions.refreshInterval": {
           "type": "number",
           "default": 0,
@@ -374,8 +383,10 @@
   },
   "dependencies": {
     "@vscode/python-extension": "^1.0.5",
+    "@xyflow/react": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dagre": "^0.8.5",
     "lucide-react": "^0.544.0",
     "react": "^19",
     "react-dom": "^19",
@@ -386,6 +397,7 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.53",
     "@types/node": "^20.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
