@@ -80,8 +80,9 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         params = _make_params([str(upstream_a), str(upstream_b)], output)
 
         # Error is now caught per-file (no propagation), returns 0 processed
-        result = process_merged_files(runner, params)
-        assert result == 0
+        files_found, files_processed = process_merged_files(runner, params)
+        assert files_processed == 0
+        assert files_found == 1
 
         # Upstream files must still be unchanged
         assert json.loads((upstream_a / "data.json").read_text()) == original_a
@@ -200,11 +201,12 @@ class TestProcessDirectoryFilesIsolation:
 
         params = _make_params([str(input_dir)], output_dir)
 
-        processed = process_directory_files(
+        files_found, files_processed = process_directory_files(
             runner, input_dir, output_dir, str(input_dir), params, set()
         )
 
-        assert processed == 2  # a.json + c.json
+        assert files_processed == 2  # a.json + c.json
+        assert files_found == 3  # all 3 seen
         assert call_count == 3  # all 3 attempted
 
     def test_all_files_succeed_returns_full_count(self, tmp_path):
@@ -222,11 +224,12 @@ class TestProcessDirectoryFilesIsolation:
 
         params = _make_params([str(input_dir)], output_dir)
 
-        processed = process_directory_files(
+        files_found, files_processed = process_directory_files(
             runner, input_dir, output_dir, str(input_dir), params, set()
         )
 
-        assert processed == 2
+        assert files_found == 2
+        assert files_processed == 2
 
 
 class TestProcessMergedFilesIsolation:
@@ -255,7 +258,8 @@ class TestProcessMergedFilesIsolation:
 
         params = _make_params([str(upstream)], output)
 
-        result = process_merged_files(runner, params)
+        files_found, files_processed = process_merged_files(runner, params)
 
-        assert result == 1  # good.json processed, bad.json skipped
+        assert files_found == 2
+        assert files_processed == 1  # good.json processed, bad.json skipped
         assert runner._process_single_file.call_count == 2

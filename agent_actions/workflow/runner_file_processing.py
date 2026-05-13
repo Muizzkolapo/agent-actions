@@ -67,6 +67,21 @@ def _log_processing_errors(
     )
 
 
+def _raise_all_files_failed(action_name: str, files_found: int, upstream_dirs: list[str]) -> None:
+    """Raise DependencyError when files were found but all failed processing."""
+    from agent_actions.errors import DependencyError
+
+    raise DependencyError(
+        f"Action '{action_name}': Found {files_found} files but failed to process any. "
+        f"Check logs for details.",
+        context={
+            "action": action_name,
+            "files_found": files_found,
+            "upstream_dirs": upstream_dirs,
+        },
+    )
+
+
 def _file_limit_reached(action_config: dict, count: int, action_name: str) -> bool:
     """Return True (and log) if file_limit has been reached."""
     file_limit = action_config.get("file_limit")
@@ -183,8 +198,13 @@ def process_directory_files(
     input_directory: str,
     params: FileProcessParams,
     processed_paths: set,
-) -> int:
-    """Process all files in a single directory. Returns count of files processed."""
+) -> tuple[int, int]:
+    """Process all files in a single directory.
+
+    Returns:
+        (files_found, files_processed) so callers can distinguish
+        "no files" from "all files failed".
+    """
     count = 0
     processing_errors: list[str] = []
     files_seen = 0
@@ -217,11 +237,16 @@ def process_directory_files(
     _log_processing_errors(
         processing_errors, count, files_seen, params.action_name, "Directory processing"
     )
-    return count
+    return (files_seen, count)
 
 
-def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int:
-    """Process files from multiple upstream directories with content merging."""
+def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> tuple[int, int]:
+    """Process files from multiple upstream directories with content merging.
+
+    Returns:
+        (files_found, files_processed) so callers can distinguish
+        "no files" from "all files failed".
+    """
     output_path = Path(params.output_directory)
     files_by_path = runner._collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
@@ -280,7 +305,7 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
         params.action_name,
         "Merged file processing",
     )
-    return files_processed_count
+    return (files_seen, files_processed_count)
 
 
 def _resolve_upstream_root(file_path: Path, upstream_data_dirs: list[str]) -> Path:
@@ -421,17 +446,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             if files_found > 0:
                 # Data was found in DB but processing failed
                 # Don't fall through to filesystem (virtual paths don't exist)
-                from agent_actions.errors import DependencyError
-
-                raise DependencyError(
-                    f"Action '{params.action_name}': Found {files_found} files in storage "
-                    f"backend but failed to process any. Check logs for details.",
-                    context={
-                        "action": params.action_name,
-                        "files_found": files_found,
-                        "upstream_dirs": params.upstream_data_dirs,
-                    },
-                )
+                _raise_all_files_failed(params.action_name, files_found, params.upstream_data_dirs)
             # Fall through to filesystem if backend had no data
 
     if len(params.upstream_data_dirs) > 1:
@@ -448,12 +463,15 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
         else:
             logger.info("Multiple dependencies detected: %s. Merging all inputs.", dep_names)
 
-        files_processed_count = process_merged_files(runner, params)
-        if files_processed_count == 0:
+        files_found, files_processed = process_merged_files(runner, params)
+        if files_processed == 0:
+            if files_found > 0:
+                _raise_all_files_failed(params.action_name, files_found, params.upstream_data_dirs)
             warn_no_files_found(params)
         return
 
-    files_processed_count = 0
+    total_found = 0
+    total_processed = 0
     output_path = Path(params.output_directory)
     processed_relative_paths: set = set()
 
@@ -463,9 +481,13 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             logger.warning("Upstream directory not found: %s", input_directory)
             continue
 
-        files_processed_count += process_directory_files(
+        found, processed = process_directory_files(
             runner, input_path, output_path, input_directory, params, processed_relative_paths
         )
+        total_found += found
+        total_processed += processed
 
-    if files_processed_count == 0:
+    if total_processed == 0:
+        if total_found > 0:
+            _raise_all_files_failed(params.action_name, total_found, params.upstream_data_dirs)
         warn_no_files_found(params)

@@ -446,8 +446,12 @@ class ActionRunner:
         input_directory: str,
         params: FileProcessParams,
         processed_paths: set,
-    ) -> int:
-        """Process all files in a single directory. Returns count of files processed."""
+    ) -> tuple[int, int]:
+        """Process all files in a single directory.
+
+        Returns:
+            (files_found, files_processed).
+        """
         return _process_directory_files(
             self, input_path, output_path, input_directory, params, processed_paths
         )
@@ -456,8 +460,12 @@ class ActionRunner:
         """Log warning if no files were found in upstream directories."""
         _warn_no_files_found(params)
 
-    def _process_merged_files(self, params: FileProcessParams) -> int:
-        """Process files from multiple upstream directories with content merging."""
+    def _process_merged_files(self, params: FileProcessParams) -> tuple[int, int]:
+        """Process files from multiple upstream directories with content merging.
+
+        Returns:
+            (files_found, files_processed).
+        """
         return _process_merged_files(self, params)
 
     def _process_from_storage_backend(self, params: FileProcessParams) -> tuple[int, int]:

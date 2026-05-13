@@ -409,10 +409,10 @@ class TestProcessDirectoryFiles:
             output_directory=str(output_dir),
             idx=0,
         )
-        count = runner._process_directory_files(
+        _found, processed = runner._process_directory_files(
             input_dir, output_dir, str(input_dir), params, set()
         )
-        assert count == 2
+        assert processed == 2
         assert strategy.execute.call_count == 2
 
     def test_skips_per_should_skip(self, runner, tmp_path):
@@ -432,10 +432,10 @@ class TestProcessDirectoryFiles:
             output_directory=str(output_dir),
             idx=0,
         )
-        count = runner._process_directory_files(
+        _found, processed = runner._process_directory_files(
             input_dir, output_dir, str(input_dir), params, set()
         )
-        assert count == 1
+        assert processed == 1
 
 
 # ---------------------------------------------------------------------------
@@ -496,8 +496,8 @@ class TestProcessMergedFiles:
             output_directory=str(output),
             idx=0,
         )
-        count = runner._process_merged_files(params)
-        assert count == 1
+        _found, processed = runner._process_merged_files(params)
+        assert processed == 1
         strategy.execute.assert_called_once()
 
     @patch("agent_actions.workflow.runner_file_processing.merge_json_files")
@@ -518,8 +518,8 @@ class TestProcessMergedFiles:
             output_directory=str(output),
             idx=0,
         )
-        count = runner._process_merged_files(params)
-        assert count == 1
+        _found, processed = runner._process_merged_files(params)
+        assert processed == 1
         mock_merge.assert_called_once()
         strategy.execute.assert_called_once()
 
@@ -815,7 +815,7 @@ class TestProcessFiles:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        with pytest.raises(DependencyError, match="Found .* files in storage"):
+        with pytest.raises(DependencyError, match="Found .* files but failed to process"):
             runner_with_backend.process_files(params)
 
     def test_storage_backend_no_data_falls_through(self, runner_with_backend, tmp_path):
