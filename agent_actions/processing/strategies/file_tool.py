@@ -92,10 +92,10 @@ class FileToolStrategy:
                 data=structured_data,
                 source_guid=None,  # FILE mode has no single source
                 raw_response=raw_response,
+                is_expansion=len(structured_data) > len(records),
             )
             result.executed = executed
             result.source_mapping = source_mapping
-            result.is_expansion = len(structured_data) > len(records)
 
             return [result]
 
