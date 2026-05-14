@@ -105,6 +105,20 @@ def _data_has_parse_error(data: list[dict[str, Any]]) -> bool:
     return False
 
 
+def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
+    """Serialize a source snapshot dict to JSON for disposition storage.
+
+    Returns None if source is missing, not a dict, or not serializable.
+    Truncation to 10KB is handled downstream by sqlite_backend.set_disposition().
+    """
+    if not source or not isinstance(source, dict):
+        return None
+    try:
+        return json.dumps(source, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return None
+
+
 def _safe_set_disposition(
     backend: "StorageBackend",
     action_name: str,
@@ -377,12 +391,16 @@ class ResultCollector:
                     )
                 )
                 if storage_backend and result.source_guid:
+                    input_snapshot_str = _serialize_snapshot(
+                        result.source_snapshot or result.input_record
+                    )
                     _safe_set_disposition(
                         storage_backend,
                         agent_name,
                         result.source_guid,
                         DISPOSITION_EXHAUSTED,
                         reason=f"exhausted_after_{attempts}_attempts",
+                        input_snapshot=input_snapshot_str,
                         detail=result.error,
                     )
 
@@ -401,20 +419,9 @@ class ResultCollector:
                     )
                 )
                 if storage_backend and result.source_guid:
-                    snapshot_source = result.source_snapshot or result.input_record
-                    input_snapshot_str = None
-                    if snapshot_source and isinstance(snapshot_source, dict):
-                        try:
-                            input_snapshot_str = json.dumps(
-                                snapshot_source, ensure_ascii=False, default=str
-                            )
-                        except (TypeError, ValueError) as snap_err:
-                            logger.debug(
-                                "Could not serialize input snapshot for %s: %s",
-                                result.source_guid,
-                                snap_err,
-                            )
-                            input_snapshot_str = None
+                    input_snapshot_str = _serialize_snapshot(
+                        result.source_snapshot or result.input_record
+                    )
                     _safe_set_disposition(
                         storage_backend,
                         agent_name,
@@ -582,12 +589,14 @@ class ResultCollector:
         if storage_backend:
             for er in exhausted_results:
                 if er.source_guid:
+                    input_snapshot_str = _serialize_snapshot(er.source_snapshot or er.input_record)
                     _safe_set_disposition(
                         storage_backend,
                         agent_name,
                         er.source_guid,
                         DISPOSITION_EXHAUSTED,
                         reason=f"exhausted_after_{_get_retry_attempts(er)}_attempts",
+                        input_snapshot=input_snapshot_str,
                         detail=er.error,
                     )
 

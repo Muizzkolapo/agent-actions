@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any, cast
 
@@ -74,6 +75,7 @@ class FileToolStrategy:
                             f"Tool '{context.agent_name}' returned empty result "
                             f"from {len(records)} input record(s)"
                         ),
+                        source_snapshot=copy.deepcopy(records[0]) if records else None,
                     )
                 ]
 

@@ -4,6 +4,7 @@ Converts raw BatchResult objects into enriched ProcessingResult records
 that can flow through the shared enrich/collect pipeline.
 """
 
+import copy
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -364,13 +365,18 @@ class BatchResultStrategy:
         if recovery_metadata:
             error_item["_recovery"] = recovery_metadata.to_dict()
 
-        return ProcessingResult(
-            status=ProcessingStatus.FAILED,
-            data=[error_item],
-            source_guid=source_guid,
+        # Retrieve original input for failure forensics (deep copy to prevent aliasing)
+        original_input = ctx.reconciler.get_record_by_id(custom_id)
+        source_snapshot = copy.deepcopy(original_input) if original_input else None
+
+        result = ProcessingResult.failed(
             error=error_message,
-            recovery_metadata=recovery_metadata,
+            source_guid=source_guid,
+            source_snapshot=source_snapshot,
         )
+        result.data = [error_item]
+        result.recovery_metadata = recovery_metadata
+        return result
 
     # -- Passthrough reconciliation --------------------------------------------
 
@@ -474,6 +480,7 @@ class BatchResultStrategy:
             data=[exhausted_item],
             source_guid=source_guid,
             recovery_metadata=recovery_meta,
+            source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
         processing_result.processing_context = processing_context
         return processing_result
@@ -512,6 +519,7 @@ class BatchResultStrategy:
             data=[passthrough_item],
             reason=reason,
             source_guid=source_guid,
+            source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
         processing_result.processing_context = processing_context
         return processing_result
