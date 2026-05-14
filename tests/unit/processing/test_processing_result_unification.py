@@ -7,6 +7,7 @@ storage row shape) — not on implementation details like "factory was used".
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -22,6 +23,7 @@ from agent_actions.processing.types import (
 # ---------------------------------------------------------------------------
 
 FRESH_VCID = "fresh-vcid-for-test"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _make_context(
@@ -363,7 +365,7 @@ class TestGrepAudit:
             ],
             capture_output=True,
             text=True,
-            cwd="/Users/muizz/Documents/codeshop/agent_actions_clones/clone_1/agent-actions",
+            cwd=PROJECT_ROOT,
         )
         assert result.stdout.strip() == "", (
             f"Raw constructors found — must use factory methods:\n{result.stdout}"
