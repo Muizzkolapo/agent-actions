@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any, cast
 
@@ -68,12 +69,16 @@ class FileToolStrategy:
             )
 
             if is_empty_response(raw_response) and records:
+                # FILE mode collapses all input records into one failure result.
+                # Snapshot captures only records[0] — for multi-record batches the
+                # error message includes the total count for context.
                 return [
                     ProcessingResult.failed(
                         error=(
                             f"Tool '{context.agent_name}' returned empty result "
                             f"from {len(records)} input record(s)"
                         ),
+                        source_snapshot=copy.deepcopy(records[0]) if records else None,
                     )
                 ]
 

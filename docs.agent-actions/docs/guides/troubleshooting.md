@@ -313,6 +313,22 @@ sqlite3 my_workflow/agent_io/store/my_workflow.db \
 
 See [Prompt Traces reference](../reference/data-io/prompt-traces.md) for the full table schema and query examples.
 
+### Inspecting Failed Record Input Snapshots
+
+When records fail or exhaust retries, the framework captures the input record at the moment of failure. Query the disposition table to see what data was being processed:
+
+```sql
+-- View failed records with their input snapshots
+SELECT action_name, record_id, reason, input_snapshot
+FROM record_disposition
+WHERE disposition = 'failed' AND input_snapshot IS NOT NULL;
+
+-- View exhausted records (retries exceeded)
+SELECT action_name, record_id, reason, input_snapshot
+FROM record_disposition
+WHERE disposition = 'exhausted' AND input_snapshot IS NOT NULL;
+```
+
 ---
 
 ## Debugging Agentic Workflows

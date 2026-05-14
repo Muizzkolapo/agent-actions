@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Populate input_snapshot on failed and exhausted disposition records across all processing paths for post-mortem debugging"
+time: 2026-05-09T04:04:00.000000Z

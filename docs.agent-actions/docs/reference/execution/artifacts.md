@@ -184,6 +184,8 @@ The SQLite database stores structured workflow data:
 | `failed` | Processing failed |
 | `unprocessed` | Not yet processed |
 
+The `failed` and `exhausted` dispositions also store an `input_snapshot` column containing the JSON-serialized input record at the time of failure (truncated to 10KB). This enables post-mortem debugging even after batch recovery files have been cleaned up. Other disposition types do not populate this column.
+
 ### Querying the Database
 
 ```bash

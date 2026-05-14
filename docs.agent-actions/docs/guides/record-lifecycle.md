@@ -217,6 +217,18 @@ The history is capped at 64 entries to bound memory usage. For most agentic work
 You can filter records by their history to answer questions like "which records were guard-skipped at action X?" or "which records required retries?" — without needing separate log aggregation.
 :::
 
+### Failure Forensics: `input_snapshot`
+
+When a record reaches a terminal failure state (`failed` or `exhausted`) through the result collection pipeline, the disposition store captures the input record at the moment of failure in the `input_snapshot` column of `record_disposition`. This covers online, batch, and file-tool processing paths. The snapshot preserves the data that was being processed when the failure occurred — even after batch context maps and temporary recovery files have been cleaned up.
+
+The snapshot is serialized as JSON and truncated to 10KB by the storage backend. To inspect it, query the store database directly:
+
+```sql
+SELECT action_name, record_id, reason, input_snapshot
+FROM record_disposition
+WHERE disposition IN ('failed', 'exhausted') AND input_snapshot IS NOT NULL;
+```
+
 ## Field Categories
 
 The record envelope manages three categories of framework fields:

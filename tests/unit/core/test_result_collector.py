@@ -256,6 +256,7 @@ def test_result_collector_on_exhausted_raise_writes_disposition_before_raising()
         "src-raise",
         "exhausted",
         reason="exhausted_after_2_attempts",
+        input_snapshot='{"target_id": "t-1"}',
         detail="Retry exhausted",
     )
 
@@ -441,6 +442,7 @@ class TestResultCollectorDispositions:
             "src-ex",
             "exhausted",
             reason="exhausted_after_2_attempts",
+            input_snapshot=None,
             detail="Retry exhausted",
         )
 
