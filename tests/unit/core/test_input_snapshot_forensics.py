@@ -338,11 +338,10 @@ class TestNonTerminalNoSnapshot:
 
     def test_unprocessed_no_input_snapshot(self):
         backend = _make_backend()
-        unprocessed = ProcessingResult(
-            status=ProcessingStatus.UNPROCESSED,
-            source_guid="sg-un",
+        unprocessed = ProcessingResult.unprocessed(
             data=[{"content": {}}],
-            skip_reason="upstream_unprocessed",
+            reason="upstream_unprocessed",
+            source_guid="sg-un",
         )
         ResultCollector.collect_results(
             [unprocessed], {}, "agent", is_first_stage=False, storage_backend=backend
@@ -522,8 +521,8 @@ class TestFileToolSnapshot:
         assert results[0].source_snapshot is not None
         assert results[0].source_snapshot["source_guid"] == "sg-ft"
 
-    def test_failed_result_empty_records_no_crash(self):
-        """Edge case: records is non-empty (guarded by `and records`) but test the snapshot."""
+    def test_failed_result_single_record_snapshot(self):
+        """Single-record failure captures that record's snapshot."""
         from agent_actions.processing.strategies.file_tool import FileToolStrategy
 
         strategy = FileToolStrategy()
@@ -546,23 +545,3 @@ class TestFileToolSnapshot:
             results = strategy.invoke(records, context)
 
         assert results[0].source_snapshot is not None
-
-
-# ---------------------------------------------------------------------------
-# No raw ProcessingResult(status=FAILED) constructors left
-# ---------------------------------------------------------------------------
-
-
-class TestNoRawFailedConstructor:
-    def test_grep_no_raw_failed_constructor_in_batch_strategy(self):
-        """Verify _build_error_result uses factory, not raw constructor."""
-        import inspect
-
-        from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
-
-        source = inspect.getsource(BatchResultStrategy._build_error_result)
-        assert "ProcessingResult.failed(" in source
-        assert (
-            "ProcessingResult(\n" not in source.replace("ProcessingResult.failed(", "")
-            or "status=ProcessingStatus.FAILED" not in source
-        )

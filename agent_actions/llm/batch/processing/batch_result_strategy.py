@@ -365,7 +365,6 @@ class BatchResultStrategy:
         if recovery_metadata:
             error_item["_recovery"] = recovery_metadata.to_dict()
 
-        # Retrieve original input for failure forensics (deep copy to prevent aliasing)
         original_input = ctx.reconciler.get_record_by_id(custom_id)
         source_snapshot = copy.deepcopy(original_input) if original_input else None
 
