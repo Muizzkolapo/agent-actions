@@ -7,6 +7,7 @@ from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 from .data_flow_graph import InputRequirement
 
@@ -43,6 +44,10 @@ class ReferenceExtractor:
     def __init__(self) -> None:
         """Initialize with a Jinja2 environment for AST parsing."""
         self._env = Environment()
+
+    def _parse(self, template: str) -> nodes.Template:
+        """Parse template after escaping Jinja syntax in inline code spans."""
+        return self._env.parse(escape_jinja_in_inline_code(template))
 
     def extract_from_agent(self, agent_config: dict[str, Any]) -> list[InputRequirement]:
         """Extract all field references from an action configuration."""
@@ -140,7 +145,7 @@ class ReferenceExtractor:
         references: list[tuple] = []
 
         try:
-            ast = self._env.parse(template)
+            ast = self._parse(template)
         except TemplateSyntaxError:
             # If template has syntax errors, fall back to empty (simple patterns will catch it)
             return references

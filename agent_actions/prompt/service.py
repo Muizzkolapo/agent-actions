@@ -24,6 +24,7 @@ from agent_actions.prompt.context.static_loader import (
 )
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.prompt.prompt_utils import PromptUtils
+from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +315,7 @@ class PromptPreparationService:
                 keep_trailing_newline=True,
             )
 
+            raw_prompt = escape_jinja_in_inline_code(raw_prompt)
             template = jinja_env.from_string(raw_prompt)
             formatted_prompt = template.render(**prompt_context)
             logger.debug("Rendered prompt template with Jinja2")
