@@ -18,11 +18,16 @@ def _make_field_context(**namespaces):
     return dict(namespaces)
 
 
-# ── scope_application: enriched warning log on null namespace at fan-in ──
+# ── scope_application: null namespace resolves to None (debug only) ───
 
 
-class TestResolveNullNamespaceWarning:
-    """_resolve_missing_field logs warning with alt deps when namespace is null at fan-in."""
+class TestResolveNullNamespaceDebugLog:
+    """_resolve_missing_field logs at DEBUG on the success path — never WARNING.
+
+    Warnings about null-namespace hazards belong in the preflight static
+    analyzer (_check_filter_fanin_observe_hazard), not in the per-field
+    resolution function that fires N×M times per workflow.
+    """
 
     @pytest.fixture(autouse=True)
     def _enable_propagation(self):
@@ -33,33 +38,12 @@ class TestResolveNullNamespaceWarning:
         yield
         aa_logger.propagate = original
 
-    def test_null_namespace_with_alt_dep_logs_warning(self, caplog):
-        """Null namespace + alternate dep present -> warning-level log with alt dep name."""
+    def test_null_namespace_resolves_to_none_with_debug_log(self, caplog):
+        """Null namespace with alt deps present -> field resolves to None, logs at DEBUG."""
         fc = _make_field_context(
             filtered_action=None,
             other_dep={"score": 42},
         )
-        with caplog.at_level(logging.WARNING):
-            _, llm_ctx, _ = apply_context_scope(
-                field_context=fc,
-                context_scope={"observe": ["filtered_action.field_a"]},
-                action_name="consumer",
-            )
-
-        # Field resolves to None (existing null-safe behavior).
-        assert llm_ctx["filtered_action"]["field_a"] is None
-
-        # Warning log contains enriched context.
-        warning_logs = [r for r in caplog.records if r.levelno == logging.WARNING]
-        assert len(warning_logs) >= 1
-        msg = warning_logs[0].message
-        assert "filtered_action" in msg
-        assert "other_dep" in msg
-        assert "NULL-NAMESPACE" in msg
-
-    def test_null_namespace_without_alt_dep_logs_debug(self, caplog):
-        """Null namespace with no alternate deps -> debug-level log (no fan-in signal)."""
-        fc = _make_field_context(filtered_action=None)
         with caplog.at_level(logging.DEBUG):
             _, llm_ctx, _ = apply_context_scope(
                 field_context=fc,
@@ -69,30 +53,12 @@ class TestResolveNullNamespaceWarning:
 
         assert llm_ctx["filtered_action"]["field_a"] is None
 
+        # No warnings on the success path.
         warning_logs = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert len(warning_logs) == 0
 
         debug_logs = [r for r in caplog.records if "NULL-SAFE" in r.message]
         assert len(debug_logs) >= 1
-
-    def test_warning_includes_remediation_hints(self, caplog):
-        """Warning message includes remediation suggestions."""
-        fc = _make_field_context(
-            filtered_action=None,
-            alt_dep_a={"data": "ok"},
-            alt_dep_b={"data": "ok"},
-        )
-        with caplog.at_level(logging.WARNING):
-            apply_context_scope(
-                field_context=fc,
-                context_scope={"observe": ["filtered_action.field_a"]},
-                action_name="consumer",
-            )
-
-        warning_logs = [r for r in caplog.records if r.levelno == logging.WARNING]
-        msg = warning_logs[0].message
-        assert "guard" in msg.lower() or "null-safe" in msg.lower()
-        assert "filtered_action.*" in msg
 
 
 # ── service.py: TemplateVariableError with null_namespace_hints ──────
