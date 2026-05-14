@@ -261,6 +261,11 @@ class ActionConfig(BaseModel):
     )
     file_limit: int | None = Field(default=None, ge=1, description="Max files to walk per action")
 
+    # --- Batch concurrency (Ollama only) ---
+    batch_max_workers: int | None = Field(
+        default=None, ge=1, description="Max concurrent workers for Ollama batch processing"
+    )
+
     # --- Expander-consumed keys ---
     interceptors: list[dict[str, Any]] | None = Field(
         default=None, description="Interceptor configuration"
@@ -385,6 +390,11 @@ class DefaultsConfig(BaseModel):
     # --- Limit controls ---
     record_limit: int | None = Field(default=None, ge=1, description="Default record limit")
     file_limit: int | None = Field(default=None, ge=1, description="Default file limit")
+
+    # --- Batch concurrency (Ollama only) ---
+    batch_max_workers: int | None = Field(
+        default=None, ge=1, description="Default max concurrent workers for Ollama batch processing"
+    )
 
     @field_validator("retry", mode="before")
     @classmethod

@@ -65,6 +65,8 @@ class TestActionConfigForbidsUnknownKeys:
             "enable_prompt_caching": True,
             "max_execution_time": 600,
             "enable_caching": True,
+            # Batch concurrency
+            "batch_max_workers": 4,
             # Expander-consumed
             "interceptors": [{"name": "log"}],
             "chunk_config": {"size": 100},
