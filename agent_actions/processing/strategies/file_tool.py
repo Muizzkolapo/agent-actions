@@ -11,7 +11,6 @@ from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
-    ProcessingStatus,
 )
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.content import is_version_merge
@@ -89,15 +88,14 @@ class FileToolStrategy:
                 version_merge=is_version_merge(context.agent_config),
             )
 
-            result = ProcessingResult(
-                status=ProcessingStatus.SUCCESS,
+            result = ProcessingResult.success(
                 data=structured_data,
                 source_guid=None,  # FILE mode has no single source
                 raw_response=raw_response,
-                executed=executed,
-                source_mapping=source_mapping,
                 is_expansion=len(structured_data) > len(records),
             )
+            result.executed = executed
+            result.source_mapping = source_mapping
 
             return [result]
 
