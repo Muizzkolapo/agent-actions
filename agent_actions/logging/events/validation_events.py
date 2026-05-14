@@ -18,6 +18,8 @@ __all__ = [
     "GuardEvaluationErrorEvent",
     "RetryExhaustedEvent",
     "RepromptValidationFailedEvent",
+    "RepromptRetryEvent",
+    "RepromptRecoveredEvent",
     "RecoveryErrorEvent",
 ]
 
@@ -290,6 +292,76 @@ class RepromptValidationFailedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "R002"
+
+
+@dataclass
+class RepromptRetryEvent(BaseEvent):
+    """Fired before each reprompt retry attempt.
+
+    ``attempt`` is the 1-indexed attempt number that is **about to execute**
+    (e.g. attempt=2 means "the first attempt failed, starting attempt 2").
+    ``failed_count`` is set by batch emitters to indicate how many records
+    failed validation; online emitters leave it at 0 (single-record).
+    """
+
+    action_name: str = ""
+    attempt: int = 0
+    max_attempts: int = 0
+    error: str = ""
+    failed_count: int = 0
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.RECOVERY
+        self.message = (
+            f"Reprompt retry for '{self.action_name}' "
+            f"(attempt {self.attempt}/{self.max_attempts}): {self.error}"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "attempt": self.attempt,
+            "max_attempts": self.max_attempts,
+            "error": self.error,
+            "failed_count": self.failed_count,
+        }
+
+    @property
+    def code(self) -> str:
+        return "R004"
+
+
+@dataclass
+class RepromptRecoveredEvent(BaseEvent):
+    """Fired when reprompt validation succeeds after retries.
+
+    ``attempt`` is the 1-indexed attempt number on which validation
+    **passed** (e.g. attempt=2 means "failed on attempt 1, succeeded
+    on attempt 2").
+    """
+
+    action_name: str = ""
+    attempt: int = 0
+    max_attempts: int = 0
+    validation_name: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.RECOVERY
+        self.message = (
+            f"Reprompt recovered for '{self.action_name}' "
+            f"on attempt {self.attempt}/{self.max_attempts} "
+            f"(validation: {self.validation_name})"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "attempt": self.attempt,
+            "max_attempts": self.max_attempts,
+            "validation_name": self.validation_name,
+        }
+
+    @property
+    def code(self) -> str:
+        return "R005"
 
 
 @dataclass

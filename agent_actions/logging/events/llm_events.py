@@ -192,7 +192,7 @@ class LLMJSONParseErrorEvent(BaseEvent):
     error: str = ""
 
     def __post_init__(self) -> None:
-        self.level = EventLevel.ERROR
+        self.level = EventLevel.WARN
         self.category = EventCategories.LLM
         self.message = f"{self.provider}/{self.model} returned invalid JSON: {self.error}"
         self.data = {

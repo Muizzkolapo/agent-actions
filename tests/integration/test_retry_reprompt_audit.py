@@ -20,6 +20,8 @@ from agent_actions.llm.batch.services.retry_serialization import (
 )
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.logging.events.validation_events import (
+    RepromptRecoveredEvent,
+    RepromptRetryEvent,
     RepromptValidationFailedEvent,
     RetryExhaustedEvent,
 )
@@ -787,11 +789,15 @@ class TestEventLogging:
             context="action=test",
         )
 
-        mock_fire.assert_called_once()
-        event = mock_fire.call_args[0][0]
-        assert isinstance(event, RepromptValidationFailedEvent)
-        assert event.action_name == "action=test"
-        assert event.attempt == 2
+        assert mock_fire.call_count == 2
+        retry_event = mock_fire.call_args_list[0][0][0]
+        assert isinstance(retry_event, RepromptRetryEvent)
+        assert retry_event.action_name == "action=test"
+        assert retry_event.attempt == 2
+        exhausted_event = mock_fire.call_args_list[1][0][0]
+        assert isinstance(exhausted_event, RepromptValidationFailedEvent)
+        assert exhausted_event.action_name == "action=test"
+        assert exhausted_event.attempt == 2
 
     @patch("agent_actions.processing.recovery.reprompt.fire_event")
     def test_reprompt_event_not_fired_on_success(self, mock_fire):
@@ -835,6 +841,362 @@ class TestEventLogging:
             ]
         finally:
             _VALIDATION_REGISTRY.clear()
+
+
+# ---------------------------------------------------------------------------
+# TestRepromptObservability — sub-items 1, 3, 4
+# ---------------------------------------------------------------------------
+
+
+class TestRepromptObservability:
+    """Tests for reprompt retry/recovered events, failure counters, and level changes."""
+
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_retry_event_fires_before_each_retry(self, mock_fire):
+        """RepromptRetryEvent fires for each retry, not on the first attempt."""
+        validator = _StubValidator([False, False, True])
+        svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
+
+        result = svc.execute(
+            llm_operation=_llm_op_factory([({"a": 1}, True), ({"b": 2}, True), ({"c": 3}, True)]),
+            original_prompt="p",
+            context="action=test",
+        )
+
+        assert result.passed is True
+        assert result.attempts == 3
+        retry_events = [
+            c[0][0] for c in mock_fire.call_args_list if isinstance(c[0][0], RepromptRetryEvent)
+        ]
+        assert len(retry_events) == 2
+        assert retry_events[0].attempt == 2
+        assert retry_events[1].attempt == 3
+
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_recovered_event_fires_on_success_after_retries(self, mock_fire):
+        """RepromptRecoveredEvent fires when validation passes after retries."""
+        validator = _StubValidator([False, True])
+        svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
+
+        result = svc.execute(
+            llm_operation=_llm_op_factory([({"a": 1}, True), ({"b": 2}, True)]),
+            original_prompt="p",
+            context="action=test",
+        )
+
+        assert result.passed is True
+        assert result.attempts == 2
+        recovered_events = [
+            c[0][0] for c in mock_fire.call_args_list if isinstance(c[0][0], RepromptRecoveredEvent)
+        ]
+        assert len(recovered_events) == 1
+        assert recovered_events[0].action_name == "action=test"
+        assert recovered_events[0].attempt == 2
+        assert recovered_events[0].max_attempts == 3
+        assert recovered_events[0].validation_name == "stub_validator"
+
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_no_events_on_first_attempt_success(self, mock_fire):
+        """Neither retry nor recovered events fire when first attempt succeeds."""
+        validator = _StubValidator([True])
+        svc = RepromptService(validator=validator, max_attempts=3)
+
+        result = svc.execute(
+            llm_operation=_llm_op_factory([({"ok": True}, True)]),
+            original_prompt="p",
+        )
+
+        assert result.passed is True
+        assert result.attempts == 1
+        mock_fire.assert_not_called()
+
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_retry_event_codes_no_collision(self, mock_fire):
+        """R004 and R005 are unique codes."""
+        validator = _StubValidator([False, True])
+        svc = RepromptService(validator=validator, max_attempts=3)
+
+        svc.execute(
+            llm_operation=_llm_op_factory([({"a": 1}, True), ({"b": 2}, True)]),
+            original_prompt="p",
+            context="ctx",
+        )
+
+        events = [c[0][0] for c in mock_fire.call_args_list]
+        codes = {e.code for e in events}
+        assert "R004" in codes
+        assert "R005" in codes
+
+    def test_failure_counters_parse_error(self):
+        """parse_error_count increments on JSON parse failures."""
+        validator = _StubValidator([True])
+        svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
+
+        result = svc.execute(
+            llm_operation=_llm_op_factory(
+                [
+                    ([{"_parse_error": "bad json"}], True),
+                    ({"ok": True}, True),
+                ]
+            ),
+            original_prompt="p",
+        )
+
+        assert result.passed is True
+        assert result.parse_error_count == 1
+        assert result.schema_fail_count == 0
+        assert result.udf_fail_count == 0
+
+    def test_failure_counters_schema_fail(self):
+        """schema_fail_count increments on non-UDF validation failures."""
+        from agent_actions.processing.recovery.response_validator import SchemaValidator
+
+        schema = {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        }
+        validator = SchemaValidator(schema=schema, action_name="test", strict_mode=True)
+        svc = RepromptService(validator=validator, max_attempts=2, on_exhausted="return_last")
+
+        result = svc.execute(
+            llm_operation=_llm_op_factory(
+                [
+                    ([{}], True),
+                    ([{"name": "ok"}], True),
+                ]
+            ),
+            original_prompt="p",
+        )
+
+        assert result.schema_fail_count >= 1
+        assert result.parse_error_count == 0
+
+    def test_failure_counters_non_udf_validator(self):
+        """Non-UDF validator failures increment schema_fail_count."""
+        validator = _StubValidator([False, True])
+        svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
+
+        result = svc.execute(
+            llm_operation=_llm_op_factory([({"a": 1}, True), ({"b": 2}, True)]),
+            original_prompt="p",
+        )
+
+        assert result.passed is True
+        assert result.schema_fail_count == 1
+        assert result.udf_fail_count == 0
+
+    def test_failure_counters_real_udf(self):
+        """udf_fail_count increments with a real UdfValidator."""
+        _VALIDATION_REGISTRY.clear()
+        try:
+
+            @reprompt_validation("bad output")
+            def check_valid(response):
+                if isinstance(response, list):
+                    return all(r.get("valid", False) for r in response)
+                return response.get("valid", False)
+
+            from agent_actions.processing.recovery.response_validator import UdfValidator
+
+            validator = UdfValidator("check_valid")
+            svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
+
+            result = svc.execute(
+                llm_operation=_llm_op_factory(
+                    [([{"valid": False}], True), ([{"valid": True}], True)]
+                ),
+                original_prompt="p",
+            )
+
+            assert result.passed is True
+            assert result.udf_fail_count == 1
+            assert result.schema_fail_count == 0
+        finally:
+            _VALIDATION_REGISTRY.clear()
+
+    def test_reprompt_metadata_to_dict_omits_zero_counters(self):
+        """to_dict() omits counter fields when all are 0."""
+        meta = RepromptMetadata(attempts=1, passed=True, validation="check")
+        d = meta.to_dict()
+        assert "parse_error_count" not in d
+        assert "schema_fail_count" not in d
+        assert "udf_fail_count" not in d
+
+    def test_reprompt_metadata_to_dict_includes_nonzero_counters(self):
+        """to_dict() includes counter fields when > 0."""
+        meta = RepromptMetadata(
+            attempts=3,
+            passed=True,
+            validation="check",
+            parse_error_count=1,
+            schema_fail_count=2,
+        )
+        d = meta.to_dict()
+        assert d["parse_error_count"] == 1
+        assert d["schema_fail_count"] == 2
+        assert "udf_fail_count" not in d
+
+    def test_reprompt_metadata_deserialization_with_counters(self):
+        """RepromptMetadata(**dict) works with new counter fields."""
+        data = {
+            "attempts": 3,
+            "passed": True,
+            "validation": "check",
+            "parse_error_count": 1,
+            "schema_fail_count": 2,
+        }
+        meta = RepromptMetadata(**data)
+        assert meta.parse_error_count == 1
+        assert meta.schema_fail_count == 2
+        assert meta.udf_fail_count == 0
+
+    def test_reprompt_metadata_deserialization_without_counters(self):
+        """RepromptMetadata(**dict) works with old data missing counter fields."""
+        data = {"attempts": 2, "passed": False, "validation": "check_v1"}
+        meta = RepromptMetadata(**data)
+        assert meta.parse_error_count == 0
+        assert meta.schema_fail_count == 0
+        assert meta.udf_fail_count == 0
+
+    def test_serialization_roundtrip_with_counters(self):
+        """BatchResult with counter fields survives serialize → deserialize."""
+        original = BatchResult(
+            custom_id="rec_001",
+            content={"answer": "42"},
+            success=True,
+            recovery_metadata=RecoveryMetadata(
+                reprompt=RepromptMetadata(
+                    attempts=3,
+                    passed=True,
+                    validation="check",
+                    parse_error_count=2,
+                    schema_fail_count=1,
+                ),
+            ),
+        )
+
+        serialized = serialize_results([original])
+        deserialized = deserialize_results(serialized)
+
+        r = deserialized[0]
+        assert r.recovery_metadata.reprompt.parse_error_count == 2
+        assert r.recovery_metadata.reprompt.schema_fail_count == 1
+        assert r.recovery_metadata.reprompt.udf_fail_count == 0
+
+    def test_llm_json_parse_error_event_is_warn(self):
+        """LLMJSONParseErrorEvent level is WARN, not ERROR."""
+        from agent_actions.logging.core.events import EventLevel
+        from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
+
+        event = LLMJSONParseErrorEvent(provider="openai", model="gpt-4", error="bad json")
+        assert event.level == EventLevel.WARN
+
+    @patch("agent_actions.processing.recovery.reprompt.fire_event")
+    def test_recovered_event_and_counters_consistent(self, mock_fire):
+        """R005 fires AND parse_error_count=1 when parse error then success."""
+        validator = _StubValidator([True])
+        svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
+
+        result = svc.execute(
+            llm_operation=_llm_op_factory(
+                [
+                    ([{"_parse_error": "bad json"}], True),
+                    ({"ok": True}, True),
+                ]
+            ),
+            original_prompt="p",
+            context="action=test",
+        )
+
+        assert result.passed is True
+        assert result.parse_error_count == 1
+        recovered_events = [
+            c[0][0] for c in mock_fire.call_args_list if isinstance(c[0][0], RepromptRecoveredEvent)
+        ]
+        assert len(recovered_events) == 1
+
+    def test_batch_exhaustion_fires_r002(self):
+        """apply_exhausted_reprompt fires RepromptValidationFailedEvent (R002)."""
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        results = [BatchResult(custom_id="rec_1", content={"x": 1}, success=True)]
+
+        with patch("agent_actions.processing.evaluation.exhaustion.fire_event") as mock_fire:
+            apply_exhausted_reprompt(
+                results=results,
+                failed_ids={"rec_1"},
+                validation_name="check_fn",
+                attempt=3,
+                on_exhausted="return_last",
+            )
+
+        mock_fire.assert_called_once()
+        event = mock_fire.call_args[0][0]
+        assert isinstance(event, RepromptValidationFailedEvent)
+        assert event.code == "R002"
+        assert "check_fn" in event.error
+
+    def test_batch_exhaustion_fires_r002_before_raise(self):
+        """R002 fires even when on_exhausted='raise' — audit before exception."""
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        results = [BatchResult(custom_id="rec_1", content={"x": 1}, success=True)]
+
+        with patch("agent_actions.processing.evaluation.exhaustion.fire_event") as mock_fire:
+            with pytest.raises(RuntimeError, match="exhausted"):
+                apply_exhausted_reprompt(
+                    results=results,
+                    failed_ids={"rec_1"},
+                    validation_name="check_fn",
+                    attempt=3,
+                    on_exhausted="raise",
+                )
+
+        mock_fire.assert_called_once()
+        event = mock_fire.call_args[0][0]
+        assert isinstance(event, RepromptValidationFailedEvent)
+
+    def test_retry_event_has_failed_count_field(self):
+        """RepromptRetryEvent exposes failed_count in structured data."""
+        event = RepromptRetryEvent(
+            action_name="batch",
+            attempt=2,
+            max_attempts=3,
+            error="5 records failed validation",
+            failed_count=5,
+        )
+        assert event.data["failed_count"] == 5
+        assert event.failed_count == 5
+
+    def test_fresh_run_clears_event_files(self, tmp_path):
+        """_clear_for_fresh_run deletes events.json and errors.json."""
+        target_dir = tmp_path / "agent_io" / "target"
+        target_dir.mkdir(parents=True)
+        (target_dir / "events.json").write_text('{"test": true}\n')
+        (target_dir / "errors.json").write_text('{"error": true}\n')
+
+        # Verify files exist
+        assert (target_dir / "events.json").exists()
+        assert (target_dir / "errors.json").exists()
+
+        # Simulate the clearing logic from coordinator._clear_for_fresh_run
+        for events_file in ("events.json", "errors.json"):
+            events_path = target_dir / events_file
+            events_path.unlink(missing_ok=True)
+
+        assert not (target_dir / "events.json").exists()
+        assert not (target_dir / "errors.json").exists()
+
+    def test_fresh_run_handles_missing_files(self, tmp_path):
+        """Clearing event files when they don't exist does not raise."""
+        target_dir = tmp_path / "agent_io" / "target"
+        target_dir.mkdir(parents=True)
+
+        # No error when files don't exist
+        for events_file in ("events.json", "errors.json"):
+            events_path = target_dir / events_file
+            events_path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

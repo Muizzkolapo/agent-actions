@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Reprompt observability: retry/recovered events (R004/R005), fresh-run log reset, parse error warn level, failure-type counters"
+time: 2026-05-14T13:50:00.000000Z

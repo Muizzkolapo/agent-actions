@@ -10,6 +10,11 @@ from agent_actions.llm.batch.services.retry_polling import (
     wait_for_batch_completion,
 )
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
+from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.events.validation_events import (
+    RepromptRecoveredEvent,
+    RepromptRetryEvent,
+)
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -204,6 +209,16 @@ def validate_and_reprompt(
             all_graduated.extend(still_failing)
             break
 
+        fire_event(
+            RepromptRetryEvent(
+                action_name=file_name or "batch",
+                attempt=attempt + 2,
+                max_attempts=max_attempts,
+                error=f"{len(still_failing)} records failed validation",
+                failed_count=len(still_failing),
+            )
+        )
+
         use_critique = (raw_reprompt_config or {}).get("use_llm_critique", False)
         critique_after = (raw_reprompt_config or {}).get("critique_after_attempt", 2)
         apply_critique = use_critique and attempt + 1 >= critique_after
@@ -357,6 +372,7 @@ def validate_and_reprompt(
             all_graduated.extend(still_failing)
             break
 
+    recovered_count = 0
     for r in all_graduated:
         if r.custom_id not in reprompted_ids:
             continue
@@ -368,6 +384,17 @@ def validate_and_reprompt(
             attempts=reprompted_ids[r.custom_id],
             passed=True,
             validation=validation_name,
+        )
+        recovered_count += 1
+
+    if recovered_count:
+        fire_event(
+            RepromptRecoveredEvent(
+                action_name=file_name or "batch",
+                attempt=attempt + 1,
+                max_attempts=max_attempts,
+                validation_name=validation_name,
+            )
         )
 
     return all_graduated

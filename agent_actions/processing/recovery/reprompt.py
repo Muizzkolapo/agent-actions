@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.logging.core.manager import fire_event
-from agent_actions.logging.events.validation_events import RepromptValidationFailedEvent
+from agent_actions.logging.events.validation_events import (
+    RepromptRecoveredEvent,
+    RepromptRetryEvent,
+    RepromptValidationFailedEvent,
+)
 
 from .critique import format_critique_feedback
 from .response_validator import (
@@ -84,6 +88,9 @@ class RepromptResult:
     passed: bool  # Whether validation ultimately passed
     validation_name: str
     exhausted: bool = False
+    parse_error_count: int = 0
+    schema_fail_count: int = 0
+    udf_fail_count: int = 0
 
 
 @dataclass
@@ -193,6 +200,9 @@ class RepromptService:
         attempts = 0
         current_prompt = original_prompt
         last_response = None
+        parse_error_count = 0
+        schema_fail_count = 0
+        udf_fail_count = 0
 
         while attempts < self.max_attempts:
             attempts += 1
@@ -219,6 +229,9 @@ class RepromptService:
                     passed=False,
                     validation_name=self.validation_name,
                     exhausted=True,
+                    parse_error_count=parse_error_count,
+                    schema_fail_count=schema_fail_count,
+                    udf_fail_count=udf_fail_count,
                 )
 
             if not executed:
@@ -237,6 +250,7 @@ class RepromptService:
             parse_error = _get_parse_error(response)
             if parse_error is not None:
                 is_valid = False
+                parse_error_count += 1
                 logger.warning(
                     "[%s] Invalid JSON on attempt %d/%d — %s",
                     context,
@@ -255,6 +269,14 @@ class RepromptService:
                         attempts,
                         self.max_attempts,
                     )
+                    fire_event(
+                        RepromptRecoveredEvent(
+                            action_name=context or "NOT_SET",
+                            attempt=attempts,
+                            max_attempts=self.max_attempts,
+                            validation_name=self.validation_name,
+                        )
+                    )
                 return RepromptResult(
                     response=response,
                     executed=True,
@@ -262,9 +284,16 @@ class RepromptService:
                     passed=True,
                     validation_name=self.validation_name,
                     exhausted=False,
+                    parse_error_count=parse_error_count,
+                    schema_fail_count=schema_fail_count,
+                    udf_fail_count=udf_fail_count,
                 )
 
             if parse_error is None:
+                if isinstance(self._validator, UdfValidator):
+                    udf_fail_count += 1
+                else:
+                    schema_fail_count += 1
                 logger.warning(
                     "[%s] Schema validation failed on attempt %d/%d",
                     context,
@@ -307,6 +336,15 @@ class RepromptService:
 
             current_prompt = f"{original_prompt}\n\n{feedback}"
 
+            fire_event(
+                RepromptRetryEvent(
+                    action_name=context or "NOT_SET",
+                    attempt=attempts + 1,
+                    max_attempts=self.max_attempts,
+                    error=parse_error or "schema_validation_failed",
+                )
+            )
+
         logger.error(
             "[%s] Reprompt exhausted after %d attempts (validation: %s)",
             context,
@@ -343,6 +381,9 @@ class RepromptService:
             passed=False,
             validation_name=self.validation_name,
             exhausted=True,
+            parse_error_count=parse_error_count,
+            schema_fail_count=schema_fail_count,
+            udf_fail_count=udf_fail_count,
         )
 
 

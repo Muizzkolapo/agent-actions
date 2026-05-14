@@ -270,7 +270,7 @@ class AgentWorkflow:
         return validate_guard_conditions(self.action_configs)
 
     def _clear_for_fresh_run(self) -> None:
-        """Clear stored results, dispositions, and status for a fresh run."""
+        """Clear stored results, dispositions, status, and event logs for a fresh run."""
         for action_name in self.execution_order:
             try:
                 self.storage_backend.delete_target(action_name)
@@ -278,6 +278,20 @@ class AgentWorkflow:
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
         self.services.core.state_manager.reset()
+
+        # Clear event log files so --fresh gives a clean debugging slate.
+        # JSONFileHandler opens lazily (on first flush), so deleting between
+        # handler init and first event write is safe.
+        # Path convention mirrors LoggerFactory.initialize() (logging/factory.py).
+        project_root = self.config.resolve_project_root()
+        target_dir = project_root / "agent_io" / "target"
+        for events_file in ("events.json", "errors.json"):
+            events_path = target_dir / events_file
+            try:
+                events_path.unlink(missing_ok=True)
+            except OSError as e:
+                logger.warning("Failed to clear %s: %s", events_file, e)
+
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
         )
