@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BatchResult
 
+from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.events.validation_events import RepromptValidationFailedEvent
 from agent_actions.processing.types import RecoveryMetadata, RepromptMetadata
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,15 @@ def apply_exhausted_reprompt(
             attempts=record_attempts,
             passed=False,
             validation=validation_name,
+        )
+
+    if failed_ids and on_exhausted != "raise":
+        fire_event(
+            RepromptValidationFailedEvent(
+                action_name="batch",
+                attempt=attempt,
+                error=f"Validation '{validation_name}' exhausted for {len(failed_ids)} records",
+            )
         )
 
     return results

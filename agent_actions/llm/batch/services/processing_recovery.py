@@ -31,6 +31,10 @@ from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
+from agent_actions.logging.events.validation_events import (
+    RepromptRecoveredEvent,
+    RepromptRetryEvent,
+)
 from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
@@ -286,6 +290,14 @@ def handle_reprompt_recovery(
             _register_recovery_batch(
                 manager, submission, parent_file_name, entry.provider, "reprompt", next_attempt
             )
+            fire_event(
+                RepromptRetryEvent(
+                    action_name=parent_file_name or "batch",
+                    attempt=next_attempt,
+                    max_attempts=state.reprompt_max_attempts,
+                    error=f"{len(still_failing)} records failed validation",
+                )
+            )
             for fr in still_failing:
                 state.reprompt_attempts_per_record[fr.custom_id] = (
                     state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
@@ -308,6 +320,16 @@ def handle_reprompt_recovery(
     final_results = BatchRetryService.deserialize_results(state.graduated_results)
     if still_failing:
         final_results.extend(still_failing)
+
+    if state.graduated_results:
+        fire_event(
+            RepromptRecoveredEvent(
+                action_name=parent_file_name or "batch",
+                attempt=state.reprompt_attempt,
+                max_attempts=state.reprompt_max_attempts,
+                validation_name=strategy.name,
+            )
+        )
 
     # Rebuild exhausted_recovery from retry phase state (frozen at phase transition).
     exhausted_recovery = None
@@ -422,6 +444,14 @@ def check_and_submit_reprompt(
         }
 
     RecoveryStateManager.save(output_directory, file_name, state)
+    fire_event(
+        RepromptRetryEvent(
+            action_name=file_name or "batch",
+            attempt=next_attempt,
+            max_attempts=max_attempts,
+            error=f"{len(still_failing)} records failed validation",
+        )
+    )
     logger.info(
         "Async reprompt submitted for %s: %d failed records, batch %s",
         file_name,

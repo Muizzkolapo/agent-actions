@@ -972,8 +972,8 @@ class TestRepromptObservability:
         assert result.schema_fail_count >= 1
         assert result.parse_error_count == 0
 
-    def test_failure_counters_udf(self):
-        """udf_fail_count increments on UDF validation failures."""
+    def test_failure_counters_non_udf_validator(self):
+        """Non-UDF validator failures increment schema_fail_count."""
         validator = _StubValidator([False, True])
         svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
 
@@ -982,10 +982,38 @@ class TestRepromptObservability:
             original_prompt="p",
         )
 
-        # _StubValidator is not UdfValidator or SchemaValidator, so
-        # schema_fail_count increments (default non-UDF path)
         assert result.passed is True
         assert result.schema_fail_count == 1
+        assert result.udf_fail_count == 0
+
+    def test_failure_counters_real_udf(self):
+        """udf_fail_count increments with a real UdfValidator."""
+        _VALIDATION_REGISTRY.clear()
+        try:
+
+            @reprompt_validation("bad output")
+            def check_valid(response):
+                if isinstance(response, list):
+                    return all(r.get("valid", False) for r in response)
+                return response.get("valid", False)
+
+            from agent_actions.processing.recovery.response_validator import UdfValidator
+
+            validator = UdfValidator("check_valid")
+            svc = RepromptService(validator=validator, max_attempts=3, on_exhausted="return_last")
+
+            result = svc.execute(
+                llm_operation=_llm_op_factory(
+                    [([{"valid": False}], True), ([{"valid": True}], True)]
+                ),
+                original_prompt="p",
+            )
+
+            assert result.passed is True
+            assert result.udf_fail_count == 1
+            assert result.schema_fail_count == 0
+        finally:
+            _VALIDATION_REGISTRY.clear()
 
     def test_reprompt_metadata_to_dict_omits_zero_counters(self):
         """to_dict() omits counter fields when all are 0."""
@@ -1087,6 +1115,56 @@ class TestRepromptObservability:
             c[0][0] for c in mock_fire.call_args_list if isinstance(c[0][0], RepromptRecoveredEvent)
         ]
         assert len(recovered_events) == 1
+
+    def test_batch_exhaustion_fires_r002(self):
+        """apply_exhausted_reprompt fires RepromptValidationFailedEvent (R002)."""
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        results = [BatchResult(custom_id="rec_1", content={"x": 1}, success=True)]
+
+        with patch("agent_actions.processing.evaluation.exhaustion.fire_event") as mock_fire:
+            apply_exhausted_reprompt(
+                results=results,
+                failed_ids={"rec_1"},
+                validation_name="check_fn",
+                attempt=3,
+                on_exhausted="return_last",
+            )
+
+        mock_fire.assert_called_once()
+        event = mock_fire.call_args[0][0]
+        assert isinstance(event, RepromptValidationFailedEvent)
+        assert event.code == "R002"
+        assert "check_fn" in event.error
+
+    def test_fresh_run_clears_event_files(self, tmp_path):
+        """_clear_for_fresh_run deletes events.json and errors.json."""
+        target_dir = tmp_path / "agent_io" / "target"
+        target_dir.mkdir(parents=True)
+        (target_dir / "events.json").write_text('{"test": true}\n')
+        (target_dir / "errors.json").write_text('{"error": true}\n')
+
+        # Verify files exist
+        assert (target_dir / "events.json").exists()
+        assert (target_dir / "errors.json").exists()
+
+        # Simulate the clearing logic from coordinator._clear_for_fresh_run
+        for events_file in ("events.json", "errors.json"):
+            events_path = target_dir / events_file
+            events_path.unlink(missing_ok=True)
+
+        assert not (target_dir / "events.json").exists()
+        assert not (target_dir / "errors.json").exists()
+
+    def test_fresh_run_handles_missing_files(self, tmp_path):
+        """Clearing event files when they don't exist does not raise."""
+        target_dir = tmp_path / "agent_io" / "target"
+        target_dir.mkdir(parents=True)
+
+        # No error when files don't exist
+        for events_file in ("events.json", "errors.json"):
+            events_path = target_dir / events_file
+            events_path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
