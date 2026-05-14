@@ -3,6 +3,7 @@
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 __all__ = [
     "parse_field_reference",
@@ -152,7 +153,7 @@ def extract_action_names_from_template(template: str | None) -> set:
 
     try:
         env = Environment()
-        ast = env.parse(template)
+        ast = env.parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError:
         return set()
 

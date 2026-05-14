@@ -6,6 +6,8 @@ from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
 
+from agent_actions.utils.template_escape import escape_jinja_in_inline_code
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,10 @@ class PromptASTAnalyzer:
     def __init__(self):
         """Initialize Jinja2 environment for AST parsing."""
         self.env = Environment()
+
+    def _parse(self, template_source: str) -> nodes.Template:
+        """Parse template after escaping Jinja syntax in inline code spans."""
+        return self.env.parse(escape_jinja_in_inline_code(template_source))
 
     def _build_path_from_node(self, node: nodes.Node) -> str:
         """Build full attribute path by walking the AST node chain.
@@ -124,7 +130,7 @@ class PromptASTAnalyzer:
             ['seed.exam_syllabus.platform_name', 'source.url']
         """
         try:
-            ast = self.env.parse(template_source)
+            ast = self._parse(template_source)
             return self._extract_full_paths(ast)
 
         except TemplateSyntaxError as e:
@@ -144,7 +150,7 @@ class PromptASTAnalyzer:
             ['seed.exam_syllabus', 'source.content']
         """
         try:
-            ast = self.env.parse(template_source)
+            ast = self._parse(template_source)
 
             # Get all referenced variables (with full paths)
             full_paths = self._extract_full_paths(ast)
@@ -177,7 +183,7 @@ class PromptASTAnalyzer:
             unexpected end of template...
         """
         try:
-            self.env.parse(template_source)
+            self._parse(template_source)
             return (True, None)
         except TemplateSyntaxError as e:
             return (False, str(e))
@@ -244,7 +250,7 @@ class PromptASTAnalyzer:
             >>> usage[0]['name']  # Returns 'seed', not 'seed.exam_syllabus'
             'seed'
         """
-        template_ast = self.env.parse(template_source)
+        template_ast = self._parse(template_source)
         usage_list = []
 
         for node in template_ast.find_all(nodes.Name):
