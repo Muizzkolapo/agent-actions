@@ -44,7 +44,6 @@ def _resolve_missing_field(
     level to aid debugging.
     """
     if ns_name in prompt_context and prompt_context[ns_name] is None:
-        # Identify alternate namespaces that DID provide data (non-None, non-framework).
         alt_deps = [
             k
             for k, v in prompt_context.items()

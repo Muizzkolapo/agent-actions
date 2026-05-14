@@ -83,8 +83,6 @@ class TemplateVariableError(TemplateRenderingError):
             ctx["storage_hints"] = storage_hints
         if null_namespace_hints:
             ctx["null_namespace_hints"] = null_namespace_hints
-
-        if null_namespace_hints:
             ns_names = ", ".join(sorted(null_namespace_hints.keys()))
             msg = (
                 f"Template for '{agent_name}' failed: namespace(s) "

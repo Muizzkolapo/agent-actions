@@ -120,7 +120,6 @@ class TestTemplateNullNamespaceError:
         assert err.null_namespace_hints
         assert "filtered_action" in err.null_namespace_hints
         hint = err.null_namespace_hints["filtered_action"]
-        assert hint["reason"] == "guard-filtered"
         assert "other_dep" in hint["alternate_deps"]
         assert "filtered" in hint["remediation"].lower()
 

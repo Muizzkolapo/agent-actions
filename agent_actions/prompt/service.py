@@ -421,15 +421,11 @@ class PromptPreparationService:
                                 }
                                 break
 
-            # Detect null namespaces from guard-filter at fan-in points.
-            # When a NoneType attribute error occurs and the namespace is None
-            # in prompt_context, this is the filter+fan-in hazard (spec 415).
+            # Null namespaces from guard-filter at fan-in (spec 415).
             null_namespace_hints: dict[str, dict[str, Any]] = {}
             if "has no attribute" in error_str:
-                # Find namespaces in prompt_context that are None.
                 null_ns = [k for k, v in prompt_context.items() if v is None]
                 if null_ns:
-                    # Identify alternate deps that DID provide data.
                     alt_deps = [
                         k
                         for k, v in prompt_context.items()
@@ -437,8 +433,6 @@ class PromptPreparationService:
                     ]
                     for ns in null_ns:
                         null_namespace_hints[ns] = {
-                            "namespace": ns,
-                            "reason": "guard-filtered",
                             "alternate_deps": alt_deps,
                             "remediation": (
                                 f"Namespace '{ns}' is null (record was filtered "
