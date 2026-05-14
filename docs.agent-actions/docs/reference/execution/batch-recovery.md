@@ -170,7 +170,8 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
     "reprompt": {
       "attempts": 2,
       "passed": true,
-      "validation": "check_format"
+      "validation": "check_format",
+      "parse_error_count": 1
     }
   }
 }
@@ -195,6 +196,15 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
 | `attempts` | integer | Number of validation attempts |
 | `passed` | boolean | Whether validation ultimately passed |
 | `validation` | string | Name of the validation UDF used |
+| `parse_error_count` | integer | JSON parse failures (absent when 0) |
+| `schema_fail_count` | integer | Schema validation failures (absent when 0) |
+| `udf_fail_count` | integer | UDF validation failures (absent when 0) |
+
+:::note Sparse serialization
+Counter fields use a sparse contract: absent means zero. Consumers should use `record.get("parse_error_count", 0)`, not assume the key exists.
+
+Counter fields are populated by the **online** reprompt path. Batch paths default to 0 because the batch evaluation loop returns pass/fail without failure-type classification.
+:::
 
 ### Serialization
 

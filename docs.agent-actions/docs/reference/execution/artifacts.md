@@ -144,7 +144,20 @@ Complete telemetry of all system events in JSON Lines format (one event per line
 | Guard | G | `GuardEvaluationEvent`, `GuardPassEvent`, `GuardFailEvent` |
 | Data I/O | FIO | `FileWriteStartedEvent`, `FileWriteCompleteEvent` |
 | Cache | C | `CacheHitEvent`, `CacheMissEvent` |
-| Recovery | R | `RecoveryAttemptEvent`, `RecoverySuccessEvent` |
+| Recovery | R | `RetryExhaustedEvent` (R001), `RepromptValidationFailedEvent` (R002), `RecoveryErrorEvent` (R003), `RepromptRetryEvent` (R004), `RepromptRecoveredEvent` (R005) |
+
+#### Recovery Events (R004/R005)
+
+When reprompt validation retries, the event stream shows each attempt:
+
+- **R004 `RepromptRetryEvent`** — fired before each retry attempt (not on the first attempt). Contains `attempt` (the upcoming 1-indexed attempt), `max_attempts`, and `error` (reason for failure).
+- **R005 `RepromptRecoveredEvent`** — fired when validation passes after retries. Contains `attempt` (the 1-indexed attempt that succeeded) and `validation_name`.
+
+A successful run that needed no retries produces zero R004/R005 events. This is by design — the events only fire when recovery actually occurs.
+
+#### File Lifecycle
+
+Both `events.json` and `errors.json` accumulate across runs by default. When `--fresh` is passed, both files are **deleted before the run starts** and recreated on the first event write. File watchers must handle the file being absent between deletion and first event.
 
 ### Errors Log (`errors.json`)
 
@@ -156,6 +169,10 @@ ERROR-level events only — a filtered subset of `events.json` for quick error d
 {"type": "ValidationFailEvent", "action": "extract_data", "error": "Required field 'name' missing"}
 {"type": "ActionFailedEvent", "action": "generate_content", "error": "Rate limit exceeded"}
 ```
+
+:::caution Monitoring change
+`LLMJSONParseErrorEvent` (code L005) is now WARN level — it no longer appears in `errors.json`. Parse errors that reprompt recovers from are not true errors. Consumers monitoring parse failures must switch to `events.json` filtered by code `L005`.
+:::
 
 :::tip
 When debugging, check `errors.json` first for a quick overview, then dive into `events.json` for the full trace around the failure timestamp.
