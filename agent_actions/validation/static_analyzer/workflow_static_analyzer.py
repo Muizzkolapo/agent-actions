@@ -127,6 +127,9 @@ class WorkflowStaticAnalyzer:
         # because expansion turns safe wildcards into specific refs (false positives).
         guard_skip_observe_warnings = self._check_guard_skipped_observe_refs()
 
+        # Guard-filter + fan-in observe hazard: also before wildcard expansion.
+        filter_fanin_warnings = self._check_filter_fanin_observe_hazard()
+
         # Step 1: Build data flow graph
         self._build_graph()
 
@@ -179,6 +182,9 @@ class WorkflowStaticAnalyzer:
             result.add_warning(warning)
 
         for warning in guard_skip_observe_warnings:
+            result.add_warning(warning)
+
+        for warning in filter_fanin_warnings:
             result.add_warning(warning)
 
         # Step 3: Check for unused dependencies (add as warnings)
@@ -1205,6 +1211,147 @@ class WorkflowStaticAnalyzer:
                             f"Use '{source_name}.*' instead of "
                             f"'{source_name}.{field_name}' to handle the case "
                             f"when the guard skips."
+                        ),
+                    )
+                )
+
+        return warnings
+
+    def _check_filter_fanin_observe_hazard(self) -> list[StaticTypeWarning]:
+        """Warn when observe refs target a filter-guarded action at a fan-in point.
+
+        When action A has ``guard.on_false`` set to ``"filter"`` and a downstream
+        action C depends on both A and B (fan-in), records filtered by A can still
+        arrive at C via B.  The filtered action's namespace is null on those
+        records, so ``observe: ["A.field"]`` crashes at runtime.
+
+        Unlike ``_check_guard_skipped_observe_refs`` (which handles skip on any
+        dep topology), this check specifically targets the fan-in case where
+        filter creates a null namespace via an alternate dependency path.
+
+        Emits one warning per (filtered_action, consumer_action) pair.
+        """
+        warnings: list[StaticTypeWarning] = []
+        actions = self.workflow_config.get("actions", [])
+
+        # Step 1: Identify filter-guarded actions.
+        filter_guarded: set[str] = set()
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "")
+            guard = action.get("guard")
+            if not guard:
+                continue
+            if isinstance(guard, dict):
+                behavior = guard.get("on_false", GuardBehavior.FILTER)
+            elif isinstance(guard, str):
+                behavior = GuardBehavior.FILTER  # string guards default to filter
+            else:
+                continue
+            if behavior == GuardBehavior.FILTER:
+                filter_guarded.add(name)
+
+        if not filter_guarded:
+            return warnings
+
+        # Step 2: Build dependency sets from raw config for each action.
+        action_deps: dict[str, set[str]] = {}
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "unknown")
+            deps_list = action.get("depends_on") or action.get("dependencies", [])
+            deps: set[str] = set()
+            if isinstance(deps_list, list):
+                for dep in deps_list:
+                    if isinstance(dep, str):
+                        deps.add(dep)
+            # Also infer from context_scope references.
+            context_scope = action.get("context_scope", {})
+            if isinstance(context_scope, dict):
+                for directive in ("observe", "passthrough"):
+                    refs = context_scope.get(directive, [])
+                    if isinstance(refs, list):
+                        for ref in refs:
+                            if isinstance(ref, str) and "." in ref:
+                                ns = ref.split(".", 1)[0]
+                                if ns not in SPECIAL_NAMESPACES:
+                                    deps.add(ns)
+            action_deps[name] = deps
+
+        # Step 3: For each consumer with fan-in deps, check observe refs.
+        warned_pairs: set[tuple[str, str]] = set()
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            consumer_name = action.get("name", "unknown")
+            deps = action_deps.get(consumer_name, set())
+
+            # Fan-in requires at least 2 dependencies.
+            if len(deps) < 2:
+                continue
+
+            context_scope = action.get("context_scope", {})
+            if not isinstance(context_scope, dict):
+                continue
+            observe_refs = context_scope.get("observe", [])
+            if not isinstance(observe_refs, list):
+                continue
+
+            # Find observe refs targeting filter-guarded actions (specific fields only).
+            hazard_sources: dict[str, list[str]] = {}  # filtered_action -> [field_refs]
+            for ref in observe_refs:
+                if not isinstance(ref, str) or "." not in ref:
+                    continue
+                source_name, field_name = ref.split(".", 1)
+                if field_name == "*":
+                    continue  # wildcards are null-safe
+                if source_name not in filter_guarded:
+                    continue
+                if source_name not in deps:
+                    continue
+                hazard_sources.setdefault(source_name, []).append(ref)
+
+            if not hazard_sources:
+                continue
+
+            # Identify alternate dependency paths (deps that are NOT the
+            # filter-guarded action and could deliver the same record).
+            for filtered_action, field_refs in hazard_sources.items():
+                alt_deps = deps - {filtered_action}
+                if not alt_deps:
+                    continue  # No alternate path — record can't arrive
+
+                pair = (filtered_action, consumer_name)
+                if pair in warned_pairs:
+                    continue
+                warned_pairs.add(pair)
+
+                alt_dep_names = ", ".join(sorted(alt_deps))
+                example_ref = field_refs[0]
+
+                warnings.append(
+                    StaticTypeWarning(
+                        message=(
+                            f"Action '{consumer_name}' observes '{example_ref}' but "
+                            f"'{filtered_action}' has guard with on_false: \"filter\". "
+                            f"Records may arrive at '{consumer_name}' via alternate "
+                            f"dependency '{alt_dep_names}' with '{filtered_action}' "
+                            f"namespace as null."
+                        ),
+                        location=FieldLocation(
+                            agent_name=consumer_name,
+                            config_field="context_scope.observe",
+                            raw_reference=example_ref,
+                        ),
+                        referenced_agent=filtered_action,
+                        referenced_field=field_refs[0].split(".", 1)[1],
+                        hint=(
+                            f"Consider: (1) Add a matching guard to '{consumer_name}', "
+                            f"(2) Change '{filtered_action}' guard to on_false=\"skip\", "
+                            f"or (3) Use '{filtered_action}.*' (null-safe) instead of "
+                            f"specific fields."
                         ),
                     )
                 )
