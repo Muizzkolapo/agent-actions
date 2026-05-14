@@ -219,7 +219,7 @@ You can filter records by their history to answer questions like "which records 
 
 ### Failure Forensics: `input_snapshot`
 
-When a record reaches a terminal failure state (`failed` or `exhausted`), the disposition store captures the input record at the moment of failure in the `input_snapshot` column of `record_disposition`. This preserves the data that was being processed when the failure occurred — even after batch context maps and temporary recovery files have been cleaned up.
+When a record reaches a terminal failure state (`failed` or `exhausted`) through the result collection pipeline, the disposition store captures the input record at the moment of failure in the `input_snapshot` column of `record_disposition`. This covers online, batch, and file-tool processing paths. The snapshot preserves the data that was being processed when the failure occurred — even after batch context maps and temporary recovery files have been cleaned up.
 
 The snapshot is serialized as JSON and truncated to 10KB by the storage backend. To inspect it, query the store database directly:
 

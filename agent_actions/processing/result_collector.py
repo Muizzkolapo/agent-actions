@@ -116,6 +116,7 @@ def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
     try:
         return json.dumps(source, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
+        logger.debug("Could not serialize input snapshot: %s", type(source).__name__, exc_info=True)
         return None
 
 
