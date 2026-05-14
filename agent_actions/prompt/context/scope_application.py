@@ -38,16 +38,44 @@ def _resolve_missing_field(
     When a dependency's guard triggers skip/filter, the namespace is stored
     as None in field_context.  This matches guard evaluation semantics where
     missing fields resolve to None rather than raising.
+
+    At fan-in points, a record may arrive via an alternate dependency path
+    with the filtered action's namespace as None.  This is logged at warning
+    level to aid debugging.
     """
     if ns_name in prompt_context and prompt_context[ns_name] is None:
-        logger.debug(
-            "[%s NULL-SAFE] '%s' on action '%s': namespace '%s' is "
-            "null (guard-skipped/filtered), resolving field as None",
-            directive.upper(),
-            field_ref,
-            action_name,
-            ns_name,
-        )
+        # Identify alternate namespaces that DID provide data (non-None, non-framework).
+        alt_deps = [
+            k
+            for k, v in prompt_context.items()
+            if v is not None
+            and isinstance(v, dict)
+            and k not in FRAMEWORK_NAMESPACES
+            and k != ns_name
+        ]
+        if alt_deps:
+            logger.warning(
+                "[%s NULL-NAMESPACE] '%s' on action '%s': namespace '%s' is null "
+                "(guard-skipped/filtered). Record arrived via alternate dependency "
+                "path(s): %s. Consider adding a matching guard to '%s' or using "
+                "'%s.*' (null-safe) instead of specific fields.",
+                directive.upper(),
+                field_ref,
+                action_name,
+                ns_name,
+                ", ".join(sorted(alt_deps)),
+                action_name,
+                ns_name,
+            )
+        else:
+            logger.debug(
+                "[%s NULL-SAFE] '%s' on action '%s': namespace '%s' is "
+                "null (guard-skipped/filtered), resolving field as None",
+                directive.upper(),
+                field_ref,
+                action_name,
+                ns_name,
+            )
         return None
 
     field_name = field_ref.split(".", 1)[1] if "." in field_ref else field_ref

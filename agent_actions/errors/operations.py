@@ -38,6 +38,7 @@ class TemplateVariableError(TemplateRenderingError):
         template_line: int | None = None,
         field_context_metadata: dict | None = None,
         storage_hints: dict | None = None,
+        null_namespace_hints: dict | None = None,
     ):
         """
         Initialize TemplateVariableError.
@@ -53,6 +54,8 @@ class TemplateVariableError(TemplateRenderingError):
             field_context_metadata: Metadata about stored vs loaded fields per namespace
             storage_hints: Dict mapping var names to storage info when field exists
                 in storage but wasn't loaded (missing schema declaration)
+            null_namespace_hints: Dict mapping namespace names to remediation info
+                when namespace is null due to guard-filter at a fan-in point
         """
         self.missing_variables = missing_variables
         self.available_variables = available_variables
@@ -62,6 +65,7 @@ class TemplateVariableError(TemplateRenderingError):
         self.template_line = template_line
         self.field_context_metadata = field_context_metadata or {}
         self.storage_hints = storage_hints or {}
+        self.null_namespace_hints = null_namespace_hints or {}
 
         ctx: dict[str, Any] = {
             "missing_variables": missing_variables,
@@ -77,6 +81,16 @@ class TemplateVariableError(TemplateRenderingError):
             ctx["field_context_metadata"] = field_context_metadata
         if storage_hints:
             ctx["storage_hints"] = storage_hints
+        if null_namespace_hints:
+            ctx["null_namespace_hints"] = null_namespace_hints
 
-        msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
+        if null_namespace_hints:
+            ns_names = ", ".join(sorted(null_namespace_hints.keys()))
+            msg = (
+                f"Template for '{agent_name}' failed: namespace(s) "
+                f"'{ns_names}' null (guard-filtered). "
+                + next(iter(null_namespace_hints.values()))["remediation"]
+            )
+        else:
+            msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
         super().__init__(msg, context=ctx, cause=cause)

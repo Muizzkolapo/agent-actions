@@ -421,6 +421,37 @@ class PromptPreparationService:
                                 }
                                 break
 
+            # Detect null namespaces from guard-filter at fan-in points.
+            # When a NoneType attribute error occurs and the namespace is None
+            # in prompt_context, this is the filter+fan-in hazard (spec 415).
+            null_namespace_hints: dict[str, dict[str, Any]] = {}
+            if "has no attribute" in error_str:
+                # Find namespaces in prompt_context that are None.
+                null_ns = [k for k, v in prompt_context.items() if v is None]
+                if null_ns:
+                    # Identify alternate deps that DID provide data.
+                    alt_deps = [
+                        k
+                        for k, v in prompt_context.items()
+                        if v is not None and isinstance(v, dict)
+                    ]
+                    for ns in null_ns:
+                        null_namespace_hints[ns] = {
+                            "namespace": ns,
+                            "reason": "guard-filtered",
+                            "alternate_deps": alt_deps,
+                            "remediation": (
+                                f"Namespace '{ns}' is null (record was filtered "
+                                f"by '{ns}' guard). The record arrived via "
+                                f"alternate dependency path "
+                                f"'{', '.join(sorted(alt_deps))}'. Either: "
+                                f"(1) Add a guard to '{agent_name}' to exclude "
+                                f"these records, (2) Change '{ns}' guard to "
+                                f"on_false=\"skip\", or (3) Remove '{ns}' fields "
+                                f"from '{agent_name}' observe."
+                            ),
+                        }
+
             raise TemplateVariableError(
                 missing_variables=missing,
                 available_variables=available_refs,
@@ -430,6 +461,7 @@ class PromptPreparationService:
                 namespace_context=namespace_context,
                 field_context_metadata=field_context_metadata if field_context_metadata else None,
                 storage_hints=storage_hints if storage_hints else None,
+                null_namespace_hints=null_namespace_hints if null_namespace_hints else None,
             ) from e
 
     @staticmethod
