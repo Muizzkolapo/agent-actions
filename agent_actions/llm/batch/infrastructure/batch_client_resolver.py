@@ -96,6 +96,8 @@ class BatchClientResolver:
                 client_config["api_key"] = BaseClient.get_api_key(agent_config)
             if agent_config.get("base_url"):
                 client_config["base_url"] = agent_config["base_url"]
+            if agent_config.get("batch_max_workers") is not None:
+                client_config["batch_max_workers"] = agent_config["batch_max_workers"]
 
             client = BatchClientFactory.create_client(client_type, client_config)
 

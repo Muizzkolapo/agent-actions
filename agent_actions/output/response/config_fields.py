@@ -55,6 +55,8 @@ SIMPLE_CONFIG_FIELDS = {
     # Limit controls (None = unlimited)
     "record_limit": None,
     "file_limit": None,
+    # Batch concurrency (Ollama only; None = use env var or default)
+    "batch_max_workers": None,
 }
 
 
