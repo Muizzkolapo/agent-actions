@@ -29,12 +29,15 @@ from agent_actions.processing.types import (
     RecoveryMetadata,
 )
 from agent_actions.record.reasons import BATCH_NOT_RETURNED, GUARD_SKIP, UPSTREAM_UNPROCESSED
-from agent_actions.record.state import CASCADE_BLOCKING_STATES
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
-_CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(s.value for s in CASCADE_BLOCKING_STATES)
+
+def _is_cascade_blocked(row: dict[str, Any]) -> bool:
+    """Return True if the row's _state is a cascade-blocking value."""
+    return row.get("_state") in CASCADE_BLOCKING_VALUES
 
 
 @dataclass
@@ -493,11 +496,15 @@ class BatchResultStrategy:
         record_index: int,
     ) -> ProcessingResult:
         """Build an UNPROCESSED result for a passthrough record."""
-        raw_state = original_row.get("_state")
-        if raw_state in _CASCADE_BLOCKING_VALUES:
-            reason = UPSTREAM_UNPROCESSED
+        # Prefer skip_reason set during preparation (single authority).
+        # Fall back to _state check for records that bypassed prep.
+        skip_reason = BatchContextMetadata.get_skip_reason(original_row)
+        if skip_reason:
+            reason = skip_reason
         elif BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED:
             reason = GUARD_SKIP
+        elif _is_cascade_blocked(original_row):
+            reason = UPSTREAM_UNPROCESSED
         else:
             reason = BATCH_NOT_RETURNED
 

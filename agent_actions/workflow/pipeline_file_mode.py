@@ -326,10 +326,9 @@ def prefilter_by_guard(
     When no guard is configured, returns ``(data, [], original_data or data)``.
 
     Note:
-        Guard evaluation uses ``context={}`` because the pre-filter runs
-        before processing context (passthrough fields, source data) is
-        established.  Guard clauses in FILE-mode pre-filter can only
-        reference item-level fields, not workflow context variables.
+        Guard evaluation uses the record's existing content as context so
+        that guard clauses can reference upstream namespace fields — matching
+        the per-record guard context used in batch mode.
 
     Returns:
         (passing, skipped, original_passing)
@@ -356,11 +355,10 @@ def prefilter_by_guard(
     for idx, item in enumerate(data):
         eval_item = get_existing_content(item)
 
-        # context={} — see Note in docstring.
         result = evaluator.evaluate(
             item=eval_item,
             guard_config=guard_config,
-            context={},
+            context=eval_item,
         )
 
         if result.should_execute:
