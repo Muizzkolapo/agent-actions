@@ -263,7 +263,7 @@ class ActionConfig(BaseModel):
 
     # --- Batch concurrency (Ollama only) ---
     batch_max_workers: int | None = Field(
-        default=None, ge=1, description="Max concurrent workers for Ollama batch processing"
+        default=None, ge=1, le=32, description="Max concurrent workers for Ollama batch processing"
     )
 
     # --- Expander-consumed keys ---
@@ -393,7 +393,7 @@ class DefaultsConfig(BaseModel):
 
     # --- Batch concurrency (Ollama only) ---
     batch_max_workers: int | None = Field(
-        default=None, ge=1, description="Default max concurrent workers for Ollama batch processing"
+        default=None, ge=1, le=32, description="Default max concurrent workers for Ollama batch processing"
     )
 
     @field_validator("retry", mode="before")

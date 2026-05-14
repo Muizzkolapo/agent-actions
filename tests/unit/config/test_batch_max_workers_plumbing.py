@@ -42,6 +42,14 @@ class TestSchemaAcceptsBatchMaxWorkers:
         config = DefaultsConfig.model_validate({"batch_max_workers": 6})
         assert config.batch_max_workers == 6
 
+    def test_action_config_accepts_at_limit(self):
+        config = ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": 32})
+        assert config.batch_max_workers == 32
+
+    def test_action_config_rejects_above_limit(self):
+        with pytest.raises(ValidationError, match="batch_max_workers"):
+            ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": 33})
+
     def test_defaults_config_rejects_zero(self):
         with pytest.raises(ValidationError, match="batch_max_workers"):
             DefaultsConfig.model_validate({"batch_max_workers": 0})
