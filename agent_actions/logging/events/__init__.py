@@ -118,6 +118,8 @@ from agent_actions.logging.events.validation_events import (
     GuardEvaluationErrorEvent,
     GuardEvaluationTimeoutEvent,
     RecoveryErrorEvent,
+    RepromptRecoveredEvent,
+    RepromptRetryEvent,
     RepromptValidationFailedEvent,
     RetryExhaustedEvent,
     ValidationCompleteEvent,
@@ -195,6 +197,8 @@ __all__ = [
     # Recovery
     "RetryExhaustedEvent",
     "RepromptValidationFailedEvent",
+    "RepromptRetryEvent",
+    "RepromptRecoveredEvent",
     "RecoveryErrorEvent",
     # Configuration
     "ConfigLoadStartEvent",

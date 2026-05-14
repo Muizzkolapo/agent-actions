@@ -62,14 +62,24 @@ class RepromptMetadata:
     attempts: int
     passed: bool
     validation: str
+    parse_error_count: int = 0
+    schema_fail_count: int = 0
+    udf_fail_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        result = {
             "attempts": self.attempts,
             "passed": self.passed,
             "validation": self.validation,
         }
+        if self.parse_error_count:
+            result["parse_error_count"] = self.parse_error_count
+        if self.schema_fail_count:
+            result["schema_fail_count"] = self.schema_fail_count
+        if self.udf_fail_count:
+            result["udf_fail_count"] = self.udf_fail_count
+        return result
 
 
 @dataclass

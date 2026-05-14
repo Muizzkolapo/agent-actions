@@ -18,6 +18,8 @@ __all__ = [
     "GuardEvaluationErrorEvent",
     "RetryExhaustedEvent",
     "RepromptValidationFailedEvent",
+    "RepromptRetryEvent",
+    "RepromptRecoveredEvent",
     "RecoveryErrorEvent",
 ]
 
@@ -290,6 +292,63 @@ class RepromptValidationFailedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "R002"
+
+
+@dataclass
+class RepromptRetryEvent(BaseEvent):
+    """Fired before each reprompt retry attempt."""
+
+    action_name: str = ""
+    attempt: int = 0
+    max_attempts: int = 0
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.RECOVERY
+        self.message = (
+            f"Reprompt retry for '{self.action_name}' "
+            f"(attempt {self.attempt}/{self.max_attempts}): {self.error}"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "attempt": self.attempt,
+            "max_attempts": self.max_attempts,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "R004"
+
+
+@dataclass
+class RepromptRecoveredEvent(BaseEvent):
+    """Fired when reprompt validation succeeds after retries."""
+
+    action_name: str = ""
+    attempt: int = 0
+    max_attempts: int = 0
+    validation_name: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.RECOVERY
+        self.message = (
+            f"Reprompt recovered for '{self.action_name}' "
+            f"on attempt {self.attempt}/{self.max_attempts} "
+            f"(validation: {self.validation_name})"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "attempt": self.attempt,
+            "max_attempts": self.max_attempts,
+            "validation_name": self.validation_name,
+        }
+
+    @property
+    def code(self) -> str:
+        return "R005"
 
 
 @dataclass

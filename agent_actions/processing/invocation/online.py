@@ -169,6 +169,9 @@ class OnlineStrategy(InvocationStrategy):
                 attempts=reprompt_result.attempts,
                 passed=reprompt_result.passed,
                 validation=reprompt_result.validation_name,
+                parse_error_count=reprompt_result.parse_error_count,
+                schema_fail_count=reprompt_result.schema_fail_count,
+                udf_fail_count=reprompt_result.udf_fail_count,
             )
 
         return reprompt_result.response, reprompt_result.executed, recovery_metadata
@@ -205,6 +208,9 @@ class OnlineStrategy(InvocationStrategy):
                 attempts=reprompt_result.attempts,
                 passed=reprompt_result.passed,
                 validation=reprompt_result.validation_name,
+                parse_error_count=reprompt_result.parse_error_count,
+                schema_fail_count=reprompt_result.schema_fail_count,
+                udf_fail_count=reprompt_result.udf_fail_count,
             )
 
         if reprompt_result.exhausted:
