@@ -16,7 +16,10 @@ from agent_actions.errors import ConfigurationError, TemplateVariableError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
-from agent_actions.prompt.context.scope_application import apply_context_scope
+from agent_actions.prompt.context.scope_application import (
+    FRAMEWORK_NAMESPACES,
+    apply_context_scope,
+)
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 from agent_actions.prompt.context.static_loader import (
     StaticDataLoader,
@@ -424,12 +427,16 @@ class PromptPreparationService:
             # Null namespaces from guard-filter at fan-in (spec 415).
             null_namespace_hints: dict[str, dict[str, Any]] = {}
             if "has no attribute" in error_str:
-                null_ns = [k for k, v in prompt_context.items() if v is None]
+                null_ns = [
+                    k
+                    for k, v in prompt_context.items()
+                    if v is None and k not in FRAMEWORK_NAMESPACES
+                ]
                 if null_ns:
                     alt_deps = [
                         k
                         for k, v in prompt_context.items()
-                        if v is not None and isinstance(v, dict)
+                        if v is not None and isinstance(v, dict) and k not in FRAMEWORK_NAMESPACES
                     ]
                     for ns in null_ns:
                         null_namespace_hints[ns] = {

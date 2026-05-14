@@ -139,8 +139,8 @@ class TestTemplateNullNamespaceError:
             )
 
         msg = str(exc_info.value)
-        assert "null" in msg.lower()
-        assert "guard-filtered" in msg.lower() or "filtered" in msg.lower()
+        assert "null (guard-filtered)" in msg.lower()
+        assert "alternate dependency path" in msg.lower()
 
     def test_normal_undefined_error_has_no_null_hints(self):
         """Regular undefined variable error -> no null_namespace_hints."""
