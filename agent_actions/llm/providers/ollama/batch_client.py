@@ -5,9 +5,7 @@ Both vendors use the same in-process loop (no real batch API exists for
 either). The ``cloud`` flag controls client construction (Bearer auth)
 and whether the ``format`` param is passed to ``client.chat()``.
 
-Records are processed concurrently via ``ThreadPoolExecutor``.  Concurrency
-is controlled by ``OLLAMA_BATCH_MAX_WORKERS`` (env var) or the constructor
-``max_workers`` parameter.  Default is 1 (sequential, matching prior behavior).
+Records are processed sequentially via ``ThreadPoolExecutor(max_workers=1)``.
 
 When Ollama ships a real cloud batch API, add a
 ``_submit_to_cloud_batch_api`` branch inside ``_submit_to_provider_api``.
@@ -53,11 +51,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         *,
         vendor_slug: str = "ollama_local",
         cloud: bool = False,
-        max_workers: int | None = None,
     ):
         self.vendor_slug = vendor_slug
         self.cloud = cloud
-        self._max_workers = max_workers
 
         if cloud:
             self.base_url = base_url or os.getenv("OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL)
@@ -121,43 +117,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     ) -> Path:
         return self._write_jsonl_file(tasks, batch_dir, batch_name, self.vendor_slug)
 
-    _MAX_WORKERS_LIMIT: int = 32
-
-    def _get_max_workers(self) -> int:
-        """Resolve batch concurrency: constructor param > env var > class default."""
-        default = (
-            OllamaCloudDefaults.BATCH_MAX_WORKERS
-            if self.cloud
-            else OllamaDefaults.BATCH_MAX_WORKERS
-        )
-
-        if self._max_workers is not None:
-            val = self._max_workers
-        else:
-            env_val = os.getenv("OLLAMA_BATCH_MAX_WORKERS")
-            if env_val:
-                try:
-                    val = int(env_val)
-                except ValueError:
-                    logger.warning(
-                        "OLLAMA_BATCH_MAX_WORKERS=%s is not an integer, using default", env_val
-                    )
-                    return default
-            else:
-                return default
-
-        if val < 1:
-            logger.warning("batch_max_workers=%s invalid (must be >= 1), using default", val)
-            return default
-        if val > self._MAX_WORKERS_LIMIT:
-            logger.warning(
-                "batch_max_workers=%s exceeds limit of %s, clamping",
-                val,
-                self._MAX_WORKERS_LIMIT,
-            )
-            return self._MAX_WORKERS_LIMIT
-        return val
-
     def _process_single_task(
         self, task: dict[str, Any], idx: int, total: int
     ) -> dict[str, Any] | None:
@@ -220,7 +179,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             }
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
-        """Process batch with concurrent workers (default: 1 = sequential)."""
+        """Process batch sequentially (no real batch API for Ollama)."""
         batch_id = f"batch_{uuid.uuid4().hex}"
 
         tasks: list[dict[str, Any]] = []
@@ -230,10 +189,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     tasks.append(json.loads(line))
 
         total = len(tasks)
-        max_workers = self._get_max_workers()
         results: list[dict[str, Any]] = []
 
-        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ollama_batch") as pool:
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="ollama_batch") as pool:
             futures: dict[Future[dict[str, Any] | None], str] = {
                 pool.submit(self._process_single_task, task, idx, total): task["custom_id"]
                 for idx, task in enumerate(tasks)

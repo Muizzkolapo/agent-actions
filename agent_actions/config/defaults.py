@@ -18,14 +18,12 @@ class OllamaDefaults:
     """Defaults for Ollama local LLM provider."""
 
     BASE_URL: str = "http://localhost:11434"
-    BATCH_MAX_WORKERS: int = 1
 
 
 class OllamaCloudDefaults:
     """Defaults for Ollama Cloud provider (ollama.com)."""
 
     BASE_URL: str = "https://ollama.com"
-    BATCH_MAX_WORKERS: int = 1
 
 
 class ApiDefaults:

@@ -128,76 +128,12 @@ def _make_task(custom_id: str) -> dict:
     }
 
 
-class TestOllamaBatchConcurrency:
-    """Tests for concurrent batch processing and max_workers config."""
+class TestOllamaBatchProcessing:
+    """Tests for batch processing via ThreadPoolExecutor."""
 
-    def test_default_max_workers_is_one(self):
-        """No behavior change without opt-in."""
+    def test_processes_all_records(self, tmp_path):
+        """All custom_ids present in results."""
         client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_from_constructor(self):
-        """Constructor param is used directly."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=4)
-        assert client._get_max_workers() == 4
-
-    def test_max_workers_from_env_var(self, monkeypatch):
-        """Env var OLLAMA_BATCH_MAX_WORKERS is respected."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "6")
-        client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 6
-
-    def test_max_workers_constructor_overrides_env(self, monkeypatch):
-        """Constructor param takes precedence over env var."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "8")
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=2)
-        assert client._get_max_workers() == 2
-
-    def test_max_workers_env_invalid_uses_default(self, monkeypatch):
-        """Non-integer env var falls back to default."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "not_a_number")
-        client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_env_zero_uses_default(self, monkeypatch):
-        """Zero env var falls back to default (must be >= 1)."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "0")
-        client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_constructor_negative_uses_default(self):
-        """Negative constructor value falls back to default."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=-1)
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_constructor_zero_uses_default(self):
-        """Zero constructor value falls back to default."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=0)
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_clamped_at_limit(self):
-        """Values above limit are clamped to 32."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=500)
-        assert client._get_max_workers() == 32
-
-    def test_max_workers_at_limit_is_allowed(self):
-        """Exactly at the limit is fine."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=32)
-        assert client._get_max_workers() == 32
-
-    def test_cloud_default_max_workers(self):
-        """Cloud client also defaults to 1."""
-        client = OllamaBatchClient(
-            base_url="https://ollama.com",
-            api_key="test-key-1234567890",
-            cloud=True,
-            vendor_slug="ollama_cloud",
-        )
-        assert client._get_max_workers() == 1
-
-    def test_concurrent_processes_all_records(self, tmp_path):
-        """All custom_ids present in results with max_workers=4."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=4)
         client.client = MagicMock()
         client.client.chat = MagicMock(return_value=_make_ollama_response())
 
@@ -223,13 +159,12 @@ class TestOllamaBatchConcurrency:
         expected_ids = {f"rec-{i}" for i in range(10)}
         assert result_ids == expected_ids
 
-    def test_concurrent_error_isolation(self, tmp_path):
+    def test_error_isolation(self, tmp_path):
         """One task error doesn't kill others."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=3)
+        client = OllamaBatchClient(base_url="http://localhost:11434")
         client.client = MagicMock()
 
         def side_effect(model, messages, options, format):
-            # Fail for rec-2 only
             if messages == [{"role": "user", "content": "fail"}]:
                 raise RuntimeError("simulated error")
             return _make_ollama_response()
@@ -237,7 +172,6 @@ class TestOllamaBatchConcurrency:
         client.client.chat = MagicMock(side_effect=side_effect)
 
         tasks = [_make_task(f"rec-{i}") for i in range(5)]
-        # Make rec-2 trigger the error
         tasks[2]["body"]["messages"] = [{"role": "user", "content": "fail"}]
 
         input_file = tmp_path / "batch" / "input.jsonl"
@@ -261,8 +195,8 @@ class TestOllamaBatchConcurrency:
         assert error_results[0]["custom_id"] == "rec-2"
         assert len(success_results) == 4
 
-    def test_sequential_preserved_with_default(self, tmp_path):
-        """max_workers=1 (default) produces correct results."""
+    def test_sequential_produces_correct_results(self, tmp_path):
+        """Sequential processing produces correct results."""
         client = OllamaBatchClient(base_url="http://localhost:11434")
         client.client = MagicMock()
         client.client.chat = MagicMock(return_value=_make_ollama_response("sequential"))

@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove batch_max_workers config plumbing from Ollama batch client (never worked end-to-end)"
+time: 2026-05-14T04:09:00.000000Z
