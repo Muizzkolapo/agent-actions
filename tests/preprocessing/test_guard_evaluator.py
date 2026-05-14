@@ -767,3 +767,117 @@ class TestNamespacedContentGuardEvaluation:
         # First clause matches, but second field is missing → whole condition not matched
         assert result.should_execute is False
         assert result.behavior == "skip"
+
+
+class TestGuardMissingFieldLogNoise:
+    """Spec 408: missing-field WARNING log removed; G002 event preserved."""
+
+    @pytest.fixture(scope="class")
+    def evaluator(self):
+        from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter
+
+        return GuardEvaluator(guard_filter=GuardFilter())
+
+    def test_reclassified_missing_field_no_warning_log(self, evaluator):
+        """Missing field path must not emit WARNING from guard_filter or evaluator."""
+        import logging
+
+        loggers_to_check = [
+            logging.getLogger("agent_actions.input.preprocessing.filtering.guard_filter"),
+            logging.getLogger("agent_actions.input.preprocessing.filtering.evaluator"),
+        ]
+        captured: list[logging.LogRecord] = []
+
+        class _CaptureHandler(logging.Handler):
+            def emit(self, rec: logging.LogRecord) -> None:
+                captured.append(rec)
+
+        handler = _CaptureHandler(level=logging.WARNING)
+        for lg in loggers_to_check:
+            lg.addHandler(handler)
+
+        try:
+            result = evaluator.evaluate(
+                {"content": {"validate": {"pass": True}}, "source_guid": "sg-1"},
+                {"clause": "nonexistent_action.field == true", "scope": "item", "behavior": "skip"},
+            )
+        finally:
+            for lg in loggers_to_check:
+                lg.removeHandler(handler)
+
+        assert result.should_execute is False
+        assert result.behavior == "skip"
+
+        noise = [
+            r
+            for r in captured
+            if "Error evaluating guard" in r.getMessage()
+            or "Guard evaluation failed" in r.getMessage()
+        ]
+        assert noise == [], f"WARNING noise found: {[r.getMessage() for r in noise]}"
+
+    def test_g002_event_still_fires_for_missing_field(self, evaluator):
+        """G002 event must still fire from filter_item — skip.py callers depend on it."""
+        from unittest.mock import patch
+
+        from agent_actions.logging.events.validation_events import GuardEvaluationErrorEvent
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.guard_filter.fire_event"
+        ) as mock_fire:
+            result = evaluator.evaluate(
+                {"content": {"validate": {"pass": True}}, "source_guid": "sg-1"},
+                {"clause": "nonexistent_action.field == true", "scope": "item", "behavior": "skip"},
+            )
+
+        assert result.should_execute is False
+
+        g002_events = [
+            c for c in mock_fire.call_args_list if isinstance(c[0][0], GuardEvaluationErrorEvent)
+        ]
+        assert len(g002_events) == 1, f"Expected exactly 1 G002 event, got {len(g002_events)}"
+
+    def test_non_missing_field_data_error_not_reclassified(self, evaluator):
+        """DATA errors without 'does not exist' are not reclassified."""
+        from agent_actions.input.preprocessing.filtering.guard_filter import (
+            ErrorCategory,
+            FilterResult,
+        )
+
+        raw = FilterResult(
+            success=False,
+            error="Error evaluating guard condition: cannot compare types",
+            error_category=ErrorCategory.DATA,
+        )
+        result = evaluator._reclassify_missing_field_error(raw, "x > y")
+
+        assert result.error_category == ErrorCategory.DATA
+        assert not result.success
+
+    def test_flat_field_semantic_reclassification_still_warns(self, evaluator):
+        """Flat field 'Did you mean:' path is reclassified to SEMANTIC and still warns."""
+        import logging
+
+        target_logger = logging.getLogger("agent_actions.input.preprocessing.filtering.evaluator")
+        captured: list[logging.LogRecord] = []
+
+        class _CaptureHandler(logging.Handler):
+            def emit(self, rec: logging.LogRecord) -> None:
+                captured.append(rec)
+
+        handler = _CaptureHandler(level=logging.WARNING)
+        target_logger.addHandler(handler)
+
+        try:
+            result = evaluator.evaluate(
+                {"content": {"validate": {"pass": True}}, "source_guid": "sg-1"},
+                {"clause": "pass == false", "scope": "item", "behavior": "skip"},
+            )
+        finally:
+            target_logger.removeHandler(handler)
+
+        assert result.should_execute is False
+        assert result.behavior == "skip"
+
+        flat_field_warnings = [r for r in captured if "flat field reference" in r.getMessage()]
+        assert len(flat_field_warnings) > 0, "Flat field reference should still warn"

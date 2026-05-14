@@ -166,8 +166,11 @@ class GuardFilter:
         except ValueError as e:
             execution_time = time.time() - start_time
             error_msg = f"Error evaluating guard condition: {str(e)}"
-            logger.warning(error_msg, exc_info=True)
 
+            # Fire the G002 event for all callers (evaluator, skip.py).
+            # No WARNING log here — the evaluator's _reclassify may
+            # downgrade expected missing-field errors to DEBUG, so it
+            # owns the log-level decision.
             fire_event(
                 GuardEvaluationErrorEvent(
                     guard_clause=request.condition,
