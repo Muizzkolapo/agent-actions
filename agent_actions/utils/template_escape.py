@@ -65,11 +65,12 @@ def escape_jinja_in_inline_code(template: str) -> str:
     if "{" not in template:
         return template
 
-    def _escape_match(match: re.Match) -> str:
-        backticks = match.group(1)
-        content = match.group(2)
+    def _escape_match(match: re.Match[str]) -> str:
+        backticks: str = match.group(1)
+        content: str = match.group(2)
         if _JINJA_BLOCK_OR_VAR.search(content):
             return f"{backticks}{{% raw %}}{content}{{% endraw %}}{backticks}"
-        return match.group(0)
+        return str(match.group(0))
 
-    return _INLINE_CODE_RE.sub(_escape_match, template)
+    result: str = _INLINE_CODE_RE.sub(_escape_match, template)
+    return result
