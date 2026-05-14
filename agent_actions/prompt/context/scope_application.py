@@ -55,8 +55,8 @@ def _resolve_missing_field(
         if alt_deps:
             logger.warning(
                 "[%s NULL-NAMESPACE] '%s' on action '%s': namespace '%s' is null "
-                "(guard-skipped/filtered). Record arrived via alternate dependency "
-                "path(s): %s. Consider adding a matching guard to '%s' or using "
+                "(likely guard-filtered or guard-skipped). Other namespaces "
+                "present: %s. Consider adding a guard to '%s' or using "
                 "'%s.*' (null-safe) instead of specific fields.",
                 directive.upper(),
                 field_ref,

@@ -123,8 +123,8 @@ class TestTemplateNullNamespaceError:
         assert "other_dep" in hint["alternate_deps"]
         assert "filtered" in hint["remediation"].lower()
 
-    def test_error_message_includes_remediation(self):
-        """The error message itself contains remediation text."""
+    def test_error_message_appends_remediation_to_original(self):
+        """Error message includes both the original missing-var text AND remediation."""
         prompt_context = {
             "filtered_action": None,
             "other_dep": {"score": 42},
@@ -139,8 +139,11 @@ class TestTemplateNullNamespaceError:
             )
 
         msg = str(exc_info.value)
-        assert "null (guard-filtered)" in msg.lower()
-        assert "alternate dependency path" in msg.lower()
+        # Original message preserved.
+        assert "undefined variables" in msg.lower()
+        # Remediation appended.
+        assert "null" in msg.lower()
+        assert "null-safe" in msg.lower()
 
     def test_normal_undefined_error_has_no_null_hints(self):
         """Regular undefined variable error -> no null_namespace_hints."""
@@ -157,6 +160,29 @@ class TestTemplateNullNamespaceError:
             )
 
         err = exc_info.value
+        assert not err.null_namespace_hints
+
+    def test_typo_on_non_null_ns_with_null_ns_coexisting_no_false_blame(self):
+        """Typo on a non-null namespace while a null namespace coexists -> no false blame.
+
+        This is the key false-positive regression test: dep_a is None but
+        the error is {{ good.nonexistent_field }} — dep_a should NOT be blamed.
+        """
+        prompt_context = {
+            "dep_a": None,
+            "good": {"x": 1},
+        }
+        raw_prompt = "{{ good.nonexistent_field }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        err = exc_info.value
+        # dep_a is None but was never accessed — must NOT appear in hints.
         assert not err.null_namespace_hints
 
     def test_context_dict_includes_null_namespace_hints(self):

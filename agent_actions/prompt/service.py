@@ -424,32 +424,51 @@ class PromptPreparationService:
                                 }
                                 break
 
-            # Null namespaces from guard-filter at fan-in (spec 415).
+            # Null namespace hint for guard-filter at fan-in (spec 415).
+            # Only triggers when Jinja dereferences None (not a dict missing
+            # a key), and only blames the namespace the template actually
+            # tried to access — not every null namespace in scope.
             null_namespace_hints: dict[str, dict[str, Any]] = {}
-            if "has no attribute" in error_str:
-                null_ns = [
-                    k
-                    for k, v in prompt_context.items()
-                    if v is None and k not in FRAMEWORK_NAMESPACES
-                ]
-                if null_ns:
-                    alt_deps = [
+            if error_str.startswith("'None' has no attribute"):
+                attribute_name = missing[0] if missing else None
+                if attribute_name:
+                    # Find which null namespace the template referenced with
+                    # this attribute by scanning for {{ ns.attr }} patterns.
+                    import re as _re
+
+                    null_ns_set = {
                         k
                         for k, v in prompt_context.items()
-                        if v is not None and isinstance(v, dict) and k not in FRAMEWORK_NAMESPACES
-                    ]
-                    for ns in null_ns:
-                        null_namespace_hints[ns] = {
-                            "alternate_deps": alt_deps,
+                        if v is None and k not in FRAMEWORK_NAMESPACES
+                    }
+                    blamed_ns: str | None = None
+                    for ns in null_ns_set:
+                        if _re.search(
+                            r"\{\{[\s\-]*" + _re.escape(ns) + r"\." + _re.escape(attribute_name),
+                            raw_prompt,
+                        ):
+                            blamed_ns = ns
+                            break
+
+                    if blamed_ns:
+                        other_ns = [
+                            k
+                            for k, v in prompt_context.items()
+                            if v is not None
+                            and isinstance(v, dict)
+                            and k not in FRAMEWORK_NAMESPACES
+                        ]
+                        null_namespace_hints[blamed_ns] = {
+                            "alternate_deps": other_ns,
                             "remediation": (
-                                f"Namespace '{ns}' is null (record was filtered "
-                                f"by '{ns}' guard). The record arrived via "
-                                f"alternate dependency path "
-                                f"'{', '.join(sorted(alt_deps))}'. Either: "
-                                f"(1) Add a guard to '{agent_name}' to exclude "
-                                f"these records, (2) Change '{ns}' guard to "
-                                f"on_false=\"skip\", or (3) Remove '{ns}' fields "
-                                f"from '{agent_name}' observe."
+                                f"Namespace '{blamed_ns}' is null (likely "
+                                f"guard-filtered or guard-skipped). Other "
+                                f"namespaces present: "
+                                f"{', '.join(sorted(other_ns)) if other_ns else '(none)'}. "
+                                f"Consider adding a guard to '{agent_name}' to "
+                                f"exclude these records, or using "
+                                f"'{blamed_ns}.*' (null-safe) instead of "
+                                f"specific fields."
                             ),
                         }
 

@@ -81,14 +81,10 @@ class TemplateVariableError(TemplateRenderingError):
             ctx["field_context_metadata"] = field_context_metadata
         if storage_hints:
             ctx["storage_hints"] = storage_hints
+        msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
         if null_namespace_hints:
             ctx["null_namespace_hints"] = null_namespace_hints
-            ns_names = ", ".join(sorted(null_namespace_hints.keys()))
-            msg = (
-                f"Template for '{agent_name}' failed: namespace(s) "
-                f"'{ns_names}' null (guard-filtered). "
-                + next(iter(null_namespace_hints.values()))["remediation"]
-            )
-        else:
-            msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
+            remediation = next(iter(null_namespace_hints.values())).get("remediation", "")
+            if remediation:
+                msg += f" — {remediation}"
         super().__init__(msg, context=ctx, cause=cause)
