@@ -166,14 +166,10 @@ class GuardFilter:
         except ValueError as e:
             execution_time = time.time() - start_time
             error_msg = f"Error evaluating guard condition: {str(e)}"
-            logger.warning(error_msg, exc_info=True)
 
-            fire_event(
-                GuardEvaluationErrorEvent(
-                    guard_clause=request.condition,
-                    error=str(e),
-                )
-            )
+            # No WARNING/event here — the evaluator decides log severity
+            # after _reclassify_missing_field_error (which may downgrade
+            # expected missing-field errors to DEBUG).
 
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)
