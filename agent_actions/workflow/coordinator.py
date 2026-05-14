@@ -282,6 +282,7 @@ class AgentWorkflow:
         # Clear event log files so --fresh gives a clean debugging slate.
         # JSONFileHandler opens lazily (on first flush), so deleting between
         # handler init and first event write is safe.
+        # Path convention mirrors LoggerFactory.initialize() (logging/factory.py).
         project_root = self.config.resolve_project_root()
         target_dir = project_root / "agent_io" / "target"
         for events_file in ("events.json", "errors.json"):

@@ -57,7 +57,13 @@ class RetryMetadata:
 
 @dataclass
 class RepromptMetadata:
-    """Metadata for reprompt recovery, stored in output _recovery.reprompt field."""
+    """Metadata for reprompt recovery, stored in output _recovery.reprompt field.
+
+    Failure-type counters (``parse_error_count``, ``schema_fail_count``,
+    ``udf_fail_count``) are populated by the **online** reprompt path only.
+    Batch paths default to 0 because ``EvaluationLoop.split()`` returns
+    pass/fail without failure-type classification.
+    """
 
     attempts: int
     passed: bool

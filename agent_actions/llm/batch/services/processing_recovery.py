@@ -296,6 +296,7 @@ def handle_reprompt_recovery(
                     attempt=next_attempt,
                     max_attempts=state.reprompt_max_attempts,
                     error=f"{len(still_failing)} records failed validation",
+                    failed_count=len(still_failing),
                 )
             )
             for fr in still_failing:
@@ -450,6 +451,7 @@ def check_and_submit_reprompt(
             attempt=next_attempt,
             max_attempts=max_attempts,
             error=f"{len(still_failing)} records failed validation",
+            failed_count=len(still_failing),
         )
     )
     logger.info(

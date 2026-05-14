@@ -215,6 +215,7 @@ def validate_and_reprompt(
                 attempt=attempt + 2,
                 max_attempts=max_attempts,
                 error=f"{len(still_failing)} records failed validation",
+                failed_count=len(still_failing),
             )
         )
 

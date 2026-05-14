@@ -1137,6 +1137,38 @@ class TestRepromptObservability:
         assert event.code == "R002"
         assert "check_fn" in event.error
 
+    def test_batch_exhaustion_fires_r002_before_raise(self):
+        """R002 fires even when on_exhausted='raise' — audit before exception."""
+        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
+
+        results = [BatchResult(custom_id="rec_1", content={"x": 1}, success=True)]
+
+        with patch("agent_actions.processing.evaluation.exhaustion.fire_event") as mock_fire:
+            with pytest.raises(RuntimeError, match="exhausted"):
+                apply_exhausted_reprompt(
+                    results=results,
+                    failed_ids={"rec_1"},
+                    validation_name="check_fn",
+                    attempt=3,
+                    on_exhausted="raise",
+                )
+
+        mock_fire.assert_called_once()
+        event = mock_fire.call_args[0][0]
+        assert isinstance(event, RepromptValidationFailedEvent)
+
+    def test_retry_event_has_failed_count_field(self):
+        """RepromptRetryEvent exposes failed_count in structured data."""
+        event = RepromptRetryEvent(
+            action_name="batch",
+            attempt=2,
+            max_attempts=3,
+            error="5 records failed validation",
+            failed_count=5,
+        )
+        assert event.data["failed_count"] == 5
+        assert event.failed_count == 5
+
     def test_fresh_run_clears_event_files(self, tmp_path):
         """_clear_for_fresh_run deletes events.json and errors.json."""
         target_dir = tmp_path / "agent_io" / "target"

@@ -50,6 +50,15 @@ def apply_exhausted_reprompt(
     Raises:
         RuntimeError: When ``on_exhausted="raise"`` and failed records exist.
     """
+    if failed_ids:
+        fire_event(
+            RepromptValidationFailedEvent(
+                action_name="batch",
+                attempt=attempt,
+                error=f"Validation '{validation_name}' exhausted for {len(failed_ids)} records",
+            )
+        )
+
     for result in results:
         if result.custom_id not in failed_ids:
             continue
@@ -71,15 +80,6 @@ def apply_exhausted_reprompt(
             attempts=record_attempts,
             passed=False,
             validation=validation_name,
-        )
-
-    if failed_ids and on_exhausted != "raise":
-        fire_event(
-            RepromptValidationFailedEvent(
-                action_name="batch",
-                attempt=attempt,
-                error=f"Validation '{validation_name}' exhausted for {len(failed_ids)} records",
-            )
         )
 
     return results

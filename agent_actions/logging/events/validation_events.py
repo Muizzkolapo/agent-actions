@@ -296,12 +296,19 @@ class RepromptValidationFailedEvent(BaseEvent):
 
 @dataclass
 class RepromptRetryEvent(BaseEvent):
-    """Fired before each reprompt retry attempt."""
+    """Fired before each reprompt retry attempt.
+
+    ``attempt`` is the 1-indexed attempt number that is **about to execute**
+    (e.g. attempt=2 means "the first attempt failed, starting attempt 2").
+    ``failed_count`` is set by batch emitters to indicate how many records
+    failed validation; online emitters leave it at 0 (single-record).
+    """
 
     action_name: str = ""
     attempt: int = 0
     max_attempts: int = 0
     error: str = ""
+    failed_count: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -315,6 +322,7 @@ class RepromptRetryEvent(BaseEvent):
             "attempt": self.attempt,
             "max_attempts": self.max_attempts,
             "error": self.error,
+            "failed_count": self.failed_count,
         }
 
     @property
@@ -324,7 +332,12 @@ class RepromptRetryEvent(BaseEvent):
 
 @dataclass
 class RepromptRecoveredEvent(BaseEvent):
-    """Fired when reprompt validation succeeds after retries."""
+    """Fired when reprompt validation succeeds after retries.
+
+    ``attempt`` is the 1-indexed attempt number on which validation
+    **passed** (e.g. attempt=2 means "failed on attempt 1, succeeded
+    on attempt 2").
+    """
 
     action_name: str = ""
     attempt: int = 0
