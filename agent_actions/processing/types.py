@@ -186,6 +186,8 @@ class ProcessingResult:
         reason: str,
         *,
         source_guid: str | None = None,
+        source_snapshot: dict[str, Any] | None = None,
+        input_record: dict[str, Any] | None = None,
     ) -> "ProcessingResult":
         """Factory for skipped (passthrough) result."""
         if passthrough_data is None:
@@ -200,6 +202,8 @@ class ProcessingResult:
             executed=False,
             skip_reason=reason,
             source_guid=source_guid,
+            source_snapshot=source_snapshot,
+            input_record=input_record,
         )
 
     @classmethod

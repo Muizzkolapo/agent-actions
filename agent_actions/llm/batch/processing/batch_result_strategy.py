@@ -313,6 +313,7 @@ class BatchResultStrategy:
         )
 
         processing_result.processing_context = processing_context
+        processing_result.is_expansion = len(structured_items) > 1
         return processing_result
 
     def _apply_context_passthrough(
@@ -347,6 +348,17 @@ class BatchResultStrategy:
 
         Error results carry the error dict in ``data`` so that downstream
         ``write_record_dispositions()`` can still find and disposition them.
+        The ``data[0]`` dict contains ``error``, ``metadata``, and optionally
+        ``raw_content`` and ``_recovery`` keys — this structure is load-bearing
+        because ``write_record_dispositions()`` iterates ``data`` items and
+        checks ``item.get("error")`` to detect failures.
+
+        This differs from the online/file_tool paths where errors are only on
+        ``result.error`` with ``result.data == []``.  The dual representation
+        exists because batch post-processing (disposition writing) needs
+        per-item error context while online errors are handled at the
+        result-status level in ``collect_results()``.
+
         Error results are NOT enriched (matching the original pipeline behaviour).
         """
         if ctx.reconciler is None:
