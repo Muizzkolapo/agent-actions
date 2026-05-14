@@ -16,7 +16,10 @@ from agent_actions.errors import ConfigurationError, TemplateVariableError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
-from agent_actions.prompt.context.scope_application import apply_context_scope
+from agent_actions.prompt.context.scope_application import (
+    FRAMEWORK_NAMESPACES,
+    apply_context_scope,
+)
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 from agent_actions.prompt.context.static_loader import (
     StaticDataLoader,
@@ -421,6 +424,54 @@ class PromptPreparationService:
                                 }
                                 break
 
+            # Null namespace hint for guard-filter at fan-in (spec 415).
+            # Only triggers when Jinja dereferences None (not a dict missing
+            # a key), and only blames the namespace the template actually
+            # tried to access — not every null namespace in scope.
+            null_namespace_hints: dict[str, dict[str, Any]] = {}
+            if error_str.startswith("'None' has no attribute"):
+                attribute_name = missing[0] if missing else None
+                if attribute_name:
+                    # Find which null namespace the template referenced with
+                    # this attribute by scanning for {{ ns.attr }} patterns.
+                    import re as _re
+
+                    null_ns_set = {
+                        k
+                        for k, v in prompt_context.items()
+                        if v is None and k not in FRAMEWORK_NAMESPACES
+                    }
+                    blamed_ns: str | None = None
+                    for ns in null_ns_set:
+                        if _re.search(
+                            r"\{\{[\s\-]*" + _re.escape(ns) + r"\." + _re.escape(attribute_name),
+                            raw_prompt,
+                        ):
+                            blamed_ns = ns
+                            break
+
+                    if blamed_ns:
+                        other_ns = [
+                            k
+                            for k, v in prompt_context.items()
+                            if v is not None
+                            and isinstance(v, dict)
+                            and k not in FRAMEWORK_NAMESPACES
+                        ]
+                        null_namespace_hints[blamed_ns] = {
+                            "alternate_deps": other_ns,
+                            "remediation": (
+                                f"Namespace '{blamed_ns}' is null (likely "
+                                f"guard-filtered or guard-skipped). Other "
+                                f"namespaces present: "
+                                f"{', '.join(sorted(other_ns)) if other_ns else '(none)'}. "
+                                f"Consider adding a guard to '{agent_name}' to "
+                                f"exclude these records, or using "
+                                f"'{blamed_ns}.*' (null-safe) instead of "
+                                f"specific fields."
+                            ),
+                        }
+
             raise TemplateVariableError(
                 missing_variables=missing,
                 available_variables=available_refs,
@@ -430,6 +481,7 @@ class PromptPreparationService:
                 namespace_context=namespace_context,
                 field_context_metadata=field_context_metadata if field_context_metadata else None,
                 storage_hints=storage_hints if storage_hints else None,
+                null_namespace_hints=null_namespace_hints if null_namespace_hints else None,
             ) from e
 
     @staticmethod
