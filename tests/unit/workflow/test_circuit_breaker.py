@@ -948,3 +948,121 @@ class TestStaleDispositionFullChain:
         # Step 2: action re-runs, produces output, resolves COMPLETED
         status = executor._resolve_completion_status("add_answer_text")
         assert status == ActionStatus.COMPLETED
+
+
+class TestFailureDetailLogging:
+    """Tests for _log_failure_details and enriched failure logging."""
+
+    @staticmethod
+    def _format_warnings(mock_logger) -> list[str]:
+        """Apply format strings to mock logger.warning calls for assertion."""
+        messages = []
+        for call in mock_logger.warning.call_args_list:
+            args = call[0]
+            if len(args) == 1:
+                messages.append(args[0])
+            else:
+                messages.append(args[0] % args[1:])
+        return messages
+
+    def _run_with_failures(
+        self, executor, mock_deps, mock_logger, failures, has_successes=True
+    ) -> list[str]:
+        """Set up mocks, resolve completion status, return formatted warning messages."""
+        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
+        mock_deps.action_runner.storage_backend.get_failed_items.return_value = failures
+        mock_deps.action_runner.storage_backend.has_successful_items.return_value = has_successes
+        executor._resolve_completion_status("agent_a")
+        return self._format_warnings(mock_logger)
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    @patch("agent_actions.workflow.executor.logger")
+    def test_partial_failure_logs_record_details(self, mock_logger, mock_fire, executor, mock_deps):
+        """Partial failure should log record IDs and reasons."""
+        msgs = self._run_with_failures(
+            executor,
+            mock_deps,
+            mock_logger,
+            [
+                {"record_id": "4a1eb1dc-9168-5df5", "reason": "timeout"},
+                {"record_id": "5f74ee93-abcd-1234", "reason": "rate limit"},
+            ],
+        )
+        assert any("4a1eb1dc" in m and "timeout" in m for m in msgs)
+        assert any("5f74ee93" in m and "rate limit" in m for m in msgs)
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    @patch("agent_actions.workflow.executor.logger")
+    def test_total_failure_also_logs_record_details(
+        self, mock_logger, mock_fire, executor, mock_deps
+    ):
+        """All-failed path should also log failure details."""
+        msgs = self._run_with_failures(
+            executor,
+            mock_deps,
+            mock_logger,
+            [{"record_id": "guid-1-long-id", "reason": "503 error"}],
+            has_successes=False,
+        )
+        assert any("guid-1-l" in m and "503 error" in m for m in msgs)
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    @patch("agent_actions.workflow.executor.logger")
+    def test_caps_at_three_detail_lines(self, mock_logger, mock_fire, executor, mock_deps):
+        """More than 3 failures: show first 3 + overflow count."""
+        msgs = self._run_with_failures(
+            executor,
+            mock_deps,
+            mock_logger,
+            [{"record_id": f"guid-{i}", "reason": f"error {i}"} for i in range(5)],
+        )
+        assert any("guid-0" in m and "error 0" in m for m in msgs)
+        assert any("guid-2" in m and "error 2" in m for m in msgs)
+        assert any("2 more failure(s)" in m for m in msgs)
+        assert not any("error 3" in m for m in msgs)
+        assert not any("error 4" in m for m in msgs)
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    @patch("agent_actions.workflow.executor.logger")
+    def test_exactly_three_failures_no_overflow(self, mock_logger, mock_fire, executor, mock_deps):
+        """Exactly 3 failures: no overflow line."""
+        msgs = self._run_with_failures(
+            executor,
+            mock_deps,
+            mock_logger,
+            [{"record_id": f"guid-{i}", "reason": f"err {i}"} for i in range(3)],
+        )
+        assert any("guid-0" in m for m in msgs)
+        assert any("guid-2" in m for m in msgs)
+        assert not any("more failure(s)" in m for m in msgs)
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    @patch("agent_actions.workflow.executor.logger")
+    def test_missing_reason_key_logs_unknown(self, mock_logger, mock_fire, executor, mock_deps):
+        """Missing reason key should log 'unknown', not crash."""
+        msgs = self._run_with_failures(executor, mock_deps, mock_logger, [{"record_id": "guid-1"}])
+        assert any("reason: unknown" in m for m in msgs)
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    @patch("agent_actions.workflow.executor.logger")
+    def test_missing_record_id_logs_unknown(self, mock_logger, mock_fire, executor, mock_deps):
+        """Missing record_id key should log 'unknown', not crash."""
+        msgs = self._run_with_failures(executor, mock_deps, mock_logger, [{"reason": "some error"}])
+        assert any("record_id: unknown" in m for m in msgs)
+
+    @patch("agent_actions.workflow.executor.fire_event")
+    @patch("agent_actions.workflow.executor.logger")
+    def test_long_reason_truncated_to_100_chars(self, mock_logger, mock_fire, executor, mock_deps):
+        """Reasons longer than 100 chars should be truncated in log output."""
+        msgs = self._run_with_failures(
+            executor,
+            mock_deps,
+            mock_logger,
+            [
+                {"record_id": "guid-1", "reason": "x" * 200},
+            ],
+        )
+        detail_msgs = [m for m in msgs if "record_id:" in m]
+        assert len(detail_msgs) == 1
+        assert "x" * 100 in detail_msgs[0]
+        assert "x" * 101 not in detail_msgs[0]

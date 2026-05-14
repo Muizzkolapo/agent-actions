@@ -541,16 +541,26 @@ class ActionExecutor:
                         action_name,
                         len(item_failures),
                     )
+                    self._log_failure_details(item_failures)
                     return ActionStatus.FAILED
                 logger.warning(
                     "Action '%s' completed with %d item-level failure(s)",
                     action_name,
                     len(item_failures),
                 )
+                self._log_failure_details(item_failures)
                 return ActionStatus.COMPLETED_WITH_FAILURES
         except Exception as e:
             logger.warning("Could not check partial failures for %s: %s", action_name, e)
         return ActionStatus.COMPLETED
+
+    def _log_failure_details(self, item_failures: list[dict]) -> None:
+        for failure in item_failures[:3]:
+            record_id = failure.get("record_id", "unknown")[:8]
+            reason = failure.get("reason", "unknown")[:100]
+            logger.warning("  record_id: %s  reason: %s", record_id, reason)
+        if len(item_failures) > 3:
+            logger.warning("  ... and %d more failure(s)", len(item_failures) - 3)
 
     def _handle_run_failure(
         self, params: ActionRunParams, error: Exception
