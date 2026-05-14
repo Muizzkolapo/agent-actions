@@ -69,6 +69,9 @@ class FileToolStrategy:
             )
 
             if is_empty_response(raw_response) and records:
+                # FILE mode collapses all input records into one failure result.
+                # Snapshot captures only records[0] — for multi-record batches the
+                # error message includes the total count for context.
                 return [
                     ProcessingResult.failed(
                         error=(

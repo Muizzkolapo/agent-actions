@@ -111,6 +111,8 @@ def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
     Returns None if source is missing, not a dict, or not serializable.
     Truncation to 10KB is handled downstream by sqlite_backend.set_disposition().
     """
+    # Empty dict ({}) is treated as absent — reconciler returns {} for missing
+    # records, and an empty snapshot has no debugging value.
     if not source or not isinstance(source, dict):
         return None
     try:
