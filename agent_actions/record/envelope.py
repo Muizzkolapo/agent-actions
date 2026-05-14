@@ -136,6 +136,18 @@ class RecordEnvelope:
         return _carry_persistent_fields(result, input_record)
 
     @staticmethod
+    def can_transition(record: dict[str, Any], to_state: RecordState) -> bool:
+        """Return True if transitioning *record* to *to_state* is legal."""
+        from_state_raw = record.get("_state")
+        if from_state_raw is None:
+            return True
+        try:
+            from_state = RecordState(from_state_raw)
+        except ValueError:
+            return False
+        return _is_legal_transition(from_state, to_state)
+
+    @staticmethod
     def transition(
         record: dict[str, Any],
         to_state: RecordState,
@@ -192,21 +204,30 @@ class RecordEnvelope:
         return record
 
 
+def _is_legal_transition(from_state: RecordState | None, to_state: RecordState) -> bool:
+    """Return True if *from_state* → *to_state* is a legal edge."""
+    if from_state is None:
+        return True
+    if from_state == to_state:
+        return True
+    if from_state in PROCESSABLE_STATES:
+        return True
+    if from_state in RESETTABLE_DOWNSTREAM_STATES and to_state in PROCESSABLE_STATES:
+        return True
+    if from_state in CASCADE_BLOCKING_STATES and to_state == RecordState.CASCADE_SKIPPED:
+        return True
+    return False
+
+
 def _validate_transition(from_state: RecordState | None, to_state: RecordState) -> None:
     """Raise RecordEnvelopeError if the from→to edge violates state machine rules."""
-    if from_state is None:
-        return
-    if from_state == to_state:
-        return
-    if from_state in PROCESSABLE_STATES:
-        return
-    if from_state in RESETTABLE_DOWNSTREAM_STATES and to_state in PROCESSABLE_STATES:
-        return
-    if from_state in CASCADE_BLOCKING_STATES and to_state == RecordState.CASCADE_SKIPPED:
-        return
-    raise RecordEnvelopeError(
-        f"Illegal state transition: {from_state.value!r} → {to_state.value!r}"
-    )
+    if not _is_legal_transition(from_state, to_state):
+        # from_state is guaranteed non-None here because _is_legal_transition
+        # returns True for None.
+        assert from_state is not None  # narrowing for type checker
+        raise RecordEnvelopeError(
+            f"Illegal state transition: {from_state.value!r} → {to_state.value!r}"
+        )
 
 
 def _carry_persistent_fields(

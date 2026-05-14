@@ -252,15 +252,15 @@ class OnlineLLMStrategy:
         return results
 
     def process_record(
-        self, item: Any, context: ProcessingContext, *, skip_guard: bool = True
+        self, item: Any, context: ProcessingContext, *, skip_guard: bool = False
     ) -> ProcessingResult:
         """Process a single record: prepare, invoke LLM, handle response, transform.
 
         Args:
-            skip_guard: When True (default), guard evaluation is skipped because
-                UnifiedProcessor already filtered records at the batch level.
-                Pass False when calling directly without UnifiedProcessor's
-                batch-level guard filter.
+            skip_guard: When False (default), per-record guard evaluates with
+                full context from TaskPreparer._load_full_context().  The
+                prefilter in UnifiedProcessor is a fast-path optimization;
+                per-record guard is the authoritative evaluation.
 
         Does NOT enrich the result — enrichment is handled by UnifiedProcessor.
         """
@@ -285,13 +285,14 @@ class OnlineLLMStrategy:
 
         # Upstream unprocessed — passthrough as tombstone
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
-            preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
-            if not isinstance(preserved_item.get("metadata"), dict):
-                preserved_item["metadata"] = {}
-            if "agent_type" not in preserved_item["metadata"]:
-                preserved_item["metadata"]["agent_type"] = "tombstone"
+            tombstone = build_tombstone(
+                context.action_name,
+                input_record,
+                UPSTREAM_UNPROCESSED,
+                source_guid=source_guid,
+            )
             return ProcessingResult.unprocessed(
-                data=[preserved_item],
+                data=[tombstone],
                 reason=UPSTREAM_UNPROCESSED,
                 source_guid=source_guid,
                 source_snapshot=source_snapshot,

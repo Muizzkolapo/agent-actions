@@ -16,6 +16,7 @@ from agent_actions.processing.prepared_task import GuardStatus, PreparationConte
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.reasons import GUARD_SKIP, UPSTREAM_UNPROCESSED
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
 from agent_actions.utils.constants import JSON_MODE_KEY
@@ -23,6 +24,8 @@ from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
 logger = logging.getLogger(__name__)
+
+_PREFLIGHT_SAMPLE_SIZE: int = 5
 
 
 class BatchTaskPreparator:
@@ -185,6 +188,9 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
+            BatchContextMetadata.set_skip_reason(
+                context_map_builder[custom_id], UPSTREAM_UNPROCESSED
+            )
             stats.skipped_items += 1
             logger.debug("Upstream unprocessed item %s", custom_id)
             return None
@@ -201,6 +207,7 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
+            BatchContextMetadata.set_skip_reason(context_map_builder[custom_id], GUARD_SKIP)
             stats.skipped_items += 1
             logger.debug("Guard skipped item %s", custom_id)
             return None
@@ -228,15 +235,14 @@ class BatchTaskPreparator:
         entry = context_map_builder[custom_id]
         BatchContextMetadata.set_filter_status(entry, FilterStatus.FAILED)
         error_str = str(error)
-        try:
+        if RecordEnvelope.can_transition(entry, RecordState.FAILED):
             RecordEnvelope.transition(entry, RecordState.FAILED, agent_name, error_str[:200])
-        except Exception:
+        else:
             logger.warning(
-                "Failed to transition record %s to FAILED state",
+                "Cannot transition record %s to FAILED (current state: %s)",
                 custom_id,
-                exc_info=True,
+                entry.get("_state"),
             )
-            entry["_state"] = RecordState.FAILED.value
 
         if storage_backend:
             source_guid = row.get("source_guid")
@@ -325,11 +331,18 @@ class BatchTaskPreparator:
         source_data: list[Any] | None = None,
         workflow_metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Run pre-flight validation on first data row to catch template errors early."""
+        """Run pre-flight validation on sample rows to catch template errors early.
+
+        Guard-aware: evaluates with ``skip_guard=False`` so guard-skipped rows
+        are advanced past rather than crashing on guard-conditional templates.
+        If all sampled rows are guard-skipped/filtered, preflight passes
+        silently — there are no prompts to validate.
+        """
         if not data:
             return
 
-        first_row = data[0]
+        task_preparer = get_task_preparer()
+        sample_size = min(len(data), _PREFLIGHT_SAMPLE_SIZE)
         tools_path = resolve_tools_path(agent_config)
         prep_context = self._build_preparation_context(
             agent_config=agent_config,
@@ -338,11 +351,25 @@ class BatchTaskPreparator:
             source_data=source_data,
             workflow_metadata=workflow_metadata,
             tools_path=tools_path,
-            current_item=first_row,
         )
 
-        # Run preparation on first row to catch template errors early
-        # Skip guard evaluation to ensure prompt is always rendered for validation
-        # (guards might filter the first row, hiding template errors)
-        task_preparer = get_task_preparer()
-        task_preparer.prepare(first_row, prep_context, skip_guard=True)
+        for row in data[:sample_size]:
+            prep_context.current_item = row
+
+            prepared = task_preparer.prepare(row, prep_context, skip_guard=False)
+
+            if prepared.guard_status in (
+                GuardStatus.SKIPPED,
+                GuardStatus.FILTERED,
+                GuardStatus.UPSTREAM_UNPROCESSED,
+            ):
+                continue  # No template rendered for this row — try next
+
+            return  # Template rendered successfully — preflight passed
+
+        # All sampled rows guard-skipped/filtered — nothing to validate
+        logger.info(
+            "Preflight skipped: all %d sampled rows filtered by guard for '%s'",
+            sample_size,
+            agent_config.get("name"),
+        )

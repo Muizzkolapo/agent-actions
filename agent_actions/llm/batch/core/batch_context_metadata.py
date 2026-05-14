@@ -64,6 +64,20 @@ class BatchContextMetadata:
         return record.pop(ContextMetaKeys.PASSTHROUGH_FIELDS, {})  # type: ignore[no-any-return]
 
     # =========================================================================
+    # Skip Reason Methods
+    # =========================================================================
+
+    @staticmethod
+    def set_skip_reason(record: dict[str, Any], reason: str) -> None:
+        """Store the reason a record was skipped during preparation."""
+        record[ContextMetaKeys.SKIP_REASON] = reason
+
+    @staticmethod
+    def get_skip_reason(record: dict[str, Any]) -> str | None:
+        """Get the skip reason from a record, or None if unset."""
+        return record.get(ContextMetaKeys.SKIP_REASON)  # type: ignore[return-value]
+
+    # =========================================================================
     # Utility Methods
     # =========================================================================
 

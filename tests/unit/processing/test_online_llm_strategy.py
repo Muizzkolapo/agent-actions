@@ -110,8 +110,8 @@ class TestProcessRecordSuccess:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
-    def test_skip_guard_defaults_to_true(self, mock_fire, mock_get_preparer):
-        """process_record defaults to skip_guard=True for UnifiedProcessor path."""
+    def test_skip_guard_defaults_to_false(self, mock_fire, mock_get_preparer):
+        """process_record defaults to skip_guard=False — per-record guard evaluates."""
         prepared = _make_prepared()
         mock_get_preparer.return_value.prepare.return_value = prepared
 
@@ -130,9 +130,9 @@ class TestProcessRecordSuccess:
         context = _make_context()
         strategy.process_record({"field": "value"}, context)
 
-        # TaskPreparer.prepare() should receive skip_guard=True
+        # TaskPreparer.prepare() should receive skip_guard=False (per-record guard evaluates)
         call_kwargs = mock_get_preparer.return_value.prepare.call_args
-        assert call_kwargs[1]["skip_guard"] is True
+        assert call_kwargs[1]["skip_guard"] is False
 
 
 # ---------------------------------------------------------------------------

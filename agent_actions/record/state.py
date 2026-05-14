@@ -44,6 +44,8 @@ CASCADE_BLOCKING_STATES: frozenset[RecordState] = frozenset(
     }
 )
 
+CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(s.value for s in CASCADE_BLOCKING_STATES)
+
 RETRIABLE_STATES: frozenset[RecordState] = frozenset(
     {
         RecordState.FAILED,

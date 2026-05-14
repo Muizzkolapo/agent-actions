@@ -12,13 +12,11 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
-from agent_actions.record.state import CASCADE_BLOCKING_STATES
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 
 logger = logging.getLogger(__name__)
-
-_CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(s.value for s in CASCADE_BLOCKING_STATES)
 
 
 class TaskPreparer:
@@ -45,7 +43,7 @@ class TaskPreparer:
             skip_guard,
         )
 
-        if isinstance(item, dict) and item.get("_state") in _CASCADE_BLOCKING_VALUES:
+        if isinstance(item, dict) and item.get("_state") in CASCADE_BLOCKING_VALUES:
             target_id = existing_target_id or self._generate_target_id()
             return PreparedTask(
                 target_id=target_id,
