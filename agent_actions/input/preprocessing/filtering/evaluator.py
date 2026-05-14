@@ -19,8 +19,6 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     GuardFilter,
     get_global_guard_filter,
 )
-from agent_actions.logging.core.manager import fire_event
-from agent_actions.logging.events.validation_events import GuardEvaluationErrorEvent
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
 logger = logging.getLogger(__name__)
@@ -181,30 +179,9 @@ class GuardEvaluator:
             eval_context = self._prepare_eval_context(context)
 
             request = FilterItemRequest(data=eval_context, condition=clause)
-            raw_result = self._filter.filter_item(request)
+            filter_result = self._filter.filter_item(request)
 
-            filter_result = self._reclassify_missing_field_error(raw_result, clause)
-
-            # Log DATA errors that survived reclassification (not missing-field).
-            # Missing-field errors are logged at DEBUG inside _reclassify; flat-field
-            # references are logged at WARNING there.  Only non-reclassified DATA
-            # errors (e.g. type coercion ValueError) need the event here.
-            if (
-                not filter_result.success
-                and filter_result.error_category == ErrorCategory.DATA
-                and filter_result is raw_result  # not reclassified
-            ):
-                logger.warning(
-                    "Guard evaluation error in condition '%s': %s",
-                    clause,
-                    filter_result.error,
-                )
-                fire_event(
-                    GuardEvaluationErrorEvent(
-                        guard_clause=clause,
-                        error=filter_result.error or "",
-                    )
-                )
+            filter_result = self._reclassify_missing_field_error(filter_result, clause)
 
             return GuardResult.from_filter_result(filter_result, behavior, passthrough_on_error)
 
