@@ -15,6 +15,7 @@ from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.cli.preview import preview
+from agent_actions.cli.retry import retry
 from agent_actions.cli.run import run
 from agent_actions.cli.schema import schema
 from agent_actions.cli.skills import skills
@@ -73,6 +74,7 @@ class CLI:
         self.click_group.add_command(inspect)
         self.click_group.add_command(preview)
         self.click_group.add_command(render)
+        self.click_group.add_command(retry)
         self.click_group.add_command(run)
         self.click_group.add_command(batch)
         self.click_group.add_command(schema)
