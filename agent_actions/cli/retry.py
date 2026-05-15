@@ -88,6 +88,13 @@ class RetryCommand:
         downstream_actions = execution_order[from_idx:]
         record_ids = {r["record_id"] for r in target_records}
 
+        logger.warning(
+            "Clearing dispositions for retry: records=%s, actions=%s. "
+            "If the re-run fails, run 'retry' again to resume.",
+            sorted(record_ids),
+            downstream_actions,
+        )
+
         cleared = 0
         for action in downstream_actions:
             for record_id in record_ids:
