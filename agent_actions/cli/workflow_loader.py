@@ -24,10 +24,10 @@ def load_workflow(
     construction.  Callers can access ``workflow.execution_order``,
     ``workflow.run()``, etc. on the returned object.
     """
-    from agent_actions.config.loader import find_config_file
-    from agent_actions.config.rendering import ConfigRenderingService
+    from agent_actions.config.project_paths import find_config_file
+    from agent_actions.prompt.renderer import ConfigRenderingService
     from agent_actions.workflow.coordinator import AgentWorkflow
-    from agent_actions.workflow.runtime_config import WorkflowPaths, WorkflowRuntimeConfig
+    from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 
     filename = f"{agent_name}.yml"
     full_path = find_config_file(
@@ -48,8 +48,10 @@ def load_workflow(
         WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(full_path),
+                user_code_path=None,
                 default_path=str(paths.default_config_path),
             ),
+            use_tools=False,
             project_root=project_root,
         )
     )
