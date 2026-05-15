@@ -170,7 +170,7 @@ class RetryCommand:
 @click.option(
     "--record",
     default=None,
-    help="Specific record source_guid to retry.",
+    help="Restrict retry to a single record (by source_guid) at the --from action.",
 )
 @click.option(
     "--dry-run",

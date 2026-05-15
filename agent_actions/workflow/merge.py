@@ -249,6 +249,12 @@ def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, An
     but succeeded in branch B, the merged record inherits cascade_skipped.
     Incomplete data from one branch means the merge is incomplete — the
     record should be retried from the branch where it failed.
+
+    This is an all-or-nothing policy: a single failed branch taints the
+    entire merge.  The successful branch data is still present in the
+    merged content (the merge runs before this function), but downstream
+    actions will cascade-skip the record.  A per-merge ``cascade_policy``
+    config (e.g. ``any_success``) could relax this in a future iteration.
     """
     for rec in group:
         state = rec.get("_state")

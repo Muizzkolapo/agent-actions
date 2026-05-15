@@ -16,11 +16,18 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
-from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_UNPROCESSED,
+    NODE_LEVEL_RECORD_ID,
+)
 
 logger = logging.getLogger(__name__)
 
-_QUARANTINE_DISPOSITIONS = frozenset({"failed", "exhausted", "unprocessed"})
+_QUARANTINE_DISPOSITIONS = frozenset(
+    {DISPOSITION_FAILED, DISPOSITION_EXHAUSTED, DISPOSITION_UNPROCESSED}
+)
 
 
 class DispositionsCommand:
