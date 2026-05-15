@@ -21,8 +21,6 @@ from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 
 logger = logging.getLogger(__name__)
 
-CASCADE_QUARANTINE_REASON = "cascade_quarantine"
-
 
 def partition_cascade_records(
     records: list[dict[str, Any]],
@@ -49,9 +47,9 @@ def partition_cascade_records(
     quarantined: list[ProcessingResult] = []
 
     for record in records:
-        state = record.get("_state") if isinstance(record, dict) else None
+        state = record.get("_state")
         if state in CASCADE_BLOCKING_VALUES:
-            source_guid = record.get("source_guid") if isinstance(record, dict) else None
+            source_guid = record.get("source_guid")
             tombstone = build_tombstone(
                 action_name,
                 record,
@@ -66,7 +64,7 @@ def partition_cascade_records(
                     input_record=record,
                 )
             )
-            logger.info(
+            logger.debug(
                 "Quarantining record %s at action '%s': upstream %s",
                 source_guid or "?",
                 action_name,

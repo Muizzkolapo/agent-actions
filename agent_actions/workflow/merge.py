@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.record.state import CASCADE_BLOCKING_VALUES
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES, RecordState
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -253,7 +253,7 @@ def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, An
     for rec in group:
         state = rec.get("_state")
         if state in CASCADE_BLOCKING_VALUES:
-            merged["_state"] = "cascade_skipped"
+            merged["_state"] = RecordState.CASCADE_SKIPPED.value
             logger.debug(
                 "Merge fan-in: propagating cascade-blocking state '%s' "
                 "from branch to merged record (source_guid=%s)",

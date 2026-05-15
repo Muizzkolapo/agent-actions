@@ -4,31 +4,14 @@ from unittest.mock import MagicMock
 
 from agent_actions.cli.retry import RetryCommand
 from agent_actions.validation.retry_validator import RetryCommandArgs
-
-
-def _make_backend(dispositions: dict[str, list[dict]] | None = None):
-    """Create a mock storage backend with disposition data."""
-    dispositions = dispositions or {}
-    backend = MagicMock()
-
-    def get_disposition(action_name, record_id=None, disposition=None):
-        rows = dispositions.get(action_name, [])
-        if disposition:
-            rows = [r for r in rows if r.get("disposition") == disposition]
-        if record_id:
-            rows = [r for r in rows if r.get("record_id") == record_id]
-        return rows
-
-    backend.get_disposition = MagicMock(side_effect=get_disposition)
-    backend.clear_disposition = MagicMock(return_value=1)
-    return backend
+from tests.unit.cli.conftest import make_mock_backend
 
 
 class TestFindFailures:
     """RetryCommand._find_failures queries disposition table correctly."""
 
     def test_finds_failed_records(self):
-        backend = _make_backend(
+        backend = make_mock_backend(
             {
                 "classify": [
                     {
@@ -39,16 +22,14 @@ class TestFindFailures:
                 ],
             }
         )
-        args = RetryCommandArgs(agent="test_workflow")
-        cmd = RetryCommand(args)
-        failures = cmd._find_failures(backend, ["extract", "classify", "enrich"])
+        failures = RetryCommand._find_failures(backend, ["extract", "classify", "enrich"])
 
         assert "classify" in failures
         assert len(failures["classify"]) == 1
         assert failures["classify"][0]["record_id"] == "r2"
 
     def test_finds_exhausted_records(self):
-        backend = _make_backend(
+        backend = make_mock_backend(
             {
                 "classify": [
                     {
@@ -59,22 +40,18 @@ class TestFindFailures:
                 ],
             }
         )
-        args = RetryCommandArgs(agent="test_workflow")
-        cmd = RetryCommand(args)
-        failures = cmd._find_failures(backend, ["extract", "classify"])
+        failures = RetryCommand._find_failures(backend, ["extract", "classify"])
 
         assert "classify" in failures
         assert failures["classify"][0]["record_id"] == "r4"
 
     def test_no_failures_returns_empty(self):
-        backend = _make_backend({})
-        args = RetryCommandArgs(agent="test_workflow")
-        cmd = RetryCommand(args)
-        failures = cmd._find_failures(backend, ["extract", "classify"])
+        backend = make_mock_backend({})
+        failures = RetryCommand._find_failures(backend, ["extract", "classify"])
         assert failures == {}
 
     def test_ignores_success_dispositions(self):
-        backend = _make_backend(
+        backend = make_mock_backend(
             {
                 "classify": [
                     {
@@ -85,13 +62,11 @@ class TestFindFailures:
                 ],
             }
         )
-        args = RetryCommandArgs(agent="test_workflow")
-        cmd = RetryCommand(args)
-        failures = cmd._find_failures(backend, ["extract", "classify"])
+        failures = RetryCommand._find_failures(backend, ["extract", "classify"])
         assert failures == {}
 
     def test_multiple_actions_with_failures(self):
-        backend = _make_backend(
+        backend = make_mock_backend(
             {
                 "classify": [
                     {"record_id": "r2", "disposition": "failed", "reason": "error"},
@@ -101,9 +76,7 @@ class TestFindFailures:
                 ],
             }
         )
-        args = RetryCommandArgs(agent="test_workflow")
-        cmd = RetryCommand(args)
-        failures = cmd._find_failures(backend, ["extract", "classify", "enrich"])
+        failures = RetryCommand._find_failures(backend, ["extract", "classify", "enrich"])
         assert len(failures) == 2
         assert "classify" in failures
         assert "enrich" in failures
@@ -118,7 +91,6 @@ class TestRetryPlan:
         cmd = RetryCommand(args)
         cmd.console = MagicMock()
 
-        # Should not raise
         cmd._display_retry_plan(
             "classify",
             [{"record_id": "r2", "disposition": "failed", "reason": "LLM error"}],

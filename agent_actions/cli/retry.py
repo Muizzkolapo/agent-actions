@@ -13,12 +13,15 @@ from rich.console import Console
 from rich.table import Table
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import DISPOSITION_EXHAUSTED, DISPOSITION_FAILED
 from agent_actions.validation.retry_validator import RetryCommandArgs
 
 logger = logging.getLogger(__name__)
+
+_FAILURE_DISPOSITIONS = (DISPOSITION_FAILED, DISPOSITION_EXHAUSTED)
 
 
 class RetryCommand:
@@ -39,10 +42,9 @@ class RetryCommand:
             workflow_name=self.agent_name,
         )
 
-        # Load execution order from the workflow config
-        execution_order = self._load_execution_order(paths, project_root)
+        workflow = load_workflow(self.agent_name, paths, project_root)
+        execution_order = list(workflow.execution_order)
 
-        # Find failed/exhausted records
         failures = self._find_failures(backend, execution_order)
 
         if not failures:
@@ -51,7 +53,6 @@ class RetryCommand:
             )
             return
 
-        # Determine the retry start action
         from_action = self.args.from_action
         if from_action:
             if from_action not in execution_order:
@@ -59,7 +60,6 @@ class RetryCommand:
                     f"Action '{from_action}' not found in execution order: {execution_order}"
                 )
         else:
-            # Find the earliest failure action in execution order
             for action in execution_order:
                 if action in failures:
                     from_action = action
@@ -69,23 +69,21 @@ class RetryCommand:
             self.console.print("[green]No actionable failures found.[/green]")
             return
 
-        # Filter failures to only include the target action (or specific record)
         target_records = failures.get(from_action, [])
         if self.args.record:
             target_records = [r for r in target_records if r["record_id"] == self.args.record]
             if not target_records:
                 raise click.ClickException(
-                    f"Record '{self.args.record}' not found in failed records for action '{from_action}'"
+                    f"Record '{self.args.record}' not found in failed records "
+                    f"for action '{from_action}'"
                 )
 
-        # Display what will be retried
         self._display_retry_plan(from_action, target_records, execution_order)
 
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
             return
 
-        # Clear dispositions for failed records from the retry action forward
         from_idx = execution_order.index(from_action)
         downstream_actions = execution_order[from_idx:]
         record_ids = {r["record_id"] for r in target_records}
@@ -100,56 +98,21 @@ class RetryCommand:
             f"across {len(downstream_actions)} action(s).[/cyan]"
         )
 
-        # Re-run the workflow — it will pick up where it left off
         self.console.print("\n[bold]Re-running workflow...[/bold]\n")
-        self._rerun_workflow(paths, project_root)
+        workflow = load_workflow(self.agent_name, paths, project_root)
+        workflow.run()
+        self.console.print("\n[green]Retry complete.[/green]")
 
-    def _load_execution_order(self, paths, project_root: Path | None) -> list[str]:
-        """Load the workflow to extract execution order."""
-        from agent_actions.config.loader import find_config_file
-        from agent_actions.config.rendering import ConfigRenderingService
-        from agent_actions.workflow.coordinator import AgentWorkflow
-        from agent_actions.workflow.runtime_config import WorkflowPaths, WorkflowRuntimeConfig
-
-        filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(
-            self.agent_name,
-            paths.agent_config_dir,
-            filename,
-            check_alternatives=True,
-            project_root=project_root,
-        )
-        ConfigRenderingService().render_and_load_config(
-            self.agent_name,
-            full_path,
-            paths.template_dir,
-            paths.rendered_workflows_dir,
-            project_root=project_root,
-        )
-
-        workflow = AgentWorkflow(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    default_path=str(paths.default_config_path),
-                ),
-                project_root=project_root,
-            )
-        )
-        return list(workflow.execution_order)
-
+    @staticmethod
     def _find_failures(
-        self,
         backend,
         execution_order: list[str],
     ) -> dict[str, list[dict]]:
         """Query disposition table for failed/exhausted records per action."""
         failures: dict[str, list[dict]] = {}
         for action in execution_order:
-            action_failures = []
-            for disposition in (DISPOSITION_FAILED, DISPOSITION_EXHAUSTED):
-                rows = backend.get_disposition(action, disposition=disposition)
-                action_failures.extend(rows)
+            rows = backend.get_disposition(action)
+            action_failures = [r for r in rows if r.get("disposition") in _FAILURE_DISPOSITIONS]
             if action_failures:
                 failures[action] = action_failures
         return failures
@@ -182,41 +145,6 @@ class RetryCommand:
             )
 
         self.console.print(table)
-
-    def _rerun_workflow(self, paths, project_root: Path | None) -> None:
-        """Re-run the workflow using the standard execution path."""
-        from agent_actions.config.loader import find_config_file
-        from agent_actions.config.rendering import ConfigRenderingService
-        from agent_actions.workflow.coordinator import AgentWorkflow
-        from agent_actions.workflow.runtime_config import WorkflowPaths, WorkflowRuntimeConfig
-
-        filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(
-            self.agent_name,
-            paths.agent_config_dir,
-            filename,
-            check_alternatives=True,
-            project_root=project_root,
-        )
-        ConfigRenderingService().render_and_load_config(
-            self.agent_name,
-            full_path,
-            paths.template_dir,
-            paths.rendered_workflows_dir,
-            project_root=project_root,
-        )
-
-        workflow = AgentWorkflow(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    default_path=str(paths.default_config_path),
-                ),
-                project_root=project_root,
-            )
-        )
-        workflow.run()
-        self.console.print("\n[green]Retry complete.[/green]")
 
 
 @click.command()

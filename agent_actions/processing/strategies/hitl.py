@@ -54,7 +54,7 @@ class HITLStrategy:
         )
 
         if not processable and quarantined_results:
-            return list(quarantined_results)
+            return quarantined_results
 
         original_data = context.source_data
         try:
@@ -165,7 +165,7 @@ class HITLStrategy:
                 source_mapping={i: i for i in range(len(structured_data))},
             )
 
-            return list(quarantined_results) + [result]
+            return quarantined_results + [result]
         except AgentActionsError:
             raise
         except Exception:

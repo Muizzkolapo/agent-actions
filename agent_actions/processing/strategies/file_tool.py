@@ -59,7 +59,7 @@ class FileToolStrategy:
         )
 
         if not processable and quarantined_results:
-            return list(quarantined_results)
+            return quarantined_results
 
         original_data = context.source_data
         try:

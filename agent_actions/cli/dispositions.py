@@ -13,11 +13,14 @@ from rich.console import Console
 from rich.table import Table
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 
 logger = logging.getLogger(__name__)
+
+_QUARANTINE_DISPOSITIONS = frozenset({"failed", "exhausted", "unprocessed"})
 
 
 class DispositionsCommand:
@@ -40,7 +43,8 @@ class DispositionsCommand:
             workflow_name=self.agent_name,
         )
 
-        execution_order = self._load_execution_order(paths, project_root)
+        workflow = load_workflow(self.agent_name, paths, project_root)
+        execution_order = list(workflow.execution_order)
 
         if self.action_filter:
             if self.action_filter not in execution_order:
@@ -70,7 +74,6 @@ class DispositionsCommand:
 
         for action in actions:
             rows = backend.get_disposition(action)
-            # Exclude node-level sentinel records
             rows = [r for r in rows if r.get("record_id") != NODE_LEVEL_RECORD_ID]
 
             counts: dict[str, int] = {}
@@ -105,55 +108,24 @@ class DispositionsCommand:
 
         found = 0
         for action in actions:
-            for disp in ("failed", "exhausted", "unprocessed"):
-                rows = backend.get_disposition(action, disposition=disp)
-                rows = [r for r in rows if r.get("record_id") != NODE_LEVEL_RECORD_ID]
-                for row in rows:
-                    found += 1
-                    table.add_row(
-                        action,
-                        row.get("record_id", "?"),
-                        row.get("disposition", "?"),
-                        (row.get("reason") or "")[:60],
-                    )
+            rows = backend.get_disposition(action)
+            for row in rows:
+                if row.get("record_id") == NODE_LEVEL_RECORD_ID:
+                    continue
+                if row.get("disposition") not in _QUARANTINE_DISPOSITIONS:
+                    continue
+                found += 1
+                table.add_row(
+                    action,
+                    row.get("record_id", "?"),
+                    row.get("disposition", "?"),
+                    (row.get("reason") or "")[:60],
+                )
 
         if found:
             self.console.print(table)
         else:
             self.console.print("[green]No quarantined records found.[/green]")
-
-    def _load_execution_order(self, paths, project_root: Path | None) -> list[str]:
-        """Load the workflow to extract execution order."""
-        from agent_actions.config.loader import find_config_file
-        from agent_actions.config.rendering import ConfigRenderingService
-        from agent_actions.workflow.coordinator import AgentWorkflow
-        from agent_actions.workflow.runtime_config import WorkflowPaths, WorkflowRuntimeConfig
-
-        filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(
-            self.agent_name,
-            paths.agent_config_dir,
-            filename,
-            check_alternatives=True,
-            project_root=project_root,
-        )
-        ConfigRenderingService().render_and_load_config(
-            self.agent_name,
-            full_path,
-            paths.template_dir,
-            paths.rendered_workflows_dir,
-            project_root=project_root,
-        )
-        workflow = AgentWorkflow(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    default_path=str(paths.default_config_path),
-                ),
-                project_root=project_root,
-            )
-        )
-        return list(workflow.execution_order)
 
 
 @click.command()
