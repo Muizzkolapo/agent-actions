@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from agent_actions.workflow.merge import (
     _identify_branch_mapping,
     _merge_group_deep,
+    _propagate_cascade_blocking,
     deep_merge_record,
     get_correlation_value,
     merge_json_files,
@@ -788,3 +789,70 @@ class TestMergeGroupDeep:
 
         assert result["content"]["ns_a"]["a"] == 1
         assert result["content"]["ns_b"]["b"] == 2
+
+
+class TestPropagateCascadeBlocking:
+    """Fan-in merge must propagate cascade-blocking state from any branch."""
+
+    def test_no_blocking_state_leaves_merged_unchanged(self):
+        merged = {"_state": "processed", "source_guid": "r1"}
+        group = [
+            {"_state": "processed", "source_guid": "r1"},
+            {"_state": "processed", "source_guid": "r1"},
+        ]
+        _propagate_cascade_blocking(merged, group)
+        assert merged["_state"] == "processed"
+
+    def test_failed_branch_propagates_cascade_skipped(self):
+        merged = {"_state": "processed", "source_guid": "r1"}
+        group = [
+            {"_state": "processed", "source_guid": "r1"},
+            {"_state": "failed", "source_guid": "r1"},
+        ]
+        _propagate_cascade_blocking(merged, group)
+        assert merged["_state"] == "cascade_skipped"
+
+    def test_exhausted_branch_propagates_cascade_skipped(self):
+        merged = {"_state": "processed", "source_guid": "r1"}
+        group = [
+            {"_state": "processed", "source_guid": "r1"},
+            {"_state": "exhausted", "source_guid": "r1"},
+        ]
+        _propagate_cascade_blocking(merged, group)
+        assert merged["_state"] == "cascade_skipped"
+
+    def test_cascade_skipped_branch_propagates(self):
+        merged = {"_state": "processed", "source_guid": "r1"}
+        group = [
+            {"_state": "processed", "source_guid": "r1"},
+            {"_state": "cascade_skipped", "source_guid": "r1"},
+        ]
+        _propagate_cascade_blocking(merged, group)
+        assert merged["_state"] == "cascade_skipped"
+
+    def test_all_healthy_no_change(self):
+        merged = {"_state": "active", "source_guid": "r1"}
+        group = [
+            {"_state": "active", "source_guid": "r1"},
+            {"_state": "guard_skipped", "source_guid": "r1"},
+        ]
+        _propagate_cascade_blocking(merged, group)
+        assert merged["_state"] == "active"
+
+    def test_merge_records_by_key_propagates_blocking(self):
+        """End-to-end: merge_records_by_key applies cascade propagation."""
+        records = [
+            {
+                "source_guid": "r1",
+                "_state": "processed",
+                "content": {"branch_a": {"val": 1}},
+            },
+            {
+                "source_guid": "r1",
+                "_state": "failed",
+                "content": {"branch_b": None},
+            },
+        ]
+        result = merge_records_by_key(records)
+        assert len(result) == 1
+        assert result[0]["_state"] == "cascade_skipped"
