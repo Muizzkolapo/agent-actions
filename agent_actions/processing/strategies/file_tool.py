@@ -13,6 +13,7 @@ from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
 )
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.content import is_version_merge
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -61,7 +62,11 @@ class FileToolStrategy:
         if not processable and quarantined_results:
             return quarantined_results
 
-        original_data = context.source_data
+        # Filter original_data to exclude quarantined records so
+        # TrackedItem.source_index aligns with reconcile_outputs lookups.
+        original_data = [
+            r for r in (context.source_data or []) if r.get("_state") not in CASCADE_BLOCKING_VALUES
+        ]
         try:
             context_scope = context.agent_config.get("context_scope") or {}
             clean_input: list[TrackedItem] = []

@@ -1736,3 +1736,44 @@ def test_file_tool_version_merge_spreads_not_wraps():
     # Existing version namespaces preserved
     assert content["extract_1"]["vote"] == "keep"
     assert content["extract_2"]["vote"] == "drop"
+
+
+def test_file_tool_cascade_blocked_source_index_alignment():
+    """Regression: TrackedItem.source_index must align with original_data.
+
+    Input: [R1 active, R2 failed, R3 active]. Processable = [R1, R3].
+    Tool returns TrackedItem results indexed 0→R1, 1→R3.
+    reconcile_outputs must map source_index=1 to R3 (not R2).
+    """
+    r1 = {"source_guid": "sg-1", "_state": "active", "content": {"prev": {"id": 1}}}
+    r2 = {"source_guid": "sg-2", "_state": "failed", "content": {"prev": {"id": 2}}}
+    r3 = {"source_guid": "sg-3", "_state": "active", "content": {"prev": {"id": 3}}}
+
+    context = _make_context()
+    context.source_data = [r1, r2, r3]
+
+    tool_output = [
+        TrackedItem({"result": "for_r1"}, source_index=0),
+        TrackedItem({"result": "for_r3"}, source_index=1),
+    ]
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        return_value=(tool_output, True),
+    ):
+        results = FileToolStrategy().invoke([r1, r2, r3], context)
+
+    # R2 should be quarantined (UNPROCESSED), R1 and R3 processed
+    unprocessed = [r for r in results if r.status == ProcessingStatus.UNPROCESSED]
+    successes = [r for r in results if r.status == ProcessingStatus.SUCCESS]
+    assert len(unprocessed) == 1
+    assert unprocessed[0].source_guid == "sg-2"
+
+    assert len(successes) == 1
+    success_data = successes[0].data
+    assert len(success_data) == 2
+
+    # R1's output should carry R1's source_guid (not R2's)
+    assert success_data[0].get("source_guid") == "sg-1"
+    # R3's output should carry R3's source_guid (not R2's — the bug)
+    assert success_data[1].get("source_guid") == "sg-3"
