@@ -87,6 +87,31 @@ class CollectionStats:
         return bool((self.skipped + self.filtered) == total)
 
 
+def _build_failed_tombstone(
+    agent_name: str,
+    source_guid: str | None,
+    input_record: dict[str, Any] | None,
+    error: str | None,
+) -> dict[str, Any]:
+    """Build a tombstone record for a FAILED processing result.
+
+    The tombstone preserves lineage fields (source_guid, root_target_id,
+    content from upstream) so downstream actions see the record and can
+    cascade-skip it.  This closes the "vanishing record" gap where FAILED
+    records previously disappeared from the output stream.
+    """
+    from agent_actions.processing.record_helpers import build_tombstone
+
+    tombstone = build_tombstone(
+        agent_name,
+        input_record,
+        error or "processing_error",
+        source_guid=source_guid,
+    )
+    _stamp(tombstone, RecordState.FAILED, agent_name, error or "processing_error")
+    return tombstone
+
+
 def _data_has_parse_error(data: list[dict[str, Any]]) -> bool:
     """Check if any data item contains a ``_parse_error`` from the LLM provider.
 
@@ -414,6 +439,14 @@ class ResultCollector:
                     result.source_guid,
                     result.error,
                 )
+
+                # Build a tombstone so downstream actions see this record
+                # and can cascade-skip it (record-level error isolation).
+                tombstone = _build_failed_tombstone(
+                    agent_name, result.source_guid, result.input_record, result.error
+                )
+                output.append(tombstone)
+
                 fire_event(
                     ResultCollectedEvent(
                         action_name=agent_name,

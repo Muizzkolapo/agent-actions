@@ -445,7 +445,9 @@ def test_file_tool_empty_response_feeds_existing_failure_check():
 
     assert stats.failed == 1
     assert stats.success == 0
-    assert output == []
+    # FAILED now produces a tombstone for record-level error isolation
+    assert len(output) == 1
+    assert output[0]["_state"] == "failed"
 
 
 def test_file_udf_result_empty_with_input_returns_failed():
@@ -822,8 +824,10 @@ def test_result_collector_does_not_raise_on_partial_failure():
         is_first_stage=False,
     )
 
-    assert len(output) == 1
+    # 1 success + 1 failed tombstone
+    assert len(output) == 2
     assert output[0]["content"]["val"] == 1
+    assert output[1]["_state"] == "failed"
 
 
 def test_result_collector_does_not_raise_when_all_filtered():

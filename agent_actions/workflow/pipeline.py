@@ -578,10 +578,16 @@ class ProcessingPipeline:
         # Zero-success failure: raise so executor marks FAILED and circuit
         # breaker skips downstream.  Uses stats.success (not `not output`)
         # because EXHAUSTED tombstones inflate the output list.
-        if data and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
+        #
+        # Exclude cascade-quarantined records from the denominator: if all
+        # ACTIVE input records failed but some records were quarantined
+        # pass-throughs, the action should not be marked FAILED (the
+        # quarantined records flow through untouched).
+        active_input_count = len(data) - stats.unprocessed
+        if active_input_count > 0 and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
             raise RuntimeError(
                 f"Action '{self.config.action_name}' produced 0 successful records — "
-                f"all {len(data)} input item(s) failed or exhausted "
+                f"all {active_input_count} active input item(s) failed or exhausted "
                 f"({stats.failed} failed, {stats.exhausted} exhausted)"
             )
 

@@ -105,7 +105,12 @@ def test_result_collector_aggregates_statuses_first_stage():
         "items": [],
         "obj": {},
     }
-    assert len(output) == 3
+    # FAILED record now produces a tombstone in output (record-level error isolation)
+    failed_tombstone = output[3]
+    assert failed_tombstone["source_guid"] == "src-4"
+    assert failed_tombstone["_state"] == "failed"
+    assert failed_tombstone["metadata"]["agent_type"] == "tombstone"
+    assert len(output) == 4
 
 
 def test_result_collector_uses_input_record_downstream():
@@ -504,7 +509,10 @@ class TestResultCollectorDispositions:
             is_first_stage=False,
             storage_backend=None,
         )
-        assert output == []
+        # FAILED now produces a tombstone (record-level error isolation)
+        assert len(output) == 1
+        assert output[0]["_state"] == "failed"
+        assert output[0]["source_guid"] == "src-fail"
 
     def test_no_source_guid_no_disposition(self):
         """Records without source_guid should not attempt disposition writes."""

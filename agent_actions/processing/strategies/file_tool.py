@@ -58,7 +58,7 @@ class FileToolStrategy:
             records, action_name=context.agent_name
         )
 
-        if not processable:
+        if not processable and quarantined_results:
             return list(quarantined_results)
 
         original_data = context.source_data
