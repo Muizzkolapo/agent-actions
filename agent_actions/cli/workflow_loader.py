@@ -11,13 +11,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent_actions.config.project_paths import ProjectPaths
+    from agent_actions.workflow.coordinator import AgentWorkflow
 
 
 def load_workflow(
     agent_name: str,
     paths: ProjectPaths,
     project_root: Path | None = None,
-):
+) -> AgentWorkflow:
     """Load and return an initialized AgentWorkflow.
 
     Handles config file resolution, template rendering, and workflow

@@ -97,7 +97,7 @@ class RetryCommand:
         downstream_actions = execution_order[from_idx:]
         record_ids = {r["record_id"] for r in target_records}
 
-        logger.warning(
+        logger.info(
             "Clearing dispositions for retry: records=%s, actions=%s. "
             "If the re-run fails, run 'retry' again to resume.",
             sorted(record_ids),
@@ -124,6 +124,7 @@ class RetryCommand:
 
         # Reset action-level status for downstream actions to PENDING so the
         # coordinator doesn't skip them as "already completed."
+        # Deferred import: avoid circular import at module load time.
         from agent_actions.workflow.managers.state import ActionStatus
 
         state_mgr = workflow.services.core.state_manager
