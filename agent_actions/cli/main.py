@@ -10,6 +10,7 @@ import click
 from agent_actions.__version__ import __version__
 from agent_actions.cli.clean import clean_cli as clean
 from agent_actions.cli.compile import compile, render
+from agent_actions.cli.dispositions import dispositions
 from agent_actions.cli.docs import docs
 from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect
@@ -70,6 +71,7 @@ class CLI:
         self.logger.debug("Registering CLI commands")
         self.click_group.add_command(clean)
         self.click_group.add_command(compile)
+        self.click_group.add_command(dispositions)
         self.click_group.add_command(init)
         self.click_group.add_command(inspect)
         self.click_group.add_command(preview)
