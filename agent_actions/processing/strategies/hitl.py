@@ -17,6 +17,7 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
@@ -56,7 +57,11 @@ class HITLStrategy:
         if not processable and quarantined_results:
             return quarantined_results
 
-        original_data = context.source_data
+        # Filter original_data to exclude quarantined records so positional
+        # indexing of record_reviews aligns with what the HITL tool received.
+        original_data = [
+            r for r in (context.source_data or []) if r.get("_state") not in CASCADE_BLOCKING_VALUES
+        ]
         try:
             # Inject HITL state persistence metadata into agent config
             hitl_agent_config = dict(context.agent_config)

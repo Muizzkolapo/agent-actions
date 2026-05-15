@@ -16,7 +16,11 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
-from agent_actions.storage.backend import DISPOSITION_EXHAUSTED, DISPOSITION_FAILED
+from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.validation.retry_validator import RetryCommandArgs
 
 logger = logging.getLogger(__name__)
@@ -99,6 +103,9 @@ class RetryCommand:
         for action in downstream_actions:
             for record_id in record_ids:
                 cleared += backend.clear_disposition(action, record_id=record_id)
+            # Clear node-level disposition so the executor doesn't see a
+            # stale action-level FAILED/SKIPPED signal.
+            backend.clear_disposition(action, record_id=NODE_LEVEL_RECORD_ID)
 
         self.console.print(
             f"\n[cyan]Cleared {cleared} disposition(s) for {len(record_ids)} record(s) "
@@ -107,6 +114,15 @@ class RetryCommand:
 
         self.console.print("\n[bold]Re-running workflow...[/bold]\n")
         workflow = load_workflow(self.agent_name, paths, project_root)
+
+        # Reset action-level status for downstream actions to PENDING so the
+        # coordinator doesn't skip them as "already completed."
+        from agent_actions.workflow.managers.state import ActionStatus
+
+        state_mgr = workflow.services.core.state_manager
+        for action in downstream_actions:
+            state_mgr.update_status(action, ActionStatus.PENDING)
+
         workflow.run()
         self.console.print("\n[green]Retry complete.[/green]")
 

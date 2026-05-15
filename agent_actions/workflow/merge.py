@@ -216,6 +216,8 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
     merged_results: list[Any] = []
     for group in groups_by_key.values():
         if len(group) == 1:
+            # Single-branch passthrough — not a fan-in, so no cascade
+            # propagation needed.  The record keeps its original _state.
             merged_results.append(group[0])
             continue
 
