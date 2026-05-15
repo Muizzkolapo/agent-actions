@@ -74,6 +74,11 @@ class RetryCommand:
             return
 
         target_records = failures.get(from_action, [])
+        if not target_records:
+            self.console.print(
+                f"[yellow]No failed records at action '{from_action}'. Nothing to retry.[/yellow]"
+            )
+            return
         if self.args.record:
             target_records = [r for r in target_records if r["record_id"] == self.args.record]
             if not target_records:
@@ -113,6 +118,8 @@ class RetryCommand:
         )
 
         self.console.print("\n[bold]Re-running workflow...[/bold]\n")
+        # Fresh workflow: dispositions were cleared above, so the coordinator
+        # needs to see the updated storage state at construction time.
         workflow = load_workflow(self.agent_name, paths, project_root)
 
         # Reset action-level status for downstream actions to PENDING so the

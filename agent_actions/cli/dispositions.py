@@ -103,7 +103,10 @@ class DispositionsCommand:
                 str(total),
             )
 
-        self.console.print(table)
+        if table.row_count:
+            self.console.print(table)
+        else:
+            self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")
 
     def _show_quarantined(self, backend, actions: list[str]) -> None:
         """Show details of failed/exhausted/unprocessed records."""

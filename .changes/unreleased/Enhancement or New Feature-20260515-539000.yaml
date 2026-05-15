@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Record-level error isolation: failed records are quarantined at the failure action and cascade-skipped downstream instead of polluting subsequent actions. New `retry` command re-processes only failed records from their failure point forward. New `dispositions` command shows per-action record outcome breakdown. **Breaking:** FAILED records now produce tombstone records in action output — external scripts reading target JSON files will see new records with `_state: failed`."
+time: 2026-05-15T05:39:00.000000Z

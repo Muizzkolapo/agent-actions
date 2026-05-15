@@ -107,3 +107,44 @@ class TestHITLCascadeMixed:
         mock_agent.assert_not_called()
         assert len(results) == 2
         assert all(r.status == ProcessingStatus.UNPROCESSED for r in results)
+
+    def test_interleaved_cascade_blocked_at_start_and_end(self):
+        """Input: [R1 failed, R2 active, R3 failed, R4 active, R5 failed].
+        Processable: [R2, R4]. Reviews indexed correctly despite gaps.
+        """
+        r1 = _record("r1", "failed")
+        r2 = _record("r2", "active")
+        r3 = _record("r3", "exhausted")
+        r4 = _record("r4", "active")
+        r5 = _record("r5", "cascade_skipped")
+
+        context = _make_context()
+        context.source_data = [r1, r2, r3, r4, r5]
+
+        hitl_response = {
+            "hitl_status": "approved",
+            "record_reviews": [
+                {"hitl_status": "approved", "user_comment": "R2 approved"},
+                {"hitl_status": "rejected", "user_comment": "R4 rejected"},
+            ],
+        }
+
+        with patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=([hitl_response], True),
+        ):
+            results = HITLStrategy().invoke([r1, r2, r3, r4, r5], context)
+
+        unprocessed = [r for r in results if r.status == ProcessingStatus.UNPROCESSED]
+        successes = [r for r in results if r.status == ProcessingStatus.SUCCESS]
+        assert len(unprocessed) == 3  # R1, R3, R5 quarantined
+        assert len(successes) == 1
+
+        success_data = successes[0].data
+        assert len(success_data) == 2  # R2 and R4 only
+
+        r2_content = success_data[0].get("content", {}).get("hitl_review", {})
+        assert r2_content.get("user_comment") == "R2 approved"
+
+        r4_content = success_data[1].get("content", {}).get("hitl_review", {})
+        assert r4_content.get("user_comment") == "R4 rejected"
