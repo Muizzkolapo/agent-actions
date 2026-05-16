@@ -3,6 +3,8 @@
 import React, { useState, useCallback, useEffect } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import rehypeRaw from "rehype-raw"
+import rehypeSanitize from "rehype-sanitize"
 import { ChevronRight, Copy, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -89,7 +91,12 @@ function CopyButton({ text }: { text: string }) {
 function MarkdownProse({ text }: { text: string }) {
   return (
     <article className="dc-prose">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw, rehypeSanitize]}
+      >
+        {text}
+      </ReactMarkdown>
     </article>
   )
 }
@@ -274,9 +281,9 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
   if (isSourceQuoteField(fieldKey) && typeof value === "string") {
     return <div className="dc-source-quote">{value}</div>
   }
-  // Long text — Notion prose block
+  // Long text — markdown prose block (supports <br>, code blocks, etc.)
   if (typeof value === "string" && value.length > 80) {
-    return <div className="dc-tree-prose">{value}</div>
+    return <MarkdownProse text={value} />
   }
   return <CellValue value={value} />
 }
