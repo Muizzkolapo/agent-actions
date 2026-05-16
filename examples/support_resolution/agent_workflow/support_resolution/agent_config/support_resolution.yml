@@ -25,13 +25,19 @@ version: "1.0.0"
 
 defaults:
   json_mode: false                    # ← Plain text responses, no JSON required
+  # Note: reprompt: on_schema_mismatch is NOT used here because json_mode is false
+  # and outputs are named via output_field. Schema mismatch reprompt only applies
+  # when json_mode is true and a structured schema is expected.
   granularity: Record
   is_operational: true
-  run_mode: batch
+  run_mode: online                    # ← Use "batch" for async Gemini batch API
+  batch_max_workers: 8
   model_vendor: gemini
   model_name: gemini-flash-lite-latest
   api_key: GEMINI_API_KEY
-  record_limit: 2      # Remove for full processing
+  retry:
+    enabled: true
+    max_attempts: 2
   data_source:
     type: local
     folder: ./staging
@@ -130,7 +136,7 @@ actions:
     output_field: suggested_response
     prompt: $support_resolution.Draft_Response
     guard:
-      condition: 'severity != "low"'
+      condition: 'assess_severity.severity != "low"'
       on_false: "skip"
     context_scope:
       observe:

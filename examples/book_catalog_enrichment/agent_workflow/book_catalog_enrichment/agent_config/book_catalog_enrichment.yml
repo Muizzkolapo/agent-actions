@@ -1,9 +1,8 @@
 ################################################################################
 # Book Catalog Enrichment Pipeline
-#  model_vendor: agac-provider
-#  model_name: agac-model
-#  api_key: not_required
-#AGAC_BATCH_COMPLETE_AFTER_SECONDS
+# Demonstrates: HITL review, tool actions, reprompt on schema mismatch,
+#   parallel branches with dependency merging, context_scope observe/passthrough,
+#   multi-model routing, and quality filtering with user views.
 ################################################################################
 name: book_catalog_enrichment
 description: "Enrich book catalog entries with BISAC classification, marketing descriptions, SEO keywords, recommendations, and quality scoring"
@@ -17,14 +16,22 @@ defaults:
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   is_operational: true
-  prompt_debug: false  # Enable to see reprompt feedback in action
-  record_limit: 2      # Remove for full processing
+  batch_max_workers: 8
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
   context_scope:
     seed_path:
       book_catalog: $file:book_catalog.json
   retry:
     enabled: true
     max_attempts: 2
+  reprompt:
+    on_schema_mismatch: reprompt
+    max_attempts: 3
+    use_self_reflection: true
+    on_exhausted: return_last
 
 actions:
   # ============================================================================
@@ -34,9 +41,8 @@ actions:
     intent: "Classify book into BISAC categories based on title, author, and description"
     schema: classify_genre
     prompt: $book_catalog_enrichment.Classify_Book_Genre
-    model_vendor: ollama_local                     # BISAC classification — fixed taxonomy, works with local models
-    model_name: llama3.2:latest
-    prompt_debug: true
+    # model_vendor: ollama_local                   # Uncomment for local Ollama (taxonomy tasks work with small models)
+    # model_name: llama3.2:latest
     context_scope:
       observe:
         - source.*
@@ -78,6 +84,7 @@ actions:
     granularity: file
     hitl:
       port: 3001
+      timeout: 3600
       instructions: |
         **Human-AI Collaborative Review of BISAC Classification**
 
@@ -123,7 +130,6 @@ actions:
     intent: "Write compelling marketing description for the book"
     schema: write_description
     prompt: $book_catalog_enrichment.Write_Marketing_Description
-    prompt_debug: false
     context_scope:
       observe:
         - validate_bisac.*
@@ -213,7 +219,7 @@ actions:
   # STEP 8: SCORE CATALOG QUALITY (merges all parallel branches)
   # ============================================================================
   - name: score_quality
-    dependencies: [generate_recommendations]
+    dependencies: [generate_recommendations, generate_seo, assess_reading_level]
     intent: "Score the overall quality of the enriched catalog entry"
     schema: score_quality
     prompt: $book_catalog_enrichment.Score_Catalog_Quality
