@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
+from tests.helpers.cascade_helpers import make_record as _record
 
 
 def _make_context(agent_name: str = "hitl_review", **kwargs) -> ProcessingContext:
@@ -23,16 +24,6 @@ def _make_context(agent_name: str = "hitl_review", **kwargs) -> ProcessingContex
         agent_name=agent_name,
         **kwargs,
     )
-
-
-def _record(guid: str, state: str | None = None) -> dict[str, Any]:
-    r: dict[str, Any] = {
-        "source_guid": guid,
-        "content": {"upstream": {"val": guid}},
-    }
-    if state is not None:
-        r["_state"] = state
-    return r
 
 
 class TestHITLCascadeMixed:

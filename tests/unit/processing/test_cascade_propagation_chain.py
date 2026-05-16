@@ -8,32 +8,11 @@ recognized by partition_cascade_records at the next stage.
 This is the critical end-to-end guarantee for record-level error isolation.
 """
 
-from typing import Any
-
 from agent_actions.processing.cascade_filter import partition_cascade_records
-from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.record.state import RecordState
-
-
-def _make_record(source_guid: str, state: str | None = None) -> dict[str, Any]:
-    r: dict[str, Any] = {
-        "source_guid": source_guid,
-        "content": {"upstream": {"val": source_guid}},
-    }
-    if state is not None:
-        r["_state"] = state
-    return r
-
-
-def _collect(results: list[ProcessingResult], action_name: str):
-    """Run results through ResultCollector like the real pipeline does."""
-    return ResultCollector.collect_results(
-        results,
-        agent_config={"agent_type": action_name},
-        agent_name=action_name,
-        is_first_stage=False,
-    )
+from tests.helpers.cascade_helpers import collect_results as _collect
+from tests.helpers.cascade_helpers import make_record as _make_record
 
 
 class TestThreeStageCascadePropagation:

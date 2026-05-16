@@ -12,20 +12,18 @@ Scenarios tested:
 """
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from agent_actions.cli.retry import RetryCommand
-from agent_actions.processing.cascade_filter import partition_cascade_records
-from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import ProcessingResult
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
     DISPOSITION_SUCCESS,
 )
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from tests.helpers.cascade_helpers import make_record as _record
+from tests.helpers.cascade_helpers import simulate_action as _simulate_action
 
 
 @pytest.fixture
@@ -34,73 +32,6 @@ def backend(tmp_path: Path) -> SQLiteBackend:
     b = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
     b.initialize()
     return b
-
-
-def _record(guid: str, state: str | None = None, content: dict | None = None) -> dict[str, Any]:
-    r: dict[str, Any] = {
-        "source_guid": guid,
-        "content": content or {"upstream": {"val": guid}},
-    }
-    if state is not None:
-        r["_state"] = state
-    return r
-
-
-def _collect(
-    results: list[ProcessingResult],
-    action_name: str,
-    backend: SQLiteBackend | None = None,
-):
-    """Run results through the real ResultCollector with storage backend."""
-    return ResultCollector.collect_results(
-        results,
-        agent_config={"agent_type": action_name},
-        agent_name=action_name,
-        is_first_stage=False,
-        storage_backend=backend,
-    )
-
-
-def _simulate_action(
-    input_records: list[dict[str, Any]],
-    action_name: str,
-    failing_guids: set[str],
-    backend: SQLiteBackend | None = None,
-) -> tuple[list[dict[str, Any]], Any]:
-    """Simulate a processing action: partition, process, collect.
-
-    Records whose source_guid is in failing_guids produce FAILED results.
-    All others produce SUCCESS results.
-    """
-    processable, quarantined = partition_cascade_records(input_records, action_name=action_name)
-
-    results: list[ProcessingResult] = list(quarantined)
-
-    for record in processable:
-        guid = record.get("source_guid", "")
-        if guid in failing_guids:
-            results.append(
-                ProcessingResult.failed(
-                    error=f"Simulated failure for {guid}",
-                    source_guid=guid,
-                    input_record=record,
-                )
-            )
-        else:
-            output_data = dict(record)
-            output_data["content"] = {
-                **(record.get("content") or {}),
-                action_name: {"processed": True, "source": guid},
-            }
-            results.append(
-                ProcessingResult.success(
-                    data=[output_data],
-                    source_guid=guid,
-                )
-            )
-
-    output, stats = _collect(results, action_name, backend)
-    return output, stats
 
 
 class TestRetryLifecycle:

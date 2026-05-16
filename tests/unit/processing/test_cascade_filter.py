@@ -3,14 +3,7 @@
 from agent_actions.processing.cascade_filter import partition_cascade_records
 from agent_actions.processing.types import ProcessingStatus
 from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
-
-
-def _record(source_guid: str, state: str | None = None) -> dict:
-    """Build a minimal record with optional _state."""
-    r: dict = {"source_guid": source_guid, "content": {"data": source_guid}}
-    if state is not None:
-        r["_state"] = state
-    return r
+from tests.helpers.cascade_helpers import make_record as _record
 
 
 class TestPartitionCascadeRecords:
