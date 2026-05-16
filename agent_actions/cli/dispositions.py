@@ -19,15 +19,15 @@ from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
-    DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
 )
 
 logger = logging.getLogger(__name__)
 
-_QUARANTINE_DISPOSITIONS = frozenset(
-    {DISPOSITION_FAILED, DISPOSITION_EXHAUSTED, DISPOSITION_UNPROCESSED}
-)
+# Records shown by --quarantined: only primary failures that a user can
+# act on via `retry`.  UNPROCESSED (cascade casualties) are excluded —
+# they resolve automatically when the upstream failure is retried.
+_QUARANTINE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
 
 
 class DispositionsCommand:

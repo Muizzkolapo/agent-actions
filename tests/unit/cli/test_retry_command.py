@@ -95,7 +95,32 @@ class TestRetryPlan:
             "classify",
             [{"record_id": "r2", "disposition": "failed", "reason": "LLM error"}],
             ["extract", "classify", "enrich", "summarize"],
+            all_failures={"classify": [{"record_id": "r2"}]},
         )
+
+    def test_display_retry_plan_shows_other_failures(self):
+        """When failures exist at later actions, the plan notes them."""
+        from io import StringIO
+
+        from rich.console import Console
+
+        args = RetryCommandArgs(agent="test_workflow")
+        cmd = RetryCommand(args)
+        buf = StringIO()
+        cmd.console = Console(file=buf, force_terminal=False, width=120)
+
+        cmd._display_retry_plan(
+            "classify",
+            [{"record_id": "r2", "disposition": "failed", "reason": "error"}],
+            ["extract", "classify", "enrich", "summarize"],
+            all_failures={
+                "classify": [{"record_id": "r2"}],
+                "enrich": [{"record_id": "r5"}],
+            },
+        )
+        output = buf.getvalue()
+        assert "enrich" in output
+        assert "Run 'retry' again" in output
 
 
 class TestRetryCommandArgs:

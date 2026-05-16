@@ -25,6 +25,16 @@ from agent_actions.validation.retry_validator import RetryCommandArgs
 
 logger = logging.getLogger(__name__)
 
+# Dispositions eligible for retry.  Allowlist — new disposition types
+# won't accidentally become retryable.
+#
+# Excluded (and why):
+#   success     — already done
+#   unprocessed — cascade casualty; resolves when upstream failure is retried
+#   passthrough — guard-skipped; not a failure
+#   skipped     — deliberately skipped (WHERE clause)
+#   filtered    — removed by predicate; not a failure
+#   deferred    — pending HITL/batch; retrying would clobber in-flight state
 _FAILURE_DISPOSITIONS = (DISPOSITION_FAILED, DISPOSITION_EXHAUSTED)
 
 
@@ -87,7 +97,7 @@ class RetryCommand:
                     f"for action '{from_action}'"
                 )
 
-        self._display_retry_plan(from_action, target_records, execution_order)
+        self._display_retry_plan(from_action, target_records, execution_order, failures)
 
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
@@ -153,6 +163,7 @@ class RetryCommand:
         from_action: str,
         target_records: list[dict],
         execution_order: list[str],
+        all_failures: dict[str, list[dict]],
     ) -> None:
         """Display what will be retried."""
         from_idx = execution_order.index(from_action)
@@ -176,6 +187,14 @@ class RetryCommand:
             )
 
         self.console.print(table)
+
+        # Alert user if there are failures at other actions too
+        other_actions = [a for a in all_failures if a != from_action]
+        if other_actions:
+            self.console.print(
+                f"\n[dim]Note: failures also exist at: {', '.join(other_actions)}. "
+                f"Run 'retry' again after this completes to address them.[/dim]"
+            )
 
 
 @click.command()
