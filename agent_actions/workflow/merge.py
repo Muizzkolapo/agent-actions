@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES, RecordState
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -215,11 +216,15 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
     merged_results: list[Any] = []
     for group in groups_by_key.values():
         if len(group) == 1:
+            # Single-branch passthrough — not a fan-in, so no cascade
+            # propagation needed.  The record keeps its original _state.
             merged_results.append(group[0])
             continue
 
         if reduce_key:
-            merged_results.append(_merge_group_deep(group))
+            result = _merge_group_deep(group)
+            _propagate_cascade_blocking(result, group)
+            merged_results.append(result)
             continue
 
         branch_mapping = _identify_branch_mapping(group)
@@ -229,11 +234,41 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
             # merged["node_id"] == group[0]["node_id"] (from {**base, ...}).
             for rec in group[1:]:
                 _populate_lineage_sources(merged, rec)
+            _propagate_cascade_blocking(merged, group)
             merged_results.append(merged)
         else:
-            merged_results.append(_merge_group_deep(group))
+            result = _merge_group_deep(group)
+            _propagate_cascade_blocking(result, group)
+            merged_results.append(result)
 
     return merged_results + records_without_key
+
+
+def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, Any]]) -> None:
+    """If ANY record in the group has cascade-blocking state, propagate it.
+
+    Fan-in merge with mixed quarantine: if record R2 failed in branch A
+    but succeeded in branch B, the merged record inherits cascade_skipped.
+    Incomplete data from one branch means the merge is incomplete — the
+    record should be retried from the branch where it failed.
+
+    This is an all-or-nothing policy: a single failed branch taints the
+    entire merge.  The successful branch data is still present in the
+    merged content (the merge runs before this function), but downstream
+    actions will cascade-skip the record.  A per-merge ``cascade_policy``
+    config (e.g. ``any_success``) could relax this in a future iteration.
+    """
+    for rec in group:
+        state = rec.get("_state")
+        if state in CASCADE_BLOCKING_VALUES:
+            merged["_state"] = RecordState.CASCADE_SKIPPED.value
+            logger.debug(
+                "Merge fan-in: propagating cascade-blocking state '%s' "
+                "from branch to merged record (source_guid=%s)",
+                state,
+                merged.get("source_guid", "?"),
+            )
+            return
 
 
 def merge_json_files(file_paths: list[Path], reduce_key: str | None = None) -> list[Any]:
