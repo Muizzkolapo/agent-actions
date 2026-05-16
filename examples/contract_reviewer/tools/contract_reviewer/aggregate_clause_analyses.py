@@ -10,9 +10,8 @@ output derives from (required by the framework for FILE-granularity tools).
 
 from typing import Any
 
-from agent_actions import udf_tool
+from agent_actions import FileUDFResult, udf_tool
 from agent_actions.config.types import Granularity
-from agent_actions.utils.udf_management.registry import FileUDFResult
 
 
 @udf_tool(granularity=Granularity.FILE)
@@ -34,7 +33,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     if not data:
         return FileUDFResult(outputs=[
             {
-                "source_index": 0,
+                "source_index": None,
                 "data": {
                     "contract_id": "unknown",
                     "contract_title": "unknown",
@@ -164,4 +163,4 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     }
 
     # source_index: 0 — aggregated from all clauses, anchored to first record
-    return FileUDFResult(outputs=[{"source_index": 0, "data": result}])
+    return FileUDFResult(outputs=[{"source_index": None, "data": result}])

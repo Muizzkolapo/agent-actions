@@ -29,6 +29,7 @@ defaults:
     max_attempts: 2
   reprompt:
     on_schema_mismatch: reprompt
+    max_attempts: 3
     use_self_reflection: true
     on_exhausted: return_last
 
