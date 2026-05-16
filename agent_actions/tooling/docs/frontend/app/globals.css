@@ -294,6 +294,13 @@
     padding: 0.75em 1em;
     margin: 0.5em 0;
   }
+  .dc-prose pre code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    color: inherit;
+    font-size: inherit;
+  }
 
   /* ─── JSON syntax highlighting ─── */
   .dc-json {
@@ -328,15 +335,6 @@
   }
 
   /* ─── Long text prose block in tree ─── */
-  .dc-tree-prose {
-    @apply rounded-md border px-3 py-2;
-    border-color: hsl(var(--border) / 0.3);
-    background: hsl(var(--secondary) / 0.3);
-    font-size: 13px;
-    line-height: 1.65;
-    color: hsl(var(--foreground) / 0.85);
-  }
-
   /* ─── Copy button ─── */
   .dc-copy-btn {
     @apply ml-auto shrink-0 rounded-md p-1 transition-colors;
