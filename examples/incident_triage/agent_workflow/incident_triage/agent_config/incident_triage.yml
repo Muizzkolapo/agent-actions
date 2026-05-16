@@ -24,7 +24,7 @@ defaults:
   model_name: gemini-flash-lite-latest
   model_vendor: gemini
   api_key: GEMINI_API_KEY
-  record_limit: 2      # Remove for full processing
+  batch_max_workers: 6
   context_scope:
     seed_path:
       team_roster: $file:team_roster.json
@@ -33,6 +33,15 @@ defaults:
   retry:
     enabled: true
     max_attempts: 2
+  reprompt:
+    on_schema_mismatch: reprompt
+    use_self_reflection: true
+    on_exhausted: return_last
+    max_attempts: 3
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
 
 
 actions:
@@ -172,6 +181,12 @@ actions:
   # ==========================================================================
   # STAGE 8: FORMAT FINAL TRIAGE OUTPUT
   # ==========================================================================
+  # NOTE: generate_executive_summary is guarded (SEV1/SEV2 only). For lower
+  # severity records, the guard filters them so generate_executive_summary
+  # produces no output. AGAC handles guarded dependencies gracefully — when a
+  # dependency is filtered out, downstream actions still execute with whatever
+  # fields are available. format_triage_output will simply not receive
+  # generate_executive_summary.* fields for non-SEV1/SEV2 records.
   - name: format_triage_output
     dependencies: [generate_response_plan, generate_executive_summary]
     kind: tool

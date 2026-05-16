@@ -2,22 +2,21 @@
 Aggregate all clause-level risk analyses into a unified contract risk report.
 
 FILE granularity — receives ALL clause records at once and emits a single
-aggregated summary. This is
-the REDUCE step of the Map-Reduce pattern.
+aggregated summary. This is the REDUCE step of the Map-Reduce pattern.
 
-Since this tool creates a NEW record (not derived from a single input),
-the output dict has no node_id — the framework treats it as a new root
-with fresh lineage.
+Uses FileUDFResult with source_index to indicate which input record each
+output derives from (required by the framework for FILE-granularity tools).
 """
 
 from typing import Any
 
 from agent_actions import udf_tool
 from agent_actions.config.types import Granularity
+from agent_actions.utils.udf_management.registry import FileUDFResult
 
 
 @udf_tool(granularity=Granularity.FILE)
-def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     """
     Combine clause-level risk analyses into a single contract risk report.
 
@@ -33,20 +32,23 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
         - negotiation_priority
     """
     if not data:
-        return [
+        return FileUDFResult(outputs=[
             {
-                "contract_id": "unknown",
-                "contract_title": "unknown",
-                "overall_risk_level": "low",
-                "overall_risk_score": 0.0,
-                "total_clauses_analyzed": 0,
-                "risk_distribution": {"high": 0, "medium": 0, "low": 0},
-                "high_risk_clauses": [],
-                "total_obligations": [],
-                "key_deadlines": [],
-                "negotiation_priority": [],
+                "source_index": 0,
+                "data": {
+                    "contract_id": "unknown",
+                    "contract_title": "unknown",
+                    "overall_risk_level": "low",
+                    "overall_risk_score": 0.0,
+                    "total_clauses_analyzed": 0,
+                    "risk_distribution": {"high": 0, "medium": 0, "low": 0},
+                    "high_risk_clauses": [],
+                    "total_obligations": [],
+                    "key_deadlines": [],
+                    "negotiation_priority": [],
+                },
             }
-        ]
+        ])
 
     # Extract contract metadata from the first record's source namespace
     first_source = data[0].get("source", {})
@@ -161,4 +163,5 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]
         "negotiation_priority": negotiation_priority,
     }
 
-    return [result]
+    # source_index: 0 — aggregated from all clauses, anchored to first record
+    return FileUDFResult(outputs=[{"source_index": 0, "data": result}])

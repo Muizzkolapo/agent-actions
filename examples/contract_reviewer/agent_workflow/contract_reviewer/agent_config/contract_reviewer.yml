@@ -23,13 +23,24 @@ defaults:
   model_vendor: gemini
   model_name: gemini-flash-lite-latest
   api_key: GEMINI_API_KEY
+  batch_max_workers: 4
 
   context_scope:
     seed_path:
       risk_criteria: $file:risk_criteria.json
+  reprompt:
+    on_schema_mismatch: reprompt
+    max_attempts: 3
+    use_self_reflection: true
+    on_exhausted: return_last
   retry:
     enabled: true
     max_attempts: 2
+
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
 
 actions:
 

@@ -34,14 +34,18 @@ defaults:
   model_name: gemini-flash-lite-latest
   model_vendor: gemini
   api_key: GEMINI_API_KEY
-  is_operational: true
-  record_limit: 2      # Remove for full processing
+  batch_max_workers: 6
   context_scope:
     seed_path:
       rubric: $file:evaluation_rubric.json
   retry:
     enabled: true
     max_attempts: 2
+  reprompt:
+    on_schema_mismatch: reprompt
+    max_attempts: 3
+    use_self_reflection: true
+    on_exhausted: return_last
 
   data_source:
     type: local
