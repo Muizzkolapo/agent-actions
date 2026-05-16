@@ -21,10 +21,11 @@ def package_triage_result(data: dict[str, Any]) -> list[dict[str, Any]]:
     # The value may be a raw string OR a dict like {"field_name": "value"} —
     # handle both for resilience.
     def _extract(val: Any) -> str:
+        if val is None:
+            return ""
         if isinstance(val, dict):
-            # Take the first value from the dict wrapper
             return str(next(iter(val.values()), "")) if val else ""
-        return str(val) if val else ""
+        return str(val)
 
     issue_type = _extract(data.get("classify_issue", data.get("issue_type", "unclassified")))
     severity = _extract(data.get("assess_severity", data.get("severity", "medium")))

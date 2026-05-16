@@ -162,5 +162,5 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
         "negotiation_priority": negotiation_priority,
     }
 
-    # source_index: 0 — aggregated from all clauses, anchored to first record
+    # source_index: None — synthetic aggregation record, not derived from a single input
     return FileUDFResult(outputs=[{"source_index": None, "data": result}])
