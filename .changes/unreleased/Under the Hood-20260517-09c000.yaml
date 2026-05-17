@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Add Phase 9c filter/skip/observe consistency tests (U-4.3): verify filtered and skipped namespaces produce identical null-safe observe behavior"
+time: 2026-05-17T09:30:00.000000Z
