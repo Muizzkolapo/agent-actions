@@ -44,11 +44,7 @@ class TestFilteredNamespaceObserve:
         assert llm_ctx["filtered_step"]["field"] is None
 
     def test_fan_in_with_filtered_upstream(self):
-        """Fan-in delivers record where one upstream was filtered; observe doesn't crash.
-
-        Record arrives via path A (success) and path B (filtered).
-        Downstream observes fields from both paths.
-        """
+        """Fan-in delivers record where one upstream was filtered; observe doesn't crash."""
         fc = _make_field_context(
             path_a={"result": "success"},
             path_b=None,  # filtered by guard
@@ -58,9 +54,7 @@ class TestFilteredNamespaceObserve:
             context_scope={"observe": ["path_a.result", "path_b.field"]},
             action_name="fan_in_consumer",
         )
-        # Path A resolved normally
         assert llm_ctx["path_a"]["result"] == "success"
-        # Path B (filtered) resolved to None
         assert llm_ctx["path_b"]["field"] is None
 
     def test_multiple_fields_from_filtered_namespace_all_none(self):
@@ -81,7 +75,6 @@ class TestFilteredNamespaceObserve:
             context_scope={"observe": ["filtered.*"]},
             action_name="downstream",
         )
-        # Wildcard on None namespace: nothing to expand, namespace absent from llm_ctx
         assert "filtered" not in llm_ctx
 
 
@@ -91,23 +84,21 @@ class TestFilteredNamespaceObserve:
 class TestFilterSkipObserveSymmetry:
     """Filter and skip must produce identical observe behavior."""
 
-    def test_filtered_and_skipped_resolve_identically(self):
-        """Both filtered and skipped namespaces resolve the same field to None."""
-        fc_filtered = _make_field_context(dep=None)  # filtered
-        fc_skipped = _make_field_context(dep=None)  # skipped
-
-        _, llm_filtered, _ = apply_context_scope(
-            field_context=fc_filtered,
-            context_scope={"observe": ["dep.status"]},
+    def test_all_directives_null_safe_on_filtered(self):
+        """Observe, passthrough, and drop all handle a filtered namespace without crash."""
+        fc = _make_field_context(filtered=None, present={"val": 42})
+        _, llm_ctx, pt = apply_context_scope(
+            field_context=fc,
+            context_scope={
+                "observe": ["filtered.status", "present.val"],
+                "passthrough": ["filtered.trace_id"],
+                "drop": ["filtered.secret"],
+            },
             action_name="downstream",
         )
-        _, llm_skipped, _ = apply_context_scope(
-            field_context=fc_skipped,
-            context_scope={"observe": ["dep.status"]},
-            action_name="downstream",
-        )
-        assert llm_filtered == llm_skipped
-        assert llm_filtered["dep"]["status"] is None
+        assert llm_ctx["filtered"]["status"] is None
+        assert llm_ctx["present"]["val"] == 42
+        assert pt["filtered"]["trace_id"] is None
 
     def test_passthrough_from_filtered_matches_skipped(self):
         """Passthrough from filtered namespace yields None, same as skipped."""
@@ -121,13 +112,14 @@ class TestFilterSkipObserveSymmetry:
 
     def test_drop_on_filtered_namespace_no_crash(self):
         """Drop directive on filtered (None) namespace is a no-op, no crash."""
-        fc = _make_field_context(filtered=None)
-        prompt_ctx, llm_ctx, pt = apply_context_scope(
+        fc = _make_field_context(filtered=None, present={"keep": "yes"})
+        prompt_ctx, _, _ = apply_context_scope(
             field_context=fc,
-            context_scope={"drop": ["filtered.secret"]},
+            context_scope={"drop": ["filtered.secret"], "observe": ["present.keep"]},
             action_name="downstream",
         )
-        assert isinstance(prompt_ctx, dict)
+        assert "filtered" not in prompt_ctx
+        assert prompt_ctx["present"]["keep"] == "yes"
 
     def test_absent_namespace_still_errors(self):
         """Namespace not in field_context at all → error (config bug / typo).
