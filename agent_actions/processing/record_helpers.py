@@ -49,6 +49,8 @@ def build_tombstone(
     item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
     if extra_metadata:
         item["metadata"].update(extra_metadata)
+    item["_tombstone"] = True
+    item["_tombstone_reason"] = reason
     carry_framework_fields(input_record, item, fields=("target_id",))
     return item
 
@@ -80,6 +82,8 @@ def build_exhausted_tombstone(
     }
     if extra_metadata:
         item["metadata"].update(extra_metadata)
+    item["_tombstone"] = True
+    item["_tombstone_reason"] = RETRY_EXHAUSTED
     carry_framework_fields(input_record, item, fields=("target_id",))
     return item
 
