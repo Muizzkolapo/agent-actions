@@ -16,6 +16,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import GuardFilter
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.record.state import RecordState
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 _PREPARATOR_LOGGER = "agent_actions.llm.batch.processing.preparator"
@@ -58,11 +59,30 @@ class TestPrepFailedLogging:
             "Missing WARNING about absent target_id on prep failure"
         )
 
+    def test_prep_failed_empty_string_target_id_logs_warning(self, caplog):
+        """Empty-string target_id is falsy — must warn same as absent."""
+        preparator = BatchTaskPreparator()
+        record = {"target_id": "", "content": {"text": "empty target"}}
+        context_map = {}
+
+        with caplog.at_level(logging.WARNING, logger=_PREPARATOR_LOGGER):
+            preparator._mark_prep_failed(
+                record,
+                context_map,
+                "test_agent",
+                ValueError("test error"),
+            )
+
+        assert any("target_id" in r.message and r.levelname == "WARNING" for r in caplog.records), (
+            "Missing WARNING for empty-string target_id"
+        )
+
     def test_prep_failed_with_target_id_no_extra_warning(self, caplog):
         """When prep fails and target_id exists, no warning about missing target_id."""
         preparator = BatchTaskPreparator()
         record = {"target_id": "t-001", "content": {"text": "has target"}}
         context_map = {"t-001": record.copy()}
+        context_map["t-001"]["_state"] = RecordState.ACTIVE.value
         BatchContextMetadata.set_filter_status(context_map["t-001"], FilterStatus.INCLUDED)
 
         with caplog.at_level(logging.WARNING, logger=_PREPARATOR_LOGGER):
@@ -118,6 +138,34 @@ class TestPassthroughOnErrorLogging:
         ]
         assert len(passthrough_warnings) == 1, (
             "Must log exactly one WARNING mentioning passthrough_on_error when exception is swallowed"
+        )
+
+    def test_passthrough_on_error_default_true_logs_warning(self, caplog):
+        """When passthrough_on_error key is omitted, default=True triggers the warning."""
+        mock_filter = MagicMock(spec=GuardFilter)
+        mock_filter.filter_item.side_effect = ValueError("bad expression")
+        evaluator = GuardEvaluator(guard_filter=mock_filter)
+
+        guard_config = {
+            "clause": "some_field == true",
+            "behavior": "filter",
+            # passthrough_on_error omitted — defaults to True
+        }
+
+        with caplog.at_level(logging.WARNING, logger=_EVALUATOR_LOGGER):
+            result = evaluator.evaluate(
+                item={"field": "value"},
+                guard_config=guard_config,
+            )
+
+        assert result.should_execute is True
+        passthrough_warnings = [
+            r
+            for r in caplog.records
+            if r.levelname == "WARNING" and "passthrough_on_error" in r.message
+        ]
+        assert len(passthrough_warnings) == 1, (
+            "Default passthrough_on_error=True must trigger the passthrough warning"
         )
 
     def test_passthrough_on_error_false_no_passthrough_warning(self, caplog):

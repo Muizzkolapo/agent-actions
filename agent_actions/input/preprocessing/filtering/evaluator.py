@@ -192,10 +192,10 @@ class GuardEvaluator:
                     "clause=%s, error=%s",
                     type(e).__name__,
                     clause,
-                    e,
+                    str(e)[:200],
                 )
                 return GuardResult.passed()
-            logger.warning("Guard: guard condition evaluation exception: %s", e)
+            logger.warning("Guard: guard condition evaluation exception: %s", str(e)[:200])
             if behavior == GuardBehavior.WARN:
                 return GuardResult.warned()
             if behavior == GuardBehavior.SKIP:
