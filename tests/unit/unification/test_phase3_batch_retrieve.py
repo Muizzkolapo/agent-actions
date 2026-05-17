@@ -4,7 +4,6 @@ U-2.A: LLM output must win over passthrough on key collision.
 U-2.D: FAILED records must appear in output, not vanish.
 """
 
-import copy
 import logging
 from typing import Any
 from unittest.mock import MagicMock
@@ -19,13 +18,21 @@ from agent_actions.llm.batch.processing.batch_result_strategy import (
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.processing.types import ProcessingResult, ProcessingStatus
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
-
+from agent_actions.processing.types import ProcessingStatus
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _enable_log_propagation():
+    """Ensure agent_actions loggers propagate to root so caplog captures them."""
+    aa_logger = logging.getLogger("agent_actions")
+    orig = aa_logger.propagate
+    aa_logger.propagate = True
+    yield
+    aa_logger.propagate = orig
 
 
 @pytest.fixture
@@ -159,7 +166,9 @@ class TestMergeOrder:
         )
         assert action_ns.get("region") == "US"
 
-    def test_collision_logged(self, strategy: BatchResultStrategy, caplog: pytest.LogCaptureFixture) -> None:
+    def test_collision_logged(
+        self, strategy: BatchResultStrategy, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Key collisions between passthrough and LLM output are logged."""
         context_map = {
             "t-001": _build_context_map_row(
@@ -171,7 +180,7 @@ class TestMergeOrder:
         llm_result = _make_batch_result("t-001", {"summary": "LLM wins"})
 
         ctx = _make_ctx([llm_result], context_map)
-        with caplog.at_level(logging.INFO):
+        with caplog.at_level(logging.DEBUG):
             strategy.process(
                 batch_results=ctx.batch_results,
                 context_map=ctx.context_map,
@@ -179,9 +188,10 @@ class TestMergeOrder:
                 agent_config=ctx.agent_config,
             )
 
-        collision_logged = any("summary" in r.message for r in caplog.records)
+        collision_logged = any("summary" in r.getMessage() for r in caplog.records)
         assert collision_logged, (
-            "Collision between passthrough and LLM key 'summary' should be logged"
+            f"Collision between passthrough and LLM key 'summary' should be logged. "
+            f"Records: {[(r.name, r.getMessage()) for r in caplog.records]}"
         )
 
     def test_framework_fields_not_logged_as_collision(
@@ -209,9 +219,7 @@ class TestMergeOrder:
         # target_id is a framework field — should NOT be logged as collision
         for record in caplog.records:
             if "target_id" in record.message and "collision" in record.message.lower():
-                pytest.fail(
-                    f"Framework field 'target_id' logged as collision: {record.message}"
-                )
+                pytest.fail(f"Framework field 'target_id' logged as collision: {record.message}")
 
 
 # ===========================================================================
@@ -247,23 +255,10 @@ class TestFailedRecordReconciliation:
             agent_config=ctx.agent_config,
         )
 
-        # t-002 must appear in output
-        result_target_ids = set()
-        for r in results:
-            for item in r.data:
-                tid = item.get("target_id")
-                if tid:
-                    result_target_ids.add(tid)
-            if r.source_guid and r.source_guid.startswith("sg-"):
-                # Extract target_id from source_guid convention
-                pass
-
-        # Also check via source_guid
+        # t-002 must appear in output (check via source_guid)
         result_source_guids = {r.source_guid for r in results}
-
-        assert "sg-t-002" in result_source_guids or "t-002" in result_target_ids, (
-            f"FAILED record t-002 must appear in output. "
-            f"Got source_guids={result_source_guids}, target_ids={result_target_ids}"
+        assert "sg-t-002" in result_source_guids, (
+            f"FAILED record t-002 must appear in output. Got source_guids={result_source_guids}"
         )
 
     def test_failed_record_has_failed_status(self, strategy: BatchResultStrategy) -> None:
@@ -282,10 +277,10 @@ class TestFailedRecordReconciliation:
             agent_config={"action_name": "test_action"},
         )
 
-        assert len(results) >= 1, "FAILED record must produce output"
+        assert len(results) == 1, "FAILED record must produce exactly one output"
         failed_result = results[0]
-        assert failed_result.status in (ProcessingStatus.FAILED, ProcessingStatus.UNPROCESSED), (
-            f"FAILED record should have FAILED or UNPROCESSED status, got {failed_result.status}"
+        assert failed_result.status == ProcessingStatus.FAILED, (
+            f"FAILED record must have FAILED status, got {failed_result.status}"
         )
 
     def test_no_duplicate_records(self, strategy: BatchResultStrategy) -> None:
@@ -293,7 +288,9 @@ class TestFailedRecordReconciliation:
         context_map = {
             "t-001": _build_context_map_row("t-001", filter_status=FilterStatus.INCLUDED),
             "t-002": _build_context_map_row("t-002", filter_status=FilterStatus.FAILED),
-            "t-003": _build_context_map_row("t-003", filter_status=FilterStatus.SKIPPED, skip_reason="guard_skip"),
+            "t-003": _build_context_map_row(
+                "t-003", filter_status=FilterStatus.SKIPPED, skip_reason="guard_skip"
+            ),
         }
         provider_results = [
             _make_batch_result("t-001", {"summary": "success"}),
@@ -331,14 +328,88 @@ class TestFailedRecordReconciliation:
             agent_config={"action_name": "test_action"},
         )
 
-        assert len(results) >= 1, "FAILED record must produce output"
+        assert len(results) == 1, "FAILED record must produce exactly one output"
         failed_result = results[0]
-        # Must have an error or skip_reason indicating why it failed
-        has_reason = (
-            failed_result.error is not None
-            or failed_result.skip_reason is not None
+        assert failed_result.error == "prep_failed"
+        assert failed_result.skip_reason == "prep_failed"
+
+    def test_failed_record_defaults_to_prep_failed_reason(
+        self, strategy: BatchResultStrategy
+    ) -> None:
+        """FAILED record without skip_reason falls back to PREP_FAILED constant."""
+        context_map = {
+            "t-001": _build_context_map_row(
+                "t-001",
+                filter_status=FilterStatus.FAILED,
+                # No skip_reason set — should fall back to PREP_FAILED
+            ),
+        }
+        results = strategy.process(
+            batch_results=[],
+            context_map=context_map,
+            output_directory="/tmp/test",
+            agent_config={"action_name": "test_action"},
         )
-        assert has_reason, (
-            f"FAILED record must carry error reason. "
-            f"error={failed_result.error}, skip_reason={failed_result.skip_reason}"
+
+        assert len(results) == 1
+        failed_result = results[0]
+        assert failed_result.error == "prep_failed", (
+            f"Should fall back to PREP_FAILED constant, got error={failed_result.error}"
         )
+        assert failed_result.skip_reason == "prep_failed"
+
+
+# ===========================================================================
+# Edge cases
+# ===========================================================================
+
+
+class TestPassthroughEdgeCases:
+    """Edge cases for passthrough merge logic."""
+
+    def test_no_passthrough_fields_is_noop(self, strategy: BatchResultStrategy) -> None:
+        """INCLUDED record with no passthrough_fields — merge is skipped cleanly."""
+        context_map = {
+            "t-001": _build_context_map_row(
+                "t-001",
+                filter_status=FilterStatus.INCLUDED,
+                # No passthrough_fields
+            ),
+        }
+        llm_result = _make_batch_result("t-001", {"summary": "LLM output"})
+
+        ctx = _make_ctx([llm_result], context_map)
+        results = strategy.process(
+            batch_results=ctx.batch_results,
+            context_map=ctx.context_map,
+            output_directory=ctx.output_directory,
+            agent_config=ctx.agent_config,
+        )
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.SUCCESS
+        action_ns = results[0].data[0]["content"]["test_action"]
+        assert action_ns["summary"] == "LLM output"
+
+    def test_empty_passthrough_fields_is_noop(self, strategy: BatchResultStrategy) -> None:
+        """INCLUDED record with empty passthrough_fields dict — no extra keys added."""
+        context_map = {
+            "t-001": _build_context_map_row(
+                "t-001",
+                filter_status=FilterStatus.INCLUDED,
+                passthrough_fields={},
+            ),
+        }
+        llm_result = _make_batch_result("t-001", {"summary": "LLM output"})
+
+        ctx = _make_ctx([llm_result], context_map)
+        results = strategy.process(
+            batch_results=ctx.batch_results,
+            context_map=ctx.context_map,
+            output_directory=ctx.output_directory,
+            agent_config=ctx.agent_config,
+        )
+
+        assert len(results) == 1
+        action_ns = results[0].data[0]["content"]["test_action"]
+        assert action_ns == {"summary": "LLM output"}
