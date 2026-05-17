@@ -8,6 +8,8 @@ filtered/skipped during preparation must NOT receive DEFERRED.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from agent_actions.llm.batch.core.batch_constants import FilterStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.storage.backend import DISPOSITION_DEFERRED
@@ -170,3 +172,36 @@ class TestDeferredStampedOnSubmit:
         call = deferred_calls[0]
         reason = call.kwargs.get("reason", "")
         assert "batch-123" in reason, f"batch_id not in DEFERRED reason: {reason}"
+
+    def test_skipped_and_filtered_records_not_stamped(self):
+        """Records that were skipped/filtered during prep must NOT receive DEFERRED."""
+        backend = MagicMock()
+        service = _make_submission_service(storage_backend=backend)
+
+        # Hand-craft a context_map with mixed filter statuses
+        context_map: dict[str, Any] = {}
+
+        included_entry = {"source_guid": "sg-included", "content": {"text": "ok"}}
+        BatchContextMetadata.set_filter_status(included_entry, FilterStatus.INCLUDED)
+        context_map["t-included"] = included_entry
+
+        skipped_entry = {"source_guid": "sg-skipped", "content": {"text": "skip"}}
+        BatchContextMetadata.set_filter_status(skipped_entry, FilterStatus.SKIPPED)
+        context_map["t-skipped"] = skipped_entry
+
+        filtered_entry = {"source_guid": "sg-filtered", "content": {"text": "filter"}}
+        BatchContextMetadata.set_filter_status(filtered_entry, FilterStatus.FILTERED)
+        context_map["t-filtered"] = filtered_entry
+
+        failed_entry = {"source_guid": "sg-failed", "content": {"text": "fail"}}
+        BatchContextMetadata.set_filter_status(failed_entry, FilterStatus.FAILED)
+        context_map["t-failed"] = failed_entry
+
+        # Call _stamp_deferred directly
+        service._stamp_deferred(context_map, "test_action", "batch-999")
+
+        # Only the INCLUDED record should have been stamped
+        assert backend.set_disposition.call_count == 1
+        call = backend.set_disposition.call_args
+        assert call.args[1] == "sg-included"
+        assert call.args[2] == DISPOSITION_DEFERRED
