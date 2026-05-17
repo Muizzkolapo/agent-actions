@@ -22,21 +22,6 @@ _PREPARATOR_LOGGER = "agent_actions.llm.batch.processing.preparator"
 _EVALUATOR_LOGGER = "agent_actions.input.preprocessing.filtering.evaluator"
 
 
-@pytest.fixture(autouse=True)
-def _enable_log_propagation():
-    """Ensure agent_actions loggers propagate to root so caplog captures them.
-
-    The agent_actions root logger has propagate=False (set by LoggingBridgeHandler),
-    so caplog (which hooks the Python root logger) can't see child log records.
-    Temporarily enable propagation for the duration of each test.
-    """
-    aa_logger = logging.getLogger("agent_actions")
-    orig = aa_logger.propagate
-    aa_logger.propagate = True
-    yield
-    aa_logger.propagate = orig
-
-
 class TestPrepFailedLogging:
     """U-2.G: _mark_prep_failed must warn when target_id is missing."""
 
