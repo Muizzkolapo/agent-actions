@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.utils.dict import get_nested_value
 
 from .operators import FUNCTIONS, OPERATORS
@@ -29,6 +30,11 @@ class GuardSemanticError(ValueError):
     """
 
     pass
+
+
+def _is_null_or_empty_namespace(ns_value: Any) -> bool:
+    """Return True if namespace value is null (NullNamespace/None) or empty dict."""
+    return is_null_namespace(ns_value) or (isinstance(ns_value, dict) and not ns_value)
 
 
 def _field_exists(data: Any, field_path: str) -> bool:
@@ -189,7 +195,7 @@ def evaluate_node(
                 top_key = node.field_path.split(".", 1)[0]
                 if top_key in data:
                     ns_value = data[top_key]
-                    if ns_value is None or (isinstance(ns_value, dict) and not ns_value):
+                    if _is_null_or_empty_namespace(ns_value):
                         return None
 
             available = (

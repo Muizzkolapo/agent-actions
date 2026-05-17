@@ -9,6 +9,7 @@ import logging
 
 import pytest
 
+from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
 _LOGGER_NAME = "agent_actions.prompt.context.scope_builder"
@@ -58,9 +59,9 @@ class TestMissingNamespaceLogging:
         assert "extract" in result
         assert result["extract"]["text"] == "hello"
 
-        # classify namespace marked as None (guard-skipped/filtered)
+        # classify namespace marked as NullNamespace (guard-skipped/filtered)
         assert "classify" in result
-        assert result["classify"] is None
+        assert is_null_namespace(result["classify"])
 
         # Should log at DEBUG, not WARNING or ERROR
         debug_messages = [r.message for r in caplog.records if r.levelno == logging.DEBUG]

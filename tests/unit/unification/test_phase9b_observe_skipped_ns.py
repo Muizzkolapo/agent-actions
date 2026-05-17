@@ -47,11 +47,13 @@ class TestObserveSkippedNamespace:
         )
         _, llm_ctx, _ = apply_context_scope(
             field_context=fc,
-            context_scope={"observe": [
-                "skipped_step.field_a",
-                "skipped_step.field_b",
-                "skipped_step.field_c",
-            ]},
+            context_scope={
+                "observe": [
+                    "skipped_step.field_a",
+                    "skipped_step.field_b",
+                    "skipped_step.field_c",
+                ]
+            },
             action_name="downstream",
         )
         assert llm_ctx["skipped_step"] == {

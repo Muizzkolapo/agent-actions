@@ -13,6 +13,7 @@ from typing import Any
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextNamespaceLoadedEvent
+from agent_actions.prompt.context.null_namespace import NullNamespace
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_namespace import (
     _extract_allowed_fields_per_dependency,
@@ -133,16 +134,18 @@ class DependencyNamespaceBuilder:
                     dep_data = namespaced_content.get(dep_name)
                     if dep_data is None:
                         # Namespace is null (guard-skipped) or absent (guard-filtered /
-                        # arrived via a different branch).  Store None so downstream
-                        # observe/passthrough can distinguish "declared but absent" from
-                        # "undeclared" and yield None instead of crashing.
+                        # arrived via a different branch).  Wrap in NullNamespace so
+                        # downstream observe/passthrough can distinguish "declared but
+                        # absent" from "undeclared" and resolve fields to None instead
+                        # of crashing.  The reason is "skipped" by default; Phase 9c
+                        # will refine this to distinguish filtered namespaces.
                         logger.debug(
                             "[RECORD NAMESPACE] '%s' null/absent on record for action '%s' "
                             "(likely guard-skipped or guard-filtered)",
                             dep_name,
                             agent_name,
                         )
-                        dep_namespaces[dep_name] = None
+                        dep_namespaces[dep_name] = NullNamespace(reason="skipped")
                         continue
 
                     if not isinstance(dep_data, dict):

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
 
@@ -174,7 +175,7 @@ class TestContextScopeSplitRecordsEdgeCases:
 
         assert (
             "split_operation" not in field_context
-            or field_context.get("split_operation") is None
+            or is_null_namespace(field_context.get("split_operation"))
             or field_context.get("split_operation") == {}
         ), "Should not load split_operation without lineage or ancestry matching"
 
@@ -217,6 +218,6 @@ class TestContextScopeSplitRecordsEdgeCases:
 
         assert (
             "split_operation" not in field_context
-            or field_context.get("split_operation") is None
+            or is_null_namespace(field_context.get("split_operation"))
             or field_context.get("split_operation") == {}
         ), "Should not load split_operation without storage backend"
