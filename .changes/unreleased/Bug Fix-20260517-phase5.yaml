@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Align online guard prefilter context with batch TaskPreparer.prepare() context so guards referencing source, version, workflow namespaces, or promoted output_fields produce identical decisions in both execution modes"
+time: 2026-05-17T00:50:00.000000Z

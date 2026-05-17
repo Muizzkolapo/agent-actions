@@ -129,6 +129,12 @@ class UnifiedProcessor:
             records,
             config,
             context.agent_name,
+            agent_indices=context.agent_indices,
+            source_data=context.source_data or None,
+            is_first_stage=context.is_first_stage,
+            version_context=context.version_context,
+            workflow_metadata=context.workflow_metadata,
+            dependency_configs=context.dependency_configs,
         )
 
         guard_results: list[ProcessingResult] = []
@@ -182,6 +188,12 @@ class UnifiedProcessor:
             config,
             context.agent_name,
             original_data=raw_records,
+            agent_indices=context.agent_indices,
+            source_data=context.source_data or None,
+            is_first_stage=context.is_first_stage,
+            version_context=context.version_context,
+            workflow_metadata=context.workflow_metadata,
+            dependency_configs=context.dependency_configs,
         )
 
         guard_results: list[ProcessingResult] = []
