@@ -8,11 +8,9 @@ filtered/skipped during preparation must NOT receive DEFERRED.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
-from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
+from agent_actions.storage.backend import DISPOSITION_DEFERRED
 
 
 def _make_submission_service(
@@ -51,7 +49,7 @@ def _make_agent_config(**overrides) -> dict[str, Any]:
         "agent_type": "llm",
         "model_vendor": "openai",
         "prompt": "Process: {{ content }}",
-        "schema": {"properties": {"output": {"type": "string"}}},
+        "json_mode": False,
     }
     base.update(overrides)
     return base
@@ -160,7 +158,7 @@ class TestDeferredStampedOnSubmit:
             mock_preparer.prepare.return_value = prepared
             mock_get_preparer.return_value = mock_preparer
 
-            result = service.submit_batch_job(agent_config, "test-batch", records)
+            service.submit_batch_job(agent_config, "test-batch", records)
 
         # Find the DEFERRED call and verify it references the batch_id
         deferred_calls = [

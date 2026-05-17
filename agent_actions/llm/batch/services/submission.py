@@ -29,6 +29,7 @@ from agent_actions.logging.events.batch_events import (
     BatchSubmissionFailedEvent,
 )
 from agent_actions.output.response.config_schema import WhereClauseBehavior
+from agent_actions.storage.backend import DISPOSITION_DEFERRED
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class BatchSubmissionService:
         context_manager: BatchContextManager,
         registry_manager_factory: Callable[[str], BatchRegistryManager],
         force_batch: bool = False,
+        storage_backend: Any | None = None,
     ):
         """Initialize submission service with dependencies.
 
@@ -55,12 +57,14 @@ class BatchSubmissionService:
             context_manager: Manager for batch context persistence
             registry_manager_factory: Factory function to create registry managers
             force_batch: Whether to force new batch submission
+            storage_backend: Optional storage backend for disposition writes
         """
         self._task_preparator = task_preparator
         self._client_resolver = client_resolver
         self._context_manager = context_manager
         self._registry_manager_factory = registry_manager_factory
         self._force_batch = force_batch
+        self._storage_backend = storage_backend
 
     def prepare_batch_tasks(
         self,
@@ -215,7 +219,13 @@ class BatchSubmissionService:
         if output_directory:
             self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
 
-        return self._submit_to_provider(agent_config, batch_name, tasks, output_directory)
+        result = self._submit_to_provider(agent_config, batch_name, tasks, output_directory)
+
+        if self._storage_backend and result.is_submitted:
+            action_name = agent_config.get("action_name", batch_name or "default")
+            self._stamp_deferred(context_map, action_name, result.batch_id)
+
+        return result
 
     def _handle_empty_tasks(
         self,
@@ -268,6 +278,24 @@ class BatchSubmissionService:
                 context_map, reason="where_clause_not_matched"
             )
         return SubmissionResult(passthrough=passthrough)
+
+    def _stamp_deferred(
+        self,
+        context_map: dict[str, Any],
+        action_name: str,
+        batch_id: str | None,
+    ) -> None:
+        """Stamp DISPOSITION_DEFERRED for all INCLUDED records after submission."""
+        for custom_id, entry in context_map.items():
+            if BatchContextMetadata.get_filter_status(entry) != FilterStatus.INCLUDED:
+                continue
+            record_id = entry.get("source_guid") or custom_id
+            self._storage_backend.set_disposition(
+                action_name=action_name,
+                record_id=record_id,
+                disposition=DISPOSITION_DEFERRED,
+                reason=f"batch_queued:batch_id={batch_id}",
+            )
 
     def _submit_to_provider(
         self,
