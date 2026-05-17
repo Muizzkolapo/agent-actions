@@ -779,7 +779,7 @@ h4.md-heading { font-size: 13.5px; }
         function renderMarkdown(text) {
             var s = String(text);
             /* Convert HTML to markdown if present */
-            if (s.indexOf('<') >= 0 && s.indexOf('>') > s.indexOf('<')) s = htmlToMarkdown(s);
+            if (/<[a-zA-Z\/][^>]*>/.test(s)) s = htmlToMarkdown(s);
             /* Split into fenced code blocks vs text */
             var segments = splitFencedCode(s);
             var html = '';
@@ -926,11 +926,9 @@ h4.md-heading { font-size: 13.5px; }
             if (typeof val === 'number') return '<span class="tv-num">' + val + '</span>';
             if (typeof val === 'string') {
                 if (isUrl(val)) return '<a class="fv-link" href="' + esc(val.trim()) + '" target="_blank" rel="noopener">' + esc(val) + '</a>';
-                /* Short plain-text path: only if the raw value is short AND
-                   has no newlines AND has no HTML tags. Otherwise render as
-                   rich markdown (which handles newlines, <br>, code blocks). */
+                /* Rich-render anything with newlines, HTML tags, or length >= 80 */
                 var hasNewlines = val.indexOf('\n') !== -1;
-                var hasHtml = val.indexOf('<') >= 0 && val.indexOf('>') > val.indexOf('<');
+                var hasHtml = /<[a-zA-Z\/][^>]*>/.test(val);
                 if (!hasNewlines && !hasHtml && val.length < 80) return '<span class="tv-str">' + inlineFmt(val) + '</span>';
                 return renderMarkdown(val);
             }
