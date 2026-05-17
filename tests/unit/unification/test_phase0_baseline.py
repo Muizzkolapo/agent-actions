@@ -261,12 +261,8 @@ class TestU04SharedBuildPipelineContext:
         assert dependency_configs is not None
         assert version_context is None  # non-versioned agent
 
-    def test_batch_path_calls_build_pipeline_context(self):
-        """Batch path in ProcessingPipeline.process() uses _build_pipeline_context output.
-
-        Verify by checking that BatchTaskPreparator is constructed with fields
-        that only _build_pipeline_context can produce (action_indices, version_context).
-        """
+    def test_build_pipeline_context_output_compatible_with_batch_preparator(self):
+        """_build_pipeline_context output is accepted by BatchTaskPreparator constructor."""
         from agent_actions.workflow.pipeline import ProcessingPipeline
 
         # Verify the static method produces correct indices

@@ -9,8 +9,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.llm.batch.core.batch_models import BatchTaskPreparationStats
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
+from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 
 @pytest.fixture
@@ -109,8 +111,6 @@ def paired_execution():
         records: list[dict[str, Any]],
         guard_config: dict[str, Any] | None = None,
     ) -> tuple[list[str], list[str]]:
-        from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
-
         if not guard_config:
             # No guard — both paths pass everything
             return (
@@ -129,7 +129,6 @@ def paired_execution():
 
             def online_evaluate(*, item, guard_config, context=None, **kwargs):
                 result = MagicMock()
-                # Simple evaluation: check if clause field is truthy in context
                 result.should_execute = bool(context) and bool(
                     context.get("upstream_ns", {}).get("status") == "ready"
                 )
@@ -152,7 +151,6 @@ def paired_execution():
             mock_preparer = MagicMock()
 
             def batch_prepare(row, ctx, skip_guard=False, **kwargs):
-                # Same logic as online: check upstream_ns.status in content
                 content = row.get("content", {})
                 is_ready = content.get("upstream_ns", {}).get("status") == "ready"
                 result = MagicMock()
@@ -167,10 +165,6 @@ def paired_execution():
 
             mock_preparer.prepare.side_effect = batch_prepare
             mock_get.return_value = mock_preparer
-
-            from agent_actions.llm.batch.core.batch_models import (
-                BatchTaskPreparationStats,
-            )
 
             context_map: dict[str, Any] = {}
             stats = BatchTaskPreparationStats()
