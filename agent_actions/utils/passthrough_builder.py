@@ -71,6 +71,8 @@ class PassthroughItemBuilder:
             processed_item["metadata"][flag_name] = True
 
         processed_item["metadata"]["agent_type"] = "tombstone"
+        processed_item["_tombstone"] = True
+        processed_item["_tombstone_reason"] = reason
 
         RecordEnvelope.transition(processed_item, RecordState.GUARD_SKIPPED, action_name, reason)
 

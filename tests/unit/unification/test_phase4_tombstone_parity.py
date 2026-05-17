@@ -6,6 +6,8 @@ U-2.F: build_tombstone() and build_exhausted_tombstone() must both produce
 instead of guessing from ``_state`` values.
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from agent_actions.processing.record_helpers import (
@@ -112,16 +114,14 @@ class TestTombstoneShapeParity:
         cascade = build_tombstone("action", record, "upstream_unprocessed", source_guid="sg-001")
         skip = build_tombstone("action", record, "guard_skip", source_guid="sg-001")
 
-        cascade_markers = {k: cascade[k] for k in REQUIRED_TOMBSTONE_FIELDS}
-        skip_markers = {k: skip[k] for k in REQUIRED_TOMBSTONE_FIELDS}
+        for field in REQUIRED_TOMBSTONE_FIELDS:
+            assert field in cascade, f"cascade tombstone missing {field}"
+            assert field in skip, f"skip tombstone missing {field}"
+        assert cascade["_tombstone"] is True
+        assert skip["_tombstone"] is True
 
-        # Both must have the same keys (values differ by reason)
-        assert set(cascade_markers.keys()) == set(skip_markers.keys())
-        assert cascade_markers["_tombstone"] is True
-        assert skip_markers["_tombstone"] is True
-
-    def test_extra_metadata_does_not_clobber_markers(self):
-        """extra_metadata kwarg must not overwrite _tombstone/_tombstone_reason."""
+    def test_extra_metadata_does_not_clobber_regular_markers(self):
+        """extra_metadata kwarg must not overwrite _tombstone/_tombstone_reason on build_tombstone."""
         tombstone = build_tombstone(
             "action",
             _make_input_record(),
@@ -131,3 +131,54 @@ class TestTombstoneShapeParity:
         )
         assert tombstone["_tombstone"] is True
         assert tombstone["_tombstone_reason"] == "guard_skip"
+
+    def test_extra_metadata_does_not_clobber_exhausted_markers(self):
+        """extra_metadata kwarg must not overwrite _tombstone/_tombstone_reason on build_exhausted_tombstone."""
+        tombstone = build_exhausted_tombstone(
+            "action",
+            _make_input_record(),
+            {"field": None},
+            source_guid="sg-001",
+            extra_metadata={"custom": "val"},
+        )
+        assert tombstone["_tombstone"] is True
+        assert tombstone["_tombstone_reason"] == "retry_exhausted"
+
+
+class TestSiblingBuilderParity:
+    """Sibling builders that construct tombstone-like records must also carry markers."""
+
+    def test_exhausted_record_builder_has_markers(self):
+        """ExhaustedRecordBuilder.build_exhausted_item must set _tombstone markers."""
+        from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+        from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
+
+        recovery = RecoveryMetadata(
+            retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="api_error")
+        )
+        item = ExhaustedRecordBuilder.build_exhausted_item(
+            source_guid="sg-001",
+            original_row=_make_input_record(),
+            recovery_metadata=recovery,
+            agent_config={"action_name": "test_action"},
+            action_name="test_action",
+        )
+        assert item["_tombstone"] is True
+        assert item["_tombstone_reason"] == "retry_exhausted"
+
+    def test_passthrough_item_builder_has_markers(self):
+        """PassthroughItemBuilder.build_item must set _tombstone markers."""
+        from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
+
+        with patch.multiple(
+            "agent_actions.utils.passthrough_builder.IDGenerator",
+            generate_target_id=staticmethod(lambda: "fixed-tid"),
+            generate_node_id=staticmethod(lambda action_name: f"{action_name}_fixed-nid"),
+        ):
+            item = PassthroughItemBuilder.build_item(
+                row=_make_input_record(),
+                reason="where_clause_not_matched",
+                action_name="test_action",
+            )
+        assert item["_tombstone"] is True
+        assert item["_tombstone_reason"] == "where_clause_not_matched"

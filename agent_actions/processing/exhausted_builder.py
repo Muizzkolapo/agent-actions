@@ -4,6 +4,7 @@ from typing import Any
 
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.lineage.builder import LineageBuilder
 
@@ -56,6 +57,8 @@ class ExhaustedRecordBuilder:
         node_id = IDGenerator.generate_node_id(action_name)
         exhausted_item["node_id"] = node_id
         exhausted_item["metadata"] = {"retry_exhausted": True, "agent_type": "tombstone"}
+        exhausted_item["_tombstone"] = True
+        exhausted_item["_tombstone_reason"] = RETRY_EXHAUSTED
         exhausted_item["_recovery"] = recovery_metadata.to_dict()
 
         if isinstance(original_row, dict):
