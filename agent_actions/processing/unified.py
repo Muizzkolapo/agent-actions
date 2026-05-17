@@ -101,8 +101,10 @@ class UnifiedProcessor:
 
         invocation_results = strategy.invoke(passing, context) if passing else []
 
-        # FILE mode: invocation first, then guard skips (preserves historical order).
-        # RECORD mode: guard skips first, then invocation results.
+        # FILE mode: sequential processing — record N can reference record N-1's output.
+        # RECORD mode: independent — merge order doesn't affect semantics.
+        # This divergence is intentional. Do not unify without verifying FILE-mode
+        # workflows that depend on sequential accumulation (e.g., multi-pass enrichment).
         if raw_records is not None:
             all_results = invocation_results + guard_results
         else:
@@ -127,6 +129,12 @@ class UnifiedProcessor:
             records,
             config,
             context.agent_name,
+            agent_indices=context.agent_indices,
+            source_data=context.source_data or None,
+            is_first_stage=context.is_first_stage,
+            version_context=context.version_context,
+            workflow_metadata=context.workflow_metadata,
+            dependency_configs=context.dependency_configs,
         )
 
         guard_results: list[ProcessingResult] = []
@@ -180,6 +188,12 @@ class UnifiedProcessor:
             config,
             context.agent_name,
             original_data=raw_records,
+            agent_indices=context.agent_indices,
+            source_data=context.source_data or None,
+            is_first_stage=context.is_first_stage,
+            version_context=context.version_context,
+            workflow_metadata=context.workflow_metadata,
+            dependency_configs=context.dependency_configs,
         )
 
         guard_results: list[ProcessingResult] = []

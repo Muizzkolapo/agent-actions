@@ -206,48 +206,24 @@ class TaskPreparer:
         context: PreparationContext,
         current_item: dict | None = None,
     ) -> dict[str, Any]:
-        """Load full context (source, upstream, version, workflow) for guard and prompt."""
-        from agent_actions.prompt.context.scope_builder import build_field_context_with_history
+        """Load full context (source, upstream, version, workflow) for guard and prompt.
 
-        field_context = build_field_context_with_history(
+        Delegates to the shared build_guard_context helper to ensure batch
+        and online paths always build identical guard context.
+        """
+        from agent_actions.processing.guard_context import build_guard_context
+
+        record = current_item if current_item is not None else {"content": content}
+        return build_guard_context(
+            record,
             agent_name=context.agent_name,
             agent_config=context.agent_config,
             agent_indices=context.agent_indices,
             source_content=source_content,
             version_context=context.version_context,
             workflow_metadata=context.workflow_metadata,
-            current_item=current_item,
-            context_scope=context.agent_config.get("context_scope"),
+            dependency_configs=context.dependency_configs,
         )
-        field_context.pop("_dependency_metadata", None)
-
-        # Promote output_field values to top-level so guards can reference them directly.
-        # E.g., if action "assess_severity" has output_field="severity", then
-        # field_context["severity"] = field_context["assess_severity"]["severity"]
-        # so guards can write `severity != "low"` instead of `assess_severity.severity != "low"`.
-        if context.dependency_configs:
-            for dep_name, dep_config in context.dependency_configs.items():
-                if not dep_config or "output_field" not in dep_config:
-                    continue
-                of_name = dep_config["output_field"]
-                dep_data = field_context.get(dep_name)
-                # Unwrap single-item list (common storage shape for output_field actions)
-                if isinstance(dep_data, list) and len(dep_data) == 1:
-                    dep_data = dep_data[0]
-                if isinstance(dep_data, dict) and of_name in dep_data:
-                    if of_name not in field_context:
-                        field_context[of_name] = dep_data[of_name]
-                    else:
-                        logger.warning(
-                            "output_field '%s' from action '%s' collides with existing "
-                            "field in context — use '%s.%s' in guard conditions instead",
-                            of_name,
-                            dep_name,
-                            dep_name,
-                            of_name,
-                        )
-
-        return field_context
 
     @staticmethod
     def _evaluate_guard(

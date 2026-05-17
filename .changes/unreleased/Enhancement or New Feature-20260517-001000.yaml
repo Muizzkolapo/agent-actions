@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Add Phase 1 observability: WARNING on prep failure without target_id, WARNING on passthrough_on_error exception, RuntimeError on prefilter length mismatch, FILE vs RECORD merge-order documentation"
+time: 2026-05-17T00:10:00.000000Z

@@ -186,9 +186,16 @@ class GuardEvaluator:
             return GuardResult.from_filter_result(filter_result, behavior, passthrough_on_error)
 
         except (ValueError, TypeError, KeyError, AttributeError) as e:
-            logger.warning("Guard: guard condition evaluation exception: %s", e)
             if passthrough_on_error:
+                logger.warning(
+                    "Guard evaluation raised %s but passthrough_on_error=True — passing record. "
+                    "clause=%s, error=%s",
+                    type(e).__name__,
+                    clause,
+                    e,
+                )
                 return GuardResult.passed()
+            logger.warning("Guard: guard condition evaluation exception: %s", e)
             if behavior == GuardBehavior.WARN:
                 return GuardResult.warned()
             if behavior == GuardBehavior.SKIP:

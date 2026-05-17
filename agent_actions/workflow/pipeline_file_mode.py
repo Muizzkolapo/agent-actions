@@ -310,6 +310,13 @@ def prefilter_by_guard(
     agent_config: dict[str, Any],
     agent_name: str,
     original_data: list[dict] | None = None,
+    *,
+    agent_indices: dict[str, int] | None = None,
+    source_data: list[dict[str, Any]] | None = None,
+    is_first_stage: bool = False,
+    version_context: dict[str, Any] | None = None,
+    workflow_metadata: dict[str, Any] | None = None,
+    dependency_configs: dict[str, Any] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Evaluate guard per-record and split into passing and skipped arrays.
 
@@ -323,17 +330,23 @@ def prefilter_by_guard(
     each passing record.  This preserves upstream fields that observe
     filtering may have stripped.
 
-    When no guard is configured, returns ``(data, [], original_data or data)``.
+    When pipeline context parameters are provided (agent_indices, source_data,
+    etc.), guard evaluation uses full field_context — identical to
+    TaskPreparer.prepare() — so guards referencing source, version, workflow,
+    or promoted output_fields produce correct decisions.
 
-    Note:
-        Guard evaluation uses the record's existing content as context so
-        that guard clauses can reference upstream namespace fields — matching
-        the per-record guard context used in batch mode.
+    When no guard is configured, returns ``(data, [], original_data or data)``.
 
     Returns:
         (passing, skipped, original_passing)
     """
     originals = original_data if original_data is not None else data
+
+    if original_data is not None and len(original_data) != len(data):
+        raise RuntimeError(
+            f"prefilter_by_guard received {len(original_data)} original_data for "
+            f"{len(data)} input records — length mismatch"
+        )
 
     guard_config = agent_config.get("guard")
     if not guard_config:
@@ -343,11 +356,24 @@ def prefilter_by_guard(
     from agent_actions.input.preprocessing.filtering.evaluator import (
         get_guard_evaluator,
     )
+    from agent_actions.processing.guard_context import build_guard_context
     from agent_actions.utils.content import get_existing_content
 
     evaluator = get_guard_evaluator()
     # The config expander normalizes user-facing "on_false" into "behavior"
     behavior = GuardBehavior(guard_config.get("behavior", "filter"))
+
+    # Determine whether full context building is available.
+    has_pipeline_context = any(
+        v is not None
+        for v in (
+            agent_indices,
+            source_data,
+            version_context,
+            workflow_metadata,
+            dependency_configs,
+        )
+    )
 
     passing: list[dict] = []
     skipped: list[dict] = []
@@ -355,10 +381,25 @@ def prefilter_by_guard(
     for idx, item in enumerate(data):
         eval_item = get_existing_content(item)
 
+        if has_pipeline_context:
+            context = build_guard_context(
+                item,
+                agent_name=agent_name,
+                agent_config=agent_config,
+                agent_indices=agent_indices,
+                source_data=source_data,
+                is_first_stage=is_first_stage,
+                version_context=version_context,
+                workflow_metadata=workflow_metadata,
+                dependency_configs=dependency_configs,
+            )
+        else:
+            context = eval_item
+
         result = evaluator.evaluate(
             item=eval_item,
             guard_config=guard_config,
-            context=eval_item,
+            context=context,
         )
 
         if result.should_execute:

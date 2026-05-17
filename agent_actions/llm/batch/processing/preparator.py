@@ -166,9 +166,8 @@ class BatchTaskPreparator:
             custom_id = IDGenerator.generate_target_id()
             row["target_id"] = custom_id
 
-        # 2. Store row in context map with initial status
+        # 2. Store row in context map (no status yet — INCLUDED only after prepare succeeds)
         row_with_meta = row.copy()
-        BatchContextMetadata.set_filter_status(row_with_meta, FilterStatus.INCLUDED)
         context_map_builder[custom_id] = row_with_meta
 
         # 3. Update prep_context with current item
@@ -212,7 +211,12 @@ class BatchTaskPreparator:
             logger.debug("Guard skipped item %s", custom_id)
             return None
 
-        # 7. Create and return task
+        # 7. Mark INCLUDED only now — prepare() succeeded and guard passed
+        BatchContextMetadata.set_filter_status(
+            context_map_builder[custom_id], FilterStatus.INCLUDED
+        )
+
+        # 8. Create and return task
         return {
             "target_id": custom_id,
             "content": prepared.llm_context,
@@ -230,7 +234,13 @@ class BatchTaskPreparator:
     ) -> None:
         """Stamp the context_map entry as FAILED with _state transition and disposition."""
         custom_id = row.get("target_id")
-        if not custom_id or custom_id not in context_map_builder:
+        if not custom_id:
+            logger.warning(
+                "Prep failed for record without target_id — record may be untrackable. error=%s",
+                error,
+            )
+            return
+        if custom_id not in context_map_builder:
             return
         entry = context_map_builder[custom_id]
         BatchContextMetadata.set_filter_status(entry, FilterStatus.FAILED)
