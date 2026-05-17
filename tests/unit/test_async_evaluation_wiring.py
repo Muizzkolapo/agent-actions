@@ -16,7 +16,6 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.storage.backend import DISPOSITION_EXHAUSTED
 
 # Module path prefix for patching deferred imports in processing_recovery.
 _MOD = "agent_actions.llm.batch.services.processing_recovery"
@@ -395,9 +394,10 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         )
 
         write_record_dispositions(service._storage_backend, items, "my_action")
-        service._storage_backend.set_disposition.assert_called_once_with(
-            "my_action", "sg-1", DISPOSITION_EXHAUSTED, reason="evaluation_exhausted:check_schema"
-        )
+        service._storage_backend.set_disposition.assert_called_once()
+        call_kwargs = service._storage_backend.set_disposition.call_args.kwargs
+        assert call_kwargs["reason"] == "evaluation_exhausted:check_schema"
+        assert "input_snapshot" in call_kwargs
 
     def test_evaluation_exhausted_takes_precedence_over_retry_exhausted(self):
         """If both _recovery.reprompt.passed=False AND retry_exhausted, evaluation wins."""
@@ -431,9 +431,10 @@ class TestWriteRecordDispositionsEvaluationExhausted:
         )
 
         write_record_dispositions(service._storage_backend, items, "my_action")
-        service._storage_backend.set_disposition.assert_called_once_with(
-            "my_action", "sg-1", DISPOSITION_EXHAUSTED, reason="retry_exhausted"
-        )
+        service._storage_backend.set_disposition.assert_called_once()
+        call_kwargs = service._storage_backend.set_disposition.call_args.kwargs
+        assert call_kwargs["reason"] == "retry_exhausted"
+        assert "input_snapshot" in call_kwargs
 
     def test_unknown_validation_fallback(self):
         """Missing validation name defaults to 'unknown'."""

@@ -162,6 +162,7 @@ class BatchProcessingService:
 
             if self._storage_backend and self._action_name:
                 self._write_record_dispositions(processed_data, self._action_name)
+                self._write_filtered_dispositions(context_map, self._action_name)
                 self._update_prompt_trace_responses(processed_data, self._action_name)
 
             if self._source_handler:
@@ -619,18 +620,68 @@ class BatchProcessingService:
         return output_path
 
     def _write_record_dispositions(self, items: list[dict[str, Any]], action_name: str) -> None:
-        """Write dispositions for non-success records in batch output.
+        """Write dispositions for batch output records.
 
         Delegates to result_collector.write_record_dispositions.
         """
         _write_record_dispositions_impl(self._storage_backend, items, action_name)
 
+    def _write_filtered_dispositions(self, context_map: dict[str, Any], action_name: str) -> None:
+        """Write FILTERED dispositions for records excluded from output.
+
+        FILTERED records are removed from the output stream by the reconciler
+        (they never reach write_record_dispositions). This method ensures they
+        still receive DISPOSITION_FILTERED to match online ResultCollector parity.
+        """
+        if not self._storage_backend or not context_map:
+            return
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+        from agent_actions.record.reasons import GUARD_FILTER
+        from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
+
+        for _custom_id, entry in context_map.items():
+            if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:
+                continue
+            source_guid = entry.get("source_guid")
+            if not source_guid:
+                continue
+            reason = BatchContextMetadata.get_skip_reason(entry) or GUARD_FILTER
+            try:
+                self._storage_backend.clear_disposition(
+                    action_name,
+                    disposition=DISPOSITION_DEFERRED,
+                    record_id=source_guid,
+                )
+            except Exception:
+                logger.debug(
+                    "Could not clear DEFERRED disposition for %s (may not exist)",
+                    source_guid,
+                    exc_info=True,
+                )
+            try:
+                self._storage_backend.set_disposition(
+                    action_name, source_guid, DISPOSITION_FILTERED, reason=reason
+                )
+            except Exception:
+                logger.debug(
+                    "Failed to write FILTERED disposition for %s", source_guid, exc_info=True
+                )
+
     def _update_prompt_trace_responses(self, items: list[dict[str, Any]], action_name: str) -> None:
-        """Update prompt traces with batch responses. Telemetry — non-fatal."""
+        """Update prompt traces with batch responses for SUCCESS records only.
+
+        Only records with _state=processed represent actual LLM responses.
+        Tombstones (exhausted, failed, skipped) must not pollute prompt traces.
+        """
         if not self._storage_backend:
             return
+        from agent_actions.record.state import RecordState
+
         try:
             for item in items:
+                if item.get("_state") != RecordState.PROCESSED.value:
+                    continue
                 target_id = item.get("target_id")
                 if not target_id:
                     continue
