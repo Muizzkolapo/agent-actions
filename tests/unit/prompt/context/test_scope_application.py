@@ -105,15 +105,15 @@ class TestDropWildcard:
         # Field must NOT be removed (drop failed to parse — safe failure)
         assert prompt_context["dep"]["api_key"] == "secret"
 
-    def test_wildcard_drop_then_observe_specific_field_raises(self):
-        """After drop: ['dep.*'], observe: ['dep.name'] must raise — all fields gone."""
+    def test_wildcard_drop_then_observe_specific_field_returns_none(self):
+        """After drop: ['dep.*'], observe: ['dep.name'] → None (U-4.2)."""
         field_context = {"dep": {"api_key": "secret", "name": "test", "value": "data"}}
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=field_context,
-                context_scope={"drop": ["dep.*"], "observe": ["dep.name"]},
-                action_name="test_action",
-            )
+        _, llm_ctx, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"drop": ["dep.*"], "observe": ["dep.name"]},
+            action_name="test_action",
+        )
+        assert llm_ctx["dep"]["name"] is None
 
     def test_drop_then_observe_wildcard_excludes_dropped_field(self):
         """Existing security test: drop + observe wildcard must not leak dropped field."""
@@ -175,15 +175,15 @@ class TestFalsyFieldPassthrough:
         )
         assert passthrough["dep"]["enabled"] is False
 
-    def test_missing_field_raises_error(self):
-        """Fields truly absent from context must raise ConfigurationError."""
+    def test_missing_field_returns_none(self):
+        """Fields absent from present namespace resolve to None (U-4.2)."""
         field_context = {"dep": {"other": "value"}}
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=field_context,
-                context_scope={"observe": ["dep.missing"]},
-                action_name="test_action",
-            )
+        _, llm_ctx, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"observe": ["dep.missing"]},
+            action_name="test_action",
+        )
+        assert llm_ctx["dep"]["missing"] is None
 
     def test_observe_includes_explicit_none_value(self):
         """G-2 boundary: field whose value IS None must still appear in llm_context.
@@ -196,15 +196,15 @@ class TestFalsyFieldPassthrough:
         )
         assert llm_context["dep"]["nullable_field"] is None
 
-    def test_passthrough_nested_path_missing_field_raises(self):
-        """G-2 nested-path: a truly missing nested field must raise ConfigurationError."""
+    def test_passthrough_nested_path_missing_field_returns_none(self):
+        """G-2 nested-path: missing nested field resolves to None (U-4.2)."""
         field_context = {"dep": {"top": {"exists": 1}}}
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=field_context,
-                context_scope={"passthrough": ["dep.top.missing"]},
-                action_name="test_action",
-            )
+        _, _, pt = apply_context_scope(
+            field_context=field_context,
+            context_scope={"passthrough": ["dep.top.missing"]},
+            action_name="test_action",
+        )
+        assert pt["dep"]["top.missing"] is None
 
 
 class TestAbsentNamespace:
@@ -399,9 +399,9 @@ class TestPassthroughNamespacing:
         _, _, pt = apply_context_scope(fc, {"passthrough": ["dep.enabled"]})
         assert pt["dep"]["enabled"] is False
 
-    def test_missing_field_raises(self):
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope({"dep": {"a": 1}}, {"passthrough": ["dep.missing"]})
+    def test_missing_field_returns_none(self):
+        _, _, pt = apply_context_scope({"dep": {"a": 1}}, {"passthrough": ["dep.missing"]})
+        assert pt["dep"]["missing"] is None
 
     def test_missing_namespace_raises(self):
         with pytest.raises(ConfigurationError, match="not found at runtime"):
