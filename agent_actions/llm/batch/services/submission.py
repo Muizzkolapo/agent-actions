@@ -29,6 +29,7 @@ from agent_actions.logging.events.batch_events import (
     BatchSubmissionFailedEvent,
 )
 from agent_actions.output.response.config_schema import WhereClauseBehavior
+from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.storage.backend import DISPOSITION_DEFERRED
 
 logger = logging.getLogger(__name__)
@@ -290,10 +291,11 @@ class BatchSubmissionService:
             if BatchContextMetadata.get_filter_status(entry) != FilterStatus.INCLUDED:
                 continue
             record_id = entry.get("source_guid") or custom_id
-            self._storage_backend.set_disposition(
-                action_name=action_name,
-                record_id=record_id,
-                disposition=DISPOSITION_DEFERRED,
+            _safe_set_disposition(
+                self._storage_backend,
+                action_name,
+                record_id,
+                DISPOSITION_DEFERRED,
                 reason=f"batch_queued:batch_id={batch_id}",
             )
 

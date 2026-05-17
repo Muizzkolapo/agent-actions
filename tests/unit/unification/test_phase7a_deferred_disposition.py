@@ -16,7 +16,6 @@ from agent_actions.storage.backend import DISPOSITION_DEFERRED
 def _make_submission_service(
     *,
     storage_backend: Any = None,
-    prepare_result: Any = None,
 ) -> BatchSubmissionService:
     """Build a BatchSubmissionService with mocked provider/registry."""
     preparator = BatchTaskPreparator(
