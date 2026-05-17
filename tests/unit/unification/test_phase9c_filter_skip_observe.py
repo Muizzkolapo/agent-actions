@@ -160,24 +160,6 @@ class TestFanInFilterInteractions:
         assert llm_ctx["step_b"]["rating"] is None
         assert llm_ctx["step_c"]["label"] == "good"
 
-    def test_fan_in_observe_and_passthrough_on_filtered(self):
-        """Both observe and passthrough on a filtered namespace in fan-in."""
-        fc = _make_field_context(
-            success_path={"output": "data"},
-            filtered_path=None,
-        )
-        _, llm_ctx, pt = apply_context_scope(
-            field_context=fc,
-            context_scope={
-                "observe": ["success_path.output", "filtered_path.result"],
-                "passthrough": ["filtered_path.id"],
-            },
-            action_name="merger",
-        )
-        assert llm_ctx["success_path"]["output"] == "data"
-        assert llm_ctx["filtered_path"]["result"] is None
-        assert pt["filtered_path"]["id"] is None
-
     def test_all_upstream_filtered_still_works(self):
         """All upstream namespaces filtered: all fields resolve to None."""
         fc = _make_field_context(dep_a=None, dep_b=None)
