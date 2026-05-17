@@ -619,6 +619,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         client_resolver=client_resolver,
         context_manager=context_manager,
         registry_manager_factory=registry_manager_factory,
+        storage_backend=ctx.storage_backend,
     )
     file_name = Path(ctx.file_path).name
     result = submission_service.submit_batch_job(
