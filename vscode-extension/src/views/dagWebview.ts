@@ -263,14 +263,58 @@ export class DagWebview implements vscode.Disposable {
         .legend-dot.failed { background: #dc3545; }
         .legend-dot.pending { background: #6c757d; }
         .legend-dot.skipped { background: #17a2b8; }
+        .dag-container {
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            height: calc(100vh - 80px);
+            border: 1px solid var(--vscode-panel-border, #444);
+            border-radius: 4px;
+        }
+        .dag-viewport {
+            transform-origin: 0 0;
+            cursor: grab;
+        }
+        .dag-viewport.grabbing {
+            cursor: grabbing;
+        }
         .mermaid {
-            display: flex;
-            justify-content: center;
+            display: inline-block;
             padding: 16px;
         }
         .mermaid svg {
-            max-width: 100%;
             height: auto;
+        }
+        .zoom-controls {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 10;
+        }
+        .zoom-controls button {
+            width: 32px;
+            height: 32px;
+            border: 1px solid var(--vscode-panel-border, #444);
+            background: var(--vscode-editor-background, #1e1e1e);
+            color: var(--vscode-editor-foreground, #d4d4d4);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .zoom-controls button:hover {
+            background: var(--vscode-toolbar-hoverBackground, #333);
+        }
+        .zoom-level {
+            text-align: center;
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground, #888);
+            padding: 2px 0;
         }
         /* Make nodes clickable */
         .node { cursor: pointer; }
@@ -290,8 +334,19 @@ export class DagWebview implements vscode.Disposable {
             <div class="legend-item"><div class="legend-dot skipped"></div> Skipped</div>
         </div>
     </div>
-    <div class="mermaid">
+    <div class="dag-container" id="dagContainer">
+        <div class="dag-viewport" id="dagViewport">
+            <div class="mermaid">
 ${diagram}
+            </div>
+        </div>
+        <div class="zoom-controls">
+            <button id="zoomIn" title="Zoom in">+</button>
+            <div class="zoom-level" id="zoomLevel">100%</div>
+            <button id="zoomOut" title="Zoom out">&minus;</button>
+            <button id="zoomFit" title="Fit to view">&#8862;</button>
+            <button id="zoomReset" title="Reset zoom">1:1</button>
+        </div>
     </div>
     <script src="${mermaidUri}"></script>
     <script nonce="${nonce}">
@@ -302,20 +357,141 @@ ${diagram}
             theme: '${isDark ? 'dark' : 'default'}',
             flowchart: {
                 curve: 'basis',
-                htmlLabels: false,  // Disable HTML labels for security
+                htmlLabels: false,
                 padding: 15
             },
             securityLevel: 'strict'
         });
 
-        // Handle click events - Mermaid will call this via the callback mechanism
-        // With securityLevel: 'strict', we use mermaid's built-in click handler
+        // Handle click events — only navigate if the user didn't drag
         window.callback = function(actionName) {
-            // Validate actionName contains only safe characters
+            if (didDrag) return;
             if (/^[a-zA-Z0-9_-]+$/.test(actionName)) {
                 vscode.postMessage({ type: 'openAction', actionName });
             }
         };
+
+        // Pan and zoom
+        const container = document.getElementById('dagContainer');
+        const viewport = document.getElementById('dagViewport');
+        const zoomLevelEl = document.getElementById('zoomLevel');
+
+        let scale = 1;
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let didDrag = false;
+        let startX = 0;
+        let startY = 0;
+        let downX = 0;
+        let downY = 0;
+        const DRAG_THRESHOLD = 5;
+
+        const MIN_SCALE = 0.1;
+        const MAX_SCALE = 5;
+        const ZOOM_STEP = 0.15;
+
+        function applyTransform() {
+            viewport.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
+            zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+        }
+
+        function zoomAtPoint(newScale, clientX, clientY) {
+            newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+            const rect = container.getBoundingClientRect();
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+            panX = x - (x - panX) * (newScale / scale);
+            panY = y - (y - panY) * (newScale / scale);
+            scale = newScale;
+            applyTransform();
+        }
+
+        function fitToView() {
+            const svg = viewport.querySelector('svg');
+            if (!svg) return;
+            const cRect = container.getBoundingClientRect();
+            // Use getBBox for intrinsic SVG size — immune to CSS transforms and overflow clipping
+            const bbox = svg.getBBox();
+            const sW = bbox.width;
+            const sH = bbox.height;
+            if (sW === 0 || sH === 0) return;
+            const fitScale = Math.min(cRect.width / (sW + 32), cRect.height / (sH + 32), 2);
+            scale = fitScale;
+            panX = (cRect.width - sW * scale) / 2 - bbox.x * scale;
+            panY = (cRect.height - sH * scale) / 2 - bbox.y * scale;
+            applyTransform();
+        }
+
+        // Mouse wheel zoom
+        container.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+            zoomAtPoint(scale * (1 + delta), e.clientX, e.clientY);
+        }, { passive: false });
+
+        // Pan with mouse drag — track distance to distinguish click from drag
+        container.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+            isPanning = true;
+            didDrag = false;
+            startX = e.clientX - panX;
+            startY = e.clientY - panY;
+            downX = e.clientX;
+            downY = e.clientY;
+            viewport.classList.add('grabbing');
+        });
+
+        window.addEventListener('mousemove', function(e) {
+            if (!isPanning) return;
+            var dx = e.clientX - downX;
+            var dy = e.clientY - downY;
+            if (!didDrag && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) {
+                didDrag = true;
+            }
+            panX = e.clientX - startX;
+            panY = e.clientY - startY;
+            applyTransform();
+        });
+
+        window.addEventListener('mouseup', function() {
+            isPanning = false;
+            viewport.classList.remove('grabbing');
+        });
+
+        // Zoom buttons
+        document.getElementById('zoomIn').addEventListener('click', function() {
+            const rect = container.getBoundingClientRect();
+            zoomAtPoint(scale * (1 + ZOOM_STEP), rect.left + rect.width / 2, rect.top + rect.height / 2);
+        });
+
+        document.getElementById('zoomOut').addEventListener('click', function() {
+            const rect = container.getBoundingClientRect();
+            zoomAtPoint(scale * (1 - ZOOM_STEP), rect.left + rect.width / 2, rect.top + rect.height / 2);
+        });
+
+        document.getElementById('zoomFit').addEventListener('click', fitToView);
+
+        document.getElementById('zoomReset').addEventListener('click', function() {
+            scale = 1;
+            panX = 0;
+            panY = 0;
+            applyTransform();
+        });
+
+        // Auto-fit once mermaid finishes rendering the SVG
+        var mermaidEl = document.querySelector('.mermaid');
+        if (viewport.querySelector('svg')) {
+            fitToView();
+        } else {
+            var fitObserver = new MutationObserver(function() {
+                if (viewport.querySelector('svg')) {
+                    fitObserver.disconnect();
+                    fitToView();
+                }
+            });
+            fitObserver.observe(mermaidEl, { childList: true, subtree: true });
+        }
     </script>
 </body>
 </html>`;
