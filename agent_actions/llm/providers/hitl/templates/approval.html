@@ -926,8 +926,12 @@ h4.md-heading { font-size: 13.5px; }
             if (typeof val === 'number') return '<span class="tv-num">' + val + '</span>';
             if (typeof val === 'string') {
                 if (isUrl(val)) return '<a class="fv-link" href="' + esc(val.trim()) + '" target="_blank" rel="noopener">' + esc(val) + '</a>';
+                /* If the raw value contains HTML tags (e.g. <br>), always
+                   go through renderMarkdown so they are interpreted, not
+                   shown as literal text. */
+                var hasHtml = val.indexOf('<') >= 0 && val.indexOf('>') > val.indexOf('<');
                 var clean = stripHtml(val);
-                if (clean.length < 80 && clean.indexOf('\n') === -1) return '<span class="tv-str">' + inlineFmt(clean) + '</span>';
+                if (!hasHtml && clean.length < 80 && clean.indexOf('\n') === -1) return '<span class="tv-str">' + inlineFmt(clean) + '</span>';
                 return renderMarkdown(val);
             }
             if (Array.isArray(val)) return renderArray(val, depth);
