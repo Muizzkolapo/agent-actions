@@ -69,6 +69,9 @@ class TestU01BatchPreflightGuardAware:
             # Must not raise — before U-0.1, this crashed with TemplateVariableError
             batch_preparator._run_preflight_validation(agent_config, data)
 
+            # All rows were attempted (not short-circuited on first skip)
+            assert mock_preparer.prepare.call_count == len(data)
+
     def test_preflight_advances_past_upstream_unprocessed_rows(self, batch_preparator):
         """UPSTREAM_UNPROCESSED rows are skipped during preflight — no template rendered."""
         agent_config = {"name": "test_action", "prompt": "{{ content }}"}
@@ -145,8 +148,9 @@ class TestU02OnlineSkipGuardFalse:
 
             # Verify prepare was called (guard evaluated)
             mock_preparer.prepare.assert_called_once()
-            # Result should reflect guard skip, not a bypass
-            assert result.skip_reason is not None or mock_tomb.called
+            # SKIPPED path must build a tombstone and mark result as not executed
+            mock_tomb.assert_called_once()
+            assert result.executed is False
 
 
 class TestU03PrefilterUsesEvalItem:

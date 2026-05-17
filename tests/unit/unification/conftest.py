@@ -100,11 +100,13 @@ def paired_execution():
     """Run same payload through both online prefilter and batch prepare paths.
 
     Returns a function that accepts records and guard config, runs both paths,
-    and returns (online_decisions, batch_decisions) as lists of GuardStatus-like
-    values for comparison.
+    and returns (online_decisions, batch_decisions) as lists of decision strings
+    for comparison.
 
-    This fixture mocks the guard evaluator to produce deterministic results
-    based on record content, ensuring both paths see the same guard logic.
+    Both paths use a deterministic mock evaluator (hardcoded to check
+    upstream_ns.status). This verifies the fixture plumbing works and that
+    both paths exercise guard dispatch logic. It does NOT test real guard
+    evaluation parity — that requires real evaluator integration tests.
     """
 
     def _run(
@@ -147,33 +149,29 @@ def paired_execution():
             dependency_configs={},
         )
 
-        with patch("agent_actions.llm.batch.processing.preparator.get_task_preparer") as mock_get:
-            mock_preparer = MagicMock()
+        mock_preparer = MagicMock()
 
-            def batch_prepare(row, ctx, skip_guard=False, **kwargs):
-                content = row.get("content", {})
-                is_ready = content.get("upstream_ns", {}).get("status") == "ready"
-                result = MagicMock()
-                if is_ready:
-                    result.guard_status = GuardStatus.PASSED
-                    batch_decisions.append("passed")
-                else:
-                    result.guard_status = GuardStatus.SKIPPED
-                    batch_decisions.append("skipped")
-                result.passthrough_fields = {}
-                return result
+        def batch_prepare(row, ctx, **kwargs):
+            content = row.get("content", {})
+            is_ready = content.get("upstream_ns", {}).get("status") == "ready"
+            result = MagicMock()
+            if is_ready:
+                result.guard_status = GuardStatus.PASSED
+                batch_decisions.append("passed")
+            else:
+                result.guard_status = GuardStatus.SKIPPED
+                batch_decisions.append("skipped")
+            result.passthrough_fields = {}
+            return result
 
-            mock_preparer.prepare.side_effect = batch_prepare
-            mock_get.return_value = mock_preparer
+        mock_preparer.prepare.side_effect = batch_prepare
 
-            context_map: dict[str, Any] = {}
-            stats = BatchTaskPreparationStats()
-            prep_context = MagicMock(spec=PreparationContext)
+        context_map: dict[str, Any] = {}
+        stats = BatchTaskPreparationStats()
+        prep_context = MagicMock(spec=PreparationContext)
 
-            for row in records:
-                preparator._process_single_item(
-                    row, prep_context, mock_preparer, context_map, stats
-                )
+        for row in records:
+            preparator._process_single_item(row, prep_context, mock_preparer, context_map, stats)
 
         return online_decisions, batch_decisions
 
