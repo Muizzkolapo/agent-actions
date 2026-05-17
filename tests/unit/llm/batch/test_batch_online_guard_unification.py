@@ -296,8 +296,8 @@ class TestReconciliationSkipReason:
     def test_reconciliation_no_cascade_fallback_without_skip_reason(self):
         """Without skip_reason, cascade-blocked _state gets BATCH_NOT_RETURNED.
 
-        Phase 6: _is_cascade_blocked fallback removed. Prep is the single
-        authority — if it didn't set skip_reason, reconciliation defaults.
+        Prep is the single authority for skip reasons. If prep didn't set
+        skip_reason, reconciliation does not re-derive from _state.
         """
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchProcessingContext,

@@ -312,6 +312,7 @@ class TestBatchPathReasonDetection:
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
         )
+        from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
 
         row = {
             "content": {"upstream_action": {"field": "value"}},
@@ -320,7 +321,7 @@ class TestBatchPathReasonDetection:
             "_state_schema_version": 1,
         }
         BatchContextMetadata.set_filter_status(row, FilterStatus.SKIPPED)
-        BatchContextMetadata.set_skip_reason(row, "upstream_unprocessed")
+        BatchContextMetadata.set_skip_reason(row, UPSTREAM_UNPROCESSED)
         ctx = self._make_ctx(passthrough_records=[("cid_1", row)])
         processor = BatchResultStrategy()
         results = processor._reconcile_passthroughs(ctx)
