@@ -211,6 +211,7 @@ class HitlServer:
                 "img-src 'self' data:; "
                 "connect-src 'self'"
             )
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             return response
 
         app.add_url_rule("/", "index", self._handle_index)
