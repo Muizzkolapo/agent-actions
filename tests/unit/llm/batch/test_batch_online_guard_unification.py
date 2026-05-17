@@ -293,21 +293,25 @@ class TestReconciliationSkipReason:
 
         assert result.skip_reason == GUARD_SKIP
 
-    def test_reconciliation_fallback_cascade_blocked_when_no_skip_reason(self):
-        """Without skip_reason, cascade-blocked _state falls back to UPSTREAM_UNPROCESSED."""
+    def test_reconciliation_no_cascade_fallback_without_skip_reason(self):
+        """Without skip_reason, cascade-blocked _state gets BATCH_NOT_RETURNED.
+
+        Prep is the single authority for skip reasons. If prep didn't set
+        skip_reason, reconciliation does not re-derive from _state.
+        """
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchProcessingContext,
             BatchResultStrategy,
         )
         from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
-        from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
+        from agent_actions.record.reasons import BATCH_NOT_RETURNED
 
         original_row = {
             "target_id": "tid_2",
             "_state": RecordState.CASCADE_SKIPPED.value,
             "content": {},
         }
-        # No filter_status, no skip_reason — should fall back to _state check
+        # No filter_status, no skip_reason — no cascade fallback anymore
 
         ctx = BatchProcessingContext(
             batch_results=[],
@@ -322,7 +326,7 @@ class TestReconciliationSkipReason:
             ctx, original_row, "test_action", "sg_002", 0
         )
 
-        assert result.skip_reason == UPSTREAM_UNPROCESSED
+        assert result.skip_reason == BATCH_NOT_RETURNED
 
     def test_reconciliation_fallback_batch_not_returned(self):
         """Without skip_reason, filter_status, or cascade state → BATCH_NOT_RETURNED."""

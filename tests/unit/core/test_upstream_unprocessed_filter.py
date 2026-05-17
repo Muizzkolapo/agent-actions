@@ -302,10 +302,17 @@ class TestBatchPathReasonDetection:
         )
 
     def test_upstream_unprocessed_reason(self):
-        """Records with cascade-blocking _state get reason=upstream_unprocessed."""
+        """Records with cascade-blocking _state get reason=upstream_unprocessed.
+
+        After Phase 6, skip_reason must be set during prep (single authority).
+        The _is_cascade_blocked fallback no longer exists.
+        """
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
         )
+        from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
 
         row = {
             "content": {"upstream_action": {"field": "value"}},
@@ -313,6 +320,8 @@ class TestBatchPathReasonDetection:
             "_state": "cascade_skipped",
             "_state_schema_version": 1,
         }
+        BatchContextMetadata.set_filter_status(row, FilterStatus.SKIPPED)
+        BatchContextMetadata.set_skip_reason(row, UPSTREAM_UNPROCESSED)
         ctx = self._make_ctx(passthrough_records=[("cid_1", row)])
         processor = BatchResultStrategy()
         results = processor._reconcile_passthroughs(ctx)
