@@ -41,6 +41,18 @@ class NullNamespace:
         return hash(("NullNamespace", self.reason))
 
 
+# ── Reason constants ──────────────────────────────────────────────────
+# Use these instead of bare string literals so typos are caught at import time.
+
+REASON_SKIPPED = "skipped"
+REASON_FILTERED = "filtered"
+
+# ── Pre-built singletons ─────────────────────────────────────────────
+# Avoids repeated allocation for the common case.
+
+SKIPPED_NAMESPACE = NullNamespace(reason=REASON_SKIPPED)
+
+
 def is_null_namespace(value: object) -> bool:
     """Return True if *value* is a null namespace marker.
 

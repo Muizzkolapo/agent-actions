@@ -13,7 +13,7 @@ from typing import Any
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextNamespaceLoadedEvent
-from agent_actions.prompt.context.null_namespace import NullNamespace
+from agent_actions.prompt.context.null_namespace import SKIPPED_NAMESPACE
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_namespace import (
     _extract_allowed_fields_per_dependency,
@@ -145,7 +145,7 @@ class DependencyNamespaceBuilder:
                             dep_name,
                             agent_name,
                         )
-                        dep_namespaces[dep_name] = NullNamespace(reason="skipped")
+                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
                         continue
 
                     if not isinstance(dep_data, dict):
