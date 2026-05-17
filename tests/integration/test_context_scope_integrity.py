@@ -927,10 +927,14 @@ class TestFileModeObserve:
             action_name="consumer",
         )
 
-        # Record is enriched — flat observed keys injected, missing field is None
+        # Record is enriched (not skipped) — present field survives, missing field
+        # doesn't crash enrichment. Flat key injection only covers present fields.
         assert result[0] is not data[0]  # enriched copy, not original
         enriched_content = result[0]["content"]
         assert enriched_content["dep"]["title"] == "Exists"
+        assert enriched_content["dep"]["body"] == "Also exists"
+        # Missing field not injected as flat key (only present fields get flat keys)
+        assert "nonexistent_field" not in enriched_content
 
     def test_file_mode_wildcard_on_partial_namespace_graceful(self):
         """FILE-mode: wildcard on namespace with missing fields is graceful."""
