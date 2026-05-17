@@ -10,9 +10,7 @@ not for tombstones/passthroughs.
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, call
-
-import pytest
+from unittest.mock import MagicMock
 
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
@@ -110,8 +108,6 @@ class TestFilteredDisposition:
         # Simulate the processing service calling write_filtered_dispositions
         # (FILTERED records are excluded from workflow output items, so they
         # must be handled separately from write_record_dispositions).
-        from agent_actions.llm.batch.services.processing import BatchProcessingService
-
         service = _build_processing_service(storage_backend=backend)
 
         context_map: dict[str, Any] = {}
@@ -141,8 +137,6 @@ class TestFilteredDisposition:
     def test_filtered_disposition_includes_reason(self):
         """FILTERED disposition must include the skip_reason matching online."""
         backend = _make_storage_backend()
-
-        from agent_actions.llm.batch.services.processing import BatchProcessingService
 
         service = _build_processing_service(storage_backend=backend)
 
@@ -252,9 +246,7 @@ class TestFailedInputSnapshot:
         ]
         assert len(failed_calls) == 1
         input_snapshot = _get_kwarg(failed_calls[0], "input_snapshot")
-        assert input_snapshot is not None, (
-            "FAILED disposition must include input_snapshot"
-        )
+        assert input_snapshot is not None, "FAILED disposition must include input_snapshot"
 
     def test_failed_includes_detail(self):
         """Batch FAILED disposition must write detail field like online."""
@@ -289,8 +281,6 @@ class TestPromptTraceOnlyForSuccess:
 
     def test_tombstone_records_not_traced(self):
         """Exhausted/failed/skipped records must NOT get prompt trace updates."""
-        from agent_actions.llm.batch.services.processing import BatchProcessingService
-
         backend = _make_storage_backend()
         backend.update_prompt_trace_response = MagicMock()
 
@@ -327,12 +317,8 @@ class TestPromptTraceOnlyForSuccess:
         trace_calls = backend.update_prompt_trace_response.call_args_list
         traced_ids = {c.kwargs.get("record_id") or c.args[1] for c in trace_calls}
         assert "t-success" in traced_ids, "SUCCESS record must get prompt trace"
-        assert "t-exhausted" not in traced_ids, (
-            "EXHAUSTED record must NOT get prompt trace update"
-        )
-        assert "t-failed" not in traced_ids, (
-            "FAILED record must NOT get prompt trace update"
-        )
+        assert "t-exhausted" not in traced_ids, "EXHAUSTED record must NOT get prompt trace update"
+        assert "t-failed" not in traced_ids, "FAILED record must NOT get prompt trace update"
 
 
 # =============================================================================

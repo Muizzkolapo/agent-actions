@@ -194,8 +194,8 @@ def write_record_dispositions(
 
     Called after batch results have been converted to workflow format.
     Clears any prior DEFERRED disposition for each record, then writes
-    the final status (EXHAUSTED, FAILED, FILTERED, PASSTHROUGH).
-    Success records only get their DEFERRED cleared — no new disposition.
+    the final status matching online ResultCollector parity:
+    SUCCESS, EXHAUSTED, FAILED, PASSTHROUGH, UNPROCESSED.
 
     Disposition writes are telemetry — errors are logged but never propagated.
     """
@@ -208,10 +208,6 @@ def write_record_dispositions(
         metadata = item.get("metadata", {})
 
         try:
-            # Clear the DEFERRED disposition now that the batch result has
-            # arrived.  For success records this is the only disposition
-            # action; for non-success records the final disposition is
-            # written immediately below.
             storage_backend.clear_disposition(
                 action_name,
                 disposition=DISPOSITION_DEFERRED,
@@ -235,6 +231,7 @@ def write_record_dispositions(
                 source_guid,
                 DISPOSITION_EXHAUSTED,
                 reason=f"evaluation_exhausted:{validation}",
+                input_snapshot=_serialize_snapshot(item),
             )
         elif metadata.get("retry_exhausted"):
             _safe_set_disposition(
@@ -243,6 +240,7 @@ def write_record_dispositions(
                 source_guid,
                 DISPOSITION_EXHAUSTED,
                 reason=RETRY_EXHAUSTED,
+                input_snapshot=_serialize_snapshot(item),
             )
         elif item.get("_state") in (
             RecordState.CASCADE_SKIPPED.value,
@@ -258,12 +256,22 @@ def write_record_dispositions(
                 reason=metadata.get("reason", UNPROCESSED),
             )
         elif item.get("error"):
+            error_str = str(item["error"])[:500]
             _safe_set_disposition(
                 storage_backend,
                 action_name,
                 source_guid,
                 DISPOSITION_FAILED,
-                reason=str(item["error"])[:500],
+                reason=error_str,
+                input_snapshot=_serialize_snapshot(item),
+                detail=error_str,
+            )
+        elif item.get("_state") == RecordState.PROCESSED.value:
+            _safe_set_disposition(
+                storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_SUCCESS,
             )
 
 
