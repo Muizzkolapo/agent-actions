@@ -335,6 +335,12 @@ def prefilter_by_guard(
     """
     originals = original_data if original_data is not None else data
 
+    if original_data is not None and len(original_data) != len(data):
+        raise RuntimeError(
+            f"prefilter_by_guard received {len(original_data)} original_data for "
+            f"{len(data)} input records — length mismatch"
+        )
+
     guard_config = agent_config.get("guard")
     if not guard_config:
         return data, [], originals
