@@ -17,9 +17,7 @@ import pytest
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchTaskPreparationStats
-from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
-from agent_actions.record.envelope import RecordEnvelope, RecordEnvelopeError
 from agent_actions.record.state import RecordState
 
 _PREPARATOR_LOGGER = "agent_actions.llm.batch.processing.preparator"
@@ -165,9 +163,8 @@ class TestEnvelopeTransitionIntegrity:
 
         # Must log a warning about the failed transition
         warnings = [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelname == "WARNING" and "Cannot transition" in r.message
         ]
-        assert len(warnings) > 0, (
-            "Must log WARNING when transition to FAILED is illegal"
-        )
+        assert len(warnings) > 0, "Must log WARNING when transition to FAILED is illegal"
