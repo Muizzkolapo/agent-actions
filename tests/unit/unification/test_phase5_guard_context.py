@@ -1,12 +1,12 @@
-"""Phase 5: Guard context alignment — TDD red tests.
+"""Phase 5: Guard context alignment tests.
 
-Proves that online prefilter and batch prepare produce different guard
+Verifies that online prefilter and batch prepare produce identical guard
 decisions for the same record when the guard references fields only
 available through full context building (source namespace, version
 namespace, output_field promotion).
 
-These tests MUST FAIL against current code.
-After Commit C (wire prefilter), they turn green.
+Commit A: These tests FAIL (prefilter doesn't build full context).
+Commit C: Tests turn green (prefilter wired to build_guard_context).
 """
 
 from __future__ import annotations
@@ -14,30 +14,16 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator
-from agent_actions.prompt.context.scope_builder import build_field_context_with_history
+from agent_actions.processing.guard_context import build_guard_context
 from agent_actions.utils.content import get_existing_content
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 # ---------------------------------------------------------------------------
-# Helpers — simulate batch and online guard evaluation paths
+# Helpers
 # ---------------------------------------------------------------------------
 
 
-def _evaluate_guard_online(
-    record: dict[str, Any],
-    guard_config: dict[str, Any],
-) -> bool:
-    """Simulate the online prefilter guard path (current behavior).
-
-    Mirrors prefilter_by_guard: context = eval_item = get_existing_content(record).
-    """
-    evaluator = GuardEvaluator()
-    eval_item = get_existing_content(record)
-    result = evaluator.evaluate(item=eval_item, guard_config=guard_config, context=eval_item)
-    return result.should_execute
-
-
-def _evaluate_guard_batch(
+def _evaluate_guard_with_full_context(
     record: dict[str, Any],
     guard_config: dict[str, Any],
     *,
@@ -45,53 +31,34 @@ def _evaluate_guard_batch(
     agent_config: dict[str, Any] | None = None,
     agent_indices: dict[str, int] | None = None,
     source_content: Any = None,
+    source_data: list[dict[str, Any]] | None = None,
     version_context: dict[str, Any] | None = None,
     workflow_metadata: dict[str, Any] | None = None,
     dependency_configs: dict[str, Any] | None = None,
 ) -> bool:
-    """Simulate the batch prepare guard path.
-
-    Mirrors TaskPreparer.prepare: builds full field_context via
-    build_field_context_with_history, then evaluates guard with that context.
-    """
+    """Evaluate guard using the shared build_guard_context (batch-equivalent path)."""
     evaluator = GuardEvaluator()
     content = get_existing_content(record)
     config = agent_config or {"name": agent_name}
 
-    if source_content is None:
-        source_content = content
-
-    field_context = build_field_context_with_history(
+    field_context = build_guard_context(
+        record,
         agent_name=agent_name,
         agent_config=config,
         agent_indices=agent_indices,
         source_content=source_content,
+        source_data=source_data,
         version_context=version_context,
         workflow_metadata=workflow_metadata,
-        current_item=record,
-        context_scope=config.get("context_scope"),
+        dependency_configs=dependency_configs,
     )
-    field_context.pop("_dependency_metadata", None)
-
-    # Promote output_field values (mirrors TaskPreparer._load_full_context)
-    if dependency_configs:
-        for dep_name, dep_config in dependency_configs.items():
-            if not dep_config or "output_field" not in dep_config:
-                continue
-            of_name = dep_config["output_field"]
-            dep_data = field_context.get(dep_name)
-            if isinstance(dep_data, list) and len(dep_data) == 1:
-                dep_data = dep_data[0]
-            if isinstance(dep_data, dict) and of_name in dep_data:
-                if of_name not in field_context:
-                    field_context[of_name] = dep_data[of_name]
 
     result = evaluator.evaluate(item=content, guard_config=guard_config, context=field_context)
     return result.should_execute
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Tests — Guard Context Parity via prefilter_by_guard
 # ---------------------------------------------------------------------------
 
 
@@ -99,98 +66,136 @@ class TestGuardContextParity:
     """U-1.1: Prefilter and prepare must use same guard context."""
 
     def test_source_namespace_parity(self):
-        """Guard referencing source.name must produce same decision in both paths.
+        """Guard referencing source.name passes when source_data provides it.
 
-        Currently FAILS: prefilter passes context=eval_item (no source namespace),
-        so source.name is missing → guard treats as 'not matched' → skip.
-        Batch builds full field_context with source namespace → guard passes.
+        prefilter_by_guard with source_data builds full context including
+        source namespace, so the guard finds source.name and passes.
         """
-        record = {
-            "target_id": "t-001",
-            "source_guid": "sg-001",
-            "content": {"text": "hello"},
-        }
-        source_content = {"name": "test_source", "id": "src-1"}
+        records = [
+            {
+                "target_id": "t-001",
+                "source_guid": "sg-001",
+                "content": {"text": "hello"},
+            }
+        ]
+        source_data = [{"source_guid": "sg-001", "name": "test_source", "id": "src-1"}]
         guard_config = {
             "clause": "source.name == 'test_source'",
             "behavior": "skip",
         }
+        agent_config = {"name": "test_action", "guard": guard_config}
 
-        online_passes = _evaluate_guard_online(record, guard_config)
-        batch_passes = _evaluate_guard_batch(
-            record,
-            guard_config,
-            source_content=source_content,
+        passing, skipped, _ = prefilter_by_guard(
+            records,
+            agent_config,
+            "test_action",
+            source_data=source_data,
         )
 
-        # Batch passes (source.name found and matches).
-        # Online must also pass — currently it doesn't.
-        assert batch_passes is True, "Batch should pass (baseline)"
-        assert online_passes == batch_passes, (
-            f"Guard parity violation: online={online_passes}, batch={batch_passes}. "
+        assert len(passing) == 1, (
+            f"Guard should pass (source.name == 'test_source') but got "
+            f"{len(passing)} passing, {len(skipped)} skipped. "
             "Prefilter context is missing source namespace."
         )
 
     def test_version_namespace_parity(self):
-        """Guard referencing version.i must produce same decision in both paths.
+        """Guard referencing version.i passes when version_context is provided."""
+        records = [
+            {
+                "target_id": "t-001",
+                "source_guid": "sg-001",
+                "content": {"text": "hello"},
+            }
+        ]
+        guard_config = {
+            "clause": "version.i > 0",
+            "behavior": "skip",
+        }
+        agent_config = {"name": "test_action", "guard": guard_config}
 
-        Currently FAILS: prefilter context has no version namespace.
+        passing, skipped, _ = prefilter_by_guard(
+            records,
+            agent_config,
+            "test_action",
+            version_context={"i": 1, "idx": 1, "length": 3},
+        )
+
+        assert len(passing) == 1, (
+            f"Guard should pass (version.i=1 > 0) but got "
+            f"{len(passing)} passing, {len(skipped)} skipped. "
+            "Prefilter context is missing version namespace."
+        )
+
+    def test_output_field_promotion_parity(self):
+        """Guard referencing promoted output_field passes with dependency_configs.
+
+        When upstream action 'assess' has output_field='severity', batch
+        promotes field_context['severity'] = 'high'. With proper config,
+        prefilter does the same via build_guard_context.
         """
+        records = [
+            {
+                "target_id": "t-001",
+                "source_guid": "sg-001",
+                "content": {"assess": {"severity": "high", "details": "..."}},
+            }
+        ]
+        guard_config = {
+            "clause": "severity == 'high'",
+            "behavior": "skip",
+        }
+        agent_config = {
+            "name": "test_action",
+            "guard": guard_config,
+            "prompt": "Handle: {{ assess.severity }}",
+            "context_scope": {"observe": ["assess.*"]},
+        }
+        dependency_configs = {"assess": {"output_field": "severity"}}
+
+        passing, skipped, _ = prefilter_by_guard(
+            records,
+            agent_config,
+            "test_action",
+            agent_indices={"assess": 0, "test_action": 1},
+            dependency_configs=dependency_configs,
+        )
+
+        assert len(passing) == 1, (
+            f"Guard should pass (promoted severity == 'high') but got "
+            f"{len(passing)} passing, {len(skipped)} skipped. "
+            "Prefilter context is missing promoted output_field."
+        )
+
+    def test_prefilter_matches_batch_context(self):
+        """prefilter_by_guard with full context produces same decision as batch path."""
         record = {
             "target_id": "t-001",
             "source_guid": "sg-001",
             "content": {"text": "hello"},
         }
-        # version.i > 0 means "not the first iteration"
+        source_data = [{"source_guid": "sg-001", "name": "test_source"}]
         guard_config = {
-            "clause": "version.i > 0",
+            "clause": "source.name == 'test_source'",
             "behavior": "skip",
         }
+        agent_config = {"name": "test_action", "guard": guard_config}
 
-        online_passes = _evaluate_guard_online(record, guard_config)
-        batch_passes = _evaluate_guard_batch(
-            record,
-            guard_config,
-            version_context={"i": 1, "idx": 1, "length": 3},
+        # Online path: prefilter_by_guard with pipeline context
+        passing, _skipped, _ = prefilter_by_guard(
+            [record],
+            agent_config,
+            "test_action",
+            source_data=source_data,
+        )
+        online_passes = len(passing) == 1
+
+        # Batch path: build_guard_context directly
+        batch_passes = _evaluate_guard_with_full_context(
+            record, guard_config, source_data=source_data
         )
 
-        assert batch_passes is True, "Batch should pass (version.i=1 > 0)"
         assert online_passes == batch_passes, (
-            f"Guard parity violation: online={online_passes}, batch={batch_passes}. "
-            "Prefilter context is missing version namespace."
-        )
-
-    def test_output_field_promotion_parity(self):
-        """Guard referencing promoted output_field must produce same decision.
-
-        When upstream action 'assess' has output_field='severity', batch
-        promotes field_context['severity'] = 'high'. Prefilter doesn't.
-        """
-        record = {
-            "target_id": "t-001",
-            "source_guid": "sg-001",
-            "content": {"assess": {"severity": "high", "details": "..."}},
-        }
-        guard_config = {
-            "clause": "severity == 'high'",
-            "behavior": "skip",
-        }
-        dependency_configs = {
-            "assess": {"output_field": "severity"},
-        }
-
-        online_passes = _evaluate_guard_online(record, guard_config)
-        batch_passes = _evaluate_guard_batch(
-            record,
-            guard_config,
-            agent_indices={"assess": 0, "test_action": 1},
-            dependency_configs=dependency_configs,
-        )
-
-        assert batch_passes is True, "Batch should pass (promoted severity == 'high')"
-        assert online_passes == batch_passes, (
-            f"Guard parity violation: online={online_passes}, batch={batch_passes}. "
-            "Prefilter context is missing promoted output_field."
+            f"Guard parity violation: online={online_passes}, batch={batch_passes}"
         )
 
 
@@ -200,81 +205,106 @@ class TestCodeCenteredQuizGuard:
     def test_has_failures_true_passes_guard(self):
         """has_failures=true → guard passes (action should run).
 
-        Guard clause: 'has_failures' (truthy check). When has_failures is True
-        the guard condition is matched → action executes.
-
-        Currently FAILS for online path when has_failures is a promoted
-        output_field (not directly in record content at top level).
+        When has_failures is a promoted output_field from upstream code_quiz,
+        prefilter must promote it the same way batch does.
         """
-        record = {
-            "target_id": "t-001",
-            "source_guid": "sg-001",
-            "content": {"code_quiz": {"has_failures": True, "score": 0.3}},
-        }
+        records = [
+            {
+                "target_id": "t-001",
+                "source_guid": "sg-001",
+                "content": {"code_quiz": {"has_failures": True, "score": 0.3}},
+            }
+        ]
         guard_config = {
             "clause": "has_failures",
             "behavior": "skip",
         }
-        dependency_configs = {
-            "code_quiz": {"output_field": "has_failures"},
+        agent_config = {
+            "name": "test_action",
+            "guard": guard_config,
+            "prompt": "Fix: {{ code_quiz.has_failures }}",
+            "context_scope": {"observe": ["code_quiz.*"]},
         }
+        dependency_configs = {"code_quiz": {"output_field": "has_failures"}}
 
-        online_passes = _evaluate_guard_online(record, guard_config)
-        batch_passes = _evaluate_guard_batch(
-            record,
-            guard_config,
+        passing, skipped, _ = prefilter_by_guard(
+            records,
+            agent_config,
+            "test_action",
             agent_indices={"code_quiz": 0, "test_action": 1},
             dependency_configs=dependency_configs,
         )
 
-        assert batch_passes is True, "Batch should pass (has_failures=True → truthy)"
-        assert online_passes == batch_passes, (
-            f"Guard parity violation: online={online_passes}, batch={batch_passes}. "
+        assert len(passing) == 1, (
+            f"Guard should pass (has_failures=True → truthy) but got "
+            f"{len(passing)} passing, {len(skipped)} skipped. "
             "Prefilter doesn't promote output_field 'has_failures'."
         )
 
     def test_has_failures_false_skips_downstream(self):
         """has_failures=false → guard skips (downstream action should not run).
 
-        Both paths should agree: has_failures=False is falsy → not matched → skip.
+        Both paths agree: has_failures=False is falsy → not matched → skip.
         """
-        record = {
-            "target_id": "t-001",
-            "source_guid": "sg-001",
-            "content": {"code_quiz": {"has_failures": False, "score": 1.0}},
-        }
+        records = [
+            {
+                "target_id": "t-001",
+                "source_guid": "sg-001",
+                "content": {"code_quiz": {"has_failures": False, "score": 1.0}},
+            }
+        ]
         guard_config = {
             "clause": "has_failures",
             "behavior": "skip",
         }
-        dependency_configs = {
-            "code_quiz": {"output_field": "has_failures"},
+        agent_config = {
+            "name": "test_action",
+            "guard": guard_config,
+            "prompt": "Fix: {{ code_quiz.has_failures }}",
+            "context_scope": {"observe": ["code_quiz.*"]},
         }
+        dependency_configs = {"code_quiz": {"output_field": "has_failures"}}
 
-        online_passes = _evaluate_guard_online(record, guard_config)
-        batch_passes = _evaluate_guard_batch(
-            record,
-            guard_config,
+        passing, skipped, _ = prefilter_by_guard(
+            records,
+            agent_config,
+            "test_action",
             agent_indices={"code_quiz": 0, "test_action": 1},
             dependency_configs=dependency_configs,
         )
 
-        # Both should skip (has_failures is falsy)
-        assert batch_passes is False, "Batch should skip (has_failures=False)"
-        assert online_passes == batch_passes, (
-            f"Guard parity violation: online={online_passes}, batch={batch_passes}"
+        # has_failures=False → falsy → guard skips
+        assert len(passing) == 0, (
+            f"Guard should skip (has_failures=False) but {len(passing)} passed"
         )
+        assert len(skipped) == 1
 
 
 class TestPrefilterByGuardContextAlignment:
-    """Integration: prefilter_by_guard must build full context when pipeline context available."""
+    """Integration: prefilter_by_guard builds full context when pipeline params available."""
 
-    def test_prefilter_passes_with_source_guard(self):
-        """prefilter_by_guard with source-referencing guard should pass record.
+    def test_no_pipeline_context_uses_eval_item(self):
+        """Without pipeline context, prefilter falls back to eval_item (backward compat)."""
+        records = [
+            {
+                "target_id": "t-001",
+                "source_guid": "sg-001",
+                "content": {"upstream_ns": {"status": "ready"}},
+            }
+        ]
+        guard_config = {
+            "clause": "upstream_ns.status == 'ready'",
+            "behavior": "skip",
+        }
+        agent_config = {"name": "test_action", "guard": guard_config}
 
-        Currently FAILS: prefilter_by_guard doesn't accept or use pipeline
-        context, so source namespace is never built.
-        """
+        # No pipeline context → uses eval_item (record content has upstream_ns)
+        passing, skipped, _ = prefilter_by_guard(records, agent_config, "test_action")
+
+        assert len(passing) == 1, "Should pass — field is in record content"
+
+    def test_pipeline_context_enables_source_guard(self):
+        """With source_data, guard referencing source namespace passes."""
         records = [
             {
                 "target_id": "t-001",
@@ -282,19 +312,60 @@ class TestPrefilterByGuardContextAlignment:
                 "content": {"text": "hello"},
             }
         ]
+        source_data = [{"source_guid": "sg-001", "name": "test_source"}]
         guard_config = {
             "clause": "source.name == 'test_source'",
             "behavior": "skip",
         }
         agent_config = {"name": "test_action", "guard": guard_config}
 
-        # After fix: prefilter_by_guard will accept pipeline_context and build
-        # full context including source namespace. For now, this call uses the
-        # existing signature — the test fails because source.name is missing.
-        passing, skipped, _ = prefilter_by_guard(records, agent_config, "test_action")
+        passing, skipped, _ = prefilter_by_guard(
+            records,
+            agent_config,
+            "test_action",
+            source_data=source_data,
+        )
 
         assert len(passing) == 1, (
-            f"Expected 1 passing record (source.name matches) but got "
-            f"{len(passing)} passing, {len(skipped)} skipped. "
-            "prefilter_by_guard needs full context to evaluate source-referencing guards."
+            f"Expected 1 passing (source.name matches) but got "
+            f"{len(passing)} passing, {len(skipped)} skipped"
         )
+
+    def test_multiple_records_mixed_decisions(self):
+        """Multiple records with different guard outcomes are correctly split."""
+        records = [
+            {
+                "target_id": "t-001",
+                "source_guid": "sg-001",
+                "content": {"assess": {"severity": "high"}},
+            },
+            {
+                "target_id": "t-002",
+                "source_guid": "sg-002",
+                "content": {"assess": {"severity": "low"}},
+            },
+        ]
+        guard_config = {
+            "clause": "severity == 'high'",
+            "behavior": "skip",
+        }
+        agent_config = {
+            "name": "test_action",
+            "guard": guard_config,
+            "prompt": "Handle: {{ assess.severity }}",
+            "context_scope": {"observe": ["assess.*"]},
+        }
+        dependency_configs = {"assess": {"output_field": "severity"}}
+
+        passing, skipped, _ = prefilter_by_guard(
+            records,
+            agent_config,
+            "test_action",
+            agent_indices={"assess": 0, "test_action": 1},
+            dependency_configs=dependency_configs,
+        )
+
+        assert len(passing) == 1, f"Only high-severity should pass, got {len(passing)}"
+        assert passing[0]["target_id"] == "t-001"
+        assert len(skipped) == 1
+        assert skipped[0]["target_id"] == "t-002"
