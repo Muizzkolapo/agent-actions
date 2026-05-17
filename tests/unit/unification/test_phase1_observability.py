@@ -1,7 +1,9 @@
 """Phase 1 observability tests — U-2.G, U-2.H, U-2.E.
 
-Commit A: these tests MUST FAIL against current code, proving the gaps exist.
-Commit B: implementation makes them pass.
+Tests that WARNING logs and RuntimeError guards exist for:
+- _mark_prep_failed with missing target_id (U-2.G)
+- passthrough_on_error swallowing exceptions (U-2.H)
+- prefilter_by_guard original_data/data length mismatch (U-2.E)
 """
 
 import logging
@@ -44,9 +46,7 @@ class TestPrepFailedLogging:
         record_without_target = {"content": {"text": "no target_id here"}}
         context_map = {}
 
-        with caplog.at_level(
-            logging.WARNING, logger="agent_actions.llm.batch.processing.preparator"
-        ):
+        with caplog.at_level(logging.WARNING, logger=_PREPARATOR_LOGGER):
             preparator._mark_prep_failed(
                 record_without_target,
                 context_map,
@@ -65,9 +65,7 @@ class TestPrepFailedLogging:
         context_map = {"t-001": record.copy()}
         BatchContextMetadata.set_filter_status(context_map["t-001"], FilterStatus.INCLUDED)
 
-        with caplog.at_level(
-            logging.WARNING, logger="agent_actions.llm.batch.processing.preparator"
-        ):
+        with caplog.at_level(logging.WARNING, logger=_PREPARATOR_LOGGER):
             preparator._mark_prep_failed(
                 record,
                 context_map,
@@ -102,7 +100,7 @@ class TestPassthroughOnErrorLogging:
 
         with caplog.at_level(
             logging.WARNING,
-            logger="agent_actions.input.preprocessing.filtering.evaluator",
+            logger=_EVALUATOR_LOGGER,
         ):
             result = evaluator.evaluate(
                 item={"field": "value"},
@@ -118,8 +116,8 @@ class TestPassthroughOnErrorLogging:
             for r in caplog.records
             if r.levelname == "WARNING" and "passthrough_on_error" in r.message
         ]
-        assert len(passthrough_warnings) >= 1, (
-            "Must log WARNING mentioning passthrough_on_error when exception is swallowed"
+        assert len(passthrough_warnings) == 1, (
+            "Must log exactly one WARNING mentioning passthrough_on_error when exception is swallowed"
         )
 
     def test_passthrough_on_error_false_no_passthrough_warning(self, caplog):
@@ -136,7 +134,7 @@ class TestPassthroughOnErrorLogging:
 
         with caplog.at_level(
             logging.WARNING,
-            logger="agent_actions.input.preprocessing.filtering.evaluator",
+            logger=_EVALUATOR_LOGGER,
         ):
             result = evaluator.evaluate(
                 item={"field": "value"},
