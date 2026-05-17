@@ -230,7 +230,13 @@ class BatchTaskPreparator:
     ) -> None:
         """Stamp the context_map entry as FAILED with _state transition and disposition."""
         custom_id = row.get("target_id")
-        if not custom_id or custom_id not in context_map_builder:
+        if not custom_id:
+            logger.warning(
+                "Prep failed for record without target_id — record may be untrackable. error=%s",
+                error,
+            )
+            return
+        if custom_id not in context_map_builder:
             return
         entry = context_map_builder[custom_id]
         BatchContextMetadata.set_filter_status(entry, FilterStatus.FAILED)
