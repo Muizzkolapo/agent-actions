@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Introduce NullNamespace sentinel for skipped upstream namespaces so observe/passthrough resolve fields to None with reason introspection instead of crashing"
+time: 2026-05-17T00:90:02.000000Z

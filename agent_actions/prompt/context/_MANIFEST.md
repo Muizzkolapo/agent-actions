@@ -14,6 +14,7 @@ loaders for cataloging prompts at documentation time.
 | ~~`scope.py`~~ | Deleted | Facade removed. Consumers import directly from the 6 `scope_*` modules. | — |
 | `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. `parse_field_reference()` delegates to `ReferenceParser` from `field_resolution` package. | `preprocessing` |
 | `scope_inference.py` | Module | Dependency inference: fan-in detection, version branch expansion, input/context source resolution. | `preprocessing` |
+| `null_namespace.py` | Module | `NullNamespace` sentinel and `is_null_namespace()` helper for skipped/filtered upstream namespaces. Used by `scope_application`, `scope_builder`, and guard evaluator `ast_nodes`. | `preprocessing` |
 | `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. | `preprocessing` |
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. | `preprocessing` |
 | `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces via composable builder classes (`SourceNamespaceBuilder`, `DependencyNamespaceBuilder`, `VersionNamespaceBuilder`, `WorkflowMetadataBuilder`). Convergence point for source data validation (see design note). | `preprocessing`, `staging.field_validation` |

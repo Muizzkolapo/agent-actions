@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
 _EVENT_PATH = "agent_actions.prompt.context.scope_builder.fire_event"
@@ -138,8 +139,8 @@ class TestDependencyNamespace:
         )
         assert result == {}
 
-    def test_absent_namespace_marked_none(self):
-        """Absent dependency namespace stored as None (guard-skipped)."""
+    def test_absent_namespace_marked_null(self):
+        """Absent dependency namespace stored as NullNamespace (guard-skipped)."""
         current_item = self._make_current_item(
             {
                 "extract": {"text": "hello"},
@@ -159,7 +160,7 @@ class TestDependencyNamespace:
             context_scope=agent_config["context_scope"],
         )
 
-        assert result["classify"] is None
+        assert is_null_namespace(result["classify"])
 
     def test_batch_mode_skipped_without_current_item(self):
         """Without current_item, batch mode is skipped — no dep namespaces loaded."""

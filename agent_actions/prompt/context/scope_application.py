@@ -12,6 +12,7 @@ from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
     ContextScopeAppliedEvent,
 )
+from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.prompt.context.scope_namespace import _extract_content_data
 from agent_actions.prompt.context.scope_parsing import (
     extract_action_fields,
@@ -36,11 +37,11 @@ def _resolve_missing_field(
     """Return None if namespace exists (null or present), raise if namespace absent.
 
     Three cases:
-    1. Namespace is None (guard-skipped/filtered) → return None
+    1. Namespace is null (NullNamespace sentinel or legacy None) → return None
     2. Namespace exists as dict but field is missing → return None (match guard semantics)
     3. Namespace not in prompt_context at all → raise (config bug / typo)
     """
-    if ns_name in prompt_context and prompt_context[ns_name] is None:
+    if ns_name in prompt_context and is_null_namespace(prompt_context[ns_name]):
         logger.debug(
             "[%s NULL-SAFE] '%s' on action '%s': namespace '%s' is "
             "null (guard-skipped/filtered), resolving field as None",
