@@ -5,8 +5,6 @@ structure as LLM outputs, so downstream observe references resolve
 identically regardless of source action kind.
 """
 
-import pytest
-
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope,
 )
@@ -92,15 +90,13 @@ class TestCrossActionToolFeedsLlm:
         )
         assert llm_ctx["tool_b"]["summary"] == "42"
 
-        # But observe: ["tool_b.question_type"] would fail because it's under "A"
-        from agent_actions.errors import ConfigurationError
-
-        with pytest.raises(ConfigurationError):
-            apply_context_scope(
-                field_context,
-                {"observe": ["tool_b.question_type"]},
-                action_name="downstream_llm",
-            )
+        # observe: ["tool_b.question_type"] → None because it's under "A", not top-level (U-4.2)
+        _, llm_ctx2, _ = apply_context_scope(
+            field_context,
+            {"observe": ["tool_b.question_type"]},
+            action_name="downstream_llm",
+        )
+        assert llm_ctx2["tool_b"]["question_type"] is None
 
 
 # ---------------------------------------------------------------------------

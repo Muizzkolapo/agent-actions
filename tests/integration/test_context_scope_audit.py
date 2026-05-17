@@ -75,11 +75,12 @@ class TestObserveDirective:
         assert llm_ctx["dep_a"]["x"] == 10
         assert llm_ctx["dep_b"]["y"] == 20
 
-    def test_observe_missing_field_raises(self):
+    def test_observe_missing_field_returns_none(self):
+        """Missing field from present namespace resolves to None (U-4.2)."""
         field_context = _fc(dep={"present": "yes"})
         scope = {"observe": ["dep.absent"]}
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(field_context, scope, action_name="act")
+        _, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
+        assert llm_ctx["dep"]["absent"] is None
 
     def test_observe_preserves_falsy_values(self):
         """0, False, None, '' must all survive observe extraction."""
@@ -199,12 +200,12 @@ class TestDropDirective:
         assert prompt_ctx.get("dep", {}) == {}
         assert llm_ctx.get("dep", {}) == {}
 
-    def test_drop_then_observe_specific_raises(self):
-        """Observing a field that was dropped must raise, not silently skip."""
+    def test_drop_then_observe_specific_returns_none(self):
+        """Observing a dropped field resolves to None — secret not leaked (U-4.2)."""
         field_context = _fc(dep={"field_a": "value"})
         scope = {"drop": ["dep.field_a"], "observe": ["dep.field_a"]}
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(field_context, scope, action_name="act")
+        _, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
+        assert llm_ctx["dep"]["field_a"] is None
 
     def test_drop_on_nonexistent_field_warns_no_crash(self):
         field_context = _fc(dep={"real": "value"})

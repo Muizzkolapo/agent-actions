@@ -109,15 +109,15 @@ class TestObserveBasic:
         assert llm_context["dep"]["none_val"] is None
         assert llm_context["dep"]["normal"] == "ok"
 
-    def test_observe_missing_field_raises_error(self):
-        """Referencing a field that doesn't exist in field_context raises ConfigurationError."""
+    def test_observe_missing_field_returns_none(self):
+        """Missing field from present namespace resolves to None (U-4.2)."""
         field_context = {
             "dep": {"existing_a": 1, "existing_b": 2, "existing_c": 3},
         }
         context_scope = {"observe": ["dep.nonexistent"]}
 
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(field_context, context_scope, action_name="test")
+        _, llm_ctx, _ = apply_context_scope(field_context, context_scope, action_name="test")
+        assert llm_ctx["dep"]["nonexistent"] is None
 
     def test_observe_multiple_namespaces(self):
         """observe: ['dep_a.x', 'dep_b.y'] -> llm_context has both namespaces."""
@@ -702,8 +702,8 @@ class TestDropSecurity:
         assert llm_context["dep"]["name"] == "public_name"
         assert llm_context["dep"]["value"] == "public_value"
 
-    def test_observe_dropped_field_raises_error(self):
-        """drop: ['dep.x'], observe: ['dep.x'] -> ConfigurationError (not silent skip)."""
+    def test_observe_dropped_field_returns_none(self):
+        """drop: ['dep.x'], observe: ['dep.x'] -> None, secret not leaked (U-4.2)."""
         field_context = {
             "dep": {"x": "secret_value", "y": "other", "z": "more"},
         }
@@ -712,8 +712,8 @@ class TestDropSecurity:
             "observe": ["dep.x"],
         }
 
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(field_context, context_scope, action_name="test")
+        _, llm_ctx, _ = apply_context_scope(field_context, context_scope, action_name="test")
+        assert llm_ctx["dep"]["x"] is None  # None, NOT "secret_value"
 
     def test_drop_happens_before_observe(self):
         """Execution order: drop first, then observe reads from post-drop state."""
@@ -905,13 +905,11 @@ class TestFileModeObserve:
         assert result[0]["content"]["extract"]["length"] == 500
         assert result[0]["source_guid"] == "sg1"
 
-    def test_file_mode_missing_field_skips_record(self):
-        """FILE-mode: missing observe field skips enrichment for that record.
+    def test_file_mode_missing_field_enriches_with_none(self):
+        """FILE-mode: missing observe field resolves to None in enriched record (U-4.2).
 
-        Unlike RECORD mode (which raises immediately), FILE mode gracefully
-        skips records where upstream failed and left empty namespaces.
-        The record passes through unenriched so downstream can handle it
-        based on its _state.
+        Missing fields from present namespaces resolve to None (matching guard
+        semantics) instead of skipping enrichment for the entire record.
         """
         data = [
             {
@@ -929,8 +927,10 @@ class TestFileModeObserve:
             action_name="consumer",
         )
 
-        # Record passes through unenriched (no flat keys injected)
-        assert result[0] is data[0]
+        # Record is enriched — flat observed keys injected, missing field is None
+        assert result[0] is not data[0]  # enriched copy, not original
+        enriched_content = result[0]["content"]
+        assert enriched_content["dep"]["title"] == "Exists"
 
     def test_file_mode_wildcard_on_partial_namespace_graceful(self):
         """FILE-mode: wildcard on namespace with missing fields is graceful."""
