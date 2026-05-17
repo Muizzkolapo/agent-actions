@@ -87,6 +87,10 @@ class TestContextMapIntegrity:
         assert status == FilterStatus.INCLUDED, (
             f"context_map must show INCLUDED after successful prepare (got status={status})"
         )
+        stats = prep_harness["stats"]
+        assert stats.included_items == 0, (
+            "included_items is counted by caller, not _process_single_item"
+        )
 
     def test_guard_skipped_not_marked_included(self, prep_harness):
         """When guard skips a record, context_map shows SKIPPED, not INCLUDED."""
@@ -102,6 +106,40 @@ class TestContextMapIntegrity:
         assert result is None
         status = BatchContextMetadata.get_filter_status(prep_harness["context_map"]["t-003"])
         assert status == FilterStatus.SKIPPED
+        assert prep_harness["stats"].skipped_items == 1
+
+    def test_guard_filtered_marked_filtered(self, prep_harness):
+        """When guard filters a record, context_map shows FILTERED, not INCLUDED."""
+        row = {"target_id": "t-004", "content": {"text": "guard filter"}}
+        task_preparer = MagicMock()
+        prepared = MagicMock()
+        prepared.guard_status = GuardStatus.FILTERED
+        prepared.passthrough_fields = {}
+        task_preparer.prepare.return_value = prepared
+
+        result = self._run(prep_harness, row, task_preparer)
+
+        assert result is None
+        status = BatchContextMetadata.get_filter_status(prep_harness["context_map"]["t-004"])
+        assert status == FilterStatus.FILTERED
+        assert prep_harness["stats"].filtered_items == 1
+
+    def test_upstream_unprocessed_marked_skipped(self, prep_harness):
+        """When upstream is unprocessed, context_map shows SKIPPED with reason."""
+        row = {"target_id": "t-005", "content": {"text": "upstream unprocessed"}}
+        task_preparer = MagicMock()
+        prepared = MagicMock()
+        prepared.guard_status = GuardStatus.UPSTREAM_UNPROCESSED
+        prepared.passthrough_fields = {}
+        task_preparer.prepare.return_value = prepared
+
+        result = self._run(prep_harness, row, task_preparer)
+
+        assert result is None
+        entry = prep_harness["context_map"]["t-005"]
+        assert BatchContextMetadata.get_filter_status(entry) == FilterStatus.SKIPPED
+        assert BatchContextMetadata.get_skip_reason(entry) == "upstream_unprocessed"
+        assert prep_harness["stats"].skipped_items == 1
 
 
 class TestEnvelopeTransitionIntegrity:
@@ -121,14 +159,18 @@ class TestEnvelopeTransitionIntegrity:
             )
 
         entry = context_map["t-001"]
-        # FilterStatus must be FAILED
         assert BatchContextMetadata.get_filter_status(entry) == FilterStatus.FAILED
-
-        # _state must be set via transition() — evidenced by _state_history existing
-        assert "_state_history" in entry, (
-            "_mark_prep_failed must use transition() which sets _state_history"
-        )
         assert entry["_state"] == RecordState.FAILED.value
+
+        # transition() writes structured history — assert on content, not just existence
+        history = entry.get("_state_history")
+        assert isinstance(history, list) and len(history) > 0, (
+            "_mark_prep_failed must use transition() which writes _state_history entries"
+        )
+        last = history[-1]
+        assert last["to"] == RecordState.FAILED.value
+        assert last["action"] == "test_agent"
+        assert "test error" in last["reason"]
 
     def test_illegal_transition_logs_warning_no_raw_write(self, batch_preparator, caplog):
         """If transition is illegal, must log WARNING and NOT do raw _state write."""
