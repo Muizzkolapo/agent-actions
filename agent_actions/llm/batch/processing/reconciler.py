@@ -55,7 +55,12 @@ class BatchResultReconciler:
             if filter_status == FilterStatus.FILTERED:
                 continue
 
-            if filter_status in (FilterStatus.SKIPPED, FilterStatus.INCLUDED, None):
+            if filter_status in (
+                FilterStatus.SKIPPED,
+                FilterStatus.INCLUDED,
+                FilterStatus.FAILED,
+                None,
+            ):
                 passthrough_records.append((custom_id, original_row))
 
         return passthrough_records

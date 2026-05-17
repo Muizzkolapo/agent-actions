@@ -28,7 +28,13 @@ from agent_actions.processing.types import (
     ProcessingStatus,
     RecoveryMetadata,
 )
-from agent_actions.record.reasons import BATCH_NOT_RETURNED, GUARD_SKIP, UPSTREAM_UNPROCESSED
+from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
+from agent_actions.record.reasons import (
+    BATCH_NOT_RETURNED,
+    GUARD_SKIP,
+    PREP_FAILED,
+    UPSTREAM_UNPROCESSED,
+)
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.content import get_existing_content
 
@@ -322,14 +328,30 @@ class BatchResultStrategy:
         custom_id: str,
         generated_list: list[Any],
     ) -> list[Any]:
-        """Apply stored context_scope.passthrough fields to generated items."""
+        """Apply stored context_scope.passthrough fields to generated items.
+
+        LLM output wins on key collisions — passthrough only fills gaps.
+        Collisions on user-content fields are logged; framework fields
+        (target_id, _state, etc.) are silently skipped.
+        """
         stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
         if stored_passthrough:
-            generated_list = [
-                {**item, **stored_passthrough} if isinstance(item, dict) else item
-                for item in generated_list
-            ]
+            passthrough_keys = set(stored_passthrough.keys())
+            merged: list[Any] = []
+            for item in generated_list:
+                if isinstance(item, dict):
+                    collisions = (passthrough_keys & set(item.keys())) - RECORD_FRAMEWORK_FIELDS
+                    if collisions:
+                        logger.info(
+                            "Passthrough keys overridden by LLM output for %s: %s",
+                            custom_id,
+                            collisions,
+                        )
+                    merged.append({**stored_passthrough, **item})
+                else:
+                    merged.append(item)
+            generated_list = merged
 
         return generated_list
 
@@ -413,6 +435,7 @@ class BatchResultStrategy:
 
         for custom_id, original_row in reconciliation.passthrough_records:
             is_exhausted = ctx.exhausted_recovery and custom_id in ctx.exhausted_recovery
+            is_failed = BatchContextMetadata.get_filter_status(original_row) == FilterStatus.FAILED
 
             record_index = ctx.reconciler.get_record_index(custom_id)
             source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
@@ -425,6 +448,14 @@ class BatchResultStrategy:
                 result = self._build_exhausted_passthrough(
                     ctx,
                     custom_id,
+                    original_row,
+                    action_name,
+                    source_guid,
+                    record_index,
+                )
+            elif is_failed:
+                result = self._build_failed_passthrough(
+                    ctx,
                     original_row,
                     action_name,
                     source_guid,
@@ -540,4 +571,43 @@ class BatchResultStrategy:
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
         processing_result.processing_context = processing_context
+        return processing_result
+
+    def _build_failed_passthrough(
+        self,
+        ctx: BatchProcessingContext,
+        original_row: dict[str, Any],
+        action_name: str,
+        source_guid: str,
+        record_index: int,
+    ) -> ProcessingResult:
+        """Build a FAILED result for a record that failed during batch preparation.
+
+        Records with FilterStatus.FAILED were never submitted to the provider.
+        They must still appear in output so downstream consumers see all records.
+        """
+        skip_reason = BatchContextMetadata.get_skip_reason(original_row)
+        reason = skip_reason or PREP_FAILED
+
+        passthrough_item = build_tombstone(
+            action_name,
+            original_row,
+            reason,
+            source_guid=source_guid,
+        )
+
+        processing_context = BatchContextAdapter.to_processing_context(
+            agent_config=ctx.agent_config or {},
+            original_row=original_row,
+            record_index=record_index,
+            output_directory=ctx.output_directory,
+        )
+        processing_result = ProcessingResult.failed(
+            error=reason,
+            source_guid=source_guid,
+            source_snapshot=copy.deepcopy(original_row) if original_row else None,
+        )
+        processing_result.data = [passthrough_item]
+        processing_result.processing_context = processing_context
+        processing_result.skip_reason = reason
         return processing_result
