@@ -103,6 +103,7 @@ class BatchProcessingService:
             storage_backend=self._storage_backend,
         )
         self._enrichment_pipeline = EnrichmentPipeline()
+        self._unified_processor = UnifiedProcessor(enrichment_pipeline=self._enrichment_pipeline)
 
     def process_batch_results(
         self,
@@ -629,24 +630,10 @@ class BatchProcessingService:
         """
         if not self._storage_backend or not self._action_name:
             return
-        from agent_actions.storage.backend import DISPOSITION_DEFERRED
-
         for item in items:
             source_guid = item.get("source_guid")
-            if not source_guid:
-                continue
-            try:
-                self._storage_backend.clear_disposition(
-                    self._action_name,
-                    disposition=DISPOSITION_DEFERRED,
-                    record_id=source_guid,
-                )
-            except Exception:
-                logger.debug(
-                    "Could not clear DEFERRED disposition for %s (may not exist)",
-                    source_guid,
-                    exc_info=True,
-                )
+            if source_guid:
+                self._try_clear_deferred(self._action_name, source_guid)
 
     def _write_filtered_dispositions(self, context_map: dict[str, Any], action_name: str) -> None:
         """Write FILTERED dispositions for records excluded from output.
@@ -660,7 +647,7 @@ class BatchProcessingService:
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
         from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
         from agent_actions.record.reasons import GUARD_FILTER
-        from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
+        from agent_actions.storage.backend import DISPOSITION_FILTERED
 
         for _custom_id, entry in context_map.items():
             if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:
@@ -669,18 +656,7 @@ class BatchProcessingService:
             if not source_guid:
                 continue
             reason = BatchContextMetadata.get_skip_reason(entry) or GUARD_FILTER
-            try:
-                self._storage_backend.clear_disposition(
-                    action_name,
-                    disposition=DISPOSITION_DEFERRED,
-                    record_id=source_guid,
-                )
-            except Exception:
-                logger.debug(
-                    "Could not clear DEFERRED disposition for %s (may not exist)",
-                    source_guid,
-                    exc_info=True,
-                )
+            self._try_clear_deferred(action_name, source_guid)
             try:
                 self._storage_backend.set_disposition(
                     action_name, source_guid, DISPOSITION_FILTERED, reason=reason
@@ -689,6 +665,25 @@ class BatchProcessingService:
                 logger.debug(
                     "Failed to write FILTERED disposition for %s", source_guid, exc_info=True
                 )
+
+    def _try_clear_deferred(self, action_name: str, record_id: str) -> None:
+        """Clear a DEFERRED disposition for one record. Swallows errors."""
+        if not self._storage_backend:
+            return
+        from agent_actions.storage.backend import DISPOSITION_DEFERRED
+
+        try:
+            self._storage_backend.clear_disposition(
+                action_name,
+                disposition=DISPOSITION_DEFERRED,
+                record_id=record_id,
+            )
+        except Exception:
+            logger.debug(
+                "Could not clear DEFERRED disposition for %s (may not exist)",
+                record_id,
+                exc_info=True,
+            )
 
     def _update_prompt_trace_responses(self, items: list[dict[str, Any]], action_name: str) -> None:
         """Update prompt traces with batch responses for SUCCESS records only.
@@ -781,8 +776,7 @@ class BatchProcessingService:
             storage_backend=self._storage_backend,
         )
 
-        processor = UnifiedProcessor(enrichment_pipeline=self._enrichment_pipeline)
-        return processor.enrich_and_collect(results, ctx)
+        return self._unified_processor.enrich_and_collect(results, ctx)
 
     @staticmethod
     def _apply_workflow_session_id(
