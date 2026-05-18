@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -45,12 +45,15 @@ from agent_actions.llm.batch.services.processing_recovery import (
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import (
+    CollectionStats,
     write_record_dispositions as _write_record_dispositions_impl,
 )
-from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
+from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -153,7 +156,7 @@ class BatchProcessingService:
                 record_count=entry.record_count if entry else None,
                 file_name=file_name,
             )
-            processed_data = self._convert_batch_results_to_workflow_format(
+            processed_data, _stats = self._convert_batch_results_to_workflow_format(
                 batch_results,
                 context_map=context_map,
                 output_directory=output_directory,
@@ -161,7 +164,7 @@ class BatchProcessingService:
             )
 
             if self._storage_backend and self._action_name:
-                self._write_record_dispositions(processed_data, self._action_name)
+                self._clear_deferred_dispositions(processed_data)
                 self._write_filtered_dispositions(context_map, self._action_name)
                 self._update_prompt_trace_responses(processed_data, self._action_name)
 
@@ -619,6 +622,35 @@ class BatchProcessingService:
         _cleanup_recovery_impl(self, manager, output_directory, file_name)
         return output_path
 
+    def _clear_deferred_dispositions(self, items: list[dict[str, Any]]) -> None:
+        """Clear DEFERRED dispositions for batch records entering output.
+
+        Batch records receive DEFERRED dispositions at submit time.
+        After retrieve, the shared collector writes final dispositions
+        (SUCCESS, FAILED, etc.), but DEFERRED entries remain unless
+        explicitly cleared.
+        """
+        if not self._storage_backend or not self._action_name:
+            return
+        from agent_actions.storage.backend import DISPOSITION_DEFERRED
+
+        for item in items:
+            source_guid = item.get("source_guid")
+            if not source_guid:
+                continue
+            try:
+                self._storage_backend.clear_disposition(
+                    self._action_name,
+                    disposition=DISPOSITION_DEFERRED,
+                    record_id=source_guid,
+                )
+            except Exception:
+                logger.debug(
+                    "Could not clear DEFERRED disposition for %s (may not exist)",
+                    source_guid,
+                    exc_info=True,
+                )
+
     def _write_record_dispositions(self, items: list[dict[str, Any]], action_name: str) -> None:
         """Write dispositions for batch output records.
 
@@ -727,18 +759,21 @@ class BatchProcessingService:
         output_directory: str | None = None,
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Convert batch results to workflow format.
+    ) -> tuple[list[dict[str, Any]], CollectionStats]:
+        """Convert batch results to workflow format via UnifiedProcessor.
+
+        Routes batch results through the shared enrich → collect pipeline
+        (same path online uses), eliminating the duplicate inline loop.
 
         Args:
             batch_results: Raw batch results
             context_map: Context map for processing
             output_directory: Output directory path
             agent_config: Agent configuration
-            exhausted_recovery: Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
+            exhausted_recovery: Per-record recovery metadata for exhausted records
 
         Returns:
-            Processed results in workflow format
+            Tuple of (output_records, CollectionStats).
         """
         results = self._result_processor.process(
             batch_results=batch_results,
@@ -747,15 +782,17 @@ class BatchProcessingService:
             agent_config=agent_config,
             exhausted_recovery=exhausted_recovery,
         )
-        # Enrich results that carry a processing_context, then flatten to
-        # workflow-format dicts.  Error results (processing_context=None) are
-        # intentionally skipped — matching the original pipeline behaviour.
-        output: list[dict[str, Any]] = []
-        for result in results:
-            if result.processing_context is not None:
-                result = self._enrichment_pipeline.enrich(result, result.processing_context)
-            output.extend(result.data or [])
-        return output
+
+        effective_config = agent_config or {}
+        ctx = ProcessingContext(
+            agent_config=cast(ActionConfigDict, effective_config),
+            agent_name=effective_config.get("action_name", "batch"),
+            mode=RunMode.BATCH,
+            storage_backend=self._storage_backend,
+        )
+
+        processor = UnifiedProcessor(enrichment_pipeline=self._enrichment_pipeline)
+        return processor.enrich_and_collect(results, ctx)
 
     @staticmethod
     def _apply_workflow_session_id(

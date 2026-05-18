@@ -460,12 +460,21 @@ def collect_results_from_processing_results(
                 result.error,
             )
 
-            # Build a tombstone so downstream actions see this record
-            # and can cascade-skip it (record-level error isolation).
-            tombstone = _build_failed_tombstone(
-                action_name, result.source_guid, result.input_record, result.error
-            )
-            output.append(tombstone)
+            if result.data:
+                # Batch FAILED results carry their own data (error items or
+                # tombstones from build_tombstone).  Preserve them as-is and
+                # stamp lifecycle state.
+                for d in result.data:
+                    _stamp(d, RecordState.FAILED, action_name, result.error or "processing_error")
+                output.extend(result.data)
+            else:
+                # Online FAILED results have data=[].  Build a tombstone so
+                # downstream actions see this record and can cascade-skip it
+                # (record-level error isolation).
+                tombstone = _build_failed_tombstone(
+                    action_name, result.source_guid, result.input_record, result.error
+                )
+                output.append(tombstone)
 
             fire_event(
                 ResultCollectedEvent(

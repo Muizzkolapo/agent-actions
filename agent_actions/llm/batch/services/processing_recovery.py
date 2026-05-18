@@ -493,7 +493,7 @@ def finalize_batch_output(
     start_time: float,
 ) -> str:
     """Finalize batch processing: convert, write output, fire events."""
-    processed_data = service._convert_batch_results_to_workflow_format(
+    processed_data, _stats = service._convert_batch_results_to_workflow_format(
         batch_results,
         context_map=context_map,
         output_directory=output_directory,
@@ -503,12 +503,11 @@ def finalize_batch_output(
 
     effective_action_name = action_name if action_name is not None else service._action_name
 
-    # Stamp _state on batch records before writing — batch results bypass the
-    # online ResultCollector._stamp() path and arrive without lifecycle fields.
-    _stamp_batch_records(processed_data, effective_action_name or file_name)
-
+    # State stamping and disposition writing are now handled by the shared
+    # collector inside _convert_batch_results_to_workflow_format.
+    # Only DEFERRED clearing and prompt trace updates remain batch-specific.
     if service._storage_backend and effective_action_name:
-        write_record_dispositions(service._storage_backend, processed_data, effective_action_name)
+        service._clear_deferred_dispositions(processed_data)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
 
     output_file = service._determine_output_path(output_directory, file_name, batch_id)
