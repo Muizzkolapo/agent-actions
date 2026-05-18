@@ -7,7 +7,10 @@ that can flow through the shared enrich/collect pipeline.
 import copy
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent_actions.processing.types import ProcessingContext
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
@@ -72,7 +75,58 @@ class BatchResultStrategy:
     caller (``BatchProcessingService``) uses to run enrichment through the
     shared enrichment pipeline.  Error results have ``processing_context``
     set to ``None`` and are intentionally not enriched.
+
+    Implements ``ProcessingStrategy`` (via structural typing) so it can
+    flow through ``UnifiedProcessor``.  Call ``prepare_invoke()`` to
+    pre-load batch data before ``invoke()`` is called by the processor.
     """
+
+    def __init__(self) -> None:
+        self._pending_batch_results: list[BatchResult] | None = None
+        self._pending_kwargs: dict[str, Any] = {}
+
+    def prepare_invoke(
+        self,
+        batch_results: list[BatchResult],
+        *,
+        context_map: dict[str, Any] | None = None,
+        output_directory: str | None = None,
+        agent_config: dict[str, Any] | None = None,
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
+    ) -> None:
+        """Pre-load batch data for the next ``invoke()`` call.
+
+        Must be called before ``UnifiedProcessor.process()`` or
+        ``UnifiedProcessor.enrich_and_collect()`` invokes this strategy.
+        """
+        self._pending_batch_results = batch_results
+        self._pending_kwargs = {
+            "context_map": context_map,
+            "output_directory": output_directory,
+            "agent_config": agent_config,
+            "exhausted_recovery": exhausted_recovery,
+        }
+
+    def invoke(
+        self,
+        records: list[dict[str, Any]],
+        context: "ProcessingContext",
+    ) -> list[ProcessingResult]:
+        """ProcessingStrategy protocol: return results from pre-loaded batch data.
+
+        The ``records`` parameter is accepted for protocol compliance but
+        ignored — batch results are pre-loaded via ``prepare_invoke()``.
+        Guard filtering already happened at batch submit time.
+        """
+        if self._pending_batch_results is None:
+            raise RuntimeError(
+                "No batch data prepared. Call prepare_invoke() before invoke()."
+            )
+        try:
+            return self.process(self._pending_batch_results, **self._pending_kwargs)
+        finally:
+            self._pending_batch_results = None
+            self._pending_kwargs = {}
 
     def process(
         self,
