@@ -369,3 +369,96 @@ class TestPrefilterByGuardContextAlignment:
         assert passing[0]["target_id"] == "t-001"
         assert len(skipped) == 1
         assert skipped[0]["target_id"] == "t-002"
+
+
+class TestPrefilterFallbackWarning:
+    """Phase 5 hardening: log a warning when the eval_item-only fallback path runs.
+
+    The fallback exists for test convenience but breaks online/batch guard parity
+    if a production caller ever omits pipeline context kwargs. The warning makes
+    the regression visible in ops logs instead of silently diverging.
+    """
+
+    def test_fallback_path_emits_warning(self, caplog):
+        """When no pipeline context kwargs are passed, a single warning fires.
+
+        Asserts: warning fires once per call (not per record), names the agent,
+        mentions the diverging behavior so operators can act on the signal.
+        """
+        records = [
+            {"target_id": "t-001", "source_guid": "sg-001", "content": {"x": 1}},
+            {"target_id": "t-002", "source_guid": "sg-002", "content": {"x": 2}},
+            {"target_id": "t-003", "source_guid": "sg-003", "content": {"x": 3}},
+        ]
+        agent_config = {
+            "name": "test_action",
+            "guard": {"clause": "x == 1", "behavior": "skip"},
+        }
+
+        import logging as _logging
+
+        with caplog.at_level(_logging.WARNING, logger="agent_actions.workflow.pipeline_file_mode"):
+            prefilter_by_guard(records, agent_config, "test_action")
+
+        fallback_warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == _logging.WARNING
+            and "prefilter_by_guard" in r.message
+            and "without pipeline context" in r.message
+        ]
+        assert len(fallback_warnings) == 1, (
+            "Expected exactly one fallback warning per call (not per record); "
+            f"got {len(fallback_warnings)} for 3 input records"
+        )
+        assert "test_action" in fallback_warnings[0].message
+
+    def test_pipeline_context_path_silent(self, caplog):
+        """When pipeline context is supplied, no fallback warning fires.
+
+        Confirms the warning only triggers on the fallback path — production
+        callers (UnifiedProcessor._guard_filter*) that pass full context kwargs
+        don't generate noise.
+        """
+        records = [{"target_id": "t-001", "source_guid": "sg-001", "content": {"x": 1}}]
+        agent_config = {
+            "name": "test_action",
+            "guard": {"clause": "x == 1", "behavior": "skip"},
+        }
+
+        import logging as _logging
+
+        with caplog.at_level(_logging.WARNING, logger="agent_actions.workflow.pipeline_file_mode"):
+            prefilter_by_guard(
+                records,
+                agent_config,
+                "test_action",
+                source_data=[{"source_guid": "sg-001"}],
+            )
+
+        fallback_warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == _logging.WARNING and "without pipeline context" in r.message
+        ]
+        assert fallback_warnings == [], (
+            "Pipeline-context path must not emit fallback warning; "
+            f"unexpected warnings: {[r.message for r in fallback_warnings]}"
+        )
+
+    def test_no_guard_configured_silent(self, caplog):
+        """When no guard is configured, the function returns early — no warning.
+
+        The fallback warning is about guard *evaluation* divergence; if there's
+        no guard to evaluate, the warning is irrelevant and would be noise.
+        """
+        records = [{"target_id": "t-001", "source_guid": "sg-001", "content": {"x": 1}}]
+        agent_config = {"name": "test_action"}  # no guard key
+
+        import logging as _logging
+
+        with caplog.at_level(_logging.WARNING, logger="agent_actions.workflow.pipeline_file_mode"):
+            prefilter_by_guard(records, agent_config, "test_action")
+
+        fallback_warnings = [r for r in caplog.records if "without pipeline context" in r.message]
+        assert fallback_warnings == [], "No guard configured → no fallback warning"
