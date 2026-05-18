@@ -629,6 +629,3 @@ def _remove_batch_placeholder(output_file: Path) -> None:
             logger.debug("Removed batch placeholder: %s", output_file)
         except OSError:
             pass  # Already removed by concurrent worker
-
-
-

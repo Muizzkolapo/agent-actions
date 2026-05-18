@@ -5,11 +5,9 @@ and persisted to both the storage backend and the filesystem.
 """
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import pytest
-
-from typing import cast
 
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy

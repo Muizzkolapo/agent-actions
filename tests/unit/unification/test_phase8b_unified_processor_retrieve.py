@@ -7,14 +7,9 @@ TDD tests verifying:
 4. Batch retrieve produces CollectionStats
 """
 
-from dataclasses import replace
 from typing import Any, cast
-from unittest.mock import MagicMock
-
-import pytest
 
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.result_collector import (
     CollectionStats,
@@ -23,13 +18,10 @@ from agent_actions.processing.result_collector import (
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
-    ProcessingStatus,
 )
 from agent_actions.record.reasons import (
     BATCH_NOT_RETURNED,
-    GUARD_SKIP,
     PREP_FAILED,
-    UNPROCESSED,
 )
 from agent_actions.record.state import RecordState
 
@@ -62,9 +54,7 @@ def _make_batch_context(
     )
 
 
-def _make_success_result(
-    source_guid: str = "sg-001", record_index: int = 0
-) -> ProcessingResult:
+def _make_success_result(source_guid: str = "sg-001", record_index: int = 0) -> ProcessingResult:
     """SUCCESS result carrying per-result processing_context (batch style)."""
     result = ProcessingResult.success(
         data=[
@@ -129,9 +119,7 @@ def _make_failed_passthrough_result(
     return result
 
 
-def _make_exhausted_result(
-    source_guid: str = "sg-004", record_index: int = 0
-) -> ProcessingResult:
+def _make_exhausted_result(source_guid: str = "sg-004", record_index: int = 0) -> ProcessingResult:
     """EXHAUSTED result with processing_context."""
     result = ProcessingResult.exhausted(
         error="max retries exceeded",
@@ -287,9 +275,7 @@ class TestFailedResultDataPreservation:
         assert len(result.data) == 1
         assert result.data[0]["error"] == "LLM provider timeout"
 
-        records, stats = collect_results_from_processing_results(
-            [result], ACTION_NAME
-        )
+        records, stats = collect_results_from_processing_results([result], ACTION_NAME)
 
         assert stats.failed == 1
         assert len(records) == 1
@@ -305,9 +291,7 @@ class TestFailedResultDataPreservation:
         )
         assert result.data == []
 
-        records, stats = collect_results_from_processing_results(
-            [result], ACTION_NAME
-        )
+        records, stats = collect_results_from_processing_results([result], ACTION_NAME)
 
         assert stats.failed == 1
         assert len(records) == 1
@@ -319,9 +303,7 @@ class TestFailedResultDataPreservation:
         result = _make_failed_passthrough_result("sg-003")
         assert len(result.data) == 1
 
-        records, stats = collect_results_from_processing_results(
-            [result], ACTION_NAME
-        )
+        records, stats = collect_results_from_processing_results([result], ACTION_NAME)
 
         assert stats.failed == 1
         assert len(records) == 1
@@ -390,11 +372,13 @@ class TestCollectionStatsParity:
                 source_guid="sg-001",
             ),
             ProcessingResult.failed(
-                error="err", source_guid="sg-002",
+                error="err",
+                source_guid="sg-002",
                 input_record={"source_guid": "sg-002"},
             ),
             ProcessingResult.exhausted(
-                error="max", data=[{"source_guid": "sg-003", "content": {"ns": {"f": "p"}}}],
+                error="max",
+                data=[{"source_guid": "sg-003", "content": {"ns": {"f": "p"}}}],
                 source_guid="sg-003",
             ),
         ]
@@ -405,20 +389,26 @@ class TestCollectionStatsParity:
                 source_guid="sg-001",
             ),
             ProcessingResult.failed(
-                error="err", source_guid="sg-002",
+                error="err",
+                source_guid="sg-002",
                 input_record={"source_guid": "sg-002"},
             ),
             ProcessingResult.exhausted(
-                error="max", data=[{"source_guid": "sg-003", "content": {"ns": {"f": "p"}}}],
+                error="max",
+                data=[{"source_guid": "sg-003", "content": {"ns": {"f": "p"}}}],
                 source_guid="sg-003",
             ),
         ]
 
         _, online_stats = collect_results_from_processing_results(
-            online_results, ACTION_NAME, agent_config=_batch_agent_config(),
+            online_results,
+            ACTION_NAME,
+            agent_config=_batch_agent_config(),
         )
         _, batch_stats = collect_results_from_processing_results(
-            batch_results, ACTION_NAME, agent_config=None,
+            batch_results,
+            ACTION_NAME,
+            agent_config=None,
         )
 
         assert online_stats.success == batch_stats.success

@@ -279,9 +279,7 @@ class TestHandleRetryRecovery:
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    def test_retry_exhausted_transitions_to_reprompt_phase(
-        self, mock_build_loop, mock_fire_event
-    ):
+    def test_retry_exhausted_transitions_to_reprompt_phase(self, mock_build_loop, mock_fire_event):
         """When retries exhausted, runs check_and_submit_reprompt for real (phase transition).
 
         This exercises the actual transition — not a mock of it. We let
@@ -344,9 +342,7 @@ class TestHandleRetryRecovery:
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    def test_all_recovered_finalizes_with_event_and_status(
-        self, mock_build_loop, mock_fire_event
-    ):
+    def test_all_recovered_finalizes_with_event_and_status(self, mock_build_loop, mock_fire_event):
         """All recovered + no reprompt: writes output, fires event with correct counts."""
         service = _mock_service()
         state = _make_state(phase="retry", retry_attempt=1, missing_ids=[])

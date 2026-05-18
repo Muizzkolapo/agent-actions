@@ -119,9 +119,7 @@ class BatchResultStrategy:
         Guard filtering already happened at batch submit time.
         """
         if self._pending_batch_results is None:
-            raise RuntimeError(
-                "No batch data prepared. Call prepare_invoke() before invoke()."
-            )
+            raise RuntimeError("No batch data prepared. Call prepare_invoke() before invoke().")
         try:
             return self.process(self._pending_batch_results, **self._pending_kwargs)
         finally:

@@ -86,7 +86,6 @@ class TestComposedRecoveryPaths:
     """End-to-end composed recovery scenarios."""
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_retry_exhausted_then_reprompt_succeeds(self, mock_mgr, mock_build_loop, _event):
@@ -133,7 +132,6 @@ class TestComposedRecoveryPaths:
         service._write_batch_output.assert_called_once()
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_retry_exhausted_then_reprompt_exhausted_return_last(
@@ -233,7 +231,6 @@ class TestComposedRecoveryPaths:
             )
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_retry_exhausted_no_reprompt_configured(self, mock_mgr, mock_build_loop, _event):
@@ -275,7 +272,6 @@ class TestComposedRecoveryPaths:
         mock_mgr.delete.assert_called_once()
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_reprompt_only_all_graduated(self, mock_mgr, mock_build_loop, _event):
