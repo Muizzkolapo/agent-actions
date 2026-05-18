@@ -86,10 +86,10 @@ class TestComposedRecoveryPaths:
     """End-to-end composed recovery scenarios."""
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions")
+
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_retry_exhausted_then_reprompt_succeeds(self, mock_mgr, mock_build_loop, _disp, _event):
+    def test_retry_exhausted_then_reprompt_succeeds(self, mock_mgr, mock_build_loop, _event):
         """Happy composed: retry exhausts, reprompt evaluates all as passing → finalize."""
         service = _mock_service()
         state = _make_state(retry_attempt=3, retry_max_attempts=3)
@@ -133,11 +133,11 @@ class TestComposedRecoveryPaths:
         service._write_batch_output.assert_called_once()
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions")
+
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_retry_exhausted_then_reprompt_exhausted_return_last(
-        self, mock_mgr, mock_build_loop, _disp, _event
+        self, mock_mgr, mock_build_loop, _event
     ):
         """Both exhausted, graceful: reprompt exhausted with return_last → finalize with metadata."""
         service = _mock_service()
@@ -233,10 +233,10 @@ class TestComposedRecoveryPaths:
             )
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions")
+
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_retry_exhausted_no_reprompt_configured(self, mock_mgr, mock_build_loop, _disp, _event):
+    def test_retry_exhausted_no_reprompt_configured(self, mock_mgr, mock_build_loop, _event):
         """Retry-only exhaustion: no reprompt configured → finalize with exhaustion metadata."""
         service = _mock_service()
         state = _make_state(retry_attempt=3, retry_max_attempts=3)
@@ -275,10 +275,10 @@ class TestComposedRecoveryPaths:
         mock_mgr.delete.assert_called_once()
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions")
+
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_reprompt_only_all_graduated(self, mock_mgr, mock_build_loop, _disp, _event):
+    def test_reprompt_only_all_graduated(self, mock_mgr, mock_build_loop, _event):
         """Reprompt-only: no retry needed, all pass evaluation → finalize."""
         service = _mock_service()
         state = _make_state(phase="reprompt", retry_attempt=0, missing_ids=[])

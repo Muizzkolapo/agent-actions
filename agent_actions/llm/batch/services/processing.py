@@ -48,10 +48,7 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.result_collector import (
-    CollectionStats,
-    write_record_dispositions as _write_record_dispositions_impl,
-)
+from agent_actions.processing.result_collector import CollectionStats
 from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.utils.path_utils import ensure_directory_exists
@@ -650,13 +647,6 @@ class BatchProcessingService:
                     source_guid,
                     exc_info=True,
                 )
-
-    def _write_record_dispositions(self, items: list[dict[str, Any]], action_name: str) -> None:
-        """Write dispositions for batch output records.
-
-        Delegates to result_collector.write_record_dispositions.
-        """
-        _write_record_dispositions_impl(self._storage_backend, items, action_name)
 
     def _write_filtered_dispositions(self, context_map: dict[str, Any], action_name: str) -> None:
         """Write FILTERED dispositions for records excluded from output.

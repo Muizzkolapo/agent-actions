@@ -35,9 +35,7 @@ from agent_actions.logging.events.validation_events import (
     RepromptRecoveredEvent,
     RepromptRetryEvent,
 )
-from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.processing.types import RecoveryMetadata
-from agent_actions.record.envelope import RecordEnvelope
 
 if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -633,24 +631,4 @@ def _remove_batch_placeholder(output_file: Path) -> None:
             pass  # Already removed by concurrent worker
 
 
-def _stamp_batch_records(records: list[dict[str, Any]], action_name: str) -> None:
-    """Stamp _state on batch output records that lack lifecycle fields.
 
-    Batch results bypass the online ResultCollector._stamp() path. This ensures
-    every record written to target has a valid _state for Phase 5 fail-closed reads.
-    """
-    from agent_actions.record.state import RecordState
-
-    for record in records:
-        if "_state" in record:
-            continue
-        # Determine state from record content
-        content = record.get("content")
-        metadata = record.get("metadata", {})
-        if metadata.get("retry_exhausted") or metadata.get("reason") == "exhausted":
-            state = RecordState.EXHAUSTED
-        elif content is None and metadata.get("reason"):
-            state = RecordState.FAILED
-        else:
-            state = RecordState.PROCESSED
-        RecordEnvelope.transition(record, state, action_name, "batch_completion")

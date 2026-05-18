@@ -278,10 +278,9 @@ class TestHandleRetryRecovery:
         assert entry.status == BatchStatus.SUBMITTED
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions")
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     def test_retry_exhausted_transitions_to_reprompt_phase(
-        self, mock_build_loop, _disp, mock_fire_event
+        self, mock_build_loop, mock_fire_event
     ):
         """When retries exhausted, runs check_and_submit_reprompt for real (phase transition).
 
@@ -344,10 +343,9 @@ class TestHandleRetryRecovery:
         mock_mgr.delete.assert_called_once()
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions")
     @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
     def test_all_recovered_finalizes_with_event_and_status(
-        self, mock_build_loop, _disp, mock_fire_event
+        self, mock_build_loop, mock_fire_event
     ):
         """All recovered + no reprompt: writes output, fires event with correct counts."""
         service = _mock_service()
@@ -567,7 +565,6 @@ class TestFinalizeBatchOutput:
 
         with (
             patch("agent_actions.llm.batch.services.processing_recovery.fire_event") as mock_event,
-            patch("agent_actions.llm.batch.services.processing_recovery.write_record_dispositions"),
         ):
             output_path = finalize_batch_output(
                 service,
@@ -774,77 +771,6 @@ class TestApplyExhaustedReprompt:
 
 # ---------------------------------------------------------------------------
 # TestStampBatchRecords (direct unit tests)
-# ---------------------------------------------------------------------------
-
-
-class TestStampBatchRecords:
-    """Direct tests for _stamp_batch_records."""
-
-    def test_stamps_processed_on_record_with_content(self):
-        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
-
-        record = {"content": {"action": {"field": "value"}}, "source_guid": "g1"}
-        _stamp_batch_records([record], "test_action")
-
-        assert record["_state"] == "processed"
-        assert "_state_history" in record
-
-    def test_stamps_exhausted_on_retry_exhausted(self):
-        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
-
-        record = {"content": {"a": {}}, "metadata": {"retry_exhausted": True}, "source_guid": "g1"}
-        _stamp_batch_records([record], "test_action")
-
-        assert record["_state"] == "exhausted"
-
-    def test_stamps_exhausted_on_reason_exhausted(self):
-        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
-
-        record = {"content": {"a": {}}, "metadata": {"reason": "exhausted"}, "source_guid": "g1"}
-        _stamp_batch_records([record], "test_action")
-
-        assert record["_state"] == "exhausted"
-
-    def test_stamps_failed_on_none_content_with_reason(self):
-        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
-
-        record = {"content": None, "metadata": {"reason": "api_error"}, "source_guid": "g1"}
-        _stamp_batch_records([record], "test_action")
-
-        assert record["_state"] == "failed"
-
-    def test_empty_dict_content_is_processed_not_failed(self):
-        """Empty dict {} is valid content — must NOT be classified as FAILED."""
-        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
-
-        record = {"content": {}, "metadata": {"reason": "something"}, "source_guid": "g1"}
-        _stamp_batch_records([record], "test_action")
-
-        assert record["_state"] == "processed"
-
-    def test_skips_record_with_existing_state(self):
-        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
-
-        record = {"_state": "committed", "content": {"a": {}}, "source_guid": "g1"}
-        _stamp_batch_records([record], "test_action")
-
-        assert record["_state"] == "committed"  # unchanged
-
-    def test_stamps_multiple_records(self):
-        from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
-
-        records = [
-            {"content": {"a": {}}, "source_guid": "g1"},
-            {"content": None, "metadata": {"reason": "timeout"}, "source_guid": "g2"},
-        ]
-        _stamp_batch_records(records, "test_action")
-
-        assert records[0]["_state"] == "processed"
-        assert records[1]["_state"] == "failed"
-
-
-# ---------------------------------------------------------------------------
-# TestRemoveBatchPlaceholder (direct unit tests)
 # ---------------------------------------------------------------------------
 
 
