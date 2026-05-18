@@ -343,10 +343,8 @@ class BatchTaskPreparator:
     ) -> None:
         """Run pre-flight validation on sample rows to catch template errors early.
 
-        Guard-aware: evaluates with ``skip_guard=False`` so guard-skipped rows
-        are advanced past rather than crashing on guard-conditional templates.
-        If all sampled rows are guard-skipped/filtered, preflight passes
-        silently — there are no prompts to validate.
+        Batch-only by design: online surfaces template errors on the first row;
+        batch submits thousands at once, so we sample first to fail fast.
         """
         if not data:
             return
