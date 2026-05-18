@@ -10,6 +10,7 @@ import logging
 from dataclasses import replace
 from typing import Any, Protocol, cast, runtime_checkable
 
+from agent_actions.config.types import RunMode
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
@@ -222,6 +223,27 @@ class UnifiedProcessor:
 
         return passing, guard_results, original_passing
 
+    def enrich_and_collect(
+        self,
+        results: list[ProcessingResult],
+        context: ProcessingContext,
+    ) -> tuple[list[dict[str, Any]], CollectionStats]:
+        """Enrich and collect pre-computed results.
+
+        Used by batch retrieve where guard filtering and strategy invocation
+        happened separately (at batch submit and result processing time).
+        The results flow through the shared enrichment pipeline and collector.
+
+        Args:
+            results: ProcessingResult objects (from BatchResultStrategy.process).
+            context: Batch ProcessingContext for enrichment and collection.
+
+        Returns:
+            Tuple of (output_records, CollectionStats).
+        """
+        enriched = self._enrich(results, context)
+        return self._collect(enriched, context)
+
     def _enrich(
         self,
         results: list[ProcessingResult],
@@ -229,13 +251,24 @@ class UnifiedProcessor:
     ) -> list[ProcessingResult]:
         """Run enrichment pipeline on each result.
 
-        Each result gets a context with its positional record_index so that
-        VersionIdEnricher produces distinct version_correlation_ids per record.
+        Uses per-result ``processing_context`` when set (batch results carry
+        their own context with correct record_index and original_row).
+        Falls back to the shared context with positional record_index for
+        online results.  Batch results without ``processing_context`` (error
+        results) skip enrichment entirely.
         """
-        return [
-            self._enrichment_pipeline.enrich(r, replace(context, record_index=i))
-            for i, r in enumerate(results)
-        ]
+        enriched: list[ProcessingResult] = []
+        for i, r in enumerate(results):
+            if r.processing_context is not None:
+                enriched.append(self._enrichment_pipeline.enrich(r, r.processing_context))
+            elif context.mode == RunMode.ONLINE:
+                enriched.append(
+                    self._enrichment_pipeline.enrich(r, replace(context, record_index=i))
+                )
+            else:
+                # Batch error results without processing_context skip enrichment.
+                enriched.append(r)
+        return enriched
 
     def _collect(
         self,
