@@ -275,6 +275,348 @@ def write_record_dispositions(
             )
 
 
+def collect_results_from_processing_results(
+    results: list[ProcessingResult],
+    action_name: str,
+    *,
+    storage_backend: Optional["StorageBackend"] = None,
+    agent_config: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], CollectionStats]:
+    """Shared collect logic for both online and batch retrieve paths.
+
+    Flattens ProcessingResult entries into output records, stamps lifecycle
+    state on each, writes dispositions to storage, and fires telemetry events.
+
+    Args:
+        results: ProcessingResult objects to collect (enriched).
+        action_name: Name of the action being processed.
+        storage_backend: Optional storage for disposition writes.
+        agent_config: Agent configuration (used for exhausted-raise check
+            and guard metadata in completion events). Pass ``None`` when
+            calling from batch retrieve — exhausted-raise is not applicable
+            and guard metadata is absent.
+
+    Returns:
+        Tuple of (output_records, stats). Stats contain counts by status.
+
+    Raises:
+        AgentActionsError: If on_exhausted=raise and records exhausted retries.
+    """
+    effective_config: dict[str, Any] = agent_config if agent_config is not None else {}
+
+    fire_event(
+        ResultCollectionStartedEvent(
+            action_name=action_name,
+            total_results=len(results),
+        )
+    )
+
+    if agent_config is not None:
+        ResultCollector._check_exhausted_raise(
+            results, effective_config, action_name, storage_backend
+        )
+
+    output: list[dict[str, Any]] = []
+    stats: collections.Counter[str] = collections.Counter()
+
+    for idx, result in enumerate(results):
+        status = result.status
+        status_key = status.value
+        stats[status_key] += 1
+
+        if status == ProcessingStatus.SUCCESS:
+            data = result.data or []
+
+            # Detect parse-error records masquerading as SUCCESS.
+            # The LLM provider returns {"_parse_error": ...} on JSON
+            # parse failure, which flows through as SUCCESS data.
+            # Reprompt has already had its chance to repair (it runs
+            # during invocation, before result collection).
+            if data and _data_has_parse_error(data):
+                result.status = ProcessingStatus.FAILED
+                for d in data:
+                    _stamp(d, RecordState.FAILED, action_name, PARSE_ERROR)
+                output.extend(data)
+                stats[status_key] -= 1
+                stats["failed"] += 1
+                logger.warning(
+                    "[%s] SUCCESS result source_guid=%s contains _parse_error "
+                    "— dispositioned as FAILED",
+                    action_name,
+                    result.source_guid,
+                )
+                fire_event(
+                    ResultCollectedEvent(
+                        action_name=action_name,
+                        result_index=idx,
+                        status="failed",
+                    )
+                )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_FAILED,
+                        reason=PARSE_ERROR,
+                    )
+                continue
+
+            if data:
+                for d in data:
+                    _stamp(d, RecordState.PROCESSED, action_name, SUCCESS)
+                output.extend(data)
+            logger.debug(
+                "Collected SUCCESS result source_guid=%s count=%d",
+                result.source_guid,
+                len(data),
+            )
+            fire_event(
+                ResultCollectedEvent(
+                    action_name=action_name,
+                    result_index=idx,
+                    status="success",
+                )
+            )
+            if storage_backend and result.source_guid:
+                _safe_set_disposition(
+                    storage_backend,
+                    action_name,
+                    result.source_guid,
+                    DISPOSITION_SUCCESS,
+                )
+
+        elif status == ProcessingStatus.SKIPPED:
+            data = result.data or []
+            if data:
+                for d in data:
+                    _stamp(
+                        d,
+                        RecordState.GUARD_SKIPPED,
+                        action_name,
+                        result.skip_reason or GUARD_SKIP,
+                    )
+                output.extend(data)
+            logger.debug(
+                "Collected SKIPPED result source_guid=%s count=%d",
+                result.source_guid,
+                len(data),
+            )
+            fire_event(
+                ResultCollectedEvent(
+                    action_name=action_name,
+                    result_index=idx,
+                    status="skipped",
+                )
+            )
+            if storage_backend and result.source_guid:
+                _safe_set_disposition(
+                    storage_backend,
+                    action_name,
+                    result.source_guid,
+                    DISPOSITION_PASSTHROUGH,
+                    reason=result.skip_reason or GUARD_SKIP,
+                )
+
+        elif status == ProcessingStatus.EXHAUSTED:
+            data = result.data or []
+            if data:
+                for d in data:
+                    _stamp(d, RecordState.EXHAUSTED, action_name, RETRY_EXHAUSTED)
+                output.extend(data)
+            attempts = _get_retry_attempts(result)
+            logger.debug(
+                "Collected EXHAUSTED result source_guid=%s attempts=%s",
+                result.source_guid,
+                attempts,
+            )
+            fire_event(
+                ExhaustedRecordEvent(
+                    action_name=action_name,
+                    record_index=idx,
+                    source_guid=result.source_guid or "",
+                    reason=f"exhausted_after_{attempts}_attempts",
+                )
+            )
+            if storage_backend and result.source_guid:
+                input_snapshot_str = _serialize_snapshot(
+                    result.source_snapshot or result.input_record
+                )
+                _safe_set_disposition(
+                    storage_backend,
+                    action_name,
+                    result.source_guid,
+                    DISPOSITION_EXHAUSTED,
+                    reason=f"exhausted_after_{attempts}_attempts",
+                    input_snapshot=input_snapshot_str,
+                    detail=result.error,
+                )
+
+        elif status == ProcessingStatus.FAILED:
+            logger.error(
+                "[%s] Processing failed for source_guid=%s: %s",
+                action_name,
+                result.source_guid,
+                result.error,
+            )
+
+            # Build a tombstone so downstream actions see this record
+            # and can cascade-skip it (record-level error isolation).
+            tombstone = _build_failed_tombstone(
+                action_name, result.source_guid, result.input_record, result.error
+            )
+            output.append(tombstone)
+
+            fire_event(
+                ResultCollectedEvent(
+                    action_name=action_name,
+                    result_index=idx,
+                    status="failed",
+                )
+            )
+            if storage_backend and result.source_guid:
+                input_snapshot_str = _serialize_snapshot(
+                    result.source_snapshot or result.input_record
+                )
+                _safe_set_disposition(
+                    storage_backend,
+                    action_name,
+                    result.source_guid,
+                    DISPOSITION_FAILED,
+                    reason=result.error or "processing_error",
+                    input_snapshot=input_snapshot_str,
+                    detail=result.error,
+                )
+
+        elif status == ProcessingStatus.FILTERED:
+            logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
+            fire_event(
+                ResultCollectedEvent(
+                    action_name=action_name,
+                    result_index=idx,
+                    status="filtered",
+                )
+            )
+            if storage_backend and result.source_guid:
+                _safe_set_disposition(
+                    storage_backend,
+                    action_name,
+                    result.source_guid,
+                    DISPOSITION_FILTERED,
+                    reason=result.skip_reason or GUARD_FILTER,
+                )
+
+        elif status == ProcessingStatus.UNPROCESSED:
+            data = result.data or []
+            if data:
+                reason = result.skip_reason or UNPROCESSED
+                # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
+                state = (
+                    RecordState.GUARD_SKIPPED
+                    if reason in (GUARD_PREFILTER_SKIP, GUARD_SKIP, GUARD_FILTER)
+                    else RecordState.CASCADE_SKIPPED
+                )
+                for d in data:
+                    _stamp(d, state, action_name, reason)
+                output.extend(data)  # Preserve in output for lineage
+            logger.debug(
+                "Collected UNPROCESSED result source_guid=%s count=%d",
+                result.source_guid,
+                len(data),
+            )
+            fire_event(
+                ResultCollectedEvent(
+                    action_name=action_name,
+                    result_index=idx,
+                    status="unprocessed",
+                )
+            )
+            if storage_backend and result.source_guid:
+                _safe_set_disposition(
+                    storage_backend,
+                    action_name,
+                    result.source_guid,
+                    DISPOSITION_UNPROCESSED,
+                    reason=result.skip_reason or UNPROCESSED,
+                )
+
+        elif status == ProcessingStatus.DEFERRED:
+            task_id = result.task_id or ""
+            logger.info(
+                "Collected DEFERRED result source_guid=%s task_id=%s",
+                result.source_guid,
+                task_id,
+            )
+            fire_event(
+                ResultCollectedEvent(
+                    action_name=action_name,
+                    result_index=idx,
+                    status="deferred",
+                )
+            )
+            if storage_backend and result.source_guid:
+                _safe_set_disposition(
+                    storage_backend,
+                    action_name,
+                    result.source_guid,
+                    DISPOSITION_DEFERRED,
+                    reason=f"batch_queued:task_id={task_id}",
+                )
+
+        else:
+            logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
+
+    guard_config = effective_config.get("guard", {})
+    guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""
+    guard_on_false = guard_config.get("behavior", "") if isinstance(guard_config, dict) else ""
+
+    fire_event(
+        ResultCollectionCompleteEvent(
+            action_name=action_name,
+            total_success=stats["success"],
+            total_skipped=stats["skipped"],
+            total_filtered=stats["filtered"],
+            total_failed=stats["failed"],
+            total_exhausted=stats["exhausted"],
+            total_unprocessed=stats["unprocessed"],
+            total_deferred=stats["deferred"],
+            guard_condition=guard_condition,
+            guard_on_false=guard_on_false,
+        )
+    )
+
+    total_input = len(results)
+    if stats["filtered"] > 0 and stats["filtered"] == total_input and total_input > 0:
+        logger.warning(
+            "[%s] All %d records filtered by guard (%s). Downstream actions will receive no input.",
+            action_name,
+            total_input,
+            guard_condition or "unknown condition",
+        )
+
+    tombstone_count = stats["skipped"] + stats["exhausted"] + stats["unprocessed"]
+    if tombstone_count > 0:
+        logger.info(
+            "[%s] %d/%d records are tombstones (skipped=%d, exhausted=%d, unprocessed=%d)",
+            action_name,
+            tombstone_count,
+            len(results),
+            stats["skipped"],
+            stats["exhausted"],
+            stats["unprocessed"],
+        )
+
+    return output, CollectionStats(
+        success=stats["success"],
+        failed=stats["failed"],
+        skipped=stats["skipped"],
+        filtered=stats["filtered"],
+        exhausted=stats["exhausted"],
+        deferred=stats["deferred"],
+        unprocessed=stats["unprocessed"],
+    )
+
+
 class ResultCollector:
     """Collect output records from processing results."""
 
@@ -289,320 +631,20 @@ class ResultCollector:
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Flatten ProcessingResult entries into output records.
 
+        Delegates to ``collect_results_from_processing_results()`` — the
+        shared helper used by both online and batch retrieve paths.
+
         Returns:
             Tuple of (output_records, stats). Stats contain counts by status.
 
         Raises:
             AgentActionsError: If on_exhausted=raise and records exhausted retries.
         """
-        fire_event(
-            ResultCollectionStartedEvent(
-                action_name=agent_name,
-                total_results=len(results),
-            )
-        )
-
-        ResultCollector._check_exhausted_raise(results, agent_config, agent_name, storage_backend)
-
-        output: list[dict[str, Any]] = []
-        stats: collections.Counter[str] = collections.Counter()
-
-        for idx, result in enumerate(results):
-            status = result.status
-            status_key = status.value
-            stats[status_key] += 1
-
-            if status == ProcessingStatus.SUCCESS:
-                data = result.data or []
-
-                # Detect parse-error records masquerading as SUCCESS.
-                # The LLM provider returns {"_parse_error": ...} on JSON
-                # parse failure, which flows through as SUCCESS data.
-                # Reprompt has already had its chance to repair (it runs
-                # during invocation, before result collection).
-                if data and _data_has_parse_error(data):
-                    result.status = ProcessingStatus.FAILED
-                    for d in data:
-                        _stamp(d, RecordState.FAILED, agent_name, PARSE_ERROR)
-                    output.extend(data)
-                    stats[status_key] -= 1
-                    stats["failed"] += 1
-                    logger.warning(
-                        "[%s] SUCCESS result source_guid=%s contains _parse_error "
-                        "— dispositioned as FAILED",
-                        agent_name,
-                        result.source_guid,
-                    )
-                    fire_event(
-                        ResultCollectedEvent(
-                            action_name=agent_name,
-                            result_index=idx,
-                            status="failed",
-                        )
-                    )
-                    if storage_backend and result.source_guid:
-                        _safe_set_disposition(
-                            storage_backend,
-                            agent_name,
-                            result.source_guid,
-                            DISPOSITION_FAILED,
-                            reason=PARSE_ERROR,
-                        )
-                    continue
-
-                if data:
-                    for d in data:
-                        _stamp(d, RecordState.PROCESSED, agent_name, SUCCESS)
-                    output.extend(data)
-                logger.debug(
-                    "Collected SUCCESS result source_guid=%s count=%d",
-                    result.source_guid,
-                    len(data),
-                )
-                fire_event(
-                    ResultCollectedEvent(
-                        action_name=agent_name,
-                        result_index=idx,
-                        status="success",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    _safe_set_disposition(
-                        storage_backend,
-                        agent_name,
-                        result.source_guid,
-                        DISPOSITION_SUCCESS,
-                    )
-
-            elif status == ProcessingStatus.SKIPPED:
-                data = result.data or []
-                if data:
-                    for d in data:
-                        _stamp(
-                            d,
-                            RecordState.GUARD_SKIPPED,
-                            agent_name,
-                            result.skip_reason or GUARD_SKIP,
-                        )
-                    output.extend(data)
-                logger.debug(
-                    "Collected SKIPPED result source_guid=%s count=%d",
-                    result.source_guid,
-                    len(data),
-                )
-                fire_event(
-                    ResultCollectedEvent(
-                        action_name=agent_name,
-                        result_index=idx,
-                        status="skipped",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    _safe_set_disposition(
-                        storage_backend,
-                        agent_name,
-                        result.source_guid,
-                        DISPOSITION_PASSTHROUGH,
-                        reason=result.skip_reason or GUARD_SKIP,
-                    )
-
-            elif status == ProcessingStatus.EXHAUSTED:
-                data = result.data or []
-                if data:
-                    for d in data:
-                        _stamp(d, RecordState.EXHAUSTED, agent_name, RETRY_EXHAUSTED)
-                    output.extend(data)
-                attempts = _get_retry_attempts(result)
-                logger.debug(
-                    "Collected EXHAUSTED result source_guid=%s attempts=%s",
-                    result.source_guid,
-                    attempts,
-                )
-                fire_event(
-                    ExhaustedRecordEvent(
-                        action_name=agent_name,
-                        record_index=idx,
-                        source_guid=result.source_guid or "",
-                        reason=f"exhausted_after_{attempts}_attempts",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    input_snapshot_str = _serialize_snapshot(
-                        result.source_snapshot or result.input_record
-                    )
-                    _safe_set_disposition(
-                        storage_backend,
-                        agent_name,
-                        result.source_guid,
-                        DISPOSITION_EXHAUSTED,
-                        reason=f"exhausted_after_{attempts}_attempts",
-                        input_snapshot=input_snapshot_str,
-                        detail=result.error,
-                    )
-
-            elif status == ProcessingStatus.FAILED:
-                logger.error(
-                    "[%s] Processing failed for source_guid=%s: %s",
-                    agent_name,
-                    result.source_guid,
-                    result.error,
-                )
-
-                # Build a tombstone so downstream actions see this record
-                # and can cascade-skip it (record-level error isolation).
-                tombstone = _build_failed_tombstone(
-                    agent_name, result.source_guid, result.input_record, result.error
-                )
-                output.append(tombstone)
-
-                fire_event(
-                    ResultCollectedEvent(
-                        action_name=agent_name,
-                        result_index=idx,
-                        status="failed",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    input_snapshot_str = _serialize_snapshot(
-                        result.source_snapshot or result.input_record
-                    )
-                    _safe_set_disposition(
-                        storage_backend,
-                        agent_name,
-                        result.source_guid,
-                        DISPOSITION_FAILED,
-                        reason=result.error or "processing_error",
-                        input_snapshot=input_snapshot_str,
-                        detail=result.error,
-                    )
-
-            elif status == ProcessingStatus.FILTERED:
-                logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
-                fire_event(
-                    ResultCollectedEvent(
-                        action_name=agent_name,
-                        result_index=idx,
-                        status="filtered",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    _safe_set_disposition(
-                        storage_backend,
-                        agent_name,
-                        result.source_guid,
-                        DISPOSITION_FILTERED,
-                        reason=result.skip_reason or GUARD_FILTER,
-                    )
-
-            elif status == ProcessingStatus.UNPROCESSED:
-                data = result.data or []
-                if data:
-                    reason = result.skip_reason or UNPROCESSED
-                    # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
-                    state = (
-                        RecordState.GUARD_SKIPPED
-                        if reason in (GUARD_PREFILTER_SKIP, GUARD_SKIP, GUARD_FILTER)
-                        else RecordState.CASCADE_SKIPPED
-                    )
-                    for d in data:
-                        _stamp(d, state, agent_name, reason)
-                    output.extend(data)  # Preserve in output for lineage
-                logger.debug(
-                    "Collected UNPROCESSED result source_guid=%s count=%d",
-                    result.source_guid,
-                    len(data),
-                )
-                fire_event(
-                    ResultCollectedEvent(
-                        action_name=agent_name,
-                        result_index=idx,
-                        status="unprocessed",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    _safe_set_disposition(
-                        storage_backend,
-                        agent_name,
-                        result.source_guid,
-                        DISPOSITION_UNPROCESSED,
-                        reason=result.skip_reason or UNPROCESSED,
-                    )
-
-            elif status == ProcessingStatus.DEFERRED:
-                task_id = result.task_id or ""
-                logger.info(
-                    "Collected DEFERRED result source_guid=%s task_id=%s",
-                    result.source_guid,
-                    task_id,
-                )
-                fire_event(
-                    ResultCollectedEvent(
-                        action_name=agent_name,
-                        result_index=idx,
-                        status="deferred",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    _safe_set_disposition(
-                        storage_backend,
-                        agent_name,
-                        result.source_guid,
-                        DISPOSITION_DEFERRED,
-                        reason=f"batch_queued:task_id={task_id}",
-                    )
-
-            else:
-                logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
-
-        guard_config = agent_config.get("guard", {})
-        guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""
-        guard_on_false = guard_config.get("behavior", "") if isinstance(guard_config, dict) else ""
-
-        fire_event(
-            ResultCollectionCompleteEvent(
-                action_name=agent_name,
-                total_success=stats["success"],
-                total_skipped=stats["skipped"],
-                total_filtered=stats["filtered"],
-                total_failed=stats["failed"],
-                total_exhausted=stats["exhausted"],
-                total_unprocessed=stats["unprocessed"],
-                total_deferred=stats["deferred"],
-                guard_condition=guard_condition,
-                guard_on_false=guard_on_false,
-            )
-        )
-
-        total_input = len(results)
-        if stats["filtered"] > 0 and stats["filtered"] == total_input and total_input > 0:
-            logger.warning(
-                "[%s] All %d records filtered by guard (%s). "
-                "Downstream actions will receive no input.",
-                agent_name,
-                total_input,
-                guard_condition or "unknown condition",
-            )
-
-        tombstone_count = stats["skipped"] + stats["exhausted"] + stats["unprocessed"]
-        if tombstone_count > 0:
-            logger.info(
-                "[%s] %d/%d records are tombstones (skipped=%d, exhausted=%d, unprocessed=%d)",
-                agent_name,
-                tombstone_count,
-                len(results),
-                stats["skipped"],
-                stats["exhausted"],
-                stats["unprocessed"],
-            )
-
-        return output, CollectionStats(
-            success=stats["success"],
-            failed=stats["failed"],
-            skipped=stats["skipped"],
-            filtered=stats["filtered"],
-            exhausted=stats["exhausted"],
-            deferred=stats["deferred"],
-            unprocessed=stats["unprocessed"],
+        return collect_results_from_processing_results(
+            results,
+            agent_name,
+            storage_backend=storage_backend,
+            agent_config=agent_config,
         )
 
     @staticmethod
