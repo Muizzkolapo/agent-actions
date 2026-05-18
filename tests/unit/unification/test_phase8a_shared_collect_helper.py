@@ -12,6 +12,9 @@ with mixed statuses (as they do from BatchResultStrategy.process).
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from agent_actions.errors import AgentActionsError
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.result_collector import (
     ResultCollector,
@@ -121,10 +124,7 @@ def _make_deferred_result(
 
 
 def _mock_storage_backend() -> MagicMock:
-    backend = MagicMock()
-    backend.set_disposition = MagicMock()
-    backend.clear_disposition = MagicMock()
-    return backend
+    return MagicMock()
 
 
 class TestSharedHelperParityWithCollectResults:
@@ -268,7 +268,6 @@ class TestSharedHelperParityWithCollectResults:
             storage_backend=backend,
         )
 
-        # 2 success + 1 failed tombstone + 1 exhausted + 1 unprocessed = 5
         assert len(records) == 5
         assert stats.success == 2
         assert stats.failed == 1
@@ -333,6 +332,47 @@ class TestSharedHelperEquivalence:
         assert stats_helper.filtered == stats_collector.filtered
         assert stats_helper.exhausted == stats_collector.exhausted
 
-        # Same _state on each record
         for rh, rc in zip(records_helper, records_collector, strict=True):
             assert rh["_state"] == rc["_state"]
+
+
+class TestExhaustedRaiseGuard:
+    """The exhausted-raise check depends on agent_config presence."""
+
+    def test_exhausted_raise_with_config(self):
+        """on_exhausted=raise + agent_config raises AgentActionsError."""
+        results = [_make_exhausted_result("sg-001")]
+        config = {"retry": {"on_exhausted": "raise"}}
+
+        with pytest.raises(AgentActionsError, match="Retry exhausted"):
+            collect_results_from_processing_results(
+                results,
+                ACTION_NAME,
+                agent_config=config,
+            )
+
+    def test_exhausted_no_raise_without_config(self):
+        """agent_config=None skips exhausted-raise (batch retrieve path)."""
+        results = [_make_exhausted_result("sg-001")]
+
+        records, stats = collect_results_from_processing_results(
+            results,
+            ACTION_NAME,
+            agent_config=None,
+        )
+
+        assert stats.exhausted == 1
+        assert len(records) == 1
+
+    def test_exhausted_raise_with_empty_config(self):
+        """agent_config={} still checks exhausted-raise (returns normally, no raise config)."""
+        results = [_make_exhausted_result("sg-001")]
+
+        records, stats = collect_results_from_processing_results(
+            results,
+            ACTION_NAME,
+            agent_config={},
+        )
+
+        assert stats.exhausted == 1
+        assert len(records) == 1

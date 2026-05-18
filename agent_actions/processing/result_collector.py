@@ -302,7 +302,7 @@ def collect_results_from_processing_results(
     Raises:
         AgentActionsError: If on_exhausted=raise and records exhausted retries.
     """
-    effective_config: dict[str, Any] = agent_config or {}
+    effective_config: dict[str, Any] = agent_config if agent_config is not None else {}
 
     fire_event(
         ResultCollectionStartedEvent(
@@ -311,7 +311,7 @@ def collect_results_from_processing_results(
         )
     )
 
-    if effective_config:
+    if agent_config is not None:
         ResultCollector._check_exhausted_raise(
             results, effective_config, action_name, storage_backend
         )
