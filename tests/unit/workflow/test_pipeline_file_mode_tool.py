@@ -379,7 +379,7 @@ def test_file_tool_non_list_non_fileudfresult_rejected():
 
 
 def test_file_tool_empty_response_with_input_returns_failed():
-    """Tool returning [] with non-empty input returns ProcessingResult.failed()."""
+    """Tool returning [] with non-empty input returns per-record FAILED results."""
     context = _make_context()
 
     input_data = [
@@ -395,10 +395,12 @@ def test_file_tool_empty_response_with_input_returns_failed():
     ):
         results = FileToolStrategy().invoke(input_data, context)
 
-    assert len(results) == 1
-    assert results[0].status == ProcessingStatus.FAILED
-    assert "returned empty result" in results[0].error
-    assert "2 input record(s)" in results[0].error
+    assert len(results) == 2
+    for i, result in enumerate(results):
+        assert result.status == ProcessingStatus.FAILED
+        assert "returned empty result" in result.error
+        assert "2 input record(s)" in result.error
+        assert result.source_guid == input_data[i]["source_guid"]
 
 
 def test_file_tool_empty_response_with_empty_input_ok():
@@ -419,13 +421,13 @@ def test_file_tool_empty_response_with_empty_input_ok():
 
 
 def test_file_tool_empty_response_feeds_existing_failure_check():
-    """Empty tool result -> stats.failed=1 -> existing zero-success check fires."""
+    """Empty tool result -> per-record failures -> existing zero-success check fires."""
     from agent_actions.processing.result_collector import ResultCollector
 
     context = _make_context()
     input_data = [
-        {"content": {"prev": {"a": 1}}},
-        {"content": {"prev": {"b": 2}}},
+        {"source_guid": "sg-a", "content": {"prev": {"a": 1}}},
+        {"source_guid": "sg-b", "content": {"prev": {"b": 2}}},
     ]
 
     context.source_data = input_data
@@ -443,15 +445,16 @@ def test_file_tool_empty_response_feeds_existing_failure_check():
         is_first_stage=False,
     )
 
-    assert stats.failed == 1
+    assert stats.failed == 2
     assert stats.success == 0
-    # FAILED now produces a tombstone for record-level error isolation
-    assert len(output) == 1
-    assert output[0]["_state"] == "failed"
+    # Each FAILED produces a tombstone for record-level error isolation
+    assert len(output) == 2
+    for rec in output:
+        assert rec["_state"] == "failed"
 
 
 def test_file_udf_result_empty_with_input_returns_failed():
-    """FileUDFResult with empty outputs and non-empty input returns FAILED."""
+    """FileUDFResult with empty outputs and non-empty input returns per-record FAILED."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -464,8 +467,85 @@ def test_file_udf_result_empty_with_input_returns_failed():
     ):
         results = FileToolStrategy().invoke(input_data, context)
 
+    assert len(results) == 1
     assert results[0].status == ProcessingStatus.FAILED
+    assert results[0].source_guid == "sg-1"
     assert "returned empty result" in results[0].error
+
+
+# --- F12 regression: per-record disposition on empty FILE tool response ---
+
+
+def test_file_tool_empty_response_writes_disposition_per_record():
+    """Regression test for F12: empty FILE tool must write FAILED disposition per input record.
+
+    Before the fix, a single ProcessingResult.failed(source_guid=None) was created
+    for all N input records. The collector skipped disposition writes because
+    source_guid was None — all records became invisible in the DB.
+    """
+    from unittest.mock import MagicMock
+
+    from agent_actions.processing.result_collector import ResultCollector
+
+    context = _make_context()
+    input_data = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
+        {"source_guid": "sg-3", "content": {"prev": {"id": 3}}},
+        {"source_guid": "sg-4", "content": {"prev": {"id": 4}}},
+        {"source_guid": "sg-5", "content": {"prev": {"id": 5}}},
+    ]
+    context.source_data = input_data
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert len(results) == 5
+    for i, result in enumerate(results):
+        assert result.status == ProcessingStatus.FAILED
+        assert result.source_guid == f"sg-{i + 1}"
+
+    mock_backend = MagicMock()
+    output, stats = ResultCollector.collect_results(
+        results,
+        {"kind": "tool"},
+        "my_file_tool",
+        is_first_stage=False,
+        storage_backend=mock_backend,
+    )
+
+    assert stats.failed == 5
+    assert stats.success == 0
+    # set_disposition(action_name, record_id, disposition, ...)
+    assert mock_backend.set_disposition.call_count == 5
+    written_guids = {call.args[1] for call in mock_backend.set_disposition.call_args_list}
+    assert written_guids == {"sg-1", "sg-2", "sg-3", "sg-4", "sg-5"}
+
+
+def test_file_tool_empty_response_snapshot_per_record():
+    """Each per-record FAILED result captures its own source_snapshot, not just processable[0]."""
+    context = _make_context()
+    input_data = [
+        {"source_guid": "sg-1", "content": {"prev": {"alpha": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"beta": 2}}},
+    ]
+    context.source_data = input_data
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        return_value=([], True),
+    ):
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert len(results) == 2
+    assert results[0].source_snapshot["source_guid"] == "sg-1"
+    assert results[1].source_snapshot["source_guid"] == "sg-2"
+    # Deep copy: mutation must not affect the original
+    results[0].source_snapshot["source_guid"] = "mutated"
+    assert input_data[0]["source_guid"] == "sg-1"
 
 
 # --- Error surfacing ---
