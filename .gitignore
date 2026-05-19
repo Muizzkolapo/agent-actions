@@ -56,4 +56,3 @@ MagicMock/
 # Example runtime artifacts
 examples/*/artefact/
 examples/*/logs/
-examples/*/docs/

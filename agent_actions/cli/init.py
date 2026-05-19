@@ -48,9 +48,14 @@ _COPY_IGNORE_PATTERNS = shutil.ignore_patterns(
     "*.mp3",
     "*.tape",
     "*.db",
+    "*.db-shm",
+    "*.db-wal",
     "__pycache__",
     ".agent_status.json",
     "target",
+    "store",
+    "artefact",
+    "logs",
 )
 
 
@@ -130,6 +135,11 @@ def _fetch_example(example_name: str, dest: Path, *, force: bool = False) -> Non
             )
 
         shutil.copytree(example_src, dest, ignore=_COPY_IGNORE_PATTERNS)
+
+        # Copy the shared .env.example from examples/ root if present
+        shared_env = roots[0] / "examples" / ".env.example"
+        if shared_env.is_file():
+            shutil.copy2(shared_env, dest / ".env.example")
 
 
 def _print_available_examples() -> None:
