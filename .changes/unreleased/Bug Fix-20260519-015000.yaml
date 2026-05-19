@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "CLI batch path (process_batch_results) now delegates to _process_single_batch_file for retry/reprompt parity with production path"
-time: 2026-05-19T01:50:00.000000Z

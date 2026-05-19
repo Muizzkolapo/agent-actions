@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Consolidate duplicate GuardBehavior enums into single StrEnum definition, eliminate raw string comparisons for guard behavior values"
-time: 2026-05-10T13:00:00.000000Z

@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Preflight warning and enriched runtime error for fan-in when filter guard upstream leaves null observe namespace"
-time: 2026-05-14T04:15:00.000000Z

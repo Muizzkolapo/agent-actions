@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Phase 9a: observe resolves missing fields to None matching guard semantics — eliminates guard/observe null asymmetry (U-4.2)"
-time: 2026-05-17T00:09:00.000000Z

@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "FILE tool empty response now writes FAILED disposition per input record instead of dropping all N records silently"
-time: 2026-05-19T12:00:00.000000Z
