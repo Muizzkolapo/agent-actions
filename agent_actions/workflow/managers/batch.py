@@ -202,8 +202,8 @@ class BatchLifecycleManager:
             for disp in _TERMINAL_DISPOSITIONS:
                 for r in self.storage_backend.get_disposition(agent_name, disposition=disp):
                     rid = r.get("record_id")
-                    if rid in deferred_ids:
-                        terminal_ids.add(rid)
+                    if rid and rid in deferred_ids:
+                        terminal_ids.add(str(rid))
                 if not (deferred_ids - terminal_ids):
                     return
 

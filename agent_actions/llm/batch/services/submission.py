@@ -287,6 +287,8 @@ class BatchSubmissionService:
         batch_id: str | None,
     ) -> None:
         """Stamp DISPOSITION_DEFERRED for all INCLUDED records after submission."""
+        if not self._storage_backend:
+            return
         for custom_id, entry in context_map.items():
             if BatchContextMetadata.get_filter_status(entry) != FilterStatus.INCLUDED:
                 continue
