@@ -344,6 +344,115 @@ class TestProcessRecordEmptyOutput:
         with pytest.raises(EmptyOutputError, match="on_empty=error"):
             strategy.process_record({"field": "value"}, context)
 
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_empty_output_warn_returns_failed(self, mock_fire, mock_get_preparer):
+        """on_empty=warn must return FAILED, not SUCCESS with empty data (F10 regression)."""
+        prepared = _make_prepared()
+        mock_get_preparer.return_value.prepare.return_value = prepared
+
+        mock_invocation = MagicMock()
+        mock_invocation.invoke.return_value = InvocationResult.immediate(response={}, executed=True)
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test", "on_empty": "warn"},
+            agent_name="test",
+            invocation_strategy=mock_invocation,
+        )
+
+        context = ProcessingContext(
+            agent_config={"agent_type": "test", "on_empty": "warn"},
+            agent_name="test",
+        )
+
+        result = strategy.process_record({"field": "value"}, context)
+
+        assert result.status == ProcessingStatus.FAILED
+        assert "Empty LLM response" in result.error
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_empty_output_warn_default_returns_failed(self, mock_fire, mock_get_preparer):
+        """Default on_empty (warn) must return FAILED for empty responses (F10 regression)."""
+        prepared = _make_prepared()
+        mock_get_preparer.return_value.prepare.return_value = prepared
+
+        mock_invocation = MagicMock()
+        mock_invocation.invoke.return_value = InvocationResult.immediate(
+            response=None, executed=True
+        )
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+            invocation_strategy=mock_invocation,
+        )
+
+        context = ProcessingContext(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+        )
+
+        result = strategy.process_record({"field": "value"}, context)
+
+        assert result.status == ProcessingStatus.FAILED
+        assert "Empty LLM response" in result.error
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_empty_output_skip_returns_skipped(self, mock_fire, mock_get_preparer):
+        """on_empty=skip must return SKIPPED with tombstone, not SUCCESS with empty data."""
+        prepared = _make_prepared()
+        mock_get_preparer.return_value.prepare.return_value = prepared
+
+        mock_invocation = MagicMock()
+        mock_invocation.invoke.return_value = InvocationResult.immediate(response=[], executed=True)
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test", "on_empty": "skip"},
+            agent_name="test",
+            invocation_strategy=mock_invocation,
+        )
+
+        context = ProcessingContext(
+            agent_config={"agent_type": "test", "on_empty": "skip"},
+            agent_name="test",
+        )
+
+        result = strategy.process_record({"field": "value"}, context)
+
+        assert result.status == ProcessingStatus.SKIPPED
+        assert result.skip_reason == "empty_output"
+        assert len(result.data) == 1  # tombstone record
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_nonempty_output_still_succeeds(self, mock_fire, mock_get_preparer):
+        """Non-empty LLM responses must still produce SUCCESS (F10 guard)."""
+        prepared = _make_prepared()
+        mock_get_preparer.return_value.prepare.return_value = prepared
+
+        mock_invocation = MagicMock()
+        mock_invocation.invoke.return_value = InvocationResult.immediate(
+            response={"result": "data"}, executed=True
+        )
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test", "on_empty": "warn"},
+            agent_name="test",
+            invocation_strategy=mock_invocation,
+        )
+
+        context = ProcessingContext(
+            agent_config={"agent_type": "test", "on_empty": "warn"},
+            agent_name="test",
+        )
+
+        result = strategy.process_record({"field": "value"}, context)
+
+        assert result.status == ProcessingStatus.SUCCESS
+        assert len(result.data) > 0
+
 
 # ---------------------------------------------------------------------------
 # invoke — batch loop

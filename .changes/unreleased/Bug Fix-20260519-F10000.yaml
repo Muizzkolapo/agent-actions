@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix SUCCESS records with empty LLM response vanishing from output — on_empty=warn now returns FAILED, on_empty=skip returns SKIPPED with tombstone"
+time: 2026-05-19T10:00:00.000000Z

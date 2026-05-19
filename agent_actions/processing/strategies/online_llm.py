@@ -459,6 +459,35 @@ class OnlineLLMStrategy:
                     },
                 )
 
+            if on_empty == "warn":
+                logger.warning(
+                    "Action '%s' produced empty output for record '%s' — "
+                    "marking as failed (on_empty=warn)",
+                    context.agent_name,
+                    source_guid,
+                )
+                return ProcessingResult.failed(
+                    error=f"Empty LLM response for record '{source_guid}'",
+                    source_guid=source_guid,
+                    source_snapshot=source_snapshot,
+                    input_record=input_record,
+                )
+
+            # on_empty == "skip": silently skip the record
+            tombstone = build_tombstone(
+                context.action_name,
+                input_record,
+                "empty_output",
+                source_guid=source_guid,
+            )
+            return ProcessingResult.skipped(
+                passthrough_data=tombstone,
+                reason="empty_output",
+                source_guid=source_guid,
+                source_snapshot=source_snapshot,
+                input_record=input_record,
+            )
+
         # Transform response
         item_existing_content = (
             extract_existing_content(item, is_first_stage=context.is_first_stage)
