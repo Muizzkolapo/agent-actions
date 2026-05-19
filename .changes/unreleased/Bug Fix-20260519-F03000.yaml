@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix orphan DEFERRED warning false positives — only warn for records with no terminal disposition sibling"
+time: 2026-05-19T00:30:00.000000Z
