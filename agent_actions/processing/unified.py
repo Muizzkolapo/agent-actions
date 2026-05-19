@@ -10,7 +10,6 @@ import logging
 from dataclasses import replace
 from typing import Any, Protocol, cast, runtime_checkable
 
-from agent_actions.config.types import RunMode
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
@@ -254,20 +253,30 @@ class UnifiedProcessor:
         Uses per-result ``processing_context`` when set (batch results carry
         their own context with correct record_index and original_row).
         Falls back to the shared context with positional record_index for
-        online results.  Batch results without ``processing_context`` (error
-        results) skip enrichment entirely.
+        results without their own context (online results and batch error
+        results alike).
+
+        Per-record enrichment failures are isolated: a failing record produces
+        a FAILED ProcessingResult instead of aborting the entire action.
         """
         enriched: list[ProcessingResult] = []
         for i, r in enumerate(results):
-            if r.processing_context is not None:
-                enriched.append(self._enrichment_pipeline.enrich(r, r.processing_context))
-            elif context.mode == RunMode.ONLINE:
+            enrich_ctx = (
+                r.processing_context
+                if r.processing_context is not None
+                else replace(context, record_index=i)
+            )
+            try:
+                enriched.append(self._enrichment_pipeline.enrich(r, enrich_ctx))
+            except Exception as e:
+                logger.warning("Enrichment failed for record %d: %s", i, e)
                 enriched.append(
-                    self._enrichment_pipeline.enrich(r, replace(context, record_index=i))
+                    ProcessingResult.failed(
+                        error=f"Enrichment failed: {e}",
+                        source_guid=r.source_guid,
+                        source_snapshot=r.input_record,
+                    )
                 )
-            else:
-                # Batch error results without processing_context skip enrichment.
-                enriched.append(r)
         return enriched
 
     def _collect(
