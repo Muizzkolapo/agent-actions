@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Clear prompt traces during --fresh and rerun reset to prevent unbounded DB growth"
+time: 2026-05-19T05:50:00.000000Z
