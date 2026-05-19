@@ -275,6 +275,7 @@ class AgentWorkflow:
             try:
                 self.storage_backend.delete_target(action_name)
                 self.storage_backend.clear_disposition(action_name)
+                self.storage_backend.clear_prompt_traces(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
         self.services.core.state_manager.reset()
@@ -310,8 +311,9 @@ class AgentWorkflow:
         for action_name in reset_actions:
             try:
                 self.storage_backend.clear_disposition(action_name)
+                self.storage_backend.clear_prompt_traces(action_name)
             except Exception as e:
-                logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
+                logger.warning("Failed to clear stored data for %s: %s", action_name, e)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
 
     # ── Properties ──────────────────────────────────────────────────────
