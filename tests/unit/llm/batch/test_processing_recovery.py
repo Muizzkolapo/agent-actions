@@ -603,6 +603,68 @@ class TestFinalizeBatchOutput:
         service, _, _, _ = self._run_finalize()
         service._cleanup_recovery_entries.assert_not_called()
 
+    def test_finalize_writes_filtered_dispositions(self):
+        """Phase 7b parity: FILTERED records in context_map must reach DISPOSITION_FILTERED.
+
+        finalize_batch_output is the production retrieve entry point (called via
+        process_all_batch_results → _process_single_batch_file → _process_original_batch
+        → _finalize_batch_output). The reconciler strips FILTERED rows from
+        processed_data before this function runs, so the collector path never sees
+        them. Without an explicit _write_filtered_dispositions call here, FILTERED
+        records stay stuck at DISPOSITION_DEFERRED (stamped at submit by Phase 7a)
+        and never transition to DISPOSITION_FILTERED — silently breaking the
+        Phase 7b parity contract for every real batch run.
+        """
+        service = _mock_service()
+        manager = MagicMock()
+        context_map = {"custom-filtered-1": {"source_guid": "sg-001"}}
+
+        with patch("agent_actions.llm.batch.services.processing_recovery.fire_event"):
+            finalize_batch_output(
+                service,
+                batch_results=[_make_result("id-1")],
+                exhausted_recovery=None,
+                context_map=context_map,
+                output_directory="/tmp",
+                file_name="test_file",
+                batch_id="batch-123",
+                agent_config={"kind": "llm"},
+                manager=manager,
+                action_name="test_action",
+                start_time=0.0,
+            )
+
+        service._write_filtered_dispositions.assert_called_once_with(context_map, "test_action")
+
+    def test_finalize_uses_service_action_name_when_action_name_none(self):
+        """When action_name=None, _write_filtered_dispositions still uses service._action_name.
+
+        Mirrors how _clear_deferred_dispositions and _update_prompt_trace_responses
+        fall back to effective_action_name. A None action_name must not silently
+        skip filtered-disposition writes — the service knows its own name.
+        """
+        service = _mock_service()
+        service._action_name = "fallback_action"
+        manager = MagicMock()
+        context_map = {"custom-filtered-1": {"source_guid": "sg-001"}}
+
+        with patch("agent_actions.llm.batch.services.processing_recovery.fire_event"):
+            finalize_batch_output(
+                service,
+                batch_results=[_make_result("id-1")],
+                exhausted_recovery=None,
+                context_map=context_map,
+                output_directory="/tmp",
+                file_name="test_file",
+                batch_id="batch-123",
+                agent_config={"kind": "llm"},
+                manager=manager,
+                action_name=None,
+                start_time=0.0,
+            )
+
+        service._write_filtered_dispositions.assert_called_once_with(context_map, "fallback_action")
+
 
 # ---------------------------------------------------------------------------
 # TestRecoveryStatePersistence

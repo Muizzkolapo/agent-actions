@@ -501,11 +501,14 @@ def finalize_batch_output(
 
     effective_action_name = action_name if action_name is not None else service._action_name
 
-    # State stamping and disposition writing are now handled by the shared
-    # collector inside _convert_batch_results_to_workflow_format.
-    # Only DEFERRED clearing and prompt trace updates remain batch-specific.
+    # SUCCESS/FAILED/EXHAUSTED dispositions and state stamping are handled by the
+    # shared collector inside _convert_batch_results_to_workflow_format. FILTERED
+    # records are stripped by the reconciler before collection, so they require
+    # an explicit write here to match online ResultCollector parity (Phase 7b /
+    # U-3.2a). DEFERRED clearing and prompt trace updates also remain batch-specific.
     if service._storage_backend and effective_action_name:
         service._clear_deferred_dispositions(processed_data)
+        service._write_filtered_dispositions(context_map, effective_action_name)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
 
     output_file = service._determine_output_path(output_directory, file_name, batch_id)
