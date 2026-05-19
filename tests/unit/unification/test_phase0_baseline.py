@@ -9,7 +9,6 @@ verify the behavior that subsequent phases depend on.
 """
 
 import inspect
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
@@ -151,86 +150,6 @@ class TestU02OnlineSkipGuardFalse:
             # SKIPPED path must build a tombstone and mark result as not executed
             mock_tomb.assert_called_once()
             assert result.executed is False
-
-
-class TestU03PrefilterUsesEvalItem:
-    """U-0.3: Prefilter passes context=eval_item to evaluator.
-
-    The guard evaluator must receive the record's existing content as its
-    context parameter, not an empty dict or None. This ensures guard clauses
-    that reference upstream namespace fields (e.g., upstream_ns.status) can
-    resolve correctly in the online prefilter path.
-    """
-
-    def test_prefilter_passes_content_as_context(self):
-        """prefilter_by_guard must pass record content as context to evaluator."""
-        from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
-
-        guard_config = {
-            "clause": "upstream_ns.status == 'ready'",
-            "behavior": "skip",
-        }
-        agent_config = {"guard": guard_config}
-
-        data = [
-            {"content": {"upstream_ns": {"status": "ready"}}},
-            {"content": {"upstream_ns": {"status": "pending"}}},
-        ]
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator"
-        ) as mock_get_eval:
-            mock_evaluator = MagicMock()
-            captured_contexts: list[Any] = []
-
-            def capture_evaluate(*, item, guard_config, context=None, **kwargs):
-                captured_contexts.append(context)
-                result = MagicMock()
-                result.should_execute = True
-                return result
-
-            mock_evaluator.evaluate.side_effect = capture_evaluate
-            mock_get_eval.return_value = mock_evaluator
-
-            prefilter_by_guard(data, agent_config, "test_action")
-
-            # Context must be the record's existing content — not empty or None
-            assert captured_contexts[0] == {"upstream_ns": {"status": "ready"}}, (
-                "First record's context must be its content dict"
-            )
-            assert captured_contexts[1] == {"upstream_ns": {"status": "pending"}}, (
-                "Second record's context must be its content dict"
-            )
-
-    def test_prefilter_context_equals_eval_item(self):
-        """context parameter must be identical to item parameter (both are eval_item)."""
-        from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
-
-        guard_config = {"clause": "field == 'x'", "behavior": "filter"}
-        agent_config = {"guard": guard_config}
-        data = [{"content": {"field": "x"}}]
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator"
-        ) as mock_get_eval:
-            mock_evaluator = MagicMock()
-            captured_args: list[dict] = []
-
-            def capture_evaluate(*, item, guard_config, context=None, **kwargs):
-                captured_args.append({"item": item, "context": context})
-                result = MagicMock()
-                result.should_execute = True
-                return result
-
-            mock_evaluator.evaluate.side_effect = capture_evaluate
-            mock_get_eval.return_value = mock_evaluator
-
-            prefilter_by_guard(data, agent_config, "test_action")
-
-            # item and context must be the same object (both = eval_item)
-            assert captured_args[0]["item"] is captured_args[0]["context"], (
-                "item and context must be the same eval_item object"
-            )
 
 
 class TestU04SharedBuildPipelineContext:

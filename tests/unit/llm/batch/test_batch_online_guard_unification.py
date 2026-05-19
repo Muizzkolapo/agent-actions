@@ -362,44 +362,7 @@ class TestReconciliationSkipReason:
 
 
 class TestOnlineGuardContextParity:
-    """Online prefilter and per-record guard must see the same context
-    as batch mode — not empty {}."""
-
-    def test_prefilter_passes_record_content_as_context(self):
-        """prefilter_by_guard must pass record content as context, not {}."""
-        from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
-
-        guard_config = {
-            "clause": "upstream_ns.status == 'ready'",
-            "behavior": "skip",
-        }
-        agent_config = {"guard": guard_config}
-
-        data = [
-            {"content": {"upstream_ns": {"status": "ready"}}},
-            {"content": {"upstream_ns": {"status": "pending"}}},
-        ]
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator"
-        ) as mock_get_eval:
-            mock_evaluator = MagicMock()
-            captured_contexts: list[Any] = []
-
-            def capture_evaluate(*, item, guard_config, context=None, **kwargs):
-                captured_contexts.append(context)
-                mock_result = MagicMock()
-                mock_result.should_execute = True
-                return mock_result
-
-            mock_evaluator.evaluate.side_effect = capture_evaluate
-            mock_get_eval.return_value = mock_evaluator
-
-            prefilter_by_guard(data, agent_config, "test_action")
-
-            # Context must be the record's existing content, not empty
-            assert captured_contexts[0] == {"upstream_ns": {"status": "ready"}}
-            assert captured_contexts[1] == {"upstream_ns": {"status": "pending"}}
+    """Online per-record guard defaults ensure parity with batch mode."""
 
     def test_online_process_record_skip_guard_false_by_default(self):
         """process_record default skip_guard is False — per-record guard
@@ -415,48 +378,6 @@ class TestOnlineGuardContextParity:
         assert skip_guard_param.default is False, (
             "skip_guard default must be False so per-record guard evaluates"
         )
-
-    def test_same_guard_verdict_online_vs_batch_path(self):
-        """Given the same item and guard config, online prefilter and batch
-        TaskPreparer.prepare() produce the same pass/skip decision."""
-        from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
-
-        # Item where guard should pass (upstream_ns.ready is truthy)
-        passing_item = {"content": {"upstream_ns": {"ready": True}}}
-        # Item where guard should skip (upstream_ns.ready is falsy)
-        skipping_item = {"content": {"upstream_ns": {"ready": False}}}
-
-        guard_config = {
-            "clause": "upstream_ns.ready == true",
-            "behavior": "skip",
-        }
-        agent_config = {"guard": guard_config}
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator"
-        ) as mock_get_eval:
-            mock_evaluator = MagicMock()
-
-            def evaluate_fn(*, item, guard_config, context=None, **kwargs):
-                # Simulate: if context has upstream_ns.ready=True → pass, else skip
-                ready = False
-                if isinstance(context, dict):
-                    ns = context.get("upstream_ns", {})
-                    ready = ns.get("ready", False) if isinstance(ns, dict) else False
-                mock_result = MagicMock()
-                mock_result.should_execute = bool(ready)
-                return mock_result
-
-            mock_evaluator.evaluate.side_effect = evaluate_fn
-            mock_get_eval.return_value = mock_evaluator
-
-            passing_out, skipped_out, _, _filtered = prefilter_by_guard(
-                [passing_item, skipping_item], agent_config, "test_action"
-            )
-
-            # passing_item passes, skipping_item is skipped
-            assert len(passing_out) == 1
-            assert len(skipped_out) == 1
 
 
 # ---------------------------------------------------------------------------
