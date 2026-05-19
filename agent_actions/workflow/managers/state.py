@@ -41,6 +41,15 @@ TERMINAL_STATUSES: frozenset[ActionStatus] = frozenset(
         ActionStatus.COMPLETED_WITH_FAILURES,
     }
 )
+RETRYABLE_STATUSES: frozenset[ActionStatus] = frozenset(
+    {
+        ActionStatus.FAILED,
+        ActionStatus.SKIPPED,
+        ActionStatus.RUNNING,
+        ActionStatus.CHECKING_BATCH,
+        ActionStatus.COMPLETED_WITH_FAILURES,
+    }
+)
 
 
 class ActionStateManager:
@@ -166,21 +175,16 @@ class ActionStateManager:
         return marked
 
     def reset_retryable(self) -> list[str]:
-        """Reset non-completed terminal and in-progress actions to PENDING.
+        """Reset retryable actions to PENDING for re-run.
 
-        Called at workflow startup so that re-runs retry non-completed
-        actions while preserving completed results.  Callers should clear
-        storage dispositions for the returned action names.
+        Called at workflow startup so that re-runs retry failed, skipped,
+        in-progress, and partially-failed actions while preserving fully
+        completed results.  Callers should clear storage dispositions for
+        the returned action names.
         """
-        retryable = {
-            ActionStatus.FAILED,
-            ActionStatus.SKIPPED,
-            ActionStatus.RUNNING,
-            ActionStatus.CHECKING_BATCH,
-        }
         reset_names: list[str] = []
         for action_name, details in self.action_status.items():
-            if details.get("status") in retryable:
+            if details.get("status") in RETRYABLE_STATUSES:
                 reset_names.append(action_name)
         for action_name in reset_names:
             self.update_status(action_name, ActionStatus.PENDING)
