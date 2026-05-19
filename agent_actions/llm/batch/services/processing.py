@@ -6,12 +6,14 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
+from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
@@ -47,10 +49,10 @@ from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.result_collector import (
-    write_record_dispositions as _write_record_dispositions_impl,
-)
-from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.processing.result_collector import CollectionStats, _safe_set_disposition
+from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
+from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -103,29 +105,32 @@ class BatchProcessingService:
             storage_backend=self._storage_backend,
         )
         self._enrichment_pipeline = EnrichmentPipeline()
+        self._unified_processor = UnifiedProcessor(enrichment_pipeline=self._enrichment_pipeline)
 
     def process_batch_results(
         self,
         batch_id: str,
         output_directory: str,
-        base_directory: str,
-        file_path: str,
         agent_config: dict[str, Any] | None = None,
     ) -> str:
-        """Process batch results and integrate them into workflow output system.
+        """Process a single batch by ID with retry/reprompt support.
+
+        Uses the same retry/reprompt logic as the production path
+        (process_all_batch_results). If recovery is needed, a recovery
+        batch is submitted and ProcessingError is raised — the caller
+        must re-invoke after the recovery batch completes.
 
         Args:
             batch_id: Batch job ID
             output_directory: Output directory path
-            base_directory: Base directory for relative paths
-            file_path: Original input file path
             agent_config: Agent configuration
 
         Returns:
             Path to output file
 
         Raises:
-            ProcessingError: If batch not completed or processing fails
+            ProcessingError: If batch not completed, no registry entry,
+                recovery is pending, or processing fails
         """
         try:
             manager = self._registry_manager_factory(output_directory)
@@ -135,57 +140,31 @@ class BatchProcessingService:
                 raise ProcessingError("Batch job is not completed", context={"batch_id": batch_id})
 
             entry = manager.get_batch_job_by_id(batch_id)
-            file_name = entry.file_name if entry else None
-            context_map = (
-                self._context_manager.load_batch_context_map(
-                    output_directory, file_name or "default"
+            if not entry:
+                raise ProcessingError(
+                    "No registry entry found for batch",
+                    context={"batch_id": batch_id},
                 )
-                if file_name
-                else {}
-            )
-            agent_config = self._apply_workflow_session_id(agent_config, entry)
 
-            batch_results = retrieve_and_reconcile(
-                provider,
-                batch_id,
-                output_directory,
-                context_map=context_map,
-                record_count=entry.record_count if entry else None,
+            file_name = entry.file_name or "default"
+
+            output_file = self._process_single_batch_file(
+                batch_id=batch_id,
                 file_name=file_name,
-            )
-            processed_data = self._convert_batch_results_to_workflow_format(
-                batch_results,
-                context_map=context_map,
+                entry=entry,
                 output_directory=output_directory,
                 agent_config=agent_config,
+                manager=manager,
+                action_name=self._action_name,
             )
 
-            if self._storage_backend and self._action_name:
-                self._write_record_dispositions(processed_data, self._action_name)
-                self._update_prompt_trace_responses(processed_data, self._action_name)
-
-            if self._source_handler:
-                self._source_handler.save_task_source(
-                    processed_data,
-                    file_path,
-                    base_directory,
-                    output_directory,
-                    storage_backend=self._storage_backend,
+            if output_file is None:
+                raise ProcessingError(
+                    "Batch recovery submitted — re-invoke after recovery batch completes",
+                    context={"batch_id": batch_id},
                 )
 
-            output_file = Path(output_directory) / Path(file_path).relative_to(
-                base_directory
-            ).with_suffix(".json")
-            if self._storage_backend is None:
-                ensure_directory_exists(output_file, is_file=True)
-            FileWriter(
-                str(output_file),
-                storage_backend=self._storage_backend,
-                action_name=self._action_name,
-                output_directory=output_directory,
-            ).write_target(processed_data)
-
-            return str(output_file)
+            return output_file
         except ProcessingError:
             raise
         except Exception as e:
@@ -261,6 +240,12 @@ class BatchProcessingService:
                         "total_processed": len(processed_files),
                         "registry_size": len(all_jobs),
                     },
+                )
+                self._fail_abandoned_records(
+                    file_name=file_name,
+                    output_directory=output_directory,
+                    action_name=effective_action_name,
+                    error=e,
                 )
                 continue
 
@@ -497,7 +482,11 @@ class BatchProcessingService:
                     )
                     return None  # Recovery pending
 
-        recovery_state = RecoveryStateManager.load(output_directory, file_name)
+        # Do NOT load recovery state here. The original batch path processes
+        # from scratch — any existing recovery_state file is stale (left by a
+        # crashed run). Passing it would poison the reprompt check with a stale
+        # reprompt_attempt counter, causing it to think attempts are exhausted.
+        # Stale files are cleaned up in _finalize_batch_output.
         should_continue = self._check_and_submit_reprompt(
             batch_results=batch_results,
             context_map=context_map,
@@ -507,7 +496,7 @@ class BatchProcessingService:
             agent_config=agent_config,
             manager=manager,
             provider=provider,
-            recovery_state=recovery_state,
+            recovery_state=None,
         )
         if not should_continue:
             return None  # Reprompt submitted, processing paused
@@ -601,7 +590,12 @@ class BatchProcessingService:
         """Finalize batch processing: convert, write output, fire events, cleanup.
 
         Delegates to processing_recovery.finalize_batch_output then cleanup_recovery.
+        Also cleans up any stale recovery state left by a crashed previous run.
         """
+        # Clean up stale recovery state (e.g. from a crashed previous run).
+        # The recovery path already does this in _finalize_and_cleanup, but the
+        # original batch path goes through this method instead and must also clean up.
+        RecoveryStateManager.delete(output_directory, file_name)
         output_path = _finalize_batch_output_impl(
             self,
             batch_results=batch_results,
@@ -618,19 +612,85 @@ class BatchProcessingService:
         _cleanup_recovery_impl(self, manager, output_directory, file_name)
         return output_path
 
-    def _write_record_dispositions(self, items: list[dict[str, Any]], action_name: str) -> None:
-        """Write dispositions for non-success records in batch output.
+    def _clear_deferred_dispositions(self, items: list[dict[str, Any]]) -> None:
+        """Clear DEFERRED dispositions for batch records entering output.
 
-        Delegates to result_collector.write_record_dispositions.
+        Batch records receive DEFERRED dispositions at submit time.
+        After retrieve, the shared collector writes final dispositions
+        (SUCCESS, FAILED, etc.), but DEFERRED entries remain unless
+        explicitly cleared.
         """
-        _write_record_dispositions_impl(self._storage_backend, items, action_name)
+        if not self._storage_backend or not self._action_name:
+            return
+        for item in items:
+            source_guid = item.get("source_guid")
+            if source_guid:
+                self._try_clear_deferred(self._action_name, source_guid)
 
-    def _update_prompt_trace_responses(self, items: list[dict[str, Any]], action_name: str) -> None:
-        """Update prompt traces with batch responses. Telemetry — non-fatal."""
+    def _write_filtered_dispositions(self, context_map: dict[str, Any], action_name: str) -> None:
+        """Write FILTERED dispositions for records excluded from output.
+
+        FILTERED records are removed from the output stream by the reconciler
+        (they never reach write_record_dispositions). This method ensures they
+        still receive DISPOSITION_FILTERED to match online ResultCollector parity.
+        """
+        if not self._storage_backend or not context_map:
+            return
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+        from agent_actions.record.reasons import GUARD_FILTER
+        from agent_actions.storage.backend import DISPOSITION_FILTERED
+
+        for _custom_id, entry in context_map.items():
+            if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:
+                continue
+            source_guid = entry.get("source_guid")
+            if not source_guid:
+                continue
+            reason = BatchContextMetadata.get_skip_reason(entry) or GUARD_FILTER
+            self._try_clear_deferred(action_name, source_guid)
+            try:
+                self._storage_backend.set_disposition(
+                    action_name, source_guid, DISPOSITION_FILTERED, reason=reason
+                )
+            except Exception:
+                logger.debug(
+                    "Failed to write FILTERED disposition for %s", source_guid, exc_info=True
+                )
+
+    def _try_clear_deferred(self, action_name: str, record_id: str) -> None:
+        """Clear a DEFERRED disposition for one record. Swallows errors."""
         if not self._storage_backend:
             return
+        from agent_actions.storage.backend import DISPOSITION_DEFERRED
+
+        try:
+            self._storage_backend.clear_disposition(
+                action_name,
+                disposition=DISPOSITION_DEFERRED,
+                record_id=record_id,
+            )
+        except Exception:
+            logger.debug(
+                "Could not clear DEFERRED disposition for %s (may not exist)",
+                record_id,
+                exc_info=True,
+            )
+
+    def _update_prompt_trace_responses(self, items: list[dict[str, Any]], action_name: str) -> None:
+        """Update prompt traces with batch responses for SUCCESS records only.
+
+        Only records with _state=processed represent actual LLM responses.
+        Tombstones (exhausted, failed, skipped) must not pollute prompt traces.
+        """
+        if not self._storage_backend:
+            return
+        from agent_actions.record.state import RecordState
+
         try:
             for item in items:
+                if item.get("_state") != RecordState.PROCESSED.value:
+                    continue
                 target_id = item.get("target_id")
                 if not target_id:
                     continue
@@ -654,6 +714,72 @@ class BatchProcessingService:
     # HELPERS (kept in this module)
     # =========================================================================
 
+    def _fail_abandoned_records(
+        self,
+        file_name: str,
+        output_directory: str,
+        action_name: str | None,
+        error: Exception,
+    ) -> None:
+        """Write FAILED dispositions for INCLUDED records in a batch file that threw an exception.
+
+        Without this, records remain stuck with stale DEFERRED dispositions —
+        the retry command won't find them and subsequent reruns won't know they failed.
+        """
+        if not self._storage_backend or not action_name:
+            return
+
+        try:
+            context_map = self._context_manager.load_batch_context_map(
+                output_directory, file_name or "default"
+            )
+        except Exception:
+            logger.warning(
+                "Could not load context_map for failed batch %s — "
+                "records may remain with stale DEFERRED dispositions",
+                file_name,
+                exc_info=True,
+            )
+            return
+
+        reason = f"batch_processing_exception: {str(error)[:500]}"
+        failed_count = 0
+        for _custom_id, record in context_map.items():
+            if not BatchContextMetadata.is_included(record):
+                continue
+            source_guid = record.get("source_guid")
+            if not source_guid:
+                continue
+
+            try:
+                self._storage_backend.clear_disposition(
+                    action_name,
+                    disposition=DISPOSITION_DEFERRED,
+                    record_id=source_guid,
+                )
+            except Exception:
+                logger.debug(
+                    "Could not clear DEFERRED disposition for %s (may not exist)",
+                    source_guid,
+                    exc_info=True,
+                )
+
+            _safe_set_disposition(
+                self._storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_FAILED,
+                reason=reason,
+            )
+            failed_count += 1
+
+        if failed_count:
+            logger.info(
+                "Wrote FAILED disposition for %d records in failed batch %s",
+                failed_count,
+                file_name,
+            )
+
     @staticmethod
     def _cleanup_recovery_entries(manager: BatchRegistryManager, parent_file_name: str) -> None:
         """Remove completed recovery entries linked to a parent batch file.
@@ -676,18 +802,21 @@ class BatchProcessingService:
         output_directory: str | None = None,
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Convert batch results to workflow format.
+    ) -> tuple[list[dict[str, Any]], CollectionStats]:
+        """Convert batch results to workflow format via UnifiedProcessor.
+
+        Routes batch results through the shared enrich → collect pipeline
+        (same path online uses), eliminating the duplicate inline loop.
 
         Args:
             batch_results: Raw batch results
             context_map: Context map for processing
             output_directory: Output directory path
             agent_config: Agent configuration
-            exhausted_recovery: Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
+            exhausted_recovery: Per-record recovery metadata for exhausted records
 
         Returns:
-            Processed results in workflow format
+            Tuple of (output_records, CollectionStats).
         """
         results = self._result_processor.process(
             batch_results=batch_results,
@@ -696,15 +825,16 @@ class BatchProcessingService:
             agent_config=agent_config,
             exhausted_recovery=exhausted_recovery,
         )
-        # Enrich results that carry a processing_context, then flatten to
-        # workflow-format dicts.  Error results (processing_context=None) are
-        # intentionally skipped — matching the original pipeline behaviour.
-        output: list[dict[str, Any]] = []
-        for result in results:
-            if result.processing_context is not None:
-                result = self._enrichment_pipeline.enrich(result, result.processing_context)
-            output.extend(result.data or [])
-        return output
+
+        effective_config = agent_config or {}
+        ctx = ProcessingContext(
+            agent_config=cast(ActionConfigDict, effective_config),
+            agent_name=effective_config.get("action_name", "batch"),
+            mode=RunMode.BATCH,
+            storage_backend=self._storage_backend,
+        )
+
+        return self._unified_processor.enrich_and_collect(results, ctx)
 
     @staticmethod
     def _apply_workflow_session_id(

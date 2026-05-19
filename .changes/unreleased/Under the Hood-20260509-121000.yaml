@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Refactor scope_builder.py into composable namespace builders (Source, Dependency, Version, Workflow) for independent testability"
-time: 2026-05-09T12:10:00.000000Z

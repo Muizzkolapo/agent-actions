@@ -1,8 +1,11 @@
 """Tests for UnifiedProcessor skeleton and ProcessingStrategy protocol."""
 
+from dataclasses import replace
 from typing import Any
 from unittest.mock import patch
 
+from agent_actions.config.types import RunMode
+from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
@@ -158,10 +161,10 @@ class TestUnifiedProcessorNoGuard:
         context = _make_context(guard={"clause": "item.impossible == true", "behavior": "filter"})
         records = [_make_record("sg-1")]
 
-        # Guard will filter all records
+        # Guard will filter all records — 4th value is the filtered records
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [], []),
+            return_value=([], [], [], [_make_record("sg-1")]),
         ):
             processor.process(records, context, tracking)
 
@@ -185,7 +188,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [skipped_record], []),
+            return_value=([], [skipped_record], [], []),
         ):
             output, stats = processor.process([skipped_record], context, strategy)
 
@@ -201,7 +204,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [], []),
+            return_value=([], [], [], [record]),
         ):
             output, stats = processor.process([record], context, strategy)
 
@@ -216,12 +219,13 @@ class TestUnifiedProcessorGuardFilter:
 
         passing = _make_record("sg-pass")
         skipped = _make_record("sg-skip")
+        filtered_rec = _make_record("sg-filter")
         # 3 total records: 1 passes, 1 skipped, 1 filtered
-        all_records = [passing, skipped, _make_record("sg-filter")]
+        all_records = [passing, skipped, filtered_rec]
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([passing], [skipped], [passing]),
+            return_value=([passing], [skipped], [passing], [filtered_rec]),
         ):
             output, stats = processor.process(all_records, context, strategy)
 
@@ -240,7 +244,6 @@ class TestUnifiedProcessorEnrichment:
 
     def test_enrichment_pipeline_is_applied(self):
         """Verify enrichment is called for every result."""
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class CountingEnricher(Enricher):
             def __init__(self):
@@ -263,7 +266,6 @@ class TestUnifiedProcessorEnrichment:
 
     def test_custom_enrichment_pipeline_used(self):
         """A custom pipeline replaces the default one."""
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class TagEnricher(Enricher):
             def enrich(self, result, context):
@@ -412,3 +414,166 @@ class TestProcessingStrategyProtocol:
     def test_lambda_does_not_satisfy_protocol(self):
         # A plain function object does not satisfy a Protocol with invoke method
         assert not isinstance(lambda r, c: [], ProcessingStrategy)
+
+
+# ---------------------------------------------------------------------------
+# F9: Enrichment failure isolation
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichmentFailureIsolation:
+    """F9: An enrichment failure for one record must not kill the action."""
+
+    def test_enrichment_failure_isolates_to_single_record(self):
+        """Record 1 of 3 fails enrichment — records 0 and 2 still succeed."""
+
+        class BombOnSecondEnricher(Enricher):
+            def __init__(self):
+                self.call_count = 0
+
+            def enrich(self, result, context):
+                self.call_count += 1
+                if self.call_count == 2:
+                    raise RuntimeError("enrichment explosion")
+                return result
+
+        enricher = BombOnSecondEnricher()
+        pipeline = EnrichmentPipeline(enrichers=[enricher])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+        strategy = NoOpStrategy()
+        records = [_make_record("sg-1"), _make_record("sg-2"), _make_record("sg-3")]
+        context = _make_context()
+
+        output, stats = processor.process(records, context, strategy)
+
+        # Record 1 (index 1) failed enrichment — becomes FAILED
+        assert stats.success == 2
+        assert stats.failed == 1
+
+    def test_enrichment_failure_records_error_message(self):
+        """The failed record carries the enrichment error string."""
+
+        class AlwaysFailEnricher(Enricher):
+            def enrich(self, result, context):
+                raise ValueError("bad lineage data")
+
+        pipeline = EnrichmentPipeline(enrichers=[AlwaysFailEnricher()])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+
+        # Feed a single result directly through _enrich
+        result = ProcessingResult.success(data=[{"x": 1}], source_guid="sg-fail")
+        context = _make_context()
+        enriched = processor._enrich([result], context)
+
+        assert len(enriched) == 1
+        assert enriched[0].status == ProcessingStatus.FAILED
+        assert "bad lineage data" in enriched[0].error
+
+    def test_enrichment_failure_preserves_source_guid(self):
+        """The failed result carries the original record's source_guid."""
+
+        class FailEnricher(Enricher):
+            def enrich(self, result, context):
+                raise RuntimeError("boom")
+
+        pipeline = EnrichmentPipeline(enrichers=[FailEnricher()])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+        result = ProcessingResult.success(data=[{"x": 1}], source_guid="sg-preserve-me")
+        context = _make_context()
+        enriched = processor._enrich([result], context)
+
+        assert enriched[0].source_guid == "sg-preserve-me"
+
+
+# ---------------------------------------------------------------------------
+# F6: Batch error results go through enrichment
+# ---------------------------------------------------------------------------
+
+
+class TestBatchErrorEnrichment:
+    """F6: Batch error results (no processing_context) must be enriched."""
+
+    def test_batch_error_result_is_enriched(self):
+        """A batch FAILED result without processing_context gets enriched."""
+
+        class TagEnricher(Enricher):
+            def enrich(self, result, context):
+                for item in result.data:
+                    item["_enriched"] = True
+                return result
+
+        pipeline = EnrichmentPipeline(enrichers=[TagEnricher()])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+
+        # Simulate a batch error result: FAILED, no processing_context
+        batch_error = ProcessingResult.failed(error="provider timeout", source_guid="sg-batch-err")
+        assert batch_error.processing_context is None
+
+        context = replace(_make_context(), mode=RunMode.BATCH)
+        enriched = processor._enrich([batch_error], context)
+
+        # Must have been passed through enrichment (not skipped)
+        assert len(enriched) == 1
+        # The enricher ran — it should not have been skipped
+        assert enriched[0].status == ProcessingStatus.FAILED
+
+    def test_batch_and_online_errors_both_enriched(self):
+        """Both batch and online error results go through the same path."""
+        enrich_calls = []
+
+        class TrackingEnricher(Enricher):
+            def enrich(self, result, context):
+                enrich_calls.append(result.source_guid)
+                return result
+
+        pipeline = EnrichmentPipeline(enrichers=[TrackingEnricher()])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+
+        error_result = ProcessingResult.failed(error="timeout", source_guid="sg-err")
+
+        # Online mode
+        ctx_online = replace(_make_context(), mode=RunMode.ONLINE)
+        processor._enrich([error_result], ctx_online)
+
+        # Batch mode
+        ctx_batch = replace(_make_context(), mode=RunMode.BATCH)
+        processor._enrich([error_result], ctx_batch)
+
+        # Both should have been enriched
+        assert enrich_calls == ["sg-err", "sg-err"]
+
+
+# ---------------------------------------------------------------------------
+# F9+F6 interaction: batch error + enrichment failure
+# ---------------------------------------------------------------------------
+
+
+class TestBatchErrorEnrichmentFailure:
+    """Combined: batch error result where enrichment itself throws."""
+
+    def test_batch_error_enrichment_failure_isolated(self):
+        """Batch error result that fails enrichment doesn't kill other records."""
+
+        class FailOnErrorResultEnricher(Enricher):
+            def enrich(self, result, context):
+                if result.status == ProcessingStatus.FAILED:
+                    raise RuntimeError("cannot enrich error result")
+                return result
+
+        pipeline = EnrichmentPipeline(enrichers=[FailOnErrorResultEnricher()])
+        processor = UnifiedProcessor(enrichment_pipeline=pipeline)
+
+        results = [
+            ProcessingResult.success(data=[{"ok": True}], source_guid="sg-ok"),
+            ProcessingResult.failed(error="provider error", source_guid="sg-bad"),
+        ]
+
+        context = replace(_make_context(), mode=RunMode.BATCH)
+        enriched = processor._enrich(results, context)
+
+        assert len(enriched) == 2
+        # First record enriched successfully
+        assert enriched[0].status == ProcessingStatus.SUCCESS
+        # Second record: enrichment failed, still gets a FAILED result
+        assert enriched[1].status == ProcessingStatus.FAILED
+        assert "cannot enrich error result" in enriched[1].error

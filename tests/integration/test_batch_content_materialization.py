@@ -5,15 +5,16 @@ and persisted to both the storage backend and the filesystem.
 """
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
+from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
-from agent_actions.llm.batch.services.processing_recovery import _stamp_batch_records
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter
-from agent_actions.processing.enrichment import EnrichmentPipeline
+from agent_actions.processing.types import ProcessingContext
+from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 
@@ -24,7 +25,7 @@ def _process_batch(
     output_directory: str,
     action_name: str = "verify_answer",
 ) -> list[dict[str, Any]]:
-    """Process batch results through strategy + enrichment + stamp (production path)."""
+    """Process batch results through strategy + UnifiedProcessor (production path)."""
     strategy = BatchResultStrategy()
     results = strategy.process(
         batch_results=batch_results,
@@ -32,13 +33,13 @@ def _process_batch(
         output_directory=output_directory,
         agent_config=action_config,
     )
-    enrichment = EnrichmentPipeline()
-    output: list[dict[str, Any]] = []
-    for result in results:
-        if result.processing_context is not None:
-            result = enrichment.enrich(result, result.processing_context)
-        output.extend(result.data or [])
-    _stamp_batch_records(output, action_name)
+    ctx = ProcessingContext(
+        agent_config=cast(ActionConfigDict, action_config),
+        agent_name=action_name,
+        mode=RunMode.BATCH,
+    )
+    processor = UnifiedProcessor()
+    output, _stats = processor.enrich_and_collect(results, ctx)
     return output
 
 

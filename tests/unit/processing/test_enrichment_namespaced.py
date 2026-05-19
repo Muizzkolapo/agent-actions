@@ -172,6 +172,43 @@ class TestPassthroughEnricherNamespaced:
 
         assert enriched.data[0]["content"]["action_c"]["shared_key"] == "passthrough_value"
 
+    def test_shared_namespace_dict_not_mutated(self):
+        """PassthroughEnricher must not mutate shared namespace dict objects in-place."""
+        shared_ns = {"llm_field": "original"}
+        item_a = {"content": {"action_c": shared_ns}}
+
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[item_a],
+            passthrough_fields={"pt_from_a": "a_value"},
+        )
+        context = _make_context("action_c")
+        PassthroughEnricher().enrich(result, context)
+
+        assert item_a["content"]["action_c"]["pt_from_a"] == "a_value"
+        assert shared_ns == {"llm_field": "original"}
+
+    def test_shared_namespace_multiple_records_in_same_result(self):
+        """Multiple items in the same result sharing a namespace dict stay isolated."""
+        shared_ns = {"base": "value"}
+        items = [
+            {"content": {"action_c": shared_ns}},
+            {"content": {"action_c": shared_ns}},
+        ]
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=items,
+            passthrough_fields={"injected": "pt"},
+        )
+        context = _make_context("action_c")
+        enriched = PassthroughEnricher().enrich(result, context)
+
+        assert enriched.data[0]["content"]["action_c"]["injected"] == "pt"
+        assert enriched.data[1]["content"]["action_c"]["injected"] == "pt"
+        enriched.data[0]["content"]["action_c"]["extra"] = "only_in_0"
+        assert "extra" not in enriched.data[1]["content"]["action_c"]
+        assert shared_ns == {"base": "value"}
+
 
 # ---------------------------------------------------------------------------
 # Other enrichers — verify they don't touch content internals

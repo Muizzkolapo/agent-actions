@@ -12,6 +12,7 @@ from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
     ContextScopeAppliedEvent,
 )
+from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.prompt.context.scope_namespace import _extract_content_data
 from agent_actions.prompt.context.scope_parsing import (
     extract_action_fields,
@@ -33,13 +34,14 @@ def _resolve_missing_field(
     action_name: str,
     directive: str,
 ) -> None:
-    """Return if namespace is null (guard-skipped/filtered), else raise.
+    """Return None if namespace exists (null or present), raise if namespace absent.
 
-    When a dependency's guard triggers skip/filter, the namespace is stored
-    as None in field_context.  This matches guard evaluation semantics where
-    missing fields resolve to None rather than raising.
+    Three cases:
+    1. Namespace is null (NullNamespace sentinel or legacy None) → return None
+    2. Namespace exists as dict but field is missing → return None (match guard semantics)
+    3. Namespace not in prompt_context at all → raise (config bug / typo)
     """
-    if ns_name in prompt_context and prompt_context[ns_name] is None:
+    if ns_name in prompt_context and is_null_namespace(prompt_context[ns_name]):
         logger.debug(
             "[%s NULL-SAFE] '%s' on action '%s': namespace '%s' is "
             "null (guard-skipped/filtered), resolving field as None",
@@ -50,7 +52,17 @@ def _resolve_missing_field(
         )
         return None
 
-    field_name = field_ref.split(".", 1)[1] if "." in field_ref else field_ref
+    if ns_name in prompt_context and isinstance(prompt_context[ns_name], dict):
+        logger.warning(
+            "[%s NULL-SAFE] '%s' on action '%s': field not found in namespace '%s', "
+            "resolving as None to match guard semantics",
+            directive.upper(),
+            field_ref,
+            action_name,
+            ns_name,
+        )
+        return None
+
     raise RecordContextError(
         f"context_scope.{directive} field '{field_ref}' not found at runtime",
         context={
@@ -58,8 +70,8 @@ def _resolve_missing_field(
             "field_ref": field_ref,
             "directive": directive,
             "operation": "apply_context_scope",
-            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
-            f"Check the output schema of '{ns_name}'.",
+            "hint": f"Namespace '{ns_name}' not found in field_context. "
+            f"Check the dependency graph for '{action_name}'.",
         },
     )
 

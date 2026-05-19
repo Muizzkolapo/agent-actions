@@ -16,6 +16,7 @@ from agent_actions.errors import ConfigurationError, TemplateVariableError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
+from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
     apply_context_scope,
@@ -439,7 +440,7 @@ class PromptPreparationService:
                     null_ns_set = {
                         k
                         for k, v in prompt_context.items()
-                        if v is None and k not in FRAMEWORK_NAMESPACES
+                        if is_null_namespace(v) and k not in FRAMEWORK_NAMESPACES
                     }
                     blamed_ns: str | None = None
                     for ns in null_ns_set:

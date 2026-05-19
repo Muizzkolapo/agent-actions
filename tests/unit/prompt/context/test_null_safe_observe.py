@@ -84,17 +84,17 @@ class TestObserveNullNamespace:
 
 
 class TestObserveStrictPreserved:
-    """Normal observe behavior is unchanged: missing field from present namespace still crashes."""
+    """Observe null-safety: missing field from present namespace returns None (U-4.2)."""
 
-    def test_missing_field_from_present_namespace_raises(self):
-        """observe: ['dep.nonexistent'] where dep is a real dict → ConfigurationError."""
+    def test_missing_field_from_present_namespace_returns_none(self):
+        """observe: ['dep.nonexistent'] where dep is a real dict → None (match guard semantics)."""
         fc = _make_field_context(dep={"actual_field": "value"})
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=fc,
-                context_scope={"observe": ["dep.nonexistent"]},
-                action_name="downstream",
-            )
+        _prompt_ctx, llm_ctx, _ = apply_context_scope(
+            field_context=fc,
+            context_scope={"observe": ["dep.nonexistent"]},
+            action_name="downstream",
+        )
+        assert llm_ctx["dep"]["nonexistent"] is None
 
     def test_undeclared_namespace_raises(self):
         """observe: ['ghost.field'] where ghost is not in field_context → ConfigurationError."""
@@ -133,15 +133,15 @@ class TestPassthroughNullNamespace:
         )
         assert "skipped" not in pt
 
-    def test_passthrough_strict_preserved(self):
-        """passthrough: ['dep.nonexistent'] from present namespace → ConfigurationError."""
+    def test_passthrough_missing_field_returns_none(self):
+        """passthrough: ['dep.nonexistent'] from present namespace → None (U-4.2)."""
         fc = _make_field_context(dep={"actual": "value"})
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=fc,
-                context_scope={"passthrough": ["dep.nonexistent"]},
-                action_name="downstream",
-            )
+        _prompt_ctx, _llm_ctx, pt = apply_context_scope(
+            field_context=fc,
+            context_scope={"passthrough": ["dep.nonexistent"]},
+            action_name="downstream",
+        )
+        assert pt["dep"]["nonexistent"] is None
 
 
 # ── Drop: null namespace ─────────────────────────────────────────────

@@ -25,6 +25,9 @@ PREP_FAILED = "prep_failed"
 # -- Batch -------------------------------------------------------------------
 BATCH_NOT_RETURNED = "batch_not_returned"
 
+# -- Empty output ------------------------------------------------------------
+EMPTY_OUTPUT = "empty_output"
+
 # -- Exhaustion --------------------------------------------------------------
 RETRY_EXHAUSTED = "retry_exhausted"
 

@@ -214,7 +214,7 @@ class PassthroughEnricher(Enricher):
                 continue
             ns = content.get(action_name)
             if isinstance(ns, dict):
-                ns.update(result.passthrough_fields)
+                content[action_name] = {**ns, **result.passthrough_fields}
             else:
                 content[action_name] = dict(result.passthrough_fields)
 

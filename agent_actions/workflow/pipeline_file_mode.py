@@ -310,8 +310,15 @@ def prefilter_by_guard(
     agent_config: dict[str, Any],
     agent_name: str,
     original_data: list[dict] | None = None,
-) -> tuple[list[dict], list[dict], list[dict]]:
-    """Evaluate guard per-record and split into passing and skipped arrays.
+    *,
+    agent_indices: dict[str, int] | None = None,
+    source_data: list[dict[str, Any]] | None = None,
+    is_first_stage: bool = False,
+    version_context: dict[str, Any] | None = None,
+    workflow_metadata: dict[str, Any] | None = None,
+    dependency_configs: dict[str, Any] | None = None,
+) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    """Evaluate guard per-record and split into passing, skipped, and filtered arrays.
 
     Called before FILE-mode processing to apply per-record guard logic
     on the full array.  ``behavior: filter`` records are excluded from
@@ -323,26 +330,33 @@ def prefilter_by_guard(
     each passing record.  This preserves upstream fields that observe
     filtering may have stripped.
 
-    When no guard is configured, returns ``(data, [], original_data or data)``.
+    When pipeline context parameters are provided (agent_indices, source_data,
+    etc.), guard evaluation uses full field_context — identical to
+    TaskPreparer.prepare() — so guards referencing source, version, workflow,
+    or promoted output_fields produce correct decisions.
 
-    Note:
-        Guard evaluation uses the record's existing content as context so
-        that guard clauses can reference upstream namespace fields — matching
-        the per-record guard context used in batch mode.
+    When no guard is configured, returns ``(data, [], original_data or data, [])``.
 
     Returns:
-        (passing, skipped, original_passing)
+        (passing, skipped, original_passing, filtered)
     """
     originals = original_data if original_data is not None else data
 
+    if original_data is not None and len(original_data) != len(data):
+        raise RuntimeError(
+            f"prefilter_by_guard received {len(original_data)} original_data for "
+            f"{len(data)} input records — length mismatch"
+        )
+
     guard_config = agent_config.get("guard")
     if not guard_config:
-        return data, [], originals
+        return data, [], originals, []
 
     from agent_actions.guards import GuardBehavior
     from agent_actions.input.preprocessing.filtering.evaluator import (
         get_guard_evaluator,
     )
+    from agent_actions.processing.guard_context import build_guard_context
     from agent_actions.utils.content import get_existing_content
 
     evaluator = get_guard_evaluator()
@@ -352,13 +366,26 @@ def prefilter_by_guard(
     passing: list[dict] = []
     skipped: list[dict] = []
     original_passing: list[dict] = []
+    filtered: list[dict] = []
     for idx, item in enumerate(data):
         eval_item = get_existing_content(item)
+
+        context = build_guard_context(
+            item,
+            agent_name=agent_name,
+            agent_config=agent_config,
+            agent_indices=agent_indices,
+            source_data=source_data,
+            is_first_stage=is_first_stage,
+            version_context=version_context,
+            workflow_metadata=workflow_metadata,
+            dependency_configs=dependency_configs,
+        )
 
         result = evaluator.evaluate(
             item=eval_item,
             guard_config=guard_config,
-            context=eval_item,
+            context=context,
         )
 
         if result.should_execute:
@@ -367,15 +394,17 @@ def prefilter_by_guard(
         elif behavior == GuardBehavior.SKIP:
             # Use pre-observe original so skipped tombstones keep namespaced content.
             skipped.append(originals[idx])
-        # behavior == GuardBehavior.FILTER: record excluded from both lists
+        else:
+            # behavior == GuardBehavior.FILTER: use original for source_guid access.
+            filtered.append(originals[idx])
 
     logger.info(
         "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered of %d total",
         agent_name,
         len(passing),
         len(skipped),
-        len(data) - len(passing) - len(skipped),
+        len(filtered),
         len(data),
     )
 
-    return passing, skipped, original_passing
+    return passing, skipped, original_passing, filtered

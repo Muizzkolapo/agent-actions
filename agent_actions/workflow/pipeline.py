@@ -218,6 +218,7 @@ class ProcessingPipeline:
             client_resolver=client_resolver,
             context_manager=context_manager,
             registry_manager_factory=registry_manager_factory,
+            storage_backend=params.storage_backend,
         )
         # Use pre-loaded data if available (storage backend), otherwise read from file
         if params.data is not None:

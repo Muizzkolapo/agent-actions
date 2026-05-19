@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Remove dead flatten_observe_context function and associated tests — tools now read namespaces directly"
-time: 2026-04-24T09:20:00.000000Z

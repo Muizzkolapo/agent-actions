@@ -1,6 +1,7 @@
 """Tests for AgentWorkflow sequential execution (_run_single_action, _run_workflow_with_context)."""
 
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -256,8 +257,8 @@ class TestRunWorkflowWithContext:
 class TestResetRetryableActions:
     """Tests for _reset_retryable_actions called at coordinator startup."""
 
-    def test_resets_and_clears_all_dispositions(self):
-        """Should clear ALL dispositions for reset actions — disposition is derived state."""
+    def test_resets_and_clears_all_stored_data(self):
+        """Should clear dispositions and prompt traces for reset actions."""
         wf = _build_workflow()
         wf.storage_backend = MagicMock()
         wf.services.core.state_manager.reset_retryable.return_value = ["agent_a"]
@@ -266,9 +267,10 @@ class TestResetRetryableActions:
 
         wf.services.core.state_manager.reset_retryable.assert_called_once()
         wf.storage_backend.clear_disposition.assert_called_once_with("agent_a")
+        wf.storage_backend.clear_prompt_traces.assert_called_once_with("agent_a")
 
     def test_multiple_reset_actions_each_cleared(self):
-        """When multiple actions reset, each gets its dispositions cleared."""
+        """When multiple actions reset, each gets dispositions and prompt traces cleared."""
         wf = _build_workflow()
         wf.storage_backend = MagicMock()
         wf.services.core.state_manager.reset_retryable.return_value = ["agent_a", "agent_b"]
@@ -278,9 +280,12 @@ class TestResetRetryableActions:
         assert wf.storage_backend.clear_disposition.call_count == 2
         wf.storage_backend.clear_disposition.assert_any_call("agent_a")
         wf.storage_backend.clear_disposition.assert_any_call("agent_b")
+        assert wf.storage_backend.clear_prompt_traces.call_count == 2
+        wf.storage_backend.clear_prompt_traces.assert_any_call("agent_a")
+        wf.storage_backend.clear_prompt_traces.assert_any_call("agent_b")
 
-    def test_no_reset_no_disposition_calls(self):
-        """No actions to reset means no disposition clearing."""
+    def test_no_reset_no_clearing(self):
+        """No actions to reset means no disposition or prompt trace clearing."""
         wf = _build_workflow()
         wf.storage_backend = MagicMock()
         wf.services.core.state_manager.reset_retryable.return_value = []
@@ -288,6 +293,7 @@ class TestResetRetryableActions:
         wf._reset_retryable_actions()
 
         wf.storage_backend.clear_disposition.assert_not_called()
+        wf.storage_backend.clear_prompt_traces.assert_not_called()
 
     def test_disposition_error_is_logged_not_raised(self):
         """Storage errors during disposition clear should not crash startup."""
@@ -298,6 +304,37 @@ class TestResetRetryableActions:
 
         # Should not raise
         wf._reset_retryable_actions()
+
+
+# ── _clear_for_fresh_run ───────────────────────────────────────────
+
+
+class TestClearForFreshRun:
+    """Tests for _clear_for_fresh_run called with --fresh flag."""
+
+    def test_clears_all_three_stores_per_action(self):
+        """Each action should have target, disposition, AND prompt traces cleared."""
+        wf = _build_workflow(execution_order=["only_action"])
+        wf.storage_backend = MagicMock()
+        wf.services.core.state_manager = MagicMock()
+        wf.config.resolve_project_root.return_value = Path("/tmp/fake_project")
+
+        wf._clear_for_fresh_run()
+
+        wf.storage_backend.delete_target.assert_called_once_with("only_action")
+        wf.storage_backend.clear_disposition.assert_called_once_with("only_action")
+        wf.storage_backend.clear_prompt_traces.assert_called_once_with("only_action")
+
+    def test_storage_error_does_not_crash(self):
+        """Storage errors during fresh clear should not crash startup."""
+        wf = _build_workflow()
+        wf.storage_backend = MagicMock()
+        wf.storage_backend.clear_prompt_traces.side_effect = RuntimeError("DB locked")
+        wf.services.core.state_manager = MagicMock()
+        wf.config.resolve_project_root.return_value = Path("/tmp/fake_project")
+
+        # Should not raise
+        wf._clear_for_fresh_run()
 
 
 class TestStripUnreachableDrops:

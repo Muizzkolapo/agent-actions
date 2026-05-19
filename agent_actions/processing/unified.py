@@ -101,8 +101,10 @@ class UnifiedProcessor:
 
         invocation_results = strategy.invoke(passing, context) if passing else []
 
-        # FILE mode: invocation first, then guard skips (preserves historical order).
-        # RECORD mode: guard skips first, then invocation results.
+        # FILE mode: sequential processing — record N can reference record N-1's output.
+        # RECORD mode: independent — merge order doesn't affect semantics.
+        # This divergence is intentional. Do not unify without verifying FILE-mode
+        # workflows that depend on sequential accumulation (e.g., multi-pass enrichment).
         if raw_records is not None:
             all_results = invocation_results + guard_results
         else:
@@ -123,10 +125,16 @@ class UnifiedProcessor:
         (SKIPPED or FILTERED). Records that pass are forwarded to the strategy.
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, _original_passing = prefilter_by_guard(
+        passing, skipped, _original_passing, filtered = prefilter_by_guard(
             records,
             config,
             context.agent_name,
+            agent_indices=context.agent_indices,
+            source_data=context.source_data or None,
+            is_first_stage=context.is_first_stage,
+            version_context=context.version_context,
+            workflow_metadata=context.workflow_metadata,
+            dependency_configs=context.dependency_configs,
         )
 
         guard_results: list[ProcessingResult] = []
@@ -147,9 +155,9 @@ class UnifiedProcessor:
                 )
             )
 
-        filtered_count = len(records) - len(passing) - len(skipped)
-        for _i in range(filtered_count):
-            guard_results.append(ProcessingResult.filtered(source_guid=None))
+        for item in filtered:
+            source_guid = item.get("source_guid") if isinstance(item, dict) else None
+            guard_results.append(ProcessingResult.filtered(source_guid=source_guid))
 
         return passing, guard_results
 
@@ -175,11 +183,17 @@ class UnifiedProcessor:
             (passing, guard_results, original_passing)
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, original_passing = prefilter_by_guard(
+        passing, skipped, original_passing, filtered = prefilter_by_guard(
             records,
             config,
             context.agent_name,
             original_data=raw_records,
+            agent_indices=context.agent_indices,
+            source_data=context.source_data or None,
+            is_first_stage=context.is_first_stage,
+            version_context=context.version_context,
+            workflow_metadata=context.workflow_metadata,
+            dependency_configs=context.dependency_configs,
         )
 
         guard_results: list[ProcessingResult] = []
@@ -202,11 +216,32 @@ class UnifiedProcessor:
                 )
             )
 
-        filtered_count = len(records) - len(passing) - len(skipped)
-        for _i in range(filtered_count):
-            guard_results.append(ProcessingResult.filtered(source_guid=None))
+        for item in filtered:
+            source_guid = item.get("source_guid") if isinstance(item, dict) else None
+            guard_results.append(ProcessingResult.filtered(source_guid=source_guid))
 
         return passing, guard_results, original_passing
+
+    def enrich_and_collect(
+        self,
+        results: list[ProcessingResult],
+        context: ProcessingContext,
+    ) -> tuple[list[dict[str, Any]], CollectionStats]:
+        """Enrich and collect pre-computed results.
+
+        Used by batch retrieve where guard filtering and strategy invocation
+        happened separately (at batch submit and result processing time).
+        The results flow through the shared enrichment pipeline and collector.
+
+        Args:
+            results: ProcessingResult objects (from BatchResultStrategy.process).
+            context: Batch ProcessingContext for enrichment and collection.
+
+        Returns:
+            Tuple of (output_records, CollectionStats).
+        """
+        enriched = self._enrich(results, context)
+        return self._collect(enriched, context)
 
     def _enrich(
         self,
@@ -215,13 +250,34 @@ class UnifiedProcessor:
     ) -> list[ProcessingResult]:
         """Run enrichment pipeline on each result.
 
-        Each result gets a context with its positional record_index so that
-        VersionIdEnricher produces distinct version_correlation_ids per record.
+        Uses per-result ``processing_context`` when set (batch results carry
+        their own context with correct record_index and original_row).
+        Falls back to the shared context with positional record_index for
+        results without their own context (online results and batch error
+        results alike).
+
+        Per-record enrichment failures are isolated: a failing record produces
+        a FAILED ProcessingResult instead of aborting the entire action.
         """
-        return [
-            self._enrichment_pipeline.enrich(r, replace(context, record_index=i))
-            for i, r in enumerate(results)
-        ]
+        enriched: list[ProcessingResult] = []
+        for i, r in enumerate(results):
+            enrich_ctx = (
+                r.processing_context
+                if r.processing_context is not None
+                else replace(context, record_index=i)
+            )
+            try:
+                enriched.append(self._enrichment_pipeline.enrich(r, enrich_ctx))
+            except Exception as e:
+                logger.warning("Enrichment failed for record %d: %s", i, e)
+                enriched.append(
+                    ProcessingResult.failed(
+                        error=f"Enrichment failed: {e}",
+                        source_guid=r.source_guid,
+                        source_snapshot=r.input_record,
+                    )
+                )
+        return enriched
 
     def _collect(
         self,

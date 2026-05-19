@@ -35,9 +35,7 @@ from agent_actions.logging.events.validation_events import (
     RepromptRecoveredEvent,
     RepromptRetryEvent,
 )
-from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.processing.types import RecoveryMetadata
-from agent_actions.record.envelope import RecordEnvelope
 
 if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -493,7 +491,7 @@ def finalize_batch_output(
     start_time: float,
 ) -> str:
     """Finalize batch processing: convert, write output, fire events."""
-    processed_data = service._convert_batch_results_to_workflow_format(
+    processed_data, _stats = service._convert_batch_results_to_workflow_format(
         batch_results,
         context_map=context_map,
         output_directory=output_directory,
@@ -503,12 +501,14 @@ def finalize_batch_output(
 
     effective_action_name = action_name if action_name is not None else service._action_name
 
-    # Stamp _state on batch records before writing — batch results bypass the
-    # online ResultCollector._stamp() path and arrive without lifecycle fields.
-    _stamp_batch_records(processed_data, effective_action_name or file_name)
-
+    # SUCCESS/FAILED/EXHAUSTED dispositions and state stamping are handled by the
+    # shared collector inside _convert_batch_results_to_workflow_format. FILTERED
+    # records are stripped by the reconciler before collection, so they require
+    # an explicit write here to match online ResultCollector parity (Phase 7b /
+    # U-3.2a). DEFERRED clearing and prompt trace updates also remain batch-specific.
     if service._storage_backend and effective_action_name:
-        write_record_dispositions(service._storage_backend, processed_data, effective_action_name)
+        service._clear_deferred_dispositions(processed_data)
+        service._write_filtered_dispositions(context_map, effective_action_name)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
 
     output_file = service._determine_output_path(output_directory, file_name, batch_id)
@@ -632,26 +632,3 @@ def _remove_batch_placeholder(output_file: Path) -> None:
             logger.debug("Removed batch placeholder: %s", output_file)
         except OSError:
             pass  # Already removed by concurrent worker
-
-
-def _stamp_batch_records(records: list[dict[str, Any]], action_name: str) -> None:
-    """Stamp _state on batch output records that lack lifecycle fields.
-
-    Batch results bypass the online ResultCollector._stamp() path. This ensures
-    every record written to target has a valid _state for Phase 5 fail-closed reads.
-    """
-    from agent_actions.record.state import RecordState
-
-    for record in records:
-        if "_state" in record:
-            continue
-        # Determine state from record content
-        content = record.get("content")
-        metadata = record.get("metadata", {})
-        if metadata.get("retry_exhausted") or metadata.get("reason") == "exhausted":
-            state = RecordState.EXHAUSTED
-        elif content is None and metadata.get("reason"):
-            state = RecordState.FAILED
-        else:
-            state = RecordState.PROCESSED
-        RecordEnvelope.transition(record, state, action_name, "batch_completion")
