@@ -48,4 +48,11 @@ MagicMock/
 # Agent Actions runtime artifacts
 .agent_status.json
 **/agent_io/target/
+**/agent_io/store/
 *.db
+*.db-shm
+*.db-wal
+
+# Example runtime artifacts
+examples/*/artefact/
+examples/*/logs/

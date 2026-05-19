@@ -122,8 +122,8 @@ Write a compelling marketing description that will appear on the book's product 
 You are an SEO specialist for an online bookstore, optimizing book listings for search engines.
 
 ## INPUT
-- Title: {{write_description.title}}
-- Authors: {{write_description.authors}}
+- Title: {{source.title}}
+- Authors: {{source.authors}}
 - Genre: {{validate_bisac.bisac_names}}
 - Marketing Description: {{write_description.marketing_description}}
 - Key Benefits: {{write_description.key_benefits}}
@@ -155,8 +155,8 @@ You are a book cataloger generating search parameters to find similar books in o
 
 ## INPUT
 Current book metadata:
-- Title: {{ write_description.title }}
-- Authors: {{ write_description.authors }}
+- Title: {{ source.title }}
+- Authors: {{ source.authors }}
 - Marketing Description: {{ write_description.marketing_description }}
 - BISAC Codes: {{ validate_bisac.bisac_codes }}
 - BISAC Names: {{ validate_bisac.bisac_names }}
@@ -173,7 +173,7 @@ Generate search criteria that will help find similar books in our catalog databa
   "genres": ["List of BISAC codes to search (use codes from input)"],
   "keywords": ["5-10 keywords for matching similar books"],
   "target_audience": "Target reader profile for filtering",
-  "exclude_isbn": "{{ write_description.isbn }}"
+  "exclude_isbn": "{{ source.isbn }}"
 }
 ```
 
@@ -190,8 +190,8 @@ You are a book recommendation specialist selecting the best matches from our cat
 
 ## INPUT
 Current book:
-- Title: {{ write_description.title }}
-- Authors: {{ write_description.authors }}
+- Title: {{ source.title }}
+- Authors: {{ source.authors }}
 - Genre: {{ validate_bisac.bisac_names }}
 - Target Audience: {{ write_description.target_audience }}
 
@@ -203,7 +203,7 @@ The following books are REAL books in our catalog database:
 Search metadata: {{ retrieve_candidates.search_metadata }}
 
 ## TASK
-From the candidates above, select the TOP 5 most relevant recommendations for readers of "{{ write_description.title }}".
+From the candidates above, select the TOP 5 most relevant recommendations for readers of "{{ source.title }}".
 
 ## OUTPUT SCHEMA
 ```json
@@ -233,9 +233,9 @@ From the candidates above, select the TOP 5 most relevant recommendations for re
 You are an educational content specialist who assesses reading difficulty and prerequisite knowledge.
 
 ## INPUT
-- Title: {{write_description.title}}
+- Title: {{source.title}}
 - Genre: {{validate_bisac.bisac_names}}
-- Page Count: {{write_description.page_count}}
+- Page Count: {{source.page_count}}
 - Target Audience: {{write_description.target_audience}}
 - Key Benefits: {{write_description.key_benefits}}
 
@@ -266,8 +266,8 @@ You are a catalog quality assurance specialist reviewing enriched book entries.
 
 ## INPUT
 Complete enriched book data:
-- Title: {{write_description.title}}
-- ISBN: {{write_description.isbn}}
+- Title: {{source.title}}
+- ISBN: {{source.isbn}}
 - Marketing Description: {{write_description.marketing_description}}
 - SEO Keywords: {{generate_seo.primary_keywords}}
 - Similar Books: {{generate_recommendations.similar_books}}

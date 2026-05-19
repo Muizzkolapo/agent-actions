@@ -10,6 +10,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.example import example
 from agent_actions.cli.init import (
     _fetch_example,
     _list_remote_examples,
@@ -22,10 +23,14 @@ from agent_actions.cli.init import (
 # ---------------------------------------------------------------------------
 
 
-def _make_tarball(examples: dict[str, dict[str, str]]) -> bytes:
+def _make_tarball(
+    examples: dict[str, dict[str, str]],
+    shared_files: dict[str, str] | None = None,
+) -> bytes:
     """Build a gzipped tarball mimicking GitHub's ``/tarball/`` response.
 
     *examples* maps ``example_name`` → ``{relative_path: file_content}``.
+    *shared_files* maps ``relative_path`` (under ``examples/``) → content.
     The tarball root is ``Owner-repo-abc1234/``.
     """
     buf = io.BytesIO()
@@ -38,6 +43,12 @@ def _make_tarball(examples: dict[str, dict[str, str]]) -> bytes:
                 info = tarfile.TarInfo(name=full)
                 info.size = len(data)
                 tar.addfile(info, io.BytesIO(data))
+        for rel_path, content in (shared_files or {}).items():
+            full = f"{root}/examples/{rel_path}"
+            data = content.encode()
+            info = tarfile.TarInfo(name=full)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
     return buf.getvalue()
 
 
@@ -53,7 +64,11 @@ _FAKE_EXAMPLES = {
     },
 }
 
-_FAKE_TARBALL = _make_tarball(_FAKE_EXAMPLES)
+_SHARED_FILES = {
+    ".env.example": "OPENAI_API_KEY=OPENAI_API_KEY\nGROQ_API_KEY=GROQ_API_KEY\n",
+}
+
+_FAKE_TARBALL = _make_tarball(_FAKE_EXAMPLES, _SHARED_FILES)
 
 _FAKE_CONTENTS_API = json.dumps(
     [
@@ -238,4 +253,80 @@ class TestInitSubcommands:
     def test_init_no_args_shows_usage(self) -> None:
         runner = CliRunner()
         result = runner.invoke(init, [])
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# _fetch_example — shared .env.example
+# ---------------------------------------------------------------------------
+
+
+class TestFetchExampleEnvFile:
+    def test_copies_shared_env_example(self, dest: Path) -> None:
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            _fetch_example("contract_reviewer", dest)
+        env_file = dest / ".env.example"
+        assert env_file.exists()
+        assert "OPENAI_API_KEY" in env_file.read_text()
+
+    def test_ignores_runtime_artefacts(self, dest: Path) -> None:
+        """Ensure store/, artefact/, logs/ dirs are excluded."""
+        examples_with_artefacts = {
+            "contract_reviewer": {
+                "agent_actions.yml": "name: contract_reviewer\n",
+                "agent_io/store/test.db": "fake-db",
+                "artefact/runs.json": "{}",
+                "logs/events.json": "{}",
+            },
+        }
+        tarball = _make_tarball(examples_with_artefacts, _SHARED_FILES)
+
+        def mock_req(url: str) -> bytes:
+            if "/tarball/" in url:
+                return tarball
+            return _mock_github_request(url)
+
+        with patch("agent_actions.cli.init._github_request", side_effect=mock_req):
+            _fetch_example("contract_reviewer", dest)
+        assert (dest / "agent_actions.yml").exists()
+        assert not (dest / "agent_io" / "store").exists()
+        assert not (dest / "artefact").exists()
+        assert not (dest / "logs").exists()
+
+
+# ---------------------------------------------------------------------------
+# ``agac example`` top-level command group
+# ---------------------------------------------------------------------------
+
+
+class TestExampleCommand:
+    def test_example_list(self) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(example, ["list"])
+        assert result.exit_code == 0
+        assert "contract_reviewer" in result.output
+        assert "book_catalog" in result.output
+
+    def test_example_install(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(
+                example, ["install", "contract_reviewer", "my_proj", "-o", str(tmp_path)]
+            )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "my_proj" / "agent_actions.yml").exists()
+        assert (tmp_path / "my_proj" / ".env.example").exists()
+
+    def test_example_install_defaults_name(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(example, ["install", "contract_reviewer", "-o", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "contract_reviewer" / "agent_actions.yml").exists()
+
+    def test_example_install_unknown(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(example, ["install", "nonexistent", "-o", str(tmp_path)])
         assert result.exit_code != 0

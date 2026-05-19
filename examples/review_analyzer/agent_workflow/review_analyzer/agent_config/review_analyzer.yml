@@ -55,30 +55,46 @@ defaults:
 actions:
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 0: NORMALIZE RAW KAGGLE DATA
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Transforms raw Kaggle review records into the schema the pipeline expects.
+  # Maps categories, parses dates/ratings, renames fields.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: normalize_review
+    kind: tool
+    impl: normalize_review
+    intent: "Transform raw Kaggle review data into the analyzer pipeline's expected schema"
+    schema: normalize_review
+    context_scope:
+      observe:
+        - source.*
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # STEP 1: EXTRACT CLAIMS & ASPECTS
   # ═══════════════════════════════════════════════════════════════════════════
   # Uses a cheap, fast model — extraction doesn't need expensive reasoning.
   # Drops star_rating so downstream scoring isn't anchored by the user's number.
   # ═══════════════════════════════════════════════════════════════════════════
   - name: extract_claims
+    dependencies: [normalize_review]
     intent: "Extract factual claims, product aspects, and sentiment signals from review text"
     schema: extract_claims
     prompt: $review_analyzer.Extract_Claims
     context_scope:
       observe:
-        - source.review_text                    # ← LLM sees only the review body
-        - source.review_title                   #    and title — nothing else
-        - source.product_name
-        - source.product_category
+        - normalize_review.review_text                    # ← LLM sees only the review body
+        - normalize_review.review_title                   #    and title — nothing else
+        - normalize_review.product_name
+        - normalize_review.product_category
       drop:
-        - source.star_rating                    # ← Excluded: avoid anchoring bias
-        - source.verified_purchase
+        - normalize_review.star_rating                    # ← Excluded: avoid anchoring bias
+        - normalize_review.verified_purchase
       passthrough:
-        - source.review_id                      # ← Flows to output, zero tokens
-        - source.reviewer_name
-        - source.review_date
-        - source.product_name
-        - source.product_category
+        - normalize_review.review_id                      # ← Flows to output, zero tokens
+        - normalize_review.reviewer_name
+        - normalize_review.review_date
+        - normalize_review.product_name
+        - normalize_review.product_category
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STEP 2: SCORE REVIEW QUALITY (3 independent parallel scorers)
@@ -107,10 +123,10 @@ actions:
         - extract_claims.factual_claims           # ← Scorers see extracted claims
         - extract_claims.product_aspects
         - extract_claims.sentiment_signals
-        - source.review_text                    # ← And original review text
+        - normalize_review.review_text                    # ← And original review text
         - seed.rubric                            # ← And the scoring rubric
       drop:
-        - source.star_rating                    # ← Still excluded from scoring
+        - normalize_review.star_rating                    # ← Still excluded from scoring
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STEP 3: AGGREGATE QUALITY SCORES
@@ -160,8 +176,8 @@ actions:
       on_false: "filter"                        #    LLM never fires for junk reviews
     context_scope:
       observe:
-        - source.review_text                    # ← Sees the original review
-        - source.review_title
+        - normalize_review.review_text                    # ← Sees the original review
+        - normalize_review.review_title
         - extract_claims.factual_claims                 # ← Sees extracted claims
         - extract_claims.product_aspects
         - extract_claims.sentiment_signals
@@ -171,11 +187,11 @@ actions:
       drop:
         - score_quality.*                       # ← Does NOT see individual scorer reasoning
       passthrough:
-        - source.review_id                      # ← Metadata flows through untouched
-        - source.reviewer_name
-        - source.product_name
-        - source.product_category
-        - source.review_date
+        - normalize_review.review_id                      # ← Metadata flows through untouched
+        - normalize_review.reviewer_name
+        - normalize_review.product_name
+        - normalize_review.product_category
+        - normalize_review.review_date
         - aggregate_scores.consensus_score
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -195,13 +211,13 @@ actions:
       on_false: "filter"
     context_scope:
       observe:
-        - source.review_text
+        - normalize_review.review_text
         - extract_claims.factual_claims
         - extract_claims.product_aspects
         - seed.rubric.product_feedback_categories
       passthrough:
-        - source.review_id
-        - source.product_name
+        - normalize_review.review_id
+        - normalize_review.product_name
         - aggregate_scores.consensus_score
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -222,4 +238,4 @@ actions:
         - extract_product_insights.*
         - extract_claims.*
         - aggregate_scores.*
-        - source.*
+        - normalize_review.*

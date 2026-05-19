@@ -17,7 +17,7 @@ def format_analysis_output(data: dict[str, Any]) -> dict[str, Any]:
     under action names.
     """
     # Namespaced data model: fields are at data[namespace][field]
-    source_ns = data.get("source", {})
+    source_ns = data.get("normalize_review", data.get("source", {}))
     extract_ns = data.get("extract_claims", {})
     agg_ns = data.get("aggregate_scores", {})
     response_ns = data.get("generate_response", {})

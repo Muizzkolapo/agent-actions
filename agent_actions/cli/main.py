@@ -12,6 +12,7 @@ from agent_actions.cli.clean import clean_cli as clean
 from agent_actions.cli.compile import compile, render
 from agent_actions.cli.dispositions import dispositions
 from agent_actions.cli.docs import docs
+from agent_actions.cli.example import example
 from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect
 from agent_actions.cli.list_udfs import list_udfs_cmd
@@ -84,6 +85,7 @@ class CLI:
         self.click_group.add_command(list_udfs_cmd)
         self.click_group.add_command(validate_udfs_cmd)
         self.click_group.add_command(docs)
+        self.click_group.add_command(example)
         self.click_group.add_command(skills)
 
     def _register_signal_handlers(self) -> None:

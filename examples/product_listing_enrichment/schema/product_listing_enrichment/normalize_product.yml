@@ -1,0 +1,34 @@
+name: normalize_product
+description: Normalized product record from raw Kaggle data
+fields:
+  - id: product_id
+    type: string
+    description: "Unique product identifier"
+  - id: product_name
+    type: string
+    description: "Product display name"
+  - id: product_category
+    type: string
+    description: "Mapped category: electronics, home_office, outdoor_gear, kitchen"
+  - id: brand
+    type: string
+    description: "Product brand name"
+  - id: current_price
+    type: number
+    description: "Current price in USD"
+  - id: raw_specs
+    type: object
+    description: "Structured technical specifications"
+    additionalProperties: true
+  - id: product_images_description
+    type: string
+    description: "Text description of product images"
+required:
+  - product_id
+  - product_name
+  - product_category
+  - brand
+  - current_price
+  - raw_specs
+  - product_images_description
+additionalProperties: true

@@ -1,0 +1,37 @@
+name: normalize_review
+description: Normalized review record from raw Kaggle data
+fields:
+  - id: review_id
+    type: string
+    description: "Unique review identifier"
+  - id: product_name
+    type: string
+    description: "Product display name"
+  - id: product_category
+    type: string
+    description: "Human-readable product category"
+  - id: reviewer_name
+    type: string
+    description: "Reviewer username or ID"
+  - id: review_date
+    type: string
+    description: "Review date in YYYY-MM-DD format"
+  - id: star_rating
+    type: integer
+    description: "Star rating 1-5"
+  - id: review_title
+    type: string
+    description: "Review headline"
+  - id: review_text
+    type: string
+    description: "Full review body text"
+  - id: verified_purchase
+    type: boolean
+    description: "Whether the purchase was verified"
+required:
+  - review_id
+  - product_name
+  - product_category
+  - star_rating
+  - review_text
+additionalProperties: true

@@ -1,740 +1,1698 @@
 [
   {
-    "isbn": "9780134685991",
-    "title": "Effective Java",
-    "authors": ["Joshua Bloch"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 2018,
-    "page_count": 412,
-    "description": "Best practices for the Java platform covering generics, enums, annotations, autoboxing, and concurrency."
+    "isbn": "9780194230353",
+    "title": "The Hound of the Baskervilles",
+    "authors": [
+      "Sir Arthur Conan Doyle"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 105,
+    "description": "Dartmoor. A wild, wet place in the Southwest of England. A place where it is easy to get lost, and to fall into the soft green earth which can pull the strongest man down to his death. A man is running for his life. Behind him comes an enormous dog - a dog from his worst dreams, a dog from hell. Between him and a terrible death stands only one person - the greatest detective of all time, Sherlock Holmes."
   },
   {
-    "isbn": "9780596007126",
-    "title": "Head First Design Patterns",
-    "authors": ["Eric Freeman", "Elisabeth Robson"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2004,
-    "page_count": 638,
-    "description": "A brain-friendly guide to design patterns using real-world examples and visual learning."
+    "isbn": "9780060872793",
+    "title": "The Burglar Who Thought He Was Bogart",
+    "authors": [
+      "Lawrence Block"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 400,
+    "description": "Bookseller Bernie Rhodenbarr's in love\u2014with an exotic Eastern European beauty who shares his obsession with Humphrey Bogart movies. He's in heaven, munching popcorn with his new amour every night at a Bogart Film Festival\u2014until their Casablanca-esque idyll is cut short by his other secret passion: burglary. When he's hired to pilfer a portfolio of valuable documents from a Park Avenue apartment, Bernie can hardly refuse. But the occupant's early return forces Bernie to flee empty-handed\u2014and he soon finds himself implicated in a murder. Before you can say \"who stole the strawberries?\" he's hunting for a killer, up to his neck in the outrageous intrigues of a tiny Balkan nation . . . and menaced by more sinister fat men and unsavory toadies than the great Bogie himself butted heads with in pursuit of that darn bird!"
   },
   {
-    "isbn": "9780132350884",
-    "title": "Clean Code",
-    "authors": ["Robert C. Martin"],
-    "publisher": "Prentice Hall",
-    "publish_year": 2008,
+    "isbn": "9780440184621",
+    "title": "Tai-Pan",
+    "authors": [
+      "James Clavell"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1966,
+    "page_count": 734,
+    "description": "Dick Straun, a pirate, smuggler, and ruthless individual, finds glory beyond his dreams as the Tai-Pan, or supreme leader, of Hong Kong. Reissue."
+  },
+  {
+    "isbn": "9780393979169",
+    "title": "Passing",
+    "authors": [
+      "Nella Larsen",
+      "Carla Kaplan"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2007,
+    "page_count": 546,
+    "description": "Nella Larsen is a central figure in African American, Modernist, and women s literature.\""
+  },
+  {
+    "isbn": "9780385264730",
+    "title": "Children of the Alley",
+    "authors": [
+      "Naj\u012bb Ma\u1e25f\u016b\u1e93"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1996,
     "page_count": 464,
-    "description": "Handbook of agile software craftsmanship covering principles, patterns, and practices of writing clean code."
+    "description": "The story of an Egyptian family mirrors the spiritual history of humankind as a feudal lord disowns one son for diabolical pride and puts another son to the ultimate test"
   },
   {
-    "isbn": "9781449373320",
-    "title": "Designing Data-Intensive Applications",
-    "authors": ["Martin Kleppmann"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2017,
-    "page_count": 616,
-    "description": "The big ideas behind reliable, scalable, and maintainable systems including databases, streams, and distributed architectures."
+    "isbn": "9780312925741",
+    "title": "Devil's Backbone",
+    "authors": [
+      "Terry C. Johnston"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1991,
+    "page_count": 448,
+    "description": "Devil's Backbone Terry C. Johnston The Modoc Indians and American officials had been flirting with war in the Oregon Territory for some time. When Modoc chief Keintpoos murdered a Civil War hero during negotiations, the U.S. Army launched a deadly offensive against the rebel tribe. Besieged in the natural stronghold of the Lava Beds near Tule Lake, the Modocs waged bloody war for seven long months. Sergeant Seamus Donegan, on the trail of his uncle, Ian O'Rourke, arrived at Tule Lake just as the conflict erupted. Soon Donegan and the brooding O'Rourke found themselves embroiled in what would be the costliest war in frontier history..."
   },
   {
-    "isbn": "9781492032557",
-    "title": "Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow",
-    "authors": ["Aurélien Géron"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2022,
-    "page_count": 861,
-    "description": "Practical machine learning with Python using Scikit-Learn, Keras, and TensorFlow with end-to-end examples."
+    "isbn": "9780156572040",
+    "title": "Marcovaldo, Or, The Seasons in the City",
+    "authors": [
+      "Italo Calvino"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1983,
+    "page_count": 128,
+    "description": "Marcovaldo, and irrepressible dreamer and inveterate schemer embarks on a series of adventures, with unpredictable results"
   },
   {
-    "isbn": "9781491946008",
-    "title": "Building Microservices",
-    "authors": ["Sam Newman"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2021,
-    "page_count": 612,
-    "description": "Designing fine-grained systems covering the full lifecycle of microservices from modeling to monitoring."
+    "isbn": "9781400097036",
+    "title": "Arthur and George",
+    "authors": [
+      "Julian Barnes"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2007,
+    "page_count": 445,
+    "description": "Chronicles the lives of two boys--the son of a Midlands vicar and the creator of the world's most famous detective--as they pursue separate destinies until meeting and forming a remarkable alliance."
   },
   {
-    "isbn": "9781617294945",
-    "title": "Kubernetes in Action",
-    "authors": ["Marko Luksa"],
-    "publisher": "Manning Publications",
-    "publish_year": 2018,
-    "page_count": 624,
-    "description": "Deploy and manage containerized applications with Kubernetes covering pods, services, deployments, and stateful sets."
+    "isbn": "9780140309591",
+    "title": "Pippi Goes on Board",
+    "authors": [
+      "Astrid Lindgren",
+      "Louis S. Glanzman"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1977,
+    "page_count": 140,
+    "description": "The further adventures of Pippi and her friends Tommy and Annika."
   },
   {
-    "isbn": "9780201633610",
-    "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
-    "authors": ["Erich Gamma", "Richard Helm", "Ralph Johnson", "John Vlissides"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 1994,
-    "page_count": 395,
-    "description": "Catalog of 23 patterns for object-oriented software design covering creational, structural, and behavioral patterns."
+    "isbn": "9780786855377",
+    "title": "Disney's Little Einsteins: Music of the Meadow",
+    "authors": [
+      "Susan Ring"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 28,
+    "description": "The Little Einsteins visit a meadow and explore the insects, animals, and plant life within it."
   },
   {
-    "isbn": "9780135957059",
-    "title": "The Pragmatic Programmer",
-    "authors": ["David Thomas", "Andrew Hunt"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 2019,
-    "page_count": 352,
-    "description": "Practical advice for software developers covering topics from personal responsibility to career development and technical practices."
+    "isbn": "9780060753108",
+    "title": "Beauty",
+    "authors": [
+      "Robin McKinley"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 325,
+    "description": "A strange imprisonment Beauty has never liked her nickname. She is thin and awkward; it is her two sisters who are the beautiful ones. But what she lacks in looks, she can perhaps make up for in courage. When her father comes home with the tale of an enchanted castle in the forest and the terrible promise he had to make to the Beast who lives there, Beauty knows she must go to the castle, a prisoner of her own free will. Her father protests that he will not let her go, but she answers, \"Cannot a Beast be tamed?\" Robin McKinley's beloved telling illuminates the unusual love story of a most unlikely couple: Beauty and the Beast."
   },
   {
-    "isbn": "9781491950364",
-    "title": "Deep Learning",
-    "authors": ["Ian Goodfellow", "Yoshua Bengio", "Aaron Courville"],
-    "publisher": "MIT Press",
-    "publish_year": 2016,
-    "page_count": 800,
-    "description": "Comprehensive textbook on deep learning covering feedforward networks, regularization, optimization, and sequence modeling."
+    "isbn": "9780060739423",
+    "title": "Catherine, Called Birdy (Summer Reading Edition)",
+    "authors": [
+      "Karen Cushman"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 224,
+    "description": "Originally published: [New York]: Clarion Books, 1994."
   },
   {
-    "isbn": "9781492034025",
-    "title": "Site Reliability Engineering",
-    "authors": ["Betsy Beyer", "Chris Jones", "Jennifer Petoff", "Niall Murphy"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2016,
-    "page_count": 552,
-    "description": "How Google runs production systems covering SLOs, error budgets, toil elimination, and incident management."
+    "isbn": "9780140503449",
+    "title": "Christmas in Noisy Village",
+    "authors": [
+      "Astrid Lindgren",
+      "Ilon Wikland"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1981,
+    "page_count": 32,
+    "description": "The noisy children of three neighboring families have a gay time at Christmas baking cookies, cutting and decorating trees, eating fruitcake and tarts, and opening Christmas gifts."
   },
   {
-    "isbn": "9781942788003",
-    "title": "The DevOps Handbook",
-    "authors": ["Gene Kim", "Jez Humble", "Patrick Debois", "John Willis"],
-    "publisher": "IT Revolution Press",
-    "publish_year": 2016,
-    "page_count": 480,
-    "description": "How to create world-class agility, reliability, and security in technology organizations through DevOps practices."
+    "isbn": "9780439651370",
+    "title": "The Fugitive Factor",
+    "authors": [
+      "Gordon Korman"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 160,
+    "description": "Having just broken out of a juvenile detention facility, Aiden and Meg live a life on the run while trying to find evidence that will free their parents from a life sentence in prison."
   },
   {
-    "isbn": "9780321125217",
-    "title": "Domain-Driven Design",
-    "authors": ["Eric Evans"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 2003,
+    "isbn": "9780439793957",
+    "title": "The Case of the Snowboarding Superstar",
+    "authors": [
+      "James Preller"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 80,
+    "description": "When Jigsaw Jones goes to Vermont with his family for winter break, he has to find a missing good luck charm without the help of his partner, Mila."
+  },
+  {
+    "isbn": "9780060734015",
+    "title": "Bridge to Terabithia (rack)",
+    "authors": [
+      "Katherine Paterson"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 191,
+    "description": "Jess Aarons' greatest ambition is to be the fastest runner in his grade. He's been practicing all summer and can't wait to see his classmates' faces when he beats them all. But on the first day of school, a new girl boldly crosses over to the boys' side and outruns everyone. That's not a very promising beginning for a friendship, but Jess and Leslie Burke become inseparable. Together they create Terabithia, a magical kingdom in the woods where the two of them reign as king and queen, and their imaginations set the only limits. Then one morning a terrible tragedy occurs. Only when Jess is able to come to grips with this tragedy does he finally understand the strength and courage Leslie has given him."
+  },
+  {
+    "isbn": "9780805079135",
+    "title": "Saint-Exupery",
+    "authors": [
+      "Stacy Schiff"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
     "page_count": 560,
-    "description": "Tackling complexity in software through domain modeling, bounded contexts, and ubiquitous language."
+    "description": "Traces the life of the French author and pilot, depicts his complex personality, and looks at his contributions to the war effort."
   },
   {
-    "isbn": "9781617291548",
-    "title": "Grokking Algorithms",
-    "authors": ["Aditya Bhargava"],
-    "publisher": "Manning Publications",
-    "publish_year": 2016,
+    "isbn": "9780312339012",
+    "title": "Where the Mountain Casts Its Shadow",
+    "authors": [
+      "Maria Coffey"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
     "page_count": 256,
-    "description": "Illustrated guide to algorithms for programmers covering search, sort, graph algorithms, and dynamic programming."
+    "description": "Shares the personal behind-the-scenes stories of famous mountaineers to reveal the events that compelled them to risk their lives and personal relationships, in a collection of portraits that includes coverage of such adventurers as Jim Wickwire, Conrad Anker, and Lynn Hill. Reprint. 15,000 first printing."
   },
   {
-    "isbn": "9781491954614",
-    "title": "Fluent Python",
-    "authors": ["Luciano Ramalho"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2022,
-    "page_count": 1012,
-    "description": "Effective, idiomatic Python covering data structures, functions as objects, object-oriented idioms, and concurrency."
-  },
-  {
-    "isbn": "9781492055525",
-    "title": "Practical MLOps",
-    "authors": ["Noah Gift", "Alfredo Deza"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2021,
-    "page_count": 430,
-    "description": "Operationalizing machine learning models covering pipelines, monitoring, cloud platforms, and model deployment."
-  },
-  {
-    "isbn": "9781492077602",
-    "title": "Terraform: Up and Running",
-    "authors": ["Yevgeniy Brikman"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2022,
-    "page_count": 466,
-    "description": "Infrastructure as code with Terraform covering modules, state management, testing, and multi-cloud deployments."
-  },
-  {
-    "isbn": "9781492032649",
-    "title": "Programming Rust",
-    "authors": ["Jim Blandy", "Jason Orendorff", "Leonora F.S. Tindall"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2021,
-    "page_count": 622,
-    "description": "Systems programming in Rust covering ownership, borrowing, lifetimes, concurrency, and async programming."
-  },
-  {
-    "isbn": "9781617295027",
-    "title": "Go in Action",
-    "authors": ["William Kennedy", "Brian Ketelsen", "Erik St. Martin"],
-    "publisher": "Manning Publications",
-    "publish_year": 2015,
+    "isbn": "9781590175866",
+    "title": "Diary of a Man in Despair",
+    "authors": [
+      "Fritz Percy Reck-Malleczewen",
+      "Friedrich Reck",
+      "Paul Rubens",
+      "Richard J. Evans"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2013,
     "page_count": 264,
-    "description": "Introduction to Go covering goroutines, channels, interfaces, testing, and building web services."
+    "description": "Originally published: New York: Macmillan Company, 1970."
   },
   {
-    "isbn": "9781491960202",
-    "title": "Fundamentals of Data Engineering",
-    "authors": ["Joe Reis", "Matt Housley"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2022,
-    "page_count": 414,
-    "description": "Planning and building data engineering systems covering the data engineering lifecycle, storage, ingestion, and orchestration."
+    "isbn": "9781400043460",
+    "title": "My Life in France",
+    "authors": [
+      "Julia Child",
+      "Alex Prud'homme"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 302,
+    "description": "A memoir begun just months before Child's death describes the legendary food expert's years in Paris, Marseille, and Provence and her journey from a young woman from Pasadena who cannot cook or speak any French to the publication of her legendary Mastering cookbooks and her winning the hearts of America as \"The French Chef.\" 150,000 first printing."
   },
   {
-    "isbn": "9780321700698",
-    "title": "Test Driven Development: By Example",
-    "authors": ["Kent Beck"],
-    "publisher": "Addison-Wesley Professional",
+    "isbn": "9781585421770",
+    "title": "In Search of Captain Zero",
+    "authors": [
+      "Alan C. Weisbecker"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 352,
+    "description": "A surfer, photojournalist, and author describes his two-year odyssey from Mexico to Central America to search for his missing long-time friend and surfing companion, Christopher Conner, and his bizarre adventures along the way."
+  },
+  {
+    "isbn": "9780802136831",
+    "title": "The Six Wives of Henry VIII",
+    "authors": [
+      "Alison Weir"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 643,
+    "description": "Profiles the oft-married English monarch and the women that came to define him through marriage, detailing their little-known histories and personalities. Reprint."
+  },
+  {
+    "isbn": "9780679602989",
+    "title": "Fear and Loathing in Las Vegas and Other American Stories",
+    "authors": [
+      "Hunter S. Thompson"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1998,
+    "page_count": 283,
+    "description": "Contains the journalist's classic account of his visit to Las Vegas, and includes three companion pieces"
+  },
+  {
+    "isbn": "9780316159418",
+    "title": "The Bookseller of Kabul",
+    "authors": [
+      "Asne Seierstad"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 288,
+    "description": "The Norwegian journalist provides a portrait of a committed Muslim man and his family living in post-Taliban Kabul, Afghanistan."
+  },
+  {
+    "isbn": "9780521348881",
+    "title": "Hegel: Elements of the Philosophy of Right",
+    "authors": [
+      "Georg Wilhelm Fredrich Hegel"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1991,
+    "page_count": 569,
+    "description": "This book is a translation of a classic work of modern social and political thought. Elements of the Philosophy of Right, Hegel's last major published work, is an attempt to systematize ethical theory, natural right, the philosophy of law, political theory, and the sociology of the modern state into the framework of Hegel's philosophy of history. Hegel's work has been interpreted in radically different ways, influencing many political movements from far right to far left, and is widely perceived as central to the communitarian tradition in modern ethical, social, and political thought. This edition includes extensive editorial material informing the reader of the historical background of Hegel's text, and explaining his allusions to Roman law and other sources, making use of lecture materials which have only recently become available. The new translation is literal, readable, and consistent, and will be informative and scholarly enough to serve the needs of students and specialists alike."
+  },
+  {
+    "isbn": "9780684852638",
+    "title": "Shadow",
+    "authors": [
+      "Bob Woodward"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 608,
+    "description": "A New York Times Notable Book of the Year Twenty-five years ago, after Richard Nixon resigned the presidency, Gerald Ford promised a return to normalcy. \u201cMy fellow Americans, our long national nightmare is over,\u201d President Ford declared. But it was not. The Watergate scandal, and the remedies against future abuses of power, would have an enduring impact on presidents and the country. In Shadow, Bob Woodward takes us deep into the administrations of Ford, Carter, Reagan, Bush and Clinton to describe how each discovered that the presidency was forever altered. With special emphasis on the human toll, Woodward shows the consequences of the new ethics laws, and the emboldened Congress and media. Powerful investigations increasingly stripped away the privacy and protections once expected by the nation's chief executive. Shadow is an authoritative, unsettling narrative of the modern, beleaguered presidency."
+  },
+  {
+    "isbn": "9780375760525",
+    "title": "Paris 1919",
+    "authors": [
+      "Margaret MacMillan"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 570,
+    "description": "National Bestseller New York Times Editors\u2019 Choice Winner of the PEN Hessell Tiltman Prize Winner of the Duff Cooper Prize Silver Medalist for the Arthur Ross Book Award of the Council on Foreign Relations Finalist for the Robert F. Kennedy Book Award For six months in 1919, after the end of \u201cthe war to end all wars,\u201d the Big Three\u2014President Woodrow Wilson, British prime minister David Lloyd George, and French premier Georges Clemenceau\u2014met in Paris to shape a lasting peace. In this landmark work of narrative history, Margaret MacMillan gives a dramatic and intimate view of those fateful days, which saw new political entities\u2014Iraq, Yugoslavia, and Palestine, among them\u2014born out of the ruins of bankrupt empires, and the borders of the modern world redrawn."
+  },
+  {
+    "isbn": "9781400049479",
+    "title": "Last Train to Paradise",
+    "authors": [
+      "Les Standiford"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 288,
+    "description": "Describes the remarkable and challenging efforts of ambitious entrepreneur Henry Flagler to construct a railway that would connect Key West to the mainland, following the design and engineering of the project, the thousands of workers who brought Flagler's vision to life, and the 1935 hurricane that destroyed the railway. Reprint. 75,000 first printing."
+  },
+  {
+    "isbn": "9781565847040",
+    "title": "Dr. Seuss Goes to War",
+    "authors": [
+      "Richard H. Minear",
+      "Dr. Seuss"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2001,
+    "page_count": 272,
+    "description": "For decades, readers throughout the world have enjoyed the marvelous stories and illustrations of Theodor Seuss Geisel, better known as Dr. Seuss. But few know the work Geisel did as a political cartoonist during World War II, for the New York daily newspaper PM. In these extraordinarily trenchant cartoons, Geisel presents \"a provocative history of wartime politics\" (Entertainment Weekly). Dr. Seuss Goes to War features handsome, large-format reproductions of more than two hundred of Geisel\u2019s cartoons, alongside \"insightful\" (Booklist) commentary by the historian Richard H. Minear that places them in the context of the national climate they reflect. Pulitzer Prize\u2013winner Art Spiegelman\u2019s introduction places Seuss firmly in the pantheon of the leading political cartoonists of our time."
+  },
+  {
+    "isbn": "9780029221303",
+    "title": "The Origins of the Civil Rights Movement",
+    "authors": [
+      "Aldon D. Morris"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1986,
+    "page_count": 368,
+    "description": "A blending of scholarly research and interviews with many of the figures who launched the civil rights movement in the 1960s and 1970s records the events of the movement's tumultuous first decade"
+  },
+  {
+    "isbn": "9780872201682",
+    "title": "On Justice, Power, and Human Nature",
+    "authors": [
+      "Thucydides"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1993,
+    "page_count": 172,
+    "description": "Designed for students with little or no background in ancient Greek language and culture, this collection of extracts from The History of the Peloponnesian War includes those passages that shed most light on Thucydides' political theory--famous as well as important but lesser-known pieces frequently overlooked by nonspecialists. Newly translated into spare, vigorous English, and situated within a connective narrative framework, Woodruff's selections will be of special interest to instructors in political theory and Greek civilization. Includes maps, notes, glossary."
+  },
+  {
+    "isbn": "9781400044870",
+    "title": "Imperial Life in the Emerald City",
+    "authors": [
+      "Rajiv Chandrasekaran"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 320,
+    "description": "Presents a revealing look at life in Baghdad's Green Zone, the headquarters for the American occupation in Iraq, criticizing the follies and foibles of L. Paul Bremer in the invasion and reconstruction of Iraq."
+  },
+  {
+    "isbn": "9780275991166",
+    "title": "C. S. Lewis",
+    "authors": [
+      "Bruce L. Edwards"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2007,
+    "page_count": 1416,
+    "description": "Examines the life and works of the British author and scholar, best known for his creation of \"The Chronicles of Narnia\" series."
+  },
+  {
+    "isbn": "9780822000235",
+    "title": "CliffsNotes on Shakespeare's King Henry IV",
+    "authors": [
+      "James K. Lowers"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1971,
+    "page_count": 80,
+    "description": "This popular play entertains and inspires in alternating comic scenes and serious ones and is the birthplace of one of the theater's greatest characters, Sir John Falstaff. Young Prince Hal rebels against his father the king until he must go to the king's aid to stamp out the rebellion of nobles."
+  },
+  {
+    "isbn": "9780764585968",
+    "title": "CliffsNotes on Steinbeck's The Grapes of Wrath",
+    "authors": [
+      "Kelly McGrath Vlcek"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 112,
+    "description": "The original CliffsNotes study guides offer a look into key elements and ideas within classic works of literature. The latest generation of titles in this series also features glossaries and visual elements that complement the familiar format. CliffsNotes on The Grapes of Wrath explores John Steinbeck's Pulitzer Prize-winning --and controversial \u2013 novel, a work based on the what the author saw for himself as a reporter covering migrant worker camps. Following the story of the Joad family as they travel from the Oklahoma Dust Bowl to California in search of farming opportunities and wealth, this study guide provides summaries and critical commentaries for each part within the novel. Other features that help you figure out this important work include Personal background on the author, including career highlights Introduction to and synopsis of the book In-depth character analyses Critical essays to take you into the author's personal philosophy Review section that features interactive questions and suggested essay topics and practice projects Resource Center with books, films, and Web sites that can help round out your knowledge Classic literature or modern-day treasure \u2014 you'll understand it all with expert information and insight from CliffsNotes study guides."
+  },
+  {
+    "isbn": "9780674002050",
+    "title": "Seamus Heaney",
+    "authors": [
+      "Helen Hennessy Vendler"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 208,
+    "description": "Poet and critic are well met, as one of our best writers on poetry takes up one of the world's great poets. Whereas other books on the Nobel laureate Seamus Heaney have dwelt chiefly on the biographical, geographical, and political aspects of his writing, this book looks squarely and deeply at Heaney's poetry as art."
+  },
+  {
+    "isbn": "9780253203182",
+    "title": "The Role of the Reader",
+    "authors": [
+      "Umberto Eco"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1984,
+    "page_count": 288,
+    "description": "\"... not merely interesting and novel, but also exceedingly provocative and heuristically fertile.\" \u2014The Review of Metaphysics \"... essential reading for anyone interesting in... the new reader-centered forms of criticism.\" \u2014Library Journal In this erudite and imaginative book, Umberto Eco sets forth a dialectic between 'open' and 'closed' texts."
+  },
+  {
+    "isbn": "9780449207338",
+    "title": "Iberia",
+    "authors": [
+      "James Albert Michener"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1968,
+    "page_count": 960,
+    "description": "Photographs and the author's personal thoughts and recollections enhance this informal portrait of Spanish life and culture"
+  },
+  {
+    "isbn": "9780764544576",
+    "title": "CliffsNotes on Woolf's Mrs. Dalloway",
+    "authors": [
+      "Gary Carey"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 72,
+    "description": "The original CliffsNotes study guides offer expert commentary on major themes, plots, characters, literary devices, and historical background. The latest generation of titles in this series also feature glossaries and visual elements that complement the classic, familiar format. In CliffsNotes on Mrs. Dalloway, you explore one of Virginia Woolf\u2019s greatest works, which is about life, love, friendship, and acceptance. Here, you meet Clarissa Dalloway as she\u2019s preparing for a party she will host that evening; and Septimus Smith, a shell-shocked war veteran struggling with the aftereffects of going to battle. This study guide carefully walks you through every step of a day in the life of Clarissa and Septimus by providing summaries and critical analyses of each chapter of the novel. You'll also explore the life and background of the author, Virginia Woolf, and gain insight into how she came to write Mrs. Dalloway. Other features that help you study include A list of characters Character analyses of Clarissa and Septimus A review section that tests your knowledge A bibliography for more study Classic literature or modern modern-day treasure \u2014 you'll understand it all with expert information and insight from CliffsNotes study guides."
+  },
+  {
+    "isbn": "9780192837622",
+    "title": "The Confidence-man",
+    "authors": [
+      "Herman Melville"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1999,
+    "page_count": 361,
+    "description": "Male, female, deft, fraudulent, constantly shifting: which of the `masquerade' of passengers on the Mississippi steamboat Fidele is `the confidence man'? The central motif of Melville's last and most `modern' novel can be seen as a symbol of American cultural history."
+  },
+  {
+    "isbn": "9780192840943",
+    "title": "Presocratic Philosophy: A Very Short Introduction",
+    "authors": [
+      "Catherine Osborne"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 144,
+    "description": "This is a book about the invention of Western philosophy, and the first thinkers to explore ideas about the nature of reality, time, and the origin of the universe. It begins with the finding of the new papyrus fragment of Empedocles' poem, and uses the story of its discovery and interpretation to highlight the way our understanding of early philosophers is marked by their presentation in later sources. Generations of philosophers, both ancient and modern, have traced their inspiration back to the presocratics, even though we have very few of their writings left. In this book, Catherine Osborne invites her readers to dip their toes into the fragmentary remains of thinkers from Thales to Pythagoras, Heraclitus to Protagoras, to try to fill in the bits of a jigsaw that has been rejigged many times and in many different ways. ABOUT THE SERIES: The Very Short Introductions series from Oxford University Press contains hundreds of titles in almost every subject area. These pocket-sized books are the perfect way to get ahead in a new subject quickly. Our expert authors combine facts, analysis, perspective, new ideas, and enthusiasm to make interesting and challenging topics highly readable."
+  },
+  {
+    "isbn": "9780691120522",
+    "title": "Hegel's Preface to the Phenomenology of Spirit",
+    "authors": [
+      "Georg Wilhelm Friedrich Hegel",
+      "Yirmiyahu Yovel"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 223,
+    "description": "This is a new translation, with running commentary, of what is perhaps the most important short piece of Hegel's writing. The Preface to Hegel's first major work, the Phenomenology of Spirit, lays the groundwork for all his other writing by explaining what is most innovative about Hegel's philosophy. This new translation combines readability with maximum precision, breaking Hegel's long sentences and simplifying their often complex structure. At the same time, it is more faithful to the original than any previous translation. The heart of the book is the detailed commentary, supported by an introductory essay. Together they offer a lucid and elegant explanation of the text and elucidate difficult issues in Hegel, making his claims and intentions intelligible to the beginner while offering interesting and original insights to the scholar and advanced student. The commentary often goes beyond the particular phrase in the text to provide systematic context and explain related topics in Hegel and his predecessors (including Kant, Spinoza, and Aristotle, as well as Fichte, Schelling, H\u00f6lderlin, and others). The commentator refrains from playing down (as many interpreters do today) those aspects of Hegel's thought that are less acceptable in our time, and abstains from mixing his own philosophical preferences with his reading of Hegel's text. His approach is faithful to the historical Hegel while reconstructing Hegel's ideas within their own context."
+  },
+  {
+    "isbn": "9780195145816",
+    "title": "Philosophy of Mind",
+    "authors": [
+      "David John Chalmers"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 675,
+    "description": "This is a comprehensive collection of readings in the philosophy of mind, ranging from Descartes to the leading edge of the discipline. Extensive selections cover foundations, the nature of consciousness, and the nature of mental content."
+  },
+  {
+    "isbn": "9780679783398",
+    "title": "Basic Writings of Nietzsche",
+    "authors": [
+      "Friedrich Wilhelm Nietzsche"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 862,
+    "description": "Six works selected from Nietzsche's writings, including \"The Birth of Tragedy,\" \"Beyond Good and Evil,\" and \"On the Genealogy of Morals\" reflect the philosopher's critique of Western morality and insights into Christianity and art."
+  },
+  {
+    "isbn": "9780674954014",
+    "title": "Wittgenstein on Rules and Private Language",
+    "authors": [
+      "Saul A. Kripke"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1982,
+    "page_count": 160,
+    "description": "In this book Saul Kripke brings his powerful philosophical intelligence to bear on Wittgenstein's analysis of the notion of following a rule."
+  },
+  {
+    "isbn": "9780521274555",
+    "title": "The Presocratic Philosophers",
+    "authors": [
+      "G. S. Kirk",
+      "J. E. Raven",
+      "M. Schofield"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1983,
+    "page_count": 518,
+    "description": "This book traces the intellectual revolution initiated by Thales in the sixth century B.C. to its culmination in the metaphysics of Parmenides."
+  },
+  {
+    "isbn": "9780140443486",
+    "title": "Lun Y\u00fc",
+    "authors": [
+      "Confucius"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1979,
+    "page_count": 249,
+    "description": "Confucius' teachings, preserved by his students, consist of aphorisms and parables that illustrate his views on morality"
+  },
+  {
+    "isbn": "9780826418975",
+    "title": "Beyond the Chains of Illusion",
+    "authors": [
+      "Erich Fromm",
+      "Rainer Funk"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 152,
+    "description": "First published in 1962 and long unavailable, BEYOND THE CHAINS OF ILLUSION is, only at first glance, a book about Marx and Freud--those two intellectual giants of the 20th century. Fromm here shows himself an outstanding interpreter of Marx. In all, Fromm's re-creation of the Freudian and Marxist way of thinking is, essentially, a look at the individual and society. BEYOND THE CHAINS OF ILLUSION will introduce many of today's readers to unknown aspects of Marx and Freud, as it also serves as a unique introduction to the life and mind of Erich Fromm as well. A new foreword by Fromm Literary Executor Rainer Funk puts this book into historic context and high relief."
+  },
+  {
+    "isbn": "9781413901474",
+    "title": "Pretear",
+    "authors": [
+      "Kaori Naruse",
+      "Junichi Satou"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 180,
+    "description": "Himeno's troublesome life changes dramatically when she meets a young boy who transports her to a fantasy world desperately in need of help from a girl called \"Pretear.\""
+  },
+  {
+    "isbn": "9781593075439",
+    "title": "Conan and the Demons of Khitai",
+    "authors": [
+      "Akira Yoshida",
+      "Paul Lee",
+      "Robert Ervin Howard",
+      "Pat Lee"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 90,
+    "description": "Set many years in the future from the award-winning ongoing series, Conan and the Demons and Khitai marks Conan's first appearance as King in Dark Horse's best-selling comics revival of the legendary fantasy hero. When King Conan receives an invitation from the Eastern kingdom of Khitai to open trade in precious jewels and spices, he decides that he will travel into this long-mysterious land. Yet to do so is perilous, as those who have requested his company may have far more devious intentions, and beasts unseen by Western eyes lurk amidst the shadows."
+  },
+  {
+    "isbn": "9781401202453",
+    "title": "John Constantine, Hellblazer: Setting sun",
+    "authors": [
+      "Warren Ellis"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 96,
+    "description": "John Constantine, a razor-tongued, chain-smoking, trench-coat-wearing mystic with a penchant for being in the wrong place at the right time, has become one of the most recognizable and enduring characters in modern comics. Featuring bone-chilling tales of horror, magic, loss and regret, JOHN CONSTANTINE, HELLBLAZER: SETTING SUN follows John Constantine as he faces the London underworld."
+  },
+  {
+    "isbn": "9781569716199",
+    "title": "Star Wars Tales Volume 1",
+    "authors": [
+      "Various",
+      "Tsuneo Sanda"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 220,
+    "description": "Collecting the first four issues of the quarterly anthology smash sensation, Star Wars Tales contains thrilling stories featuring Darth Vader, Obi-Wan Kenobi, Han Solo, Emperor Palpatine, C-3PO, R2-D2, Lando Calrissian and a cast of thousands! Tales explores every corner of the Star Wars galaxy and keeps readers coming back for more! Star Wars Tales Volume I is sure to delight fans both young and old!"
+  },
+  {
+    "isbn": "9781593073527",
+    "title": "Star Wars: Clone Wars Volume 6: On the Fields of Battle",
+    "authors": [
+      "John Ostrander",
+      "Jan Duursema",
+      "Dan Parsons",
+      "Brad Anderson",
+      "Tomas Giorello"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 168,
+    "description": "From the space-station headquarters of the Bounty Hunters' Guild, to untamed worlds on the edge of the galaxy, the Jedi must go where the Clone Wars take them. Mace Windu leads an elite Jedi strike force against an army of trained killers in a demonstration of Jedi power and resolve...Aayla Secura must confront her former Master in an effort to retrieve the plans for a weapon that has already destroyed one world...Obi-Wan Kenobi and Anakin Skywalker must join forces with a renegade Jedi to prevent a fleet of warships from falling into the hands of the enemy... On whatever field of battle the Jedi find themselves, their greatest challenge is to remain true to their teachings and to the ways of the Force!"
+  },
+  {
+    "isbn": "9781421509594",
+    "title": "The Drifting Classroom",
+    "authors": [
+      "Kazuo Umezu"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2007,
+    "page_count": 192,
+    "description": "A flash flood turns the desert into a drowned world, and the students struggle to protect the school--and their precious vegetable garden--from the deluge. But just as the first vegetables are ready to harvest, the crop is infested with a strange fungus. Was all their work for nothing? Lonely for home and their parents, the students make a surrogate mother out of a statue...only to find it replaced one day by a new, terrifying idol..."
+  },
+  {
+    "isbn": "9780976401117",
+    "title": "The Wood Boy",
+    "authors": [
+      "Raymond E. Feist",
+      "Sean J. Jordan",
+      "Tad Williams"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 144,
+    "description": "Provides two coming of age tales that are adapted from short stories."
+  },
+  {
+    "isbn": "9780785115311",
+    "title": "Astonishing X-Men - Volume 1",
+    "authors": [
+      "Joss Whedon"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 152,
+    "description": "Cyclops and Emma Frost want to reunite the X-Men in order to astonish the world, but as the demand for a \"mutant cure\" escalates, they find some unexpected allies and adversaries."
+  },
+  {
+    "isbn": "9780800614287",
+    "title": "Liturgies of the Western Church",
+    "authors": [
+      "Bard Thompson"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1980,
+    "page_count": 434,
+    "description": "The liturgies of the Word and the Lord's Supper that are included in this volume range from those of the church fathers Justin Martyr and Hippolytus through the Roman Mass (in both Latin and English), to the great Reformation liturgies of Luther, Zwingli, Calvin, Knox, Baxter, and Wesley, as well as the Middleburg Liturgy of the English Puritans and the Westminster Directory. In addition to his translations, Thompson draws upon copies of many original documents to insure accuracy. An introduction, which places the liturgy within its tradition, accompanies each text."
+  },
+  {
+    "isbn": "9780824512590",
+    "title": "In the Name of Jesus",
+    "authors": [
+      "Henri J. M. Nouwen"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1992,
+    "page_count": 120,
+    "description": "Ruminates on the problems, and possible solutions, in today's Christian leadership, offering a rethinking of how to lead, one based more firmly on divine guidance"
+  },
+  {
+    "isbn": "9780226323985",
+    "title": "Gilgamesh Epic and Old Testament Parallels",
+    "authors": [
+      "Alexander Heidel"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1949,
+    "page_count": 280,
+    "description": "Cuneiform records made some three thousand years ago are the basis for this essay on the ideas of death and the afterlife and the story of the flood which were current among the ancient peoples of the Tigro-Euphrates Valley. With the same careful scholarship shown in his previous volume, The Babylonian Genesis, Heidel interprets the famous Gilgamesh Epic and other related Babylonian and Assyrian documents. He compares them with corresponding portions of the Old Testament in order to determine the inherent historical relationship of Hebrew and Mesopotamian ideas."
+  },
+  {
+    "isbn": "9780800637149",
+    "title": "Introduction to World Religions",
+    "authors": [
+      "Christopher Hugh Partridge"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 495,
+    "description": "Objective, authoritative and lavishly illustrated with nearly 200 full-colour photographs, maps and diagrams, Introduction to World Religions will be widely welcomed by all those seeking to understand the complexity and diversity of the world's religious landscape."
+  },
+  {
+    "isbn": "9780310257868",
+    "title": "Becoming a Contagious Christian",
+    "authors": [
+      "Mark Mittelberg",
+      "Lee Strobel",
+      "Bill Hybels"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2007,
+    "page_count": 299,
+    "description": "Over one million people have experienced the groundbreaking evangelism training course Becoming a Contagious Christian -- a proven resource designed to equip believers for relational evangelism. Now revised and updated, it avoids stereotyped approaches that feel intimidating to many Christians -- and to their friends! Instead, it shows ordinary believers how to share the gospel in natural and effective ways being the person God made them to be. This participant's guide is designed to help you get the most out of the Becoming a Contagious Christian course. By applying training principles to real-life situations and relationships, you'll identify and develop an evangelism style that's effective for you. DVD segments, as well as individual and group activities, will help you gain confidence and equip you to: Discover your own style of communicating about Christ Build spiritually significant relationships Direct conversations toward matters of faith Tell your own story of coming to faith Use easy-to-remember gospel illustrations Pray with someone to receive Christ, and more! Designed for use with the revised and updated Becoming a Contagious Christian kit and small group DVD editions."
+  },
+  {
+    "isbn": "9780933121294",
+    "title": "African Origins of the Major \"Western Religions\"",
+    "authors": [
+      "Yosef Ben-Jochannan"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1991,
+    "page_count": 363,
+    "description": "African Origins of the Major \"Western Religions\" first published in 1970, continues to be one of Dr. Ben's most thought-provoking works. This critical examination of the history, beliefs and myths, remains instructive and fresh. By highlighting the African influences and roots of these religions, Dr. Ben reveals an untold history that many would prefer to froget."
+  },
+  {
+    "isbn": "9780812930344",
+    "title": "Living Faith",
+    "authors": [
+      "Jimmy Carter"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1998,
+    "page_count": 288,
+    "description": "The former president traces the role of his strong religious faith in his life past and present, in the paperback version of a national best-seller, which features a new foreword by the author. Reprint. 150,000 first printing."
+  },
+  {
+    "isbn": "9781581342475",
+    "title": "The Hidden Smile of God",
+    "authors": [
+      "John Piper"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2001,
+    "page_count": 175,
+    "description": "The author of \"Comforting God\" takes an inspiring look at the words and examples of three early Christians--William Cowper, John Bunyan, and David Brainerd--and how their faith in adversity encourages us to rest in the sovereignty of God amid our own difficulties."
+  },
+  {
+    "isbn": "9780743477116",
+    "title": "Romeo and Juliet",
+    "authors": [
+      "William Shakespeare"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1992,
+    "page_count": 283,
+    "description": "Offers explanatory notes on pages facing the text of the play, as well as an introduction to Shakespeare's language, life, and theater"
+  },
+  {
+    "isbn": "9780822218630",
+    "title": "Wonder of the World",
+    "authors": [
+      "David Lindsay-Abaire"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 72,
+    "description": "THE STORY: Nothing will prepare you for the dirty little secret Cass discovers in her husband's sweater drawer. It is so shocking that our heroine has no choice but to flee to the honeymoon capital of the world in a frantic search for the life she"
+  },
+  {
+    "isbn": "9780393979312",
+    "title": "1 Henry IV",
+    "authors": [
+      "William Shakespeare"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 432,
+    "description": "The text, with few departures, is that of the First Quarto (1598) edition of the play."
+  },
+  {
+    "isbn": "9780156632775",
+    "title": "Murder in the Cathedral",
+    "authors": [
+      "Thomas Stearns Eliot"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1963,
+    "page_count": 148,
+    "description": "A play in verse form dramatizes the murder of Archbishop Thomas Becket by four knights of Henry II's court"
+  },
+  {
+    "isbn": "9780394604800",
+    "title": "Bernard Shaw's Saint Joan, Major Barbara, Androcles and the Lion",
+    "authors": [
+      "Bernard Shaw"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1979,
+    "page_count": 479,
+    "description": "In this volume, the texts of 3 of Shaw's most popular plays are given."
+  },
+  {
+    "isbn": "9780393978193",
+    "title": "The Tempest",
+    "authors": [
+      "William Shakespeare",
+      "Peter Hulme",
+      "William Howard Sherman"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 355,
+    "description": "Presents William Shakespeare's \"The Tempest\" and includes excerpts from its sources, eighteen works of criticism by writers ranging from John Dryden to Barbara Fuchs, and seventeen works based on the play by such authors as Percy Shelley and Ted Hughes."
+  },
+  {
+    "isbn": "9780199120093",
+    "title": "Clouds",
+    "authors": [
+      "Aristophanes"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1970,
+    "page_count": 254,
+    "description": "This new translation of the play Clouds examines the two versions of the play, the history of the text, an analysis of Right and Wrong, the purpose of the chorus, and explanations of certain previously unexamined sexualjokes referred to in the play. Dover also includes notes on metrical analysis, a full commentary, and indexes."
+  },
+  {
+    "isbn": "9780743482776",
+    "title": "Twelfth Night",
+    "authors": [
+      "William Shakespeare"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 220,
+    "description": "Background information about Shakespeare, Elizabethan theater, and the text accompany his play about unrequited love and mistaken identity."
+  },
+  {
+    "isbn": "9780440419174",
+    "title": "Vincent Van Gogh",
+    "authors": [
+      "Jan Greenberg",
+      "Sandra Jane Jordan"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 144,
+    "description": "Profiles the turbulent life of Vincent van Gogh from his birth in the Netherlands, through his attempts to be a clergyman, to his years of painting, and finally, to his death in Auvers-sur-Oise near Paris. An ALA Notable Book. Reprint."
+  },
+  {
+    "isbn": "9780810935204",
+    "title": "Lewis Carroll's Jabberwocky",
+    "authors": [
+      "Graeme Base"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1996,
+    "page_count": 14,
+    "description": "Lewis Carroll's classic and inventive verse comes to life in a series of ingenious dioramas, colorful three-dimensional renderings of the rhyme by the best-selling author-illustrator of Animalia and The Eleventh Hour."
+  },
+  {
+    "isbn": "9780805071061",
+    "title": "Rosa",
+    "authors": [
+      "Nikki Giovanni"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 40,
+    "description": "Provides the story of the black woman whose refusal to give up her seat on a bus in Alabama set in motion all the events of the civil rights movements that resulted in the end of the segregated South."
+  },
+  {
+    "isbn": "9780791059296",
+    "title": "Ray Bradbury's Fahrenheit 451",
+    "authors": [
+      "Harold Bloom"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2001,
+    "page_count": 147,
+    "description": "Presents a collection of critical essays on Bradbury's novel, Fahrenheit 451."
+  },
+  {
+    "isbn": "9780140366600",
+    "title": "The Puffin Book of Nonsense Verse",
+    "authors": [
+      "Quentin Blake"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1996,
+    "page_count": 287,
+    "description": "A lively, upbeat collection of nonsense verse for all the family, including Lear, Carroll, Belloc and Nash, with Quentin Blake's wonderfully loopy illustrations."
+  },
+  {
+    "isbn": "9780789422132",
+    "title": "Flowers",
+    "authors": [
+      "David Burnie"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1997,
+    "page_count": 64,
+    "description": "Describes the physical characteristics and life cycles of flowers and examines kinds of garden flowers, woodland flowers, desert flowers, and others."
+  },
+  {
+    "isbn": "9780791056646",
+    "title": "J.D. Salinger's The Catcher in the Rye",
+    "authors": [
+      "Harold Bloom"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 176,
+    "description": "Critical essays discuss the language, symbolism, and psychological structure of the classic novel of Holden Caulfield's search for identity."
+  },
+  {
+    "isbn": "9780375812934",
+    "title": "Jurassic Park Institute Dinosaur Field Guide",
+    "authors": [
+      "Thomas R. Holtz",
+      "M. K. Brett-Surman"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2001,
+    "page_count": 160,
+    "description": "Discusses dinosaur research and what can be learned from it, providing information about the age of the dinosaurs, what plant life was like, different dinosaurs, non-dinosaur animals, and what the Earth looked during their time."
+  },
+  {
+    "isbn": "9781567922691",
+    "title": "Selected Poems of Herman Melville",
+    "authors": [
+      "Herman Melville"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 512,
+    "description": "\"First published in 1970, Warren's edition remains the most comprehensive selection of Melville's poetry ever presented. It brings together the best of the Civil War poems from Battle-Pieces (1866), the portraits of sailors from John Marr (1888), and the autumnal lyrics from Timoleon (1891), as well as poems uncollected during Melville's lifetime. Central to the selection are several self-contained passages from Clarel: A Poem and Pilgrimage to the Holy Land (1876), a book-length work that Warren calls \"an important document of our modernity ... in fact, a precursor to The Waste Land, with the same central image, the same flickering contrasts of the past and the present, the same charade of belief and unbelief.\"\" \"Warren introduces his selection with a valuable interpretive essay, and also provides copious textual and critical notes.\"--BOOK JACKET.Title Summary field provided by Blackwell North America, Inc. All Rights Reserved"
+  },
+  {
+    "isbn": "9780375755217",
+    "title": "The Trouble With Poetry",
+    "authors": [
+      "Billy Collins"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2007,
+    "page_count": 101,
+    "description": "An all-new collection of poetry by America's former Poet Laureate features witty, insightful, and simple poems dealing with the themes of jazz, the passage of time, love, boyhood, and writing. Reprint. 50,000 first printing."
+  },
+  {
+    "isbn": "9780261102262",
+    "title": "The Lays of Beleriand",
+    "authors": [
+      "John Ronald Reuel Tolkien",
+      "Christopher Tolkien"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 393,
+    "description": "The third volume that contains the early myths and legends which led to the writing of Tolkien's epic tale of war, The Silmarillion. This, the third volume of The History of Middle-earth, gives us a priviledged insight into the creation of the mythology of Middle-earth, through the alliterative verse tales of two of the most crucial stories in Tolkien's world -- those of Turien and Luthien. The first of the poems is the unpublished Lay of The Children of Hurin, narrating on a grand scale the tragedy of Turin Turambar. The second is the moving Lay of Leithian, the chief source of the tale of Beren and Luthien in The Silmarillion, telling of the Quest of the Silmaril and the encounter with Morgoth in his subterranean fortress. Accompanying the poems are commentaries on the evolution of the history of the Elder Days. Also included is the notable criticism of The Lay of The Leithian by CS Lewis, who read the poem in 1929."
+  },
+  {
+    "isbn": "9780871401526",
+    "title": "Complete Poems, 1904-1962",
+    "authors": [
+      "Edward Estlin Cummings"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1994,
+    "page_count": 1136,
+    "description": "A collection of the modern poet's work shows his use of satire and sentiment in unconventional verse styles"
+  },
+  {
+    "isbn": "9780786881482",
+    "title": "Love",
+    "authors": [
+      "Pablo Neruda"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1995,
+    "page_count": 43,
+    "description": "Poems from the Film Il Postino. The poems collected in this book are at the heart of the film Il Postino, a cinematic fantasy spun from an apocryphal incident in the life of the Chilean poet and Nobel laureate, Pablo Neruda. Together they show why many consider Neruda to be the finest love poet of the century. Few writers of any age have described the pleasures and torments of erotic love with such un-sentimental directness and sensual precision. Here, too, we find Neruda at his most accessible, the language of his odes and lyrics refined to the point at which it achieves, in critic Jean Franco's words, \"the naturalness of song\". This short selection draws on work from throughout his writing life, from the famous early collection Twenty Love Songs & a Song of Despair (1924) to the key works of his maturity, Residence on Earth (1935), Elemental Odes (1954) and the autobiographical Memorial de Isla Negra (1964). It offers an enticing glimpse of one of modern poetry's greatest masters."
+  },
+  {
+    "isbn": "9780451527929",
+    "title": "Paradise Lost and Paradise Regained",
+    "authors": [
+      "John Milton"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2001,
+    "page_count": 357,
+    "description": "Presents the complete texts of the seventeenth-century English poet's two great epic poems about creation, fall, and redemption of humankind and the moral and spiritual dilemmas of God's judgment. Reprint."
+  },
+  {
+    "isbn": "9780374530310",
+    "title": "Georgics (Zongo Classics)",
+    "authors": [
+      "Virgil"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2017,
+    "page_count": 224,
+    "description": "The Georgics is a poem by Latin poet Virgil, likely published in 29 BC. As the name suggests (from the Greek word \u03b3\u03b5\u03c9\u03c1\u03b3\u03b9\u03ba\u03ac, ge\u014drgika, i.e. \"agricultural (things)\") the subject of the poem is agriculture; but far from being an example of peaceful rural poetry, it is a work characterized by tensions in both theme and purpose. The Georgics is considered Virgil's second major work, following his Eclogues and preceding the Aeneid. The poem draws on a variety of prior sources,[citation needed] and has influenced many later authors from antiquity to the present."
+  },
+  {
+    "isbn": "9780571090242",
+    "title": "Death of a Naturalist",
+    "authors": [
+      "Seamus Heaney"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1969,
+    "page_count": 57,
+    "description": "Death of a Naturalist marks the auspicious outset of an acclaimed master. As a first book of poems, it is remarkable for its accurate perceptions and its rich linguistic gifts."
+  },
+  {
+    "isbn": "9780140178975",
+    "title": "Essays",
+    "authors": [
+      "Michel de Montaigne"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1993,
+    "page_count": 416,
+    "description": "Reflections by the creator of the essay form display the humane, skeptical, humorous, and honest views of Montaigne, revealing his thoughts on sexuality, religion, cannibals, intellectuals, and other unexpected themes. Included are such celebrated works as \"On Solitude,\" \"To Philosophize Is to Learn How to Die,\" and \"On Experience.\""
+  },
+  {
+    "isbn": "9780312183011",
+    "title": "Radio On",
+    "authors": [
+      "Sarah Vowell"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1997,
+    "page_count": 256,
+    "description": "A self-proclaimed member of Generation X examines what is on the radio day-by-day and how she as an audience interacts with it from morning to night, in a car, at home, and in the office"
+  },
+  {
+    "isbn": "9780060927516",
+    "title": "Testaments Betrayed",
+    "authors": [
+      "Milan Kundera"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1996,
+    "page_count": 288,
+    "description": "Milan Kundera has established himself as one of the great novelists of our time with such books as The Unbearable Lightness of Being, Immortality and The Book of Laughter and Forgetting. In Testaments Betrayed, he proves himself a brilliant defender of the moral rights of the artist and the respect due to a work of art and its creator's wishes. The betrayal of both\u2014often by their most passionate proponents\u2014is the principal theme of this extraordinary work. Readers will be particularly intrigued by Kundera's impassioned attack on society's shifting moral judgments and persecutions of art and artists, from Mayakovsky to Rushdie."
+  },
+  {
+    "isbn": "9780465017744",
+    "title": "After Theory",
+    "authors": [
+      "Terry Eagleton"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 240,
+    "description": "As heralded everywhere from NPR to the pages of the New York Times Magazine, a new era is underway in our colleges and universities: after a lengthy tenure, the dominance of postmodern theory has come to an end. In this timely and topical book, the legendary Terry Eagleton (\"one of [our] best-known public intellectuals.\"-Boston Globe) traces the rise and fall of these ideas from the 1960s through the 1990s, candidly assessing the resultant gains and losses. What's needed now, After Theory argues, is a return to the big questions and grand narratives. Today's global politics demand we pay attention to a range of topics that have gone ignored by the academy and public alike, from fundamentalism to objectivity, religion to ethics. Fresh, provocative, and consistently engaging, Eagleton's latest salvo will challenge everyone looking to better grasp the state of the world."
+  },
+  {
+    "isbn": "9780811209052",
+    "title": "Seven Nights",
+    "authors": [
+      "Jorge Luis Borges"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1984,
+    "page_count": 121,
+    "description": "Lectures discuss The Divine Comedy, nightmares, The Thousand and One Nights, Buddhism, poetry, the Kabbalah, and blindness"
+  },
+  {
+    "isbn": "9780385423397",
+    "title": "The Art of the Personal Essay",
+    "authors": [
+      "Phillip Lopate"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1995,
+    "page_count": 777,
+    "description": "Essays by writers representing various cultures and eras, from ancient Greece to the present, include works by Seneca, Thoreau, Dillard, Vidal, and Orwell."
+  },
+  {
+    "isbn": "9781929241637",
+    "title": "Beloved Bride",
+    "authors": [
+      "William Potter"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 156,
+    "description": "The great military exploits of Confederate General 'Stonewall' Jackson are studied in military schools the world over. His iron-will and stern self-disciple are legendary. But the real Thomas J.Jackson was also a humble Christian and a loving husband and father. The tender and instructive letters he wrote to his wife Anna are a model of godly leadership and covenantal faithfulness."
+  },
+  {
+    "isbn": "9780140446043",
+    "title": "The Complete Essays",
+    "authors": [
+      "Michel Montaigne"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 1344,
+    "description": "In 1572 Montaigne retired to his estates in order to devote himself to leisure, reading and reflection. There he wrote his constantly expanding 'essays', inspired by the ideas he found in books from his library and his own experience. He discusses subjects as diverse as war-horses and cannibals, poetry and politics, sex and religion, love and friendship, ecstasy and experience. Above all, Montaigne studied himself to find his own inner nature and that of humanity. The Essays are among the most idiosyncratic and personal works in all literature. An insight into a wise Renaissance mind, they continue to engage, enlighten and entertain modern readers."
+  },
+  {
+    "isbn": "9780618619160",
+    "title": "The Ancestor's Tale",
+    "authors": [
+      "Richard Dawkins",
+      "Yan Wong"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 688,
+    "description": "A renowned biologist provides a sweeping chronicle of more than four billion years of life on Earth, shedding new light on evolutionary theory and history, sexual selection, speciation, extinction, and genetics."
+  },
+  {
+    "isbn": "9780471409762",
+    "title": "Bad Astronomy",
+    "authors": [
+      "Philip C. Plait"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 277,
+    "description": "Advance praise for Philip Plait s Bad Astronomy \"Bad Astronomy is just plain good! Philip Plait clears up every misconception on astronomy and space you never knew you suffered from.\" --Stephen Maran, Author of Astronomy for Dummies and editor of The Astronomy and Astrophysics Encyclopedia \"Thank the cosmos for the bundle of star stuff named Philip Plait, who is the world s leading consumer advocate for quality science in space and on Earth. This important contribution to science will rest firmly on my reference library shelf, ready for easy access the next time an astrologer calls.\" --Dr. Michael Shermer, Publisher of Skeptic magazine, monthly columnist for Scientific American, and author of The Borderlands of Science \"Philip Plait has given us a readable, erudite, informative, useful, and entertaining book. Bad Astronomy is Good Science. Very good science...\" --James \"The Amazing\" Randi, President, James Randi Educational Foundation, and author of An Encyclopedia of Claims, Frauds, and Hoaxes of the Occult and Supernatural \"Bad Astronomy is a fun read. Plait is wonderfully witty and educational as he debunks the myths, legends, and 'conspiracies that abound in our society. 'The Truth Is Out There' and it's in this book. I loved it!\" --Mike Mullane, Space Shuttle astronaut and author of Do Your Ears Pop in Space?"
+  },
+  {
+    "isbn": "9781570625190",
+    "title": "The Tao of Physics",
+    "authors": [
+      "Fritjof Capra"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 366,
+    "description": "Studies similarities between the concept of a harmonious universe that emerges from the theories of modern physics and the vision of a continuously interactive world conceived by Eastern mystics"
+  },
+  {
+    "isbn": "9780802714626",
+    "title": "Longitude",
+    "authors": [
+      "Dava Sobel",
+      "Neil Armstrong"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 192,
+    "description": "Describes the forty-year effort of John Harrison to invent the chronometer, the first instrument able to keep accurate time for navigational purposes."
+  },
+  {
+    "isbn": "9780879697129",
+    "title": "Bioinformatics",
+    "authors": [
+      "David W. Mount"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 692,
+    "description": "As more species' genomes are sequenced, computational analysis of these data has become increasingly important. The second, entirely updated edition of this widely praised textbook provides a comprehensive and critical examination of the computational methods needed for analyzing DNA, RNA, and protein data, as well as genomes. The book has been rewritten to make it more accessible to a wider audience, including advanced undergraduate and graduate students. New features include chapter guides and explanatory information panels and glossary terms. New chapters in this second edition cover statistical analysis of sequence alignments, computer programming for bioinformatics, and data management and mining. Practically oriented problems at the ends of chapters enhance the value of the book as a teaching resource. The book also serves as an essential reference for professionals in molecular biology, pharmaceutical, and genome laboratories."
+  },
+  {
+    "isbn": "9780965738408",
+    "title": "A Short History of Nearly Everything",
+    "authors": [
+      "Bill Bryson"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 545,
+    "description": "In this book Bill Bryson explores the most intriguing and consequential questions that science seeks to answer and attempts to understand everything that has transpired from the Big Bang to the rise of civilization. To that end, Bill Bryson apprenticed himself to a host of the world's most profound scientific minds, living and dead. His challenge is to take subjects like geology, chemistry, paleontology, astronomy, and particle physics and see if there isn't some way to render them comprehensible to people, like himself, made bored (or scared) stiff of science by school. His interest is not simply to discover what we know but to find out how we know it. How do we know what is in the center of the earth, thousands of miles beneath the surface? How can we know the extent and the composition of the universe, or what a black hole is? How can we know where the continents were 600 million years ago? How did anyone ever figure these things out? On his travels through space and time, Bill Bryson encounters a splendid gallery of the most fascinating, eccentric, competitive, and foolish personalities ever to ask a hard question. In their company, he undertakes a sometimes profound, sometimes funny, and always supremely clear and entertaining adventure in the realms of human knowledge."
+  },
+  {
+    "isbn": "9780674891999",
+    "title": "Time's Arrow, Time's Cycle",
+    "authors": [
+      "Stephen Jay Gould"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1987,
+    "page_count": 240,
+    "description": "Examines scientific theories pertaining to the measurement of earth's history"
+  },
+  {
+    "isbn": "9780486450063",
+    "title": "On the Origin of Species",
+    "authors": [
+      "Charles Darwin"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 336,
+    "description": "States the evidence for a theory of evolution, explains how evolution takes place, and discusses instinct, hybridism, fossils, distribution, and classification."
+  },
+  {
+    "isbn": "9780393323528",
+    "title": "Next: The Future Just Happened",
+    "authors": [
+      "Michael Lewis"
+    ],
+    "publisher": "Unknown",
     "publish_year": 2002,
     "page_count": 240,
-    "description": "Practical TDD using examples in Java and Python covering the red-green-refactor cycle and test patterns."
+    "description": "The author of Liar's Poker and The Next New Thing explains the Internet's role in how people live, work, and think, identifying a status revolution in which individuals are key players, and offers a forecast of future implications of this technological revolution on human society. Reprint. 55,000 first printing."
   },
   {
-    "isbn": "9781593279509",
-    "title": "The Linux Command Line",
-    "authors": ["William E. Shotts"],
-    "publisher": "No Starch Press",
-    "publish_year": 2019,
-    "page_count": 480,
-    "description": "Complete guide to the Linux command line covering navigation, shell scripting, text processing, and system administration."
+    "isbn": "9780316172325",
+    "title": "Blink",
+    "authors": [
+      "Malcolm Gladwell"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 277,
+    "description": "The landmark book that has revolutionized the way we understand leadership and decision making--from #1 bestselling author Malcolm Gladwell. In his breakthrough bestseller The Tipping Point, Malcolm Gladwell redefined how we understand the world around us. Now, in Blink, he revolutionizes the way we understand the world within. Blink is a book about how we think without thinking, about choices that seem to be made in an instant--in the blink of an eye--that actually aren't as simple as they seem. Why are some people brilliant decision makers, while others are consistently inept? Why do some people follow their instincts and win, while others end up stumbling into error? How do our brains really work--in the office, in the classroom, in the kitchen, and in the bedroom? And why are the best decisions often those that are impossible to explain to others? In Blink we meet the psychologist who has learned to predict whether a marriage will last, based on a few minutes of observing a couple; the tennis coach who knows when a player will double-fault before the racket even makes contact with the ball; the antiquities experts who recognize a fake at a glance. Here, too, are great failures of \"blink\": the election of Warren Harding; \"New Coke\"; and the shooting of Amadou Diallo by police. Blink reveals that great decision makers aren't those who process the most information or spend the most time deliberating, but those who have perfected the art of \"thin-slicing\"--filtering the very few factors that matter from an overwhelming number of variables."
   },
   {
-    "isbn": "9781098107963",
-    "title": "Learning SQL",
-    "authors": ["Alan Beaulieu"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2020,
-    "page_count": 340,
-    "description": "Introduction to SQL covering queries, joins, subqueries, indexes, and transactions for MySQL, Oracle, and SQL Server."
-  },
-  {
-    "isbn": "9781492034605",
-    "title": "Kafka: The Definitive Guide",
-    "authors": ["Neha Narkhede", "Gwen Shapira", "Todd Palino"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2021,
-    "page_count": 464,
-    "description": "Real-time data streaming with Apache Kafka covering producers, consumers, brokers, and stream processing."
-  },
-  {
-    "isbn": "9781617291999",
-    "title": "Spring in Action",
-    "authors": ["Craig Walls"],
-    "publisher": "Manning Publications",
-    "publish_year": 2022,
-    "page_count": 520,
-    "description": "Comprehensive guide to Spring covering dependency injection, Spring MVC, Spring Boot, Spring Data, and Spring Security."
-  },
-  {
-    "isbn": "9781491912058",
-    "title": "High Performance Python",
-    "authors": ["Micha Gorelick", "Ian Ozsvald"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2020,
-    "page_count": 468,
-    "description": "Profiling, optimization, and parallel computing in Python covering NumPy, Cython, and multiprocessing."
-  },
-  {
-    "isbn": "9781617295195",
-    "title": "Docker in Action",
-    "authors": ["Jeff Nickoloff", "Stephen Kuenzli"],
-    "publisher": "Manning Publications",
-    "publish_year": 2019,
-    "page_count": 350,
-    "description": "Developing and deploying containerized applications with Docker covering images, networking, volumes, and orchestration."
-  },
-  {
-    "isbn": "9781491919019",
-    "title": "Natural Language Processing with Python",
-    "authors": ["Steven Bird", "Ewan Klein", "Edward Loper"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2009,
-    "page_count": 504,
-    "description": "Text processing with NLTK covering tokenization, tagging, parsing, semantic analysis, and building NLP applications."
-  },
-  {
-    "isbn": "9781491946459",
-    "title": "Data Science from Scratch",
-    "authors": ["Joel Grus"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2019,
-    "page_count": 406,
-    "description": "Building data science tools from first principles covering statistics, linear algebra, machine learning, and data visualization."
-  },
-  {
-    "isbn": "9780137081073",
-    "title": "The Clean Coder",
-    "authors": ["Robert C. Martin"],
-    "publisher": "Prentice Hall",
-    "publish_year": 2011,
-    "page_count": 256,
-    "description": "Professional conduct for software developers covering commitment, saying no, coding under pressure, and time management."
-  },
-  {
-    "isbn": "9780201485677",
-    "title": "Refactoring: Improving the Design of Existing Code",
-    "authors": ["Martin Fowler"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 2018,
-    "page_count": 448,
-    "description": "Catalog of refactorings for improving the design of existing code safely with examples in JavaScript."
-  },
-  {
-    "isbn": "9780131177055",
-    "title": "Working Effectively with Legacy Code",
-    "authors": ["Michael Feathers"],
-    "publisher": "Prentice Hall",
-    "publish_year": 2004,
-    "page_count": 456,
-    "description": "Techniques for safely changing and testing legacy codebases covering seams, dependency breaking, and characterization tests."
-  },
-  {
-    "isbn": "9780735619678",
-    "title": "Code Complete",
-    "authors": ["Steve McConnell"],
-    "publisher": "Microsoft Press",
-    "publish_year": 2004,
-    "page_count": 960,
-    "description": "Practical guide to software construction covering design, coding, debugging, testing, and software craftsmanship."
-  },
-  {
-    "isbn": "9781680502618",
-    "title": "The Rust Programming Language",
-    "authors": ["Steve Klabnik", "Carol Nichols"],
-    "publisher": "No Starch Press",
-    "publish_year": 2022,
-    "page_count": 560,
-    "description": "Official guide to Rust covering ownership, borrowing, structs, enums, error handling, generics, and cargo."
-  },
-  {
-    "isbn": "9781617295188",
-    "title": "Kotlin in Action",
-    "authors": ["Dmitry Jemerov", "Svetlana Isakova"],
-    "publisher": "Manning Publications",
-    "publish_year": 2017,
-    "page_count": 360,
-    "description": "Practical Kotlin for JVM developers covering null safety, extension functions, lambdas, coroutines, and DSLs."
-  },
-  {
-    "isbn": "9781119476009",
-    "title": "The Web Application Hacker's Handbook",
-    "authors": ["Dafydd Stuttard", "Marcus Pinto"],
-    "publisher": "Wiley",
-    "publish_year": 2011,
-    "page_count": 912,
-    "description": "Finding and exploiting security flaws in web applications covering injection, authentication bypass, and client-side attacks."
-  },
-  {
-    "isbn": "9781491977552",
-    "title": "Database Internals",
-    "authors": ["Alex Petrov"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2019,
-    "page_count": 376,
-    "description": "Deep dive into database storage engines, distributed systems algorithms, consensus protocols, and replication."
-  },
-  {
-    "isbn": "9780321601919",
-    "title": "Continuous Delivery",
-    "authors": ["Jez Humble", "David Farley"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 2010,
-    "page_count": 512,
-    "description": "Reliable software releases through build, test, and deployment automation covering pipelines and deployment patterns."
-  },
-  {
-    "isbn": "9781942788317",
-    "title": "Accelerate",
-    "authors": ["Nicole Forsgren", "Jez Humble", "Gene Kim"],
-    "publisher": "IT Revolution Press",
-    "publish_year": 2018,
-    "page_count": 288,
-    "description": "Research-backed practices for high software delivery performance covering deployment frequency, lead time, and recovery."
-  },
-  {
-    "isbn": "9781491924242",
-    "title": "Infrastructure as Code",
-    "authors": ["Kief Morris"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2021,
-    "page_count": 440,
-    "description": "Managing dynamic cloud infrastructure with code covering provisioning, configuration management, and immutable infrastructure."
-  },
-  {
-    "isbn": "9780262033848",
-    "title": "Introduction to Algorithms",
-    "authors": ["Thomas H. Cormen", "Charles E. Leiserson", "Ronald L. Rivest", "Clifford Stein"],
-    "publisher": "MIT Press",
-    "publish_year": 2022,
-    "page_count": 1312,
-    "description": "Comprehensive textbook on algorithms covering sorting, data structures, graph algorithms, dynamic programming, and NP-completeness."
-  },
-  {
-    "isbn": "9781492041139",
-    "title": "Feature Engineering for Machine Learning",
-    "authors": ["Alice Zheng", "Amanda Casari"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2018,
-    "page_count": 218,
-    "description": "Principles and techniques for engineering features covering numeric, categorical, text, and image data."
-  },
-  {
-    "isbn": "9781492041856",
-    "title": "Data Pipelines with Apache Airflow",
-    "authors": ["Bas Harenslak", "Julian de Ruiter"],
-    "publisher": "Manning Publications",
-    "publish_year": 2021,
-    "page_count": 464,
-    "description": "Building and scheduling data pipelines with Apache Airflow covering DAGs, operators, sensors, and deployment."
-  },
-  {
-    "isbn": "9780596517748",
-    "title": "JavaScript: The Good Parts",
-    "authors": ["Douglas Crockford"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2008,
-    "page_count": 172,
-    "description": "Identifying the reliable and elegant subset of JavaScript covering functions, objects, arrays, and inheritance."
-  },
-  {
-    "isbn": "9781491904244",
-    "title": "You Don't Know JS: Scope and Closures",
-    "authors": ["Kyle Simpson"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2014,
-    "page_count": 98,
-    "description": "Deep dive into JavaScript scope, hoisting, closures, and the module pattern."
-  },
-  {
-    "isbn": "9781491904930",
-    "title": "Learning React",
-    "authors": ["Alex Banks", "Eve Porcello"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2020,
-    "page_count": 310,
-    "description": "Functional web development with React and hooks covering state management, side effects, and performance optimization."
-  },
-  {
-    "isbn": "9781484206522",
-    "title": "Pro Git",
-    "authors": ["Scott Chacon", "Ben Straub"],
-    "publisher": "Apress",
-    "publish_year": 2014,
-    "page_count": 574,
-    "description": "Comprehensive guide to Git covering branching, merging, rebasing, distributed workflows, and GitHub integration."
-  },
-  {
-    "isbn": "9781617290893",
-    "title": "The Art of Unit Testing",
-    "authors": ["Roy Osherove"],
-    "publisher": "Manning Publications",
-    "publish_year": 2013,
-    "page_count": 296,
-    "description": "Writing maintainable unit tests covering mocks, stubs, test doubles, and test-driven development practices."
-  },
-  {
-    "isbn": "9780201835953",
-    "title": "The Mythical Man-Month",
-    "authors": ["Frederick P. Brooks Jr."],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 1995,
-    "page_count": 336,
-    "description": "Essays on software engineering covering Brooks's Law, the second-system effect, and managing large programming projects."
-  },
-  {
-    "isbn": "9781492076988",
-    "title": "Spark: The Definitive Guide",
-    "authors": ["Bill Chambers", "Matei Zaharia"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2018,
-    "page_count": 604,
-    "description": "Complete guide to Apache Spark covering DataFrames, SQL, streaming, machine learning, and graph processing."
-  },
-  {
-    "isbn": "9781492050278",
-    "title": "Istio: Up and Running",
-    "authors": ["Lee Calcote", "Zack Butcher"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2019,
-    "page_count": 274,
-    "description": "Managing microservices with the Istio service mesh covering traffic management, security, observability, and policy."
-  },
-  {
-    "isbn": "9781617295539",
-    "title": "Grokking System Design Interview",
-    "authors": ["Donne Martin"],
-    "publisher": "Manning Publications",
-    "publish_year": 2021,
-    "page_count": 320,
-    "description": "Patterns and examples for system design interviews covering scalability, load balancing, caching, and distributed systems."
-  },
-  {
-    "isbn": "9780321127426",
-    "title": "Patterns of Enterprise Application Architecture",
-    "authors": ["Martin Fowler"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 2002,
-    "page_count": 560,
-    "description": "Catalog of patterns for enterprise application architecture covering domain logic, data source, and web presentation patterns."
-  },
-  {
-    "isbn": "9780735684256",
-    "title": "The Staff Engineer's Path",
-    "authors": ["Tanya Reilly"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2022,
-    "page_count": 318,
-    "description": "Guide for senior engineers navigating the staff engineer role covering technical vision, influence, and execution."
-  },
-  {
-    "isbn": "9781491973899",
-    "title": "Monolith to Microservices",
-    "authors": ["Sam Newman"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2019,
+    "isbn": "9780143037835",
+    "title": "Let My People Go Surfing",
+    "authors": [
+      "Yvon Chouinard"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
     "page_count": 272,
-    "description": "Evolutionary patterns for decomposing monolithic applications into microservices incrementally and safely."
+    "description": "The personal stories of the founder of Patagonia, Inc. describes his underprivileged childhood as an immigrant in southern California, early fame as a successful mountain climber, and company's dedication to quality and environmental responsibility. Reprint. 75,000 first printing."
   },
   {
-    "isbn": "9780596004361",
-    "title": "Head First SQL",
-    "authors": ["Lynn Beighley"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2007,
-    "page_count": 608,
-    "description": "Visual, brain-friendly introduction to SQL covering SELECT, INSERT, UPDATE, DELETE, joins, and subqueries."
+    "isbn": "9780273704744",
+    "title": "Traders, Guns & Money",
+    "authors": [
+      "Satyajit Das"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 334,
+    "description": "Derivatives. Warren Buffett once called them 'financial weapons of mass destruction.' Unlike some WMDs, however, derivatives are easy to find: nowadays, thousands of companies use them to make money and protect against risk. But most derivatives buyers simply don't understand what they're dealing with and sellers are in no rush to enlighten them. This book will! Traders, Guns and Money is a sensational first-person expose of the derivatives business, straight from one of the industry's most widely-known experts. Satyajit Das has operated for decades on both the \"buy\" and \"sell\" side, and authored some of the field's leading references. Now, he's written the first no-holds-barred insider's guide To The real derivatives business."
   },
   {
-    "isbn": "9781617292545",
-    "title": "Elasticsearch in Action",
-    "authors": ["Radu Gheorghe", "Matthew Lee Hinman", "Roy Russo"],
-    "publisher": "Manning Publications",
-    "publish_year": 2015,
-    "page_count": 400,
-    "description": "Building search applications with Elasticsearch covering indexing, querying, aggregations, and cluster management."
+    "isbn": "9780787960759",
+    "title": "The Five Dysfunctions of a Team",
+    "authors": [
+      "Patrick M. Lencioni"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 227,
+    "description": "In The Five Dysfunctions of a Team Patrick Lencioni once again offers a leadership fable that is as enthralling and instructive as his first two best-selling books, The Five Temptations of a CEO and The Four Obsessions of an Extraordinary Executive. This time, he turns his keen intellect and storytelling power to the fascinating, complex world of teams. Kathryn Petersen, Decision Tech's CEO, faces the ultimate leadership crisis: Uniting a team in such disarray that it threatens to bring down the entire company. Will she succeed? Will she be fired? Will the company fail? Lencioni's utterly gripping tale serves as a timeless reminder that leadership requires as much courage as it does insight. Throughout the story, Lencioni reveals the five dysfunctions which go to the very heart of why teams even the best ones-often struggle. He outlines a powerful model and actionable steps that can be used to overcome these common hurdles and build a cohesive, effective team. Just as with his other books, Lencioni has written a compelling fable with a powerful yet deceptively simple message for all those who strive to be exceptional team leaders."
   },
   {
-    "isbn": "9781491901632",
-    "title": "Redis in Action",
-    "authors": ["Josiah Carlson"],
-    "publisher": "Manning Publications",
-    "publish_year": 2013,
-    "page_count": 320,
-    "description": "Using Redis as a database, cache, and message broker covering data structures, persistence, and clustering."
+    "isbn": "9780671792800",
+    "title": "Principle Centered Leadership",
+    "authors": [
+      "Stephen R. Covey"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1992,
+    "page_count": 336,
+    "description": "The author invites business readers to center their professional lives around principles of excellence and quality and discusses the six conditions of effectiveness and the patterns of organizational excellence"
   },
   {
-    "isbn": "9781491953396",
-    "title": "Python Cookbook",
-    "authors": ["David Beazley", "Brian K. Jones"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2013,
-    "page_count": 706,
-    "description": "Recipes for mastering Python 3 covering data structures, strings, algorithms, metaprogramming, and network programming."
-  },
-  {
-    "isbn": "9781593275990",
-    "title": "Automate the Boring Stuff with Python",
-    "authors": ["Al Sweigart"],
-    "publisher": "No Starch Press",
-    "publish_year": 2019,
-    "page_count": 504,
-    "description": "Practical automation with Python covering files, spreadsheets, PDFs, web scraping, scheduling, and GUI automation."
-  },
-  {
-    "isbn": "9780596006754",
-    "title": "Learning Python",
-    "authors": ["Mark Lutz"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2013,
-    "page_count": 1594,
-    "description": "Comprehensive introduction to Python covering core language features, built-in types, functions, modules, and OOP."
-  },
-  {
-    "isbn": "9780321950215",
-    "title": "Growing Object-Oriented Software, Guided by Tests",
-    "authors": ["Steve Freeman", "Nat Pryce"],
-    "publisher": "Addison-Wesley Professional",
-    "publish_year": 2009,
-    "page_count": 384,
-    "description": "Test-driven development for object-oriented systems covering walking skeleton, ports and adapters, and test smells."
-  },
-  {
-    "isbn": "9780262045483",
-    "title": "The Algorithm Design Manual",
-    "authors": ["Steven S. Skiena"],
-    "publisher": "Springer",
-    "publish_year": 2020,
-    "page_count": 800,
-    "description": "Practical algorithm design covering data structures, graph algorithms, combinatorial search, and the hitchhiker's guide to algorithms."
-  },
-  {
-    "isbn": "9781491970348",
-    "title": "Python for DevOps",
-    "authors": ["Noah Gift", "Kennedy Behrman", "Alfredo Deza", "Grig Gheorghiu"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2020,
-    "page_count": 504,
-    "description": "Using Python for automation, infrastructure, and cloud management covering shell scripting, testing, and CI/CD."
-  },
-  {
-    "isbn": "9781098131944",
-    "title": "Building LLM Applications",
-    "authors": ["Valentina Alto"],
-    "publisher": "Packt Publishing",
-    "publish_year": 2023,
-    "page_count": 358,
-    "description": "Building applications with large language models covering prompt engineering, LangChain, retrieval-augmented generation, and deployment."
-  },
-  {
-    "isbn": "9781633437166",
-    "title": "AI Engineering",
-    "authors": ["Chip Huyen"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2025,
-    "page_count": 510,
-    "description": "Building production AI systems covering foundation models, RAG, fine-tuning, evaluation, and AI infrastructure."
-  },
-  {
-    "isbn": "9781098150945",
-    "title": "Prompt Engineering for LLMs",
-    "authors": ["John Berryman", "Albert Ziegler"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2024,
-    "page_count": 300,
-    "description": "Systematic approaches to prompt design covering chain-of-thought, few-shot learning, RAG integration, and evaluation."
-  },
-  {
-    "isbn": "9781098140960",
-    "title": "Developing Apps with GPT-4 and ChatGPT",
-    "authors": ["Olivier Caelen", "Marie-Alice Blete"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2023,
-    "page_count": 200,
-    "description": "Building applications with the OpenAI API covering completions, function calling, embeddings, and fine-tuning."
-  },
-  {
-    "isbn": "9781492092452",
-    "title": "Graph Algorithms",
-    "authors": ["Mark Needham", "Amy E. Hodler"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2019,
-    "page_count": 256,
-    "description": "Practical graph algorithms with Apache Spark and Neo4j covering pathfinding, centrality, community detection, and link prediction."
-  },
-  {
-    "isbn": "9781492075912",
-    "title": "Practical Statistics for Data Scientists",
-    "authors": ["Peter Bruce", "Andrew Bruce", "Peter Gedeck"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2020,
+    "isbn": "9780671708634",
+    "title": "The Seven Habits of Highly Effective People",
+    "authors": [
+      "Stephen R. Covey"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1990,
     "page_count": 368,
-    "description": "Statistical methods for data science covering exploratory analysis, regression, classification, and statistical machine learning."
+    "description": "A presentation of a holistic, integrated, principle-centered approach for solving personal and professional problems."
   },
   {
-    "isbn": "9781617295416",
-    "title": "Deep Learning with Python",
-    "authors": ["François Chollet"],
-    "publisher": "Manning Publications",
-    "publish_year": 2021,
-    "page_count": 504,
-    "description": "Deep learning with Keras and TensorFlow covering computer vision, natural language processing, and generative models."
+    "isbn": "9781857880786",
+    "title": "Snapshots From Hell",
+    "authors": [
+      "Peter Robinson"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 296,
+    "description": "This work is an attempt to provide an answer to the paramount question every prospective student asks, \"What is business school really like?\" During his first year at Stanford Business School, the author began keeping a journal of his day-to-day impressions which evolved into this book, the writing of which he came to see as a \"simple act of decency, like going back to the last calm bend in the river and nailing up a sign that reads 'Waterfall Ahead'\". From his initial harrowing days at \"maths camp\" through the dizzying phalanx of core courses, the frenzy of the exam week, the pitfalls and triumphs of the interview process (including a surreal interview with Robert Maxwell) to being wined and dined by some of the most prestigious companies in the world, Robinson's account is an irreverent story peopled with a wide range of characters."
   },
   {
-    "isbn": "9781098107857",
-    "title": "Software Architecture: The Hard Parts",
-    "authors": ["Neal Ford", "Mark Richards", "Pramod Sadalage", "Zhamak Dehghani"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2021,
-    "page_count": 459,
-    "description": "Architecture trade-off analysis for distributed systems covering service granularity, data ownership, and workflow patterns."
+    "isbn": "9780887847448",
+    "title": "Feeding the Future",
+    "authors": [
+      "Andrew Heintzman",
+      "Evan Solomon"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 336,
+    "description": "Outlines practical solutions to global food supply problems in the twenty-first century, suggesting relevant ways to address key issues related to food safety, conservation, global trade, and more. Original."
   },
   {
-    "isbn": "9781491950357",
-    "title": "Python Cookbook",
-    "authors": ["David Beazley", "Brian K. Jones"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2013,
-    "page_count": 706,
-    "description": "Recipes for mastering Python 3 covering iterators, generators, decorators, context managers, and metaprogramming."
+    "isbn": "9780767900317",
+    "title": "The Corner",
+    "authors": [
+      "David Simon",
+      "Edward Burns"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1998,
+    "page_count": 576,
+    "description": "Chronicles the experiences of a broken family over the course of a year to illustrate life in Baltimore's drug-racked inner-city"
   },
   {
-    "isbn": "9780596802301",
-    "title": "JavaScript: The Definitive Guide",
-    "authors": ["David Flanagan"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2020,
-    "page_count": 706,
-    "description": "Comprehensive JavaScript reference covering the core language, browser APIs, Node.js, and modern ES2020 features."
+    "isbn": "9780534613037",
+    "title": "Slaughterhouse Blues",
+    "authors": [
+      "Donald D. Stull",
+      "Michael J. Broadway"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 172,
+    "description": "SLAUGHTERHOUSE BLUES: THE MEAT AND POULTRY INDUSTRY IN NORTH AMERICA draws on more than 15 years of research by the authors, a cultural anthropologist and a social geographer, to present a detailed look at the meat and poultry industry in the United States and Canada. Following chapters on today's beef, poultry, and pork industries, SLAUGHTERHOUSE BLUES examines industry impacts on workers and on the communities that host its plants. The book details the authors' efforts to help communities plan for and mitigate the negative consequences of meat and poultry plants as well as community opposition to confined animal feeding operations. The book concludes by exploring alternatives to North America's model of industrialized meat production."
   },
   {
-    "isbn": "9781617297618",
-    "title": "TypeScript Quickly",
-    "authors": ["Yakov Fain", "Anton Moiseev"],
-    "publisher": "Manning Publications",
-    "publish_year": 2020,
-    "page_count": 416,
-    "description": "Practical TypeScript covering the type system, generics, decorators, and building full-stack applications with Angular."
+    "isbn": "9781580051880",
+    "title": "Homelands",
+    "authors": [
+      "Patricia Justine Tumang",
+      "Jenesha de Rivera"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 343,
+    "description": "This beautifully complex collection of essays weaves together many different perspectives of \"homeland,\" including belonging, longing, and exile, and features contributions from Etel Adnan, who chose to leave Beirut during wartime, and Agate Nesaule, who left Latvia under Nazi and Soviet threats. Original."
   },
   {
-    "isbn": "9781492044352",
-    "title": "Network Programmability and Automation",
-    "authors": ["Jason Edelman", "Scott S. Lowe", "Matt Oswalt"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2022,
-    "page_count": 600,
-    "description": "Automating networks with Python, Ansible, and APIs covering NETCONF, RESTCONF, and network data modeling."
+    "isbn": "9780521386739",
+    "title": "The Collapse of Complex Societies",
+    "authors": [
+      "Joseph Tainter"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1990,
+    "page_count": 262,
+    "description": "Dr Tainter describes nearly two dozen cases of collapse and reviews more than 2000 years of explanations. He then develops a new and far-reaching theory."
   },
   {
-    "isbn": "9781098116743",
-    "title": "Ansible: Up and Running",
-    "authors": ["Bas Meijer", "Lorin Hochstein", "René Moser"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2022,
-    "page_count": 472,
-    "description": "Automating configuration management and deployment with Ansible covering playbooks, roles, inventories, and Ansible Galaxy."
+    "isbn": "9780520048980",
+    "title": "Europe and the People Without History",
+    "authors": [
+      "Eric R. Wolf"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1982,
+    "page_count": 534,
+    "description": "Analyzes the history of European peasants, workers, and artisans as they were affected by major economic developments and trends"
   },
   {
-    "isbn": "9781491932704",
-    "title": "Learning Spark",
-    "authors": ["Jules Damji", "Brooke Wenig", "Tathagata Das", "Denny Lee"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2020,
-    "page_count": 398,
-    "description": "Big data processing with Apache Spark covering DataFrames, Spark SQL, streaming, and MLlib machine learning."
+    "isbn": "9780375708213",
+    "title": "The Working Poor",
+    "authors": [
+      "David K. Shipler"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 352,
+    "description": "An intimate portrait of poverty-level working families from a range of ethnic backgrounds in America reveals their legacy of low-paying, dead-end jobs, dysfunctional parenting, and substance abuse and charges the government with failing to provide adequate housing, health care, and education. Reprint. 40,000 first printing."
   },
   {
-    "isbn": "9781492051473",
-    "title": "Cloud Native Patterns",
-    "authors": ["Cornelia Davis"],
-    "publisher": "Manning Publications",
-    "publish_year": 2019,
-    "page_count": 400,
-    "description": "Design patterns for cloud-native applications covering dynamic configuration, service discovery, circuit breakers, and observability."
+    "isbn": "9780316341516",
+    "title": "Mythology",
+    "authors": [
+      "Edith Hamilton"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1998,
+    "page_count": 497,
+    "description": "Since its original publication by Little, Brown and Company in 1942, Edith Hamilton's Mythology has sold millions of copies throughout the world and established itself as a perennial bestseller in its various available formats: hardcover, trade paperback, mass market paperback, and e-book. Mythology succeeds like no other book in bringing to life for the modern reader the Greek, Roman, and Norse myths and legends that are the keystone of Western culture - the stories of gods and heroes that have inspired human creativity from antiquity to the present."
   },
   {
-    "isbn": "9781492078005",
-    "title": "The Manager's Path",
-    "authors": ["Camille Fournier"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2017,
-    "page_count": 244,
-    "description": "Guide for tech leads and engineering managers covering mentorship, team management, technical roadmaps, and culture."
+    "isbn": "9780812695830",
+    "title": "Star Wars and Philosophy",
+    "authors": [
+      "Kevin S. Decker",
+      "William Irwin",
+      "Jason T. Eberl"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2005,
+    "page_count": 227,
+    "description": "A collection of essays that address the philosophical questions associated with the \"Star Wars\" films."
   },
   {
-    "isbn": "9781491927625",
-    "title": "A Philosophy of Software Design",
-    "authors": ["John Ousterhout"],
-    "publisher": "Yaknyam Press",
-    "publish_year": 2021,
-    "page_count": 196,
-    "description": "Reducing software complexity through deep modules, good naming, error handling, and incremental design."
+    "isbn": "9780812695311",
+    "title": "Buffy the Vampire Slayer and Philosophy",
+    "authors": [
+      "James B. South"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 335,
+    "description": "Uses philosophical concepts in metaphysics, epistemology, ethics, and political philosophy to analyze the television series \"Buffy the Vampire Slayer.\""
   },
   {
-    "isbn": "9781098121648",
-    "title": "Generative AI on AWS",
-    "authors": ["Chris Fregly", "Antje Barth", "Shelbee Eigenbrode"],
-    "publisher": "O'Reilly Media",
-    "publish_year": 2023,
-    "page_count": 472,
-    "description": "Building generative AI applications on AWS covering foundation models, SageMaker, Bedrock, fine-tuning, and RLHF."
+    "isbn": "9780262740159",
+    "title": "Looking Awry",
+    "authors": [
+      "Slavoj \u017di\u017eek"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1992,
+    "page_count": 188,
+    "description": "Slavoj Zizek, a leading intellectual in the new social movements that are sweepingEastern Europe, provides a virtuoso reading of Jacques Lacan. Zizek inverts current pedagogicalstrategies to explain the difficult philosophical underpinnings of the French theoretician andpractician who revolutionized our view of psychoanalysis. He approaches Lacan through the motifs andworks of contemporary popular culture, from Hitchcock's Vertigo to Stephen King's Pet Sematary, fromMcCullough's An Indecent Obsession to Romero's Return of the Living Dead - a strategy of \"lookingawry\" that recalls the exhilarating and vital experience of Lacan.Zizek discovers fundamentalLacanian categories the triad Imaginary/Symbolic/Real, the object small a, the opposition of driveand desire, the split subject - at work in horror fiction, in detective thrillers, in romances, inthe mass media's perception of ecological crisis, and, above all, in Alfred Hitchcock's films. Theplayfulness of Zizek's text, however, is entirely different from that associated with thedeconstructive approach made famous by Derrida. By clarifying what Lacan is saying as well as whathe is not saying, Zizek is uniquely able to distinguish Lacan from the poststructuralists who sooften claim him.Slavoj Zizek is a Researcher in the Institute of Sociology at the University ofLjubljana, Yugoslavia. His work has been published in France and in Yugoslavia where, running as aproreform candidate, he narrowly missed being elected to the presidency of the republic ofSlovenia."
+  },
+  {
+    "isbn": "9780156717205",
+    "title": "The Philosophy of Andy Warhol",
+    "authors": [
+      "Andy Warhol"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1977,
+    "page_count": 272,
+    "description": "Warhol offers his observations of love, beauty, fame, work, and art and discusses the continuous play and display of his many fetishes"
+  },
+  {
+    "isbn": "9780262632553",
+    "title": "The Language of New Media",
+    "authors": [
+      "Lev Manovich",
+      "Roger F. Malina",
+      "Sean Cubitt"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2001,
+    "page_count": 354,
+    "description": "A stimulating, eclectic accountof new media that finds its origins in old media, particularly the cinema. In this book Lev Manovich offers the first systematic and rigorous theory of new media. He places new media within the histories of visual and media cultures of the last few centuries. He discusses new media's reliance on conventions of old media, such as the rectangular frame and mobile camera, and shows how new media works create the illusion of reality, address the viewer, and represent space. He also analyzes categories and forms unique to new media, such as interface and database. Manovich uses concepts from film theory, art history, literary theory, and computer science and also develops new theoretical constructs, such as cultural interface, spatial montage, and cinegratography. The theory and history of cinema play a particularly important role in the book. Among other topics, Manovich discusses parallels between the histories of cinema and of new media, digital cinema, screen and montage in cinema and in new media, and historical ties between avant-garde film and new media."
+  },
+  {
+    "isbn": "9780300093049",
+    "title": "Art and Beauty in the Middle Ages",
+    "authors": [
+      "Umberto Eco"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 144,
+    "description": "In this authoritative, lively book, the celebrated Italian novelist and philosopher Umberto Eco presents a learned summary of medieval aesthetic ideas. Juxtaposing theology and science, poetry and mysticism, Eco explores the relationship that existed between the aesthetic theories and the artistic experience and practice of medieval culture. \"[A] delightful study. . . . [Eco's] remarkably lucid and readable essay is full of contemporary relevance and informed by the energies of a man in love with his subject.\"--Robert Taylor, Boston Globe \"The book lays out so many exciting ideas and interesting facts that readers will find it gripping.\"--Washington Post Book World \"A lively introduction to the subject.\"--Michael Camille, The Burlington Magazine \"If you want to become acquainted with medieval aesthetics, you will not find a more scrupulously researched, better written (or better translated), intelligent and illuminating introduction than Eco's short volume.\"--D. C. Barrett, Art Monthly"
+  },
+  {
+    "isbn": "9781580175203",
+    "title": "Cider",
+    "authors": [
+      "Annie Proulx",
+      "Lew Nichols"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 224,
+    "description": "The Pilgrims drank cider as they sailed to America aboard the Mayflower. John Adams had a tankard of cider every morning at breakfast. After a long day on safari, Ernest Hemingway liked to kick back beside the campfire with a glass of cider. And Robert Frost saluted his favorite beverage with a poem titled ?In A Glass of Cider.? Neck and neck with brewing beer at home is the resurgence of making cider. Whether sweet, hard, blended, or sparkling, trend watchers say cider, once the preferred beverage of early America, could very well become the drink of the future. (Hard cider is the fastest growing segment of the beverage industry.) Keeping pace with the commercial cider producers are small-scale and individual cider makers who have discovered how easy it is to make their own. After all, the only ingredient you need is an apple. In this updated edition of Cider, Annie Proulx and Lew Nichols take you step-by-step through the process that renders fruit into a refreshing drink. In addition to learning about the equipment you?ll need to make a glorious cider, Proulx and Nichols also discuss the pros and cons of various types of apple presses ? from traditional heavy grinders to sleek hydraulic presses. You?ll also learn about the glass bottles vs. wooden barrels debate; how to filter, fine, and rack your cider; and where and how to store it. Proulx and Nichols provide detailed recipes for making six types of cider: still, sparkling, champagne, barrel, French, and flavored, with advice on which apples to use to achieve a tart, aromatic, astringent, or neutral quality in your cider. In fact, this book is brimming with expert advice on cidermaking. If you want to plant your own apple orchard, this book has an entire chapter that lists which cultivars of apples thrive in which parts of the United States and Canada, along with each cultivar?s characteristics and when it is ready for harvesting. Another chapter explains how to care for an orchard, from improving the soil to pruning and thinning the trees to fighting off pests and wildlife. Once a cidermaker has learned how to make excellent cider, he or she is likely to look for further fields t o explore. With that in mind, the authors include a chapter on making cider vinegars and brandy and using cider in cooking. Finally, Proulx and Nichols walk you through the latest federal regulations covering the production and sale of homemade cider in the United States and Canada, and they familiarize you with the kind of impact state and provincial laws can make.The clear, simple language, numerous illustrations, and detailed step-by-step directions make it easy for even novices to become skilled cidermakers. This revised edition of the classic handbook is a complete guide for anyone who wants to discover the pleasure of making ? and drinking ? fresh cider."
+  },
+  {
+    "isbn": "9780609602195",
+    "title": "The Barefoot Contessa Cookbook",
+    "authors": [
+      "Ina Garten"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1999,
+    "page_count": 256,
+    "description": "Presents a collection of recipes for appetizers, entrees, desserts, and accompaniments"
+  },
+  {
+    "isbn": "9781933615097",
+    "title": "The Best of America's Test Kitchen 2007",
+    "authors": [
+      "America's Test Kitchen"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 312,
+    "description": "Presents nearly one thousand recipes--from appetizers and salads to entrees and desserts--developed by America's Test Kitchen chefs, along with tips for choosing equipment, preparing food, or saving money in the kitchen."
+  },
+  {
+    "isbn": "9781740591201",
+    "title": "Cuba",
+    "authors": [
+      "Conner Gorry",
+      "David Stanley"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 448,
+    "description": "Reviews the history, geography, and culture of Cuba, describes tourist attractions in each region, and recommends hotels and restaurants."
+  },
+  {
+    "isbn": "9781741045918",
+    "title": "Europe on a Shoestring",
+    "authors": [
+      "Sarah Johnstone"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2007,
+    "page_count": 1284,
+    "description": "Lonely Planet's Shoestring Guides are the passport to the adventure of a lifetime--without blowing a traveller's budget. Along with insider tips on how to eat, sleep and travel cheaply are sections that cover studying, working and volunteering.Europe on a Shoestring is the single most comprehensive guide to Europe, covering 44 countries and Kaliningrad."
+  },
+  {
+    "isbn": "9780312360863",
+    "title": "Let's Go Australia 9th Edition",
+    "authors": [
+      "Let's Go Inc"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 784,
+    "description": "For over 40,000 years, people have been arriving awestruck on Australia, at the edge of the earth. Researched and compiled entirely by students who know how to see the world on the cheap, this guide contains insider tips and information for the socially conscious traveller."
+  },
+  {
+    "isbn": "9780875428321",
+    "title": "Three Books of Occult Philosophy",
+    "authors": [
+      "Heinrich Cornelius Agrippa von Nettesheim"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1993,
+    "page_count": 1024,
+    "description": "Now you can learn from the original, most important source for magic in the Western world that has ever been published, when you get Agrippa's Three Books of Occult Philosophy. This massive volume was originally published in 1531, and occultists have been drawing on it ever since. Now, Llewellyn is proud to produce the first complete reprint of the original English translation in the last 500 years. Donald Tyson edited this work and removed the hundreds of errors that appeared in the original translation. He also fully annotated the work, to make it understandable--and usable--by people today. \u00b7Discover what the Renaissance scholar knew about astrology, medicine, history, herbs, geography, animals, angels, devils, Witches, charms, the weather, and a host of other subjects \u00b7Gain immediate reference to a vast amount of arcane, but completely annotated, magical material \u00b7Find corrected drawings of seals, sigils, and magic squares, and correctly represented geomantic figures \u00b7Explore the practical Kabbalah, geomancy, the magic squares, the elements, the humors, and the Soul of the World \u00b7Consult the new Biographical dictionary for background on each of the hundreds of writers and historical figures referred to by Agrippa \u00b7Consult the new Geographical Dictionary for data on referenced rivers, mountains, nations, cities--many of which now carry different names. The Three Books of Occult Philosophyis the most complete repository of pagan and Neoplatonic magic ever compiled. This book is packed with material you will not find elsewhere, including copious extracts on magic from obscure or lost works by Pythagoras, Ptolemy, Plato, Aristotle, and many others. Tyson's detailed annotations clarify difficult references and provide origins of quotations, even expanding upon them in many cases, in order to make Agrippa's work more accessible to the modern reader. The Three Books of Occult Philosophy is the ultimate \"how-to\" for magical workings. It describes how to work all manner of divinations and natural and ceremonial magic in such clear and useful detail that it is still the guidefor modern techniques. The extensive new supplementary material makes this wisdom practical for use today. The Three Books of Occult Philosophyis an essential reference tool for all students of the occult. Get your copy today."
+  },
+  {
+    "isbn": "9781842931851",
+    "title": "Mysteries",
+    "authors": [
+      "Colin Wilson"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 672,
+    "description": "Through his own cathartic experiences, Colin Wilson discovered that human beings consist of a ladder or hierarchy of selves, whose upper members may be called on at will for personal transformation and deep knowledge. \"Mysteries\" attempts to explain all paranormal phenomena -- from precognition to Uri Geller's spoon bending -- in terms of this theory. Included are detailed studies of haunting, possession, and \" demonic hypnosis, \" and also of magic, the Kabbalah, and astrology. At the heart of the book is a fascinating chapter on the \" Great Secret\" of the alchemists, which Wilson sees as the key to the mystery of the \" ladder of selves.\""
+  },
+  {
+    "isbn": "9780971500761",
+    "title": "Discovery of the Presence of God",
+    "authors": [
+      "David R. Hawkins"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 296,
+    "description": "Finalizes and further clarifies the true nature and core of the condition termed \"Enlightenment.\" It is primarily an instruction manual for the serious spiritual devotee, and reveals information only known by those who have transcended the ego to reach Divine Realization. This is the inner route from the self to the Self. The subjective states of the mystic are of great interest, but historically never have been clarified to the degree presented in this semi-autobiographical account that also provides the means by which to identify their rare occurrence, and thus describe the core characteristics of Spiritual Truth. Devoid of ecclesiastical doctrine or religious belief systems, the pristine essence of all spiritual Truth is revealed in its purity with unprecedcented clarity."
+  },
+  {
+    "isbn": "9780934380232",
+    "title": "The Crowd: Extradordinary Popular Delusions: Twin Classics of Crowd Pyschology",
+    "authors": [
+      "Gustave Le Bon",
+      "Charles Mackay"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1993,
+    "page_count": 288,
+    "description": "There are two classic texts that deal with crowd psychology and the irrational behavior that characterizes large groups of people acting en masse. They are The Crowd, and Extraordinary Popular Delusions and the Madness Crowds. Both books provide lucid and witty insights into the madness of crowd psychology, such as the tulipmania in Holland, when the price of tulip bulbs was up to astronomical heights. Both of these books are combined into a single volume for the price of one!"
+  },
+  {
+    "isbn": "9780425099995",
+    "title": "The Psychology of Winning",
+    "authors": [
+      "Denis Waitley"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1986,
+    "page_count": 176,
+    "description": "\"A heavyweight amoung motivational writers.\"?Charles Paul conn, author of An Uncommon Freedom."
+  },
+  {
+    "isbn": "9781573226325",
+    "title": "Awakening at Midlife",
+    "authors": [
+      "Kathleen A. Brehony"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1997,
+    "page_count": 384,
+    "description": "\"A Jungian-oriented psychotherapist, Kathleen Brehony illuminates a new path for people on their midlife journey.\"--Jacket."
+  },
+  {
+    "isbn": "9780072226966",
+    "title": "Incident Response & Computer Forensics, 2nd Ed.",
+    "authors": [
+      "Kevin Mandia",
+      "Chris Prosise"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 507,
+    "description": "Written by FBI insiders, this updated best-seller offers a look at the legal, procedural, and technical steps of incident response and computer forensics. Including new chapters on forensic analysis and remediation, and real-world case studies, this revealing book shows how to counteract and conquer today\u2019s hack attacks."
+  },
+  {
+    "isbn": "9780321303370",
+    "title": "The Non-designer's Web Book",
+    "authors": [
+      "Robin Williams",
+      "John Tollett"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2006,
+    "page_count": 335,
+    "description": "The top-selling Web design guide returns - completely updated to address the most current browsers, software, and standards!"
+  },
+  {
+    "isbn": "9781590593899",
+    "title": "Joel on Software",
+    "authors": [
+      "Avram Joel Spolsky"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 384,
+    "description": "* Covers three years of the best essays. * Essays range from technical to humorous, but are always tangible. * Beautifully written and extremely timely. * Google lists 183,000 links for \"Joel on Software\". * Spolsky is one of the most popular programmers around today, with legions of followers."
+  },
+  {
+    "isbn": "9780743250979",
+    "title": "The 7 Habits of Highly Effective People Personal Workbook",
+    "authors": [
+      "Stephen R. Covey"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2003,
+    "page_count": 192,
+    "description": "Outlining seven key organizational rules for improving effectiveness and increasing productivity at work and at home, a companion volume to The 7 Habits of Highly Effective People presents a step-by-step guide that includes in-depth exercises and solutions that teach the fundamentals of fairness, integrity, honesty, and dignity and help readers set goals, enhance relationships, and promote success. Original. 75,000 first printing."
+  },
+  {
+    "isbn": "9780764553028",
+    "title": "Sex For Dummies",
+    "authors": [
+      "Sabine Walter"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 432,
+    "description": "Does Viagra work for women? What are the side effects from using Uprema? And what the heck is Zonagen? If you thought sex hasn't changed much over the years you have a lot to learn, and Dr. Ruth is the one to tell you all about it! Dr. Ruth is back with a new edition that tackles the hottest, most current sexual issues. Updated material includes expanded coverage of medical concerns, from prostate cancer and Viagra to birth control and sexually transmitted diseases. In addition, expert advice cuts through the medical jargon and presents the latest and most comprehensive information on AIDS \u2013 with new statistics and research to current treatments. New and updated illustrations supplement no-nonsense advice on everything from puberty to procreation, and expanded coverage of cybersex resources offers tips for exploring sex on the Internet to enhance understanding and increase enjoyment while protecting kids from inappropriate web sites. Sex For Dummies, 2nd Edition provides you with the information you need to make smart choices about your sexuality."
+  },
+  {
+    "isbn": "9780446526128",
+    "title": "Ten Things I Wish I'd Known - Before I Went Out into the Real World",
+    "authors": [
+      "Maria Shriver"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 144,
+    "description": "Award-winning broadcast journalist and NBC anchor-woman Maria Shriver reveals the lessons she has learned that have guided her journey as a career woman, wife and mother."
+  },
+  {
+    "isbn": "9780761929949",
+    "title": "The Politics of Injustice",
+    "authors": [
+      "Katherine Beckett",
+      "Theodore Sasson"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2000,
+    "page_count": 272,
+    "description": "Examining the role of crime in American politics and culture, The Politics of Injustice, Second Edition provides a better understanding of the nature of crime and punishment in America, as well as the cultural and political contexts in which they occur. Updated throughout, this book will be of interest to students in all areas of Criminology especially those involved in critical issues in Criminal Justice."
+  },
+  {
+    "isbn": "9781556434952",
+    "title": "Empire 2.0",
+    "authors": [
+      "R\u00e9gis Debray"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2004,
+    "page_count": 144,
+    "description": "As citizens of newly-admitted states in the larger US of W, hitherto politically impotent Europeans will be able to vote in the only elections that really matter.\"--Jacket."
+  },
+  {
+    "isbn": "9780452284982",
+    "title": "A Long Short War",
+    "authors": [
+      "Christopher Hitchens"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2002,
+    "page_count": 112,
+    "description": "Presents an eyewitness account of the 2003 war in Iraq while arguing that the war actually began in 1990 when Saddam Hussein invaded Kuwait, and discusses how the conflict has divided public opinion."
+  },
+  {
+    "isbn": "9781573228718",
+    "title": "Still Here",
+    "authors": [
+      "Ram Dass"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 2001,
+    "page_count": 224,
+    "description": "The noted spiritualist offers humorous and insightful guidance for exploring the joy, pain, and opportunities of the later phases of life."
+  },
+  {
+    "isbn": "9780060192778",
+    "title": "Mars and Venus Book of Days",
+    "authors": [
+      "John Gray"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1998,
+    "page_count": 368,
+    "description": "Provides daily reminders of the differences in behavior and communication styles of men and women"
+  },
+  {
+    "isbn": "9780688140717",
+    "title": "Trapped in T Mirror",
+    "authors": [
+      "Elan Golomb"
+    ],
+    "publisher": "Unknown",
+    "publish_year": 1995,
+    "page_count": 272,
+    "description": "In this compelling book, Elan Golomb identifies the crux of the emotional and psychological problems of millions of adults. Simply put, the children of narcissist -- offspring of parents whose interest always towered above the most basic needs of their sons and daughters -- share a common belief: They believe they do not have the right to exist. The difficulties experienced by adult children of narcissists can manifest themselves in many ways: for examples, physical self-loathing that takes form of overeating, anorexia, or bulimia; a self-destructive streak that causes poor job performance and rocky personal relationships; or a struggle with the self that is perpetuated in the adult's interaction with his or her own children. These dilemmas are both common and correctable, Dr. Golomb tells us. With an empathic blend of scholarship and case studies, along with her own personal narrative of her fight for self, Dr. Golomb plumbs the depths of this problem, revealing its mysterious hold on the affairs of otherwise bright, aware, motivated, and worthy people. Trapped in the Mirror explores. the nature of the paralysis and lack of motivation so many adults feel stress and its role in exacerbating childhood wrongs why do many of our relationships seem to be \"reruns\" of the past how one's body image can be formed by faulty parenting how anger must be acknowledge to be overcome and, most important, how even the most traumatized self can be healed. Rooted in a profoundly humanist traditional approach, and suffused with the benefit of the latest knowledge about intrafamily relationships, Trapped in the Mirror offers more than the average self-help book; it is truly the first self-heal book for millions."
   }
 ]

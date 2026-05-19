@@ -12,11 +12,12 @@ defaults:
   json_mode: true
   granularity: Record
   run_mode: online
-  model_vendor: openai
-  model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
+  model_vendor: ollama_cloud
+  model_name: gpt-oss:120b-cloud
+  batch_max_workers: 12
+  api_key: OLLAMA_API_KEY
   is_operational: true
-  batch_max_workers: 8
+  record_limit: 3
   data_source:
     type: local
     folder: ./staging
@@ -41,8 +42,6 @@ actions:
     intent: "Classify book into BISAC categories based on title, author, and description"
     schema: classify_genre
     prompt: $book_catalog_enrichment.Classify_Book_Genre
-    # model_vendor: ollama_local                   # Uncomment for local Ollama (taxonomy tasks work with small models)
-    # model_name: llama3.2:latest
     context_scope:
       observe:
         - source.*
@@ -59,9 +58,6 @@ actions:
     intent: "AI reviews BISAC classification quality and flags issues for human"
     schema: ai_review_classification
     prompt: $book_catalog_enrichment.AI_Review_Classification
-    model_vendor: groq
-    model_name: llama-3.1-8b-instant
-    api_key: GROQ_API_KEY
     context_scope:
       observe:
         - classify_genre.primary_bisac_code
@@ -160,6 +156,8 @@ actions:
       observe:
         - validate_bisac.*
         - write_description.*
+        - source.title
+        - source.authors
 
   # ============================================================================
   # STEP 6a: GENERATE SEARCH CRITERIA FOR RECOMMENDATIONS
@@ -173,6 +171,9 @@ actions:
       observe:
         - validate_bisac.*
         - write_description.*
+        - source.isbn
+        - source.title
+        - source.authors
 
   # ============================================================================
   # STEP 6b: RETRIEVE CANDIDATE BOOKS FROM CATALOG
@@ -201,6 +202,8 @@ actions:
         - validate_bisac.*
         - write_description.*
         - retrieve_candidates.*
+        - source.title
+        - source.authors
 
   # ============================================================================
   # STEP 7: ASSESS READING LEVEL
@@ -214,6 +217,8 @@ actions:
       observe:
         - validate_bisac.*
         - write_description.*
+        - source.title
+        - source.page_count
 
   # ============================================================================
   # STEP 8: SCORE CATALOG QUALITY (merges all parallel branches)
@@ -230,6 +235,8 @@ actions:
         - write_description.*
         - validate_bisac.*
         - assess_reading_level.*
+        - source.isbn
+        - source.title
       passthrough:
         # Source metadata
         - write_description.isbn
@@ -300,7 +307,7 @@ actions:
     schema: select_for_users
     granularity: Record
     guard:
-      condition: 'passes_filter'
+      condition: 'filter_quality.passes_filter == true'
       on_false: filter
     context_scope:
       observe:
