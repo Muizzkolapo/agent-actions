@@ -507,7 +507,11 @@ class BatchProcessingService:
                     )
                     return None  # Recovery pending
 
-        recovery_state = RecoveryStateManager.load(output_directory, file_name)
+        # Do NOT load recovery state here. The original batch path processes
+        # from scratch — any existing recovery_state file is stale (left by a
+        # crashed run). Passing it would poison the reprompt check with a stale
+        # reprompt_attempt counter, causing it to think attempts are exhausted.
+        # Stale files are cleaned up in _finalize_batch_output.
         should_continue = self._check_and_submit_reprompt(
             batch_results=batch_results,
             context_map=context_map,
@@ -517,7 +521,7 @@ class BatchProcessingService:
             agent_config=agent_config,
             manager=manager,
             provider=provider,
-            recovery_state=recovery_state,
+            recovery_state=None,
         )
         if not should_continue:
             return None  # Reprompt submitted, processing paused
@@ -611,7 +615,12 @@ class BatchProcessingService:
         """Finalize batch processing: convert, write output, fire events, cleanup.
 
         Delegates to processing_recovery.finalize_batch_output then cleanup_recovery.
+        Also cleans up any stale recovery state left by a crashed previous run.
         """
+        # Clean up stale recovery state (e.g. from a crashed previous run).
+        # The recovery path already does this in _finalize_and_cleanup, but the
+        # original batch path goes through this method instead and must also clean up.
+        RecoveryStateManager.delete(output_directory, file_name)
         output_path = _finalize_batch_output_impl(
             self,
             batch_results=batch_results,

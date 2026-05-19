@@ -966,12 +966,20 @@ class TestRecoveryLoopRootCauses:
         return_value=True,
     )
     @patch("agent_actions.llm.batch.services.processing.RecoveryStateManager")
-    def test_process_original_batch_loads_recovery_state_from_disk(
+    def test_process_original_batch_ignores_stale_recovery_state(
         self, mock_state_mgr, mock_check_reprompt, mock_reconcile
     ):
+        """Original batch path must NOT load recovery state from disk.
+
+        Any existing recovery_state file is stale (left by a crashed run).
+        Passing it to check_and_submit_reprompt would poison the reprompt
+        check with a stale reprompt_attempt counter, causing it to skip
+        reprompt when it should start fresh.
+        """
+        # Stale state exists on disk — should be ignored
         persisted_state = _make_state(
             phase="reprompt",
-            reprompt_attempt=1,
+            reprompt_attempt=2,
             reprompt_max_attempts=2,
             graduated_results=[{"custom_id": "id-grad", "content": "ok", "success": True}],
         )
@@ -1000,9 +1008,11 @@ class TestRecoveryLoopRootCauses:
         )
 
         mock_check_reprompt.assert_called_once()
+        # recovery_state must be None — stale state is NOT passed
         recovery_state_arg = mock_check_reprompt.call_args.kwargs.get("recovery_state")
-        assert recovery_state_arg is not None
-        assert recovery_state_arg.reprompt_attempt == 1
+        assert recovery_state_arg is None
+        # RecoveryStateManager.load should NOT be called in original batch path
+        mock_state_mgr.load.assert_not_called()
 
     def test_attempt_counter_not_reset_across_runs(self):
         persisted_state = _make_state(
@@ -1171,3 +1181,54 @@ class TestDownstreamBugs:
         submitted = service._retry_service.submit_reprompt_batch.call_args.kwargs["failed_results"]
         none_ids = [r.custom_id for r in submitted if r.content is None]
         assert not none_ids
+
+
+# ---------------------------------------------------------------------------
+# TestStaleRecoveryState — F13 regression tests
+# ---------------------------------------------------------------------------
+
+
+class TestStaleRecoveryState:
+    """Stale recovery state from a crashed run must not poison subsequent runs.
+
+    F13: If a batch run crashes after saving recovery_state but before
+    completing, the next fresh run must NOT inherit the stale attempt counter.
+
+    The primary regression test for stale state poisoning is
+    TestRecoveryLoopRootCauses.test_process_original_batch_ignores_stale_recovery_state.
+    This class covers the complementary cleanup concern: finalization deletes
+    leftover state files.
+    """
+
+    @patch("agent_actions.llm.batch.services.processing._finalize_batch_output_impl")
+    @patch("agent_actions.llm.batch.services.processing._cleanup_recovery_impl")
+    @patch("agent_actions.llm.batch.services.processing.RecoveryStateManager")
+    def test_finalize_deletes_stale_recovery_state(
+        self, mock_state_mgr, mock_cleanup, mock_finalize
+    ):
+        """_finalize_batch_output must delete any recovery state file on disk.
+
+        Ensures stale state from a crashed run is cleaned up after successful
+        completion of the original batch path.
+        """
+        mock_finalize.return_value = "/tmp/output.json"
+
+        svc = BatchProcessingService.__new__(BatchProcessingService)
+        svc._storage_backend = MagicMock()
+        svc._action_name = "test_action"
+
+        svc._finalize_batch_output(
+            batch_results=[_make_result("id-1")],
+            exhausted_recovery=None,
+            context_map={},
+            output_directory="/tmp/output",
+            file_name="my_action",
+            batch_id="batch-123",
+            agent_config={"kind": "llm"},
+            manager=MagicMock(),
+            action_name="test_action",
+            start_time=0.0,
+        )
+
+        # Recovery state must be deleted before finalization
+        mock_state_mgr.delete.assert_called_once_with("/tmp/output", "my_action")
