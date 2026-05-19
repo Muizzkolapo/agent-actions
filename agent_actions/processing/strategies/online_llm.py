@@ -44,6 +44,7 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
+    EMPTY_OUTPUT,
     GUARD_FILTER,
     GUARD_SKIP,
     LLM_LAYER_GUARD_FILTER,
@@ -458,6 +459,29 @@ class OnlineLLMStrategy:
                         "output": str(response),
                     },
                 )
+
+            if on_empty == "warn":
+                return ProcessingResult.failed(
+                    error=f"Empty LLM response for record '{source_guid}'",
+                    source_guid=source_guid,
+                    source_snapshot=source_snapshot,
+                    input_record=input_record,
+                )
+
+            # on_empty == "skip": produce tombstone so record is visible in output
+            tombstone = build_tombstone(
+                context.action_name,
+                input_record,
+                EMPTY_OUTPUT,
+                source_guid=source_guid,
+            )
+            return ProcessingResult.skipped(
+                passthrough_data=tombstone,
+                reason=EMPTY_OUTPUT,
+                source_guid=source_guid,
+                source_snapshot=source_snapshot,
+                input_record=input_record,
+            )
 
         # Transform response
         item_existing_content = (
