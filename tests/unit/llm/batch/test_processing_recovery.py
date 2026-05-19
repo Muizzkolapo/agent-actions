@@ -1193,56 +1193,12 @@ class TestStaleRecoveryState:
 
     F13: If a batch run crashes after saving recovery_state but before
     completing, the next fresh run must NOT inherit the stale attempt counter.
+
+    The primary regression test for stale state poisoning is
+    TestRecoveryLoopRootCauses.test_process_original_batch_ignores_stale_recovery_state.
+    This class covers the complementary cleanup concern: finalization deletes
+    leftover state files.
     """
-
-    @patch("agent_actions.llm.batch.services.processing.retrieve_and_reconcile")
-    @patch("agent_actions.llm.batch.services.processing.RecoveryStateManager")
-    def test_stale_state_does_not_skip_reprompt(self, mock_state_mgr, mock_reconcile):
-        """A stale recovery_state with exhausted attempts must not prevent fresh reprompt.
-
-        Scenario: Previous run crashed after reprompt_attempt=2 (max=2).
-        Next run should start reprompt from attempt 0, not skip it.
-        """
-        # Stale state on disk: reprompt exhausted
-        stale_state = _make_state(
-            phase="reprompt",
-            reprompt_attempt=2,
-            reprompt_max_attempts=2,
-        )
-        mock_state_mgr.load.return_value = stale_state
-        mock_reconcile.return_value = [_make_result("id-1", content="bad", success=False)]
-
-        svc = BatchProcessingService.__new__(BatchProcessingService)
-        svc._context_manager = MagicMock()
-        svc._context_manager.load_batch_context_map.return_value = {"id-1": {}}
-        svc._apply_workflow_session_id = MagicMock(return_value={"kind": "llm"})
-        svc._client_resolver = MagicMock()
-        svc._retry_service = MagicMock()
-        svc._storage_backend = MagicMock()
-        svc._action_name = "test_action"
-        svc._update_prompt_trace_responses = MagicMock()
-
-        reprompt_call_args = {}
-
-        def capture_reprompt(**kwargs):
-            reprompt_call_args.update(kwargs)
-            return True  # no reprompt needed (all pass)
-
-        svc._check_and_submit_reprompt = MagicMock(side_effect=capture_reprompt)
-        svc._finalize_batch_output = MagicMock(return_value="/tmp/output.json")
-
-        svc._process_original_batch(
-            batch_id="batch-parent",
-            file_name="my_action",
-            entry=_make_parent_entry(record_count=1),
-            output_directory="/tmp/output",
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            action_name="test_action",
-        )
-
-        # recovery_state=None means reprompt starts fresh (attempt 0)
-        assert reprompt_call_args["recovery_state"] is None
 
     @patch("agent_actions.llm.batch.services.processing._finalize_batch_output_impl")
     @patch("agent_actions.llm.batch.services.processing._cleanup_recovery_impl")
