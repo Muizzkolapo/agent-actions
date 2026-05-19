@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove dormant eval_item fallback in prefilter_by_guard — always uses build_guard_context for consistent online/batch guard parity"
+time: 2026-05-19T00:08:00.000000Z

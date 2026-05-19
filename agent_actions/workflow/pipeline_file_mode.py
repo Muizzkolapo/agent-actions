@@ -363,34 +363,6 @@ def prefilter_by_guard(
     # The config expander normalizes user-facing "on_false" into "behavior"
     behavior = GuardBehavior(guard_config.get("behavior", "filter"))
 
-    # Determine whether full context building is available.
-    has_pipeline_context = any(
-        v is not None
-        for v in (
-            agent_indices,
-            source_data,
-            version_context,
-            workflow_metadata,
-            dependency_configs,
-        )
-    )
-
-    # Phase 5 unification: all production callers (UnifiedProcessor._guard_filter
-    # and _guard_filter_file_mode) pass full pipeline context. The eval_item-only
-    # fallback exists for test convenience and would reintroduce the pre-Phase-5
-    # online/batch guard divergence if a production caller ever omitted the
-    # context kwargs. Log once per call so the regression is visible in ops logs
-    # — quiet enough not to spam test runs (one log line, not per-record).
-    if not has_pipeline_context:
-        logger.warning(
-            "prefilter_by_guard called for agent=%s without pipeline context "
-            "(agent_indices/source_data/version_context/workflow_metadata/dependency_configs); "
-            "falling back to eval_item-only guard context. This diverges from "
-            "TaskPreparer.prepare() and breaks online/batch guard parity. "
-            "Production callers must pass pipeline context kwargs.",
-            agent_name,
-        )
-
     passing: list[dict] = []
     skipped: list[dict] = []
     original_passing: list[dict] = []
@@ -398,20 +370,17 @@ def prefilter_by_guard(
     for idx, item in enumerate(data):
         eval_item = get_existing_content(item)
 
-        if has_pipeline_context:
-            context = build_guard_context(
-                item,
-                agent_name=agent_name,
-                agent_config=agent_config,
-                agent_indices=agent_indices,
-                source_data=source_data,
-                is_first_stage=is_first_stage,
-                version_context=version_context,
-                workflow_metadata=workflow_metadata,
-                dependency_configs=dependency_configs,
-            )
-        else:
-            context = eval_item
+        context = build_guard_context(
+            item,
+            agent_name=agent_name,
+            agent_config=agent_config,
+            agent_indices=agent_indices,
+            source_data=source_data,
+            is_first_stage=is_first_stage,
+            version_context=version_context,
+            workflow_metadata=workflow_metadata,
+            dependency_configs=dependency_configs,
+        )
 
         result = evaluator.evaluate(
             item=eval_item,

@@ -147,9 +147,16 @@ def paired_execution():
 
             def online_evaluate(*, item, guard_config, context=None, **kwargs):
                 result = MagicMock()
-                result.should_execute = bool(context) and bool(
-                    context.get("upstream_ns", {}).get("status") == "ready"
-                )
+                # Context comes from build_guard_context — upstream_ns may be
+                # at top level or nested under "source" depending on kwargs.
+                is_ready = False
+                if isinstance(context, dict):
+                    ns = context.get("upstream_ns")
+                    if ns is None:
+                        ns = context.get("source", {}).get("upstream_ns")
+                    if isinstance(ns, dict):
+                        is_ready = ns.get("status") == "ready"
+                result.should_execute = is_ready
                 online_decisions.append("passed" if result.should_execute else "skipped")
                 return result
 
