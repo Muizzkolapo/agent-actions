@@ -1,8 +1,11 @@
 """Tests for UnifiedProcessor skeleton and ProcessingStrategy protocol."""
 
+from dataclasses import replace
 from typing import Any
 from unittest.mock import patch
 
+from agent_actions.config.types import RunMode
+from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
@@ -241,7 +244,6 @@ class TestUnifiedProcessorEnrichment:
 
     def test_enrichment_pipeline_is_applied(self):
         """Verify enrichment is called for every result."""
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class CountingEnricher(Enricher):
             def __init__(self):
@@ -264,7 +266,6 @@ class TestUnifiedProcessorEnrichment:
 
     def test_custom_enrichment_pipeline_used(self):
         """A custom pipeline replaces the default one."""
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class TagEnricher(Enricher):
             def enrich(self, result, context):
@@ -425,7 +426,6 @@ class TestEnrichmentFailureIsolation:
 
     def test_enrichment_failure_isolates_to_single_record(self):
         """Record 1 of 3 fails enrichment — records 0 and 2 still succeed."""
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class BombOnSecondEnricher(Enricher):
             def __init__(self):
@@ -452,7 +452,6 @@ class TestEnrichmentFailureIsolation:
 
     def test_enrichment_failure_records_error_message(self):
         """The failed record carries the enrichment error string."""
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class AlwaysFailEnricher(Enricher):
             def enrich(self, result, context):
@@ -472,7 +471,6 @@ class TestEnrichmentFailureIsolation:
 
     def test_enrichment_failure_preserves_source_guid(self):
         """The failed result carries the original record's source_guid."""
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class FailEnricher(Enricher):
             def enrich(self, result, context):
@@ -497,8 +495,6 @@ class TestBatchErrorEnrichment:
 
     def test_batch_error_result_is_enriched(self):
         """A batch FAILED result without processing_context gets enriched."""
-        from agent_actions.config.types import RunMode
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class TagEnricher(Enricher):
             def enrich(self, result, context):
@@ -513,8 +509,6 @@ class TestBatchErrorEnrichment:
         batch_error = ProcessingResult.failed(error="provider timeout", source_guid="sg-batch-err")
         assert batch_error.processing_context is None
 
-        from dataclasses import replace
-
         context = replace(_make_context(), mode=RunMode.BATCH)
         enriched = processor._enrich([batch_error], context)
 
@@ -525,9 +519,6 @@ class TestBatchErrorEnrichment:
 
     def test_batch_and_online_errors_both_enriched(self):
         """Both batch and online error results go through the same path."""
-        from agent_actions.config.types import RunMode
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
-
         enrich_calls = []
 
         class TrackingEnricher(Enricher):
@@ -539,8 +530,6 @@ class TestBatchErrorEnrichment:
         processor = UnifiedProcessor(enrichment_pipeline=pipeline)
 
         error_result = ProcessingResult.failed(error="timeout", source_guid="sg-err")
-
-        from dataclasses import replace
 
         # Online mode
         ctx_online = replace(_make_context(), mode=RunMode.ONLINE)
@@ -564,8 +553,6 @@ class TestBatchErrorEnrichmentFailure:
 
     def test_batch_error_enrichment_failure_isolated(self):
         """Batch error result that fails enrichment doesn't kill other records."""
-        from agent_actions.config.types import RunMode
-        from agent_actions.processing.enrichment import Enricher, EnrichmentPipeline
 
         class FailOnErrorResultEnricher(Enricher):
             def enrich(self, result, context):
@@ -580,8 +567,6 @@ class TestBatchErrorEnrichmentFailure:
             ProcessingResult.success(data=[{"ok": True}], source_guid="sg-ok"),
             ProcessingResult.failed(error="provider error", source_guid="sg-bad"),
         ]
-
-        from dataclasses import replace
 
         context = replace(_make_context(), mode=RunMode.BATCH)
         enriched = processor._enrich(results, context)
