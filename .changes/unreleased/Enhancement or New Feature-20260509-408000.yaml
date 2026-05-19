@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Add preflight validation for seed field references in prompt templates — catches typos and missing fields before pipeline execution instead of mid-flight at Jinja2 render time"
-time: 2026-05-09T04:08:00.000000Z

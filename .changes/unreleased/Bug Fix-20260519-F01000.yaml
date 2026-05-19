@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Guard prefilter path now writes DISPOSITION_FILTERED for filtered records instead of silently dropping them"
-time: 2026-05-19T00:10:00.000000Z

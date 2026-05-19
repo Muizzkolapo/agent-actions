@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Reorder disposition writes so terminal status (FAILED, EXHAUSTED, etc.) is committed before clearing DEFERRED — a crash between the two operations no longer leaves a record with no disposition"
-time: 2026-05-19T01:40:00.000000Z

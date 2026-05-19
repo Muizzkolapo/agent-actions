@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Extract collect_results_from_processing_results() shared helper from ResultCollector for batch/online convergence"
-time: 2026-05-18T08:00:00.000000Z

@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Remove _is_cascade_blocked fallback from batch reconciliation — get_skip_reason() is sole authority (Phase 6)"
-time: 2026-05-17T06:00:00.000000Z

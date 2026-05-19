@@ -1,0 +1,40 @@
+kind: Under the Hood
+body: |
+  Batch/online unification initiative — 29 PRs across Phases 0–9 + 13 bug fixes.
+
+  Two schedulers, one framework: batch and online now share the same guard context,
+  collect path, disposition lifecycle, tombstone contract, and observe/null semantics.
+
+  Architecture:
+  - Shared guard context builder (guard_context.py) — eliminates "works online, breaks in batch" guard divergence
+  - UnifiedProcessor.enrich_and_collect() — batch retrieve flows through the shared enrichment/collection pipeline
+  - NullNamespace sentinel — skipped/filtered namespaces resolve to None in observe, not crash
+  - Disposition write ordering — terminal disposition committed before DEFERRED clear (crash-safe)
+
+  Phases delivered:
+  - Phase 0: TDD baseline tests and shared fixtures
+  - Phase 1: Observability — prep-fail warnings, prefilter length guard, schema compile cache
+  - Phase 2: Batch prep integrity — INCLUDED only after prepare() succeeds
+  - Phase 3: Batch retrieve correctness — LLM output wins merge collisions, FAILED records reconciled
+  - Phase 4: Tombstone parity — shared build_tombstone() across online and batch
+  - Phase 5: Guard context alignment — prefilter and prepare see identical bus-shaped context
+  - Phase 6: Reconcile authority — single CASCADE source via get_skip_reason()
+  - Phase 7: Disposition lifecycle — DEFERRED stamped on batch submit, parity with online collector on retrieve
+  - Phase 8: Collector convergence — shared collect helper, batch retrieve through UnifiedProcessor
+  - Phase 9: Observe/null semantics — guards and observe share null-field contract, NullNamespace for skipped namespaces
+
+  Bug fixes (F1–F15):
+  - F1: Guard-filtered records now get DISPOSITION_FILTERED in the DB
+  - F2: Rerun retries COMPLETED_WITH_FAILURES actions
+  - F3: Orphan DEFERRED warning only fires for genuine orphans
+  - F4: Batch file processing exceptions write FAILED dispositions instead of abandoning records
+  - F5: Prompt traces cleared on --fresh and rerun reset
+  - F6+F9: Enrichment failures isolated per-record; batch errors enriched same as online
+  - F8: Prefilter eval_item fallback removed (Phase 5 anti-pattern)
+  - F10: Empty LLM responses produce explicit failure instead of silent SUCCESS
+  - F11: PassthroughEnricher copies namespace dict before mutation
+  - F12: FILE tool empty response writes per-record FAILED dispositions
+  - F13: Stale recovery state cleaned up on successful completion
+  - F14: Terminal disposition written before DEFERRED clear (crash-safe ordering)
+  - F15: CLI batch path now uses production retry/reprompt logic
+time: 2026-05-19T12:00:00.000000Z
