@@ -16,7 +16,27 @@ from agent_actions.logging.events import (
     BatchResultsProcessedEvent,
     BatchStatusEvent,
 )
-from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_PASSTHROUGH
+from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
+    DISPOSITION_SUCCESS,
+)
+
+# Dispositions that indicate a record reached a terminal outcome.
+# A DEFERRED record with a terminal sibling is NOT orphaned.
+_TERMINAL_DISPOSITIONS = frozenset(
+    {
+        DISPOSITION_SUCCESS,
+        DISPOSITION_FAILED,
+        DISPOSITION_FILTERED,
+        DISPOSITION_EXHAUSTED,
+        DISPOSITION_SKIPPED,
+    }
+)
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -157,25 +177,45 @@ class BatchLifecycleManager:
         self._warn_orphaned_deferred(agent_name)
 
     def _warn_orphaned_deferred(self, agent_name: str) -> None:
-        """Log a warning if DEFERRED dispositions remain after batch processing.
+        """Log a warning if genuinely orphaned DEFERRED records remain.
 
-        Orphaned DEFERRED records indicate records that were queued for batch
-        execution but never received a final result — e.g. due to a submission
-        failure or a provider-side drop.  This is diagnostic only and never
-        raises.
+        A record is orphaned when it has a DEFERRED disposition (set at batch
+        submit) but never received a terminal disposition (SUCCESS, FAILED,
+        FILTERED, etc.).  Records that have both DEFERRED and a terminal
+        sibling are NOT orphans — they simply have a stale DEFERRED row that
+        will be cleared.  This is diagnostic only and never raises.
         """
         try:
-            orphans = self.storage_backend.get_disposition(
+            # Fast path: query only DEFERRED (indexed). If none remain, done.
+            deferred_rows = self.storage_backend.get_disposition(
                 agent_name, disposition=DISPOSITION_DEFERRED
             )
-            if orphans:
-                sample_ids = [r.get("record_id", "?") for r in orphans[:10]]
+            if not deferred_rows:
+                return
+
+            deferred_ids = {r["record_id"] for r in deferred_rows if r.get("record_id")}
+            if not deferred_ids:
+                return
+
+            # Slow path: DEFERRED rows exist — check for terminal siblings.
+            terminal_ids: set[str] = set()
+            for disp in _TERMINAL_DISPOSITIONS:
+                for r in self.storage_backend.get_disposition(agent_name, disposition=disp):
+                    rid = r.get("record_id")
+                    if rid in deferred_ids:
+                        terminal_ids.add(rid)
+                if not (deferred_ids - terminal_ids):
+                    return
+
+            orphan_ids = deferred_ids - terminal_ids
+            if orphan_ids:
+                sample = sorted(orphan_ids)[:10]
                 logger.warning(
                     "[%s] %d record(s) still in DEFERRED state after batch completion "
                     "— possible orphans: %s",
                     agent_name,
-                    len(orphans),
-                    sample_ids,
+                    len(orphan_ids),
+                    sample,
                 )
         except Exception:
             logger.debug(
