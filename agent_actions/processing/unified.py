@@ -126,7 +126,7 @@ class UnifiedProcessor:
         (SKIPPED or FILTERED). Records that pass are forwarded to the strategy.
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, _original_passing = prefilter_by_guard(
+        passing, skipped, _original_passing, filtered = prefilter_by_guard(
             records,
             config,
             context.agent_name,
@@ -156,9 +156,9 @@ class UnifiedProcessor:
                 )
             )
 
-        filtered_count = len(records) - len(passing) - len(skipped)
-        for _i in range(filtered_count):
-            guard_results.append(ProcessingResult.filtered(source_guid=None))
+        for item in filtered:
+            source_guid = item.get("source_guid") if isinstance(item, dict) else None
+            guard_results.append(ProcessingResult.filtered(source_guid=source_guid))
 
         return passing, guard_results
 
@@ -184,7 +184,7 @@ class UnifiedProcessor:
             (passing, guard_results, original_passing)
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, original_passing = prefilter_by_guard(
+        passing, skipped, original_passing, filtered = prefilter_by_guard(
             records,
             config,
             context.agent_name,
@@ -217,9 +217,9 @@ class UnifiedProcessor:
                 )
             )
 
-        filtered_count = len(records) - len(passing) - len(skipped)
-        for _i in range(filtered_count):
-            guard_results.append(ProcessingResult.filtered(source_guid=None))
+        for item in filtered:
+            source_guid = item.get("source_guid") if isinstance(item, dict) else None
+            guard_results.append(ProcessingResult.filtered(source_guid=source_guid))
 
         return passing, guard_results, original_passing
 

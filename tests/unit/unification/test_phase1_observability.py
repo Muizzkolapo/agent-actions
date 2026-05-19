@@ -154,7 +154,7 @@ class TestPrefilterLengthGuard:
         data = [{"content": {"x": 1}}, {"content": {"x": 2}}]
         original_data = [{"content": {"x": 1, "extra": "a"}}, {"content": {"x": 2, "extra": "b"}}]
 
-        passing, skipped, original_passing = prefilter_by_guard(
+        passing, skipped, original_passing, _filtered = prefilter_by_guard(
             data, {}, "test_agent", original_data=original_data
         )
         assert len(passing) == 2

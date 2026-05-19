@@ -450,7 +450,7 @@ class TestOnlineGuardContextParity:
             mock_evaluator.evaluate.side_effect = evaluate_fn
             mock_get_eval.return_value = mock_evaluator
 
-            passing_out, skipped_out, _ = prefilter_by_guard(
+            passing_out, skipped_out, _, _filtered = prefilter_by_guard(
                 [passing_item, skipping_item], agent_config, "test_action"
             )
 

@@ -158,10 +158,10 @@ class TestUnifiedProcessorNoGuard:
         context = _make_context(guard={"clause": "item.impossible == true", "behavior": "filter"})
         records = [_make_record("sg-1")]
 
-        # Guard will filter all records
+        # Guard will filter all records — 4th value is the filtered records
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [], []),
+            return_value=([], [], [], [_make_record("sg-1")]),
         ):
             processor.process(records, context, tracking)
 
@@ -185,7 +185,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [skipped_record], []),
+            return_value=([], [skipped_record], [], []),
         ):
             output, stats = processor.process([skipped_record], context, strategy)
 
@@ -201,7 +201,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [], []),
+            return_value=([], [], [], [record]),
         ):
             output, stats = processor.process([record], context, strategy)
 
@@ -216,12 +216,13 @@ class TestUnifiedProcessorGuardFilter:
 
         passing = _make_record("sg-pass")
         skipped = _make_record("sg-skip")
+        filtered_rec = _make_record("sg-filter")
         # 3 total records: 1 passes, 1 skipped, 1 filtered
-        all_records = [passing, skipped, _make_record("sg-filter")]
+        all_records = [passing, skipped, filtered_rec]
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([passing], [skipped], [passing]),
+            return_value=([passing], [skipped], [passing], [filtered_rec]),
         ):
             output, stats = processor.process(all_records, context, strategy)
 
