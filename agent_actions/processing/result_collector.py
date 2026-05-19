@@ -193,9 +193,13 @@ def write_record_dispositions(
     """Write dispositions for batch output records.
 
     Called after batch results have been converted to workflow format.
-    Clears any prior DEFERRED disposition for each record, then writes
-    the final status matching online ResultCollector parity:
-    SUCCESS, EXHAUSTED, FAILED, PASSTHROUGH, UNPROCESSED.
+    Writes the terminal disposition first (SUCCESS, EXHAUSTED, FAILED,
+    PASSTHROUGH, UNPROCESSED), then clears the prior DEFERRED
+    disposition.  This ordering is crash-safe: if the process dies
+    between the two operations the terminal state is already committed
+    and queryable.  The UNIQUE constraint on (action_name, record_id,
+    disposition) allows both rows to coexist since the disposition
+    values differ.
 
     Disposition writes are telemetry — errors are logged but never propagated.
     """
@@ -207,20 +211,6 @@ def write_record_dispositions(
             continue
         metadata = item.get("metadata", {})
 
-        try:
-            storage_backend.clear_disposition(
-                action_name,
-                disposition=DISPOSITION_DEFERRED,
-                record_id=source_guid,
-            )
-        except Exception:
-            logger.debug(
-                "Could not clear DEFERRED disposition for %s (may not exist)",
-                source_guid,
-                exc_info=True,
-            )
-
-        # Check for evaluation/reprompt exhaustion via _recovery metadata.
         recovery = item.get("_recovery", {})
         reprompt_recovery = recovery.get("reprompt", {})
         if reprompt_recovery.get("passed") is False:
@@ -272,6 +262,19 @@ def write_record_dispositions(
                 action_name,
                 source_guid,
                 DISPOSITION_SUCCESS,
+            )
+
+        try:
+            storage_backend.clear_disposition(
+                action_name,
+                disposition=DISPOSITION_DEFERRED,
+                record_id=source_guid,
+            )
+        except Exception:
+            logger.debug(
+                "Could not clear DEFERRED disposition for %s (may not exist)",
+                source_guid,
+                exc_info=True,
             )
 
 
