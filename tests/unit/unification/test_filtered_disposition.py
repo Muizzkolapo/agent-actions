@@ -286,9 +286,12 @@ class TestFilteredDispositionWritten:
 
         # Verify DISPOSITION_FILTERED was written with the correct source_guid
         disposition_calls = [
-            c for c in mock_backend.set_disposition.call_args_list if DISPOSITION_FILTERED in str(c)
+            c
+            for c in mock_backend.set_disposition.call_args_list
+            if len(c.args) >= 3 and c.args[2] == DISPOSITION_FILTERED
         ]
         assert len(disposition_calls) == 1
+        assert disposition_calls[0].args[1] == "sg-filter"
 
     def test_file_mode_filtered_writes_disposition(self):
         """FILE mode: filtered record -> DISPOSITION_FILTERED in DB."""
@@ -357,7 +360,6 @@ class TestFilteredDispositionWritten:
         disposition_calls = [
             c
             for c in mock_backend.set_disposition.call_args_list
-            if c.kwargs.get("disposition") == DISPOSITION_FILTERED
-            or (len(c.args) >= 4 and c.args[3] == DISPOSITION_FILTERED)
+            if len(c.args) >= 3 and c.args[2] == DISPOSITION_FILTERED
         ]
         assert len(disposition_calls) == 0
