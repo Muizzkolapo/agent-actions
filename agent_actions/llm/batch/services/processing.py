@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
@@ -48,9 +49,10 @@ from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.result_collector import CollectionStats
+from agent_actions.processing.result_collector import CollectionStats, _safe_set_disposition
 from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
 from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -263,6 +265,12 @@ class BatchProcessingService:
                         "total_processed": len(processed_files),
                         "registry_size": len(all_jobs),
                     },
+                )
+                self._fail_abandoned_records(
+                    file_name=file_name,
+                    output_directory=output_directory,
+                    action_name=effective_action_name,
+                    error=e,
                 )
                 continue
 
@@ -721,6 +729,72 @@ class BatchProcessingService:
     # =========================================================================
     # HELPERS (kept in this module)
     # =========================================================================
+
+    def _fail_abandoned_records(
+        self,
+        file_name: str,
+        output_directory: str,
+        action_name: str | None,
+        error: Exception,
+    ) -> None:
+        """Write FAILED dispositions for INCLUDED records in a batch file that threw an exception.
+
+        Without this, records remain stuck with stale DEFERRED dispositions —
+        the retry command won't find them and subsequent reruns won't know they failed.
+        """
+        if not self._storage_backend or not action_name:
+            return
+
+        try:
+            context_map = self._context_manager.load_batch_context_map(
+                output_directory, file_name or "default"
+            )
+        except Exception:
+            logger.warning(
+                "Could not load context_map for failed batch %s — "
+                "records may remain with stale DEFERRED dispositions",
+                file_name,
+                exc_info=True,
+            )
+            return
+
+        reason = f"batch_processing_exception: {str(error)[:500]}"
+        failed_count = 0
+        for _custom_id, record in context_map.items():
+            if not BatchContextMetadata.is_included(record):
+                continue
+            source_guid = record.get("source_guid")
+            if not source_guid:
+                continue
+
+            try:
+                self._storage_backend.clear_disposition(
+                    action_name,
+                    disposition=DISPOSITION_DEFERRED,
+                    record_id=source_guid,
+                )
+            except Exception:
+                logger.debug(
+                    "Could not clear DEFERRED disposition for %s (may not exist)",
+                    source_guid,
+                    exc_info=True,
+                )
+
+            _safe_set_disposition(
+                self._storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_FAILED,
+                reason=reason,
+            )
+            failed_count += 1
+
+        if failed_count:
+            logger.info(
+                "Wrote FAILED disposition for %d records in failed batch %s",
+                failed_count,
+                file_name,
+            )
 
     @staticmethod
     def _cleanup_recovery_entries(manager: BatchRegistryManager, parent_file_name: str) -> None:
