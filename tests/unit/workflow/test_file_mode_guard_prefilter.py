@@ -66,6 +66,8 @@ class TestPrefilterByGuard:
         assert passing[1]["content"]["score"] == 85
         assert skipped == []
         assert original_passing == passing
+        assert len(filtered) == 1
+        assert filtered[0]["content"]["score"] == 40
 
     def test_skip_preserves_failing_records(self):
         """behavior: skip -> failing records in skipped list."""
@@ -117,6 +119,7 @@ class TestPrefilterByGuard:
         assert passing == []
         assert skipped == []
         assert original_passing == []
+        assert len(filtered) == 2
 
     def test_all_skipped(self):
         """All records fail with skip -> all in skipped."""

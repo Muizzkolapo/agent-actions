@@ -403,7 +403,7 @@ def prefilter_by_guard(
         agent_name,
         len(passing),
         len(skipped),
-        len(data) - len(passing) - len(skipped),
+        len(filtered),
         len(data),
     )
 
