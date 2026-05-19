@@ -111,20 +111,18 @@ class BatchProcessingService:
         self,
         batch_id: str,
         output_directory: str,
-        base_directory: str,
-        file_path: str,
         agent_config: dict[str, Any] | None = None,
     ) -> str:
-        """Process batch results and integrate them into workflow output system.
+        """Process a single batch by ID with retry/reprompt support.
 
-        Delegates to _process_single_batch_file so that retry/reprompt logic
-        runs identically to the production path (process_all_batch_results).
+        Uses the same retry/reprompt logic as the production path
+        (process_all_batch_results). If recovery is needed, a recovery
+        batch is submitted and ProcessingError is raised — the caller
+        must re-invoke after the recovery batch completes.
 
         Args:
             batch_id: Batch job ID
             output_directory: Output directory path
-            base_directory: Base directory for relative paths
-            file_path: Original input file path
             agent_config: Agent configuration
 
         Returns:
@@ -161,10 +159,6 @@ class BatchProcessingService:
             )
 
             if output_file is None:
-                logger.warning(
-                    "Recovery batch submitted for %s — re-invoke after recovery completes",
-                    batch_id,
-                )
                 raise ProcessingError(
                     "Batch recovery submitted — re-invoke after recovery batch completes",
                     context={"batch_id": batch_id},

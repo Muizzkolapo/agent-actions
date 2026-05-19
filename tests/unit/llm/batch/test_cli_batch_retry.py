@@ -77,8 +77,6 @@ class TestProcessBatchResultsRetryParity:
             result = service.process_batch_results(
                 batch_id="batch-123",
                 output_directory="/tmp/out",
-                base_directory="/tmp",
-                file_path="/tmp/input.json",
                 agent_config={"kind": "llm"},
             )
 
@@ -107,8 +105,6 @@ class TestProcessBatchResultsRetryParity:
                 service.process_batch_results(
                     batch_id="batch-123",
                     output_directory="/tmp/out",
-                    base_directory="/tmp",
-                    file_path="/tmp/input.json",
                 )
 
     def test_missing_entry_raises_processing_error(self):
@@ -128,8 +124,6 @@ class TestProcessBatchResultsRetryParity:
             service.process_batch_results(
                 batch_id="batch-123",
                 output_directory="/tmp/out",
-                base_directory="/tmp",
-                file_path="/tmp/input.json",
             )
 
     def test_not_completed_raises_processing_error(self):
@@ -147,6 +141,4 @@ class TestProcessBatchResultsRetryParity:
             service.process_batch_results(
                 batch_id="batch-123",
                 output_directory="/tmp/out",
-                base_directory="/tmp",
-                file_path="/tmp/input.json",
             )
