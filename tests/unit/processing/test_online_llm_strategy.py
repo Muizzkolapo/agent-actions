@@ -18,6 +18,7 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.processing.unified import ProcessingStrategy
+from agent_actions.record.reasons import EMPTY_OUTPUT
 from agent_actions.record.state import RecordState
 
 
@@ -422,7 +423,7 @@ class TestProcessRecordEmptyOutput:
         result = strategy.process_record({"field": "value"}, context)
 
         assert result.status == ProcessingStatus.SKIPPED
-        assert result.skip_reason == "empty_output"
+        assert result.skip_reason == EMPTY_OUTPUT
         assert len(result.data) == 1  # tombstone record
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
