@@ -27,12 +27,14 @@ version: "1.0.0"
 defaults:
   json_mode: true
   granularity: Record
-  run_mode: online
-  model_name: gemini-flash-lite-latest
-  model_vendor: gemini
-  api_key: GEMINI_API_KEY
+  run_mode: batch
+  model_vendor: ollama_cloud
+  model_name: gpt-oss:120b-cloud
+  batch_max_workers: 12
+  api_key: OLLAMA_API_KEY
+  record_limit: 10
   is_operational: true
-  batch_max_workers: 6
+
   context_scope:
     seed_path:
       brand_voice: $file:brand_voice.json
@@ -54,6 +56,21 @@ defaults:
 actions:
 
   # ══════════════════════════════════════════════════════════════════════════
+  # STEP 0: NORMALIZE RAW KAGGLE DATA (Tool)
+  # ══════════════════════════════════════════════════════════════════════════
+  # Transforms raw Kaggle product records into the schema the pipeline expects.
+  # Maps categories, parses prices, builds structured specs dict.
+  # ══════════════════════════════════════════════════════════════════════════
+  - name: normalize_product
+    kind: tool
+    impl: normalize_product
+    intent: "Transform raw Kaggle product data into the enrichment pipeline's expected schema"
+    schema: normalize_product
+    context_scope:
+      observe:
+        - source.*
+
+  # ══════════════════════════════════════════════════════════════════════════
   # STEP 1: GENERATE PRODUCT DESCRIPTION (LLM)
   # ══════════════════════════════════════════════════════════════════════════
   # Transforms raw technical specs into a human-readable product description.
@@ -61,6 +78,7 @@ actions:
   # that a tool could never produce. Seed data brand_voice shapes the tone.
   # ══════════════════════════════════════════════════════════════════════════
   - name: generate_description
+    dependencies: [normalize_product]
     intent: "Generate a structured product description from raw technical specs and image context"
     schema: generate_description
     prompt: $product_listing_enrichment.Generate_Product_Description
@@ -70,15 +88,15 @@ actions:
       on_exhausted: return_last
     context_scope:
       observe:
-        - source.raw_specs
-        - source.product_images_description
-        - source.product_name
-        - source.brand
+        - normalize_product.raw_specs
+        - normalize_product.product_images_description
+        - normalize_product.product_name
+        - normalize_product.brand
         - seed.brand_voice
       passthrough:
-        - source.product_id
-        - source.product_category
-        - source.current_price
+        - normalize_product.product_id
+        - normalize_product.product_category
+        - normalize_product.current_price
 
   # ══════════════════════════════════════════════════════════════════════════
   # STEP 2: FETCH COMPETITOR PRICES (Tool)
@@ -97,8 +115,8 @@ actions:
     context_scope:
       observe:
         - generate_description.search_keywords
-        - source.product_category
-        - source.current_price
+        - normalize_product.product_category
+        - normalize_product.current_price
 
   # ══════════════════════════════════════════════════════════════════════════
   # STEP 3: WRITE MARKETING COPY (LLM)
@@ -125,12 +143,12 @@ actions:
         - seed.brand_voice
         - seed.marketplace_rules
       drop:
-        - source.raw_specs
+        - normalize_product.raw_specs
       passthrough:
-        - source.product_id
-        - source.product_category
-        - source.current_price
-        - source.brand
+        - normalize_product.product_id
+        - normalize_product.product_category
+        - normalize_product.current_price
+        - normalize_product.brand
 
   # ══════════════════════════════════════════════════════════════════════════
   # STEP 4: VALIDATE MARKETPLACE COMPLIANCE (Tool)
@@ -169,11 +187,11 @@ actions:
       observe:
         - write_marketing_copy.*
         - validate_compliance.*
-        - source.product_category
-        - source.brand
+        - normalize_product.product_category
+        - normalize_product.brand
       passthrough:
-        - source.product_id
-        - source.current_price
+        - normalize_product.product_id
+        - normalize_product.current_price
 
   # ══════════════════════════════════════════════════════════════════════════
   # STEP 6: FORMAT MARKETPLACE LISTING (Tool)
@@ -196,8 +214,8 @@ actions:
         - optimize_seo.*
         - fetch_competitor_prices.*
       passthrough:
-        - source.product_id
-        - source.product_name
-        - source.brand
-        - source.current_price
-        - source.product_category
+        - normalize_product.product_id
+        - normalize_product.product_name
+        - normalize_product.brand
+        - normalize_product.current_price
+        - normalize_product.product_category

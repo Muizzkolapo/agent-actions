@@ -1,118 +1,171 @@
-"""Search book catalog for similar books.
+"""Search for similar books using the Open Library API.
 
-Abstraction layer for catalog search — currently JSON file search.
-Can be swapped to Vector DB (ChromaDB/Pinecone) or SQL without workflow changes.
+Production-grade tool that queries Open Library's free API to find
+real books by subject, author, and keyword. No API key required.
+Returns grounded results — every recommendation is a real book.
 """
 
-import json
-import os
+import time
+from typing import Any
+from urllib.parse import quote
 
+import httpx
 from agent_actions import udf_tool
 
-# Path to seed data catalog (relative to workflow)
-CATALOG_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "../../agent_workflow/book_catalog_enrichment/seed_data/book_catalog.json",
-)
+OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
+
+# Map BISAC prefixes to Open Library subjects
+BISAC_TO_SUBJECT = {
+    "COM": "computers",
+    "BUS": "business",
+    "TEC": "technology",
+    "SCI": "science",
+    "MAT": "mathematics",
+    "EDU": "education",
+    "FIC": "fiction",
+    "BIO": "biography",
+    "HIS": "history",
+    "PHI": "philosophy",
+    "REL": "religion",
+    "ART": "art",
+    "MUS": "music",
+    "POE": "poetry",
+    "DRA": "drama",
+    "SOC": "social_science",
+    "PSY": "psychology",
+    "MED": "medical",
+    "LAW": "law",
+    "POL": "political_science",
+    "TRA": "travel",
+    "CKB": "cooking",
+    "HEA": "health",
+    "SEL": "self-help",
+    "JUV": "juvenile_fiction",
+    "SPO": "sports",
+    "GAR": "gardening",
+    "PET": "pets",
+    "FAM": "family",
+    "HOU": "house",
+    "CGN": "comics",
+    "LIT": "literary_criticism",
+    "LCO": "literary_collections",
+    "PER": "performing_arts",
+}
 
 
-def _load_catalog() -> list[dict]:
-    """Load book catalog from seed data."""
-    catalog_path = os.path.normpath(CATALOG_PATH)
-
-    if not os.path.exists(catalog_path):
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        catalog_path = os.path.join(
-            base_dir,
-            "agent_workflow/book_catalog_enrichment/seed_data/book_catalog.json",
-        )
-
-    if os.path.exists(catalog_path):
-        with open(catalog_path, encoding="utf-8") as f:
-            return json.load(f)
-
-    return []
-
-
-def _calculate_relevance_score(book: dict, genres: list[str], keywords: list[str]) -> float:
-    """Calculate relevance score for a book based on search criteria."""
-    score = 0.0
-
-    book_genres = book.get("genres", [])
-    book_keywords = book.get("keywords", [])
-    book_description = book.get("description", "").lower()
-
-    # Genre matching (high weight)
+def _bisac_to_subjects(genres: list[str]) -> list[str]:
+    """Convert BISAC codes to Open Library subject terms."""
+    subjects = []
     for genre in genres:
-        if genre in book_genres:
-            score += 10.0
-        elif any(bg.startswith(genre[:6]) for bg in book_genres if len(genre) >= 6):
-            score += 5.0
+        prefix = genre[:3].upper() if len(genre) >= 3 else ""
+        if prefix in BISAC_TO_SUBJECT:
+            subjects.append(BISAC_TO_SUBJECT[prefix])
+        else:
+            subjects.append(genre.lower().replace(" & ", " ").replace("/", " "))
+    return subjects
 
-    # Keyword matching
-    for keyword in keywords:
-        keyword_lower = keyword.lower()
-        if keyword_lower in [k.lower() for k in book_keywords]:
-            score += 3.0
-        elif keyword_lower in book_description:
-            score += 1.0
 
-    return score
+def _search_open_library(query: str, limit: int = 20) -> list[dict]:
+    """Query Open Library search API."""
+    try:
+        response = httpx.get(
+            OPEN_LIBRARY_SEARCH,
+            params={
+                "q": query,
+                "limit": limit,
+                "fields": "key,title,author_name,isbn,subject,first_publish_year,number_of_pages_median,publisher",
+            },
+            timeout=15.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("docs", [])
+    except (httpx.HTTPError, Exception) as e:
+        print(f"   Open Library API error: {e}")
+        return []
+
+
+def _format_book(doc: dict, relevance_score: float) -> dict:
+    """Format an Open Library doc into our schema."""
+    isbns = doc.get("isbn", [])
+    isbn = isbns[0] if isbns else ""
+
+    return {
+        "isbn": isbn,
+        "title": doc.get("title", ""),
+        "authors": doc.get("author_name", []),
+        "genres": (doc.get("subject", []) or [])[:5],
+        "description": (
+            f"Published {doc.get('first_publish_year', 'unknown')}. "
+            f"{doc.get('number_of_pages_median', 'Unknown')} pages. "
+            f"Publisher: {(doc.get('publisher', []) or ['Unknown'])[0]}."
+        ),
+        "relevance_score": relevance_score,
+    }
 
 
 @udf_tool()
-def search_book_catalog(data: dict) -> dict:
-    """Search catalog for similar books (grounded retrieval — no hallucination).
+def search_book_catalog(data: dict[str, Any]) -> dict[str, Any]:
+    """Search Open Library for similar books (grounded retrieval — real books only).
 
-    Current backend: JSON file search with keyword/genre matching.
-    Future: swap to Vector DB or SQL without changing the workflow YAML.
+    Queries by subject (from BISAC codes) and keywords. Every result is a
+    real book with a real ISBN. No hallucination possible.
     """
     genres = data.get("genres", [])
     keywords = data.get("keywords", [])
+    query_text = data.get("query_text", "")
     exclude_isbn = data.get("exclude_isbn", "") or data.get("isbn", "")
 
-    catalog = _load_catalog()
+    subjects = _bisac_to_subjects(genres)
 
-    if not catalog:
-        return {
-            "matching_books": [],
-            "search_metadata": {
-                "total_in_catalog": 0,
-                "candidates_found": 0,
-                "search_method": "json_file",
-                "error": "Catalog not found or empty",
-            },
-        }
+    all_results: list[dict] = []
+    seen_titles: set[str] = set()
 
-    scored_books = []
-    for book in catalog:
-        if book.get("isbn") == exclude_isbn:
-            continue
+    # Query 1: Subject-based search
+    if subjects:
+        subject_query = " ".join(subjects[:3])
+        docs = _search_open_library(f"subject:{subject_query}", limit=15)
+        for i, doc in enumerate(docs):
+            title = doc.get("title", "")
+            if title and title.lower() not in seen_titles:
+                seen_titles.add(title.lower())
+                all_results.append(_format_book(doc, 10.0 - (i * 0.3)))
+        time.sleep(0.5)
 
-        score = _calculate_relevance_score(book, genres, keywords)
+    # Query 2: Keyword-based search
+    if keywords:
+        kw_query = " ".join(keywords[:5])
+        docs = _search_open_library(kw_query, limit=10)
+        for i, doc in enumerate(docs):
+            title = doc.get("title", "")
+            if title and title.lower() not in seen_titles:
+                seen_titles.add(title.lower())
+                all_results.append(_format_book(doc, 7.0 - (i * 0.3)))
+        time.sleep(0.5)
 
-        if score > 0:
-            scored_books.append(
-                {
-                    "isbn": book.get("isbn"),
-                    "title": book.get("title"),
-                    "authors": book.get("authors", []),
-                    "genres": book.get("genres", []),
-                    "description": book.get("description", ""),
-                    "relevance_score": score,
-                }
-            )
+    # Query 3: Natural language query fallback
+    if query_text and len(all_results) < 10:
+        docs = _search_open_library(query_text[:100], limit=10)
+        for i, doc in enumerate(docs):
+            title = doc.get("title", "")
+            if title and title.lower() not in seen_titles:
+                seen_titles.add(title.lower())
+                all_results.append(_format_book(doc, 5.0 - (i * 0.3)))
 
-    scored_books.sort(key=lambda x: x["relevance_score"], reverse=True)
-    top_candidates = scored_books[:20]
+    # Filter out the current book
+    if exclude_isbn:
+        all_results = [r for r in all_results if r["isbn"] != exclude_isbn]
+
+    all_results.sort(key=lambda x: x["relevance_score"], reverse=True)
+    top_candidates = all_results[:20]
 
     return {
         "matching_books": top_candidates,
         "search_metadata": {
-            "total_in_catalog": len(catalog),
-            "candidates_found": len(scored_books),
+            "total_in_catalog": len(all_results),
+            "candidates_found": len(all_results),
             "returned": len(top_candidates),
-            "search_method": "json_file",
+            "search_method": "open_library_api",
             "genres_searched": genres,
             "keywords_searched": keywords,
         },

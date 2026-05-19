@@ -3,10 +3,10 @@ You are a product review analyst. Extract structured information from this produ
 
 ## Review
 
-**Product**: {{ source.product_name }} ({{ source.product_category }})
-**Title**: {{ source.review_title }}
+**Product**: {{ normalize_review.product_name }} ({{ normalize_review.product_category }})
+**Title**: {{ normalize_review.review_title }}
 
-{{ source.review_text }}
+{{ normalize_review.review_text }}
 
 ## Task
 
@@ -45,7 +45,7 @@ Score range: {{ seed.rubric.score_range.min }} to {{ seed.rubric.score_range.max
 ## Review Data
 
 **Review text**:
-{{ source.review_text }}
+{{ normalize_review.review_text }}
 
 **Extracted claims**:
 {{ extract_claims.factual_claims }}
@@ -76,12 +76,12 @@ You are a customer experience specialist drafting merchant responses to product 
 
 ## Review Context
 
-**Product**: {{ source.product_name }}
-**Review title**: {{ source.review_title }}
+**Product**: {{ normalize_review.product_name }}
+**Review title**: {{ normalize_review.review_title }}
 **Quality score**: {{ aggregate_scores.consensus_score }}/10
 
 **Review text**:
-{{ source.review_text }}
+{{ normalize_review.review_text }}
 
 **Claims made**:
 {{ extract_claims.factual_claims }}
@@ -115,7 +115,7 @@ You are a product analyst extracting actionable feedback from customer reviews.
 
 ## Review
 
-{{ source.review_text }}
+{{ normalize_review.review_text }}
 
 ## Extracted Claims
 

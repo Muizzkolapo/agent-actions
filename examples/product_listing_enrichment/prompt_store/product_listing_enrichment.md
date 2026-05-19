@@ -3,17 +3,17 @@ You are a product copywriter who translates technical specifications into clear,
 
 ## Product
 
-**Name**: {{ source.product_name }}
-**Brand**: {{ source.brand }}
-**Category**: {{ source.product_category }}
+**Name**: {{ normalize_product.product_name }}
+**Brand**: {{ normalize_product.brand }}
+**Category**: {{ normalize_product.product_category }}
 
 ## Technical Specifications
 
-{{ source.raw_specs | tojson }}
+{{ normalize_product.raw_specs | tojson }}
 
 ## What the Product Images Show
 
-{{ source.product_images_description }}
+{{ normalize_product.product_images_description }}
 
 ## Brand Voice Guidelines
 
@@ -53,9 +53,9 @@ You are a marketplace listing copywriter. Write compelling product copy that pos
 - {{ feature }}
 {% endfor %}
 
-**Category**: {{ source.product_category }}
-**Our Price**: ${{ source.current_price }}
-**Brand**: {{ source.brand }}
+**Category**: {{ normalize_product.product_category }}
+**Our Price**: ${{ normalize_product.current_price }}
+**Brand**: {{ normalize_product.brand }}
 
 ## Competitor Pricing Context
 
@@ -120,9 +120,9 @@ You are a marketplace SEO specialist. Optimize this product listing for maximum 
 
 ## Product Context
 
-**Category**: {{ source.product_category }}
-**Brand**: {{ source.brand }}
-**Price**: ${{ source.current_price }}
+**Category**: {{ normalize_product.product_category }}
+**Brand**: {{ normalize_product.brand }}
+**Price**: ${{ normalize_product.current_price }}
 
 ## Task
 
