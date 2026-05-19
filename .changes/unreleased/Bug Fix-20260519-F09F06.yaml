@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Isolate per-record enrichment failures (F9) and enrich batch error results (F6) — a single enrichment failure no longer kills the entire action, and batch errors now go through the enrichment pipeline like online errors"
+time: 2026-05-19T09:06:00.000000Z
