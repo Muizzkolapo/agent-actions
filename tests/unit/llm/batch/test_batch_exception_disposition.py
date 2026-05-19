@@ -21,6 +21,8 @@ from agent_actions.storage.backend import DISPOSITION_FAILED
 # Helpers
 # ---------------------------------------------------------------------------
 
+_EMPTY_STATS = BatchRegistryStats(total_jobs=1, completed=1, in_progress=0, failed=0, cancelled=0)
+
 
 def _make_entry(
     batch_id: str = "batch-1",
@@ -67,6 +69,42 @@ def _build_service(
     return svc
 
 
+def _setup_single_file_failure(
+    svc: BatchProcessingService,
+    *,
+    file_name: str = "file_a",
+    batch_id: str = "batch-1",
+) -> MagicMock:
+    """Wire up a single-file registry where _process_single_batch_file raises."""
+    entry = _make_entry(batch_id=batch_id, file_name=file_name)
+    manager = MagicMock()
+    manager.get_all_jobs.return_value = {file_name: entry}
+    manager.get_registry_stats.return_value = _EMPTY_STATS
+    svc._registry_manager_factory.return_value = manager
+    return manager
+
+
+def _failed_disposition_record_ids(backend: MagicMock) -> set[str]:
+    """Extract record_ids from set_disposition calls that wrote DISPOSITION_FAILED."""
+    ids = set()
+    for c in backend.set_disposition.call_args_list:
+        # Handles both positional and keyword calling conventions
+        disposition = c[0][2] if len(c[0]) > 2 else c.kwargs.get("disposition")
+        if disposition == DISPOSITION_FAILED:
+            ids.add(c[0][1])
+    return ids
+
+
+def _run_with_failure(svc, side_effect):
+    """Patch _is_batch_ready + _process_single_batch_file, call process_all_batch_results."""
+    with (
+        patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
+        patch.object(svc, "_process_single_batch_file", side_effect=side_effect),
+    ):
+        with pytest.raises(ProcessingError):
+            svc.process_all_batch_results("/output")
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -86,47 +124,16 @@ class TestBatchExceptionDisposition:
             ("t3", "sg-3", FilterStatus.SKIPPED),
         )
         svc._context_manager.load_batch_context_map.return_value = context_map
+        _setup_single_file_failure(svc)
+        _run_with_failure(svc, ValueError("simulated error"))
 
-        entry_a = _make_entry(batch_id="batch-a", file_name="file_a")
-        manager = MagicMock()
-        manager.get_all_jobs.return_value = {"file_a": entry_a}
-        manager.get_registry_stats.return_value = BatchRegistryStats(
-            total_jobs=1, completed=1, in_progress=0, failed=0, cancelled=0
-        )
-        svc._registry_manager_factory.return_value = manager
-
-        # Simulate _is_batch_ready_for_processing returning True, then
-        # _process_single_batch_file raising a ValueError
-        with (
-            patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
-            patch.object(
-                svc,
-                "_process_single_batch_file",
-                side_effect=ValueError("simulated error"),
-            ),
-        ):
-            # Should raise ProcessingError because no files were processed
-            with pytest.raises(ProcessingError):
-                svc.process_all_batch_results("/output")
-
-        # INCLUDED records get FAILED
-        failed_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if c[0][2] == DISPOSITION_FAILED or c.kwargs.get("disposition") == DISPOSITION_FAILED
-        ]
-        assert len(failed_calls) == 2
-        failed_ids = {c[0][1] for c in failed_calls}
+        failed_ids = _failed_disposition_record_ids(backend)
         assert failed_ids == {"sg-1", "sg-2"}
 
-        # DEFERRED cleared for INCLUDED records
-        clear_calls = backend.clear_disposition.call_args_list
-        cleared_ids = {c.kwargs.get("record_id") or c[0][1] for c in clear_calls}
+        cleared_ids = {c.kwargs.get("record_id") for c in backend.clear_disposition.call_args_list}
         assert "sg-1" in cleared_ids
         assert "sg-2" in cleared_ids
-        # SKIPPED record sg-3 must NOT appear
         assert "sg-3" not in cleared_ids
-        assert "sg-3" not in failed_ids
 
     def test_failed_batch_reason_contains_exception_message(self):
         """FAILED disposition reason includes the exception message."""
@@ -135,36 +142,17 @@ class TestBatchExceptionDisposition:
 
         context_map = _make_context_map(("t1", "sg-1", FilterStatus.INCLUDED))
         svc._context_manager.load_batch_context_map.return_value = context_map
+        _setup_single_file_failure(svc, file_name="file_x", batch_id="batch-x")
+        _run_with_failure(svc, TypeError("unexpected None"))
 
-        entry = _make_entry(batch_id="batch-x", file_name="file_x")
-        manager = MagicMock()
-        manager.get_all_jobs.return_value = {"file_x": entry}
-        manager.get_registry_stats.return_value = BatchRegistryStats(
-            total_jobs=1, completed=1, in_progress=0, failed=0, cancelled=0
-        )
-        svc._registry_manager_factory.return_value = manager
-
-        with (
-            patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
-            patch.object(
-                svc,
-                "_process_single_batch_file",
-                side_effect=TypeError("unexpected None"),
-            ),
-        ):
-            with pytest.raises(ProcessingError):
-                svc.process_all_batch_results("/output")
-
-        # Check reason
         set_call = backend.set_disposition.call_args
-        assert "unexpected None" in set_call.kwargs.get("reason", set_call[1].get("reason", ""))
+        assert "unexpected None" in set_call.kwargs.get("reason", "")
 
     def test_other_files_unaffected_by_single_file_failure(self):
         """When one batch file fails, other files still process normally."""
         backend = MagicMock()
         svc = _build_service(storage_backend=backend)
 
-        # file_a will fail, file_b will succeed
         ctx_a = _make_context_map(("t1", "sg-1", FilterStatus.INCLUDED))
         ctx_b = _make_context_map(("t2", "sg-2", FilterStatus.INCLUDED))
 
@@ -179,108 +167,48 @@ class TestBatchExceptionDisposition:
         manager.get_all_jobs.return_value = {"file_a": entry_a, "file_b": entry_b}
         svc._registry_manager_factory.return_value = manager
 
-        call_count = 0
-
         def process_side_effect(**kwargs):
-            nonlocal call_count
-            call_count += 1
             if kwargs["file_name"] == "file_a":
                 raise ValueError("file_a broke")
             return "/output/file_b.json"
 
         with (
             patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
-            patch.object(
-                svc,
-                "_process_single_batch_file",
-                side_effect=process_side_effect,
-            ),
+            patch.object(svc, "_process_single_batch_file", side_effect=process_side_effect),
         ):
             result = svc.process_all_batch_results("/output")
 
-        # file_b processed successfully
         assert result == ["/output/file_b.json"]
 
-        # Only file_a's records got FAILED dispositions
-        failed_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if len(c[0]) > 2 and c[0][2] == DISPOSITION_FAILED
-        ]
-        assert len(failed_calls) == 1
-        assert failed_calls[0][0][1] == "sg-1"
+        failed_ids = _failed_disposition_record_ids(backend)
+        assert failed_ids == {"sg-1"}
 
     def test_no_disposition_when_no_storage_backend(self):
         """Without a storage backend, exception path doesn't crash."""
         svc = _build_service(storage_backend=None)
+        _setup_single_file_failure(svc)
+        _run_with_failure(svc, ValueError("boom"))
 
-        entry = _make_entry(batch_id="batch-1", file_name="file_a")
-        manager = MagicMock()
-        manager.get_all_jobs.return_value = {"file_a": entry}
-        manager.get_registry_stats.return_value = BatchRegistryStats(
-            total_jobs=1, completed=1, in_progress=0, failed=0, cancelled=0
-        )
-        svc._registry_manager_factory.return_value = manager
-
-        with (
-            patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
-            patch.object(
-                svc,
-                "_process_single_batch_file",
-                side_effect=ValueError("boom"),
-            ),
-        ):
-            with pytest.raises(ProcessingError):
-                svc.process_all_batch_results("/output")
-
-        # No crash — context_manager should not even be called for context_map
         svc._context_manager.load_batch_context_map.assert_not_called()
 
     def test_context_map_load_failure_does_not_crash(self):
         """If loading the context_map itself fails, we log and continue."""
         backend = MagicMock()
         svc = _build_service(storage_backend=backend)
-
         svc._context_manager.load_batch_context_map.side_effect = OSError("disk error")
+        _setup_single_file_failure(svc)
+        _run_with_failure(svc, ValueError("processing failed"))
 
-        entry = _make_entry(batch_id="batch-1", file_name="file_a")
-        manager = MagicMock()
-        manager.get_all_jobs.return_value = {"file_a": entry}
-        manager.get_registry_stats.return_value = BatchRegistryStats(
-            total_jobs=1, completed=1, in_progress=0, failed=0, cancelled=0
-        )
-        svc._registry_manager_factory.return_value = manager
-
-        with (
-            patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
-            patch.object(
-                svc,
-                "_process_single_batch_file",
-                side_effect=ValueError("processing failed"),
-            ),
-        ):
-            with pytest.raises(ProcessingError):
-                svc.process_all_batch_results("/output")
-
-        # No disposition writes since context_map couldn't be loaded
         backend.set_disposition.assert_not_called()
 
     def test_runtime_error_still_propagates(self):
         """RuntimeError must propagate (not be caught by the exception handler)."""
         svc = _build_service(storage_backend=MagicMock())
-
-        entry = _make_entry(batch_id="batch-1", file_name="file_a")
-        manager = MagicMock()
-        manager.get_all_jobs.return_value = {"file_a": entry}
-        svc._registry_manager_factory.return_value = manager
+        _setup_single_file_failure(svc)
 
         with (
             patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
-            patch.object(
-                svc,
-                "_process_single_batch_file",
-                side_effect=RuntimeError("fatal"),
-            ),
+            patch.object(svc, "_process_single_batch_file", side_effect=RuntimeError("fatal")),
         ):
             with pytest.raises(RuntimeError, match="fatal"):
                 svc.process_all_batch_results("/output")
@@ -290,33 +218,14 @@ class TestBatchExceptionDisposition:
         backend = MagicMock()
         svc = _build_service(storage_backend=backend)
 
-        # Record with no source_guid
         ctx = {}
         record: dict = {}
         BatchContextMetadata.set_filter_status(record, FilterStatus.INCLUDED)
         ctx["t1"] = record
-
         svc._context_manager.load_batch_context_map.return_value = ctx
 
-        entry = _make_entry(batch_id="batch-1", file_name="file_a")
-        manager = MagicMock()
-        manager.get_all_jobs.return_value = {"file_a": entry}
-        manager.get_registry_stats.return_value = BatchRegistryStats(
-            total_jobs=1, completed=1, in_progress=0, failed=0, cancelled=0
-        )
-        svc._registry_manager_factory.return_value = manager
+        _setup_single_file_failure(svc)
+        _run_with_failure(svc, ValueError("boom"))
 
-        with (
-            patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
-            patch.object(
-                svc,
-                "_process_single_batch_file",
-                side_effect=ValueError("boom"),
-            ),
-        ):
-            with pytest.raises(ProcessingError):
-                svc.process_all_batch_results("/output")
-
-        # No disposition writes for records without source_guid
         backend.set_disposition.assert_not_called()
         backend.clear_disposition.assert_not_called()

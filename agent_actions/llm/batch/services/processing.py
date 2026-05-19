@@ -49,7 +49,7 @@ from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.result_collector import CollectionStats
+from agent_actions.processing.result_collector import CollectionStats, _safe_set_disposition
 from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
@@ -780,20 +780,14 @@ class BatchProcessingService:
                     exc_info=True,
                 )
 
-            try:
-                self._storage_backend.set_disposition(
-                    action_name,
-                    source_guid,
-                    DISPOSITION_FAILED,
-                    reason=reason,
-                )
-                failed_count += 1
-            except Exception:
-                logger.exception(
-                    "Failed to write FAILED disposition for record %s in batch %s",
-                    source_guid,
-                    file_name,
-                )
+            _safe_set_disposition(
+                self._storage_backend,
+                action_name,
+                source_guid,
+                DISPOSITION_FAILED,
+                reason=reason,
+            )
+            failed_count += 1
 
         if failed_count:
             logger.info(
