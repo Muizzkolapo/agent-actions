@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Fix stale recovery state from crashed batch run poisoning reprompt on next run"
-time: 2026-05-19T0F:13:00.000000Z

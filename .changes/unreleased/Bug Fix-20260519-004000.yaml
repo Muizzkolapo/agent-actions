@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Batch processing exceptions now write FAILED dispositions for all INCLUDED records instead of leaving them stuck with stale DEFERRED dispositions"
-time: 2026-05-19T00:40:00.000000Z

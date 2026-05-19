@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Stamp DISPOSITION_DEFERRED on batch submit for all records sent to the provider, enabling operators to track in-flight batch records via the disposition table"
-time: 2026-05-17T00:07:00.000000Z
