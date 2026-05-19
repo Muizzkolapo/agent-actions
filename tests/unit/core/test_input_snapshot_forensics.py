@@ -516,10 +516,11 @@ class TestFileToolSnapshot:
         ):
             results = strategy.invoke(records, context)
 
-        assert len(results) == 1
-        assert results[0].status == ProcessingStatus.FAILED
-        assert results[0].source_snapshot is not None
-        assert results[0].source_snapshot["source_guid"] == "sg-ft"
+        assert len(results) == 2
+        for i, result in enumerate(results):
+            assert result.status == ProcessingStatus.FAILED
+            assert result.source_snapshot is not None
+            assert result.source_snapshot["source_guid"] == records[i]["source_guid"]
 
     def test_failed_result_single_record_snapshot(self):
         """Single-record failure captures that record's snapshot."""

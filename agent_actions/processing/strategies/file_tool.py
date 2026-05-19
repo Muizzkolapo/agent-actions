@@ -85,17 +85,17 @@ class FileToolStrategy:
             )
 
             if is_empty_response(raw_response) and processable:
-                # FILE mode collapses all input records into one failure result.
-                # Snapshot captures only processable[0] — for multi-record batches the
-                # error message includes the total count for context.
+                error_msg = (
+                    f"Tool '{context.agent_name}' returned empty result "
+                    f"from {len(processable)} input record(s)"
+                )
                 return quarantined_results + [
                     ProcessingResult.failed(
-                        error=(
-                            f"Tool '{context.agent_name}' returned empty result "
-                            f"from {len(processable)} input record(s)"
-                        ),
-                        source_snapshot=copy.deepcopy(processable[0]) if processable else None,
+                        error=error_msg,
+                        source_guid=record.get("source_guid"),
+                        source_snapshot=copy.deepcopy(record),
                     )
+                    for record in processable
                 ]
 
             structured_data, source_mapping = reconcile_outputs(
