@@ -117,6 +117,9 @@ class BatchProcessingService:
     ) -> str:
         """Process batch results and integrate them into workflow output system.
 
+        Delegates to _process_single_batch_file so that retry/reprompt logic
+        runs identically to the production path (process_all_batch_results).
+
         Args:
             batch_id: Batch job ID
             output_directory: Output directory path
@@ -128,7 +131,8 @@ class BatchProcessingService:
             Path to output file
 
         Raises:
-            ProcessingError: If batch not completed or processing fails
+            ProcessingError: If batch not completed, no registry entry,
+                recovery is pending, or processing fails
         """
         try:
             manager = self._registry_manager_factory(output_directory)
@@ -138,58 +142,35 @@ class BatchProcessingService:
                 raise ProcessingError("Batch job is not completed", context={"batch_id": batch_id})
 
             entry = manager.get_batch_job_by_id(batch_id)
-            file_name = entry.file_name if entry else None
-            context_map = (
-                self._context_manager.load_batch_context_map(
-                    output_directory, file_name or "default"
+            if not entry:
+                raise ProcessingError(
+                    "No registry entry found for batch",
+                    context={"batch_id": batch_id},
                 )
-                if file_name
-                else {}
-            )
-            agent_config = self._apply_workflow_session_id(agent_config, entry)
 
-            batch_results = retrieve_and_reconcile(
-                provider,
-                batch_id,
-                output_directory,
-                context_map=context_map,
-                record_count=entry.record_count if entry else None,
+            file_name = entry.file_name or "default"
+
+            output_file = self._process_single_batch_file(
+                batch_id=batch_id,
                 file_name=file_name,
-            )
-            processed_data, _stats = self._convert_batch_results_to_workflow_format(
-                batch_results,
-                context_map=context_map,
+                entry=entry,
                 output_directory=output_directory,
                 agent_config=agent_config,
+                manager=manager,
+                action_name=self._action_name,
             )
 
-            if self._storage_backend and self._action_name:
-                self._clear_deferred_dispositions(processed_data)
-                self._write_filtered_dispositions(context_map, self._action_name)
-                self._update_prompt_trace_responses(processed_data, self._action_name)
-
-            if self._source_handler:
-                self._source_handler.save_task_source(
-                    processed_data,
-                    file_path,
-                    base_directory,
-                    output_directory,
-                    storage_backend=self._storage_backend,
+            if output_file is None:
+                logger.warning(
+                    "Recovery batch submitted for %s — re-invoke after recovery completes",
+                    batch_id,
+                )
+                raise ProcessingError(
+                    "Batch recovery submitted — re-invoke after recovery batch completes",
+                    context={"batch_id": batch_id},
                 )
 
-            output_file = Path(output_directory) / Path(file_path).relative_to(
-                base_directory
-            ).with_suffix(".json")
-            if self._storage_backend is None:
-                ensure_directory_exists(output_file, is_file=True)
-            FileWriter(
-                str(output_file),
-                storage_backend=self._storage_backend,
-                action_name=self._action_name,
-                output_directory=output_directory,
-            ).write_target(processed_data)
-
-            return str(output_file)
+            return output_file
         except ProcessingError:
             raise
         except Exception as e:
