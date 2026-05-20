@@ -69,6 +69,7 @@ class BatchPipelineParams:
     agent_indices: dict[str, int] | None = None
     dependency_configs: dict[str, Any] | None = None
     version_context: dict[str, Any] | None = None
+    disposition_gate: Any = None  # DispositionGate (optional, for retry idempotency)
 
 
 @dataclass
@@ -155,7 +156,18 @@ class ProcessingPipeline:
             agent_config=cast(dict[str, Any], config.action_config),
             agent_name=config.action_name,
         )
-        self._unified_processor = UnifiedProcessor()
+
+        # Per-record idempotency gate — created once per pipeline, shared
+        # across all files and both online/batch paths. Instance-level cache
+        # ensures one SQL query per action, not per file.
+        from agent_actions.processing.disposition_gate import DispositionGate
+
+        self._disposition_gate = DispositionGate(
+            storage_backend=config.storage_backend,
+        )
+        self._unified_processor = UnifiedProcessor(
+            disposition_gate=self._disposition_gate,
+        )
 
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
@@ -204,6 +216,13 @@ class ProcessingPipeline:
         Expects agent_indices, dependency_configs, and version_context to be
         pre-populated on ``params`` via ``_build_pipeline_context()``.
         """
+        # Use provided gate or create one from storage_backend
+        disposition_gate = params.disposition_gate
+        if disposition_gate is None and params.storage_backend is not None:
+            from agent_actions.processing.disposition_gate import DispositionGate
+
+            disposition_gate = DispositionGate(storage_backend=params.storage_backend)
+
         task_preparator = BatchTaskPreparator(
             action_indices=params.agent_indices,
             dependency_configs=params.dependency_configs,
@@ -219,6 +238,7 @@ class ProcessingPipeline:
             context_manager=context_manager,
             registry_manager_factory=registry_manager_factory,
             storage_backend=params.storage_backend,
+            disposition_gate=disposition_gate,
         )
         # Use pre-loaded data if available (storage backend), otherwise read from file
         if params.data is not None:
@@ -441,6 +461,7 @@ class ProcessingPipeline:
                 agent_indices=agent_indices,
                 dependency_configs=dependency_configs,
                 version_context=version_context,
+                disposition_gate=self._disposition_gate,
             )
         )
         return result_path

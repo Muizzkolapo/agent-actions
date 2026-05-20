@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from agent_actions.processing.disposition_gate import (
     GATE_TERMINAL_DISPOSITIONS,
     DispositionGate,
@@ -122,9 +120,15 @@ class TestTerminalSetCorrectness:
         assert "exhausted" in GATE_TERMINAL_DISPOSITIONS
 
     def test_all_expected_terminals_present(self):
-        assert GATE_TERMINAL_DISPOSITIONS == frozenset({
-            "success", "filtered", "skipped", "passthrough", "exhausted",
-        })
+        assert GATE_TERMINAL_DISPOSITIONS == frozenset(
+            {
+                "success",
+                "filtered",
+                "skipped",
+                "passthrough",
+                "exhausted",
+            }
+        )
 
 
 # ── Test 9: EXHAUSTED cleared by retry, then gate lets through ───────

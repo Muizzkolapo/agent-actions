@@ -53,9 +53,7 @@ def _make_service(
 
     # Mock prepare_batch_tasks to return given tasks/context_map
     if tasks is not None:
-        service.prepare_batch_tasks = MagicMock(
-            return_value=(tasks, context_map or {})
-        )
+        service.prepare_batch_tasks = MagicMock(return_value=(tasks, context_map or {}))
 
     # Mock _submit_to_provider to return a successful submission
     submitted = MagicMock()

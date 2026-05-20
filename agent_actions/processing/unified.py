@@ -114,9 +114,7 @@ class UnifiedProcessor:
         # ── disposition gate (per-record idempotency) ────────────────
         carry_results: list[ProcessingResult] = []
         if self._disposition_gate is not None and passing:
-            to_process, carry_ids = self._disposition_gate.filter(
-                passing, context.action_name
-            )
+            to_process, carry_ids = self._disposition_gate.filter(passing, context.action_name)
             if carry_ids:
                 relative_path = self._get_carry_forward_path(context)
                 if relative_path and context.storage_backend:
@@ -132,9 +130,7 @@ class UnifiedProcessor:
                     )
                     # Missing records fall back to processing
                     if missing_ids:
-                        to_process.extend(
-                            r for r in passing if r.get("source_guid") in missing_ids
-                        )
+                        to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
                     # Build carry-forward results (branch on FILE vs RECORD mode)
                     for record in carry_data:
                         if raw_records is not None:

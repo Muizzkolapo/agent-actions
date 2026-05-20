@@ -73,8 +73,7 @@ class TestMergeCarryForward:
     def test_carry_forward_merged_into_output(self):
         """9 carry-forward + 1 batch-processed → 10 in output."""
         prior_records = [
-            {"source_guid": f"r{i}", "score_quality": {"score": 0.9}}
-            for i in range(9)
+            {"source_guid": f"r{i}", "score_quality": {"score": 0.9}} for i in range(9)
         ]
         backend = _mock_backend(
             target_files=["data.json"],
@@ -125,7 +124,6 @@ class TestMergeCarryForward:
 
 
 class TestCarryForwardEdgeCases:
-
     def test_malformed_json_returns_unchanged(self):
         """Malformed .batch_carry_forward.json → output unchanged, warning logged."""
         service = _make_service()

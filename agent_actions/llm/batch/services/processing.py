@@ -324,9 +324,7 @@ class BatchProcessingService:
             action_name: Override action_name for storage backend writes
         """
         effective_action = action_name or self._action_name
-        main_output = self._merge_carry_forward(
-            effective_action, main_output, output_directory
-        )
+        main_output = self._merge_carry_forward(effective_action, main_output, output_directory)
 
         if self._storage_backend is None:
             ensure_directory_exists(output_file, is_file=True)
@@ -371,9 +369,7 @@ class BatchProcessingService:
         for rel_path in self._storage_backend.list_target_files(action_name):
             try:
                 prior = self._storage_backend.read_target(action_name, rel_path)
-                carry_records.extend(
-                    r for r in prior if r.get("source_guid") in carry_guids
-                )
+                carry_records.extend(r for r in prior if r.get("source_guid") in carry_guids)
             except FileNotFoundError:
                 logger.warning(
                     "Prior output missing for %s/%s — carry-forward records lost",
@@ -389,9 +385,7 @@ class BatchProcessingService:
                 "Carry-forward/batch overlap for %d records — deduplicating",
                 len(overlap),
             )
-            carry_records = [
-                r for r in carry_records if r.get("source_guid") not in overlap
-            ]
+            carry_records = [r for r in carry_records if r.get("source_guid") not in overlap]
 
         if carry_records:
             logger.info(

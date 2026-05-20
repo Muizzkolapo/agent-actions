@@ -74,9 +74,7 @@ class _TrackingStrategy:
         for r in records:
             guid = r.get("source_guid")
             data = self._transform.get(guid, r) if guid else r
-            results.append(
-                ProcessingResult.success(data=[data], source_guid=guid)
-            )
+            results.append(ProcessingResult.success(data=[data], source_guid=guid))
         return results
 
 
@@ -88,10 +86,7 @@ class TestOnlineRecordRetry:
 
     def test_terminal_records_skipped_strategy_sees_only_cleared(self):
         terminal = {f"r{i}" for i in range(9)}
-        prior_output = [
-            {"source_guid": f"r{i}", "score_quality": {"score": 0.9}}
-            for i in range(9)
-        ]
+        prior_output = [{"source_guid": f"r{i}", "score_quality": {"score": 0.9}} for i in range(9)]
         backend = _mock_backend(terminal_ids=terminal, prior_output=prior_output)
         gate = DispositionGate(storage_backend=backend)
 
@@ -149,17 +144,17 @@ class TestOnlineFirstRun:
 
 class TestRecordsWithoutGuidProcessed:
     def test_no_guid_records_sent_to_strategy(self):
-        backend = _mock_backend(terminal_ids={"r0"}, prior_output=[
-            {"source_guid": "r0", "data": "carried"}
-        ])
+        backend = _mock_backend(
+            terminal_ids={"r0"}, prior_output=[{"source_guid": "r0", "data": "carried"}]
+        )
         gate = DispositionGate(storage_backend=backend)
 
         processor = UnifiedProcessor(disposition_gate=gate)
         strategy = _TrackingStrategy()
         records = [
-            _make_record("r0"),          # terminal → carry
-            {"content": {}},              # no guid → process
-            _make_record("r2"),          # not terminal → process
+            _make_record("r0"),  # terminal → carry
+            {"content": {}},  # no guid → process
+            _make_record("r2"),  # not terminal → process
         ]
         context = _make_context(storage_backend=backend)
 
@@ -180,9 +175,7 @@ class TestFileModeCarryForward:
     def test_file_mode_uses_unprocessed_result_type(self):
         """Spec test 4: FILE mode carry-forward uses ProcessingResult.unprocessed()."""
         terminal = {f"r{i}" for i in range(4)}
-        prior_output = [
-            {"source_guid": f"r{i}", "enriched": True} for i in range(4)
-        ]
+        prior_output = [{"source_guid": f"r{i}", "enriched": True} for i in range(4)]
         backend = _mock_backend(terminal_ids=terminal, prior_output=prior_output)
         gate = DispositionGate(storage_backend=backend)
 
@@ -197,9 +190,7 @@ class TestFileModeCarryForward:
             "_guard_filter_file_mode",
             return_value=(records, [], raw_records),
         ):
-            output, stats = processor.process(
-                records, context, strategy, raw_records=raw_records
-            )
+            output, stats = processor.process(records, context, strategy, raw_records=raw_records)
 
         # Strategy receives only the 1 cleared record
         assert len(strategy.received) == 1
@@ -253,9 +244,7 @@ class TestCarryForwardStats:
     def test_carry_forward_counted_in_stats(self):
         """Spec test 14: carry-forward records counted alongside strategy results."""
         terminal = {f"r{i}" for i in range(9)}
-        prior_output = [
-            {"source_guid": f"r{i}", "data": "carried"} for i in range(9)
-        ]
+        prior_output = [{"source_guid": f"r{i}", "data": "carried"} for i in range(9)]
         backend = _mock_backend(terminal_ids=terminal, prior_output=prior_output)
         gate = DispositionGate(storage_backend=backend)
 
