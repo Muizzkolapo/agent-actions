@@ -1,0 +1,157 @@
+"""Per-record disposition gate for retry idempotency.
+
+Partitions records into (to_process, carry_ids) based on existing terminal
+dispositions in the storage backend. Records with terminal dispositions are
+skipped by the strategy and carried forward from prior output instead.
+
+The gate runs ABOVE the strategy layer — strategies never see already-done
+records. This is the same architectural layer as :mod:`cascade_filter`.
+
+Instantiate once per workflow run. The instance-level cache avoids repeated
+SQL queries across files within the same action.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
+logger = logging.getLogger(__name__)
+
+GATE_TERMINAL_DISPOSITIONS = frozenset({
+    "success",
+    "filtered",
+    "skipped",
+    "passthrough",
+    "exhausted",
+})
+"""Dispositions that mean 'do not reprocess this record'.
+
+This is NOT the same as ``batch.py:_TERMINAL_DISPOSITIONS`` (used by the
+orphan checker). Notably:
+- FAILED is NOT gate-terminal (failed records must be reprocessed).
+- DEFERRED is NOT gate-terminal (in-flight batch records).
+- EXHAUSTED IS gate-terminal (gave up), but retry clears it, so after
+  retry the record has no disposition and flows through normally.
+"""
+
+
+class DispositionGate:
+    """Per-record idempotency gate. Instantiate once per workflow run.
+
+    The instance-level cache ensures one SQL query per action (not per file).
+    Do NOT use a module-level cache — ``retry.py`` calls ``workflow.run()``
+    in the same process after clearing dispositions, and a module-level cache
+    would retain stale data from the first run.
+    """
+
+    def __init__(self, storage_backend: StorageBackend | None = None) -> None:
+        self._backend = storage_backend
+        self._action_has_terminals: dict[str, bool] = {}
+        self._terminal_ids_cache: dict[str, set[str]] = {}
+
+    def filter(
+        self,
+        records: list[dict[str, Any]],
+        action_name: str,
+    ) -> tuple[list[dict[str, Any]], set[str]]:
+        """Partition records into (to_process, carry_ids).
+
+        Args:
+            records: Input records for the action.
+            action_name: Current action name.
+
+        Returns:
+            to_process: records with no terminal disposition (send to strategy).
+            carry_ids: source_guids with terminal dispositions (skip strategy).
+                Records without ``source_guid`` always flow through (safe default).
+        """
+        if self._backend is None:
+            return records, set()
+
+        # Fast path: one query per action, cached across files
+        if action_name not in self._action_has_terminals:
+            terminal_ids = self._backend.get_terminal_record_ids(action_name)
+            self._action_has_terminals[action_name] = bool(terminal_ids)
+            self._terminal_ids_cache[action_name] = terminal_ids
+
+        if not self._action_has_terminals[action_name]:
+            return records, set()
+
+        terminal_ids = self._terminal_ids_cache[action_name]
+
+        to_process: list[dict[str, Any]] = []
+        carry_ids: set[str] = set()
+        for record in records:
+            rid = record.get("source_guid")
+            if rid is None or rid not in terminal_ids:
+                to_process.append(record)
+            else:
+                carry_ids.add(rid)
+
+        if carry_ids:
+            logger.info(
+                "Action '%s': %d record(s) carried forward, %d to process",
+                action_name,
+                len(carry_ids),
+                len(to_process),
+            )
+
+        return to_process, carry_ids
+
+
+def build_carry_forward(
+    carry_ids: set[str],
+    action_name: str,
+    relative_path: str,
+    storage_backend: StorageBackend,
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Read prior output for carry-forward records.
+
+    Reads the current action's prior output from storage (NOT upstream input)
+    so that carried records include the action's enriched namespace.
+
+    Args:
+        carry_ids: source_guids to carry forward.
+        action_name: Current action name.
+        relative_path: Relative path to the output file in storage.
+        storage_backend: Storage backend instance.
+
+    Returns:
+        (found_records, missing_ids):
+        - found_records: records read from prior output.
+        - missing_ids: record IDs not found in prior output.
+            The caller must add these back to ``to_process`` so they flow
+            through the strategy normally — never silently dropped.
+    """
+    try:
+        prior_output = storage_backend.read_target(action_name, relative_path)
+    except FileNotFoundError:
+        logger.warning(
+            "Prior output missing for %s/%s — all %d carry-forward records will be reprocessed",
+            action_name,
+            relative_path,
+            len(carry_ids),
+        )
+        return [], carry_ids
+
+    prior_by_guid = {r["source_guid"]: r for r in prior_output if r.get("source_guid")}
+    found: list[dict[str, Any]] = []
+    missing: set[str] = set()
+    for rid in carry_ids:
+        if rid in prior_by_guid:
+            found.append(prior_by_guid[rid])
+        else:
+            missing.add(rid)
+
+    if missing:
+        logger.warning(
+            "Action '%s': %d carry-forward records not found in prior output — will reprocess",
+            action_name,
+            len(missing),
+        )
+
+    return found, missing

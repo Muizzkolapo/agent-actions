@@ -10,7 +10,12 @@ from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
-from agent_actions.storage.backend import VALID_DISPOSITIONS, Disposition, StorageBackend
+from agent_actions.storage.backend import (
+    NODE_LEVEL_RECORD_ID,
+    VALID_DISPOSITIONS,
+    Disposition,
+    StorageBackend,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -701,6 +706,21 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             cursor.execute(query, params)
             return cursor.fetchone() is not None
+
+    def get_terminal_record_ids(self, action_name: str) -> set[str]:
+        """Return record_ids with any gate-terminal disposition for an action."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        terminal = ("success", "filtered", "skipped", "passthrough", "exhausted")
+        placeholders = ",".join("?" * len(terminal))
+        sql = (
+            f"SELECT DISTINCT record_id FROM record_disposition "
+            f"WHERE action_name = ? AND disposition IN ({placeholders}) "
+            f"AND record_id != ?"
+        )
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(sql, (action_name, *terminal, NODE_LEVEL_RECORD_ID))
+            return {row["record_id"] for row in cursor.fetchall()}
 
     def clear_disposition(
         self,

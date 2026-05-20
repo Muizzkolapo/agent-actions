@@ -165,6 +165,16 @@ class StorageBackend(ABC):
         """Check whether at least one matching disposition exists."""
         return False
 
+    def get_terminal_record_ids(self, action_name: str) -> set[str]:
+        """Return record_ids with any gate-terminal disposition for an action.
+
+        Gate-terminal dispositions: success, filtered, skipped, passthrough,
+        exhausted. Excludes NODE_LEVEL_RECORD_ID sentinel.
+
+        Default returns empty set. SQLiteBackend overrides with SQL.
+        """
+        return set()
+
     def clear_disposition(
         self,
         action_name: str,
