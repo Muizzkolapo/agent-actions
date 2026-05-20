@@ -14,6 +14,7 @@ from agent_actions.logging.events import (
     ResultCollectionCompleteEvent,
     ResultCollectionStartedEvent,
 )
+from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
@@ -74,6 +75,7 @@ class CollectionStats:
     exhausted: int = 0
     deferred: int = 0
     unprocessed: int = 0
+    carry_forward: int = 0
 
     @property
     def only_guard_outcomes(self) -> bool:
@@ -330,6 +332,13 @@ def collect_results_from_processing_results(
         if status == ProcessingStatus.SUCCESS:
             data = result.data or []
 
+            if result.skip_reason == CARRY_FORWARD_REASON:
+                if data:
+                    output.extend(data)
+                stats[status_key] -= 1
+                stats["carry_forward"] += 1
+                continue
+
             # Detect parse-error records masquerading as SUCCESS.
             # The LLM provider returns {"_parse_error": ...} on JSON
             # parse failure, which flows through as SUCCESS data.
@@ -520,6 +529,14 @@ def collect_results_from_processing_results(
 
         elif status == ProcessingStatus.UNPROCESSED:
             data = result.data or []
+
+            if result.skip_reason == CARRY_FORWARD_REASON:
+                if data:
+                    output.extend(data)
+                stats[status_key] -= 1
+                stats["carry_forward"] += 1
+                continue
+
             if data:
                 reason = result.skip_reason or UNPROCESSED
                 # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
@@ -626,6 +643,7 @@ def collect_results_from_processing_results(
         exhausted=stats["exhausted"],
         deferred=stats["deferred"],
         unprocessed=stats["unprocessed"],
+        carry_forward=stats["carry_forward"],
     )
 
 

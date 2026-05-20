@@ -614,12 +614,16 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
     registry_manager_factory = create_registry_manager_factory()
+    from agent_actions.processing.disposition_gate import DispositionGate
+
+    disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
     submission_service = BatchSubmissionService(
         task_preparator=task_preparator,
         client_resolver=client_resolver,
         context_manager=context_manager,
         registry_manager_factory=registry_manager_factory,
         storage_backend=ctx.storage_backend,
+        disposition_gate=disposition_gate,
     )
     file_name = Path(ctx.file_path).name
     result = submission_service.submit_batch_job(
@@ -652,8 +656,11 @@ def _process_online_mode_with_record_processor(
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
 
+    from agent_actions.processing.disposition_gate import DispositionGate
+
     strategy = OnlineLLMStrategy(agent_config=ctx.agent_config, agent_name=ctx.agent_name)
-    processor = UnifiedProcessor()
+    disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
+    processor = UnifiedProcessor(disposition_gate=disposition_gate)
 
     processing_context = ProcessingContext(
         agent_config=cast("ActionConfigDict", ctx.agent_config),

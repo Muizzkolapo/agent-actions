@@ -311,22 +311,75 @@ class BatchProcessingService:
         output_directory: str,
         action_name: str | None = None,
     ) -> None:
-        """Write batch output file.
+        """Write batch output file, merging any carry-forward records first."""
+        effective_action = action_name or self._action_name
+        main_output = self._merge_carry_forward(effective_action, main_output, output_directory)
 
-        Args:
-            output_file: Path to write main output
-            main_output: Main output data to write
-            output_directory: Output directory path
-            action_name: Override action_name for storage backend writes
-        """
         if self._storage_backend is None:
             ensure_directory_exists(output_file, is_file=True)
         FileWriter(
             str(output_file),
             storage_backend=self._storage_backend,
-            action_name=action_name or self._action_name,
+            action_name=effective_action,
             output_directory=output_directory,
         ).write_target(main_output)
+
+    def _merge_carry_forward(
+        self,
+        action_name: str | None,
+        batch_output: list[dict[str, Any]],
+        output_directory: str,
+    ) -> list[dict[str, Any]]:
+        """Merge carry-forward records from prior output into batch results."""
+        from agent_actions.llm.batch.services.submission import (
+            BATCH_CARRY_FORWARD_FILENAME,
+        )
+
+        carry_path = Path(output_directory) / "batch" / BATCH_CARRY_FORWARD_FILENAME
+        if not carry_path.exists():
+            return batch_output
+
+        try:
+            carry_data = json.loads(carry_path.read_text())
+            carry_guids = set(carry_data.get("guids", []))
+        except (json.JSONDecodeError, KeyError):
+            logger.warning("Malformed .batch_carry_forward.json — skipping merge")
+            return batch_output
+
+        if not carry_guids or not self._storage_backend or not action_name:
+            return batch_output
+
+        from agent_actions.processing.disposition_gate import build_carry_forward
+
+        carry_records: list[dict[str, Any]] = []
+        for rel_path in self._storage_backend.list_target_files(action_name):
+            found, _missing = build_carry_forward(
+                carry_guids, action_name, rel_path, self._storage_backend
+            )
+            carry_records.extend(found)
+
+        batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
+        overlap = carry_guids & batch_guids
+        if overlap:
+            logger.warning(
+                "Carry-forward/batch overlap for %d records — deduplicating",
+                len(overlap),
+            )
+            carry_records = [r for r in carry_records if r.get("source_guid") not in overlap]
+
+        if carry_records:
+            logger.info(
+                "Merging %d carry-forward records into batch output for %s",
+                len(carry_records),
+                action_name,
+            )
+
+        try:
+            carry_path.unlink()
+        except OSError:
+            logger.debug("Failed to clean up %s", carry_path)
+
+        return batch_output + carry_records
 
     def _process_single_batch_file(
         self,

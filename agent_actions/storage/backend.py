@@ -165,6 +165,10 @@ class StorageBackend(ABC):
         """Check whether at least one matching disposition exists."""
         return False
 
+    def get_terminal_record_ids(self, action_name: str) -> set[str]:
+        """Return record_ids with any gate-terminal disposition for an action."""
+        return set()
+
     def clear_disposition(
         self,
         action_name: str,

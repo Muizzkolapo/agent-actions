@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Per-record retry idempotency: retry only reprocesses records whose dispositions were cleared, carrying forward already-succeeded records from prior output without LLM calls"
+time: 2026-05-20T04:16:00.000000Z

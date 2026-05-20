@@ -28,6 +28,7 @@ from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
 
 if TYPE_CHECKING:
+    from agent_actions.processing.disposition_gate import DispositionGate
     from agent_actions.storage.backend import StorageBackend
 
 TOOL_VENDOR = "tool"
@@ -69,6 +70,7 @@ class BatchPipelineParams:
     agent_indices: dict[str, int] | None = None
     dependency_configs: dict[str, Any] | None = None
     version_context: dict[str, Any] | None = None
+    disposition_gate: Optional["DispositionGate"] = field(default=None)
 
 
 @dataclass
@@ -155,7 +157,15 @@ class ProcessingPipeline:
             agent_config=cast(dict[str, Any], config.action_config),
             agent_name=config.action_name,
         )
-        self._unified_processor = UnifiedProcessor()
+
+        from agent_actions.processing.disposition_gate import DispositionGate
+
+        self._disposition_gate = DispositionGate(
+            storage_backend=config.storage_backend,
+        )
+        self._unified_processor = UnifiedProcessor(
+            disposition_gate=self._disposition_gate,
+        )
 
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
@@ -204,6 +214,12 @@ class ProcessingPipeline:
         Expects agent_indices, dependency_configs, and version_context to be
         pre-populated on ``params`` via ``_build_pipeline_context()``.
         """
+        disposition_gate = params.disposition_gate
+        if disposition_gate is None and params.storage_backend is not None:
+            from agent_actions.processing.disposition_gate import DispositionGate
+
+            disposition_gate = DispositionGate(storage_backend=params.storage_backend)
+
         task_preparator = BatchTaskPreparator(
             action_indices=params.agent_indices,
             dependency_configs=params.dependency_configs,
@@ -219,6 +235,7 @@ class ProcessingPipeline:
             context_manager=context_manager,
             registry_manager_factory=registry_manager_factory,
             storage_backend=params.storage_backend,
+            disposition_gate=disposition_gate,
         )
         # Use pre-loaded data if available (storage backend), otherwise read from file
         if params.data is not None:
@@ -441,6 +458,7 @@ class ProcessingPipeline:
                 agent_indices=agent_indices,
                 dependency_configs=dependency_configs,
                 version_context=version_context,
+                disposition_gate=self._disposition_gate,
             )
         )
         return result_path
