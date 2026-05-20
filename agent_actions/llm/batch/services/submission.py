@@ -1,9 +1,12 @@
 """Batch submission service for task preparation and job submission."""
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
@@ -31,8 +34,14 @@ from agent_actions.logging.events.batch_events import (
 from agent_actions.output.response.config_schema import WhereClauseBehavior
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.storage.backend import DISPOSITION_DEFERRED
+from agent_actions.utils.atomic_write import atomic_json_write
+
+if TYPE_CHECKING:
+    from agent_actions.processing.disposition_gate import DispositionGate
 
 logger = logging.getLogger(__name__)
+
+BATCH_CARRY_FORWARD_FILENAME = ".batch_carry_forward.json"
 
 
 class BatchSubmissionService:
@@ -49,6 +58,7 @@ class BatchSubmissionService:
         registry_manager_factory: Callable[[str], BatchRegistryManager],
         force_batch: bool = False,
         storage_backend: Any | None = None,
+        disposition_gate: DispositionGate | None = None,
     ):
         """Initialize submission service with dependencies.
 
@@ -59,6 +69,7 @@ class BatchSubmissionService:
             registry_manager_factory: Factory function to create registry managers
             force_batch: Whether to force new batch submission
             storage_backend: Optional storage backend for disposition writes
+            disposition_gate: Optional per-record idempotency gate for retry
         """
         self._task_preparator = task_preparator
         self._client_resolver = client_resolver
@@ -66,6 +77,7 @@ class BatchSubmissionService:
         self._registry_manager_factory = registry_manager_factory
         self._force_batch = force_batch
         self._storage_backend = storage_backend
+        self._disposition_gate = disposition_gate
 
     def prepare_batch_tasks(
         self,
@@ -210,6 +222,31 @@ class BatchSubmissionService:
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
 
+        # ── disposition gate (per-record idempotency) ────────────────
+        action_name = agent_config.get("action_name", batch_name or "default")
+        carry_forward_guids: list[str] = []
+        if self._disposition_gate is not None:
+            to_process, carry_ids = self._disposition_gate.filter(data, action_name)
+            if carry_ids:
+                carry_forward_guids = sorted(carry_ids)
+                data = to_process
+
+        # Write/clean carry-forward GUIDs sibling file
+        if output_directory:
+            carry_forward_path = Path(output_directory) / "batch" / BATCH_CARRY_FORWARD_FILENAME
+            if carry_forward_guids:
+                carry_forward_path.parent.mkdir(parents=True, exist_ok=True)
+                atomic_json_write(carry_forward_path, {"guids": carry_forward_guids})
+            elif carry_forward_path.exists():
+                carry_forward_path.unlink()
+
+        if not data:
+            logger.info(
+                "All %d records have terminal dispositions — skipping batch submission",
+                len(carry_forward_guids),
+            )
+            return SubmissionResult(batch_id=None, passthrough={"carry_forward_only": True})
+
         tasks, context_map = self.prepare_batch_tasks(
             agent_config, data, output_directory, batch_name, source_data, workflow_metadata
         )
@@ -223,7 +260,6 @@ class BatchSubmissionService:
         result = self._submit_to_provider(agent_config, batch_name, tasks, output_directory)
 
         if self._storage_backend and result.is_submitted:
-            action_name = agent_config.get("action_name", batch_name or "default")
             self._stamp_deferred(context_map, action_name, result.batch_id)
 
         return result
