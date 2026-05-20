@@ -74,6 +74,7 @@ class CollectionStats:
     exhausted: int = 0
     deferred: int = 0
     unprocessed: int = 0
+    carry_forward: int = 0
 
     @property
     def only_guard_outcomes(self) -> bool:
@@ -330,6 +331,17 @@ def collect_results_from_processing_results(
         if status == ProcessingStatus.SUCCESS:
             data = result.data or []
 
+            # Carry-forward records (from disposition gate) already have
+            # correct state and dispositions from the prior run. Count
+            # them separately so stats.success reflects only strategy-
+            # processed records.
+            if result.skip_reason and result.skip_reason.startswith("disposition_gate:"):
+                if data:
+                    output.extend(data)
+                stats[status_key] -= 1
+                stats["carry_forward"] += 1
+                continue
+
             # Detect parse-error records masquerading as SUCCESS.
             # The LLM provider returns {"_parse_error": ...} on JSON
             # parse failure, which flows through as SUCCESS data.
@@ -520,6 +532,15 @@ def collect_results_from_processing_results(
 
         elif status == ProcessingStatus.UNPROCESSED:
             data = result.data or []
+
+            # FILE-mode carry-forward: skip re-stamping, count separately
+            if result.skip_reason and result.skip_reason.startswith("disposition_gate:"):
+                if data:
+                    output.extend(data)
+                stats[status_key] -= 1
+                stats["carry_forward"] += 1
+                continue
+
             if data:
                 reason = result.skip_reason or UNPROCESSED
                 # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
@@ -626,6 +647,7 @@ def collect_results_from_processing_results(
         exhausted=stats["exhausted"],
         deferred=stats["deferred"],
         unprocessed=stats["unprocessed"],
+        carry_forward=stats["carry_forward"],
     )
 
 

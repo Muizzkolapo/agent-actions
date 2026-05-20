@@ -241,8 +241,8 @@ class TestCarryForwardSkipsEnrichment:
 
 
 class TestCarryForwardStats:
-    def test_carry_forward_counted_in_stats(self):
-        """Spec test 14: carry-forward records counted alongside strategy results."""
+    def test_carry_forward_not_counted_as_success(self):
+        """Spec test 14: carry-forward must not inflate stats.success."""
         terminal = {f"r{i}" for i in range(9)}
         prior_output = [{"source_guid": f"r{i}", "data": "carried"} for i in range(9)]
         backend = _mock_backend(terminal_ids=terminal, prior_output=prior_output)
@@ -258,9 +258,11 @@ class TestCarryForwardStats:
 
         # All 10 records in output (1 strategy-processed + 9 carry-forward)
         assert len(output) == 10
-        # Carry-forward records with SUCCESS status count in stats.success
-        assert stats.success == 10
-        # Strategy only received 1 record (the key idempotency check)
+        # Only 1 record was strategy-processed → stats.success == 1
+        assert stats.success == 1
+        # Carry-forward counted separately
+        assert stats.carry_forward == 9
+        # Strategy only received 1 record
         assert len(strategy.received) == 1
 
 

@@ -779,7 +779,7 @@ h4.md-heading { font-size: 13.5px; }
         function renderMarkdown(text) {
             var s = String(text);
             /* Convert HTML to markdown if present */
-            if (/<[a-zA-Z\/][^>]*>/.test(s)) s = htmlToMarkdown(s);
+            if (s.indexOf('<') >= 0 && s.indexOf('>') > s.indexOf('<')) s = htmlToMarkdown(s);
             /* Split into fenced code blocks vs text */
             var segments = splitFencedCode(s);
             var html = '';
@@ -867,7 +867,8 @@ h4.md-heading { font-size: 13.5px; }
                     html += '</ul>';
                     continue;
                 }
-                /* Paragraph */
+                /* Paragraph — apply inlineFmt per line, then join with <br>
+                   so the <br> tags are not escaped by esc() inside inlineFmt */
                 html += '<p>' + block.split('\n').map(function(ln) { return inlineFmt(ln); }).join('<br>') + '</p>';
             }
             return html;
@@ -926,9 +927,11 @@ h4.md-heading { font-size: 13.5px; }
             if (typeof val === 'number') return '<span class="tv-num">' + val + '</span>';
             if (typeof val === 'string') {
                 if (isUrl(val)) return '<a class="fv-link" href="' + esc(val.trim()) + '" target="_blank" rel="noopener">' + esc(val) + '</a>';
-                /* Rich-render anything with newlines, HTML tags, or length >= 80 */
+                /* Short plain-text path: only if the raw value is short AND
+                   has no newlines AND has no HTML tags. Otherwise render as
+                   rich markdown (which handles <br>, \n, code blocks, etc.) */
                 var hasNewlines = val.indexOf('\n') !== -1;
-                var hasHtml = /<[a-zA-Z\/][^>]*>/.test(val);
+                var hasHtml = val.indexOf('<') >= 0 && val.indexOf('>') > val.indexOf('<');
                 if (!hasNewlines && !hasHtml && val.length < 80) return '<span class="tv-str">' + inlineFmt(val) + '</span>';
                 return renderMarkdown(val);
             }
