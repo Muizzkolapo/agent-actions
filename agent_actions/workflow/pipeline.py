@@ -158,9 +158,6 @@ class ProcessingPipeline:
             agent_name=config.action_name,
         )
 
-        # Per-record idempotency gate — created once per pipeline, shared
-        # across all files and both online/batch paths. Instance-level cache
-        # ensures one SQL query per action, not per file.
         from agent_actions.processing.disposition_gate import DispositionGate
 
         self._disposition_gate = DispositionGate(
@@ -217,7 +214,6 @@ class ProcessingPipeline:
         Expects agent_indices, dependency_configs, and version_context to be
         pre-populated on ``params`` via ``_build_pipeline_context()``.
         """
-        # Use provided gate or create one from storage_backend
         disposition_gate = params.disposition_gate
         if disposition_gate is None and params.storage_backend is not None:
             from agent_actions.processing.disposition_gate import DispositionGate

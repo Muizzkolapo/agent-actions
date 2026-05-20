@@ -111,7 +111,6 @@ class UnifiedProcessor:
         else:
             passing, guard_results = self._guard_filter(records, context)
 
-        # ── disposition gate (per-record idempotency) ────────────────
         carry_results: list[ProcessingResult] = []
         if self._disposition_gate is not None and passing:
             to_process, carry_ids = self._disposition_gate.filter(passing, context.action_name)
@@ -129,10 +128,8 @@ class UnifiedProcessor:
                         relative_path,
                         context.storage_backend,
                     )
-                    # Missing records fall back to processing
                     if missing_ids:
                         to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
-                    # Build carry-forward results (branch on FILE vs RECORD mode)
                     for record in carry_data:
                         if raw_records is not None:
                             carry_results.append(
@@ -152,11 +149,9 @@ class UnifiedProcessor:
                                 )
                             )
                 else:
-                    # No relative_path or no backend — can't carry forward, process all
                     to_process = passing
             passing = to_process
 
-        # ── strategy invocation ────────────────────────────────────────
         invocation_results = strategy.invoke(passing, context) if passing else []
 
         # FILE mode: sequential processing — record N can reference record N-1's output.
@@ -168,11 +163,9 @@ class UnifiedProcessor:
         else:
             all_results = guard_results + invocation_results
 
-        # Enrich strategy + guard results (NOT carry-forward — they already
-        # have correct lineage from the prior run).
         enriched = self._enrich(all_results, context)
 
-        # Inject carry-forward AFTER enrichment to bypass LineageEnricher
+        # Carry-forward bypasses enrichment (already has correct lineage)
         if carry_results:
             enriched.extend(carry_results)
 

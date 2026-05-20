@@ -62,7 +62,6 @@ class DispositionGate:
 
     def __init__(self, storage_backend: StorageBackend | None = None) -> None:
         self._backend = storage_backend
-        # action_name → set of terminal record IDs (empty set = queried, no terminals)
         self._terminal_ids_cache: dict[str, set[str]] = {}
 
     def filter(
@@ -72,19 +71,13 @@ class DispositionGate:
     ) -> tuple[list[dict[str, Any]], set[str]]:
         """Partition records into (to_process, carry_ids).
 
-        Args:
-            records: Input records for the action.
-            action_name: Current action name.
-
         Returns:
-            to_process: records with no terminal disposition (send to strategy).
-            carry_ids: source_guids with terminal dispositions (skip strategy).
-                Records without ``source_guid`` always flow through (safe default).
+            to_process: records with no terminal disposition.
+            carry_ids: source_guids with terminal dispositions.
         """
         if self._backend is None:
             return records, set()
 
-        # One query per action, cached across files
         if action_name not in self._terminal_ids_cache:
             self._terminal_ids_cache[action_name] = self._backend.get_terminal_record_ids(
                 action_name
@@ -122,21 +115,11 @@ def build_carry_forward(
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read prior output for carry-forward records.
 
-    Reads the current action's prior output from storage (NOT upstream input)
-    so that carried records include the action's enriched namespace.
+    Reads the current action's prior output (not upstream input) so that
+    carried records include the action's enriched namespace.
 
-    Args:
-        carry_ids: source_guids to carry forward.
-        action_name: Current action name.
-        relative_path: Relative path to the output file in storage.
-        storage_backend: Storage backend instance.
-
-    Returns:
-        (found_records, missing_ids):
-        - found_records: records read from prior output.
-        - missing_ids: record IDs not found in prior output.
-            The caller must add these back to ``to_process`` so they flow
-            through the strategy normally — never silently dropped.
+    Returns (found_records, missing_ids). Missing IDs must be added back
+    to ``to_process`` by the caller — never silently dropped.
     """
     try:
         prior_output = storage_backend.read_target(action_name, relative_path)

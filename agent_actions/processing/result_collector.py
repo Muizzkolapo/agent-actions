@@ -332,10 +332,6 @@ def collect_results_from_processing_results(
         if status == ProcessingStatus.SUCCESS:
             data = result.data or []
 
-            # Carry-forward records (from disposition gate) already have
-            # correct state and dispositions from the prior run. Count
-            # them separately so stats.success reflects only strategy-
-            # processed records.
             if result.skip_reason == CARRY_FORWARD_REASON:
                 if data:
                     output.extend(data)
@@ -534,7 +530,6 @@ def collect_results_from_processing_results(
         elif status == ProcessingStatus.UNPROCESSED:
             data = result.data or []
 
-            # FILE-mode carry-forward: skip re-stamping, count separately
             if result.skip_reason == CARRY_FORWARD_REASON:
                 if data:
                     output.extend(data)

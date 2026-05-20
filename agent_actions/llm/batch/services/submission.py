@@ -222,7 +222,6 @@ class BatchSubmissionService:
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
 
-        # ── disposition gate (per-record idempotency) ────────────────
         action_name = agent_config.get("action_name", batch_name or "default")
         carry_forward_guids: list[str] = []
         if self._disposition_gate is not None:
@@ -231,7 +230,6 @@ class BatchSubmissionService:
                 carry_forward_guids = sorted(carry_ids)
                 data = to_process
 
-        # Write/clean carry-forward GUIDs sibling file
         if output_directory:
             carry_forward_path = Path(output_directory) / "batch" / BATCH_CARRY_FORWARD_FILENAME
             if carry_forward_guids:

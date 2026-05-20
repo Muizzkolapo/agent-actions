@@ -311,18 +311,7 @@ class BatchProcessingService:
         output_directory: str,
         action_name: str | None = None,
     ) -> None:
-        """Write batch output file.
-
-        Merges carry-forward records (from retry idempotency gate) before
-        writing. Carry-forward records were excluded from batch submission
-        and their GUIDs stored in ``.batch_carry_forward.json``.
-
-        Args:
-            output_file: Path to write main output
-            main_output: Main output data to write
-            output_directory: Output directory path
-            action_name: Override action_name for storage backend writes
-        """
+        """Write batch output file, merging any carry-forward records first."""
         effective_action = action_name or self._action_name
         main_output = self._merge_carry_forward(effective_action, main_output, output_directory)
 
@@ -341,11 +330,7 @@ class BatchProcessingService:
         batch_output: list[dict[str, Any]],
         output_directory: str,
     ) -> list[dict[str, Any]]:
-        """Merge carry-forward records from prior output into batch results.
-
-        Reads ``.batch_carry_forward.json`` written at submit time (commit 3).
-        If no file exists, returns ``batch_output`` unchanged.
-        """
+        """Merge carry-forward records from prior output into batch results."""
         from agent_actions.llm.batch.services.submission import (
             BATCH_CARRY_FORWARD_FILENAME,
         )
@@ -364,7 +349,6 @@ class BatchProcessingService:
         if not carry_guids or not self._storage_backend or not action_name:
             return batch_output
 
-        # Load prior output, reusing the shared carry-forward reader
         from agent_actions.processing.disposition_gate import build_carry_forward
 
         carry_records: list[dict[str, Any]] = []
@@ -374,7 +358,6 @@ class BatchProcessingService:
             )
             carry_records.extend(found)
 
-        # Detect unexpected overlap (should not happen — gate partitions are disjoint)
         batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
         overlap = carry_guids & batch_guids
         if overlap:
@@ -391,7 +374,6 @@ class BatchProcessingService:
                 action_name,
             )
 
-        # Clean up carry-forward file
         try:
             carry_path.unlink()
         except OSError:
