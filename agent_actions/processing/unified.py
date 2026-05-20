@@ -6,17 +6,27 @@ that controls the actual invocation step; everything else (guard filtering,
 enrichment, result collection) is handled uniformly by UnifiedProcessor.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import replace
-from typing import Any, Protocol, cast, runtime_checkable
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
-from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.processing.types import (
+    ProcessingContext,
+    ProcessingResult,
+    ProcessingStatus,
+)
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_PREFILTER_SKIP, GUARD_SKIP
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
+
+if TYPE_CHECKING:
+    from agent_actions.processing.disposition_gate import DispositionGate
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +68,10 @@ class UnifiedProcessor:
         self,
         *,
         enrichment_pipeline: EnrichmentPipeline | None = None,
+        disposition_gate: DispositionGate | None = None,
     ) -> None:
         self._enrichment_pipeline = enrichment_pipeline or EnrichmentPipeline()
+        self._disposition_gate = disposition_gate
 
     def process(
         self,
@@ -99,6 +111,55 @@ class UnifiedProcessor:
         else:
             passing, guard_results = self._guard_filter(records, context)
 
+        # ── disposition gate (per-record idempotency) ────────────────
+        carry_results: list[ProcessingResult] = []
+        if self._disposition_gate is not None and passing:
+            to_process, carry_ids = self._disposition_gate.filter(
+                passing, context.action_name
+            )
+            if carry_ids:
+                relative_path = self._get_carry_forward_path(context)
+                if relative_path and context.storage_backend:
+                    from agent_actions.processing.disposition_gate import (
+                        build_carry_forward,
+                    )
+
+                    carry_data, missing_ids = build_carry_forward(
+                        carry_ids,
+                        context.action_name,
+                        relative_path,
+                        context.storage_backend,
+                    )
+                    # Missing records fall back to processing
+                    if missing_ids:
+                        to_process.extend(
+                            r for r in passing if r.get("source_guid") in missing_ids
+                        )
+                    # Build carry-forward results (branch on FILE vs RECORD mode)
+                    for record in carry_data:
+                        if raw_records is not None:
+                            carry_results.append(
+                                ProcessingResult.unprocessed(
+                                    data=[record],
+                                    reason="disposition_gate:already_terminal",
+                                    source_guid=record.get("source_guid"),
+                                )
+                            )
+                        else:
+                            carry_results.append(
+                                ProcessingResult(
+                                    status=ProcessingStatus.SUCCESS,
+                                    data=[record],
+                                    source_guid=record.get("source_guid"),
+                                    skip_reason="disposition_gate:already_terminal",
+                                )
+                            )
+                else:
+                    # No relative_path or no backend — can't carry forward, process all
+                    to_process = passing
+            passing = to_process
+
+        # ── strategy invocation ────────────────────────────────────────
         invocation_results = strategy.invoke(passing, context) if passing else []
 
         # FILE mode: sequential processing — record N can reference record N-1's output.
@@ -110,9 +171,23 @@ class UnifiedProcessor:
         else:
             all_results = guard_results + invocation_results
 
+        # Enrich strategy + guard results (NOT carry-forward — they already
+        # have correct lineage from the prior run).
         enriched = self._enrich(all_results, context)
 
+        # Inject carry-forward AFTER enrichment to bypass LineageEnricher
+        if carry_results:
+            enriched.extend(carry_results)
+
         return self._collect(enriched, context)
+
+    @staticmethod
+    def _get_carry_forward_path(context: ProcessingContext) -> str | None:
+        """Derive relative_path for read_target from ProcessingContext."""
+        file_path = getattr(context, "file_path", None)
+        if not file_path:
+            return None
+        return Path(file_path).name
 
     def _guard_filter(
         self,
