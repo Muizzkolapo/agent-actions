@@ -286,3 +286,50 @@ class TestMissingFilePath:
 
         # With no file_path, can't carry forward, so all records go to strategy
         assert len(strategy.received) == 2
+
+
+# ── Test: Carry-forward must not mask real failures ──────────────────
+
+
+class _FailingStrategy:
+    """Strategy that fails all records."""
+
+    def invoke(
+        self, records: list[dict[str, Any]], context: ProcessingContext
+    ) -> list[ProcessingResult]:
+        return [
+            ProcessingResult.failed(
+                error="test failure",
+                source_guid=r.get("source_guid"),
+            )
+            for r in records
+        ]
+
+
+class TestCarryForwardDoesNotMaskFailure:
+    def test_single_failed_record_detected_despite_carry_forward(self):
+        """pipeline.py:610 checks stats.success == 0 to detect total failure.
+
+        With 9 carry-forward + 1 strategy-processed that FAILS,
+        stats.success must be 0 (not 9) so the failure is detected.
+        """
+        terminal = {f"r{i}" for i in range(9)}
+        prior_output = [{"source_guid": f"r{i}", "data": "carried"} for i in range(9)]
+        backend = _mock_backend(terminal_ids=terminal, prior_output=prior_output)
+        gate = DispositionGate(storage_backend=backend)
+
+        processor = UnifiedProcessor(disposition_gate=gate)
+        strategy = _FailingStrategy()
+        records = [_make_record(f"r{i}") for i in range(10)]
+        context = _make_context(storage_backend=backend)
+
+        with patch.object(processor, "_guard_filter", return_value=(records, [])):
+            output, stats = processor.process(records, context, strategy)
+
+        # The 1 real record failed → stats.success == 0
+        assert stats.success == 0
+        assert stats.failed == 1
+        # 9 carry-forward counted separately
+        assert stats.carry_forward == 9
+        # All 10 records still in output
+        assert len(output) == 10

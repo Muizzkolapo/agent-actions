@@ -38,8 +38,6 @@ GATE_TERMINAL_DISPOSITIONS = frozenset(
         DISPOSITION_EXHAUSTED,
     }
 )
-
-CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 """Dispositions that mean 'do not reprocess this record'.
 
 This is NOT the same as ``batch.py:_TERMINAL_DISPOSITIONS`` (used by the
@@ -49,6 +47,8 @@ orphan checker). Notably:
 - EXHAUSTED IS gate-terminal (gave up), but retry clears it, so after
   retry the record has no disposition and flows through normally.
 """
+
+CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 
 
 class DispositionGate:

@@ -14,6 +14,7 @@ from agent_actions.logging.events import (
     ResultCollectionCompleteEvent,
     ResultCollectionStartedEvent,
 )
+from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
@@ -335,7 +336,7 @@ def collect_results_from_processing_results(
             # correct state and dispositions from the prior run. Count
             # them separately so stats.success reflects only strategy-
             # processed records.
-            if result.skip_reason and result.skip_reason.startswith("disposition_gate:"):
+            if result.skip_reason == CARRY_FORWARD_REASON:
                 if data:
                     output.extend(data)
                 stats[status_key] -= 1
@@ -534,7 +535,7 @@ def collect_results_from_processing_results(
             data = result.data or []
 
             # FILE-mode carry-forward: skip re-stamping, count separately
-            if result.skip_reason and result.skip_reason.startswith("disposition_gate:"):
+            if result.skip_reason == CARRY_FORWARD_REASON:
                 if data:
                     output.extend(data)
                 stats[status_key] -= 1
