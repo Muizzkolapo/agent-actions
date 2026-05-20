@@ -709,8 +709,10 @@ class SQLiteBackend(StorageBackend):
 
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
         """Return record_ids with any gate-terminal disposition for an action."""
+        from agent_actions.processing.disposition_gate import GATE_TERMINAL_DISPOSITIONS
+
         action_name = self._validate_identifier(action_name, "action_name")
-        terminal = ("success", "filtered", "skipped", "passthrough", "exhausted")
+        terminal = tuple(GATE_TERMINAL_DISPOSITIONS)
         placeholders = ",".join("?" * len(terminal))
         sql = (
             f"SELECT DISTINCT record_id FROM record_disposition "

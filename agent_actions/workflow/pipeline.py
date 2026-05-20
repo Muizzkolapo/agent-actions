@@ -28,6 +28,7 @@ from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
 
 if TYPE_CHECKING:
+    from agent_actions.processing.disposition_gate import DispositionGate
     from agent_actions.storage.backend import StorageBackend
 
 TOOL_VENDOR = "tool"
@@ -69,7 +70,7 @@ class BatchPipelineParams:
     agent_indices: dict[str, int] | None = None
     dependency_configs: dict[str, Any] | None = None
     version_context: dict[str, Any] | None = None
-    disposition_gate: Any = None  # DispositionGate (optional, for retry idempotency)
+    disposition_gate: Optional["DispositionGate"] = field(default=None)
 
 
 @dataclass

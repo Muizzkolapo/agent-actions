@@ -16,18 +16,30 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
+    DISPOSITION_SUCCESS,
+)
+
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
-GATE_TERMINAL_DISPOSITIONS = frozenset({
-    "success",
-    "filtered",
-    "skipped",
-    "passthrough",
-    "exhausted",
-})
+GATE_TERMINAL_DISPOSITIONS = frozenset(
+    {
+        DISPOSITION_SUCCESS,
+        DISPOSITION_FILTERED,
+        DISPOSITION_SKIPPED,
+        DISPOSITION_PASSTHROUGH,
+        DISPOSITION_EXHAUSTED,
+    }
+)
+
+CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 """Dispositions that mean 'do not reprocess this record'.
 
 This is NOT the same as ``batch.py:_TERMINAL_DISPOSITIONS`` (used by the
@@ -50,7 +62,7 @@ class DispositionGate:
 
     def __init__(self, storage_backend: StorageBackend | None = None) -> None:
         self._backend = storage_backend
-        self._action_has_terminals: dict[str, bool] = {}
+        # action_name → set of terminal record IDs (empty set = queried, no terminals)
         self._terminal_ids_cache: dict[str, set[str]] = {}
 
     def filter(
@@ -72,16 +84,15 @@ class DispositionGate:
         if self._backend is None:
             return records, set()
 
-        # Fast path: one query per action, cached across files
-        if action_name not in self._action_has_terminals:
-            terminal_ids = self._backend.get_terminal_record_ids(action_name)
-            self._action_has_terminals[action_name] = bool(terminal_ids)
-            self._terminal_ids_cache[action_name] = terminal_ids
-
-        if not self._action_has_terminals[action_name]:
-            return records, set()
+        # One query per action, cached across files
+        if action_name not in self._terminal_ids_cache:
+            self._terminal_ids_cache[action_name] = self._backend.get_terminal_record_ids(
+                action_name
+            )
 
         terminal_ids = self._terminal_ids_cache[action_name]
+        if not terminal_ids:
+            return records, set()
 
         to_process: list[dict[str, Any]] = []
         carry_ids: set[str] = set()

@@ -119,6 +119,7 @@ class UnifiedProcessor:
                 relative_path = self._get_carry_forward_path(context)
                 if relative_path and context.storage_backend:
                     from agent_actions.processing.disposition_gate import (
+                        CARRY_FORWARD_REASON,
                         build_carry_forward,
                     )
 
@@ -137,7 +138,7 @@ class UnifiedProcessor:
                             carry_results.append(
                                 ProcessingResult.unprocessed(
                                     data=[record],
-                                    reason="disposition_gate:already_terminal",
+                                    reason=CARRY_FORWARD_REASON,
                                     source_guid=record.get("source_guid"),
                                 )
                             )
@@ -147,7 +148,7 @@ class UnifiedProcessor:
                                     status=ProcessingStatus.SUCCESS,
                                     data=[record],
                                     source_guid=record.get("source_guid"),
-                                    skip_reason="disposition_gate:already_terminal",
+                                    skip_reason=CARRY_FORWARD_REASON,
                                 )
                             )
                 else:

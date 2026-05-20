@@ -237,8 +237,8 @@ class BatchSubmissionService:
             if carry_forward_guids:
                 carry_forward_path.parent.mkdir(parents=True, exist_ok=True)
                 atomic_json_write(carry_forward_path, {"guids": carry_forward_guids})
-            elif carry_forward_path.exists():
-                carry_forward_path.unlink()
+            else:
+                carry_forward_path.unlink(missing_ok=True)
 
         if not data:
             logger.info(

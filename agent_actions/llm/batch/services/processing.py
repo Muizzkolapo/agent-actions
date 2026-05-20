@@ -364,18 +364,15 @@ class BatchProcessingService:
         if not carry_guids or not self._storage_backend or not action_name:
             return batch_output
 
-        # Load prior output and filter to carry-forward GUIDs
+        # Load prior output, reusing the shared carry-forward reader
+        from agent_actions.processing.disposition_gate import build_carry_forward
+
         carry_records: list[dict[str, Any]] = []
         for rel_path in self._storage_backend.list_target_files(action_name):
-            try:
-                prior = self._storage_backend.read_target(action_name, rel_path)
-                carry_records.extend(r for r in prior if r.get("source_guid") in carry_guids)
-            except FileNotFoundError:
-                logger.warning(
-                    "Prior output missing for %s/%s — carry-forward records lost",
-                    action_name,
-                    rel_path,
-                )
+            found, _missing = build_carry_forward(
+                carry_guids, action_name, rel_path, self._storage_backend
+            )
+            carry_records.extend(found)
 
         # Detect unexpected overlap (should not happen — gate partitions are disjoint)
         batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
@@ -398,7 +395,7 @@ class BatchProcessingService:
         try:
             carry_path.unlink()
         except OSError:
-            pass
+            logger.debug("Failed to clean up %s", carry_path)
 
         return batch_output + carry_records
 
