@@ -55,6 +55,7 @@ class RetryCommand:
             workflow_path=str(paths.io_dir.parent),
             workflow_name=self.agent_name,
         )
+        backend.initialize()
 
         workflow = load_workflow(self.agent_name, paths, project_root)
         execution_order = list(workflow.execution_order)
