@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from agent_actions.processing.evaluation.loop import EvaluationLoop
 from agent_actions.processing.types import (
     EvaluationMetadata,
+    EvaluationOutcome,
     RecoveryMetadata,
     RepromptMetadata,
     RetryMetadata,
@@ -25,7 +26,8 @@ def _make_strategy(evaluate_fn=None, name="test", max_attempts=3, on_exhausted="
     strategy.name = name
     strategy.max_attempts = max_attempts
     strategy.on_exhausted = on_exhausted
-    strategy.evaluate = evaluate_fn or (lambda r: True)
+    raw_fn = evaluate_fn or (lambda r: True)
+    strategy.evaluate = lambda r: EvaluationOutcome(passed=raw_fn(r))
     strategy.build_feedback.return_value = "Please fix this."
     return strategy
 
@@ -36,7 +38,7 @@ class TestSplit:
         loop = EvaluationLoop(strategy)
         results = [_make_result("r1"), _make_result("r2")]
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert len(graduated) == 2
         assert len(failing) == 0
@@ -48,7 +50,7 @@ class TestSplit:
         loop = EvaluationLoop(strategy)
         results = [_make_result("r1"), _make_result("r2")]
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert len(graduated) == 0
         assert len(failing) == 2
@@ -63,7 +65,7 @@ class TestSplit:
         loop = EvaluationLoop(strategy)
         results = [_make_result("r1"), _make_result("r2"), _make_result("r3")]
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert [r.custom_id for r in graduated] == ["r1"]
         assert [r.custom_id for r in failing] == ["r2", "r3"]
@@ -79,7 +81,7 @@ class TestSplit:
         )
         fresh = _make_result("r2")
 
-        graduated, failing = loop.split([already_done, fresh])
+        graduated, failing, _ = loop.split([already_done, fresh])
 
         assert len(graduated) == 2
         assert graduated[0].custom_id == "r1"
@@ -89,7 +91,7 @@ class TestSplit:
         strategy = _make_strategy()
         loop = EvaluationLoop(strategy)
 
-        graduated, failing = loop.split([])
+        graduated, failing, _ = loop.split([])
 
         assert graduated == []
         assert failing == []
@@ -101,7 +103,7 @@ class TestSplit:
         result = MagicMock(spec=[])
         result.custom_id = "r1"
 
-        _, failing = loop.split([result])
+        _, failing, _ = loop.split([result])
 
         assert len(failing) == 1
         assert failing[0].custom_id == "r1"
@@ -134,7 +136,7 @@ class TestSplit:
         result = _make_result("r1", recovery_metadata=None)
         result.recovery_metadata = None
 
-        graduated, _ = loop.split([result])
+        graduated, _, _ = loop.split([result])
 
         assert len(graduated) == 1
 
@@ -155,7 +157,7 @@ class TestSplit:
             ),
         )
 
-        _, failing = loop.split([result])
+        _, failing, _ = loop.split([result])
 
         assert "r1" in call_log
         assert len(failing) == 1
@@ -342,12 +344,12 @@ class TestSplitThenTagRoundtrip:
         loop = EvaluationLoop(strategy)
         results = [_make_result("r1"), _make_result("r2")]
 
-        graduated, _ = loop.split(results)
+        graduated, _, _ = loop.split(results)
         loop.tag_graduated(graduated)
 
         # Second cycle: make strategy reject everything — graduated should still pass
-        loop.strategy.evaluate = lambda r: False
-        graduated2, failing2 = loop.split(results)
+        loop.strategy.evaluate = lambda r: EvaluationOutcome(passed=False)
+        graduated2, failing2, _ = loop.split(results)
 
         assert [r.custom_id for r in graduated2] == ["r1", "r2"]
         assert failing2 == []
@@ -364,10 +366,10 @@ class TestSplitThenTagRoundtrip:
         loop = EvaluationLoop(strategy)
         result = _make_result("r1")
 
-        _, failing = loop.split([result])
+        _, failing, _ = loop.split([result])
         assert len(failing) == 1
 
-        graduated, _ = loop.split([result])
+        graduated, _, _ = loop.split([result])
         assert len(graduated) == 1
 
 
@@ -432,12 +434,12 @@ class TestTypedMetadataRoundtrip:
         retry = RetryMetadata(attempts=1, failures=0, succeeded=True, reason="timeout")
         result = _make_result("r1", recovery_metadata=RecoveryMetadata(retry=retry))
 
-        graduated, _ = loop.split([result])
+        graduated, _, _ = loop.split([result])
         loop.tag_graduated(graduated)
 
         # Change strategy to reject everything — graduated should still be detected
-        loop.strategy.evaluate = lambda r: False
-        graduated2, failing2 = loop.split([result])
+        loop.strategy.evaluate = lambda r: EvaluationOutcome(passed=False)
+        graduated2, failing2, _ = loop.split([result])
 
         assert len(graduated2) == 1
         assert len(failing2) == 0

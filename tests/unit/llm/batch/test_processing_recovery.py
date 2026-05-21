@@ -308,7 +308,7 @@ class TestHandleRetryRecovery:
         strategy.name = "validation"
         strategy.max_attempts = 2
         strategy.on_exhausted = "return_last"
-        loop.split.return_value = ([_make_result("id-1")], [])  # all pass
+        loop.split.return_value = ([_make_result("id-1")], [], {})  # all pass
         mock_build_loop.return_value = (loop, strategy, None)
 
         with patch(
@@ -405,7 +405,7 @@ class TestHandleRepromptRecovery:
 
         graduated = [_make_result(cid) for cid in graduated_ids]
         failing = [_make_result(cid, success=False) for cid in failing_ids]
-        loop.split.return_value = (graduated, failing)
+        loop.split.return_value = (graduated, failing, {})
 
         return loop, strategy
 
@@ -716,7 +716,7 @@ class TestRecoveryStatePersistence:
         loop = MagicMock()
         strategy = MagicMock()
         strategy.name = "validation"
-        loop.split.return_value = ([], [_make_result("id-1")])  # all failing
+        loop.split.return_value = ([], [_make_result("id-1")], {})  # all failing
         mock_build_loop.return_value = (loop, strategy, None)
 
         service = _mock_service()
@@ -1035,7 +1035,7 @@ class TestRecoveryLoopRootCauses:
             ) as mock_state_mgr,
         ):
             loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-            loop.split.return_value = ([], results)
+            loop.split.return_value = ([], results, {})
             mock_build_loop.return_value = (loop, strategy, None)
             service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch-2", 1)
 
@@ -1066,7 +1066,7 @@ class TestRecoveryLoopRootCauses:
             "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
         ) as mock_build_loop:
             loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-            loop.split.return_value = ([], results)
+            loop.split.return_value = ([], results, {})
             mock_build_loop.return_value = (loop, strategy, None)
 
             should_continue = check_and_submit_reprompt(
@@ -1120,7 +1120,7 @@ class TestDownstreamBugs:
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_retry_to_reprompt_does_not_mutate_retry_state(self, mock_mgr, mock_build_loop):
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-        loop.split.return_value = ([], [_make_result("id-1", success=False)])
+        loop.split.return_value = ([], [_make_result("id-1", success=False)], {})
         mock_build_loop.return_value = (loop, strategy, None)
 
         service = _mock_service()
@@ -1162,7 +1162,7 @@ class TestDownstreamBugs:
             patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
         ):
             loop, strategy = _make_eval_loop_mocks(max_attempts=3)
-            loop.split.return_value = ([], results)
+            loop.split.return_value = ([], results, {})
             mock_build_loop.return_value = (loop, strategy, None)
             service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
 

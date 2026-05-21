@@ -10,7 +10,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from agent_actions.processing.types import EvaluationMetadata, RecoveryMetadata
+from agent_actions.processing.types import (
+    EvaluationMetadata,
+    EvaluationOutcome,
+    RecoveryMetadata,
+)
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BatchResult
@@ -22,7 +26,7 @@ logger = logging.getLogger(__name__)
 class EvaluationStrategy(Protocol):
     """What changes between reprompt, critique, etc."""
 
-    def evaluate(self, result: BatchResult) -> bool: ...
+    def evaluate(self, result: BatchResult) -> EvaluationOutcome: ...
 
     def build_feedback(self, result: BatchResult) -> str: ...
 
@@ -52,20 +56,30 @@ class EvaluationLoop:
             return False
         return getattr(eval_meta, "passed", False) is True
 
-    def split(self, results: list[BatchResult]) -> tuple[list[BatchResult], list[BatchResult]]:
-        """→ (graduated, still_failing). Skips already-graduated."""
+    def split(
+        self, results: list[BatchResult]
+    ) -> tuple[list[BatchResult], list[BatchResult], dict[str, str]]:
+        """→ (graduated, still_failing, failure_types).
+
+        Skips already-graduated. ``failure_types`` maps custom_id to
+        failure classification (e.g. ``"parse_error"``, ``"udf_fail"``).
+        """
         graduated: list[BatchResult] = []
         still_failing: list[BatchResult] = []
+        failure_types: dict[str, str] = {}
 
         for result in results:
             if self._is_already_graduated(result):
                 graduated.append(result)
                 continue
 
-            if self.strategy.evaluate(result):
+            outcome = self.strategy.evaluate(result)
+            if outcome.passed:
                 graduated.append(result)
             else:
                 still_failing.append(result)
+                if outcome.failure_type:
+                    failure_types[result.custom_id] = outcome.failure_type
 
         logger.info(
             "EvaluationLoop[%s].split: %d graduated, %d still failing (of %d total)",
@@ -74,7 +88,7 @@ class EvaluationLoop:
             len(still_failing),
             len(results),
         )
-        return graduated, still_failing
+        return graduated, still_failing, failure_types
 
     def tag_graduated(self, results: list[BatchResult]) -> None:
         """Mark as done. Never evaluated again."""
@@ -111,3 +125,18 @@ class EvaluationLoop:
             len(submissions),
         )
         return submissions
+
+
+def accumulate_failure_types(
+    target: dict[str, dict[str, int]],
+    failure_types: dict[str, str],
+) -> None:
+    """Merge per-record failure classifications into cumulative counts.
+
+    ``failure_types`` maps ``custom_id → failure_type`` (one entry per
+    failing record from a single ``split()`` call).  ``target`` accumulates
+    counts across rounds: ``custom_id → {failure_type: count}``.
+    """
+    for cid, ftype in failure_types.items():
+        per_record = target.setdefault(cid, {})
+        per_record[ftype] = per_record.get(ftype, 0) + 1
