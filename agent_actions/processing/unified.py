@@ -13,6 +13,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
+from agent_actions.processing.cascade_filter import partition_cascade_records
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.result_collector import CollectionStats, ResultCollector
@@ -43,7 +44,8 @@ class ProcessingStrategy(Protocol):
     - HITL state management and decision broadcast (FILE HITL)
     - Batch result reconciliation (batch)
 
-    The strategy receives only records that passed the guard filter.
+    The strategy receives only records that passed the guard filter and
+    cascade filter (upstream-failed records are quarantined by the processor).
     It returns one ProcessingResult per logical output (may be 1:1 or N:M
     depending on the strategy).
     """
@@ -60,7 +62,7 @@ class ProcessingStrategy(Protocol):
 class UnifiedProcessor:
     """Unified record processing pipeline.
 
-    Shared skeleton: guard -> invoke -> enrich -> collect.
+    Shared skeleton: guard -> cascade filter -> invoke -> enrich -> collect.
     The strategy controls only the invocation step.
     """
 
@@ -85,9 +87,10 @@ class UnifiedProcessor:
 
         Steps:
             1. Guard filter — split records into passing/skipped/filtered
-            2. Invoke strategy — process passing records
-            3. Enrich — add lineage, metadata, version IDs, passthrough fields
-            4. Collect — flatten results into output records with dispositions
+            2. Cascade filter — quarantine upstream-failed records
+            3. Invoke strategy — process remaining records
+            4. Enrich — add lineage, metadata, version IDs, passthrough fields
+            5. Collect — flatten results into output records with dispositions
 
         Args:
             records: Input records.  For FILE mode these are context-scope-
@@ -152,16 +155,34 @@ class UnifiedProcessor:
                     to_process = passing
             passing = to_process
 
-        invocation_results = strategy.invoke(passing, context) if passing else []
+        # Cascade filter — quarantine upstream-failed records before strategy
+        # sees them.  Strategies only receive processable records.
+        processable, quarantined_results = partition_cascade_records(
+            passing, action_name=context.agent_name
+        )
+
+        # FILE mode: filter context.source_data to maintain positional alignment
+        # with processable records (used by reconcile_outputs / HITL broadcast).
+        if raw_records is not None and quarantined_results:
+            quarantined_guids = {
+                r.source_guid for r in quarantined_results if r.source_guid is not None
+            }
+            context.source_data = [
+                s
+                for s in (context.source_data or [])
+                if s.get("source_guid") not in quarantined_guids
+            ]
+
+        invocation_results = strategy.invoke(processable, context) if processable else []
 
         # FILE mode: sequential processing — record N can reference record N-1's output.
         # RECORD mode: independent — merge order doesn't affect semantics.
         # This divergence is intentional. Do not unify without verifying FILE-mode
         # workflows that depend on sequential accumulation (e.g., multi-pass enrichment).
         if raw_records is not None:
-            all_results = invocation_results + guard_results
+            all_results = quarantined_results + invocation_results + guard_results
         else:
-            all_results = guard_results + invocation_results
+            all_results = guard_results + quarantined_results + invocation_results
 
         enriched = self._enrich(all_results, context)
 
