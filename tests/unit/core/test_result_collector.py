@@ -682,6 +682,91 @@ class TestCollectionStatsOnlyGuardOutcomes:
 
 
 # ---------------------------------------------------------------------------
+# raise_if_terminal_failure tests
+# ---------------------------------------------------------------------------
+
+
+class TestRaiseIfTerminalFailure:
+    """Tests for CollectionStats.raise_if_terminal_failure.
+
+    Covers the guard-only disposition path, the zero-success circuit breaker,
+    and the unprocessed-exclusion edge case that was previously inconsistent
+    between pipeline.py and initial_pipeline.py.
+    """
+
+    def test_guard_only_writes_skipped_disposition(self):
+        """All guard outcomes + empty output → write SKIPPED, no raise."""
+        stats = CollectionStats(skipped=3)
+        backend = MagicMock()
+        # Should not raise
+        stats.raise_if_terminal_failure("act", [1, 2, 3], [], backend)
+        backend.set_disposition.assert_called_once()
+        call_args = backend.set_disposition.call_args
+        assert call_args[0][2] == "skipped"
+
+    def test_guard_only_with_output_does_not_write(self):
+        """Guard outcomes but output exists (passthrough) → no disposition, no raise."""
+        stats = CollectionStats(skipped=2)
+        backend = MagicMock()
+        stats.raise_if_terminal_failure("act", [1, 2], [{"data": 1}], backend)
+        backend.set_disposition.assert_not_called()
+
+    def test_zero_success_all_failed_raises(self):
+        """All records failed → RuntimeError."""
+        stats = CollectionStats(failed=3)
+        with pytest.raises(RuntimeError, match="0 successful records"):
+            stats.raise_if_terminal_failure("act", [1, 2, 3], [])
+
+    def test_zero_success_all_exhausted_raises(self):
+        """All records exhausted → RuntimeError."""
+        stats = CollectionStats(exhausted=2)
+        with pytest.raises(RuntimeError, match="0 successful records"):
+            stats.raise_if_terminal_failure("act", [1, 2], [])
+
+    def test_zero_success_mixed_failed_exhausted_raises(self):
+        """Mixed failed + exhausted → RuntimeError."""
+        stats = CollectionStats(failed=2, exhausted=1)
+        with pytest.raises(RuntimeError, match="3 active input"):
+            stats.raise_if_terminal_failure("act", [1, 2, 3], [])
+
+    def test_some_success_does_not_raise(self):
+        """At least one success → no raise."""
+        stats = CollectionStats(success=1, failed=2)
+        stats.raise_if_terminal_failure("act", [1, 2, 3], [{"ok": True}])
+
+    def test_unprocessed_excluded_from_denominator(self):
+        """Unprocessed (cascade-quarantined) records don't count as active input.
+
+        3 input records, all 3 unprocessed (0 active) → no raise even though
+        success == 0 and the input list is non-empty.
+        """
+        stats = CollectionStats(unprocessed=3)
+        # Should not raise — active_input_count is 0
+        stats.raise_if_terminal_failure("act", [1, 2, 3], [])
+
+    def test_unprocessed_with_failures_raises_for_active(self):
+        """2 unprocessed + 1 failed → active_input_count is 1, raises."""
+        stats = CollectionStats(unprocessed=2, failed=1)
+        with pytest.raises(RuntimeError, match="1 active input"):
+            stats.raise_if_terminal_failure("act", [1, 2, 3], [])
+
+    def test_empty_data_does_not_raise(self):
+        """Empty input → no raise regardless of stats."""
+        stats = CollectionStats(failed=5)
+        stats.raise_if_terminal_failure("act", [], [])
+
+    def test_no_backend_guard_only_does_not_crash(self):
+        """Guard-only with no storage backend → no crash, no disposition write."""
+        stats = CollectionStats(filtered=2)
+        stats.raise_if_terminal_failure("act", [1, 2], [])
+
+    def test_deferred_only_does_not_raise(self):
+        """All deferred, zero success → no raise (no failed/exhausted)."""
+        stats = CollectionStats(deferred=3)
+        stats.raise_if_terminal_failure("act", [1, 2, 3], [])
+
+
+# ---------------------------------------------------------------------------
 # _data_has_parse_error helper tests
 # ---------------------------------------------------------------------------
 

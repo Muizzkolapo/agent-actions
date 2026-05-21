@@ -43,5 +43,6 @@ The reserved names come from `SPECIAL_NAMESPACES` in `utils/constants.py`.
 
 ### Zero-success failure check (`initial_pipeline.py`)
 
-Mirrors the check in `workflow/pipeline.py`. See `workflow/_MANIFEST.md` design note for
+Delegates to `CollectionStats.raise_if_terminal_failure()` (in
+`processing/result_collector.py`). See `workflow/_MANIFEST.md` design note for
 full rationale on why `stats.success == 0` is used instead of `not output`.
