@@ -437,6 +437,20 @@ def collect_results_from_processing_results(
                     result.source_guid,
                     DISPOSITION_SUCCESS,
                 )
+            elif storage_backend and result.source_guid is None and data:
+                # FILE-mode results have source_guid=None on the result level
+                # but individual items carry their own source_guid.  Write
+                # per-item dispositions so DispositionGate can carry them
+                # forward on retry.
+                for item in data:
+                    item_guid = item.get("source_guid")
+                    if item_guid:
+                        _safe_set_disposition(
+                            storage_backend,
+                            action_name,
+                            item_guid,
+                            DISPOSITION_SUCCESS,
+                        )
 
         elif status == ProcessingStatus.SKIPPED:
             data = result.data or []

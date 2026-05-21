@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "FILE-mode tool/HITL actions now write per-record SUCCESS dispositions, enabling DispositionGate carry-forward on retry"
+time: 2026-05-21T04:21:00.000000Z
