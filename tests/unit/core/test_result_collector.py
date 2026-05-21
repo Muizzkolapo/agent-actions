@@ -637,6 +637,120 @@ class TestResultCollectorDispositions:
         assert calls[1] == (("agent", "src-f", "filtered"), {"reason": "guard_filter"})
 
 
+class TestFileModeDispositionWrites:
+    """Tests for per-item disposition fallback when result.source_guid is None (FILE mode)."""
+
+    def test_file_mode_success_writes_per_item_dispositions(self):
+        """FILE-mode SUCCESS with source_guid=None writes per-item dispositions."""
+        backend = _make_backend()
+        result = ProcessingResult.success(
+            data=[
+                {"source_guid": "rec-1", "content": {"a": 1}},
+                {"source_guid": "rec-2", "content": {"b": 2}},
+                {"source_guid": "rec-3", "content": {"c": 3}},
+            ],
+            source_guid=None,
+        )
+
+        ResultCollector.collect_results(
+            [result],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        assert backend.set_disposition.call_count == 3
+        calls = backend.set_disposition.call_args_list
+        assert calls[0] == (("agent", "rec-1", "success"), {})
+        assert calls[1] == (("agent", "rec-2", "success"), {})
+        assert calls[2] == (("agent", "rec-3", "success"), {})
+
+    def test_record_mode_still_uses_result_level_disposition(self):
+        """RECORD-mode SUCCESS with source_guid set uses the fast result-level path."""
+        backend = _make_backend()
+        result = ProcessingResult.success(
+            data=[{"source_guid": "rec-1", "content": {"a": 1}}],
+            source_guid="rec-1",
+        )
+
+        ResultCollector.collect_results(
+            [result],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent",
+            "rec-1",
+            "success",
+        )
+
+    def test_file_mode_items_without_source_guid_silently_skipped(self):
+        """FILE-mode items lacking source_guid are skipped without crashing."""
+        backend = _make_backend()
+        result = ProcessingResult.success(
+            data=[
+                {"source_guid": "rec-1", "content": {"a": 1}},
+                {"content": {"b": 2}},  # no source_guid
+                {"source_guid": "rec-3", "content": {"c": 3}},
+            ],
+            source_guid=None,
+        )
+
+        ResultCollector.collect_results(
+            [result],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        assert backend.set_disposition.call_count == 2
+        calls = backend.set_disposition.call_args_list
+        assert calls[0] == (("agent", "rec-1", "success"), {})
+        assert calls[1] == (("agent", "rec-3", "success"), {})
+
+    def test_file_mode_empty_data_no_disposition(self):
+        """FILE-mode SUCCESS with empty data writes no dispositions."""
+        backend = _make_backend()
+        result = ProcessingResult.success(
+            data=[],
+            source_guid=None,
+        )
+
+        ResultCollector.collect_results(
+            [result],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_not_called()
+
+    def test_file_mode_no_backend_no_crash(self):
+        """FILE-mode without storage backend does not crash."""
+        result = ProcessingResult.success(
+            data=[
+                {"source_guid": "rec-1", "content": {"a": 1}},
+            ],
+            source_guid=None,
+        )
+
+        output, _ = ResultCollector.collect_results(
+            [result],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=None,
+        )
+
+        assert len(output) == 1
+
+
 class TestCollectionStatsOnlyGuardOutcomes:
     """Tests for CollectionStats.only_guard_outcomes property.
 
