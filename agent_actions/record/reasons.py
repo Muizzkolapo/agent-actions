@@ -25,6 +25,9 @@ PREP_FAILED = "prep_failed"
 # -- Batch -------------------------------------------------------------------
 BATCH_NOT_RETURNED = "batch_not_returned"
 
+# -- Tool (FILE mode) -------------------------------------------------------
+TOOL_MISSING_RECORD = "tool_missing_record"
+
 # -- Empty output ------------------------------------------------------------
 EMPTY_OUTPUT = "empty_output"
 
