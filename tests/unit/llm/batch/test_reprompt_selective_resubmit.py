@@ -25,9 +25,7 @@ def _make_results(n: int, fail_ids: set[str] | None = None) -> list[BatchResult]
     return [
         BatchResult(
             custom_id=f"rec_{i:03d}",
-            content='{"answer": "bad"}'
-            if f"rec_{i:03d}" in fail_ids
-            else f'{{"answer": "ok_{i}"}}',
+            content={"answer": "bad"} if f"rec_{i:03d}" in fail_ids else {"answer": f"ok_{i}"},
             success=True,
         )
         for i in range(n)
@@ -121,7 +119,7 @@ class TestSelectiveRepromptResubmission:
         provider = MagicMock()
         provider.submit_batch.return_value = ("batch_reprompt_1", "submitted")
         provider.retrieve_results.return_value = [
-            BatchResult(custom_id=cid, content='{"answer": "fixed"}', success=True)
+            BatchResult(custom_id=cid, content={"answer": "fixed"}, success=True)
             for cid in FAIL_IDS
         ]
 
@@ -159,8 +157,7 @@ class TestSelectiveRepromptResubmission:
         from agent_actions.llm.batch.services.reprompt_ops import submit_reprompt_batch
 
         failed_results = [
-            BatchResult(custom_id=cid, content='{"answer": "bad"}', success=True)
-            for cid in FAIL_IDS
+            BatchResult(custom_id=cid, content={"answer": "bad"}, success=True) for cid in FAIL_IDS
         ]
         context_map = _make_context_map(10)
 
@@ -217,7 +214,7 @@ class TestSelectiveRepromptResubmission:
         provider = MagicMock()
         provider.submit_batch.return_value = ("batch_rp", "submitted")
         provider.retrieve_results.return_value = [
-            BatchResult(custom_id=cid, content='{"answer": "bad"}', success=True)
+            BatchResult(custom_id=cid, content={"answer": "bad"}, success=True)
             for cid in persistent_fail
         ]
 
@@ -267,9 +264,9 @@ class TestSelectiveRepromptResubmission:
         from agent_actions.llm.batch.services.retry import BatchRetryService
 
         accumulated = _make_results(10, fail_ids=set())
-        rec_003_ok = BatchResult(custom_id="rec_003", content='{"answer": "now_ok"}', success=True)
+        rec_003_ok = BatchResult(custom_id="rec_003", content={"answer": "now_ok"}, success=True)
         rec_007_bad = BatchResult(
-            custom_id="rec_007", content='{"answer": "still_bad"}', success=True
+            custom_id="rec_007", content={"answer": "still_bad"}, success=True
         )
         recovery_results = [rec_003_ok, rec_007_bad]
 
@@ -285,7 +282,7 @@ class TestSelectiveRepromptResubmission:
 
         # Mock the evaluation loop: rec_003 graduates, rec_007 still fails
         mock_loop = MagicMock()
-        mock_loop.split.return_value = ([rec_003_ok], [rec_007_bad])
+        mock_loop.split.return_value = ([rec_003_ok], [rec_007_bad], {})
         mock_strategy = MagicMock()
         mock_strategy.name = "check_it"
         mock_strategy.max_attempts = 3
@@ -337,8 +334,7 @@ class TestSelectiveRepromptResubmission:
         from agent_actions.llm.batch.services.reprompt_ops import submit_reprompt_batch
 
         failed_results = [
-            BatchResult(custom_id=cid, content='{"answer": "bad"}', success=True)
-            for cid in FAIL_IDS
+            BatchResult(custom_id=cid, content={"answer": "bad"}, success=True) for cid in FAIL_IDS
         ]
 
         # 6 entries: 3 that match FAIL_IDS + 3 that don't
@@ -406,7 +402,7 @@ class TestRepromptDroppedRecordReconciliation:
         provider = MagicMock()
         provider.submit_batch.return_value = ("batch_rp_1", "submitted")
         provider.retrieve_results.return_value = [
-            BatchResult(custom_id="rec_003", content='{"answer": "fixed"}', success=True),
+            BatchResult(custom_id="rec_003", content={"answer": "fixed"}, success=True),
         ]
 
         with (
@@ -472,7 +468,7 @@ class TestRepromptDroppedRecordReconciliation:
         provider = MagicMock()
         provider.submit_batch.return_value = ("batch_rp_1", "submitted")
         provider.retrieve_results.return_value = [
-            BatchResult(custom_id=cid, content='{"answer": "fixed"}', success=True)
+            BatchResult(custom_id=cid, content={"answer": "fixed"}, success=True)
             for cid in FAIL_IDS
         ]
 
@@ -599,13 +595,13 @@ class TestRepromptDroppedRecordReconciliation:
         provider_retrieve_side_effects = [
             # Attempt 1: drop rec_002
             [
-                BatchResult(custom_id="rec_001", content='{"answer": "bad"}', success=True),
-                BatchResult(custom_id="rec_003", content='{"answer": "bad"}', success=True),
+                BatchResult(custom_id="rec_001", content={"answer": "bad"}, success=True),
+                BatchResult(custom_id="rec_003", content={"answer": "bad"}, success=True),
             ],
             # Attempt 2: both pass
             [
-                BatchResult(custom_id="rec_001", content='{"answer": "fixed"}', success=True),
-                BatchResult(custom_id="rec_003", content='{"answer": "fixed"}', success=True),
+                BatchResult(custom_id="rec_001", content={"answer": "fixed"}, success=True),
+                BatchResult(custom_id="rec_003", content={"answer": "fixed"}, success=True),
             ],
         ]
 
@@ -670,14 +666,13 @@ class TestCheckAndSubmitRepromptSelectivity:
         all_results = _make_results(10, fail_ids=set())
         fail_ids = {"rec_003", "rec_007"}
         still_failing = [
-            BatchResult(custom_id=cid, content='{"answer": "bad"}', success=True)
-            for cid in fail_ids
+            BatchResult(custom_id=cid, content={"answer": "bad"}, success=True) for cid in fail_ids
         ]
         graduated = [r for r in all_results if r.custom_id not in fail_ids]
 
         # Mock evaluation loop: 8 graduate, 2 still fail
         mock_loop = MagicMock()
-        mock_loop.split.return_value = (graduated, still_failing)
+        mock_loop.split.return_value = (graduated, still_failing, {})
         mock_strategy = MagicMock()
         mock_strategy.name = "check_it"
         mock_strategy.max_attempts = 3

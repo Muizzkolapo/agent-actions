@@ -135,7 +135,7 @@ def run_bug8_no_state_mutation():
         patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
     ):
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-        loop.split.return_value = ([], [_make_result("id-1", success=False)])
+        loop.split.return_value = ([], [_make_result("id-1", success=False)], {})
         mock_build.return_value = (loop, strategy, None)
 
         check_and_submit_reprompt(
@@ -193,7 +193,7 @@ def run_bug10_none_content_filtered():
         patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
     ):
         loop, strategy = _make_eval_loop_mocks(max_attempts=3)
-        loop.split.return_value = ([], results)
+        loop.split.return_value = ([], results, {})
         mock_build.return_value = (loop, strategy, None)
 
         check_and_submit_reprompt(

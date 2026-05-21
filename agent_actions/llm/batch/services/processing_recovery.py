@@ -268,7 +268,7 @@ def handle_reprompt_recovery(
         )
 
     loop, strategy, _ = setup
-    graduated, still_failing = loop.split(recovery_results)
+    graduated, still_failing, _failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
     state.graduated_results.extend(BatchRetryService.serialize_results(graduated))
     state.evaluation_strategy_name = strategy.name
@@ -386,7 +386,7 @@ def check_and_submit_reprompt(
     max_attempts = strategy.max_attempts
     on_exhausted = strategy.on_exhausted
 
-    graduated, still_failing = loop.split(batch_results)
+    graduated, still_failing, _failure_types = loop.split(batch_results)
     loop.tag_graduated(graduated)
 
     # Filter out records with None content (provider failures, not content quality issues)

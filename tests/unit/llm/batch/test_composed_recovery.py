@@ -108,7 +108,7 @@ class TestComposedRecoveryPaths:
         strategy.name = "schema_check"
         strategy.max_attempts = 2
         strategy.on_exhausted = "return_last"
-        loop.split.return_value = ([_make_result("id-1")], [])
+        loop.split.return_value = ([_make_result("id-1")], [], {})
         mock_build_loop.return_value = (loop, strategy, None)
 
         result = handle_retry_recovery(
@@ -156,7 +156,7 @@ class TestComposedRecoveryPaths:
         strategy.max_attempts = 0  # Already at max (current_attempt >= max)
         strategy.on_exhausted = "return_last"
         failing_result = _make_result("id-1", success=False)
-        loop.split.return_value = ([], [failing_result])
+        loop.split.return_value = ([], [failing_result], {})
         mock_build_loop.return_value = (loop, strategy, None)
 
         result = handle_retry_recovery(
@@ -203,7 +203,7 @@ class TestComposedRecoveryPaths:
         strategy.max_attempts = 0
         strategy.on_exhausted = "raise"
         failing_result = _make_result("id-1", success=False)
-        loop.split.return_value = ([], [failing_result])
+        loop.split.return_value = ([], [failing_result], {})
         mock_build_loop.return_value = (loop, strategy, None)
 
         # Wire the real exhaustion function to get the raise
@@ -282,7 +282,7 @@ class TestComposedRecoveryPaths:
         loop = MagicMock()
         strategy = MagicMock()
         strategy.name = "validation"
-        loop.split.return_value = ([_make_result("id-1"), _make_result("id-2")], [])
+        loop.split.return_value = ([_make_result("id-1"), _make_result("id-2")], [], {})
         mock_build_loop.return_value = (loop, strategy, None)
 
         result = handle_reprompt_recovery(
@@ -388,7 +388,7 @@ class TestGraduatedPoolMonotonicity:
         strategy.name = "validation"
 
         # Split returns: id-new graduated, id-still-bad failing
-        loop.split.return_value = ([_make_result("id-new")], [_make_result("id-still-bad")])
+        loop.split.return_value = ([_make_result("id-new")], [_make_result("id-still-bad")], {})
         mock_build_loop.return_value = (loop, strategy, None)
 
         service = _mock_service()
@@ -434,7 +434,7 @@ class TestGraduatedPoolMonotonicity:
         strategy = MagicMock()
         strategy.name = "validation"
         # This cycle: id-2 graduates, id-3 still fails
-        loop.split.return_value = ([_make_result("id-2")], [_make_result("id-3")])
+        loop.split.return_value = ([_make_result("id-2")], [_make_result("id-3")], {})
         mock_build_loop.return_value = (loop, strategy, None)
 
         service = _mock_service()

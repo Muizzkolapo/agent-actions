@@ -111,7 +111,7 @@ def _mock_validation_setup():
 def mock_loop():
     """A controllable EvaluationLoop instance with patched constructor."""
     loop = MagicMock()
-    loop.split.return_value = ([], [])
+    loop.split.return_value = ([], [], {})
     loop.tag_graduated = MagicMock()
     with patch("agent_actions.processing.evaluation.EvaluationLoop", return_value=loop):
         yield loop
@@ -151,7 +151,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
         """loop.split() receives recovery_results, NOT merged accumulated."""
         recovery = [_result("r1"), _result("r2")]
         accumulated = [_result("old1"), _result("old2"), _result("old3")]
-        mock_loop.split.return_value = ([_result("r1")], [_result("r2")])
+        mock_loop.split.return_value = ([_result("r1")], [_result("r2")], {})
 
         service = _make_service()
         with (
@@ -170,7 +170,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
     def test_graduated_results_grow_after_each_cycle(self, mock_loop):
         """state.graduated_results accumulates graduated records across cycles."""
         r1, r2 = _result("r1", "pass"), _result("r2", "fail")
-        mock_loop.split.return_value = ([r1], [r2])
+        mock_loop.split.return_value = ([r1], [r2], {})
 
         prior_graduated = [{"custom_id": "r0", "content": "prior", "success": True}]
         state = _make_state(
@@ -189,7 +189,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
     def test_record_count_invariant(self, mock_loop):
         """Only still_failing records are submitted for reprompt."""
         recovery = [_result("r1"), _result("r2"), _result("r3")]
-        mock_loop.split.return_value = ([_result("r1"), _result("r3")], [_result("r2")])
+        mock_loop.split.return_value = ([_result("r1"), _result("r3")], [_result("r2")], {})
 
         service = _make_service()
         with (
@@ -210,7 +210,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
     def test_exhaustion_marks_still_failing_and_adds_to_graduated(self, mock_loop):
         """When max_attempts reached, still_failing get exhaustion metadata and join graduated."""
         r1, r2 = _result("r1", "pass"), _result("r2", "fail")
-        mock_loop.split.return_value = ([r1], [r2])
+        mock_loop.split.return_value = ([r1], [r2], {})
 
         state = _make_state(reprompt_attempt=2, reprompt_max_attempts=2, graduated_results=[])
         service = _make_service()
@@ -239,7 +239,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
     def test_all_graduated_no_submission(self, mock_loop):
         """When all recovery_results pass, no reprompt batch is submitted."""
         recovery = [_result("r1"), _result("r2")]
-        mock_loop.split.return_value = (recovery, [])
+        mock_loop.split.return_value = (recovery, [], {})
 
         service = _make_service()
         with (
@@ -265,7 +265,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
     def test_submission_failure_falls_through_to_exhaustion(self, mock_loop):
         """When submit_reprompt_batch returns None under max attempts, treat as exhausted."""
         r1, r2 = _result("r1", "pass"), _result("r2", "fail")
-        mock_loop.split.return_value = ([r1], [r2])
+        mock_loop.split.return_value = ([r1], [r2], {})
 
         state = _make_state(reprompt_attempt=0, reprompt_max_attempts=2, graduated_results=[])
         service = _make_service()
@@ -317,7 +317,7 @@ class TestCheckAndSubmitRepromptGraduatedPool:
     def test_uses_evaluation_loop_split(self, mock_loop):
         """EvaluationLoop.split() is used instead of validate_results()."""
         batch = [_result("r1"), _result("r2")]
-        mock_loop.split.return_value = ([_result("r1")], [_result("r2")])
+        mock_loop.split.return_value = ([_result("r1")], [_result("r2")], {})
 
         service = _make_service()
         with patch.object(RecoveryStateManager, "save"):
@@ -330,7 +330,7 @@ class TestCheckAndSubmitRepromptGraduatedPool:
     def test_all_pass_returns_true(self, mock_loop):
         """When all results pass evaluation, returns True (no reprompt needed)."""
         batch = [_result("r1"), _result("r2")]
-        mock_loop.split.return_value = (batch, [])
+        mock_loop.split.return_value = (batch, [], {})
 
         result = self._call(_make_service(), batch_results=batch)
         assert result is True
@@ -338,7 +338,7 @@ class TestCheckAndSubmitRepromptGraduatedPool:
     def test_exhausted_returns_true_and_applies_metadata(self, mock_loop):
         """When current_attempt >= max_attempts, applies exhaustion metadata and returns True."""
         batch = [_result("r1"), _result("r2")]
-        mock_loop.split.return_value = ([_result("r1")], [_result("r2")])
+        mock_loop.split.return_value = ([_result("r1")], [_result("r2")], {})
 
         service = _make_service()
         recovery_state = _make_state(reprompt_attempt=2)
@@ -357,7 +357,7 @@ class TestCheckAndSubmitRepromptGraduatedPool:
     def test_graduated_saved_to_state(self, mock_loop):
         """Graduated results are persisted to state.graduated_results."""
         r1, r2 = _result("r1", "pass"), _result("r2", "fail")
-        mock_loop.split.return_value = ([r1], [r2])
+        mock_loop.split.return_value = ([r1], [r2], {})
 
         service = _make_service()
         saved_state = {}
