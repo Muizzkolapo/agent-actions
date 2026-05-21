@@ -102,14 +102,15 @@ class CollectionStats:
 
         1. **only_guard_outcomes** with no output — write a node-level
            SKIPPED disposition so the executor can cascade-skip downstream.
+           Guard-skipped records with passthrough data ARE in ``output``,
+           so ``not output`` prevents cascade-blocking when passthrough
+           data exists.
         2. **zero successes** among active (non-unprocessed) input records
            with at least one failure — raise ``RuntimeError`` for the
-           circuit breaker.
+           circuit breaker.  Unprocessed (cascade-quarantined) records are
+           excluded from the denominator so pass-through-only actions
+           don't erroneously trip the breaker.
         """
-        # Guard-only outcome: signal node-level SKIP when output is truly
-        # empty.  Guard-skipped records with passthrough data ARE in
-        # ``output``, so ``not output`` prevents cascade-blocking when
-        # passthrough data exists.
         if data and self.only_guard_outcomes and not output:
             write_node_level_disposition(
                 storage_backend,
@@ -119,9 +120,6 @@ class CollectionStats:
             )
             return
 
-        # Exclude cascade-quarantined records from the denominator: if all
-        # ACTIVE input records failed but some records were quarantined
-        # pass-throughs, the action should not be marked FAILED.
         active_input_count = len(data) - self.unprocessed
         if active_input_count > 0 and self.success == 0 and (self.failed + self.exhausted) > 0:
             raise RuntimeError(
