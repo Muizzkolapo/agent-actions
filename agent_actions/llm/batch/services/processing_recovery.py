@@ -35,6 +35,7 @@ from agent_actions.logging.events.validation_events import (
     RepromptRecoveredEvent,
     RepromptRetryEvent,
 )
+from agent_actions.processing.evaluation.loop import accumulate_failure_types
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -273,10 +274,7 @@ def handle_reprompt_recovery(
     state.graduated_results.extend(BatchRetryService.serialize_results(graduated))
     state.evaluation_strategy_name = validation_name
 
-    # Accumulate failure type counts per record across rounds
-    for cid, ftype in failure_types.items():
-        per_record = state.failure_type_counts.setdefault(cid, {})
-        per_record[ftype] = per_record.get(ftype, 0) + 1
+    accumulate_failure_types(state.failure_type_counts, failure_types)
 
     if still_failing and state.reprompt_attempt < state.reprompt_max_attempts:
         next_attempt = state.reprompt_attempt + 1
@@ -404,11 +402,8 @@ def check_and_submit_reprompt(
 
     current_attempt = recovery_state.reprompt_attempt if recovery_state else 0
 
-    # Build per-record failure type counts from this split
     ftc: dict[str, dict[str, int]] = {}
-    for cid, ftype in failure_types.items():
-        per_record = ftc.setdefault(cid, {})
-        per_record[ftype] = per_record.get(ftype, 0) + 1
+    accumulate_failure_types(ftc, failure_types)
 
     if current_attempt >= max_attempts:
         failed_ids = {r.custom_id for r in still_failing}

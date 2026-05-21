@@ -125,3 +125,18 @@ class EvaluationLoop:
             len(submissions),
         )
         return submissions
+
+
+def accumulate_failure_types(
+    target: dict[str, dict[str, int]],
+    failure_types: dict[str, str],
+) -> None:
+    """Merge per-record failure classifications into cumulative counts.
+
+    ``failure_types`` maps ``custom_id → failure_type`` (one entry per
+    failing record from a single ``split()`` call).  ``target`` accumulates
+    counts across rounds: ``custom_id → {failure_type: count}``.
+    """
+    for cid, ftype in failure_types.items():
+        per_record = target.setdefault(cid, {})
+        per_record[ftype] = per_record.get(ftype, 0) + 1

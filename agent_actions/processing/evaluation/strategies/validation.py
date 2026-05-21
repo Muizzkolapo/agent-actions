@@ -90,7 +90,6 @@ class ValidationStrategy:
         ):
             return EvaluationOutcome(passed=True)
 
-        # Explicit parse error detection — before UDF, matching online path
         parse_error = _detect_parse_error(result.content, json_mode=self._json_mode)
         if parse_error:
             logger.warning(

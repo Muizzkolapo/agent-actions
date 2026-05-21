@@ -16,6 +16,7 @@ from agent_actions.logging.events.validation_events import (
     RepromptRetryEvent,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.processing.evaluation.loop import accumulate_failure_types
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -184,10 +185,7 @@ def validate_and_reprompt(
         graduated, still_failing, round_failure_types = loop.split(active_results)
         all_graduated.extend(graduated)
 
-        # Accumulate failure type counts across rounds
-        for cid, ftype in round_failure_types.items():
-            per_record = failure_type_counts.setdefault(cid, {})
-            per_record[ftype] = per_record.get(ftype, 0) + 1
+        accumulate_failure_types(failure_type_counts, round_failure_types)
 
         if not still_failing:
             logger.info("All records passed validation after %d attempts", attempt + 1)
