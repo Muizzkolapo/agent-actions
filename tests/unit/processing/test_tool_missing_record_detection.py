@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
+from agent_actions.record.reasons import TOOL_MISSING_RECORD
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.udf_management.registry import FileUDFResult
 
@@ -84,7 +85,7 @@ class TestToolMissingRecordDetection:
         assert missing_guids == {"r2", "r4"}
 
         for r in missing:
-            assert r.skip_reason == "tool_missing_record"
+            assert r.skip_reason == TOOL_MISSING_RECORD
             assert r.executed is False
             assert len(r.data) == 1
             assert r.data[0].get("_tombstone") is True

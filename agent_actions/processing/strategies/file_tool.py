@@ -13,6 +13,7 @@ from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
 )
+from agent_actions.record.reasons import TOOL_MISSING_RECORD
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.content import is_version_merge
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -103,9 +104,7 @@ class FileToolStrategy:
             has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
             missing_results: list[ProcessingResult] = []
             if not is_expansion and not has_synthetic:
-                output_guids = {
-                    item.get("source_guid") for item in structured_data if isinstance(item, dict)
-                }
+                output_guids = {item.get("source_guid") for item in structured_data}
                 for input_record in records:
                     rid = input_record.get("source_guid")
                     if rid and rid not in output_guids:
@@ -120,11 +119,11 @@ class FileToolStrategy:
                                     build_tombstone(
                                         context.agent_name,
                                         input_record,
-                                        "tool_missing_record",
+                                        TOOL_MISSING_RECORD,
                                         source_guid=rid,
                                     )
                                 ],
-                                reason="tool_missing_record",
+                                reason=TOOL_MISSING_RECORD,
                                 source_guid=rid,
                                 input_record=input_record,
                             )
