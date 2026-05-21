@@ -67,6 +67,7 @@ class PreviewCommand:
             workflow_name=self.workflow_name,
             backend_type="sqlite",
         )
+        backend.initialize()
 
         try:
             if self.stats_only:
