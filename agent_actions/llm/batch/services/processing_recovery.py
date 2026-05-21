@@ -268,7 +268,8 @@ def handle_reprompt_recovery(
             start_time,
         )
 
-    loop, strategy, validation_name = setup
+    loop, strategy = setup
+    validation_name = strategy.name
     graduated, still_failing, failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
     state.graduated_results.extend(BatchRetryService.serialize_results(graduated))
@@ -387,7 +388,8 @@ def check_and_submit_reprompt(
     if setup is None:
         return True
 
-    loop, strategy, validation_name = setup
+    loop, strategy = setup
+    validation_name = strategy.name
     max_attempts = strategy.max_attempts
     on_exhausted = strategy.on_exhausted
 

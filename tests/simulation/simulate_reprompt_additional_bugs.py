@@ -136,7 +136,7 @@ def run_bug8_no_state_mutation():
     ):
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
         loop.split.return_value = ([], [_make_result("id-1", success=False)], {})
-        mock_build.return_value = (loop, strategy, None)
+        mock_build.return_value = (loop, strategy)
 
         check_and_submit_reprompt(
             service,
@@ -194,7 +194,7 @@ def run_bug10_none_content_filtered():
     ):
         loop, strategy = _make_eval_loop_mocks(max_attempts=3)
         loop.split.return_value = ([], results, {})
-        mock_build.return_value = (loop, strategy, None)
+        mock_build.return_value = (loop, strategy)
 
         check_and_submit_reprompt(
             service,

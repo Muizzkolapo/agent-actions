@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 from agent_actions.processing.evaluation.loop import EvaluationLoop
 from agent_actions.processing.evaluation.strategies.validation import (
     ValidationStrategy,
-    _detect_parse_error,
+    detect_parse_error,
 )
 
 # ---------------------------------------------------------------------------
@@ -45,46 +45,46 @@ def _always_fail(response):
 
 
 # ---------------------------------------------------------------------------
-# _detect_parse_error helper tests
+# detect_parse_error helper tests
 # ---------------------------------------------------------------------------
 
 
 class TestDetectParseError:
     def test_string_content_json_mode(self):
         """String content in json_mode → parse error."""
-        assert _detect_parse_error("not json", json_mode=True) is not None
+        assert detect_parse_error("not json", json_mode=True) is not None
 
     def test_string_content_non_json_mode(self):
         """String content in non-json_mode → NOT a parse error (legitimate text)."""
-        assert _detect_parse_error("plain text response", json_mode=False) is None
+        assert detect_parse_error("plain text response", json_mode=False) is None
 
     def test_dict_with_parse_error_key(self):
         """Dict containing _parse_error → always a parse error regardless of json_mode."""
         content = {"raw_response": "bad", "_parse_error": "Failed to parse JSON"}
-        assert _detect_parse_error(content, json_mode=False) == "Failed to parse JSON"
-        assert _detect_parse_error(content, json_mode=True) == "Failed to parse JSON"
+        assert detect_parse_error(content, json_mode=False) == "Failed to parse JSON"
+        assert detect_parse_error(content, json_mode=True) == "Failed to parse JSON"
 
     def test_dict_without_parse_error_key(self):
         """Normal dict content → not a parse error."""
-        assert _detect_parse_error({"answer": "ok"}, json_mode=True) is None
-        assert _detect_parse_error({"answer": "ok"}, json_mode=False) is None
+        assert detect_parse_error({"answer": "ok"}, json_mode=True) is None
+        assert detect_parse_error({"answer": "ok"}, json_mode=False) is None
 
     def test_list_with_parse_error_at_index_0(self):
         """Online-path format: list with _parse_error at index 0."""
         content = [{"_parse_error": "bad json", "raw_response": ""}]
-        assert _detect_parse_error(content, json_mode=False) == "bad json"
+        assert detect_parse_error(content, json_mode=False) == "bad json"
 
     def test_list_without_parse_error(self):
         """Normal list content → not a parse error."""
-        assert _detect_parse_error([{"value": 10}], json_mode=True) is None
+        assert detect_parse_error([{"value": 10}], json_mode=True) is None
 
     def test_empty_parse_error_string_returns_none(self):
         """Empty _parse_error value is not treated as a parse error."""
-        assert _detect_parse_error({"_parse_error": ""}, json_mode=True) is None
+        assert detect_parse_error({"_parse_error": ""}, json_mode=True) is None
 
     def test_none_content(self):
         """None content → not a parse error."""
-        assert _detect_parse_error(None, json_mode=True) is None
+        assert detect_parse_error(None, json_mode=True) is None
 
 
 # ---------------------------------------------------------------------------

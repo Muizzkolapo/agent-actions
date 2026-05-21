@@ -287,7 +287,7 @@ class TestSelectiveRepromptResubmission:
         mock_strategy.name = "check_it"
         mock_strategy.max_attempts = 3
         mock_strategy.on_exhausted = "return_last"
-        mock_build_loop.return_value = (mock_loop, mock_strategy, "check_it")
+        mock_build_loop.return_value = (mock_loop, mock_strategy)
 
         service = MagicMock()
         service._retry_service.submit_reprompt_batch.return_value = ("batch_rp_2", 1)
@@ -677,7 +677,7 @@ class TestCheckAndSubmitRepromptSelectivity:
         mock_strategy.name = "check_it"
         mock_strategy.max_attempts = 3
         mock_strategy.on_exhausted = "return_last"
-        mock_build_loop.return_value = (mock_loop, mock_strategy, "check_it")
+        mock_build_loop.return_value = (mock_loop, mock_strategy)
 
         service = MagicMock()
         service._retry_service.submit_reprompt_batch.return_value = ("batch_rp", 2)

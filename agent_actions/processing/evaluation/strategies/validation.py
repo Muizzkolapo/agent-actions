@@ -26,7 +26,7 @@ _PARSE_ERROR_FEEDBACK = (
 )
 
 
-def _detect_parse_error(content: Any, *, json_mode: bool) -> str | None:
+def detect_parse_error(content: Any, *, json_mode: bool) -> str | None:
     """Detect a parse error in batch result content.
 
     Batch providers return content as a raw string when JSON parsing fails.
@@ -90,7 +90,7 @@ class ValidationStrategy:
         ):
             return EvaluationOutcome(passed=True)
 
-        parse_error = _detect_parse_error(result.content, json_mode=self._json_mode)
+        parse_error = detect_parse_error(result.content, json_mode=self._json_mode)
         if parse_error:
             logger.warning(
                 "Parse error detected for %s before UDF: %s",
@@ -119,7 +119,7 @@ class ValidationStrategy:
             )
 
         # Parse error → JSON-specific feedback (not generic UDF feedback)
-        if _detect_parse_error(result.content, json_mode=self._json_mode):
+        if detect_parse_error(result.content, json_mode=self._json_mode):
             return _PARSE_ERROR_FEEDBACK
 
         return build_validation_feedback(

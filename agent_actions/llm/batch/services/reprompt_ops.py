@@ -97,8 +97,9 @@ def build_evaluation_loop(
     sequence used by validate_and_reprompt, handle_reprompt_recovery, and
     check_and_submit_reprompt.
 
-    Returns ``(loop, strategy, validation_name)`` or ``None`` if reprompt
-    is not configured or the validation function cannot be resolved.
+    Returns ``(loop, strategy)`` or ``None`` if reprompt is not configured
+    or the validation function cannot be resolved.  The validation name
+    is available via ``strategy.name``.
     """
     from agent_actions.processing.evaluation import EvaluationLoop
     from agent_actions.processing.evaluation.strategies import ValidationStrategy
@@ -134,7 +135,7 @@ def build_evaluation_loop(
         json_mode=bool(json_mode),
         validation_name=parsed.validation_name,
     )
-    return EvaluationLoop(strategy), strategy, parsed.validation_name
+    return EvaluationLoop(strategy), strategy
 
 
 def validate_and_reprompt(
@@ -168,7 +169,8 @@ def validate_and_reprompt(
         logger.debug("Reprompt not configured, skipping validation")
         return results
 
-    loop, strategy, validation_name = setup
+    loop, strategy = setup
+    validation_name = strategy.name
     max_attempts = strategy.max_attempts
     on_exhausted = strategy.on_exhausted
     feedback_message = strategy._feedback_message
@@ -445,7 +447,7 @@ def validate_results(
         return [], None
 
     from agent_actions.processing.evaluation.strategies.validation import (
-        _detect_parse_error,
+        detect_parse_error,
     )
 
     json_mode = bool((agent_config or {}).get("json_mode", get_default("json_mode")))
@@ -463,7 +465,7 @@ def validate_results(
             continue
 
         # Check parse error before UDF — matching online path
-        if _detect_parse_error(result.content, json_mode=json_mode):
+        if detect_parse_error(result.content, json_mode=json_mode):
             failed_results.append(result)
             continue
 
