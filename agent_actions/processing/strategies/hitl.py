@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import AgentActionsError
-from agent_actions.processing.cascade_filter import partition_cascade_records
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.record_helpers import carry_framework_fields
 from agent_actions.processing.types import (
@@ -17,7 +16,6 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
@@ -43,25 +41,15 @@ class HITLStrategy:
     ) -> list[ProcessingResult]:
         """Invoke a FILE-mode HITL action and broadcast the decision.
 
-        Cascade-blocking records (FAILED/EXHAUSTED/CASCADE_SKIPPED from
-        upstream) are partitioned out before the HITL tool runs.
+        Records are already cascade-filtered by UnifiedProcessor — only
+        processable records arrive here.
 
         ``context.source_data`` must contain the pre-context-scope records
-        that passed the guard filter (set by UnifiedProcessor before
-        invoking the strategy).  These are used to build structured output.
+        that passed the guard and cascade filters (set by UnifiedProcessor
+        before invoking the strategy).  These are used to build structured
+        output.
         """
-        processable, quarantined_results = partition_cascade_records(
-            records, action_name=context.agent_name
-        )
-
-        if not processable and quarantined_results:
-            return quarantined_results
-
-        # Filter original_data to exclude quarantined records so positional
-        # indexing of record_reviews aligns with what the HITL tool received.
-        original_data = [
-            r for r in (context.source_data or []) if r.get("_state") not in CASCADE_BLOCKING_VALUES
-        ]
+        original_data = context.source_data or []
         try:
             # Inject HITL state persistence metadata into agent config
             hitl_agent_config = dict(context.agent_config)
@@ -78,7 +66,7 @@ class HITLStrategy:
                 hitl_agent_config["_hitl_file_stem"] = file_stem
 
             context_scope = context.agent_config.get("context_scope") or {}
-            filtered_records = [extract_tool_input(r, context_scope) for r in processable]
+            filtered_records = [extract_tool_input(r, context_scope) for r in records]
 
             empty_count = sum(1 for r in filtered_records if not r)
             if empty_count:
@@ -123,11 +111,11 @@ class HITLStrategy:
                     1 for r in (decision_payload.get("record_reviews") or []) if r is not None
                 )
                 raise AgentActionsError(
-                    f"HITL review timed out ({reviewed}/{len(processable)} records reviewed). "
+                    f"HITL review timed out ({reviewed}/{len(records)} records reviewed). "
                     "Partial reviews saved. Re-run workflow to resume.",
                     context={
                         "agent_name": context.agent_name,
-                        "record_count": len(processable),
+                        "record_count": len(records),
                     },
                 )
 
@@ -170,7 +158,7 @@ class HITLStrategy:
                 source_mapping={i: i for i in range(len(structured_data))},
             )
 
-            return quarantined_results + [result]
+            return [result]
         except AgentActionsError:
             raise
         except Exception:

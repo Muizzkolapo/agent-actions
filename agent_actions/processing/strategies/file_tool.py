@@ -7,13 +7,13 @@ import logging
 from typing import Any, cast
 
 from agent_actions.errors import AgentActionsError
-from agent_actions.processing.cascade_filter import partition_cascade_records
 from agent_actions.processing.helpers import run_dynamic_agent
+from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
 )
-from agent_actions.record.state import CASCADE_BLOCKING_VALUES
+from agent_actions.record.reasons import TOOL_MISSING_RECORD
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.content import is_version_merge
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -47,30 +47,19 @@ class FileToolStrategy:
     ) -> list[ProcessingResult]:
         """Invoke a FILE-mode tool and reconcile outputs.
 
-        Cascade-blocking records (FAILED/EXHAUSTED/CASCADE_SKIPPED from
-        upstream) are partitioned out before the tool runs — no tool
-        invocation for quarantined records.
+        Records are already cascade-filtered by UnifiedProcessor — only
+        processable records arrive here.
 
         ``context.source_data`` must contain the pre-context-scope records
-        that passed the guard filter (set by UnifiedProcessor before
-        invoking the strategy).  These are used for output reconciliation.
+        that passed the guard and cascade filters (set by UnifiedProcessor
+        before invoking the strategy).  These are used for output
+        reconciliation.
         """
-        processable, quarantined_results = partition_cascade_records(
-            records, action_name=context.agent_name
-        )
-
-        if not processable and quarantined_results:
-            return quarantined_results
-
-        # Filter original_data to exclude quarantined records so
-        # TrackedItem.source_index aligns with reconcile_outputs lookups.
-        original_data = [
-            r for r in (context.source_data or []) if r.get("_state") not in CASCADE_BLOCKING_VALUES
-        ]
+        original_data = context.source_data or []
         try:
             context_scope = context.agent_config.get("context_scope") or {}
             clean_input: list[TrackedItem] = []
-            for i, record in enumerate(processable):
+            for i, record in enumerate(records):
                 business = extract_tool_input(record, context_scope)
                 clean_input.append(TrackedItem(business, source_index=i))
 
@@ -84,18 +73,18 @@ class FileToolStrategy:
                 skip_guard_eval=True,
             )
 
-            if is_empty_response(raw_response) and processable:
+            if is_empty_response(raw_response) and records:
                 error_msg = (
                     f"Tool '{context.agent_name}' returned empty result "
-                    f"from {len(processable)} input record(s)"
+                    f"from {len(records)} input record(s)"
                 )
-                return quarantined_results + [
+                return [
                     ProcessingResult.failed(
                         error=error_msg,
                         source_guid=record.get("source_guid"),
                         source_snapshot=copy.deepcopy(record),
                     )
-                    for record in processable
+                    for record in records
                 ]
 
             structured_data, source_mapping = reconcile_outputs(
@@ -105,16 +94,51 @@ class FileToolStrategy:
                 version_merge=is_version_merge(context.agent_config),
             )
 
+            is_expansion = len(structured_data) > len(records)
+
+            # Detect missing records — tool dropped input without output.
+            # Skip for expansion tools (N→M, M>N) where output GUIDs
+            # legitimately differ from input GUIDs.
+            # Also skip when synthetic records exist (source_mapping contains
+            # None) — we can't determine which inputs a synthetic consumed.
+            has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
+            missing_results: list[ProcessingResult] = []
+            if not is_expansion and not has_synthetic:
+                output_guids = {item.get("source_guid") for item in structured_data}
+                for input_record in records:
+                    rid = input_record.get("source_guid")
+                    if rid and rid not in output_guids:
+                        logger.warning(
+                            "Tool '%s' did not return record %s — producing passthrough tombstone",
+                            context.agent_name,
+                            rid,
+                        )
+                        missing_results.append(
+                            ProcessingResult.unprocessed(
+                                data=[
+                                    build_tombstone(
+                                        context.agent_name,
+                                        input_record,
+                                        TOOL_MISSING_RECORD,
+                                        source_guid=rid,
+                                    )
+                                ],
+                                reason=TOOL_MISSING_RECORD,
+                                source_guid=rid,
+                                input_record=input_record,
+                            )
+                        )
+
             result = ProcessingResult.success(
                 data=structured_data,
                 source_guid=None,  # FILE mode has no single source
                 raw_response=raw_response,
-                is_expansion=len(structured_data) > len(processable),
+                is_expansion=is_expansion,
             )
             result.executed = executed
             result.source_mapping = source_mapping
 
-            return quarantined_results + [result]
+            return [result] + missing_results
 
         except AgentActionsError:
             raise
@@ -124,7 +148,7 @@ class FileToolStrategy:
                 f"FILE mode tool '{context.agent_name}' failed: {e}",
                 context={
                     "agent_name": context.agent_name,
-                    "record_count": len(processable),
+                    "record_count": len(records),
                     "operation": "file_mode_tool",
                 },
                 cause=e,

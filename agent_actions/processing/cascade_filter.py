@@ -5,8 +5,8 @@ Partitions input records into processable (ACTIVE) and quarantined
 Quarantined records produce UNPROCESSED results immediately — no LLM
 call, no tool invocation, no compute wasted.
 
-Every processing strategy must call :func:`partition_cascade_records`
-at the top of its ``invoke()`` method.
+Called by :class:`~agent_actions.processing.unified.UnifiedProcessor`
+before ``strategy.invoke()`` — strategies never see cascade-blocked records.
 """
 
 from __future__ import annotations

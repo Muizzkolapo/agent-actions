@@ -91,6 +91,7 @@ class InitialStrategy(ActionStrategy):
                     output_directory=params.output_directory,
                     idx=params.idx,
                     storage_backend=params.storage_backend,
+                    action_configs=params.action_configs,
                 )
             ),
         )

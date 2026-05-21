@@ -39,6 +39,7 @@ class InitialStageContext:
     output_directory: str
     idx: int = 0
     storage_backend: Any = None  # Optional StorageBackend for database persistence
+    action_configs: dict[str, Any] | None = None
 
 
 @dataclass
@@ -65,6 +66,7 @@ class BatchProcessingContext:
     output_directory: str
     idx: int = 0
     storage_backend: Any = None  # Optional StorageBackend for database persistence
+    action_configs: dict[str, Any] | None = None
 
 
 def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:
@@ -225,6 +227,7 @@ def process_initial_stage(ctx: InitialStageContext):
             output_directory=ctx.output_directory,
             idx=ctx.idx,
             storage_backend=ctx.storage_backend,
+            action_configs=ctx.action_configs,
         )
         return _process_batch_mode(batch_ctx)
 
@@ -608,13 +611,25 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.llm.batch.service import create_registry_manager_factory
     from agent_actions.llm.batch.services.submission import BatchSubmissionService
+    from agent_actions.processing.disposition_gate import DispositionGate
+    from agent_actions.workflow.pipeline import ProcessingPipeline
 
     local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)
-    task_preparator = BatchTaskPreparator(storage_backend=ctx.storage_backend)
+
+    agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
+        cast("ActionConfigDict", ctx.agent_config),
+        ctx.action_configs,
+    )
+
+    task_preparator = BatchTaskPreparator(
+        action_indices=agent_indices,
+        dependency_configs=dependency_configs,
+        storage_backend=ctx.storage_backend,
+        version_context=version_context,
+    )
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
     registry_manager_factory = create_registry_manager_factory()
-    from agent_actions.processing.disposition_gate import DispositionGate
 
     disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
     submission_service = BatchSubmissionService(
@@ -627,7 +642,12 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     )
     file_name = Path(ctx.file_path).name
     result = submission_service.submit_batch_job(
-        ctx.agent_config, file_name, ctx.data_chunk, ctx.output_directory
+        ctx.agent_config,
+        file_name,
+        ctx.data_chunk,
+        ctx.output_directory,
+        source_data=ctx.data_chunk,
+        workflow_metadata={"source_file": ctx.file_path},
     )
 
     relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
