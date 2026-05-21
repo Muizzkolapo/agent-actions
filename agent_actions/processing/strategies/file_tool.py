@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.helpers import run_dynamic_agent
+from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
@@ -92,16 +93,53 @@ class FileToolStrategy:
                 version_merge=is_version_merge(context.agent_config),
             )
 
+            is_expansion = len(structured_data) > len(records)
+
+            # Detect missing records — tool dropped input without output.
+            # Skip for expansion tools (N→M, M>N) where output GUIDs
+            # legitimately differ from input GUIDs.
+            # Also skip when synthetic records exist (source_mapping contains
+            # None) — we can't determine which inputs a synthetic consumed.
+            has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
+            missing_results: list[ProcessingResult] = []
+            if not is_expansion and not has_synthetic:
+                output_guids = {
+                    item.get("source_guid") for item in structured_data if isinstance(item, dict)
+                }
+                for input_record in records:
+                    rid = input_record.get("source_guid")
+                    if rid and rid not in output_guids:
+                        logger.warning(
+                            "Tool '%s' did not return record %s — producing passthrough tombstone",
+                            context.agent_name,
+                            rid,
+                        )
+                        missing_results.append(
+                            ProcessingResult.unprocessed(
+                                data=[
+                                    build_tombstone(
+                                        context.agent_name,
+                                        input_record,
+                                        "tool_missing_record",
+                                        source_guid=rid,
+                                    )
+                                ],
+                                reason="tool_missing_record",
+                                source_guid=rid,
+                                input_record=input_record,
+                            )
+                        )
+
             result = ProcessingResult.success(
                 data=structured_data,
                 source_guid=None,  # FILE mode has no single source
                 raw_response=raw_response,
-                is_expansion=len(structured_data) > len(records),
+                is_expansion=is_expansion,
             )
             result.executed = executed
             result.source_mapping = source_mapping
 
-            return [result]
+            return [result] + missing_results
 
         except AgentActionsError:
             raise
