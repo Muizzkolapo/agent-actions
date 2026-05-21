@@ -55,6 +55,10 @@ class RecoveryState:
     # Which evaluation strategy is active (e.g., "validation", "critique")
     evaluation_strategy_name: str | None = None
 
+    # Per-record failure type counts accumulated across recovery rounds.
+    # Maps custom_id → {"parse_error": N, "udf_fail": M, "schema_fail": K}
+    failure_type_counts: dict[str, dict[str, int]] = field(default_factory=dict)
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict without deep-copying already-serialized lists.
 
@@ -77,6 +81,7 @@ class RecoveryState:
             "accumulated_results": self.accumulated_results,
             "graduated_results": self.graduated_results,
             "evaluation_strategy_name": self.evaluation_strategy_name,
+            "failure_type_counts": self.failure_type_counts,
         }
 
 

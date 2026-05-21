@@ -32,12 +32,13 @@ Agent Actions.
 
 ## Design Notes
 
-### Zero-success failure check (`pipeline.py`)
+### Zero-success failure check
 
-Both `pipeline.py` and `initial_pipeline.py` raise `RuntimeError` when `stats.success == 0`
-and `stats.failed + stats.exhausted > 0`. This uses `stats.success` rather than `not output`
-because EXHAUSTED records produce tombstone data that inflates the output list despite
-representing zero real successes.
+Both `pipeline.py` and `initial_pipeline.py` delegate to
+`CollectionStats.raise_if_terminal_failure()` (in `processing/result_collector.py`).
+The method uses `stats.success` rather than `not output` because EXHAUSTED records
+produce tombstone data that inflates the output list despite representing zero real
+successes.
 
 This intentionally overrides `on_exhausted="return_last"` when ALL records exhaust.
 `return_last` is designed for partial failures where some records succeed alongside exhausted

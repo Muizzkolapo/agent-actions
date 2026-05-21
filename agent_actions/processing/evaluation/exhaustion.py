@@ -27,6 +27,7 @@ def apply_exhausted_reprompt(
     attempt: int,
     on_exhausted: str,
     per_record_attempts: dict[str, int] | None = None,
+    failure_type_counts: dict[str, dict[str, int]] | None = None,
 ) -> list[BatchResult]:
     """Apply reprompt exhaustion metadata to records that failed validation.
 
@@ -43,6 +44,10 @@ def apply_exhausted_reprompt(
         per_record_attempts: Optional per-record attempt counts. When
             provided, each record's metadata uses its own count instead
             of the scalar ``attempt``. Used by the sync reprompt path.
+        failure_type_counts: Optional per-record failure type counts.
+            Maps custom_id → ``{"parse_error": N, "udf_fail": M, ...}``.
+            When provided, populates ``parse_error_count``,
+            ``schema_fail_count``, ``udf_fail_count`` on RepromptMetadata.
 
     Returns:
         The same results list with exhaustion metadata applied.
@@ -73,6 +78,8 @@ def apply_exhausted_reprompt(
             per_record_attempts.get(result.custom_id, attempt) if per_record_attempts else attempt
         )
 
+        counts = (failure_type_counts or {}).get(result.custom_id, {})
+
         if not result.recovery_metadata:
             result.recovery_metadata = RecoveryMetadata()
 
@@ -80,6 +87,9 @@ def apply_exhausted_reprompt(
             attempts=record_attempts,
             passed=False,
             validation=validation_name,
+            parse_error_count=counts.get("parse_error", 0),
+            schema_fail_count=counts.get("schema_fail", 0),
+            udf_fail_count=counts.get("udf_fail", 0),
         )
 
     return results
