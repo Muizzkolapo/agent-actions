@@ -22,7 +22,7 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
@@ -582,33 +582,9 @@ class ProcessingPipeline:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
             output, stats = self._unified_processor.process(data, context, strategy)
 
-        # Signal node-level SKIP only when output is truly empty and the
-        # only outcomes were guard-skip / guard-filter.  Guard-skipped
-        # records with passthrough data ARE in `output`, so `not output`
-        # prevents cascade-blocking when passthrough data exists.
-        if data and stats.only_guard_outcomes and not output:
-            write_node_level_disposition(
-                self.config.storage_backend,
-                self.config.action_name,
-                DISPOSITION_SKIPPED,
-                "All records filtered — no output produced",
-            )
-
-        # Zero-success failure: raise so executor marks FAILED and circuit
-        # breaker skips downstream.  Uses stats.success (not `not output`)
-        # because EXHAUSTED tombstones inflate the output list.
-        #
-        # Exclude cascade-quarantined records from the denominator: if all
-        # ACTIVE input records failed but some records were quarantined
-        # pass-throughs, the action should not be marked FAILED (the
-        # quarantined records flow through untouched).
-        active_input_count = len(data) - stats.unprocessed
-        if active_input_count > 0 and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
-            raise RuntimeError(
-                f"Action '{self.config.action_name}' produced 0 successful records — "
-                f"all {active_input_count} active input item(s) failed or exhausted "
-                f"({stats.failed} failed, {stats.exhausted} exhausted)"
-            )
+        stats.raise_if_terminal_failure(
+            self.config.action_name, data, output, self.config.storage_backend
+        )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
