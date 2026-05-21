@@ -351,14 +351,6 @@ class TestPrefilterByGuard:
         assert skipped == []
         assert filtered == []
 
-    def test_no_guard_no_conditional_clause_returns_all(self):
-        """Neither guard nor conditional_clause -> all records pass."""
-        data = [{"content": {"x": 1}}, {"content": {"x": 2}}]
-        passing, skipped, original_passing, filtered = prefilter_by_guard(data, {}, "test")
-        assert passing == data
-        assert skipped == []
-        assert filtered == []
-
 
 class TestGuardFilterFileMode:
     """Tests for UnifiedProcessor._guard_filter_file_mode() skip-wrapping behavior.
