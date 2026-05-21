@@ -11,6 +11,7 @@ import pytest
 from agent_actions.input.preprocessing.filtering.evaluator import (
     GuardEvaluator,
     GuardResult,
+    reclassify_missing_field_error,
 )
 from agent_actions.input.preprocessing.filtering.guard_filter import (
     FilterResult,
@@ -711,15 +712,15 @@ class TestNamespacedContentGuardEvaluation:
         semantic = FilterResult(
             success=False, error="broken condition", error_category=ErrorCategory.SEMANTIC
         )
-        assert evaluator._reclassify_missing_field_error(semantic, "x == y") is semantic
+        assert reclassify_missing_field_error(semantic, "x == y") is semantic
 
         timeout = FilterResult(
             success=False, error="timed out", error_category=ErrorCategory.TIMEOUT
         )
-        assert evaluator._reclassify_missing_field_error(timeout, "x == y") is timeout
+        assert reclassify_missing_field_error(timeout, "x == y") is timeout
 
         success = FilterResult(success=True, matched=True)
-        assert evaluator._reclassify_missing_field_error(success, "x == y") is success
+        assert reclassify_missing_field_error(success, "x == y") is success
 
     def test_reclassify_ignores_parse_errors(self, evaluator):
         """_reclassify_missing_field_error does not reclassify parse errors."""
@@ -733,7 +734,7 @@ class TestNamespacedContentGuardEvaluation:
             error="Error evaluating guard condition: Parse error: unexpected token",
             error_category=ErrorCategory.DATA,
         )
-        result = evaluator._reclassify_missing_field_error(parse_err, "bad syntax")
+        result = reclassify_missing_field_error(parse_err, "bad syntax")
 
         # Should return the same object — not reclassified
         assert result is parse_err
@@ -746,7 +747,7 @@ class TestNamespacedContentGuardEvaluation:
         )
 
         no_msg = FilterResult(success=False, error=None, error_category=ErrorCategory.DATA)
-        result = evaluator._reclassify_missing_field_error(no_msg, "x == y")
+        result = reclassify_missing_field_error(no_msg, "x == y")
 
         assert result is no_msg
 
@@ -849,7 +850,7 @@ class TestGuardMissingFieldLogNoise:
             error="Error evaluating guard condition: cannot compare types",
             error_category=ErrorCategory.DATA,
         )
-        result = evaluator._reclassify_missing_field_error(raw, "x > y")
+        result = reclassify_missing_field_error(raw, "x > y")
 
         assert result.error_category == ErrorCategory.DATA
         assert not result.success

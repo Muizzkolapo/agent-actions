@@ -23,6 +23,8 @@ class FakeFilterResult:
     success: bool
     matched: bool = False
     error: str | None = None
+    error_category: object | None = None
+    execution_time: float = 0.0
 
 
 def _make_filter(result: FakeFilterResult):
@@ -315,6 +317,107 @@ class TestGuardStrategy:
         call_args = filt.filter_item.call_args[0][0]
         # Multi-item list should remain as-is
         assert call_args.data["extract"] == [{"id": 1}, {"id": 2}]
+
+    # ── Missing field reclassification tests ──
+
+    def test_missing_upstream_skips_action(self, strategy):
+        """Guard on missing upstream action skips instead of passing through.
+
+        Before the fix, a missing field produced a DATA error that
+        passthrough_on_error=True (default) let through silently.
+        After reclassification, the missing field is treated as
+        matched=False → action is skipped.
+        """
+        from agent_actions.input.preprocessing.filtering.guard_filter import (
+            ErrorCategory,
+            FilterResult,
+        )
+
+        # Simulate GuardFilter response for a field that doesn't exist
+        result = FilterResult(
+            success=False,
+            error="Field 'classify.category' does not exist in the data",
+            error_category=ErrorCategory.DATA,
+        )
+        filt = _make_filter(result)
+        cfg = {
+            "guard": {
+                "scope": "action",
+                "clause": 'classify.category == "urgent"',
+                "passthrough_on_error": True,
+            },
+            "agent_type": "triage",
+        }
+        # previous_outputs does NOT contain 'classify'
+        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
+            should_skip = strategy.should_skip(cfg, {})
+
+        assert should_skip is True
+        mock_fire.assert_called_once()
+        event = mock_fire.call_args[0][0]
+        assert event.action_name == "triage"
+
+    def test_present_upstream_matching_does_not_skip(self, strategy):
+        """Guard on present upstream with matching value → action runs."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=True))
+        cfg = {
+            "guard": {
+                "scope": "action",
+                "clause": 'classify.category == "urgent"',
+            },
+            "agent_type": "triage",
+        }
+        previous_outputs = {"classify": [{"category": "urgent"}]}
+        with patch(GUARD_FILTER_PATH, return_value=filt):
+            assert strategy.should_skip(cfg, previous_outputs) is False
+
+    def test_present_upstream_non_matching_skips(self, strategy):
+        """Guard on present upstream with non-matching value → action skipped."""
+        filt = _make_filter(FakeFilterResult(success=True, matched=False))
+        cfg = {
+            "guard": {
+                "scope": "action",
+                "clause": 'classify.category == "urgent"',
+            },
+            "agent_type": "triage",
+        }
+        previous_outputs = {"classify": [{"category": "low"}]}
+        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH):
+            assert strategy.should_skip(cfg, previous_outputs) is True
+
+    def test_semantic_error_always_skips_regardless_of_passthrough(self, strategy):
+        """SEMANTIC errors bypass passthrough_on_error and always skip.
+
+        This matches GuardEvaluator parity: semantic errors (e.g. flat
+        field reference in namespaced content) are structural config
+        mistakes that should not be silently passed through.
+        """
+        from agent_actions.input.preprocessing.filtering.guard_filter import (
+            ErrorCategory,
+            FilterResult,
+        )
+
+        # After reclassification, a flat-field-in-namespace error becomes SEMANTIC
+        result = FilterResult(
+            success=False,
+            error="Field 'category' does not exist in the data. Did you mean: classify.category?",
+            error_category=ErrorCategory.DATA,
+        )
+        filt = _make_filter(result)
+        cfg = {
+            "guard": {
+                "scope": "action",
+                "clause": 'category == "urgent"',
+                "passthrough_on_error": True,
+            },
+            "agent_type": "triage",
+        }
+        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
+            should_skip = strategy.should_skip(cfg, {})
+
+        # Should skip despite passthrough_on_error=True
+        assert should_skip is True
+        mock_fire.assert_called_once()
 
 
 # ── LegacySkipIfStrategy ──────────────────────────────────────────────

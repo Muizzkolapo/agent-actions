@@ -6,7 +6,11 @@ from typing import Any
 
 from rich.console import Console
 
+from agent_actions.input.preprocessing.filtering.evaluator import (
+    reclassify_missing_field_error,
+)
 from agent_actions.input.preprocessing.filtering.guard_filter import (
+    ErrorCategory,
     FilterItemRequest,
     get_global_guard_filter,
 )
@@ -194,7 +198,23 @@ class GuardStrategy(SkipStrategy):
                 )
             )
 
+            # Reclassify missing-field DATA errors so they apply guard
+            # behavior instead of silently passing via passthrough_on_error.
+            filter_result = reclassify_missing_field_error(filter_result, guard_clause)
+
             if not filter_result.success:
+                # SEMANTIC errors (e.g. flat field reference in namespaced
+                # content) always skip — unlike GuardResult.from_filter_result
+                # which dispatches on behavior (skip/filter/warn), action-level
+                # guards only have a binary outcome (skip or don't skip).
+                if filter_result.error_category == ErrorCategory.SEMANTIC:
+                    fire_event(
+                        ActionSkipEvent(
+                            action_name=agent_name,
+                            skip_reason=f"guard semantic error: {filter_result.error}",
+                        )
+                    )
+                    return True
                 error_msg = filter_result.error or "Unknown filter error"
                 return self._handle_filter_error(agent_name, error_msg, passthrough_on_error)
 
