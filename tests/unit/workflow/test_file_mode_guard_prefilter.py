@@ -281,6 +281,84 @@ class TestPrefilterByGuard:
 
         assert len(passing) == 0
 
+    # -- conditional_clause tests --
+
+    def test_conditional_clause_passed_to_evaluator(self):
+        """conditional_clause from agent_config is forwarded to evaluator.evaluate()."""
+        data = [{"content": {"score": 90}}]
+        config = {
+            "guard": {"clause": "score >= 80", "behavior": "filter"},
+            "conditional_clause": "my_udf_check",
+        }
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = GuardResult.passed()
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            prefilter_by_guard(data, config, "test")
+
+        call_kwargs = evaluator.evaluate.call_args[1]
+        assert call_kwargs["conditional_clause"] == "my_udf_check"
+
+    def test_conditional_clause_only_rejects_to_skipped(self):
+        """conditional_clause without guard_config: rejected records go to skipped (SKIP behavior)."""
+        data = [
+            {"content": {"val": "good"}},
+            {"content": {"val": "bad"}},
+        ]
+        # Only conditional_clause, no guard block
+        config = {"conditional_clause": "my_udf"}
+
+        evaluator = MagicMock()
+
+        def side_effect(*, item, guard_config, context=None, conditional_clause=None):
+            # UDF rejects "bad" items
+            if item.get("val") == "bad":
+                return GuardResult.skipped()
+            return GuardResult.passed()
+
+        evaluator.evaluate.side_effect = side_effect
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+
+        assert len(passing) == 1
+        assert passing[0]["content"]["val"] == "good"
+        assert len(skipped) == 1
+        assert skipped[0]["content"]["val"] == "bad"
+        assert filtered == []
+
+    def test_conditional_clause_only_all_pass(self):
+        """conditional_clause without guard_config: all records pass when UDF passes."""
+        data = [{"content": {"val": "ok"}}]
+        config = {"conditional_clause": "my_udf"}
+
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = GuardResult.passed()
+
+        with patch(
+            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
+            return_value=evaluator,
+        ):
+            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+
+        assert len(passing) == 1
+        assert skipped == []
+        assert filtered == []
+
+    def test_no_guard_no_conditional_clause_returns_all(self):
+        """Neither guard nor conditional_clause -> all records pass."""
+        data = [{"content": {"x": 1}}, {"content": {"x": 2}}]
+        passing, skipped, original_passing, filtered = prefilter_by_guard(data, {}, "test")
+        assert passing == data
+        assert skipped == []
+        assert filtered == []
+
 
 class TestGuardFilterFileMode:
     """Tests for UnifiedProcessor._guard_filter_file_mode() skip-wrapping behavior.
