@@ -60,9 +60,11 @@ class RepromptMetadata:
     """Metadata for reprompt recovery, stored in output _recovery.reprompt field.
 
     Failure-type counters (``parse_error_count``, ``schema_fail_count``,
-    ``udf_fail_count``) are populated by the **online** reprompt path only.
-    Batch paths default to 0 because ``EvaluationLoop.split()`` returns
-    pass/fail without failure-type classification.
+    ``udf_fail_count``) are populated by both online and batch paths.
+    Online: ``RepromptService.execute()`` increments counters per attempt.
+    Batch: ``EvaluationLoop.split()`` returns failure classifications via
+    ``EvaluationOutcome.failure_type``, accumulated across rounds and
+    wired into counters by ``apply_exhausted_reprompt()``.
     """
 
     attempts: int
@@ -86,6 +88,15 @@ class RepromptMetadata:
         if self.udf_fail_count:
             result["udf_fail_count"] = self.udf_fail_count
         return result
+
+
+@dataclass
+class EvaluationOutcome:
+    """Result of a single evaluation — pass/fail with failure classification."""
+
+    passed: bool
+    failure_type: str | None = None  # "parse_error", "udf_fail", "api_error", None
+    error: str | None = None
 
 
 @dataclass

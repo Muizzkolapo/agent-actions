@@ -15,7 +15,7 @@ import pytest
 
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.processing.types import EvaluationMetadata, RecoveryMetadata
+from agent_actions.processing.types import EvaluationMetadata, EvaluationOutcome, RecoveryMetadata
 
 # Skip entire module if evaluation loop code is not yet available.
 # Created by specs 062 (PR #295) and 063 (PR #297).
@@ -63,7 +63,7 @@ def deterministic_strategy():
         strategy.name = "test_validation"
         strategy.max_attempts = max_attempts
         strategy.on_exhausted = "keep_last"
-        strategy.evaluate = lambda r: r.custom_id in passing_ids
+        strategy.evaluate = lambda r: EvaluationOutcome(passed=r.custom_id in passing_ids)
         strategy.build_feedback.return_value = "Please fix the output."
         return strategy
 
@@ -88,9 +88,9 @@ def make_strategy():
         strategy.max_attempts = max_attempts
         strategy.on_exhausted = on_exhausted
         if evaluate_fn is not None:
-            strategy.evaluate.side_effect = evaluate_fn
+            strategy.evaluate.side_effect = lambda r: EvaluationOutcome(passed=evaluate_fn(r))
         elif evaluate_return is not None:
-            strategy.evaluate.return_value = evaluate_return
+            strategy.evaluate.return_value = EvaluationOutcome(passed=evaluate_return)
         strategy.build_feedback.return_value = feedback
         return strategy
 
@@ -107,7 +107,7 @@ def nondeterministic_strategy():
         strategy.name = "nondeterministic"
         strategy.max_attempts = 5
         strategy.on_exhausted = "keep_last"
-        strategy.evaluate = lambda r: rng.random() < pass_probability
+        strategy.evaluate = lambda r: EvaluationOutcome(passed=rng.random() < pass_probability)
         strategy.build_feedback.return_value = "Try again."
         return strategy
 
@@ -128,7 +128,7 @@ class TestGraduatedPoolWorks:
         strategy = deterministic_strategy(passing)
         loop = EvaluationLoop(strategy)
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
         assert len(graduated) == 7
         assert len(failing) == 3
         loop.tag_graduated(graduated)
@@ -137,7 +137,7 @@ class TestGraduatedPoolWorks:
         passing.add("record_7")
         strategy_2 = deterministic_strategy(passing)
         loop_2 = EvaluationLoop(strategy_2)
-        graduated_2, failing_2 = loop_2.split(failing)
+        graduated_2, failing_2, _ = loop_2.split(failing)
         assert len(graduated_2) == 1  # record_7
         assert len(failing_2) == 2  # record_8, record_9
 
@@ -150,7 +150,7 @@ class TestGraduatedPoolWorks:
         strategy = make_strategy(evaluate_fn=lambda r: r.custom_id in passing)
         loop = EvaluationLoop(strategy)
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
         assert len(graduated) == 7
         loop.tag_graduated(graduated)
         graduated_ids = {r.custom_id for r in graduated}
@@ -158,7 +158,7 @@ class TestGraduatedPoolWorks:
         strategy.evaluate.reset_mock()
 
         # Pass ALL results (including graduated) back to split
-        graduated_2, failing_2 = loop.split(results)
+        graduated_2, failing_2, _ = loop.split(results)
 
         # Graduated records must NOT appear in the failing set
         failing_2_ids = {r.custom_id for r in failing_2}
@@ -196,7 +196,7 @@ class TestFailureSetShrinksDeterministic:
                 evaluate_fn=lambda r, p=passing: r.custom_id in p,
             )
             loop = EvaluationLoop(strategy)
-            graduated, failing = loop.split(active)
+            graduated, failing, _ = loop.split(active)
             loop.tag_graduated(graduated)
             failure_counts.append(len(failing))
             active = failing
@@ -224,7 +224,7 @@ class TestFailureSetShrinksDeterministic:
                 evaluate_fn=lambda r, p=passing: r.custom_id in p,
             )
             loop = EvaluationLoop(strategy)
-            graduated, failing = loop.split(active)
+            graduated, failing, _ = loop.split(active)
             loop.tag_graduated(graduated)
             all_graduated.extend(graduated)
             active = failing
@@ -257,7 +257,7 @@ class TestNonDeterministicConvergence:
 
         for _cycle in range(5):
             pre_call_count = strategy.evaluate.call_count
-            graduated, failing = loop.split(active)
+            graduated, failing, _ = loop.split(active)
 
             # evaluate() called exactly once per active record — never for graduated
             assert strategy.evaluate.call_count - pre_call_count == len(active)
@@ -280,7 +280,7 @@ class TestNonDeterministicConvergence:
         failure_counts = []
 
         for _cycle in range(5):
-            graduated, failing = loop.split(active)
+            graduated, failing, _ = loop.split(active)
             loop.tag_graduated(graduated)
             failure_counts.append(len(failing))
             active = failing
@@ -308,7 +308,7 @@ class TestDispositionCorrect:
         active = results
 
         for _attempt in range(strategy.max_attempts):
-            graduated, failing = loop.split(active)
+            graduated, failing, _ = loop.split(active)
             loop.tag_graduated(graduated)
             if not failing:
                 break
@@ -328,7 +328,7 @@ class TestDispositionCorrect:
         )
 
         loop = EvaluationLoop(strategy)
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert len(graduated) == 0
         assert len(failing) == 3
@@ -358,7 +358,7 @@ class TestRetryEvaluationInteraction:
 
         complete_results = initial_results + retry_results
         loop = EvaluationLoop(strategy)
-        graduated, failing = loop.split(complete_results)
+        graduated, failing, _ = loop.split(complete_results)
 
         assert len(graduated) == 10
         assert len(failing) == 0
@@ -373,7 +373,7 @@ class TestRetryEvaluationInteraction:
 
         complete_results = make_batch_results(10)
         loop = EvaluationLoop(strategy)
-        graduated, failing = loop.split(complete_results)
+        graduated, failing, _ = loop.split(complete_results)
 
         assert len(graduated) == 5
         assert len(failing) == 5
@@ -399,14 +399,14 @@ class TestStrategyPluggable:
             on_exhausted = "drop"
 
             def evaluate(self, result):
-                return False
+                return EvaluationOutcome(passed=False, failure_type="udf_fail")
 
             def build_feedback(self, result):
                 return "This will never pass."
 
         results = make_batch_results(5)
         loop = EvaluationLoop(AlwaysFailStrategy())
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
         assert len(graduated) == 0
         assert len(failing) == 5
 
@@ -419,14 +419,14 @@ class TestStrategyPluggable:
             on_exhausted = "keep_last"
 
             def evaluate(self, result):
-                return True
+                return EvaluationOutcome(passed=True)
 
             def build_feedback(self, result):
                 return "Should not be called."
 
         results = make_batch_results(10)
         loop = EvaluationLoop(AlwaysPassStrategy())
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
         assert len(graduated) == 10
         assert len(failing) == 0
 
@@ -450,7 +450,7 @@ class TestBackwardCompat:
         strategy = make_strategy(name="validation", evaluate_return=True)
 
         loop = EvaluationLoop(strategy)
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert len(graduated) == 5
         assert len(failing) == 0
@@ -466,10 +466,10 @@ class TestBackwardCompat:
 
         strategy = MagicMock(spec=EvaluationStrategy)
         strategy.name = "validation"
-        strategy.evaluate = lambda r: True  # All new ones would pass
+        strategy.evaluate = lambda r: EvaluationOutcome(passed=True)
         loop = EvaluationLoop(strategy)
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
         # 5 already-graduated (skipped) + 5 newly evaluated (all pass) = 10 graduated
         assert len(graduated) == 10
         assert len(failing) == 0

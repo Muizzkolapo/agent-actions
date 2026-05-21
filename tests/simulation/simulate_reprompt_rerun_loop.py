@@ -152,8 +152,8 @@ def run_max_attempts_enforced(work_dir):
         patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager") as mgr,
     ):
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-        loop.split.return_value = ([], results)
-        mock_build.return_value = (loop, strategy, None)
+        loop.split.return_value = ([], results, {})
+        mock_build.return_value = (loop, strategy)
 
         should_continue = check_and_submit_reprompt(
             service,
@@ -183,8 +183,8 @@ def run_max_attempts_enforced(work_dir):
         patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager") as mgr,
     ):
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-        loop.split.return_value = ([], results)
-        mock_build.return_value = (loop, strategy, None)
+        loop.split.return_value = ([], results, {})
+        mock_build.return_value = (loop, strategy)
 
         should_continue = check_and_submit_reprompt(
             service,
@@ -211,8 +211,8 @@ def run_max_attempts_enforced(work_dir):
     state_run3 = RecoveryState(phase="reprompt", reprompt_attempt=2, reprompt_max_attempts=2)
     with patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop") as mock_build:
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-        loop.split.return_value = ([], results)
-        mock_build.return_value = (loop, strategy, None)
+        loop.split.return_value = ([], results, {})
+        mock_build.return_value = (loop, strategy)
 
         should_continue = check_and_submit_reprompt(
             service,
@@ -295,8 +295,8 @@ def run_graduated_pool_persists(work_dir):
         patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager") as mgr,
     ):
         loop, strategy = _make_eval_loop_mocks(max_attempts=3)
-        loop.split.return_value = ([], results)
-        mock_build.return_value = (loop, strategy, None)
+        loop.split.return_value = ([], results, {})
+        mock_build.return_value = (loop, strategy)
 
         check_and_submit_reprompt(
             service,

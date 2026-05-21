@@ -75,12 +75,12 @@ class TestValidationStrategyEvaluate:
     def test_passing_result(self):
         strategy = ValidationStrategy(validation_func=_always_pass, feedback_message="fix")
         result = _make_result("r1", content={"valid": True})
-        assert strategy.evaluate(result) is True
+        assert strategy.evaluate(result).passed is True
 
     def test_failing_result(self):
         strategy = ValidationStrategy(validation_func=_always_fail, feedback_message="fix")
         result = _make_result("r1", content={"valid": False})
-        assert strategy.evaluate(result) is False
+        assert strategy.evaluate(result).passed is False
 
     def test_success_false_fails_validation(self):
         """API-failed results fail validation without calling the UDF."""
@@ -92,7 +92,7 @@ class TestValidationStrategyEvaluate:
 
         strategy = ValidationStrategy(validation_func=tracking_validate, feedback_message="fix")
         result = _make_result("r1", success=False)
-        assert strategy.evaluate(result) is False
+        assert strategy.evaluate(result).passed is False
         assert call_log == []
 
     def test_success_false_with_content_still_fails(self):
@@ -105,7 +105,7 @@ class TestValidationStrategyEvaluate:
 
         strategy = ValidationStrategy(validation_func=tracking_validate, feedback_message="fix")
         result = _make_result("r1", content={"partial": "data"}, success=False)
-        assert strategy.evaluate(result) is False
+        assert strategy.evaluate(result).passed is False
         assert call_log == []
 
     def test_already_passed_skips_validation(self):
@@ -123,7 +123,7 @@ class TestValidationStrategyEvaluate:
 
         strategy = ValidationStrategy(validation_func=tracking_validate, feedback_message="fix")
         result = _make_result("r1", recovery_metadata=recovery)
-        assert strategy.evaluate(result) is True
+        assert strategy.evaluate(result).passed is True
         assert call_log == []
 
     def test_exception_in_validation_returns_false(self):
@@ -134,7 +134,7 @@ class TestValidationStrategyEvaluate:
 
         strategy = ValidationStrategy(validation_func=raising_validate, feedback_message="fix")
         result = _make_result("r1")
-        assert strategy.evaluate(result) is False
+        assert strategy.evaluate(result).passed is False
 
     def test_uses_result_content(self):
         """Validation function receives result.content."""
@@ -190,7 +190,7 @@ class TestGraduatedPoolIntegration:
         loop = EvaluationLoop(strategy)
         results = [_make_result("r1"), _make_result("r2")]
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert len(graduated) == 2
         assert len(failing) == 0
@@ -207,7 +207,7 @@ class TestGraduatedPoolIntegration:
             _make_result("r3", content={"valid": True}),
         ]
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert [r.custom_id for r in graduated] == ["r1", "r3"]
         assert [r.custom_id for r in failing] == ["r2"]
@@ -232,19 +232,19 @@ class TestGraduatedPoolIntegration:
 
         # Cycle 0
         attempt_counter[0] = 0
-        graduated_0, failing_0 = loop.split(results)
+        graduated_0, failing_0, _ = loop.split(results)
         assert len(graduated_0) == 1
         assert len(failing_0) == 2
 
         # Cycle 1 — only failing records re-evaluated
         attempt_counter[0] = 1
-        graduated_1, failing_1 = loop.split(failing_0)
+        graduated_1, failing_1, _ = loop.split(failing_0)
         assert len(graduated_1) == 1
         assert len(failing_1) == 1
 
         # Cycle 2
         attempt_counter[0] = 2
-        graduated_2, failing_2 = loop.split(failing_1)
+        graduated_2, failing_2, _ = loop.split(failing_1)
         assert len(graduated_2) == 1
         assert len(failing_2) == 0
 
@@ -272,14 +272,14 @@ class TestGraduatedPoolIntegration:
         results = [_make_result("r1"), _make_result("r2")]
 
         # Cycle 0 — both evaluated, both graduate
-        graduated_0, _ = loop.split(results)
+        graduated_0, _, _ = loop.split(results)
         assert set(evaluated_ids) == {"r1", "r2"}
 
         # Cycle 1 — pass same results, but since we're using the graduated pool
         # pattern correctly, only new active_results go into split.
         # Simulating: active_results would be reprompt results (empty in this case)
         evaluated_ids.clear()
-        graduated_1, _ = loop.split([])
+        graduated_1, _, _ = loop.split([])
         assert evaluated_ids == []
 
     def test_api_failures_are_not_graduated(self):
@@ -292,7 +292,7 @@ class TestGraduatedPoolIntegration:
             _make_result("r2", success=False),  # API failure
         ]
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert [r.custom_id for r in graduated] == []
         assert [r.custom_id for r in failing] == ["r1", "r2"]
@@ -312,7 +312,7 @@ class TestGraduatedPoolIntegration:
             _make_result("pass-2", content={"valid": True}, success=True),
         ]
 
-        graduated, failing = loop.split(results)
+        graduated, failing, _ = loop.split(results)
 
         assert [r.custom_id for r in graduated] == ["pass-1", "pass-2"]
         assert [r.custom_id for r in failing] == ["api-fail", "val-fail"]

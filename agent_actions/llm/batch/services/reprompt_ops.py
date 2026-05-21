@@ -15,6 +15,8 @@ from agent_actions.logging.events.validation_events import (
     RepromptRecoveredEvent,
     RepromptRetryEvent,
 )
+from agent_actions.output.response.config_fields import get_default
+from agent_actions.processing.evaluation.loop import accumulate_failure_types
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -95,8 +97,9 @@ def build_evaluation_loop(
     sequence used by validate_and_reprompt, handle_reprompt_recovery, and
     check_and_submit_reprompt.
 
-    Returns ``(loop, strategy, validation_name)`` or ``None`` if reprompt
-    is not configured or the validation function cannot be resolved.
+    Returns ``(loop, strategy)`` or ``None`` if reprompt is not configured
+    or the validation function cannot be resolved.  The validation name
+    is available via ``strategy.name``.
     """
     from agent_actions.processing.evaluation import EvaluationLoop
     from agent_actions.processing.evaluation.strategies import ValidationStrategy
@@ -121,14 +124,18 @@ def build_evaluation_loop(
 
     strategies = resolve_feedback_strategies(raw_reprompt_config)
 
+    json_mode = (agent_config or {}).get("json_mode", get_default("json_mode"))
+
     strategy = ValidationStrategy(
         validation_func=validation_func,
         feedback_message=feedback_message,
         strategies=strategies,
         max_attempts=max_attempts if max_attempts is not None else parsed.max_attempts,
         on_exhausted=on_exhausted if on_exhausted is not None else parsed.on_exhausted,
+        json_mode=bool(json_mode),
+        validation_name=parsed.validation_name,
     )
-    return EvaluationLoop(strategy), strategy, parsed.validation_name
+    return EvaluationLoop(strategy), strategy
 
 
 def validate_and_reprompt(
@@ -162,7 +169,8 @@ def validate_and_reprompt(
         logger.debug("Reprompt not configured, skipping validation")
         return results
 
-    loop, strategy, validation_name = setup
+    loop, strategy = setup
+    validation_name = strategy.name
     max_attempts = strategy.max_attempts
     on_exhausted = strategy.on_exhausted
     feedback_message = strategy._feedback_message
@@ -173,10 +181,13 @@ def validate_and_reprompt(
     all_graduated: list[BatchResult] = []
     active_results = results
     reprompted_ids: dict[str, int] = {}
+    failure_type_counts: dict[str, dict[str, int]] = {}
 
     for attempt in range(max_attempts):
-        graduated, still_failing = loop.split(active_results)
+        graduated, still_failing, round_failure_types = loop.split(active_results)
         all_graduated.extend(graduated)
+
+        accumulate_failure_types(failure_type_counts, round_failure_types)
 
         if not still_failing:
             logger.info("All records passed validation after %d attempts", attempt + 1)
@@ -205,6 +216,7 @@ def validate_and_reprompt(
                 attempt=attempt + 1,
                 on_exhausted=on_exhausted,
                 per_record_attempts=reprompted_ids,
+                failure_type_counts=failure_type_counts or None,
             )
             all_graduated.extend(still_failing)
             break
@@ -434,6 +446,12 @@ def validate_results(
         logger.error("Failed to get validation function: %s", e)
         return [], None
 
+    from agent_actions.processing.evaluation.strategies.validation import (
+        detect_parse_error,
+    )
+
+    json_mode = bool((agent_config or {}).get("json_mode", get_default("json_mode")))
+
     failed_results = []
     for result in results:
         if not result.success:
@@ -444,6 +462,11 @@ def validate_results(
             and result.recovery_metadata.reprompt
             and result.recovery_metadata.reprompt.passed
         ):
+            continue
+
+        # Check parse error before UDF — matching online path
+        if detect_parse_error(result.content, json_mode=json_mode):
+            failed_results.append(result)
             continue
 
         is_valid = safe_validate(

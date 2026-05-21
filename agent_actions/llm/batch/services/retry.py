@@ -313,6 +313,8 @@ class BatchRetryService:
         validation_name: str,
         attempt: int,
         on_exhausted: str,
+        per_record_attempts: dict[str, int] | None = None,
+        failure_type_counts: dict[str, dict[str, int]] | None = None,
     ) -> list[BatchResult]:
         """Apply reprompt exhaustion metadata to failed records."""
         from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
@@ -323,6 +325,8 @@ class BatchRetryService:
             validation_name=validation_name,
             attempt=attempt,
             on_exhausted=on_exhausted,
+            per_record_attempts=per_record_attempts,
+            failure_type_counts=failure_type_counts,
         )
 
     # =========================================================================

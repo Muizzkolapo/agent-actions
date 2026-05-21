@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "FILE-mode prefilter_by_guard now passes conditional_clause to GuardEvaluator, fixing silent skip of legacy UDF guards"
+time: 2026-05-21T04:19:00.000000Z

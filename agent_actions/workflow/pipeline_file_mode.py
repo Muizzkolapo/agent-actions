@@ -349,7 +349,8 @@ def prefilter_by_guard(
         )
 
     guard_config = agent_config.get("guard")
-    if not guard_config:
+    conditional_clause = agent_config.get("conditional_clause")
+    if not guard_config and not conditional_clause:
         return data, [], originals, []
 
     from agent_actions.guards import GuardBehavior
@@ -361,7 +362,12 @@ def prefilter_by_guard(
 
     evaluator = get_guard_evaluator()
     # The config expander normalizes user-facing "on_false" into "behavior"
-    behavior = GuardBehavior(guard_config.get("behavior", "filter"))
+    # conditional_clause (legacy UDF) always uses SKIP behavior; guard_config
+    # may override via its "behavior" key.
+    if guard_config:
+        behavior = GuardBehavior(guard_config.get("behavior", "filter"))
+    else:
+        behavior = GuardBehavior.SKIP
 
     passing: list[dict] = []
     skipped: list[dict] = []
@@ -386,6 +392,7 @@ def prefilter_by_guard(
             item=eval_item,
             guard_config=guard_config,
             context=context,
+            conditional_clause=conditional_clause,
         )
 
         if result.should_execute:

@@ -18,7 +18,7 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 
@@ -675,27 +675,9 @@ def _process_online_mode_with_record_processor(
 
     processed_items, stats = processor.process(data_chunk, processing_context, strategy)
 
-    # Signal node-level SKIP only when output is truly empty and the
-    # only outcomes were guard-skip / guard-filter.  Guard-skipped
-    # records with passthrough data ARE in `processed_items`, so
-    # `not processed_items` prevents cascade-blocking when passthrough
-    # data exists.
-    if data_chunk and stats.only_guard_outcomes and not processed_items:
-        write_node_level_disposition(
-            ctx.storage_backend,
-            ctx.agent_name,
-            DISPOSITION_SKIPPED,
-            "All records filtered — no output produced",
-        )
-
-    # Zero-success failure: raise so executor marks FAILED and circuit
-    # breaker skips downstream.  See _MANIFEST.md design note for rationale.
-    if data_chunk and stats.success == 0 and (stats.failed + stats.exhausted) > 0:
-        raise RuntimeError(
-            f"Action '{ctx.agent_name}' produced 0 successful records — "
-            f"all {len(data_chunk)} input item(s) failed or exhausted "
-            f"({stats.failed} failed, {stats.exhausted} exhausted)"
-        )
+    stats.raise_if_terminal_failure(
+        ctx.agent_name, data_chunk, processed_items, ctx.storage_backend
+    )
 
     # Tool actions that return empty output should be treated as failures
     # rather than silently succeeding (mirrors pipeline.py check).

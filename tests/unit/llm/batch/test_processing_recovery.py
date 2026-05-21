@@ -308,8 +308,8 @@ class TestHandleRetryRecovery:
         strategy.name = "validation"
         strategy.max_attempts = 2
         strategy.on_exhausted = "return_last"
-        loop.split.return_value = ([_make_result("id-1")], [])  # all pass
-        mock_build_loop.return_value = (loop, strategy, None)
+        loop.split.return_value = ([_make_result("id-1")], [], {})  # all pass
+        mock_build_loop.return_value = (loop, strategy)
 
         with patch(
             "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
@@ -405,7 +405,7 @@ class TestHandleRepromptRecovery:
 
         graduated = [_make_result(cid) for cid in graduated_ids]
         failing = [_make_result(cid, success=False) for cid in failing_ids]
-        loop.split.return_value = (graduated, failing)
+        loop.split.return_value = (graduated, failing, {})
 
         return loop, strategy
 
@@ -414,7 +414,7 @@ class TestHandleRepromptRecovery:
     def test_all_graduated_finalizes_output(self, mock_mgr, mock_build_loop):
         """When all records pass evaluation, finalize immediately."""
         loop, strategy = self._setup_eval_loop(["id-1", "id-2"], [])
-        mock_build_loop.return_value = (loop, strategy, None)
+        mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
         state = _make_state(phase="reprompt", reprompt_attempt=1)
@@ -448,7 +448,7 @@ class TestHandleRepromptRecovery:
     def test_still_failing_submits_next_reprompt(self, mock_mgr, mock_build_loop):
         """When records still fail and attempts remain, submit next reprompt."""
         loop, strategy = self._setup_eval_loop(["id-1"], ["id-2"])
-        mock_build_loop.return_value = (loop, strategy, None)
+        mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
         state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
@@ -482,7 +482,7 @@ class TestHandleRepromptRecovery:
     def test_exhausted_applies_exhaustion_metadata(self, mock_mgr, mock_build_loop):
         """When attempts exhausted, applies exhaustion metadata and finalizes."""
         loop, strategy = self._setup_eval_loop(["id-1"], ["id-2"])
-        mock_build_loop.return_value = (loop, strategy, None)
+        mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
         # reprompt_attempt == max → exhausted
@@ -516,7 +516,7 @@ class TestHandleRepromptRecovery:
     def test_graduated_results_accumulated_in_state(self, mock_mgr, mock_build_loop):
         """Graduated results from each cycle are accumulated in state."""
         loop, strategy = self._setup_eval_loop(["id-1"], ["id-2"])
-        mock_build_loop.return_value = (loop, strategy, None)
+        mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
         state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
@@ -716,8 +716,8 @@ class TestRecoveryStatePersistence:
         loop = MagicMock()
         strategy = MagicMock()
         strategy.name = "validation"
-        loop.split.return_value = ([], [_make_result("id-1")])  # all failing
-        mock_build_loop.return_value = (loop, strategy, None)
+        loop.split.return_value = ([], [_make_result("id-1")], {})  # all failing
+        mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
         state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
@@ -1035,8 +1035,8 @@ class TestRecoveryLoopRootCauses:
             ) as mock_state_mgr,
         ):
             loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-            loop.split.return_value = ([], results)
-            mock_build_loop.return_value = (loop, strategy, None)
+            loop.split.return_value = ([], results, {})
+            mock_build_loop.return_value = (loop, strategy)
             service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch-2", 1)
 
             should_continue = check_and_submit_reprompt(
@@ -1066,8 +1066,8 @@ class TestRecoveryLoopRootCauses:
             "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
         ) as mock_build_loop:
             loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-            loop.split.return_value = ([], results)
-            mock_build_loop.return_value = (loop, strategy, None)
+            loop.split.return_value = ([], results, {})
+            mock_build_loop.return_value = (loop, strategy)
 
             should_continue = check_and_submit_reprompt(
                 service,
@@ -1120,8 +1120,8 @@ class TestDownstreamBugs:
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     def test_retry_to_reprompt_does_not_mutate_retry_state(self, mock_mgr, mock_build_loop):
         loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-        loop.split.return_value = ([], [_make_result("id-1", success=False)])
-        mock_build_loop.return_value = (loop, strategy, None)
+        loop.split.return_value = ([], [_make_result("id-1", success=False)], {})
+        mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
         service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
@@ -1162,8 +1162,8 @@ class TestDownstreamBugs:
             patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
         ):
             loop, strategy = _make_eval_loop_mocks(max_attempts=3)
-            loop.split.return_value = ([], results)
-            mock_build_loop.return_value = (loop, strategy, None)
+            loop.split.return_value = ([], results, {})
+            mock_build_loop.return_value = (loop, strategy)
             service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
 
             check_and_submit_reprompt(

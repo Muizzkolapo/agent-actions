@@ -35,6 +35,7 @@ from agent_actions.logging.events.validation_events import (
     RepromptRecoveredEvent,
     RepromptRetryEvent,
 )
+from agent_actions.processing.evaluation.loop import accumulate_failure_types
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -267,11 +268,14 @@ def handle_reprompt_recovery(
             start_time,
         )
 
-    loop, strategy, _ = setup
-    graduated, still_failing = loop.split(recovery_results)
+    loop, strategy = setup
+    validation_name = strategy.name
+    graduated, still_failing, failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
     state.graduated_results.extend(BatchRetryService.serialize_results(graduated))
-    state.evaluation_strategy_name = strategy.name
+    state.evaluation_strategy_name = validation_name
+
+    accumulate_failure_types(state.failure_type_counts, failure_types)
 
     if still_failing and state.reprompt_attempt < state.reprompt_max_attempts:
         next_attempt = state.reprompt_attempt + 1
@@ -311,9 +315,11 @@ def handle_reprompt_recovery(
         service._retry_service.apply_exhausted_reprompt_metadata(
             results=still_failing,
             failed_ids=failed_ids,
-            validation_name=strategy.name,
+            validation_name=validation_name,
             attempt=state.reprompt_attempt,
             on_exhausted=state.on_exhausted,
+            per_record_attempts=state.reprompt_attempts_per_record or None,
+            failure_type_counts=state.failure_type_counts or None,
         )
 
     final_results = BatchRetryService.deserialize_results(state.graduated_results)
@@ -326,7 +332,7 @@ def handle_reprompt_recovery(
                 action_name=parent_file_name or "batch",
                 attempt=state.reprompt_attempt,
                 max_attempts=state.reprompt_max_attempts,
-                validation_name=strategy.name,
+                validation_name=validation_name,
             )
         )
 
@@ -382,11 +388,12 @@ def check_and_submit_reprompt(
     if setup is None:
         return True
 
-    loop, strategy, _ = setup
+    loop, strategy = setup
+    validation_name = strategy.name
     max_attempts = strategy.max_attempts
     on_exhausted = strategy.on_exhausted
 
-    graduated, still_failing = loop.split(batch_results)
+    graduated, still_failing, failure_types = loop.split(batch_results)
     loop.tag_graduated(graduated)
 
     # Filter out records with None content (provider failures, not content quality issues)
@@ -397,14 +404,25 @@ def check_and_submit_reprompt(
 
     current_attempt = recovery_state.reprompt_attempt if recovery_state else 0
 
+    # Seed from prior-round counts (if resuming from persisted state)
+    ftc: dict[str, dict[str, int]] = (
+        dict(recovery_state.failure_type_counts) if recovery_state else {}
+    )
+    accumulate_failure_types(ftc, failure_types)
+
     if current_attempt >= max_attempts:
         failed_ids = {r.custom_id for r in still_failing}
+        per_record_attempts = (
+            recovery_state.reprompt_attempts_per_record if recovery_state else None
+        )
         service._retry_service.apply_exhausted_reprompt_metadata(
             results=still_failing,
             failed_ids=failed_ids,
-            validation_name=strategy.name,
+            validation_name=validation_name,
             attempt=current_attempt,
             on_exhausted=on_exhausted,
+            per_record_attempts=per_record_attempts,
+            failure_type_counts=ftc or None,
         )
         return True
 
@@ -441,6 +459,7 @@ def check_and_submit_reprompt(
         retry_attempt=recovery_state.retry_attempt if recovery_state else 0,
         retry_max_attempts=recovery_state.retry_max_attempts if recovery_state else 3,
         accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
+        failure_type_counts=ftc,
     )
     for fr in repromptable:
         state.reprompt_attempts_per_record[fr.custom_id] = (
