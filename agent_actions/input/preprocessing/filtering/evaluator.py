@@ -238,7 +238,7 @@ class GuardEvaluator:
             request = FilterItemRequest(data=eval_context, condition=clause)
             filter_result = self._filter.filter_item(request)
 
-            filter_result = self._reclassify_missing_field_error(filter_result, clause)
+            filter_result = reclassify_missing_field_error(filter_result, clause)
 
             return GuardResult.from_filter_result(filter_result, behavior, passthrough_on_error)
 
@@ -258,12 +258,6 @@ class GuardEvaluator:
             if behavior == GuardBehavior.SKIP:
                 return GuardResult.skipped(error=str(e))
             return GuardResult.filtered(error=str(e))
-
-    def _reclassify_missing_field_error(
-        self, filter_result: FilterResult, clause: str
-    ) -> FilterResult:
-        """Delegate to module-level reclassify_missing_field_error."""
-        return reclassify_missing_field_error(filter_result, clause)
 
     def _prepare_eval_context(self, context: Any) -> dict[str, Any]:
         """Promote content namespaces to top-level keys for guard evaluation.

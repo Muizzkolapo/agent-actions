@@ -204,8 +204,9 @@ class GuardStrategy(SkipStrategy):
 
             if not filter_result.success:
                 # SEMANTIC errors (e.g. flat field reference in namespaced
-                # content) always apply guard behavior — they bypass
-                # passthrough_on_error, matching GuardEvaluator parity.
+                # content) always skip — unlike GuardResult.from_filter_result
+                # which dispatches on behavior (skip/filter/warn), action-level
+                # guards only have a binary outcome (skip or don't skip).
                 if filter_result.error_category == ErrorCategory.SEMANTIC:
                     fire_event(
                         ActionSkipEvent(
