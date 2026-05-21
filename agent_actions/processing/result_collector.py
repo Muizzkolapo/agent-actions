@@ -33,6 +33,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
     DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
@@ -87,6 +88,47 @@ class CollectionStats:
         """
         total: int = sum(getattr(self, f.name) for f in fields(self))
         return bool((self.skipped + self.filtered) == total)
+
+    def raise_if_terminal_failure(
+        self,
+        action_name: str,
+        data: list,
+        output: list,
+        storage_backend: Optional["StorageBackend"] = None,
+    ) -> None:
+        """Raise RuntimeError if all active records failed.
+
+        Handles two cases:
+
+        1. **only_guard_outcomes** with no output — write a node-level
+           SKIPPED disposition so the executor can cascade-skip downstream.
+        2. **zero successes** among active (non-unprocessed) input records
+           with at least one failure — raise ``RuntimeError`` for the
+           circuit breaker.
+        """
+        # Guard-only outcome: signal node-level SKIP when output is truly
+        # empty.  Guard-skipped records with passthrough data ARE in
+        # ``output``, so ``not output`` prevents cascade-blocking when
+        # passthrough data exists.
+        if data and self.only_guard_outcomes and not output:
+            write_node_level_disposition(
+                storage_backend,
+                action_name,
+                DISPOSITION_SKIPPED,
+                "All records filtered — no output produced",
+            )
+            return
+
+        # Exclude cascade-quarantined records from the denominator: if all
+        # ACTIVE input records failed but some records were quarantined
+        # pass-throughs, the action should not be marked FAILED.
+        active_input_count = len(data) - self.unprocessed
+        if active_input_count > 0 and self.success == 0 and (self.failed + self.exhausted) > 0:
+            raise RuntimeError(
+                f"Action '{action_name}' produced 0 successful records — "
+                f"all {active_input_count} active input item(s) failed or exhausted "
+                f"({self.failed} failed, {self.exhausted} exhausted)"
+            )
 
 
 def _build_failed_tombstone(
