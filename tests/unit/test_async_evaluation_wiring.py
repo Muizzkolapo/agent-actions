@@ -230,7 +230,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
 
         service._retry_service.apply_exhausted_reprompt_metadata.assert_called_once()
         call_kwargs = service._retry_service.apply_exhausted_reprompt_metadata.call_args.kwargs
-        assert call_kwargs["validation_name"] == "validation"
+        assert call_kwargs["validation_name"] == "v"
         assert {r.custom_id for r in call_kwargs["results"]} == {"r2"}
         # Only graduated records (r1) are in state; exhausted records (r2) are
         # combined directly at finalization without a serialize round-trip.
@@ -371,7 +371,7 @@ class TestCheckAndSubmitRepromptGraduatedPool:
 
         assert len(saved_state["graduated_results"]) == 1
         assert saved_state["graduated_results"][0]["custom_id"] == "r1"
-        assert saved_state["evaluation_strategy_name"] == "validation"
+        assert saved_state["evaluation_strategy_name"] == "v"
 
 
 # ---------------------------------------------------------------------------
