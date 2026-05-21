@@ -402,7 +402,10 @@ def check_and_submit_reprompt(
 
     current_attempt = recovery_state.reprompt_attempt if recovery_state else 0
 
-    ftc: dict[str, dict[str, int]] = {}
+    # Seed from prior-round counts (if resuming from persisted state)
+    ftc: dict[str, dict[str, int]] = (
+        dict(recovery_state.failure_type_counts) if recovery_state else {}
+    )
     accumulate_failure_types(ftc, failure_types)
 
     if current_attempt >= max_attempts:
@@ -454,6 +457,7 @@ def check_and_submit_reprompt(
         retry_attempt=recovery_state.retry_attempt if recovery_state else 0,
         retry_max_attempts=recovery_state.retry_max_attempts if recovery_state else 3,
         accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
+        failure_type_counts=ftc,
     )
     for fr in repromptable:
         state.reprompt_attempts_per_record[fr.custom_id] = (
