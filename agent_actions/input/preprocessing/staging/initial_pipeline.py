@@ -39,7 +39,7 @@ class InitialStageContext:
     output_directory: str
     idx: int = 0
     storage_backend: Any = None  # Optional StorageBackend for database persistence
-    action_configs: dict[str, Any] | None = None  # All action configs for pipeline context
+    action_configs: dict[str, Any] | None = None
 
 
 @dataclass
@@ -66,7 +66,7 @@ class BatchProcessingContext:
     output_directory: str
     idx: int = 0
     storage_backend: Any = None  # Optional StorageBackend for database persistence
-    action_configs: dict[str, Any] | None = None  # All action configs for pipeline context
+    action_configs: dict[str, Any] | None = None
 
 
 def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:

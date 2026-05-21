@@ -56,6 +56,17 @@ def _make_ctx(tmp_dirs, *, action_configs=None, agent_config=None, data_chunk=No
     )
 
 
+def _run_batch_and_get_prep_kwargs(ctx):
+    """Run _process_batch_mode and return the kwargs passed to BatchTaskPreparator."""
+    with (
+        patch(f"{_PREP_MODULE}.BatchTaskPreparator") as MockPrep,
+        patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc,
+    ):
+        MockSvc.return_value.submit_batch_job.return_value = SubmissionResult(batch_id="vid_123")
+        _process_batch_mode(ctx)
+    return MockPrep.call_args[1]
+
+
 class TestBatchFirstStagePipelineContext:
     """BatchTaskPreparator receives full pipeline context from _build_pipeline_context."""
 
@@ -65,17 +76,8 @@ class TestBatchFirstStagePipelineContext:
         """When action_configs is provided, BatchTaskPreparator gets agent_indices
         and dependency_configs — matching the downstream batch path."""
         ctx = _make_ctx(tmp_dirs, action_configs=action_configs)
+        prep_kwargs = _run_batch_and_get_prep_kwargs(ctx)
 
-        with (
-            patch(f"{_PREP_MODULE}.BatchTaskPreparator") as MockPrep,
-            patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc,
-        ):
-            MockSvc.return_value.submit_batch_job.return_value = SubmissionResult(
-                batch_id="vid_123"
-            )
-            _process_batch_mode(ctx)
-
-        prep_kwargs = MockPrep.call_args[1]
         assert prep_kwargs["action_indices"] == {"extract": 0, "classify": 1, "summarize": 2}
         assert prep_kwargs["dependency_configs"] is action_configs
 
@@ -93,17 +95,8 @@ class TestBatchFirstStagePipelineContext:
                 "_version_context": version_ctx,
             },
         )
+        prep_kwargs = _run_batch_and_get_prep_kwargs(ctx)
 
-        with (
-            patch(f"{_PREP_MODULE}.BatchTaskPreparator") as MockPrep,
-            patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc,
-        ):
-            MockSvc.return_value.submit_batch_job.return_value = SubmissionResult(
-                batch_id="vid_123"
-            )
-            _process_batch_mode(ctx)
-
-        prep_kwargs = MockPrep.call_args[1]
         assert prep_kwargs["version_context"] == version_ctx
         # Must be a copy, not the same object (mutation safety from _build_pipeline_context)
         assert prep_kwargs["version_context"] is not version_ctx
@@ -111,18 +104,9 @@ class TestBatchFirstStagePipelineContext:
     def test_preparator_accepts_none_action_configs(self, tmp_dirs):
         """When action_configs is None (single-action workflow), preparator gets
         None for indices/configs — matches _build_pipeline_context contract."""
-        ctx = _make_ctx(tmp_dirs)  # action_configs defaults to None
+        ctx = _make_ctx(tmp_dirs)
+        prep_kwargs = _run_batch_and_get_prep_kwargs(ctx)
 
-        with (
-            patch(f"{_PREP_MODULE}.BatchTaskPreparator") as MockPrep,
-            patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc,
-        ):
-            MockSvc.return_value.submit_batch_job.return_value = SubmissionResult(
-                batch_id="vid_123"
-            )
-            _process_batch_mode(ctx)
-
-        prep_kwargs = MockPrep.call_args[1]
         assert prep_kwargs["action_indices"] is None
         assert prep_kwargs["dependency_configs"] is None
         assert prep_kwargs["version_context"] is None
@@ -135,7 +119,7 @@ class TestBatchFirstStageTemplateContext:
         """source_data and workflow_metadata are passed to submit_batch_job so
         {{ source.* }} and {{ workflow.* }} templates resolve."""
         data_chunk = [{"batch_id": "b1", "batch_uuid": "b1_0", "name": "Alice"}]
-        base, output, input_file = tmp_dirs
+        _, _, input_file = tmp_dirs
         ctx = _make_ctx(tmp_dirs, data_chunk=data_chunk)
 
         with patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc:
@@ -150,7 +134,7 @@ class TestBatchFirstStageTemplateContext:
     def test_submit_positional_args_unchanged(self, tmp_dirs):
         """Positional args (agent_config, batch_name, data, output_directory)
         remain in the same order — no regression."""
-        base, output, input_file = tmp_dirs
+        _, output, _ = tmp_dirs
         data_chunk = [{"batch_id": "b1", "batch_uuid": "b1_0", "content": "x"}]
         ctx = _make_ctx(tmp_dirs, data_chunk=data_chunk)
 
