@@ -56,6 +56,7 @@ class ValidationStrategy:
         max_attempts: int = 3,
         on_exhausted: str = "return_last",
         json_mode: bool = False,
+        validation_name: str = "validation",
     ) -> None:
         self._validation_func = validation_func
         self._feedback_message = feedback_message
@@ -63,10 +64,11 @@ class ValidationStrategy:
         self._max_attempts = max_attempts
         self._on_exhausted = on_exhausted
         self._json_mode = json_mode
+        self._validation_name = validation_name
 
     @property
     def name(self) -> str:
-        return "validation"
+        return self._validation_name
 
     @property
     def max_attempts(self) -> int:

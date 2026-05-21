@@ -131,6 +131,7 @@ def build_evaluation_loop(
         max_attempts=max_attempts if max_attempts is not None else parsed.max_attempts,
         on_exhausted=on_exhausted if on_exhausted is not None else parsed.on_exhausted,
         json_mode=bool(json_mode),
+        validation_name=parsed.validation_name,
     )
     return EvaluationLoop(strategy), strategy, parsed.validation_name
 
@@ -177,10 +178,16 @@ def validate_and_reprompt(
     all_graduated: list[BatchResult] = []
     active_results = results
     reprompted_ids: dict[str, int] = {}
+    failure_type_counts: dict[str, dict[str, int]] = {}
 
     for attempt in range(max_attempts):
-        graduated, still_failing, _failure_types = loop.split(active_results)
+        graduated, still_failing, round_failure_types = loop.split(active_results)
         all_graduated.extend(graduated)
+
+        # Accumulate failure type counts across rounds
+        for cid, ftype in round_failure_types.items():
+            per_record = failure_type_counts.setdefault(cid, {})
+            per_record[ftype] = per_record.get(ftype, 0) + 1
 
         if not still_failing:
             logger.info("All records passed validation after %d attempts", attempt + 1)
@@ -209,6 +216,7 @@ def validate_and_reprompt(
                 attempt=attempt + 1,
                 on_exhausted=on_exhausted,
                 per_record_attempts=reprompted_ids,
+                failure_type_counts=failure_type_counts or None,
             )
             all_graduated.extend(still_failing)
             break
