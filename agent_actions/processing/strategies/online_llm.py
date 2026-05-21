@@ -25,7 +25,6 @@ from agent_actions.logging.events.data_pipeline_events import (
     RecordTransformedEvent,
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
-from agent_actions.processing.cascade_filter import partition_cascade_records
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.invocation import InvocationStrategy, InvocationStrategyFactory
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
@@ -139,34 +138,29 @@ class OnlineLLMStrategy:
     ) -> list[ProcessingResult]:
         """Process records through the online LLM pipeline.
 
-        Cascade-blocking records (FAILED/EXHAUSTED/CASCADE_SKIPPED from
-        upstream) are partitioned out before processing — no LLM calls
-        are made for quarantined records.
+        Records are already cascade-filtered by UnifiedProcessor — only
+        processable records arrive here.
 
-        Iterates remaining records, calling process_record() for each.
+        Iterates records, calling process_record() for each.
         Record-specific errors (RecordContextError, TemplateVariableError
         with missing vars) produce tombstones and continue. Action-fatal
         errors (ConfigurationError, TemplateSyntaxError, EmptyOutputError,
         SchemaValidationError) re-raise.
         """
-        processable, quarantined_results = partition_cascade_records(
-            records, action_name=context.agent_name
-        )
-
         start_time = datetime.now(UTC)
 
         fire_event(
             BatchProcessingStartedEvent(
                 action_name=context.agent_name,
-                batch_size=len(processable),
+                batch_size=len(records),
             )
         )
 
-        results: list[ProcessingResult] = list(quarantined_results)
+        results: list[ProcessingResult] = []
         successes = 0
         failures = 0
 
-        for idx, item in enumerate(processable):
+        for idx, item in enumerate(records):
             try:
                 item_context = _create_item_context(context, idx, item)
                 result = self.process_record(item, item_context)
@@ -177,12 +171,12 @@ class OnlineLLMStrategy:
                 elif result.status == ProcessingStatus.FAILED:
                     failures += 1
 
-                if (idx + 1) % 10 == 0 or (idx + 1) == len(processable):
+                if (idx + 1) % 10 == 0 or (idx + 1) == len(records):
                     fire_event(
                         BatchProcessingProgressEvent(
                             action_name=context.agent_name,
                             processed=idx + 1,
-                            total=len(processable),
+                            total=len(records),
                             successes=successes,
                             failures=failures,
                         )
@@ -256,7 +250,7 @@ class OnlineLLMStrategy:
         fire_event(
             BatchDataProcessingCompleteEvent(
                 action_name=context.agent_name,
-                total_records=len(processable),
+                total_records=len(records),
                 elapsed_time=elapsed_time,
             )
         )

@@ -1824,7 +1824,12 @@ def test_file_tool_cascade_blocked_source_index_alignment():
     Input: [R1 active, R2 failed, R3 active]. Processable = [R1, R3].
     Tool returns TrackedItem results indexed 0→R1, 1→R3.
     reconcile_outputs must map source_index=1 to R3 (not R2).
+
+    Cascade filtering is done by UnifiedProcessor, so this test runs
+    through the full processor pipeline (FILE mode with raw_records).
     """
+    from agent_actions.processing.unified import UnifiedProcessor
+
     r1 = {"source_guid": "sg-1", "_state": "active", "content": {"prev": {"id": 1}}}
     r2 = {"source_guid": "sg-2", "_state": "failed", "content": {"prev": {"id": 2}}}
     r3 = {"source_guid": "sg-3", "_state": "active", "content": {"prev": {"id": 3}}}
@@ -1841,19 +1846,16 @@ def test_file_tool_cascade_blocked_source_index_alignment():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(tool_output, True),
     ):
-        results = FileToolStrategy().invoke([r1, r2, r3], context)
+        processor = UnifiedProcessor()
+        strategy = FileToolStrategy()
+        output, stats = processor.process([r1, r2, r3], context, strategy, raw_records=[r1, r2, r3])
 
-    # R2 should be quarantined (UNPROCESSED), R1 and R3 processed
-    unprocessed = [r for r in results if r.status == ProcessingStatus.UNPROCESSED]
-    successes = [r for r in results if r.status == ProcessingStatus.SUCCESS]
-    assert len(unprocessed) == 1
-    assert unprocessed[0].source_guid == "sg-2"
+    # R2 should be quarantined (unprocessed), R1 and R3 processed
+    assert stats.unprocessed == 1
 
-    assert len(successes) == 1
-    success_data = successes[0].data
-    assert len(success_data) == 2
-
-    # R1's output should carry R1's source_guid (not R2's)
-    assert success_data[0].get("source_guid") == "sg-1"
-    # R3's output should carry R3's source_guid (not R2's — the bug)
-    assert success_data[1].get("source_guid") == "sg-3"
+    r1_out = [r for r in output if r.get("source_guid") == "sg-1"]
+    r3_out = [r for r in output if r.get("source_guid") == "sg-3"]
+    r2_out = [r for r in output if r.get("source_guid") == "sg-2"]
+    assert len(r1_out) == 1
+    assert len(r3_out) == 1
+    assert len(r2_out) == 1  # quarantined tombstone
