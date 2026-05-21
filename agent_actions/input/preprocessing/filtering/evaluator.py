@@ -101,6 +101,63 @@ class GuardResult:
         return cls.passed()
 
 
+def reclassify_missing_field_error(filter_result: FilterResult, clause: str) -> FilterResult:
+    """Reclassify DATA errors for missing fields in namespaced content.
+
+    With namespaced content, guard conditions must use dotted paths
+    (e.g., ``validate.pass == false``).  Two cases are handled:
+
+    1. **Flat field with namespace match** — the field exists inside a
+       namespace but was referenced without the prefix.  Reclassified as
+       SEMANTIC so the guard behavior always applies (bypasses
+       ``passthrough_on_error``).
+    2. **Genuinely missing field** — the field does not exist anywhere.
+       Treated as *condition not matched* so the guard behavior applies
+       instead of silently passing.
+
+    This is a standalone function so it can be called from any guard
+    evaluation path (GuardEvaluator, GuardStrategy, etc.).
+    """
+    if (
+        filter_result.success
+        or filter_result.error_category != ErrorCategory.DATA
+        or not filter_result.error
+    ):
+        return filter_result
+
+    # Only reclassify MissingFieldError-originated errors
+    if "does not exist in the data" not in filter_result.error:
+        return filter_result
+
+    if "Did you mean:" in filter_result.error:
+        # Flat field reference that exists in a namespace → semantic error
+        logger.warning(
+            "Guard: flat field reference in condition '%s'. "
+            "Content is namespaced — use dotted paths (e.g., action_name.field). %s",
+            clause,
+            filter_result.error,
+        )
+        return FilterResult(
+            success=False,
+            error=filter_result.error,
+            error_category=ErrorCategory.SEMANTIC,
+            execution_time=filter_result.execution_time,
+        )
+
+    # Field genuinely missing → treat as condition not matched
+    logger.debug(
+        "Guard: field not found in condition '%s', treating as not matched: %s",
+        clause,
+        filter_result.error,
+    )
+    return FilterResult(
+        success=True,
+        matched=False,
+        error=filter_result.error,
+        execution_time=filter_result.execution_time,
+    )
+
+
 class GuardEvaluator:
     """Unified guard evaluation for batch and online modes."""
 
@@ -205,57 +262,8 @@ class GuardEvaluator:
     def _reclassify_missing_field_error(
         self, filter_result: FilterResult, clause: str
     ) -> FilterResult:
-        """Reclassify DATA errors for missing fields in namespaced content.
-
-        With namespaced content, guard conditions must use dotted paths
-        (e.g., ``validate.pass == false``).  Two cases are handled:
-
-        1. **Flat field with namespace match** — the field exists inside a
-           namespace but was referenced without the prefix.  Reclassified as
-           SEMANTIC so the guard behavior always applies (bypasses
-           ``passthrough_on_error``).
-        2. **Genuinely missing field** — the field does not exist anywhere.
-           Treated as *condition not matched* so the guard behavior applies
-           instead of silently passing.
-        """
-        if (
-            filter_result.success
-            or filter_result.error_category != ErrorCategory.DATA
-            or not filter_result.error
-        ):
-            return filter_result
-
-        # Only reclassify MissingFieldError-originated errors
-        if "does not exist in the data" not in filter_result.error:
-            return filter_result
-
-        if "Did you mean:" in filter_result.error:
-            # Flat field reference that exists in a namespace → semantic error
-            logger.warning(
-                "Guard: flat field reference in condition '%s'. "
-                "Content is namespaced — use dotted paths (e.g., action_name.field). %s",
-                clause,
-                filter_result.error,
-            )
-            return FilterResult(
-                success=False,
-                error=filter_result.error,
-                error_category=ErrorCategory.SEMANTIC,
-                execution_time=filter_result.execution_time,
-            )
-
-        # Field genuinely missing → treat as condition not matched
-        logger.debug(
-            "Guard: field not found in condition '%s', treating as not matched: %s",
-            clause,
-            filter_result.error,
-        )
-        return FilterResult(
-            success=True,
-            matched=False,
-            error=filter_result.error,
-            execution_time=filter_result.execution_time,
-        )
+        """Delegate to module-level reclassify_missing_field_error."""
+        return reclassify_missing_field_error(filter_result, clause)
 
     def _prepare_eval_context(self, context: Any) -> dict[str, Any]:
         """Promote content namespaces to top-level keys for guard evaluation.
