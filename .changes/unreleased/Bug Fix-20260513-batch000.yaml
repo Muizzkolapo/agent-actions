@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Batch mode: materialize processed JSON to agent_io/target/ alongside SQLite write (parity with online mode)"
-time: 2026-05-13T11:15:00.000000Z

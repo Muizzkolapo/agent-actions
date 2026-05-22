@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Fix async batch reprompt recovery loop: load recovery state from disk, consume recovery batch results, enforce max_attempts"
-time: 2026-05-13T04:50:00.000000Z

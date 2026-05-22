@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Record fate on prompt template failure: failed records are now tracked with per-record dispositions and cascade correctly to downstream actions instead of being silently dropped"
-time: 2026-05-11T04:10:00.000000Z

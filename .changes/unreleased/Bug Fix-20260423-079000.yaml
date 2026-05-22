@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "_handle_action_skip returns COMPLETED (matching state_manager) instead of contradictory SKIPPED"
-time: 2026-04-23T07:90:00.000000Z

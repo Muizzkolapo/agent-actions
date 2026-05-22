@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Fix 6 VS Code/LSP issues: missing grammar file, disposed flag surviving reload, context_scope completions limited to current file, missing didChange handler, no crash recovery, and unescaped Mermaid labels"
-time: 2026-05-22T03:20:00.000000Z

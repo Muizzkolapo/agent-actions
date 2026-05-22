@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Retry exhaustion inside reprompt now correctly reports passed=False instead of silently passing as guard-skip"
-time: 2026-04-22T00:10:00.000000Z

@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Fix Anthropic batch stuck in infinite recovery loop — result type 'errored' was not recognized, causing error info loss and repeated recovery submissions"
-time: 2026-05-10T04:40:00.000000Z

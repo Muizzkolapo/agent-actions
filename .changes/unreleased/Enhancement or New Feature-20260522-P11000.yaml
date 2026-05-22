@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Batch SQLite disposition commits — one transaction per action instead of N per-record commits during result collection"
-time: 2026-05-22T11:10:00.000000Z
