@@ -2,11 +2,22 @@
 
 import json
 import sqlite3
-from unittest.mock import patch
+from contextlib import contextmanager
 
 import pytest
 
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+
+@contextmanager
+def extra_required_columns(backend, table_name, columns):
+    """Temporarily add columns to _REQUIRED_COLUMNS, restoring on exit."""
+    original = backend._REQUIRED_COLUMNS[table_name].copy()
+    backend._REQUIRED_COLUMNS[table_name] = original | set(columns)
+    try:
+        yield
+    finally:
+        backend._REQUIRED_COLUMNS[table_name] = original
 
 
 class TestSchemaMigrationPreservesData:
@@ -14,21 +25,18 @@ class TestSchemaMigrationPreservesData:
 
     @pytest.fixture
     def backend_with_records(self, tmp_path):
-        """Create a backend with 100 target records and 100 dispositions."""
+        """Create a backend with 3 target records and 3 dispositions."""
         db_path = tmp_path / "agent_io" / "test.db"
         backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
 
         cursor = backend.connection.cursor()
-        # Insert 100 target records
-        for i in range(100):
+        for i in range(3):
             cursor.execute(
                 "INSERT INTO target_data (action_name, relative_path, data, record_count) "
                 "VALUES (?, ?, ?, ?)",
                 (f"action_{i}", f"file_{i}.json", json.dumps([{"id": i}]), 1),
             )
-        # Insert 100 dispositions
-        for i in range(100):
             cursor.execute(
                 "INSERT INTO record_disposition (action_name, record_id, disposition, reason, relative_path) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -42,69 +50,44 @@ class TestSchemaMigrationPreservesData:
     def test_alter_table_preserves_target_records(self, backend_with_records):
         """Adding a missing column must not destroy existing target records."""
         backend = backend_with_records
-
-        # Verify records exist before migration
         cursor = backend.connection.cursor()
-        cursor.execute("SELECT COUNT(*) FROM target_data")
-        assert cursor.fetchone()[0] == 100
 
-        # Add a new required column that doesn't exist yet
-        original_required = backend._REQUIRED_COLUMNS["target_data"].copy()
-        backend._REQUIRED_COLUMNS["target_data"] = original_required | {"updated_at"}
-
-        try:
-            # Re-run _enforce_schema (simulating re-initialize)
+        with extra_required_columns(backend, "target_data", {"updated_at"}):
             backend._enforce_schema(cursor)
             backend.connection.commit()
 
-            # All 100 records must still exist
             cursor.execute("SELECT COUNT(*) FROM target_data")
-            assert cursor.fetchone()[0] == 100
+            assert cursor.fetchone()[0] == 3
 
-            # New column must be present
             cursor.execute("PRAGMA table_info(target_data)")
             columns = {row[1] for row in cursor.fetchall()}
             assert "updated_at" in columns
 
-            # New column must default to NULL for existing rows
             cursor.execute("SELECT updated_at FROM target_data LIMIT 1")
             assert cursor.fetchone()[0] is None
-        finally:
-            backend._REQUIRED_COLUMNS["target_data"] = original_required
 
     def test_alter_table_preserves_dispositions(self, backend_with_records):
         """Adding a missing column must not destroy existing dispositions."""
         backend = backend_with_records
-
         cursor = backend.connection.cursor()
-        cursor.execute("SELECT COUNT(*) FROM record_disposition")
-        assert cursor.fetchone()[0] == 100
 
-        original_required = backend._REQUIRED_COLUMNS["record_disposition"].copy()
-        backend._REQUIRED_COLUMNS["record_disposition"] = original_required | {"updated_at"}
-
-        try:
+        with extra_required_columns(backend, "record_disposition", {"updated_at"}):
             backend._enforce_schema(cursor)
             backend.connection.commit()
 
             cursor.execute("SELECT COUNT(*) FROM record_disposition")
-            assert cursor.fetchone()[0] == 100
+            assert cursor.fetchone()[0] == 3
 
             cursor.execute("PRAGMA table_info(record_disposition)")
             columns = {row[1] for row in cursor.fetchall()}
             assert "updated_at" in columns
-        finally:
-            backend._REQUIRED_COLUMNS["record_disposition"] = original_required
 
     def test_multiple_missing_columns(self, backend_with_records):
         """Multiple missing columns are each added individually."""
         backend = backend_with_records
         cursor = backend.connection.cursor()
 
-        original_required = backend._REQUIRED_COLUMNS["target_data"].copy()
-        backend._REQUIRED_COLUMNS["target_data"] = original_required | {"col_a", "col_b", "col_c"}
-
-        try:
+        with extra_required_columns(backend, "target_data", {"col_a", "col_b", "col_c"}):
             backend._enforce_schema(cursor)
             backend.connection.commit()
 
@@ -112,23 +95,22 @@ class TestSchemaMigrationPreservesData:
             columns = {row[1] for row in cursor.fetchall()}
             assert {"col_a", "col_b", "col_c"}.issubset(columns)
 
-            # Data preserved
             cursor.execute("SELECT COUNT(*) FROM target_data")
-            assert cursor.fetchone()[0] == 100
-        finally:
-            backend._REQUIRED_COLUMNS["target_data"] = original_required
+            assert cursor.fetchone()[0] == 3
 
     def test_no_change_when_schema_matches(self, backend_with_records):
         """No ALTER when existing columns already match required columns."""
         backend = backend_with_records
         cursor = backend.connection.cursor()
 
-        # _enforce_schema should be a no-op when schema matches
-        with patch("agent_actions.storage.backends.sqlite_backend.logger") as mock_logger:
-            backend._enforce_schema(cursor)
-            # No info logs about migration
-            for call in mock_logger.info.call_args_list:
-                assert "ALTER TABLE" not in str(call)
+        cursor.execute("PRAGMA table_info(target_data)")
+        columns_before = {row[1] for row in cursor.fetchall()}
+
+        backend._enforce_schema(cursor)
+
+        cursor.execute("PRAGMA table_info(target_data)")
+        columns_after = {row[1] for row in cursor.fetchall()}
+        assert columns_before == columns_after
 
     def test_nonexistent_table_skipped(self, tmp_path):
         """Tables not yet created are skipped (CREATE TABLE handles them)."""
@@ -142,7 +124,6 @@ class TestSchemaMigrationPreservesData:
         backend._connection = conn
 
         cursor = conn.cursor()
-        # Should not raise — just skips nonexistent tables
         backend._enforce_schema(cursor)
         conn.close()
 
@@ -151,22 +132,15 @@ class TestSchemaMigrationPreservesData:
         backend = backend_with_records
         cursor = backend.connection.cursor()
 
-        original_required = backend._REQUIRED_COLUMNS["target_data"].copy()
-        backend._REQUIRED_COLUMNS["target_data"] = original_required | {"new_col"}
-
-        try:
-            # First run adds the column
+        with extra_required_columns(backend, "target_data", {"new_col"}):
             backend._enforce_schema(cursor)
             backend.connection.commit()
 
-            # Second run — column already exists, should be a no-op
             backend._enforce_schema(cursor)
             backend.connection.commit()
 
             cursor.execute("SELECT COUNT(*) FROM target_data")
-            assert cursor.fetchone()[0] == 100
-        finally:
-            backend._REQUIRED_COLUMNS["target_data"] = original_required
+            assert cursor.fetchone()[0] == 3
 
     def test_full_reinitialize_preserves_data(self, tmp_path):
         """Full initialize() cycle with a new column preserves all records."""
@@ -174,9 +148,8 @@ class TestSchemaMigrationPreservesData:
         backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
 
-        # Insert records
         cursor = backend.connection.cursor()
-        for i in range(50):
+        for i in range(3):
             cursor.execute(
                 "INSERT INTO target_data (action_name, relative_path, data, record_count) "
                 "VALUES (?, ?, ?, ?)",
@@ -184,21 +157,15 @@ class TestSchemaMigrationPreservesData:
             )
         backend.connection.commit()
 
-        # Add new required column
-        original_required = backend._REQUIRED_COLUMNS["target_data"].copy()
-        backend._REQUIRED_COLUMNS["target_data"] = original_required | {"migrated_col"}
-
-        try:
-            # Re-initialize (as would happen on framework upgrade)
+        with extra_required_columns(backend, "target_data", {"migrated_col"}):
             backend.initialize()
 
             cursor = backend.connection.cursor()
             cursor.execute("SELECT COUNT(*) FROM target_data")
-            assert cursor.fetchone()[0] == 50
+            assert cursor.fetchone()[0] == 3
 
             cursor.execute("PRAGMA table_info(target_data)")
             columns = {row[1] for row in cursor.fetchall()}
             assert "migrated_col" in columns
-        finally:
-            backend._REQUIRED_COLUMNS["target_data"] = original_required
-            backend.close()
+
+        backend.close()

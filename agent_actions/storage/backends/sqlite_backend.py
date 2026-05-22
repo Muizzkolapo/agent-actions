@@ -270,8 +270,9 @@ class SQLiteBackend(StorageBackend):
             existing = {row[1] for row in rows}
             missing = required - existing
             if missing:
-                for column in sorted(missing):
-                    logger.info(
+                columns_to_add = sorted(missing)
+                for column in columns_to_add:
+                    logger.debug(
                         "Table '%s' missing column '%s' — adding via ALTER TABLE",
                         table_name,
                         column,
@@ -285,8 +286,8 @@ class SQLiteBackend(StorageBackend):
                 logger.info(
                     "Schema migration complete for '%s': added %d column(s): %s",
                     table_name,
-                    len(missing),
-                    sorted(missing),
+                    len(columns_to_add),
+                    columns_to_add,
                 )
 
     def write_target(self, action_name: str, relative_path: str, data: list[dict[str, Any]]) -> str:
