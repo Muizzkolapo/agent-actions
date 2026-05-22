@@ -125,7 +125,7 @@ actions:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `model_vendor` | string | Provider: openai, anthropic, google, groq, mistral, cohere, ollama_local, ollama_cloud |
+| `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud |
 | `model_name` | string | Model identifier (e.g., gpt-4o-mini) |
 | `api_key` | string | Environment variable name for API key |
 | `temperature` | float | LLM temperature (0.0-2.0) |
@@ -135,7 +135,7 @@ actions:
 
 :::note Vendor-Specific Parameter Mapping
 Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped to vendor-specific API keys automatically:
-- **OpenAI / Groq / Mistral**: Parameters passed through as-is. OpenAI and Groq also support `frequency_penalty` and `presence_penalty`.
+- **OpenAI / Groq**: Parameters passed through as-is. OpenAI and Groq also support `frequency_penalty` and `presence_penalty`.
 - **Anthropic**: `stop` → `stop_sequences` (string values are wrapped in a list)
 - **Gemini**: `max_tokens` → `max_output_tokens`, `stop` → `stop_sequences`
 - **Cohere**: `top_p` → `p`, `stop` → `stop_sequences`
@@ -195,7 +195,6 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 | Anthropic | `anthropic` | ✅ | claude-sonnet-4-20250514 |
 | Google | `google` | ✅ | gemini-2.0-flash |
 | Groq | `groq` | ✅ | llama-3.3-70b-versatile |
-| Mistral | `mistral` | ✅ | mistral-large-latest |
 | Cohere | `cohere` | ❌ | command-r-plus |
 | Ollama | `ollama` | ✅ | llama3, mistral |
 
@@ -215,7 +214,6 @@ api_key: OPENAI_API_KEY  # Uses $OPENAI_API_KEY from environment
 | `ANTHROPIC_API_KEY` | Anthropic |
 | `GOOGLE_API_KEY` | Google Gemini |
 | `GROQ_API_KEY` | Groq |
-| `MISTRAL_API_KEY` | Mistral |
 | `OLLAMA_HOST` | Ollama (default: `http://localhost:11434`) |
 
 ### Runtime Variables
