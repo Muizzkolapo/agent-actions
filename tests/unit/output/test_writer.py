@@ -264,6 +264,41 @@ class TestWriteTarget:
         with pytest.raises(ProcessingError):
             writer.write_target([{"x": 1}])
 
+    @patch("agent_actions.output.writer.fire_event")
+    def test_rejects_path_traversal(self, mock_fire, tmp_path):
+        """write_target must reject paths that escape output_directory."""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        # Crafted path escaping via ../
+        fp = str(output_dir / ".." / "escaped.json")
+        backend = MagicMock()
+        writer = FileWriter(
+            fp,
+            storage_backend=backend,
+            action_name="node_a",
+            output_directory=str(output_dir),
+        )
+        with pytest.raises(ProcessingError):
+            writer.write_target([{"x": 1}])
+        # Backend should NOT have been called
+        backend.write_target.assert_not_called()
+
+    @patch("agent_actions.output.writer.fire_event")
+    def test_accepts_valid_subdirectory_path(self, mock_fire, tmp_path):
+        """write_target must accept paths within output_directory."""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        fp = str(output_dir / "subdir" / "data.json")
+        backend = MagicMock()
+        writer = FileWriter(
+            fp,
+            storage_backend=backend,
+            action_name="node_a",
+            output_directory=str(output_dir),
+        )
+        writer.write_target([{"x": 1}])
+        backend.write_target.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # write_source

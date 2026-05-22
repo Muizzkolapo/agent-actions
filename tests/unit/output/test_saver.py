@@ -196,6 +196,21 @@ class TestSaverErrors:
             saver.save_source_items([{"x": 1}], "path")
 
     @patch("agent_actions.output.saver.fire_event")
+    def test_binary_data_does_not_crash(self, mock_fire, tmp_path):
+        """Items containing bytes values must not crash json.dumps."""
+        backend = MagicMock()
+        saver = UnifiedSourceDataSaver(
+            base_directory=str(tmp_path),
+            storage_backend=backend,
+        )
+        items = [{"key": b"binary data from UDF", "normal": "text"}]
+        # Should not raise TypeError
+        saver.save_source_items(items, "binary_path")
+        backend.write_source.assert_called_once()
+        saved_event = mock_fire.call_args_list[1][0][0]
+        assert saved_event.bytes_written > 0
+
+    @patch("agent_actions.output.saver.fire_event")
     def test_saving_event_fired_before_backend_error(self, mock_fire, tmp_path):
         """Even if backend raises, the 'saving' event should have been fired."""
         backend = MagicMock()
