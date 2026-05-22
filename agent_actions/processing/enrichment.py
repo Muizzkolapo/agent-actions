@@ -58,6 +58,12 @@ class LineageEnricher(Enricher):
                 item["target_id"] = IDGenerator.generate_target_id()
                 if old_target_id:
                     item["parent_target_id"] = old_target_id
+                # Each expansion child gets its own source_guid to prevent
+                # UNIQUE constraint collisions when written to source_data.
+                old_source_guid = item.get("source_guid")
+                item["source_guid"] = IDGenerator.generate_source_guid()
+                if old_source_guid:
+                    item["parent_source_guid"] = old_source_guid
 
             if (
                 result.source_mapping is not None
