@@ -135,7 +135,7 @@ class TestResolveStartNodeDirectories:
         mock_resolve.return_value = mock_result
         result = runner._resolve_start_node_directories(tmp_path, "agent")
         assert result == [staging]
-        mock_resolve.assert_called_once()
+        mock_resolve.assert_called_once_with(tmp_path, None, "agent")
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ class TestSetupDirectories:
         config = {"agent_type": "analyzer", "dependencies": ["dep1"]}
         dirs, output = runner.setup_directories(str(tmp_path), config, None)
         assert dirs == [str(dep_dir)]
-        mock_dep.assert_called_once()
+        mock_dep.assert_called_once_with(tmp_path, ["dep1"], "analyzer")
 
     def test_has_previous_agent_type(self, runner, tmp_path):
         config = {"agent_type": "analyzer"}

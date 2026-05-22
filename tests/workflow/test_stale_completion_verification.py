@@ -510,5 +510,10 @@ class TestCoordinatorSequentialVerification:
         )
 
         assert result is False
-        mock.services.core.action_executor.execute_action_sync.assert_called_once()
+        mock.services.core.action_executor.execute_action_sync.assert_called_once_with(
+            "write_description",
+            action_idx=0,
+            action_config={"agent_type": "write_description"},
+            is_last_action=True,
+        )
         mock.event_logger.log_action_skip.assert_not_called()
