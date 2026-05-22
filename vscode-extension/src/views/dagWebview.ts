@@ -197,10 +197,7 @@ export class DagWebview implements vscode.Disposable {
         return name.replace(/[^a-zA-Z0-9_]/g, '_');
     }
 
-    /**
-     * Escape special Mermaid characters in node labels to prevent syntax breaks.
-     * Handles quotes, brackets, braces, parens, pipes, and other Mermaid-significant chars.
-     */
+    /** Escape Mermaid-significant characters in node labels. */
     private escapeMermaidLabel(label: string): string {
         return label.replace(/["\\[\]{}()<>|#&;]/g, '_');
     }

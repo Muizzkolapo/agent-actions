@@ -289,7 +289,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Context scope completions
     elif is_in_context_scope_block(lines, params.position.line):
-        items.extend(build_context_scope_completions(current_file, index))
+        items.extend(build_context_scope_completions(index))
 
     # Guard/reprompt completions
     elif "condition:" in line_before_cursor or "validation:" in line_before_cursor:

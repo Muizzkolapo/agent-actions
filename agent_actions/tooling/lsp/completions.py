@@ -40,7 +40,7 @@ def is_in_versions_block(lines: list[str], line_number: int) -> bool:
 
 
 def build_context_scope_completions(
-    file_path: Path, index: ProjectIndex
+    index: ProjectIndex,
 ) -> list[lsp.CompletionItem]:
     """Build completions for context_scope observe/drop blocks.
 
