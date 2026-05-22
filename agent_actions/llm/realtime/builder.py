@@ -20,7 +20,6 @@ from .services import (
 
 def create_dynamic_agent(
     agent_config: dict[str, Any],
-    udf: Any,
     context_data_str: str | dict,
     formatted_prompt: str | None = None,
     tools_path: str | None = None,
@@ -32,7 +31,6 @@ def create_dynamic_agent(
 
     Args:
         agent_config: Agent configuration with model/prompt settings.
-        udf: User defined function (agent_name).
         context_data_str: Context data for LLM (may be transformed with
             context_scope.drop applied).
         formatted_prompt: Pre-formatted prompt (optional, from DataGenerator).

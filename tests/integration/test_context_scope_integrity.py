@@ -979,7 +979,6 @@ class TestContextScopeEdgeCases:
         with pytest.raises(ConfigurationError, match="context_scope is required"):
             PromptPreparationService._build_llm_context(
                 mode="online",
-                contents={"text": "hello", "other": "data", "more": "info"},
                 llm_additional_context={},
                 context_scope=None,
             )

@@ -149,7 +149,7 @@ def _build_seed_file_hover(reference, index: ProjectIndex) -> str | None:
     return header + render_card_markdown(record)
 
 
-def get_prompt_symbols(content: str, file_path) -> list[lsp.DocumentSymbol]:
+def get_prompt_symbols(content: str) -> list[lsp.DocumentSymbol]:
     """Extract prompt block symbols from markdown content."""
     symbols = []
     lines = content.split("\n")

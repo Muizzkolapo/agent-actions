@@ -17,7 +17,6 @@ from .completions import (
 )
 from .diagnostics import (
     collect_available_guard_variables,
-    collect_diagnostics,
     publish_diagnostics,
 )
 from .handlers import (
@@ -343,7 +342,7 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
             )
 
     if file_path.suffix == ".md":
-        symbols.extend(get_prompt_symbols(doc.source, file_path))
+        symbols.extend(get_prompt_symbols(doc.source))
 
     return symbols
 
@@ -675,23 +674,6 @@ def _build_watchers_for_project(root: Path) -> list[lsp.FileSystemWatcher]:
             )
 
     return watchers
-
-
-# ---------------------------------------------------------------------------
-# Backward-compatible private names kept for any external test imports
-# ---------------------------------------------------------------------------
-
-_build_hover_content = build_hover_content
-_get_prompt_symbols = get_prompt_symbols
-_find_reference_at_position = find_reference_at_position
-_semantic_tokens_legend = semantic_tokens_legend
-_build_semantic_tokens = build_semantic_tokens
-_collect_diagnostics = collect_diagnostics
-_collect_available_guard_variables = collect_available_guard_variables
-_is_in_context_scope_block = is_in_context_scope_block
-_is_in_versions_block = is_in_versions_block
-_build_context_scope_completions = build_context_scope_completions
-_build_guard_completions = build_guard_completions
 
 
 def main():
