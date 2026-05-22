@@ -289,7 +289,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Context scope completions
     elif is_in_context_scope_block(lines, params.position.line):
-        items.extend(build_context_scope_completions(current_file, index))
+        items.extend(build_context_scope_completions(index))
 
     # Guard/reprompt completions
     elif "condition:" in line_before_cursor or "validation:" in line_before_cursor:
@@ -376,6 +376,12 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
             _reindex_project(file_idx.root)
             logger.info("Reindexed project at %s after save", file_idx.root)
 
+    _publish_diagnostics(params.text_document.uri)
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
+def did_change(params: lsp.DidChangeTextDocumentParams):
+    """Handle document change — update in-memory content and republish diagnostics."""
     _publish_diagnostics(params.text_document.uri)
 
 
