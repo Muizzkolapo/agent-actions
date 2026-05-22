@@ -330,6 +330,8 @@ def _prepare_text_chunks_batch(
     content: str, agent_config: dict[str, Any], batch_id: str, node_id: str
 ) -> list[dict[str, Any]]:
     """Prepare text chunks for batch mode."""
+    from agent_actions.utils.id_generation import IDGenerator
+
     chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
     chunk_size = chunk_config.get("chunk_size", get_default("chunk_size"))
     chunk_overlap = chunk_config.get("overlap", get_default("chunk_overlap"))
@@ -350,7 +352,7 @@ def _prepare_text_chunks_batch(
                 "content": chunk,
                 "batch_id": batch_id,
                 "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": str(uuid.uuid4()),
+                "source_guid": IDGenerator.generate_source_guid(),
                 "target_id": target_id,
                 # Ancestry Chain: first-stage records are their own root
                 "parent_target_id": None,
@@ -374,6 +376,8 @@ def _add_batch_metadata(
     rows: list[dict[str, Any]], batch_id: str, node_id: str
 ) -> list[dict[str, Any]]:
     """Add batch metadata to rows of data."""
+    from agent_actions.utils.id_generation import IDGenerator
+
     result = []
     for idx, row in enumerate(rows):
         target_id = str(uuid.uuid4())
@@ -382,7 +386,7 @@ def _add_batch_metadata(
                 **row,
                 "batch_id": batch_id,
                 "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": str(uuid.uuid4()),
+                "source_guid": IDGenerator.generate_source_guid(),
                 "target_id": target_id,
                 # Ancestry Chain: first-stage records are their own root
                 "parent_target_id": None,
