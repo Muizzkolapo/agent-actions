@@ -281,6 +281,25 @@ class EnrichmentPipeline:
         """Run result through all enrichers in sequence."""
         start_time = datetime.now(UTC)
 
+        # LLM can return malformed data (strings, lists, None) that would
+        # crash every enricher's .get() calls with AttributeError.
+        if any(not isinstance(item, dict) for item in result.data):
+            valid_items = [item for item in result.data if isinstance(item, dict)]
+            invalid_count = len(result.data) - len(valid_items)
+            logger.warning(
+                "Filtered %d non-dict items from result.data (action=%s)",
+                invalid_count,
+                context.action_name,
+            )
+            result.data = valid_items
+            if not valid_items:
+                result.status = ProcessingStatus.FAILED
+                result.error = (
+                    f"All {invalid_count} items in result.data were non-dict "
+                    f"(action={context.action_name}) — enrichment skipped"
+                )
+                return result
+
         fire_event(
             EnrichmentPipelineStartedEvent(
                 enricher_count=len(self.enrichers),
