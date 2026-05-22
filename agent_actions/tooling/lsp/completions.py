@@ -40,30 +40,38 @@ def is_in_versions_block(lines: list[str], line_number: int) -> bool:
 
 
 def build_context_scope_completions(
-    file_path: Path, index: ProjectIndex
+    index: ProjectIndex,
 ) -> list[lsp.CompletionItem]:
-    """Build completions for context_scope observe/drop blocks."""
+    """Build completions for context_scope observe/drop blocks.
+
+    Searches all indexed files in the workspace so that cross-file action
+    references are available, not just actions defined in the current file.
+    """
     items = []
-    actions = index.file_actions.get(file_path, {})
-    for action in actions.values():
-        if action.schema_ref:
-            schema = index.get_schema_definition(action.schema_ref)
-            if schema and schema.fields:
-                for field in schema.fields:
-                    items.append(
-                        lsp.CompletionItem(
-                            label=f"{action.name}.{field}",
-                            kind=lsp.CompletionItemKind.Field,
-                            detail=f"Output field from {action.name}",
+    seen_actions: set[str] = set()
+    for actions in index.file_actions.values():
+        for action in actions.values():
+            if action.name in seen_actions:
+                continue
+            seen_actions.add(action.name)
+            if action.schema_ref:
+                schema = index.get_schema_definition(action.schema_ref)
+                if schema and schema.fields:
+                    for field in schema.fields:
+                        items.append(
+                            lsp.CompletionItem(
+                                label=f"{action.name}.{field}",
+                                kind=lsp.CompletionItemKind.Field,
+                                detail=f"Output field from {action.name}",
+                            )
                         )
-                    )
-        items.append(
-            lsp.CompletionItem(
-                label=action.name,
-                kind=lsp.CompletionItemKind.Module,
-                detail="Action output",
+            items.append(
+                lsp.CompletionItem(
+                    label=action.name,
+                    kind=lsp.CompletionItemKind.Module,
+                    detail="Action output",
+                )
             )
-        )
     return items
 
 
