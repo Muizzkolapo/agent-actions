@@ -28,21 +28,46 @@ class ProbeResult:
 # a ProbeResult.  SDK imports are lazy (inside the function body) to
 # avoid loading unused vendor SDKs.
 
+_INFRA_ERROR_PREFIX = "Infrastructure error during key verification"
+
+
+def _classify_sdk_exception(
+    vendor: str,
+    exc: Exception,
+    auth_types: tuple[type, ...],
+    transient_types: tuple[type, ...],
+) -> ProbeResult:
+    """Classify an SDK exception into auth failure, transient, or infrastructure error."""
+    if isinstance(exc, auth_types):
+        return ProbeResult(vendor=vendor, ok=False, error=str(exc))
+    if isinstance(exc, transient_types):
+        logger.warning("Could not verify %s key: %s (proceeding — transient)", vendor, exc)
+        return ProbeResult(vendor=vendor, ok=True)
+    return ProbeResult(vendor=vendor, ok=False, error=f"{_INFRA_ERROR_PREFIX}: {exc}")
+
 
 def _probe_openai(api_key: str) -> ProbeResult:
     try:
         from openai import AuthenticationError, OpenAI
 
         client = OpenAI(api_key=api_key, timeout=_PROBE_TIMEOUT_SECONDS)
-        # models.list() consumes no tokens.
         client.models.list()
         return ProbeResult(vendor="openai", ok=True)
-    except AuthenticationError as e:
-        return ProbeResult(vendor="openai", ok=False, error=str(e))
+    except ImportError:
+        return ProbeResult(
+            vendor="openai",
+            ok=False,
+            error="openai package not installed — run: pip install openai",
+        )
     except Exception as e:
-        # Network / timeout / rate-limit — not an auth issue.
-        logger.warning("Could not verify openai key: %s (proceeding)", e)
-        return ProbeResult(vendor="openai", ok=True)
+        from openai import APIConnectionError, APITimeoutError, AuthenticationError, RateLimitError
+
+        return _classify_sdk_exception(
+            "openai",
+            e,
+            (AuthenticationError,),
+            (APIConnectionError, APITimeoutError, RateLimitError),
+        )
 
 
 def _probe_anthropic(api_key: str) -> ProbeResult:
@@ -52,11 +77,21 @@ def _probe_anthropic(api_key: str) -> ProbeResult:
         client = anthropic.Anthropic(api_key=api_key, timeout=_PROBE_TIMEOUT_SECONDS)
         client.models.list(limit=1)
         return ProbeResult(vendor="anthropic", ok=True)
-    except anthropic.AuthenticationError as e:
-        return ProbeResult(vendor="anthropic", ok=False, error=str(e))
+    except ImportError:
+        return ProbeResult(
+            vendor="anthropic",
+            ok=False,
+            error="anthropic package not installed — run: pip install anthropic",
+        )
     except Exception as e:
-        logger.warning("Could not verify anthropic key: %s (proceeding)", e)
-        return ProbeResult(vendor="anthropic", ok=True)
+        import anthropic
+
+        return _classify_sdk_exception(
+            "anthropic",
+            e,
+            (anthropic.AuthenticationError,),
+            (anthropic.APIConnectionError, anthropic.APITimeoutError, anthropic.RateLimitError),
+        )
 
 
 def _probe_groq(api_key: str) -> ProbeResult:
@@ -66,11 +101,18 @@ def _probe_groq(api_key: str) -> ProbeResult:
         client = Groq(api_key=api_key, timeout=_PROBE_TIMEOUT_SECONDS)
         client.models.list()
         return ProbeResult(vendor="groq", ok=True)
-    except AuthenticationError as e:
-        return ProbeResult(vendor="groq", ok=False, error=str(e))
+    except ImportError:
+        return ProbeResult(
+            vendor="groq",
+            ok=False,
+            error="groq package not installed — run: pip install groq",
+        )
     except Exception as e:
-        logger.warning("Could not verify groq key: %s (proceeding)", e)
-        return ProbeResult(vendor="groq", ok=True)
+        from groq import APIConnectionError, APITimeoutError, AuthenticationError, RateLimitError
+
+        return _classify_sdk_exception(
+            "groq", e, (AuthenticationError,), (APIConnectionError, APITimeoutError, RateLimitError)
+        )
 
 
 def _probe_gemini(api_key: str) -> ProbeResult:
@@ -78,15 +120,33 @@ def _probe_gemini(api_key: str) -> ProbeResult:
         from google import genai
 
         client = genai.Client(api_key=api_key)
-        # Fetch one model to validate the key.
         next(iter(client.models.list(config={"page_size": 1})))
         return ProbeResult(vendor="gemini", ok=True)
+    except ImportError:
+        return ProbeResult(
+            vendor="gemini",
+            ok=False,
+            error="google-genai package not installed — run: pip install google-genai",
+        )
     except Exception as e:
         err_str = str(e).lower()
         if "401" in err_str or "403" in err_str or "api key" in err_str:
             return ProbeResult(vendor="gemini", ok=False, error=str(e))
-        logger.warning("Could not verify gemini key: %s (proceeding)", e)
-        return ProbeResult(vendor="gemini", ok=True)
+        # Build transient type tuple from optional Google SDK exceptions
+        transient_types: list[type] = []
+        try:
+            from google.api_core.exceptions import ServiceUnavailable
+            from google.auth.exceptions import TransportError
+
+            transient_types.extend([ServiceUnavailable, TransportError])
+        except ImportError:
+            pass
+        if (transient_types and isinstance(e, tuple(transient_types))) or (
+            "timeout" in err_str or "connection" in err_str
+        ):
+            logger.warning("Could not verify gemini key: %s (proceeding — transient)", e)
+            return ProbeResult(vendor="gemini", ok=True)
+        return ProbeResult(vendor="gemini", ok=False, error=f"{_INFRA_ERROR_PREFIX}: {e}")
 
 
 # ── Registry ──────────────────────────────────────────────────────────
