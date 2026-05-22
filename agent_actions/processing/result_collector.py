@@ -37,6 +37,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
+    DispositionRow,
 )
 
 if TYPE_CHECKING:
@@ -363,10 +364,7 @@ def collect_results_from_processing_results(
 
     output: list[dict[str, Any]] = []
     stats: collections.Counter[str] = collections.Counter()
-    # Accumulate dispositions for a single batch flush instead of N per-record commits.
-    pending_dispositions: list[
-        tuple[str, str, str, str | None, str | None, str | None, str | None]
-    ] = []
+    pending_dispositions: list[DispositionRow] = []
 
     for idx, result in enumerate(results):
         status = result.status

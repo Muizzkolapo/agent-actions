@@ -15,6 +15,7 @@ from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
+from tests.conftest import wire_batch_disposition_delegate
 
 
 @pytest.fixture
@@ -95,21 +96,7 @@ class TestGuardSkipDisposition:
             source_guid="guid-1",
         )
         backend = MagicMock()
-
-        def _batch_delegate(dispositions):
-            for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
-                kwargs = {}
-                if reason is not None:
-                    kwargs["reason"] = reason
-                if rp is not None:
-                    kwargs["relative_path"] = rp
-                if snapshot is not None:
-                    kwargs["input_snapshot"] = snapshot
-                if detail is not None:
-                    kwargs["detail"] = detail
-                backend.set_disposition(action_name, record_id, disposition, **kwargs)
-
-        backend.set_dispositions_batch = MagicMock(side_effect=_batch_delegate)
+        wire_batch_disposition_delegate(backend)
 
         ResultCollector.collect_results(
             [result],

@@ -19,6 +19,7 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.utils.id_generation import IDGenerator
+from tests.conftest import wire_batch_disposition_delegate
 
 
 def _retry_metadata() -> RecoveryMetadata:
@@ -246,21 +247,7 @@ def test_result_collector_on_exhausted_raise_writes_disposition_before_raising()
 
     mock_backend = MagicMock()
     mock_backend.set_disposition = MagicMock()
-
-    def _batch_delegate(dispositions):
-        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
-            kwargs = {}
-            if reason is not None:
-                kwargs["reason"] = reason
-            if rp is not None:
-                kwargs["relative_path"] = rp
-            if snapshot is not None:
-                kwargs["input_snapshot"] = snapshot
-            if detail is not None:
-                kwargs["detail"] = detail
-            mock_backend.set_disposition(action_name, record_id, disposition, **kwargs)
-
-    mock_backend.set_dispositions_batch = MagicMock(side_effect=_batch_delegate)
+    wire_batch_disposition_delegate(mock_backend)
 
     with pytest.raises(AgentActionsError):
         ResultCollector.collect_results(
@@ -324,22 +311,7 @@ def _make_backend():
     """Create a mock StorageBackend with a mocked set_disposition method."""
     backend = MagicMock()
     backend.set_disposition = MagicMock()
-
-    def _batch_delegate(dispositions):
-        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
-            kwargs: dict = {}
-            if reason is not None:
-                kwargs["reason"] = reason
-            if rp is not None:
-                kwargs["relative_path"] = rp
-            # Always pass input_snapshot and detail (even when None) — tests
-            # for FAILED/EXHAUSTED assert these are present in call kwargs.
-            if snapshot is not None or detail is not None:
-                kwargs["input_snapshot"] = snapshot
-                kwargs["detail"] = detail
-            backend.set_disposition(action_name, record_id, disposition, **kwargs)
-
-    backend.set_dispositions_batch = MagicMock(side_effect=_batch_delegate)
+    wire_batch_disposition_delegate(backend)
     return backend
 
 

@@ -34,6 +34,9 @@ class Disposition(str, Enum):
 
 VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 
+DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]
+"""(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
+
 
 class StorageBackend(ABC):
     """Abstract interface for pluggable storage backends (SQLite, S3, DuckDB, etc.)."""
@@ -149,12 +152,9 @@ class StorageBackend(ABC):
 
     def set_dispositions_batch(
         self,
-        dispositions: list[tuple[str, str, str, str | None, str | None, str | None, str | None]],
+        dispositions: list[DispositionRow],
     ) -> None:
         """Write multiple disposition records in a single transaction.
-
-        Each tuple: (action_name, record_id, disposition, reason, relative_path,
-                     input_snapshot, detail).
 
         Default implementation loops over set_disposition. Backends may
         override for batch-optimized writes.
