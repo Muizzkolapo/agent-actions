@@ -379,6 +379,12 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
     _publish_diagnostics(params.text_document.uri)
 
 
+@server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
+def did_change(params: lsp.DidChangeTextDocumentParams):
+    """Handle document change — update in-memory content and republish diagnostics."""
+    _publish_diagnostics(params.text_document.uri)
+
+
 @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
 def did_open(params: lsp.DidOpenTextDocumentParams):
     """Handle file open - publish diagnostics."""
