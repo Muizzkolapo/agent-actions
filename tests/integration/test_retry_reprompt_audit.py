@@ -570,7 +570,9 @@ class TestRepromptServiceFactory:
 
     def test_none_config_with_validator_returns_service(self):
         svc = create_reprompt_service_from_config(None, validator=_StubValidator([True]))
-        assert svc is not None
+        assert isinstance(svc, RepromptService)
+        assert svc.max_attempts == 2
+        assert svc.on_exhausted == "return_last"
 
     def test_config_missing_validation_no_validator_raises(self):
         with pytest.raises(ValueError, match="Reprompt requires a validator"):
