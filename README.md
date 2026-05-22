@@ -55,8 +55,8 @@ pip install agent-actions
 ## Quick start
 
 ```bash
-agac init my-project && cd my-project                # scaffold a project
-agac init --example contract_reviewer my-project     # or start from an example
+agac init my_project && cd my_project                # scaffold a project
+agac init example contract_reviewer my_project       # or start from an example
 agac run -a my_workflow                              # execute
 ```
 
@@ -114,7 +114,7 @@ Switch providers per-action by changing `model_vendor`.
 
 ```bash
 git clone https://github.com/Muizzkolapo/agent-actions.git && cd agent-actions
-pip install -e ".[dev]"
+uv sync
 pytest
 ```
 
