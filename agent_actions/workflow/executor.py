@@ -1,6 +1,8 @@
 """Single action execution with batch support."""
 
 import asyncio
+import hashlib
+import json as _json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -36,6 +38,32 @@ UPSTREAM_SKIP_PREFIX = "Upstream dependency"
 
 # Reason string for WHERE-clause skip (action skipped, record unchanged).
 WHERE_SKIP_REASON = "WHERE clause — action skipped"
+
+
+def _compute_action_config_hash(
+    action_config: ActionConfigDict,
+    prompt_content: str | None = None,
+) -> str:
+    """Compute a deterministic hash of semantically-meaningful action config.
+
+    Covers: prompt content (or reference), model, schema reference,
+    guard clause + behavior. Changes to these fields invalidate prior
+    results. Cosmetic fields (description, tags) are excluded.
+    """
+    guard = action_config.get("guard") or {}
+    if isinstance(guard, str):
+        guard = {"clause": guard, "behavior": "skip"}
+
+    hash_input = {
+        "prompt": prompt_content or action_config.get("prompt", ""),
+        "model": action_config.get("model", ""),
+        "schema": action_config.get("schema", ""),
+        "guard_clause": guard.get("clause", "") if isinstance(guard, dict) else "",
+        "guard_behavior": guard.get("behavior", "") if isinstance(guard, dict) else "",
+    }
+
+    serialized = _json.dumps(hash_input, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -142,25 +170,36 @@ class ActionExecutor:
         return self.deps == other.deps
 
     @staticmethod
-    def _limit_metadata(action_config: ActionConfigDict) -> dict[str, int | None]:
-        """Extract limit fields for status metadata storage."""
+    def _completion_metadata(action_config: ActionConfigDict) -> dict[str, Any]:
+        """Build metadata dict for completed action status."""
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
             "record_limit": cfg.get("record_limit"),
             "file_limit": cfg.get("file_limit"),
+            "config_hash": _compute_action_config_hash(action_config),
         }
 
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
     ) -> ActionStatus:
-        """Reset to pending if limit config changed since last completion."""
+        """Reset to pending if limit or semantic config changed since last completion."""
         if current_status not in COMPLETED_STATUSES:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
-        if details.get("record_limit") != action_config.get("record_limit") or details.get(
-            "file_limit"
-        ) != action_config.get("file_limit"):
-            logger.info("Limit config changed for %s, resetting to pending", action_name)
+
+        limits_changed = details.get("record_limit") != action_config.get(
+            "record_limit"
+        ) or details.get("file_limit") != action_config.get("file_limit")
+
+        config_hash = _compute_action_config_hash(action_config)
+        stored_hash = details.get("config_hash")
+        config_changed = stored_hash is not None and stored_hash != config_hash
+
+        if limits_changed or config_changed:
+            reason = (
+                "limit config" if limits_changed else "action config (prompt/model/schema/guard)"
+            )
+            logger.info("%s changed for %s, resetting to pending", reason, action_name)
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
@@ -251,7 +290,7 @@ class ActionExecutor:
         # No disposition written: the record is unchanged, downstream
         # proceeds normally reading existing namespaces.
         self.deps.state_manager.update_status(
-            action_name, ActionStatus.COMPLETED, **self._limit_metadata(action_config)
+            action_name, ActionStatus.COMPLETED, **self._completion_metadata(action_config)
         )
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -329,7 +368,7 @@ class ActionExecutor:
             self.deps.state_manager.update_status(
                 params.action_name,
                 ActionStatus.COMPLETED,
-                **self._limit_metadata(params.action_config),
+                **self._completion_metadata(params.action_config),
             )
             logger.info(
                 "Action completed (passthrough)",
@@ -354,7 +393,7 @@ class ActionExecutor:
             params.action_name,
             final_status,
             execution_time=duration,
-            **self._limit_metadata(params.action_config),
+            **self._completion_metadata(params.action_config),
         )
         tokens = get_last_usage()
         self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
@@ -928,7 +967,7 @@ class ActionExecutor:
                 final_status,
                 execution_time=wall_clock,
                 execution_mode="batch",
-                **self._limit_metadata(action_config),
+                **self._completion_metadata(action_config),
             )
             fire_event(
                 BatchCompleteEvent(
