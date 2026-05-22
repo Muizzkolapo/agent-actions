@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from rich.console import Console
 
+from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
@@ -443,11 +444,13 @@ class AgentWorkflow:
 
                 if state_mgr.is_workflow_complete():
                     self.event_logger.finalize_workflow(elapsed_time=duration)
+                    self._run_storage_maintenance()
                     return ("success", {})
 
                 if state_mgr.is_workflow_done():
                     self.state.failed = True
                     self.event_logger.finalize_workflow(elapsed_time=duration)
+                    self._run_storage_maintenance()
                     failed = state_mgr.get_failed_actions(self.execution_order)
                     return ("completed_with_failures", {"failed": failed})
 
@@ -534,12 +537,14 @@ class AgentWorkflow:
 
                 if state_mgr.is_workflow_complete():
                     self.event_logger.finalize_workflow(elapsed_time=duration)
+                    self._run_storage_maintenance()
                     return ("success", {})
 
                 if state_mgr.is_workflow_done():
                     # All actions reached a terminal state but some failed
                     self.state.failed = True
                     self.event_logger.finalize_workflow(elapsed_time=duration)
+                    self._run_storage_maintenance()
                     failed = state_mgr.get_failed_actions(self.execution_order)
                     return ("completed_with_failures", {"failed": failed})
 
@@ -557,6 +562,30 @@ class AgentWorkflow:
                 )
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
+
+    def _run_storage_maintenance(self) -> None:
+        """Run post-workflow storage maintenance (WAL checkpoint, cleanup)."""
+        backend = getattr(self, "storage_backend", None)
+        if backend is None:
+            return
+
+        storage_config: dict = {}
+        config_mgr = getattr(self.config, "manager", None)
+        if config_mgr is not None:
+            user_cfg = getattr(config_mgr, "user_config", None)
+            if isinstance(user_cfg, dict):
+                storage_config = user_cfg.get("storage", {})
+
+        backend.perform_maintenance(
+            prompt_trace_retention_runs=storage_config.get(
+                "prompt_trace_retention_runs",
+                StorageDefaults.PROMPT_TRACE_RETENTION_RUNS,
+            ),
+            source_data_ttl_days=storage_config.get(
+                "source_data_ttl_days",
+                StorageDefaults.SOURCE_DATA_TTL_DAYS,
+            ),
+        )
 
     def _run_single_action(self, idx: int, action_name: str, total_actions: int) -> bool:
         """Run a single action in sequential mode. Return True if workflow should stop."""
