@@ -5,7 +5,7 @@ asyncio.gather(return_exceptions=True) captures them, other actions
 complete normally, and errors are logged.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -17,18 +17,12 @@ from agent_actions.workflow.parallel.action_executor import (
 
 
 @dataclass
-class FakeExecutionMetrics:
-    duration: float = 0.0
-    tokens: dict = field(default_factory=dict)
-
-
-@dataclass
 class FakeActionResult:
     success: bool
     output_folder: str | None = None
     error: Exception | None = None
     status: str = "completed"
-    metrics: FakeExecutionMetrics = field(default_factory=FakeExecutionMetrics)
+    metrics: None = None
 
 
 class TestParallelExceptionHandling:
@@ -53,7 +47,7 @@ class TestParallelExceptionHandling:
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
     async def test_one_of_three_raises_others_complete(self, mock_fire_event):
-        """One action raises exception; other two complete normally."""
+        """One action raises; all three are still attempted."""
         actions = ["action_a", "action_b", "action_c"]
         orchestrator = self._make_orchestrator(actions)
 
@@ -65,56 +59,46 @@ class TestParallelExceptionHandling:
             return FakeActionResult(success=True)
 
         executor.execute_action_async.side_effect = side_effect
-
         params = self._make_params(actions, executor)
 
-        # Should NOT raise — gather(return_exceptions=True) catches
         await orchestrator._execute_parallel_actions(params)
 
-        # All 3 actions were attempted
         assert executor.execute_action_async.call_count == 3
 
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
     async def test_all_actions_raise_all_captured(self, mock_fire_event):
-        """All actions raise exceptions — all are captured, function returns normally."""
+        """All actions raise — all are captured, function returns normally."""
         actions = ["act_1", "act_2", "act_3"]
         orchestrator = self._make_orchestrator(actions)
 
         executor = AsyncMock()
         executor.execute_action_async.side_effect = RuntimeError("boom")
-
         params = self._make_params(actions, executor)
 
-        # Should not raise despite all actions failing
         await orchestrator._execute_parallel_actions(params)
 
-        # All 3 actions were attempted
         assert executor.execute_action_async.call_count == 3
 
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
     async def test_exception_and_failed_result_both_captured(self, mock_fire_event):
-        """One action raises, one returns failed result — both handled."""
+        """One raises, one returns failed result — both handled without raising."""
         actions = ["raises", "fails_gracefully"]
         orchestrator = self._make_orchestrator(actions)
 
         executor = AsyncMock()
-        error_exc = ValueError("bad input")
 
         async def side_effect(action, **kwargs):
             if action == "raises":
                 raise RuntimeError("crash")
-            return FakeActionResult(success=False, error=error_exc)
+            return FakeActionResult(success=False, error=ValueError("bad input"))
 
         executor.execute_action_async.side_effect = side_effect
-
         params = self._make_params(actions, executor)
 
-        # Should not raise
         await orchestrator._execute_parallel_actions(params)
 
-        # Both actions executed
         assert executor.execute_action_async.call_count == 2
 
     @pytest.mark.asyncio
@@ -126,11 +110,10 @@ class TestParallelExceptionHandling:
 
         executor = AsyncMock()
         executor.execute_action_async.side_effect = RuntimeError("kaboom")
-
         params = self._make_params(actions, executor)
+
         await orchestrator._execute_parallel_actions(params)
 
-        # ActionFailedEvent should have been fired
         assert mock_fire_event.call_count >= 1
         event = mock_fire_event.call_args_list[0][0][0]
         assert event.action_name == "failing_action"
@@ -139,14 +122,14 @@ class TestParallelExceptionHandling:
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
     async def test_successful_actions_return_normally(self, mock_fire_event):
-        """All actions succeed — no errors logged, function returns normally."""
+        """All actions succeed — function returns normally."""
         actions = ["a", "b", "c"]
         orchestrator = self._make_orchestrator(actions)
 
         executor = AsyncMock()
         executor.execute_action_async.return_value = FakeActionResult(success=True)
-
         params = self._make_params(actions, executor)
+
         await orchestrator._execute_parallel_actions(params)
 
         assert executor.execute_action_async.call_count == 3

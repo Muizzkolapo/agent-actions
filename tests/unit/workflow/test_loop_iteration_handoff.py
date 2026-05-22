@@ -2,7 +2,6 @@
 
 Verifies that version outputs from iteration N correctly feed iteration N+1
 via prepare_correlated_input → _load_version_outputs → _process_version_files.
-Also tests the (OSError, ValueError, KeyError) catch-all in prepare_correlated_input.
 """
 
 from pathlib import Path
@@ -10,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agent_actions.errors import DataValidationError
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
 
@@ -36,7 +36,6 @@ class TestLoopIterationHandoff:
 
     def test_two_version_outputs_correlated_by_source_record(self, correlator, storage_backend):
         """Outputs from two version agents merge correctly by correlation ID."""
-        # Version agent "v1" produced records
         v1_records = [
             {
                 "version_correlation_id": "corr_1",
@@ -45,7 +44,6 @@ class TestLoopIterationHandoff:
                 "_source_file": "data.json",
             },
         ]
-        # Version agent "v2" produced records
         v2_records = [
             {
                 "version_correlation_id": "corr_1",
@@ -59,24 +57,19 @@ class TestLoopIterationHandoff:
             return ["data.json"]
 
         def mock_read_target(agent_name, relative_path):
-            if agent_name == "v1":
-                return v1_records
-            return v2_records
+            return v1_records if agent_name == "v1" else v2_records
 
         storage_backend.list_target_files.side_effect = mock_list_target_files
         storage_backend.read_target.side_effect = mock_read_target
 
-        result = correlator.prepare_correlated_input(
+        correlator.prepare_correlated_input(
             agent_name="downstream_action",
             version_sources=["v1", "v2"],
             _current_idx=0,
         )
 
-        assert result is not None
-        # Should write correlated output to storage backend
         storage_backend.write_target.assert_called_once()
-        call_args = storage_backend.write_target.call_args
-        written_data = call_args[0][2]  # third positional arg
+        written_data = storage_backend.write_target.call_args[0][2]
         assert len(written_data) == 1
         assert written_data[0]["source_guid"] == "guid_1"
 
@@ -92,23 +85,17 @@ class TestLoopIterationHandoff:
 
         assert result is None
 
-    def test_key_error_in_correlation_returns_none(self, correlator, storage_backend):
-        """KeyError during processing → caught by except clause, returns None."""
+    def test_missing_namespace_raises_data_validation_error(self, correlator, storage_backend):
+        """DataValidationError propagates (not caught by OSError/ValueError/KeyError)."""
         storage_backend.list_target_files.return_value = ["data.json"]
-        # Return records that will trigger a KeyError in _create_merged_record
-        # by having valid correlation IDs but missing namespace in content
         storage_backend.read_target.return_value = [
             {
                 "version_correlation_id": "corr_1",
                 "source_guid": "guid_1",
-                "content": {},  # missing v1 namespace → DataValidationError
+                "content": {},
                 "_source_file": "data.json",
             }
         ]
-
-        # DataValidationError is not caught by (OSError, ValueError, KeyError)
-        # This verifies the actual error propagation behavior
-        from agent_actions.errors import DataValidationError
 
         with pytest.raises(DataValidationError, match="missing own namespace"):
             correlator.prepare_correlated_input(
@@ -117,12 +104,11 @@ class TestLoopIterationHandoff:
                 _current_idx=0,
             )
 
-    def test_oserror_during_mkdir_returns_none(self, storage_backend):
+    def test_oserror_during_mkdir_returns_none(self):
         """OSError when creating correlation_dir → caught, returns None."""
-        # Use a path that will cause OSError on mkdir
         correlator = VersionOutputCorrelator(
             agent_folder=Path("/nonexistent/impossible/path"),
-            storage_backend=None,  # forces mkdir path
+            storage_backend=None,
         )
 
         result = correlator.prepare_correlated_input(
@@ -134,7 +120,7 @@ class TestLoopIterationHandoff:
         assert result is None
 
     def test_filesystem_fallback_when_no_storage_backend(self, tmp_path):
-        """Without storage_backend, falls back to filesystem loading."""
+        """Without storage_backend, creates correlation dir and falls back to filesystem."""
         correlator = VersionOutputCorrelator(
             agent_folder=tmp_path,
             storage_backend=None,
@@ -146,11 +132,8 @@ class TestLoopIterationHandoff:
             _current_idx=0,
         )
 
-        # No version files on disk → returns None
         assert result is None
-        # But it should have created the correlation directory
-        correlation_dir = tmp_path / "target" / "downstream"
-        assert correlation_dir.exists()
+        assert (tmp_path / "target" / "downstream").exists()
 
     def test_file_not_found_in_storage_skips_and_continues(self, correlator, storage_backend):
         """FileNotFoundError on read_target for one file skips it, continues others."""
@@ -176,5 +159,4 @@ class TestLoopIterationHandoff:
             _current_idx=0,
         )
 
-        # Should succeed with the good file's data
         assert result is not None
