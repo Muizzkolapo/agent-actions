@@ -174,6 +174,7 @@ function restartServer(context: vscode.ExtensionContext): Promise<void> {
 // ── Activation ───────────────────────────────────────────────────────
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    disposed = false;
     initializeLogger(context);
     outputChannel = vscode.window.createOutputChannel('Agent Actions');
     context.subscriptions.push(outputChannel);
