@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Harden LLM client layer: add token overflow pre-flight guard, fix OpenAI JSON mode prompt injection by splitting user data into user message, tolerate skipped-dependency template variables, return _parse_error sentinel from Anthropic empty responses, raise LLMResponseParseError on JSON parse failure when reprompt is configured, and fix None rendering as literal 'None' in prompt templates"
+time: 2026-05-22T15:00:00.000000Z
