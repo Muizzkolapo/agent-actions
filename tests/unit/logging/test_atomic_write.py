@@ -61,7 +61,7 @@ class TestRunResultsAtomicWrite:
         _orig = Path.replace
 
         def failing_replace(self_path, target):
-            if str(self_path).endswith(".json.tmp"):
+            if str(self_path).endswith(".tmp"):
                 raise OSError("disk full")
             return _orig(self_path, target)
 
