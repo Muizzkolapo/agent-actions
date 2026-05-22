@@ -21,6 +21,7 @@ from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
+from agent_actions.utils.id_generation import IDGenerator
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -350,7 +351,7 @@ def _prepare_text_chunks_batch(
                 "content": chunk,
                 "batch_id": batch_id,
                 "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
+                "source_guid": IDGenerator.generate_source_guid(),
                 "target_id": target_id,
                 # Ancestry Chain: first-stage records are their own root
                 "parent_target_id": None,
@@ -382,7 +383,7 @@ def _add_batch_metadata(
                 **row,
                 "batch_id": batch_id,
                 "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                "source_guid": IDGenerator.generate_source_guid(),
                 "target_id": target_id,
                 # Ancestry Chain: first-stage records are their own root
                 "parent_target_id": None,
@@ -499,11 +500,9 @@ def _prepare_online_data(ctx: DataPreparationContext):
         data_chunk = chunks
 
         # GUIDs must match what UnifiedProcessor/OnlineLLMStrategy will generate
-        from agent_actions.utils.id_generation import IDGenerator
-
         src_text = []
         for text in data_chunk:
-            guid = IDGenerator.generate_deterministic_source_guid(text)
+            guid = IDGenerator.generate_source_guid()
             src_text.append({"source_guid": guid, "content": text})
 
     elif ctx.file_type == ".json":
@@ -513,16 +512,12 @@ def _prepare_online_data(ctx: DataPreparationContext):
             data_chunk = [data_chunk]
 
         # Do NOT mutate data_chunk: OnlineLLMStrategy hashes raw items for source_guid
-        from agent_actions.utils.id_generation import IDGenerator
-
         src_text = []
         for item in data_chunk:
             if isinstance(item, dict):
                 source_item = item.copy()
                 if "source_guid" not in source_item:
-                    source_item["source_guid"] = IDGenerator.generate_deterministic_source_guid(
-                        item
-                    )
+                    source_item["source_guid"] = IDGenerator.generate_source_guid()
                 src_text.append(source_item)
             else:
                 src_text.append(item)

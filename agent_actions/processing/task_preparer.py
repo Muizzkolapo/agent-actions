@@ -137,7 +137,7 @@ class TaskPreparer:
             if self._id_generator:
                 source_guid = self._id_generator(item)
             else:
-                source_guid = IDGenerator.generate_deterministic_source_guid(item)
+                source_guid = IDGenerator.generate_source_guid()
 
             snapshot = self._prepare_source_snapshot(item)
             return item, source_guid, snapshot
@@ -149,7 +149,7 @@ class TaskPreparer:
                     # treat them like first-stage by extracting raw fields
                     source_guid = item.get("source_guid")
                     if not source_guid:
-                        source_guid = IDGenerator.generate_deterministic_source_guid(item)
+                        source_guid = IDGenerator.generate_source_guid()
                     snapshot = self._prepare_source_snapshot(item)
                     return item, source_guid, snapshot
                 source_guid = item.get("source_guid")

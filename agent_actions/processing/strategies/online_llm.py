@@ -233,7 +233,7 @@ class OnlineLLMStrategy:
                 if context.is_first_stage:
                     from agent_actions.utils.id_generation import IDGenerator
 
-                    source_guid = IDGenerator.generate_deterministic_source_guid(item)
+                    source_guid = IDGenerator.generate_source_guid()
                     source_snapshot = TaskPreparer._prepare_source_snapshot(item)
                 else:
                     source_guid = item.get("source_guid") if isinstance(item, dict) else None
