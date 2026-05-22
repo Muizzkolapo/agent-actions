@@ -9,6 +9,7 @@ import datetime
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -67,12 +68,13 @@ def _write_manifest(
     atomic_json_write(path, manifest, indent=2)
 
 
-def _read_manifest(path: Path) -> dict | None:
+def _read_manifest(path: Path) -> dict[str, Any] | None:
     """Read and return the retry manifest, or None if absent/corrupt."""
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        return data
     except (json.JSONDecodeError, OSError) as e:
         logger.warning("Corrupt retry manifest at %s: %s — ignoring", path, e)
         return None
