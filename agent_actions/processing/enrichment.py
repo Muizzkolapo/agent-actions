@@ -80,11 +80,13 @@ class LineageEnricher(Enricher):
                     skipped = len(source_idx) - len(source_items)
                     if skipped:
                         logger.warning(
-                            "source_mapping[%d]: %d of %d indices out of bounds (source_data has %d items)",
+                            "source_mapping[%d]: %d of %d indices out of bounds "
+                            "(source_data has %d items, action=%s)",
                             i,
                             skipped,
                             len(source_idx),
                             source_data_len,
+                            context.action_name,
                         )
                     result.data[i] = LineageBuilder.add_lineage_tracking_from_sources(
                         obj=item,
@@ -101,10 +103,12 @@ class LineageEnricher(Enricher):
                         parent_item = context.source_data[source_idx]
                     else:
                         logger.warning(
-                            "source_mapping[%d] -> %d is out of bounds (source_data has %d items)",
+                            "source_mapping[%d] -> %d is out of bounds "
+                            "(source_data has %d items, action=%s)",
                             i,
                             source_idx,
                             source_data_len,
+                            context.action_name,
                         )
                         parent_item = None
             elif use_per_item_parent_lookup:
@@ -324,7 +328,12 @@ class EnrichmentPipeline:
                         )
                     )
                 except Exception:
-                    logger.exception("Enricher %s failed", enricher_name)
+                    logger.exception(
+                        "Enricher %s failed for action=%s source_guid=%s",
+                        enricher_name,
+                        context.action_name,
+                        result.source_guid,
+                    )
                     fire_event(
                         EnricherExecutedEvent(
                             enricher_name=enricher_name,
