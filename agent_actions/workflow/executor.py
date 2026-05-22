@@ -2,7 +2,7 @@
 
 import asyncio
 import hashlib
-import json as _json
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -62,7 +62,7 @@ def _compute_action_config_hash(
         "guard_behavior": guard.get("behavior", "") if isinstance(guard, dict) else "",
     }
 
-    serialized = _json.dumps(hash_input, sort_keys=True, ensure_ascii=True)
+    serialized = json.dumps(hash_input, sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
