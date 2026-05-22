@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Remove 3 stale content fallback patterns that could leak framework fields to LLM providers"
-time: 2026-04-26T16:00:00.000000Z

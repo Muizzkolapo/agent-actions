@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Halt workflow when an action produces 0 successful outputs — escalate total item failure from COMPLETED_WITH_FAILURES to FAILED so downstream actions are skipped instead of crashing"
-time: 2026-05-12T04:15:00.000000Z

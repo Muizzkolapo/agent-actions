@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Surface unknown defaults keys with warning, add fuzzy-match suggestions for action key typos, and expose Pydantic field errors in ConfigurationError context"
-time: 2026-05-22T024000.000000Z

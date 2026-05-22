@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Narrow except Exception blocks around read_target/list_target_files to specific I/O exceptions so ConfigurationError from lifecycle validation propagates instead of being silently swallowed"
-time: 2026-05-09T12:70:00.000000Z

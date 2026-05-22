@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Detect prompt/model/schema/guard config changes and invalidate stale completed actions instead of requiring manual store deletion"
-time: 2026-05-22T01:40:00.000000Z

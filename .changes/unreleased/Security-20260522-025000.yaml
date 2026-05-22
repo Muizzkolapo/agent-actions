@@ -1,3 +1,0 @@
-kind: Security
-body: "Add output path containment check, filesystem name sanitization, and fix json.dumps on binary data"
-time: 2026-05-22T02:50:00.000000Z

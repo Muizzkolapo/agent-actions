@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Unify action_name injection: coordinator sets it for all actions at init, eliminating online/batch divergence where non-versioned expansions could miss version_correlation_id assignment"
-time: 2026-05-03T03:15:00.000000Z

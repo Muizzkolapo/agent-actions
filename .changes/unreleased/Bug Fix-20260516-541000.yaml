@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Harden all 6 examples with production patterns: fix FileUDFResult for FILE-granularity tools, fix output_field guard namespacing, add default reprompt/retry/batch_max_workers config, remove debug artifacts"
-time: 2026-05-16T12:55:00.000000Z

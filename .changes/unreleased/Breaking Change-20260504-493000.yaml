@@ -1,3 +1,0 @@
-kind: Breaking Change
-body: "Remove top-level on_schema_mismatch and strict_schema config keys. Schema conformance is now declared inside reprompt: {on_schema_mismatch: reject/reprompt}."
-time: 2026-05-04T14:33:00.000000Z

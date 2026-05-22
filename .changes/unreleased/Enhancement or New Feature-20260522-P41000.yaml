@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Add observability improvements: record identity in enrichment error logs, LLM call duration logging, batch timeout progress context, disposition clearing events, and action_name in warning logs"
-time: 2026-05-22T04:10:00.000000Z
