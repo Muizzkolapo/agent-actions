@@ -7,6 +7,8 @@
 
 import * as vscode from 'vscode';
 import {
+    CloseAction,
+    ErrorAction,
     LanguageClient,
     LanguageClientOptions,
     ServerOptions,
@@ -46,6 +48,7 @@ let disposed = false;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 const DEBOUNCE_MS = 300;
 const ACTIVATION_TIMEOUT_MS = 10_000;
+const MAX_RESTART_COUNT = 3;
 const MODULE_ARGS = ['-m', 'agent_actions.tooling.lsp.server', '--stdio'];
 
 // File watchers for LSP synchronization — created once in activate(), reused across restarts
@@ -114,6 +117,18 @@ async function startClient(context: vscode.ExtensionContext): Promise<void> {
         ],
         synchronize: { fileEvents: lspFileWatchers },
         outputChannel,
+        errorHandler: {
+            error: () => ({ action: ErrorAction.Continue }),
+            closed: () => {
+                if (disposed) {
+                    return { action: CloseAction.DoNotRestart };
+                }
+                return { action: CloseAction.Restart, message: 'LSP server crashed, restarting...' };
+            },
+        },
+        connectionOptions: {
+            maxRestartCount: MAX_RESTART_COUNT,
+        },
     };
 
     client = new LanguageClient('agentActionsLsp', 'Agent Actions LSP', serverOptions, clientOptions);
