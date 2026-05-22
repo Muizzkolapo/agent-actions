@@ -611,12 +611,12 @@ class TestServiceInitSqliteError:
 class TestSchemaEnforcement:
     """Tests for _enforce_schema dropping stale tables."""
 
-    def test_old_schema_dropped_and_recreated(self, tmp_path):
-        """Table with missing columns is dropped and recreated on initialize()."""
+    def test_old_schema_migrated_with_alter_table(self, tmp_path):
+        """Table with missing columns gets them added via ALTER TABLE, preserving data."""
         import sqlite3
 
         db_path = tmp_path / "test.db"
-        # Create a DB with old schema missing 'detail' column
+        # Create a DB with old schema missing 'detail' and 'input_snapshot' columns
         conn = sqlite3.connect(str(db_path))
         conn.execute("""
             CREATE TABLE record_disposition (
@@ -643,9 +643,16 @@ class TestSchemaEnforcement:
         assert "detail" in columns
         assert "input_snapshot" in columns
 
-        # Old data should be gone (table was dropped)
+        # Old data must be preserved (ALTER TABLE, not DROP TABLE)
         cursor.execute("SELECT COUNT(*) FROM record_disposition")
-        assert cursor.fetchone()[0] == 0
+        assert cursor.fetchone()[0] == 1
+
+        # Verify the existing row is intact
+        cursor.execute("SELECT action_name, record_id, disposition FROM record_disposition")
+        row = cursor.fetchone()
+        assert row["action_name"] == "a"
+        assert row["record_id"] == "r"
+        assert row["disposition"] == "d"
         backend.close()
 
     def test_correct_schema_not_dropped(self, tmp_path):
