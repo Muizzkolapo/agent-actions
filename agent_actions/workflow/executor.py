@@ -21,7 +21,11 @@ from agent_actions.logging.events import (
 from agent_actions.record.reasons import GUARD_FILTERED_ALL
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
+    DISPOSITION_SUCCESS,
+    DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
@@ -222,17 +226,39 @@ class ActionExecutor:
                 self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                 return (False, None)
 
-        if not storage_backend.list_target_files(action_name):
-            logger.info("Action %s completed but no output in storage — re-running", action_name)
-            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-            return (False, None)
-
-        return (
+        completed = (
             True,
             ActionExecutionResult(
-                success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics(duration=0.0)
+                success=True,
+                status=ActionStatus.COMPLETED,
+                metrics=ExecutionMetrics(duration=0.0),
             ),
         )
+
+        if storage_backend.list_target_files(action_name):
+            return completed
+
+        # No target files. Check if the action intentionally produced no
+        # output (guard-filtered all records, WHERE-skipped, etc.) by
+        # looking for a node-level terminal disposition that is NOT
+        # FAILED/SKIPPED (those were already handled above).
+        for disp in (
+            DISPOSITION_FILTERED,
+            DISPOSITION_PASSTHROUGH,
+            DISPOSITION_SUCCESS,
+            DISPOSITION_UNPROCESSED,
+        ):
+            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
+                logger.info(
+                    "Action %s has no output but node-level %s — intentional, skipping re-run",
+                    action_name,
+                    disp,
+                )
+                return completed
+
+        logger.info("Action %s completed but no output in storage — re-running", action_name)
+        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+        return (False, None)
 
     def _handle_action_skip(
         self,
