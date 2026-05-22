@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Replace O(N^2) lineage lookups with dict index in LineageEnricher and get_content_by_source_guid"
+time: 2026-05-22T02:20:00.000000Z
