@@ -788,9 +788,10 @@ class BatchProcessingService:
             )
         except Exception:
             logger.warning(
-                "Could not load context_map for failed batch %s — "
+                "Could not load context_map for failed batch %s (action=%s) — "
                 "records may remain with stale DEFERRED dispositions",
                 file_name,
+                action_name,
                 exc_info=True,
             )
             return
@@ -827,10 +828,12 @@ class BatchProcessingService:
             failed_count += 1
 
         if failed_count:
-            logger.info(
-                "Wrote FAILED disposition for %d records in failed batch %s",
+            logger.warning(
+                "Wrote FAILED disposition for %d abandoned records in batch %s (action=%s): %s",
                 failed_count,
                 file_name,
+                action_name,
+                str(error)[:200],
             )
 
     @staticmethod

@@ -5,6 +5,7 @@ Handles client routing and invocation for different LLM providers.
 
 import importlib
 import logging
+import time
 from typing import Any
 
 from agent_actions.llm.providers.agac.client import AgacClient
@@ -117,24 +118,33 @@ class ClientInvocationService:
 
         client = _resolve_client(model_vendor)
 
+        start = time.perf_counter()
+
         # Tool client has different parameters
         if model_vendor == "tool":
-            return client.invoke(  # type: ignore[no-any-return]
-                agent_config, context_data, tool_args=tool_args, source_content=source_content
-            )
-
-        # HITL client has same signature as tool client; wrap for List consistency
-        if model_vendor == "hitl":
             result = client.invoke(
                 agent_config, context_data, tool_args=tool_args, source_content=source_content
             )
-            return [result]
+        elif model_vendor == "hitl":
+            # HITL client has same signature as tool client; wrap for List consistency
+            result = [
+                client.invoke(
+                    agent_config, context_data, tool_args=tool_args, source_content=source_content
+                )
+            ]
+        else:
+            # Standard client invocation (all providers, including Groq)
+            result = client.invoke(agent_config, prompt_config, context_data, schema)
+            # Single-response clients return single item, wrap in list for consistency
+            if model_vendor in SINGLE_RESPONSE_CLIENTS:
+                result = [result]
 
-        # Standard client invocation (all providers, including Groq)
-        result = client.invoke(agent_config, prompt_config, context_data, schema)
-
-        # Single-response clients return single item, wrap in list for consistency
-        if model_vendor in SINGLE_RESPONSE_CLIENTS:
-            result = [result]
+        elapsed = time.perf_counter() - start
+        logger.info(
+            "LLM call completed: vendor=%s action=%s elapsed=%.3fs",
+            model_vendor,
+            action_name,
+            elapsed,
+        )
 
         return result  # type: ignore[no-any-return]

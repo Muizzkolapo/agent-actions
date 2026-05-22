@@ -850,13 +850,23 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(query, params)
                 self.connection.commit()
                 deleted = cursor.rowcount
-                logger.debug(
-                    "Cleared %d dispositions: action=%s disp=%s",
-                    deleted,
-                    action_name,
-                    disposition,
-                    extra={"workflow_name": self.workflow_name},
-                )
+                if deleted > 0:
+                    logger.info(
+                        "Cleared %d dispositions: action=%s disp=%s record_id=%s",
+                        deleted,
+                        action_name,
+                        disposition,
+                        record_id,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                else:
+                    logger.debug(
+                        "Cleared %d dispositions: action=%s disp=%s",
+                        deleted,
+                        action_name,
+                        disposition,
+                        extra={"workflow_name": self.workflow_name},
+                    )
                 return deleted
             except sqlite3.Error as e:
                 self.connection.rollback()

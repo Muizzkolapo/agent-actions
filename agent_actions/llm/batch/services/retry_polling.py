@@ -83,7 +83,16 @@ def wait_for_batch_completion(
         logger.debug("Retry batch %s status: %s, waiting...", batch_id, status)
         time.sleep(poll_interval)
 
-    logger.warning("Retry batch %s timed out after %d seconds", batch_id, timeout_seconds)
+    elapsed = time.time() - start_time
+    logger.warning(
+        "Retry batch %s timed out after %.0fs (limit=%ds, completed=%d, failed=%d, total=%d)",
+        batch_id,
+        elapsed,
+        timeout_seconds,
+        completed,
+        failed,
+        total_items,
+    )
     return provider.check_status(batch_id)  # type: ignore[return-value]
 
 
