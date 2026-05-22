@@ -280,7 +280,6 @@ class TestWriteTarget:
         )
         with pytest.raises(ProcessingError):
             writer.write_target([{"x": 1}])
-        # Backend should NOT have been called
         backend.write_target.assert_not_called()
 
     @patch("agent_actions.output.writer.fire_event")

@@ -204,7 +204,6 @@ class TestSaverErrors:
             storage_backend=backend,
         )
         items = [{"key": b"binary data from UDF", "normal": "text"}]
-        # Should not raise TypeError
         saver.save_source_items(items, "binary_path")
         backend.write_source.assert_called_once()
         saved_event = mock_fire.call_args_list[1][0][0]

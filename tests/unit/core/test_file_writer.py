@@ -72,7 +72,6 @@ class TestFileWriterRelativePath:
         with pytest.raises(ProcessingError, match="Path escapes containment"):
             writer.write_target([{"key": "value"}])
 
-        # Backend should NOT have been called
         mock_backend.write_target.assert_not_called()
 
     def test_prevents_collision_for_same_filename_different_dirs(self, tmp_path):
