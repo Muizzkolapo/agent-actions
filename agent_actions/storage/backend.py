@@ -293,6 +293,17 @@ class StorageBackend(ABC):
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
 
+    def perform_maintenance(  # noqa: B027
+        self,
+        prompt_trace_retention_runs: int = 10,
+        source_data_ttl_days: int | None = None,
+    ) -> None:
+        """Run post-workflow maintenance (WAL checkpoint, cleanup stale data).
+
+        Default is no-op. SQLiteBackend overrides with actual maintenance.
+        """
+        pass
+
     def close(self) -> None:  # noqa: B027
         """Close the storage backend and release resources."""
         pass

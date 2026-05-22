@@ -1221,6 +1221,172 @@ class SQLiteBackend(StorageBackend):
             size /= 1024
         return f"{size:.1f} TB"
 
+    # ------------------------------------------------------------------
+    # Maintenance operations
+    # ------------------------------------------------------------------
+
+    def perform_maintenance(
+        self,
+        prompt_trace_retention_runs: int = 10,
+        source_data_ttl_days: int | None = None,
+    ) -> None:
+        """Run post-workflow maintenance: WAL checkpoint, disposition cleanup,
+        prompt trace retention, and source data TTL.
+
+        All operations are idempotent and safe to run concurrently.
+        """
+        self._checkpoint_wal()
+        self._cleanup_stale_dispositions()
+        self._enforce_prompt_trace_retention(prompt_trace_retention_runs)
+        if source_data_ttl_days is not None:
+            self._enforce_source_data_ttl(source_data_ttl_days)
+
+    def _checkpoint_wal(self) -> None:
+        """Checkpoint and truncate the WAL file to reclaim disk space."""
+        with self._lock:
+            try:
+                result = self.connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+                busy, log_pages, checkpointed = result if result else (0, 0, 0)
+                if log_pages > 0 or checkpointed > 0:
+                    logger.info(
+                        "WAL checkpoint: %d pages checkpointed, %d busy",
+                        checkpointed,
+                        busy,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                else:
+                    logger.debug(
+                        "WAL checkpoint: nothing to checkpoint",
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                logger.warning(
+                    "WAL checkpoint failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+
+    def _cleanup_stale_dispositions(self) -> None:
+        """Remove disposition records for items that completed successfully on re-run.
+
+        When a workflow re-runs, records that previously FAILED may now succeed.
+        This removes the old FAILED/EXHAUSTED dispositions for records that have
+        a newer SUCCESS disposition, preventing stale data from accumulating.
+        """
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute("""
+                    DELETE FROM record_disposition
+                    WHERE id IN (
+                        SELECT old.id
+                        FROM record_disposition old
+                        INNER JOIN record_disposition success
+                            ON old.action_name = success.action_name
+                            AND old.record_id = success.record_id
+                        WHERE success.disposition = 'success'
+                          AND old.disposition IN ('failed', 'exhausted')
+                          AND old.id < success.id
+                    )
+                """)
+                self.connection.commit()
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    logger.info(
+                        "Cleaned up %d stale disposition records",
+                        deleted,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Disposition cleanup failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+
+    def _enforce_prompt_trace_retention(self, retention_runs: int) -> None:
+        """Delete prompt traces older than the N most recent workflow runs.
+
+        Uses created_at timestamps to identify run boundaries. Traces from the
+        most recent ``retention_runs`` distinct runs are kept.
+        """
+        if retention_runs < 1:
+            return
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                # Find the Nth most recent distinct run timestamp boundary.
+                # Each workflow run writes traces with created_at within the same
+                # second range, so we use DATE(created_at) as a run boundary.
+                cursor.execute(
+                    """
+                    SELECT DISTINCT DATE(created_at) as run_date
+                    FROM prompt_trace
+                    ORDER BY run_date DESC
+                    LIMIT 1 OFFSET ?
+                    """,
+                    (retention_runs - 1,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    # Fewer runs than retention window — nothing to delete
+                    return
+
+                cutoff_date = row[0]
+                cursor.execute(
+                    "DELETE FROM prompt_trace WHERE DATE(created_at) < ?",
+                    (cutoff_date,),
+                )
+                self.connection.commit()
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    logger.info(
+                        "Pruned %d prompt traces older than %s (keeping %d runs)",
+                        deleted,
+                        cutoff_date,
+                        retention_runs,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Prompt trace retention enforcement failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+
+    def _enforce_source_data_ttl(self, ttl_days: int) -> None:
+        """Delete source_data rows older than ``ttl_days`` days."""
+        if ttl_days < 1:
+            return
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    """
+                    DELETE FROM source_data
+                    WHERE created_at < datetime('now', '-' || ? || ' days')
+                    """,
+                    (ttl_days,),
+                )
+                self.connection.commit()
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    logger.info(
+                        "Deleted %d source_data rows older than %d days",
+                        deleted,
+                        ttl_days,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Source data TTL enforcement failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+
     def close(self) -> None:
         """Close the database connection."""
         with self._lock:

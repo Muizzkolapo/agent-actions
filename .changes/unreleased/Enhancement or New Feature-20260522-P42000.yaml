@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Add SQLite database maintenance: WAL checkpoint after workflow completion, stale disposition cleanup, configurable prompt trace retention, and optional source data TTL"
+time: 2026-05-22T04:20:00.000000Z

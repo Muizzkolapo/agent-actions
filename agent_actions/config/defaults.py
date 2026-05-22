@@ -5,6 +5,8 @@ class StorageDefaults:
     """Defaults for storage backends."""
 
     SQLITE_LOCK_TIMEOUT_SECONDS: float = 30.0
+    PROMPT_TRACE_RETENTION_RUNS: int = 10
+    SOURCE_DATA_TTL_DAYS: int | None = None  # None = keep forever
 
 
 class LockDefaults:
