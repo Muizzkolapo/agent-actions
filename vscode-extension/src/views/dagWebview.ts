@@ -159,7 +159,7 @@ export class DagWebview implements vscode.Disposable {
         // Define nodes with status styling
         for (const action of actions) {
             const nodeId = this.sanitizeId(action.name);
-            const label = action.name.replace(/["\]\\]/g, '_');
+            const label = this.escapeMermaidLabel(action.name);
             const statusClass = this.getStatusClass(action.status);
 
             lines.push(`  ${nodeId}["[${action.index}] ${label}"]:::${statusClass}`);
@@ -195,6 +195,14 @@ export class DagWebview implements vscode.Disposable {
 
     private sanitizeId(name: string): string {
         return name.replace(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    /**
+     * Escape special Mermaid characters in node labels to prevent syntax breaks.
+     * Handles quotes, brackets, braces, parens, pipes, and other Mermaid-significant chars.
+     */
+    private escapeMermaidLabel(label: string): string {
+        return label.replace(/["\\[\]{}()<>|#&;]/g, '_');
     }
 
     /**
