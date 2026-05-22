@@ -19,6 +19,7 @@ from enum import Enum
 from textwrap import dedent
 from typing import Any
 
+from agent_actions.errors import PromptTooLargeError
 from agent_actions.input.preprocessing.transformation.string_transformer import (
     StringProcessor,
 )
@@ -335,8 +336,6 @@ class MessageBuilder:
             estimated_tokens = sum(len(m.content) for m in messages) // 4
             model_limit = _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
             if estimated_tokens > model_limit:
-                from agent_actions.errors import PromptTooLargeError
-
                 raise PromptTooLargeError(
                     f"Estimated prompt size ({estimated_tokens} tokens) exceeds "
                     f"model context window ({model_limit} tokens)",

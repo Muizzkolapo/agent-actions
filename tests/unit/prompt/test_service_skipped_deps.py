@@ -52,8 +52,7 @@ class TestSkippedDependencyTolerance:
             mode="online",
             skipped_actions={"dep_a", "dep_b"},
         )
-        # First skipped dep is caught, re-rendered, then second may also fire
-        assert "val" not in result or result is not None  # should not crash
+        assert result == "A: , B: "
 
 
 class TestNoneFinalize:

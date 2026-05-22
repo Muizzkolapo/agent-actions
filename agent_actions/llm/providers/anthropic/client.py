@@ -13,8 +13,6 @@ import uuid
 from datetime import datetime
 from typing import Any, ClassVar
 
-logger = logging.getLogger(__name__)
-
 import anthropic
 
 from agent_actions.errors import VendorAPIError
@@ -30,6 +28,8 @@ from agent_actions.logging.events import (
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
+
+logger = logging.getLogger(__name__)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="anthropic",
