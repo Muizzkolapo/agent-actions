@@ -93,4 +93,4 @@ Consider what happens when `extract_facts` returns an empty list. The guard on `
 
 ## Supported Providers
 
-Agent Actions supports OpenAI, Anthropic, Google, Groq, Mistral, Cohere, and Ollama. You can mix providers in the same agentic workflow—use different models for different actions based on cost or capability. See [Configuration](./configuration/) for setup details.
+Agent Actions supports OpenAI, Anthropic, Google, Groq, Cohere, and Ollama. You can mix providers in the same agentic workflow—use different models for different actions based on cost or capability. See [Configuration](./configuration/) for setup details.

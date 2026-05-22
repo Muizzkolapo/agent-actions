@@ -41,7 +41,6 @@ Redirect debug output to a file for complex issues: `AGENT_ACTIONS_LOG_LEVEL=DEB
 | `OPENAI_API_KEY` | OpenAI API key |
 | `GEMINI_API_KEY` | Google Gemini API key |
 | `GROQ_API_KEY` | Groq API key |
-| `MISTRAL_API_KEY` | Mistral API key |
 | `COHERE_API_KEY` | Cohere API key |
 
 ## Exit Codes

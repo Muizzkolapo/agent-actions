@@ -22,26 +22,39 @@
 | `RenderCommand` | Class | Implementation of the render command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
+| `compile` | Function | Alias for render — compile workflow configuration. | - |
+| `dispositions.py` | Module | Inspect record-level processing dispositions per action. | `cli`, `storage`, `validation` |
+| `DispositionsCommand` | Class | Implementation of the dispositions command. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the dispositions command. | - |
+| `dispositions` | Function | Inspect record-level processing dispositions per action. | - |
 | `docs.py` | Module | Documentation commands for agent-actions CLI. | `cli`, `docs` |
 | `docs` | Function | Generate and serve workflow documentation. | - |
 | `generate` | Function | Generate documentation data files. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
 | `serve` | Function | Start HTTP server to view documentation. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
 | `run_tests` | Function | Run Playwright tests to verify documentation site. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
 | `dev` | Function | Start development environment. | - |
+| `example.py` | Module | Browse and install example projects. | `cli`, `configuration` |
+| `example` | Function | Example command group. | - |
+| `example_list` | Function | List available example projects from GitHub. | - |
+| `example_install` | Function | Install an example project. | - |
 | `init.py` | Module | Initialize command for the Agent Actions CLI. | `cli`, `configuration`, `errors`, `validation` |
 | `InitCommand` | Class | Implementation of the init command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the init command. | - |
 | `init` | Function | Initialize a new Agent Actions project. | - |
-| `inspect.py` | Module | Inspect commands for the Agent Actions CLI. | `cli`, `errors`, `orchestration`, `prompt_generation`, `response_processing`, `services`, `utilities`, `validation` |
-| `BaseInspectCommand` | Class | Base class for inspect commands with common functionality. | - |
-| `DependenciesCommand` | Class | Show dependency analysis in table format. | - |
-| `GraphCommand` | Class | Show workflow structure as a visual dependency graph. | - |
-| `ActionCommand` | Class | Show detailed information about a single action. | - |
-| `ContextCommand` | Class | Show context debug information for a specific action. | - |
+| `inspect.py` | Module | Inspect command group for the Agent Actions CLI. | `cli` |
 | `inspect` | Function | Inspect workflow structure and data flow (command group). | - |
+| `inspect_base.py` | Module | Shared base class for all inspect subcommands. | `cli`, `orchestration`, `validation` |
+| `BaseInspectCommand` | Class | Base class for inspect commands with common functionality. | - |
+| `inspect_deps.py` | Module | Dependencies inspect subcommand. | `cli`, `orchestration` |
+| `DependenciesCommand` | Class | Show dependency analysis in table format. | - |
 | `dependencies` | Function | Analyze workflow dependencies and auto-inferred context. | - |
+| `inspect_graph.py` | Module | Graph inspect subcommand. | `cli`, `orchestration` |
+| `GraphCommand` | Class | Show workflow structure as a visual dependency graph. | - |
 | `graph` | Function | Show workflow structure as a dependency graph. | - |
+| `inspect_action.py` | Module | Action and context inspect subcommands. | `cli`, `orchestration`, `prompt_generation` |
+| `ActionCommand` | Class | Show detailed information about a single action. | - |
 | `action` | Function | Show details for a specific action. | - |
+| `ContextCommand` | Class | Show context debug information for a specific action. | - |
 | `context` | Function | Show context debug information for a specific action. | - |
 | `list_udfs.py` | Module | list-udfs command for the Agent Actions CLI. | `cli`, `input_loading`, `utilities` |
 | `ListUDFsCommand` | Class | Implementation of the list-udfs command. | - |
@@ -52,18 +65,17 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
 | `main` | Function | Entry point for the CLI tool when run from the command line. | - |
-| `project_paths_factory.py` | Shim | Re-export shim → `config.project_paths`. | `config` |
-| `find_config_file` | Function | Find a workflow configuration file with optional alternative-location lookup. Accepts `project_root: Path \| None`. | - |
-| `ProjectPaths` | Class | Container for project directory paths. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert paths to a dictionary of strings. | - |
-| `ProjectPathsFactory` | Class | Factory for creating project paths. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_agent_paths` | Method | Get the agent paths using the FileHandler. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_project_paths` | Method | Create project paths for the given agent. Accepts `project_root: Path \| None`. | - |
 | `run.py` | Module | Run command for the Agent Actions CLI. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |
 | `RunCommand` | Class | Implementation of the run command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the run command. | - |
 | `run` | Function | Run agents with a specified agent configuration. | - |
+| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. | `cli`, `storage`, `validation` |
+| `RetryCommand` | Class | Implementation of the retry command. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the retry command. | - |
+| `retry` | Function | Retry failed/exhausted records from a specific action. | - |
+| `workflow_loader.py` | Module | Shared workflow loading helper for CLI commands. | `cli`, `validation` |
+| `load_workflow` | Function | Load and validate a workflow configuration. | - |
 | `schema.py` | Module | Schema command for the Agent Actions CLI. | `cli`, `errors`, `orchestration`, `prompt_generation`, `response_processing`, `services`, `utilities` |
 | `SchemaCommand` | Class | Implementation of the schema command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the schema command. | - |

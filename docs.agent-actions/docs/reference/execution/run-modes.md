@@ -67,7 +67,6 @@ defaults:
 | Anthropic | Yes | ~50% |
 | Google Gemini | Yes | Varies |
 | Groq | Yes | Varies |
-| Mistral | Yes | Varies |
 | Ollama | Yes (local) | N/A |
 
 ### Batch Commands

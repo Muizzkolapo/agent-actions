@@ -11,7 +11,7 @@ An agentic workflow engine that runs in your terminal. Define LLM pipelines in Y
 
 ## Get started in 30 seconds
 
-**Prerequisites:** Python 3.11+ and an API key from any supported provider (OpenAI, Anthropic, Gemini, Groq, Mistral, Ollama).
+**Prerequisites:** Python 3.11+ and an API key from any supported provider (OpenAI, Anthropic, Gemini, Groq, Ollama).
 
 **Install Agent Actions:**
 
@@ -53,7 +53,7 @@ See [Installation](./installation.md) for configuration options or [Troubleshoot
 
 **Validate every output:** Every LLM response is validated against JSON Schema. Invalid outputs trigger automatic reprompting until they conform.
 
-**Mix and match providers:** Chain OpenAI, Anthropic, Gemini, Groq, Mistral, and Ollama in the same workflow. Switch models per-action.
+**Mix and match providers:** Chain OpenAI, Anthropic, Gemini, Groq, and Ollama in the same workflow. Switch models per-action.
 
 **Catch errors before they cost you:** Pre-flight validation checks your config, variables, and dependency wiring before any API calls are made.
 

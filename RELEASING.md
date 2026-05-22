@@ -21,18 +21,20 @@ ruff format --check .
 
 ### 2. Bump the version
 
-Update the version in `pyproject.toml`:
+Use `changie batch` to batch unreleased changelog entries and bump the version automatically:
 
-```toml
-[project]
-version = "X.Y.Z"
+```bash
+task changelog:batch -- X.Y.Z
+task changelog:merge
 ```
+
+This updates the version in both `pyproject.toml` and `agent_actions/__version__.py` (configured via `.changie.yaml` replacements), and merges entries into `CHANGELOG.md`.
 
 Commit and push:
 
 ```bash
-git add pyproject.toml
-git commit -m "chore: bump version to X.Y.Z"
+git add pyproject.toml agent_actions/__version__.py CHANGELOG.md .changes/
+git commit -m "chore: release vX.Y.Z"
 git push origin main
 ```
 

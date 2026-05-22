@@ -60,7 +60,6 @@ Feature support varies by vendor:
 | Anthropic | ✅ | ✅ | ✅ | ✅ |
 | Google | ✅ | ✅ | ✅ | ✅ |
 | Groq | ✅ | ✅ | ✅ | ❌ |
-| Mistral | ✅ | ✅ | ✅ | ❌ |
 | Ollama | ✅ | ✅ | ✅ | ✅ |
 
 ## Schema Validation

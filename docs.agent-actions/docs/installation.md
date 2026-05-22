@@ -81,7 +81,6 @@ Agent Actions automatically loads `.env` files from the current directory.
 | Anthropic | `ANTHROPIC_API_KEY` | Any model supported by the Anthropic API |
 | Google | `GEMINI_API_KEY` | Any model supported by the Gemini API |
 | Groq | `GROQ_API_KEY` | Any model supported by the Groq API |
-| Mistral | `MISTRAL_API_KEY` | Any model supported by the Mistral API |
 | Cohere | `COHERE_API_KEY` | Any model supported by the Cohere API |
 | Ollama | (local) | Any model you've pulled locally |
 
