@@ -83,6 +83,7 @@ You will, until you have 15 steps, 3 models, batch retry, and a teammate asks wh
 | [Product Listing Enrichment](examples/product_listing_enrichment) | Tool + LLM hybrid | LLM generates copy, tool fetches pricing, LLM optimizes |
 | [Book Catalog Enrichment](examples/book_catalog_enrichment) | Multi-step enrichment | BISAC classification, marketing copy, SEO metadata, reading level |
 | [Incident Triage](examples/incident_triage) | Parallel consensus | Severity classification, impact assessment, team assignment, response plan |
+| [Support Resolution](examples/support_resolution) | Non-JSON pipeline | Classify, route, and draft responses using `output_field` — works with any model including local Ollama |
 
 ## Providers
 
