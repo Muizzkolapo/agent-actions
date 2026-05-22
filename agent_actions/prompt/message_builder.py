@@ -26,6 +26,44 @@ from agent_actions.utils.json_safety import ensure_json_safe
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Token estimation limits (chars / 4 heuristic — within ~20% of actual)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CONTEXT_LIMIT = 128_000
+
+_MODEL_CONTEXT_LIMITS: dict[str, int] = {
+    # OpenAI
+    "gpt-4": 8_192,
+    "gpt-4-32k": 32_768,
+    "gpt-4-turbo": 128_000,
+    "gpt-4-turbo-preview": 128_000,
+    "gpt-4o": 128_000,
+    "gpt-4o-mini": 128_000,
+    "gpt-4.1": 1_047_576,
+    "gpt-4.1-mini": 1_047_576,
+    "gpt-4.1-nano": 1_047_576,
+    "gpt-3.5-turbo": 16_385,
+    "o1": 200_000,
+    "o1-mini": 128_000,
+    "o1-pro": 200_000,
+    "o3": 200_000,
+    "o3-mini": 200_000,
+    "o4-mini": 200_000,
+    # Anthropic
+    "claude-3-haiku-20240307": 200_000,
+    "claude-3-sonnet-20240229": 200_000,
+    "claude-3-opus-20240229": 200_000,
+    "claude-3-5-sonnet-20241022": 200_000,
+    "claude-sonnet-4-20250514": 200_000,
+    "claude-opus-4-20250514": 200_000,
+    # Groq
+    "llama-3.3-70b-versatile": 128_000,
+    "llama-3.1-8b-instant": 128_000,
+    "mixtral-8x7b-32768": 32_768,
+    "gemma2-9b-it": 8_192,
+}
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -237,6 +275,7 @@ class MessageBuilder:
         schema: dict[str, Any] | None = None,
         json_mode: bool = True,
         enable_prompt_caching: bool = False,
+        model_name: str | None = None,
     ) -> LLMMessageEnvelope:
         """Build a message envelope for a realtime (online) provider call."""
         config = MessageBuilder._get_config(provider)
@@ -273,7 +312,13 @@ class MessageBuilder:
                 f"Return ONLY the JSON object, no extra text."
             )
 
-        messages = MessageBuilder._wrap_in_roles(role, effective_prompt, context_str, body)
+        messages = MessageBuilder._wrap_in_roles(
+            role,
+            effective_prompt,
+            context_str,
+            body,
+            style=style,
+        )
 
         if enable_prompt_caching and provider == "anthropic":
             messages = [
@@ -284,6 +329,24 @@ class MessageBuilder:
                 )
                 for m in messages
             ]
+
+        # Token overflow pre-flight guard
+        if model_name is not None:
+            estimated_tokens = sum(len(m.content) for m in messages) // 4
+            model_limit = _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
+            if estimated_tokens > model_limit:
+                from agent_actions.errors import PromptTooLargeError
+
+                raise PromptTooLargeError(
+                    f"Estimated prompt size ({estimated_tokens} tokens) exceeds "
+                    f"model context window ({model_limit} tokens)",
+                    context={
+                        "estimated_tokens": estimated_tokens,
+                        "model_limit": model_limit,
+                        "provider": provider,
+                        "model_name": model_name,
+                    },
+                )
 
         return LLMMessageEnvelope(
             messages=messages,
@@ -451,6 +514,8 @@ class MessageBuilder:
         prompt_config: str,
         context_str: str,
         body: str,
+        *,
+        style: PromptStyle = PromptStyle.TAGGED,
     ) -> list[LLMMessage]:
         """Wrap the assembled body into the correct message role structure."""
         if role == MessageRole.SYSTEM_PLUS_USER:
@@ -461,6 +526,16 @@ class MessageBuilder:
             ]
 
         if role == MessageRole.SYSTEM_ONLY:
+            # For TAGGED style (OpenAI JSON mode): split user-supplied
+            # context into a separate user message to prevent prompt
+            # injection via the system message.  TAGGED_GROQ (Groq)
+            # embeds context in its own tagged format inside body,
+            # so it keeps the single system message.
+            if style == PromptStyle.TAGGED and context_str:
+                return [
+                    LLMMessage(role="system", content=prompt_config),
+                    LLMMessage(role="user", content=context_str),
+                ]
             return [LLMMessage(role="system", content=body)]
 
         # SINGLE_USER (default)

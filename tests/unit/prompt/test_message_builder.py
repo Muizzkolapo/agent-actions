@@ -111,9 +111,15 @@ class TestStringEquivalence:
         assert env.messages[0].content == expected
 
     def test_openai_json(self):
-        expected = _original_openai_json(PROMPT, CONTEXT_STR)
+        # After prompt-injection fix: system=prompt, user=context (two messages)
         env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=True)
-        assert env.messages[0].content == expected
+        assert env.messages[0].role == "system"
+        assert env.messages[0].content == PROMPT
+        assert env.messages[1].role == "user"
+        assert env.messages[1].content == CONTEXT_STR
+        # The tagged body is still available in prompt_body
+        expected = _original_openai_json(PROMPT, CONTEXT_STR)
+        assert env.prompt_body == expected
 
     def test_openai_non_json(self):
         expected = _original_openai_non_json(PROMPT, CONTEXT_STR)
@@ -185,9 +191,11 @@ class TestMessageBuilderStructure:
         assert env.messages[0].role == "user"
 
     def test_openai_json_system_message(self):
+        # After prompt-injection fix: system + user (two messages)
         env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=True)
-        assert len(env.messages) == 1
+        assert len(env.messages) == 2
         assert env.messages[0].role == "system"
+        assert env.messages[1].role == "user"
 
     def test_openai_non_json_user_message(self):
         env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=False)
@@ -230,7 +238,8 @@ class TestTaggedContent:
         env = MessageBuilder.build(
             provider, PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
         )
-        content = env.messages[0].content
+        # OpenAI JSON mode splits into system+user; tags are in prompt_body
+        content = env.prompt_body if provider == "openai" else env.messages[0].content
         assert "<|begin_of_user_instruction|>" in content
         assert "<|end_of_user_instruction|>" in content
         assert "<|begin_of_text|>" in content
@@ -259,9 +268,9 @@ class TestTaggedContent:
 
     def test_openai_json_has_rules(self):
         env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=True)
-        content = env.messages[0].content
-        assert "RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA" in content
-        assert "RULES: ALWAYS READ INPUT AS STRING" in content
+        # Rules are in prompt_body (system message has raw prompt after split)
+        assert "RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA" in env.prompt_body
+        assert "RULES: ALWAYS READ INPUT AS STRING" in env.prompt_body
 
     def test_openai_non_json_no_rules(self):
         env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=False)
@@ -632,12 +641,14 @@ class TestContextSerialisationJsonSafety:
     def test_openai_dict_context_with_nan_produces_valid_string(self):
         ctx = {"score": float("nan"), "text": "hello"}
         env = MessageBuilder.build("openai", PROMPT, ctx, json_mode=True)
-        content = env.messages[0].content
+        # After split: context is in user message (messages[1])
+        content = env.messages[1].content
         assert "None" in content  # NaN replaced with None before str()
         assert isinstance(content, str)
 
     def test_openai_dict_context_with_set_produces_valid_string(self):
         ctx = {"tags": {"a", "b"}, "text": "hello"}
         env = MessageBuilder.build("openai", PROMPT, ctx, json_mode=True)
-        content = env.messages[0].content
+        # After split: context is in user message (messages[1])
+        content = env.messages[1].content
         assert isinstance(content, str)

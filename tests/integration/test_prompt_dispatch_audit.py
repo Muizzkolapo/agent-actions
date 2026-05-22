@@ -318,9 +318,10 @@ class TestMessageBuilder:
             schema={"type": "object", "properties": {}},
             json_mode=True,
         )
-        # OpenAI JSON mode should produce system-only message
-        assert len(envelope.messages) == 1
+        # OpenAI JSON mode splits into system + user messages
+        assert len(envelope.messages) == 2
         assert envelope.messages[0].role == "system"
+        assert envelope.messages[1].role == "user"
 
     def test_non_json_mode_role_assignment(self):
         """Non-JSON mode uses the provider's non_json_role."""

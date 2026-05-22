@@ -73,7 +73,12 @@ class OpenAIClient(BaseClient):
         client = OpenAI(api_key=api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
-            "openai", prompt_config, context_data, schema=schema, json_mode=True
+            "openai",
+            prompt_config,
+            context_data,
+            schema=schema,
+            json_mode=True,
+            model_name=model_name,
         )
         messages: list[ChatCompletionSystemMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
 
@@ -149,6 +154,18 @@ class OpenAIClient(BaseClient):
                     request_id=request_id,
                 )
             )
+            # If reprompt is configured, raise so retry machinery can intercept
+            if agent_config.get("reprompt"):
+                from agent_actions.errors import LLMResponseParseError
+
+                raise LLMResponseParseError(
+                    "Failed to parse JSON from LLM response",
+                    context={
+                        "raw_response_snippet": response_content[:200],
+                        "provider": "openai",
+                        "model_name": model_name,
+                    },
+                )
             return [
                 {
                     "raw_response": response_content,

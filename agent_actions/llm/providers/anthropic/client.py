@@ -8,9 +8,12 @@ SDK errors are wrapped into unified agent-actions error types to enable
 consistent retry handling across all providers.
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, ClassVar
+
+logger = logging.getLogger(__name__)
 
 import anthropic
 
@@ -138,6 +141,7 @@ class AnthropicClient(BaseClient):
             schema=schema,
             json_mode=json_mode,
             enable_prompt_caching=enable_caching,
+            model_name=model_name,
         )
         messages = envelope.to_dicts()
 
@@ -183,17 +187,18 @@ class AnthropicClient(BaseClient):
         try:
             result = AnthropicClient._extract_response_content(response, model_name)
             return result if isinstance(result, list) else [result]
-        except VendorAPIError as e:
+        except VendorAPIError:
             fire_event(
                 LLMErrorEvent(
                     provider="anthropic",
                     model=model_name,
-                    error_type="ContentExtractionError",
-                    error_message=str(e),
+                    error_type="EmptyResponse",
+                    error_message="No extractable content in Anthropic response",
                     request_id=request_id,
                 )
             )
-            raise
+            logger.debug("Empty/unusable response from Anthropic API, model=%s", model_name)
+            return [{"raw_response": "", "_parse_error": "Empty response from API"}]
 
     @staticmethod
     def call_non_json(
