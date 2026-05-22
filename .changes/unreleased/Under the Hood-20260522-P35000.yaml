@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Add 33 tests covering 7 critical untested paths: abandoned records context_map failure, batch timeout, retry submission failure, parallel executor exceptions, loop correlation handoff, validation strategy malformed config, and resolve_completion_status errors"
+time: 2026-05-22T03:50:00.000000Z
