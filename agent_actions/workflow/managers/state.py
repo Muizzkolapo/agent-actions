@@ -188,27 +188,30 @@ class ActionStateManager:
         return reset_names
 
     def get_summary(self) -> dict[str, int]:
-        """Return summary counts of action statuses."""
+        """Return summary counts of action statuses (current actions only)."""
         summary: dict[str, int] = {}
-        for details in self.action_status.values():
-            status = details.get("status", ActionStatus.PENDING)
+        for name in self.execution_order:
+            status = self.action_status.get(name, {}).get("status", ActionStatus.PENDING)
             summary[status] = summary.get(status, 0) + 1
         return summary
 
     def is_workflow_complete(self) -> bool:
-        """Return True if all actions completed (including partial failures)."""
+        """Return True if all current actions completed (including partial failures)."""
         return all(
-            details.get("status") in COMPLETED_STATUSES for details in self.action_status.values()
+            self.action_status.get(name, {}).get("status") in COMPLETED_STATUSES
+            for name in self.execution_order
         )
 
     def is_workflow_done(self) -> bool:
-        """Return True if all actions are in a terminal state."""
+        """Return True if all current actions are in a terminal state."""
         return all(
-            details.get("status") in TERMINAL_STATUSES for details in self.action_status.values()
+            self.action_status.get(name, {}).get("status") in TERMINAL_STATUSES
+            for name in self.execution_order
         )
 
     def has_any_failed(self) -> bool:
-        """Return True if any action has 'failed' status."""
+        """Return True if any current action has 'failed' status."""
         return any(
-            details.get("status") == ActionStatus.FAILED for details in self.action_status.values()
+            self.action_status.get(name, {}).get("status") == ActionStatus.FAILED
+            for name in self.execution_order
         )
