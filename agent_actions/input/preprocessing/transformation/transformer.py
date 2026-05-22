@@ -106,8 +106,14 @@ class DataTransformer:
         return result
 
     @staticmethod
-    def get_content_by_source_guid(data: list[dict[str, Any]], source_guid: str) -> Any | None:
+    def get_content_by_source_guid(
+        data: list[dict[str, Any]],
+        source_guid: str,
+        index: dict[str, dict] | None = None,
+    ) -> Any | None:
         """Find and return the item matching the given source_guid, or None."""
+        if index is not None:
+            return index.get(source_guid)
         for item in data:
             if isinstance(item, dict):
                 if item.get("source_guid") == source_guid:
