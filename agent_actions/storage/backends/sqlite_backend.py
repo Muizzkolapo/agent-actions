@@ -251,21 +251,44 @@ class SQLiteBackend(StorageBackend):
                 raise
 
     def _enforce_schema(self, cursor: sqlite3.Cursor) -> None:
-        """Drop tables whose columns don't match _REQUIRED_COLUMNS."""
+        """Add missing columns to existing tables via ALTER TABLE.
+
+        Never drops tables — user data must survive framework upgrades.
+        Only adds columns; does not remove or rename existing columns.
+        """
         for table_name, required in self._REQUIRED_COLUMNS.items():
+            # Quote identifier to prevent SQL injection (table_name is from
+            # hardcoded _REQUIRED_COLUMNS keys, but defense-in-depth)
+            quoted_table = f'"{table_name}"'
+            # PRAGMA does not support quoted identifiers — but table_name
+            # is safe (from hardcoded _REQUIRED_COLUMNS keys, not user input)
             cursor.execute(f"PRAGMA table_info({table_name})")
             rows = cursor.fetchall()
             if not rows:
-                continue  # table doesn't exist yet — CREATE will handle it
+                continue  # table doesn't exist yet — CREATE TABLE handles it
+
             existing = {row[1] for row in rows}
             missing = required - existing
             if missing:
-                logger.warning(
-                    "Table '%s' schema outdated (missing: %s) — dropping and recreating",
+                columns_to_add = sorted(missing)
+                for column in columns_to_add:
+                    logger.debug(
+                        "Table '%s' missing column '%s' — adding via ALTER TABLE",
+                        table_name,
+                        column,
+                    )
+                    # Quote column name for safety; TEXT DEFAULT NULL is
+                    # the most permissive — application code handles types
+                    quoted_col = f'"{column}"'
+                    cursor.execute(
+                        f"ALTER TABLE {quoted_table} ADD COLUMN {quoted_col} TEXT DEFAULT NULL"
+                    )
+                logger.info(
+                    "Schema migration complete for '%s': added %d column(s): %s",
                     table_name,
-                    sorted(missing),
+                    len(columns_to_add),
+                    columns_to_add,
                 )
-                cursor.execute(f"DROP TABLE {table_name}")
 
     def write_target(self, action_name: str, relative_path: str, data: list[dict[str, Any]]) -> str:
         """Write target data for a specific node."""
