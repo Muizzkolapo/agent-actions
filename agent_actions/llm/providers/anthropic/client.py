@@ -77,8 +77,8 @@ class AnthropicClient(BaseClient):
             key_map={"stop": "stop_sequences"},
             stop_as_list=True,
         )
-        # max_tokens is always required for Anthropic; default 1024
-        params.setdefault("max_tokens", 1024)
+        # max_tokens is always required for Anthropic; default 4096
+        params.setdefault("max_tokens", 4096)
 
         api_args: dict[str, Any] = {
             "model": model_name,

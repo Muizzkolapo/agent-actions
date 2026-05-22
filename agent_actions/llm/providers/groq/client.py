@@ -144,7 +144,6 @@ class GroqClient(BaseClient, JSONResponseMixin):
         model_name = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("groq", prompt_config, context_data, json_mode=False)
         params = extract_generation_params(agent_config)
-        params.setdefault("temperature", 0.7)
         params.setdefault("max_tokens", 1000)
         completion_kwargs = {
             "messages": envelope.to_dicts(),

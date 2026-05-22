@@ -260,7 +260,11 @@ class TestGroqCallNonJson:
     @patch("agent_actions.llm.providers.groq.client.fire_event")
     @patch("agent_actions.llm.providers.groq.client.Groq")
     def test_none_temperature_and_max_tokens_use_defaults(self, mock_groq_cls, mock_fire):
-        """When config has temperature=None / max_tokens=None, fall back to defaults."""
+        """When config has temperature=None / max_tokens=None, fall back to defaults.
+
+        Groq does not inject a temperature default (parity with other providers).
+        Only max_tokens has a default (required by the Groq API).
+        """
         from agent_actions.llm.providers.groq.client import GroqClient
 
         config = {"model_name": "test-model", "temperature": None, "max_tokens": None}
@@ -273,7 +277,7 @@ class TestGroqCallNonJson:
         GroqClient.call_non_json("key", config, "prompt", "data")
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert call_kwargs["temperature"] == 0.7
+        assert "temperature" not in call_kwargs
         assert call_kwargs["max_tokens"] == 1000
 
 
@@ -479,8 +483,8 @@ class TestAnthropicSharedCallApi:
 
     @patch("agent_actions.llm.providers.anthropic.client.fire_event")
     @patch("agent_actions.llm.providers.anthropic.client.anthropic")
-    def test_default_max_tokens_is_1024(self, mock_anthropic_mod, mock_fire):
-        """When max_tokens is not in config, it should default to 1024."""
+    def test_default_max_tokens_is_4096(self, mock_anthropic_mod, mock_fire):
+        """When max_tokens is not in config, it should default to 4096."""
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         config = {"model_name": "claude-3"}
@@ -492,7 +496,7 @@ class TestAnthropicSharedCallApi:
         AnthropicClient.call_non_json("key", config, "prompt", "data")
 
         call_kwargs = mock_client.messages.create.call_args[1]
-        assert call_kwargs["max_tokens"] == 1024
+        assert call_kwargs["max_tokens"] == 4096
 
 
 # ---------------------------------------------------------------------------
