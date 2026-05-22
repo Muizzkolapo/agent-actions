@@ -2,6 +2,7 @@
 
 import json
 import logging
+import threading
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,7 @@ class ActionStateManager:
         self.status_file = status_file_path
         self.execution_order = execution_order
         self.action_status: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
         self._load_status()
 
     def _load_status(self):
@@ -77,8 +79,9 @@ class ActionStateManager:
 
     def reset(self) -> None:
         """Reset all actions to 'pending' status and persist."""
-        self._initialize_default_status()
-        self._save_status()
+        with self._lock:
+            self._initialize_default_status()
+            self._save_status()
 
     def _initialize_default_status(self):
         """Initialize all actions with 'pending' status."""
@@ -93,16 +96,16 @@ class ActionStateManager:
 
     def update_status(self, action_name: str, status: ActionStatus, **metadata):
         """Update action status and persist to file."""
-        if action_name not in self.action_status:
-            self.action_status[action_name] = {}
+        with self._lock:
+            if action_name not in self.action_status:
+                self.action_status[action_name] = {}
 
-        self.action_status[action_name]["status"] = status
+            self.action_status[action_name]["status"] = status
 
-        # Add any additional metadata
-        for key, value in metadata.items():
-            self.action_status[action_name][key] = value
+            for key, value in metadata.items():
+                self.action_status[action_name][key] = value
 
-        self._save_status()
+            self._save_status()
 
     def get_status(self, action_name: str) -> ActionStatus:
         """Return current status of an action, defaulting to PENDING."""
@@ -158,18 +161,34 @@ class ActionStateManager:
         """Return actions that were skipped."""
         return [agent for agent in agents if self.is_skipped(agent)]
 
+    def _bulk_transition(
+        self, from_statuses: frozenset[ActionStatus] | set[ActionStatus], to_status: ActionStatus
+    ) -> list[str]:
+        """Transition all actions matching *from_statuses* to *to_status*.
+
+        Holds the lock for the entire scan-mutate-save cycle and persists
+        at most once.  Returns the names of affected actions.
+        """
+        with self._lock:
+            affected = [
+                name
+                for name, details in self.action_status.items()
+                if details.get("status") in from_statuses
+            ]
+            for name in affected:
+                self.action_status[name]["status"] = to_status
+            if affected:
+                self._save_status()
+        return affected
+
     def mark_running_as_failed(self) -> list[str]:
         """Mark all actions in 'running' or 'checking_batch' status as failed.
 
         Returns list of action names that were marked failed.
         """
-        marked: list[str] = []
-        for action_name, details in self.action_status.items():
-            if details.get("status") in (ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH):
-                marked.append(action_name)
-        for action_name in marked:
-            self.update_status(action_name, ActionStatus.FAILED)
-        return marked
+        return self._bulk_transition(
+            {ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, ActionStatus.FAILED
+        )
 
     def reset_retryable(self) -> list[str]:
         """Reset retryable actions to PENDING for re-run.
@@ -179,13 +198,7 @@ class ActionStateManager:
         completed results.  Callers should clear storage dispositions for
         the returned action names.
         """
-        reset_names: list[str] = []
-        for action_name, details in self.action_status.items():
-            if details.get("status") in RETRYABLE_STATUSES:
-                reset_names.append(action_name)
-        for action_name in reset_names:
-            self.update_status(action_name, ActionStatus.PENDING)
-        return reset_names
+        return self._bulk_transition(RETRYABLE_STATUSES, ActionStatus.PENDING)
 
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of action statuses (current actions only)."""

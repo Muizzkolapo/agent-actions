@@ -6,6 +6,7 @@ is either the old content or the new content, never a partial write.
 
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -35,10 +36,18 @@ def atomic_json_write(
         OSError: If the write or rename fails. The original exception is
                  chained via ``from``.
     """
-    tmp_path = path.with_suffix(".json.tmp")
+    fd, tmp_path_str = tempfile.mkstemp(dir=path.parent, suffix=".tmp", prefix=path.stem + "_")
+    tmp_path = Path(tmp_path_str)
 
     try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        f = os.fdopen(fd, "w", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    try:
+        with f:
             json.dump(data, f, **json_kwargs)
             if fsync:
                 f.flush()
