@@ -10,6 +10,7 @@ from agent_actions.output.response.expander_action_types import process_tool_act
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import ProcessingStatus
 from agent_actions.utils.correlation.version_id import VersionIdGenerator
+from tests.conftest import wire_batch_disposition_delegate
 
 
 class TestEnrichmentCompleteEventOnFailure:
@@ -189,6 +190,7 @@ class TestDeferredStatusHandling:
             source_guid="test-guid",
         )
         backend = MagicMock()
+        wire_batch_disposition_delegate(backend)
 
         ResultCollector.collect_results(
             [deferred],

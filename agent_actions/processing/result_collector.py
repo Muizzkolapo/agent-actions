@@ -37,6 +37,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
+    DispositionRow,
 )
 
 if TYPE_CHECKING:
@@ -363,6 +364,7 @@ def collect_results_from_processing_results(
 
     output: list[dict[str, Any]] = []
     stats: collections.Counter[str] = collections.Counter()
+    pending_dispositions: list[DispositionRow] = []
 
     for idx, result in enumerate(results):
         status = result.status
@@ -405,12 +407,16 @@ def collect_results_from_processing_results(
                     )
                 )
                 if storage_backend and result.source_guid:
-                    _safe_set_disposition(
-                        storage_backend,
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_FAILED,
-                        reason=PARSE_ERROR,
+                    pending_dispositions.append(
+                        (
+                            action_name,
+                            result.source_guid,
+                            DISPOSITION_FAILED,
+                            PARSE_ERROR,
+                            None,
+                            None,
+                            None,
+                        )
                     )
                 continue
 
@@ -431,11 +437,16 @@ def collect_results_from_processing_results(
                 )
             )
             if storage_backend and result.source_guid:
-                _safe_set_disposition(
-                    storage_backend,
-                    action_name,
-                    result.source_guid,
-                    DISPOSITION_SUCCESS,
+                pending_dispositions.append(
+                    (
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_SUCCESS,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
                 )
             elif storage_backend and result.source_guid is None and data:
                 # FILE-mode results have source_guid=None on the result level
@@ -445,11 +456,16 @@ def collect_results_from_processing_results(
                 for item in data:
                     item_guid = item.get("source_guid")
                     if item_guid:
-                        _safe_set_disposition(
-                            storage_backend,
-                            action_name,
-                            item_guid,
-                            DISPOSITION_SUCCESS,
+                        pending_dispositions.append(
+                            (
+                                action_name,
+                                item_guid,
+                                DISPOSITION_SUCCESS,
+                                None,
+                                None,
+                                None,
+                                None,
+                            )
                         )
 
         elif status == ProcessingStatus.SKIPPED:
@@ -476,12 +492,16 @@ def collect_results_from_processing_results(
                 )
             )
             if storage_backend and result.source_guid:
-                _safe_set_disposition(
-                    storage_backend,
-                    action_name,
-                    result.source_guid,
-                    DISPOSITION_PASSTHROUGH,
-                    reason=result.skip_reason or GUARD_SKIP,
+                pending_dispositions.append(
+                    (
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_PASSTHROUGH,
+                        result.skip_reason or GUARD_SKIP,
+                        None,
+                        None,
+                        None,
+                    )
                 )
 
         elif status == ProcessingStatus.EXHAUSTED:
@@ -508,14 +528,16 @@ def collect_results_from_processing_results(
                 input_snapshot_str = _serialize_snapshot(
                     result.source_snapshot or result.input_record
                 )
-                _safe_set_disposition(
-                    storage_backend,
-                    action_name,
-                    result.source_guid,
-                    DISPOSITION_EXHAUSTED,
-                    reason=f"exhausted_after_{attempts}_attempts",
-                    input_snapshot=input_snapshot_str,
-                    detail=result.error,
+                pending_dispositions.append(
+                    (
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_EXHAUSTED,
+                        f"exhausted_after_{attempts}_attempts",
+                        None,
+                        input_snapshot_str,
+                        result.error,
+                    )
                 )
 
         elif status == ProcessingStatus.FAILED:
@@ -553,14 +575,16 @@ def collect_results_from_processing_results(
                 input_snapshot_str = _serialize_snapshot(
                     result.source_snapshot or result.input_record
                 )
-                _safe_set_disposition(
-                    storage_backend,
-                    action_name,
-                    result.source_guid,
-                    DISPOSITION_FAILED,
-                    reason=result.error or "processing_error",
-                    input_snapshot=input_snapshot_str,
-                    detail=result.error,
+                pending_dispositions.append(
+                    (
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_FAILED,
+                        result.error or "processing_error",
+                        None,
+                        input_snapshot_str,
+                        result.error,
+                    )
                 )
 
         elif status == ProcessingStatus.FILTERED:
@@ -573,12 +597,16 @@ def collect_results_from_processing_results(
                 )
             )
             if storage_backend and result.source_guid:
-                _safe_set_disposition(
-                    storage_backend,
-                    action_name,
-                    result.source_guid,
-                    DISPOSITION_FILTERED,
-                    reason=result.skip_reason or GUARD_FILTER,
+                pending_dispositions.append(
+                    (
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_FILTERED,
+                        result.skip_reason or GUARD_FILTER,
+                        None,
+                        None,
+                        None,
+                    )
                 )
 
         elif status == ProcessingStatus.UNPROCESSED:
@@ -615,12 +643,16 @@ def collect_results_from_processing_results(
                 )
             )
             if storage_backend and result.source_guid:
-                _safe_set_disposition(
-                    storage_backend,
-                    action_name,
-                    result.source_guid,
-                    DISPOSITION_UNPROCESSED,
-                    reason=result.skip_reason or UNPROCESSED,
+                pending_dispositions.append(
+                    (
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_UNPROCESSED,
+                        result.skip_reason or UNPROCESSED,
+                        None,
+                        None,
+                        None,
+                    )
                 )
 
         elif status == ProcessingStatus.DEFERRED:
@@ -638,16 +670,31 @@ def collect_results_from_processing_results(
                 )
             )
             if storage_backend and result.source_guid:
-                _safe_set_disposition(
-                    storage_backend,
-                    action_name,
-                    result.source_guid,
-                    DISPOSITION_DEFERRED,
-                    reason=f"batch_queued:task_id={task_id}",
+                pending_dispositions.append(
+                    (
+                        action_name,
+                        result.source_guid,
+                        DISPOSITION_DEFERRED,
+                        f"batch_queued:task_id={task_id}",
+                        None,
+                        None,
+                        None,
+                    )
                 )
 
         else:
             logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
+
+    # Flush all accumulated dispositions in a single transaction.
+    if storage_backend and pending_dispositions:
+        try:
+            storage_backend.set_dispositions_batch(pending_dispositions)
+        except Exception:
+            logger.exception(
+                "Failed to batch-write %d dispositions for %s",
+                len(pending_dispositions),
+                action_name,
+            )
 
     guard_config = effective_config.get("guard", {})
     guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""

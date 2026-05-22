@@ -14,6 +14,7 @@ from agent_actions.storage.backend import (
     NODE_LEVEL_RECORD_ID,
     VALID_DISPOSITIONS,
     Disposition,
+    DispositionRow,
     StorageBackend,
 )
 
@@ -607,6 +608,33 @@ class SQLiteBackend(StorageBackend):
     # commit/rollback as well.
     # ------------------------------------------------------------------
 
+    def _validate_disposition_fields(
+        self,
+        action_name: str,
+        record_id: str,
+        disposition: str | Disposition,
+        relative_path: str | None,
+        input_snapshot: str | None,
+    ) -> tuple[str, str, str | None, str | None]:
+        """Validate and normalize fields shared by set_disposition and set_dispositions_batch.
+
+        Returns (action_name, record_id, relative_path, input_snapshot) after validation.
+        """
+        action_name = self._validate_identifier(action_name, "action_name")
+        record_id = self._validate_identifier(record_id, "record_id")
+        if relative_path is not None:
+            relative_path = self._validate_identifier(relative_path, "relative_path")
+        if disposition not in VALID_DISPOSITIONS:
+            raise ValueError(
+                f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
+            )
+        # Cap input_snapshot at 10KB to prevent storage bloat.
+        if input_snapshot and len(input_snapshot) > 10240:
+            input_snapshot = (
+                '{"__truncated__": true, "partial": ' + json.dumps(input_snapshot[:8192]) + "}"
+            )
+        return action_name, record_id, relative_path, input_snapshot
+
     def set_disposition(
         self,
         action_name: str,
@@ -618,20 +646,9 @@ class SQLiteBackend(StorageBackend):
         detail: str | None = None,
     ) -> None:
         """Write a disposition record, clearing any prior disposition for this (action, record)."""
-        action_name = self._validate_identifier(action_name, "action_name")
-        record_id = self._validate_identifier(record_id, "record_id")
-        if relative_path is not None:
-            relative_path = self._validate_identifier(relative_path, "relative_path")
-        if disposition not in VALID_DISPOSITIONS:
-            raise ValueError(
-                f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
-            )
-        # Cap input_snapshot at 10KB to prevent storage bloat.
-        # Wrap truncated content so consumers can detect and skip invalid JSON.
-        if input_snapshot and len(input_snapshot) > 10240:
-            input_snapshot = (
-                '{"__truncated__": true, "partial": ' + json.dumps(input_snapshot[:8192]) + "}"
-            )
+        action_name, record_id, relative_path, input_snapshot = self._validate_disposition_fields(
+            action_name, record_id, disposition, relative_path, input_snapshot
+        )
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -677,6 +694,61 @@ class SQLiteBackend(StorageBackend):
                         "disposition": disposition,
                         "workflow_name": self.workflow_name,
                     },
+                )
+                raise
+
+    def set_dispositions_batch(
+        self,
+        dispositions: list[DispositionRow],
+    ) -> None:
+        """Batch-write dispositions in a single transaction.
+
+        Validates every record before touching the DB — on first invalid
+        record the entire batch is rejected with no partial writes.  Uses
+        DELETE-then-INSERT (matching set_disposition) to prevent phantom
+        coexistence of conflicting dispositions for the same record.
+        """
+        if not dispositions:
+            return
+
+        rows: list[DispositionRow] = []
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            action_name, record_id, rp, snapshot = self._validate_disposition_fields(
+                action_name, record_id, disposition, rp, snapshot
+            )
+            rows.append((action_name, record_id, disposition, reason, rp, snapshot, detail))
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                # DELETE prior dispositions for each (action_name, record_id) pair,
+                # matching set_disposition's DELETE-before-INSERT pattern (P0-5).
+                cursor.executemany(
+                    "DELETE FROM record_disposition WHERE action_name = ? AND record_id = ?",
+                    [(r[0], r[1]) for r in rows],
+                )
+                cursor.executemany(
+                    """
+                    INSERT INTO record_disposition
+                    (action_name, record_id, disposition, reason, relative_path,
+                     input_snapshot, detail, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    rows,
+                )
+                self.connection.commit()
+                logger.debug(
+                    "Batch set %d dispositions",
+                    len(rows),
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to batch set dispositions: %s (count=%d)",
+                    e,
+                    len(rows),
+                    extra={"workflow_name": self.workflow_name},
                 )
                 raise
 

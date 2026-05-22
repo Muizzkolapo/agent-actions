@@ -15,6 +15,7 @@ from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
+from tests.conftest import wire_batch_disposition_delegate
 
 
 @pytest.fixture
@@ -95,6 +96,7 @@ class TestGuardSkipDisposition:
             source_guid="guid-1",
         )
         backend = MagicMock()
+        wire_batch_disposition_delegate(backend)
 
         ResultCollector.collect_results(
             [result],

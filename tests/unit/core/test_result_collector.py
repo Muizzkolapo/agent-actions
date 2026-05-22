@@ -19,6 +19,7 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.utils.id_generation import IDGenerator
+from tests.conftest import wire_batch_disposition_delegate
 
 
 def _retry_metadata() -> RecoveryMetadata:
@@ -245,6 +246,8 @@ def test_result_collector_on_exhausted_raise_writes_disposition_before_raising()
     )
 
     mock_backend = MagicMock()
+    mock_backend.set_disposition = MagicMock()
+    wire_batch_disposition_delegate(mock_backend)
 
     with pytest.raises(AgentActionsError):
         ResultCollector.collect_results(
@@ -308,6 +311,7 @@ def _make_backend():
     """Create a mock StorageBackend with a mocked set_disposition method."""
     backend = MagicMock()
     backend.set_disposition = MagicMock()
+    wire_batch_disposition_delegate(backend)
     return backend
 
 

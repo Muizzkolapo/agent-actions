@@ -486,6 +486,7 @@ def test_file_tool_empty_response_writes_disposition_per_record():
     from unittest.mock import MagicMock
 
     from agent_actions.processing.result_collector import ResultCollector
+    from tests.conftest import wire_batch_disposition_delegate
 
     context = _make_context()
     input_data = [
@@ -509,6 +510,7 @@ def test_file_tool_empty_response_writes_disposition_per_record():
         assert result.source_guid == f"sg-{i + 1}"
 
     mock_backend = MagicMock()
+    wire_batch_disposition_delegate(mock_backend)
     output, stats = ResultCollector.collect_results(
         results,
         {"kind": "tool"},

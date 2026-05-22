@@ -34,6 +34,9 @@ class Disposition(str, Enum):
 
 VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 
+DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]
+"""(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
+
 
 class StorageBackend(ABC):
     """Abstract interface for pluggable storage backends (SQLite, S3, DuckDB, etc.)."""
@@ -146,6 +149,26 @@ class StorageBackend(ABC):
             detail: Extended error message or context for the disposition.
         """
         # No-op: subclass must override to persist dispositions.
+
+    def set_dispositions_batch(
+        self,
+        dispositions: list[DispositionRow],
+    ) -> None:
+        """Write multiple disposition records in a single transaction.
+
+        Default implementation loops over set_disposition. Backends may
+        override for batch-optimized writes.
+        """
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            self.set_disposition(
+                action_name,
+                record_id,
+                disposition,
+                reason=reason,
+                relative_path=rp,
+                input_snapshot=snapshot,
+                detail=detail,
+            )
 
     def get_disposition(
         self,
