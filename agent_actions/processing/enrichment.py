@@ -41,6 +41,14 @@ class LineageEnricher(Enricher):
 
         use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
 
+        source_index: dict[str, dict] | None = None
+        if use_per_item_parent_lookup and context.source_data:
+            source_index = {
+                sg: item
+                for item in context.source_data
+                if (sg := item.get("source_guid")) is not None
+            }
+
         parent_item = None
         if not use_per_item_parent_lookup:
             parent_item = self._get_parent_item(result.source_guid, context)
@@ -109,7 +117,7 @@ class LineageEnricher(Enricher):
                         parent_item = None
             elif use_per_item_parent_lookup:
                 item_source_guid = item.get("source_guid")
-                parent_item = self._get_parent_item(item_source_guid, context)
+                parent_item = self._get_parent_item(item_source_guid, context, source_index)
 
             result.data[i] = LineageBuilder.add_unified_lineage(
                 obj=item,
@@ -120,7 +128,12 @@ class LineageEnricher(Enricher):
         result.node_id = base_node_id
         return result
 
-    def _get_parent_item(self, source_guid: str | None, context: ProcessingContext) -> dict | None:
+    def _get_parent_item(
+        self,
+        source_guid: str | None,
+        context: ProcessingContext,
+        source_index: dict[str, dict] | None = None,
+    ) -> dict | None:
         """Look up parent item for lineage chaining; returns None for first-stage."""
         if context.is_first_stage or not source_guid:
             return None
@@ -130,6 +143,9 @@ class LineageEnricher(Enricher):
 
         if not context.source_data:
             return None
+
+        if source_index is not None:
+            return source_index.get(source_guid)
 
         for source_item in context.source_data:
             if source_item.get("source_guid") == source_guid:
