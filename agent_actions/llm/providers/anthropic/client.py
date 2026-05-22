@@ -123,7 +123,6 @@ class AnthropicClient(BaseClient):
         prompt_config: str,
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
-        mode: str,
     ) -> tuple:
         """Shared API call with timing, usage tracking, and event handling.
 
@@ -182,7 +181,7 @@ class AnthropicClient(BaseClient):
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
         response, model_name, request_id = AnthropicClient._call_api(
-            api_key, agent_config, prompt_config, context_data, schema, "json"
+            api_key, agent_config, prompt_config, context_data, schema
         )
         try:
             result = AnthropicClient._extract_response_content(response, model_name)
@@ -209,7 +208,7 @@ class AnthropicClient(BaseClient):
     ) -> list[dict[str, str]]:
         """Plain-text (non-JSON) mode for Claude."""
         response, model_name, request_id = AnthropicClient._call_api(
-            api_key, agent_config, prompt_config, context_data, None, "non_json"
+            api_key, agent_config, prompt_config, context_data, None
         )
 
         content = next(

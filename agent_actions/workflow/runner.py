@@ -377,7 +377,7 @@ class ActionRunner:
         return agent_folder / "target" / previous_action_type
 
     def setup_directories(
-        self, agent_folder: str, action_config: dict, previous_action_type: str | None, idx: int
+        self, agent_folder: str, action_config: dict, previous_action_type: str | None
     ) -> tuple[list[str], str]:
         """Set up input and output directories for the action."""
         agent_folder_path = Path(agent_folder)
@@ -495,7 +495,7 @@ class ActionRunner:
             output_directory = str(Path(agent_folder) / "target" / agent_type)
         else:
             input_directories, output_directory = self.setup_directories(
-                agent_folder, params.action_config, params.previous_action_type, params.idx
+                agent_folder, params.action_config, params.previous_action_type
             )
 
         # Resolve file_type_filter for start nodes
