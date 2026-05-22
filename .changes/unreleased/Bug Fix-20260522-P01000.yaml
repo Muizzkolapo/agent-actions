@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Propagate storage errors (DB locked, corrupt, disk full) instead of silently swallowing them in completion status resolution and version correlation"
+time: 2026-05-22T00:10:00.000000Z
