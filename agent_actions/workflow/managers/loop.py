@@ -115,51 +115,39 @@ class VersionOutputCorrelator:
         outputs = []
         filenames = set()
 
-        try:
-            target_files = self.storage_backend.list_target_files(version_agent)
-            if not target_files:
-                logger.debug(
-                    "No target files found in storage backend for %s",
-                    version_agent,
-                )
-                return [], set()
-
-            for relative_path in target_files:
-                try:
-                    data = self.storage_backend.read_target(version_agent, relative_path)
-                    if isinstance(data, list):
-                        for record in data:
-                            record["_source_file"] = relative_path
-                        outputs.extend(data)
-                    else:
-                        data["_source_file"] = relative_path  # type: ignore[unreachable]
-                        outputs.append(data)
-                    filenames.add(relative_path)
-                except Exception as e:
-                    logger.warning(
-                        "Failed to read target %s/%s from storage backend: %s",
-                        version_agent,
-                        relative_path,
-                        e,
-                        exc_info=True,
-                    )
-
+        target_files = self.storage_backend.list_target_files(version_agent)
+        if not target_files:
             logger.debug(
-                "Loaded %d records from storage backend for %s (files: %s)",
-                len(outputs),
+                "No target files found in storage backend for %s",
                 version_agent,
-                list(filenames),
-            )
-            return outputs, filenames
-
-        except Exception as e:
-            logger.warning(
-                "Failed to list target files from storage backend for %s: %s",
-                version_agent,
-                e,
-                exc_info=True,
             )
             return [], set()
+
+        for relative_path in target_files:
+            try:
+                data = self.storage_backend.read_target(version_agent, relative_path)
+                if isinstance(data, list):
+                    for record in data:
+                        record["_source_file"] = relative_path
+                    outputs.extend(data)
+                else:
+                    data["_source_file"] = relative_path  # type: ignore[unreachable]
+                    outputs.append(data)
+                filenames.add(relative_path)
+            except FileNotFoundError:
+                logger.warning(
+                    "Target %s/%s listed but not found (possible TOCTOU race) — skipping",
+                    version_agent,
+                    relative_path,
+                )
+
+        logger.debug(
+            "Loaded %d records from storage backend for %s (files: %s)",
+            len(outputs),
+            version_agent,
+            list(filenames),
+        )
+        return outputs, filenames
 
     def _process_version_files(
         self,

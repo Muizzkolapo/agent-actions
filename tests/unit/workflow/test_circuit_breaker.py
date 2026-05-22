@@ -598,11 +598,13 @@ class TestResolveCompletionStatus:
         assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_returns_completed_on_storage_error(self, mock_fire, executor, mock_deps):
+    def test_storage_error_propagates(self, mock_fire, executor, mock_deps):
+        """Storage errors must propagate instead of being silently swallowed."""
         mock_deps.action_runner.storage_backend.has_disposition.side_effect = RuntimeError(
             "DB error"
         )
-        assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
+        with pytest.raises(RuntimeError, match="DB error"):
+            executor._resolve_completion_status("agent_a")
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_skipped_when_all_records_guard_skipped(self, mock_fire, executor, mock_deps):

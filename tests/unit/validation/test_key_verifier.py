@@ -1,9 +1,12 @@
 """Tests for key_verifier.py — lightweight API key probing."""
 
+import ssl
 from unittest.mock import MagicMock, patch
 
 from agent_actions.validation.preflight.key_verifier import (
     ProbeResult,
+    _probe_anthropic,
+    _probe_groq,
     _probe_openai,
     verify_keys,
 )
@@ -34,10 +37,22 @@ class TestProbeOpenai:
         assert result.ok is False
         assert "Invalid API Key" in result.error
 
-    def test_network_error_treated_as_ok(self):
-        """Timeout/network errors are not auth failures — proceed anyway."""
+    def test_api_timeout_treated_as_ok(self):
+        """SDK APITimeoutError is transient — proceed anyway."""
+        from openai import APITimeoutError
+
         mock_client = MagicMock()
-        mock_client.models.list.side_effect = TimeoutError("connect timeout")
+        mock_client.models.list.side_effect = APITimeoutError(request=MagicMock())
+        with patch("openai.OpenAI", return_value=mock_client):
+            result = _probe_openai("sk-validkey12345678901234567890")
+        assert result.ok is True
+
+    def test_api_connection_error_treated_as_ok(self):
+        """SDK APIConnectionError is transient — proceed anyway."""
+        from openai import APIConnectionError
+
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = APIConnectionError(request=MagicMock())
         with patch("openai.OpenAI", return_value=mock_client):
             result = _probe_openai("sk-validkey12345678901234567890")
         assert result.ok is True
@@ -55,6 +70,114 @@ class TestProbeOpenai:
         with patch("openai.OpenAI", return_value=mock_client):
             result = _probe_openai("sk-validkey12345678901234567890")
         assert result.ok is True
+
+    def test_ssl_error_fails(self):
+        """SSL certificate error is an infrastructure problem — must fail."""
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = ssl.SSLError("certificate verify failed")
+        with patch("openai.OpenAI", return_value=mock_client):
+            result = _probe_openai("sk-validkey12345678901234567890")
+        assert result.ok is False
+        assert "Infrastructure error" in result.error
+
+    def test_import_error_fails(self):
+        """Missing openai package must fail with install hint."""
+        with patch.dict("sys.modules", {"openai": None}):
+            result = _probe_openai("sk-validkey12345678901234567890")
+        assert result.ok is False
+        assert "not installed" in result.error
+        assert "pip install openai" in result.error
+
+
+class TestProbeAnthropic:
+    """Unit tests for the Anthropic probe function."""
+
+    def test_successful_probe(self):
+        mock_client = MagicMock()
+        with patch("anthropic.Anthropic", return_value=mock_client):
+            result = _probe_anthropic("sk-ant-validkey")
+        assert result.ok is True
+        assert result.vendor == "anthropic"
+
+    def test_auth_failure(self):
+        import anthropic
+
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = anthropic.AuthenticationError(
+            message="Invalid API Key",
+            response=MagicMock(status_code=401),
+            body=None,
+        )
+        with patch("anthropic.Anthropic", return_value=mock_client):
+            result = _probe_anthropic("sk-ant-expired")
+        assert result.ok is False
+        assert "Invalid API Key" in result.error
+
+    def test_rate_limit_treated_as_ok(self):
+        import anthropic
+
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = anthropic.RateLimitError(
+            message="Rate limited",
+            response=MagicMock(status_code=429),
+            body=None,
+        )
+        with patch("anthropic.Anthropic", return_value=mock_client):
+            result = _probe_anthropic("sk-ant-validkey")
+        assert result.ok is True
+
+    def test_ssl_error_fails(self):
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = ssl.SSLError("certificate verify failed")
+        with patch("anthropic.Anthropic", return_value=mock_client):
+            result = _probe_anthropic("sk-ant-validkey")
+        assert result.ok is False
+        assert "Infrastructure error" in result.error
+
+    def test_import_error_fails(self):
+        with patch.dict("sys.modules", {"anthropic": None}):
+            result = _probe_anthropic("sk-ant-validkey")
+        assert result.ok is False
+        assert "pip install anthropic" in result.error
+
+
+class TestProbeGroq:
+    """Unit tests for the Groq probe function."""
+
+    def test_successful_probe(self):
+        mock_client = MagicMock()
+        with patch("groq.Groq", return_value=mock_client):
+            result = _probe_groq("gsk_validkey")
+        assert result.ok is True
+        assert result.vendor == "groq"
+
+    def test_auth_failure(self):
+        from groq import AuthenticationError
+
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = AuthenticationError(
+            message="Invalid API Key",
+            response=MagicMock(status_code=401),
+            body=None,
+        )
+        with patch("groq.Groq", return_value=mock_client):
+            result = _probe_groq("gsk_expired")
+        assert result.ok is False
+        assert "Invalid API Key" in result.error
+
+    def test_ssl_error_fails(self):
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = ssl.SSLError("certificate verify failed")
+        with patch("groq.Groq", return_value=mock_client):
+            result = _probe_groq("gsk_validkey")
+        assert result.ok is False
+        assert "Infrastructure error" in result.error
+
+    def test_import_error_fails(self):
+        with patch.dict("sys.modules", {"groq": None}):
+            result = _probe_groq("gsk_validkey")
+        assert result.ok is False
+        assert "pip install groq" in result.error
 
 
 class TestVerifyKeys:

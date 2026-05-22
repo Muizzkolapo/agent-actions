@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Schema migration now uses ALTER TABLE ADD COLUMN instead of DROP TABLE, preserving user data across framework upgrades"
+time: 2026-05-22T00:20:00.000000Z
