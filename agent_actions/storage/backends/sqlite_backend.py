@@ -617,7 +617,7 @@ class SQLiteBackend(StorageBackend):
         input_snapshot: str | None = None,
         detail: str | None = None,
     ) -> None:
-        """Write a disposition record (INSERT OR REPLACE)."""
+        """Write a disposition record, clearing any prior disposition for this (action, record)."""
         action_name = self._validate_identifier(action_name, "action_name")
         record_id = self._validate_identifier(record_id, "record_id")
         if relative_path is not None:
@@ -636,9 +636,14 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             try:
+                # UNIQUE is on (action_name, record_id, disposition), so DELETE first to prevent coexistence.
+                cursor.execute(
+                    "DELETE FROM record_disposition WHERE action_name = ? AND record_id = ?",
+                    (action_name, record_id),
+                )
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO record_disposition
+                    INSERT INTO record_disposition
                     (action_name, record_id, disposition, reason, relative_path,
                      input_snapshot, detail, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
