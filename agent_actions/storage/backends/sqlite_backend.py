@@ -680,6 +680,68 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
+    def set_dispositions_batch(
+        self,
+        dispositions: list[tuple[str, str, str, str | None, str | None, str | None, str | None]],
+    ) -> None:
+        """Batch-write dispositions in a single transaction.
+
+        Validates every record before touching the DB — on first invalid
+        record the entire batch is rejected with no partial writes.  Uses
+        DELETE-then-INSERT (matching set_disposition) to prevent phantom
+        coexistence of conflicting dispositions for the same record.
+        """
+        if not dispositions:
+            return
+
+        rows: list[tuple[str, str, str, str | None, str | None, str | None, str | None]] = []
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            action_name = self._validate_identifier(action_name, "action_name")
+            record_id = self._validate_identifier(record_id, "record_id")
+            if rp is not None:
+                rp = self._validate_identifier(rp, "relative_path")
+            if disposition not in VALID_DISPOSITIONS:
+                raise ValueError(
+                    f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
+                )
+            if snapshot and len(snapshot) > 10240:
+                snapshot = '{"__truncated__": true, "partial": ' + json.dumps(snapshot[:8192]) + "}"
+            rows.append((action_name, record_id, disposition, reason, rp, snapshot, detail))
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                # DELETE prior dispositions for each (action_name, record_id) pair,
+                # matching set_disposition's DELETE-before-INSERT pattern (P0-5).
+                cursor.executemany(
+                    "DELETE FROM record_disposition WHERE action_name = ? AND record_id = ?",
+                    [(r[0], r[1]) for r in rows],
+                )
+                cursor.executemany(
+                    """
+                    INSERT INTO record_disposition
+                    (action_name, record_id, disposition, reason, relative_path,
+                     input_snapshot, detail, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    rows,
+                )
+                self.connection.commit()
+                logger.debug(
+                    "Batch set %d dispositions",
+                    len(rows),
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to batch set dispositions: %s (count=%d)",
+                    e,
+                    len(rows),
+                    extra={"workflow_name": self.workflow_name},
+                )
+                raise
+
     def get_disposition(
         self,
         action_name: str,

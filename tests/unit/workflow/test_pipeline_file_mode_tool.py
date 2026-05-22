@@ -509,6 +509,21 @@ def test_file_tool_empty_response_writes_disposition_per_record():
         assert result.source_guid == f"sg-{i + 1}"
 
     mock_backend = MagicMock()
+
+    def _batch_delegate(dispositions):
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            kwargs = {}
+            if reason is not None:
+                kwargs["reason"] = reason
+            if rp is not None:
+                kwargs["relative_path"] = rp
+            if snapshot is not None:
+                kwargs["input_snapshot"] = snapshot
+            if detail is not None:
+                kwargs["detail"] = detail
+            mock_backend.set_disposition(action_name, record_id, disposition, **kwargs)
+
+    mock_backend.set_dispositions_batch = MagicMock(side_effect=_batch_delegate)
     output, stats = ResultCollector.collect_results(
         results,
         {"kind": "tool"},

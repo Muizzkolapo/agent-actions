@@ -147,6 +147,29 @@ class StorageBackend(ABC):
         """
         # No-op: subclass must override to persist dispositions.
 
+    def set_dispositions_batch(
+        self,
+        dispositions: list[tuple[str, str, str, str | None, str | None, str | None, str | None]],
+    ) -> None:
+        """Write multiple disposition records in a single transaction.
+
+        Each tuple: (action_name, record_id, disposition, reason, relative_path,
+                     input_snapshot, detail).
+
+        Default implementation loops over set_disposition. Backends may
+        override for batch-optimized writes.
+        """
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            self.set_disposition(
+                action_name,
+                record_id,
+                disposition,
+                reason=reason,
+                relative_path=rp,
+                input_snapshot=snapshot,
+                detail=detail,
+            )
+
     def get_disposition(
         self,
         action_name: str,

@@ -259,6 +259,21 @@ class TestFilteredDispositionWritten:
             {"content": {"score": 40}, "source_guid": "sg-filter"},
         ]
         mock_backend = MagicMock()
+
+        def _batch_delegate(dispositions):
+            for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+                kwargs = {}
+                if reason is not None:
+                    kwargs["reason"] = reason
+                if rp is not None:
+                    kwargs["relative_path"] = rp
+                if snapshot is not None:
+                    kwargs["input_snapshot"] = snapshot
+                if detail is not None:
+                    kwargs["detail"] = detail
+                mock_backend.set_disposition(action_name, record_id, disposition, **kwargs)
+
+        mock_backend.set_dispositions_batch = MagicMock(side_effect=_batch_delegate)
         context = _make_context(
             guard={"clause": "score >= 80", "behavior": "filter"},
             storage_backend=mock_backend,
@@ -301,6 +316,21 @@ class TestFilteredDispositionWritten:
         ]
         raw = records
         mock_backend = MagicMock()
+
+        def _batch_delegate(dispositions):
+            for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+                kwargs = {}
+                if reason is not None:
+                    kwargs["reason"] = reason
+                if rp is not None:
+                    kwargs["relative_path"] = rp
+                if snapshot is not None:
+                    kwargs["input_snapshot"] = snapshot
+                if detail is not None:
+                    kwargs["detail"] = detail
+                mock_backend.set_disposition(action_name, record_id, disposition, **kwargs)
+
+        mock_backend.set_dispositions_batch = MagicMock(side_effect=_batch_delegate)
         context = _make_context(
             guard={"clause": "score >= 80", "behavior": "filter"},
             storage_backend=mock_backend,
@@ -339,6 +369,21 @@ class TestFilteredDispositionWritten:
         """Record without source_guid -> no disposition write (no crash)."""
         records = [{"content": {"score": 40}}]
         mock_backend = MagicMock()
+
+        def _batch_delegate(dispositions):
+            for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+                kwargs = {}
+                if reason is not None:
+                    kwargs["reason"] = reason
+                if rp is not None:
+                    kwargs["relative_path"] = rp
+                if snapshot is not None:
+                    kwargs["input_snapshot"] = snapshot
+                if detail is not None:
+                    kwargs["detail"] = detail
+                mock_backend.set_disposition(action_name, record_id, disposition, **kwargs)
+
+        mock_backend.set_dispositions_batch = MagicMock(side_effect=_batch_delegate)
         context = _make_context(
             guard={"clause": "score >= 80", "behavior": "filter"},
             storage_backend=mock_backend,
