@@ -11,6 +11,9 @@ from typing import Any
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
     VALID_DISPOSITIONS,
     Disposition,
@@ -1227,8 +1230,8 @@ class SQLiteBackend(StorageBackend):
 
     def perform_maintenance(
         self,
-        prompt_trace_retention_runs: int = 10,
-        source_data_ttl_days: int | None = None,
+        prompt_trace_retention_runs: int = StorageDefaults.PROMPT_TRACE_RETENTION_RUNS,
+        source_data_ttl_days: int | None = StorageDefaults.SOURCE_DATA_TTL_DAYS,
     ) -> None:
         """Run post-workflow maintenance: WAL checkpoint, disposition cleanup,
         prompt trace retention, and source data TTL.
@@ -1276,7 +1279,8 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     DELETE FROM record_disposition
                     WHERE id IN (
                         SELECT old.id
@@ -1284,11 +1288,13 @@ class SQLiteBackend(StorageBackend):
                         INNER JOIN record_disposition success
                             ON old.action_name = success.action_name
                             AND old.record_id = success.record_id
-                        WHERE success.disposition = 'success'
-                          AND old.disposition IN ('failed', 'exhausted')
+                        WHERE success.disposition = ?
+                          AND old.disposition IN (?, ?)
                           AND old.id < success.id
                     )
-                """)
+                    """,
+                    (DISPOSITION_SUCCESS, DISPOSITION_FAILED, DISPOSITION_EXHAUSTED),
+                )
                 self.connection.commit()
                 deleted = cursor.rowcount
                 if deleted > 0:
@@ -1334,8 +1340,10 @@ class SQLiteBackend(StorageBackend):
                     return
 
                 cutoff_date = row[0]
+                # Compare created_at directly (not via DATE()) so indexes can be used.
+                # cutoff_date is "YYYY-MM-DD"; all timestamps before that date sort lower.
                 cursor.execute(
-                    "DELETE FROM prompt_trace WHERE DATE(created_at) < ?",
+                    "DELETE FROM prompt_trace WHERE created_at < ?",
                     (cutoff_date,),
                 )
                 self.connection.commit()
