@@ -26,6 +26,7 @@ from agent_actions.processing.types import (
     RecoveryMetadata,
     RetryMetadata,
 )
+from tests.conftest import wire_batch_disposition_delegate
 
 
 def _retry_metadata(attempts: int = 2) -> RecoveryMetadata:
@@ -42,6 +43,7 @@ def _retry_metadata(attempts: int = 2) -> RecoveryMetadata:
 def _make_backend() -> MagicMock:
     backend = MagicMock()
     backend.set_disposition = MagicMock()
+    wire_batch_disposition_delegate(backend)
     return backend
 
 

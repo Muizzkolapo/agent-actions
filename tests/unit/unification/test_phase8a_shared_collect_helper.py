@@ -33,6 +33,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
 )
+from tests.conftest import wire_batch_disposition_delegate
 
 ACTION_NAME = "test_action"
 
@@ -124,7 +125,9 @@ def _make_deferred_result(
 
 
 def _mock_storage_backend() -> MagicMock:
-    return MagicMock()
+    backend = MagicMock()
+    wire_batch_disposition_delegate(backend)
+    return backend
 
 
 class TestSharedHelperParityWithCollectResults:

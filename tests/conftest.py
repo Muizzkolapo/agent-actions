@@ -3,7 +3,7 @@ import shutil
 import sys
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from click.testing import CliRunner
@@ -133,6 +133,29 @@ def make_mock_config_manager(upstream_refs: list[dict], agent_name: str = "downs
     manager.user_config = {"upstream": upstream_refs}
     manager.project_root = None
     return manager
+
+
+def wire_batch_disposition_delegate(backend: MagicMock) -> None:
+    """Wire ``set_dispositions_batch`` to forward calls to ``set_disposition``.
+
+    Use this on mock backends whose tests assert on per-record
+    ``set_disposition`` calls, since production code now batches
+    dispositions via ``set_dispositions_batch``.
+    """
+
+    def _delegate(dispositions: list) -> None:
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            kwargs: dict = {}
+            if reason is not None:
+                kwargs["reason"] = reason
+            if rp is not None:
+                kwargs["relative_path"] = rp
+            if snapshot is not None or detail is not None:
+                kwargs["input_snapshot"] = snapshot
+                kwargs["detail"] = detail
+            backend.set_disposition(action_name, record_id, disposition, **kwargs)
+
+    backend.set_dispositions_batch = MagicMock(side_effect=_delegate)
 
 
 @pytest.fixture(autouse=True)
