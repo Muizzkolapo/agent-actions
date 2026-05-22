@@ -91,7 +91,7 @@ You will, until you have 15 steps, 3 models, batch retry, and a teammate asks wh
 |----------|-------|----------|-------|
 | OpenAI | Yes | Groq | Yes |
 | Anthropic | Yes | Cohere | Online only |
-| Google Gemini | Yes | Ollama (local) | Online only |
+| Google Gemini | Yes | Ollama (local) | Yes |
 
 Switch providers per-action by changing `model_vendor`.
 
