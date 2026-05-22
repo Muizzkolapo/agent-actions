@@ -511,47 +511,44 @@ class ActionExecutor:
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return ActionStatus.COMPLETED
-        try:
-            if storage_backend.has_disposition(
-                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-            ):
-                target_files = storage_backend.list_target_files(action_name)
-                if not target_files:
-                    logger.info(
-                        "Action '%s' had all records guard-filtered — marking as skipped",
-                        action_name,
-                    )
-                    return ActionStatus.SKIPPED
-                storage_backend.clear_disposition(
-                    action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-                )
-                logger.warning(
-                    "Stale guard-skip disposition on '%s' — action has %d target file(s). "
-                    "A write path set SKIPPED despite output existing. "
-                    "Clearing disposition and proceeding as COMPLETED.",
+        if storage_backend.has_disposition(
+            action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+        ):
+            target_files = storage_backend.list_target_files(action_name)
+            if not target_files:
+                logger.info(
+                    "Action '%s' had all records guard-filtered — marking as skipped",
                     action_name,
-                    len(target_files),
                 )
-            item_failures = storage_backend.get_failed_items(action_name)
-            if item_failures:
-                if not storage_backend.has_successful_items(action_name):
-                    logger.error(
-                        "Action '%s' failed: 0 successful outputs out of %d records. "
-                        "Halting workflow — all downstream actions will be skipped.",
-                        action_name,
-                        len(item_failures),
-                    )
-                    self._log_failure_details(item_failures)
-                    return ActionStatus.FAILED
-                logger.warning(
-                    "Action '%s' completed with %d item-level failure(s)",
+                return ActionStatus.SKIPPED
+            storage_backend.clear_disposition(
+                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+            )
+            logger.warning(
+                "Stale guard-skip disposition on '%s' — action has %d target file(s). "
+                "A write path set SKIPPED despite output existing. "
+                "Clearing disposition and proceeding as COMPLETED.",
+                action_name,
+                len(target_files),
+            )
+        item_failures = storage_backend.get_failed_items(action_name)
+        if item_failures:
+            if not storage_backend.has_successful_items(action_name):
+                logger.error(
+                    "Action '%s' failed: 0 successful outputs out of %d records. "
+                    "Halting workflow — all downstream actions will be skipped.",
                     action_name,
                     len(item_failures),
                 )
                 self._log_failure_details(item_failures)
-                return ActionStatus.COMPLETED_WITH_FAILURES
-        except Exception as e:
-            logger.warning("Could not check partial failures for %s: %s", action_name, e)
+                return ActionStatus.FAILED
+            logger.warning(
+                "Action '%s' completed with %d item-level failure(s)",
+                action_name,
+                len(item_failures),
+            )
+            self._log_failure_details(item_failures)
+            return ActionStatus.COMPLETED_WITH_FAILURES
         return ActionStatus.COMPLETED
 
     def _log_failure_details(self, item_failures: list[dict]) -> None:
