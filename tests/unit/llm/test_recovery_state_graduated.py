@@ -225,7 +225,7 @@ class TestRecoveryStateAtomicWrite:
         # Temp file was observed with valid data before rename
         assert captured_tmp["existed"] is True
         assert captured_tmp["content"]["phase"] == "retry"
-        assert str(captured_tmp["path"]).endswith(".json.tmp")
+        assert str(captured_tmp["path"]).endswith(".tmp")
 
         # Final file is correct, temp file gone
         assert path.exists()
@@ -267,8 +267,7 @@ class TestRecoveryStateAtomicWrite:
         assert len(loaded.graduated_results) == 1
 
         # No leftover temp file
-        tmp_file = path.with_suffix(".json.tmp")
-        assert not tmp_file.exists()
+        assert list(path.parent.glob("*.tmp")) == []
 
     def test_save_error_cleans_up_temp_file(self, tmp_path):
         """On write failure, the temp file is removed — no disk litter."""
@@ -314,7 +313,7 @@ class TestRecoveryStateAtomicWrite:
         assert loaded.phase == "retry"
 
         # Temp file cleaned up
-        assert not path.with_suffix(".json.tmp").exists()
+        assert list(path.parent.glob("*.tmp")) == []
 
     def test_save_error_raises_oserror(self, tmp_path):
         """save() propagates write failures as OSError."""

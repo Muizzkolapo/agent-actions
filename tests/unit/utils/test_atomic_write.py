@@ -1,6 +1,7 @@
 """Tests for atomic_json_write utility."""
 
 import json
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,7 +25,7 @@ class TestAtomicJsonWrite:
         """Temp file is removed after successful write."""
         target = tmp_path / "out.json"
         atomic_json_write(target, {"a": 1})
-        assert not target.with_suffix(".json.tmp").exists()
+        assert list(tmp_path.glob("*.tmp")) == []
 
     def test_json_kwargs_forwarded(self, tmp_path):
         """indent and other json.dump kwargs are respected."""
@@ -65,7 +66,7 @@ class TestAtomicJsonWriteAtomicity:
         with patch.object(Path, "replace", spy):
             atomic_json_write(target, {"spied": True}, ensure_ascii=False)
 
-        assert str(captured["tmp_path"]).endswith(".json.tmp")
+        assert str(captured["tmp_path"]).endswith(".tmp")
         assert captured["tmp_content"] == {"spied": True}
 
     def test_original_survives_write_failure(self, tmp_path):
@@ -96,7 +97,7 @@ class TestAtomicJsonWriteAtomicity:
             atomic_json_write(target, {"v": 2})
 
         assert target.read_text() == original
-        assert not target.with_suffix(".json.tmp").exists()
+        assert list(tmp_path.glob("*.tmp")) == []
 
 
 class TestAtomicJsonWriteErrorHandling:
@@ -143,3 +144,53 @@ class TestAtomicJsonWriteErrorHandling:
             atomic_json_write(target, {"fast": True}, fsync=False)
         mock_fsync.assert_not_called()
         assert json.loads(target.read_text()) == {"fast": True}
+
+
+class TestAtomicJsonWriteConcurrency:
+    """Verify concurrent writes to the same file don't corrupt data."""
+
+    def test_concurrent_writes_no_corruption(self, tmp_path):
+        """N threads writing to the same file never produce corrupt JSON."""
+        target = tmp_path / "shared.json"
+        atomic_json_write(target, {"init": True})
+
+        num_threads = 20
+        errors: list[Exception] = []
+        barrier = threading.Barrier(num_threads)
+
+        def writer(i: int):
+            try:
+                barrier.wait(timeout=5)
+                atomic_json_write(target, {"thread": i, "data": list(range(100))})
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=writer, args=(i,)) for i in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert errors == [], f"Errors during concurrent writes: {errors}"
+        # File must contain valid JSON from one of the writers
+        result = json.loads(target.read_text())
+        assert "thread" in result
+        assert "data" in result
+
+    def test_unique_temp_paths_per_call(self, tmp_path):
+        """Each call to atomic_json_write uses a unique temp path."""
+        target = tmp_path / "out.json"
+        observed_temps: list[Path] = []
+        original_replace = Path.replace
+
+        def spy(self_path, dest):
+            observed_temps.append(self_path)
+            return original_replace(self_path, dest)
+
+        with patch.object(Path, "replace", spy):
+            for i in range(5):
+                atomic_json_write(target, {"i": i})
+
+        # All temp paths must be unique (mkstemp guarantees this)
+        assert len(observed_temps) == 5
+        assert len(set(observed_temps)) == 5
