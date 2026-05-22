@@ -286,9 +286,12 @@ class TestEdgeCases:
             "items": {"type": "string"},
         }
 
-        # Should not crash
+        # Should not crash and should wrap array in an object property
         result = compile_unified_schema(schema, "openai")
-        assert result is not None, "Should compile successfully"
+        assert isinstance(result, dict)
+        props = result["schema"]["properties"]
+        assert "bounded_array" in props
+        assert props["bounded_array"]["type"] == "array"
 
     def test_empty_string_items_type(self):
         """Items with empty string type should be handled."""
@@ -298,6 +301,10 @@ class TestEdgeCases:
             "items": {"type": ""},  # Empty type string
         }
 
-        # Should default to object handling
+        # Should default to object handling and wrap array in object property
         result = compile_unified_schema(schema, "anthropic")
-        assert result is not None, "Should handle gracefully"
+        assert isinstance(result, list)
+        assert len(result) == 1
+        props = result[0]["input_schema"]["properties"]
+        assert "test" in props
+        assert props["test"]["type"] == "array"

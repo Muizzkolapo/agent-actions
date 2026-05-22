@@ -1,5 +1,3 @@
-import os
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -94,16 +92,6 @@ def sample_agent_config_no_json_mode() -> dict[str, Any]:
         "json_mode": False,
         "prompt": "You are helpful",
     }
-
-
-@pytest.fixture(autouse=True)
-def cleanup_temp_files():
-    """Automatically cleanup temporary files after each test."""
-    yield
-    temp_dirs = ["/tmp/agent_actions_test", "/tmp/test_output", "/tmp/test_config"]
-    for temp_dir in temp_dirs:
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
