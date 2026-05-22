@@ -350,7 +350,7 @@ def _prepare_text_chunks_batch(
                 "content": chunk,
                 "batch_id": batch_id,
                 "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
+                "source_guid": str(uuid.uuid4()),
                 "target_id": target_id,
                 # Ancestry Chain: first-stage records are their own root
                 "parent_target_id": None,
@@ -382,7 +382,7 @@ def _add_batch_metadata(
                 **row,
                 "batch_id": batch_id,
                 "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                "source_guid": str(uuid.uuid4()),
                 "target_id": target_id,
                 # Ancestry Chain: first-stage records are their own root
                 "parent_target_id": None,
@@ -503,7 +503,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
 
         src_text = []
         for text in data_chunk:
-            guid = IDGenerator.generate_deterministic_source_guid(text)
+            guid = IDGenerator.generate_source_guid()
             src_text.append({"source_guid": guid, "content": text})
 
     elif ctx.file_type == ".json":
@@ -520,9 +520,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
             if isinstance(item, dict):
                 source_item = item.copy()
                 if "source_guid" not in source_item:
-                    source_item["source_guid"] = IDGenerator.generate_deterministic_source_guid(
-                        item
-                    )
+                    source_item["source_guid"] = IDGenerator.generate_source_guid()
                 src_text.append(source_item)
             else:
                 src_text.append(item)

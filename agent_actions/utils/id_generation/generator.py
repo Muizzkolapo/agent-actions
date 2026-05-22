@@ -19,10 +19,24 @@ class IDGenerator:
         return f"{action_name}_{uuid.uuid4()}"
 
     @staticmethod
-    def generate_deterministic_source_guid(content: Any) -> str:
-        """Generate a deterministic UUID5 source GUID based on content."""
+    def generate_source_guid() -> str:
+        """Generate a unique UUID4 source GUID for a record instance."""
+        return str(uuid.uuid4())
+
+    @staticmethod
+    def generate_content_hash(content: Any) -> str:
+        """Generate a deterministic UUID5 content hash for dedup comparison.
+
+        This is NOT a source_guid — it is a content fingerprint.
+        Use generate_source_guid() for record identity.
+        """
         if isinstance(content, dict):
             content_for_hash = json.dumps(content, sort_keys=True)
         else:
             content_for_hash = str(content)
         return str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
+
+    @staticmethod
+    def generate_deterministic_source_guid(content: Any) -> str:
+        """Deprecated: use generate_content_hash() instead."""
+        return IDGenerator.generate_content_hash(content)
