@@ -309,7 +309,6 @@ guard:
 | Anthropic | `anthropic` | claude-3-5-sonnet, claude-3-5-haiku |
 | Google | `google` | gemini-1.5-pro, gemini-1.5-flash |
 | Groq | `groq` | mixtral-8x7b, llama-3.1-70b |
-| Mistral | `mistral` | mistral-large, mistral-medium |
 | Cohere | `cohere` | command-r-plus |
 | Ollama | `ollama` | llama3, mistral |
 
@@ -347,7 +346,7 @@ actions:
 **Batch:** Asynchronous batch API processing
 - Up to 50% cost savings
 - 24-hour processing window
-- Supported: OpenAI, Anthropic, Google, Groq, Mistral
+- Supported: OpenAI, Anthropic, Google, Groq
 
 ## Environment Variables
 
@@ -358,7 +357,6 @@ actions:
 | `ANTHROPIC_API_KEY` | Alternative Anthropic key |
 | `GOOGLE_API_KEY` | Google Gemini API key |
 | `GROQ_API_KEY` | Groq API key |
-| `MISTRAL_API_KEY` | Mistral API key |
 | `OLLAMA_HOST` | Ollama server URL |
 | `AGENT_ACTIONS_DEBUG` | Enable debug mode (0/1) |
 | `AGENT_ACTIONS_LOG_LEVEL` | Log level (DEBUG, INFO, WARNING, ERROR) |

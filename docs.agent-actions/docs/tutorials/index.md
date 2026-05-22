@@ -171,7 +171,7 @@ actions:
 ```yaml
 default_agent_config:
   api_key: OPENAI_API_KEY        # Environment variable name for your API key
-  model_vendor: openai           # openai, anthropic, google, groq, mistral, ollama_local, ollama_cloud
+  model_vendor: openai           # openai, anthropic, google, groq, ollama_local, ollama_cloud
   model_name: gpt-4o-mini        # Any model supported by your provider
 
 schema_path: schema
