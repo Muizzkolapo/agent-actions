@@ -1078,6 +1078,28 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
+    def clear_source_data(self) -> None:
+        """Delete all rows from source_data table."""
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute("DELETE FROM source_data")
+                self.connection.commit()
+                deleted = cursor.rowcount
+                logger.info(
+                    "Cleared source_data table (%d rows)",
+                    deleted,
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to clear source_data: %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                raise
+
     @staticmethod
     def _format_size(size_bytes: int) -> str:
         """Format bytes as human-readable size."""

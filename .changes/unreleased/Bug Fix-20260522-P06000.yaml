@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "--fresh now clears source_data table, batch recovery state files, batch registry, and batch carry-forward files so a fresh run actually starts clean"
+time: 2026-05-22T00:06:00.000000Z
