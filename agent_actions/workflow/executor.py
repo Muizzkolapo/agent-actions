@@ -54,9 +54,10 @@ def _compute_action_config_hash(
     guard clause + behavior. Changes to these fields invalidate prior
     results. Cosmetic fields (description, tags) are excluded.
     """
-    guard = action_config.get("guard") or {}
-    if isinstance(guard, str):
-        guard = {"clause": guard, "behavior": "skip"}
+    raw_guard: Any = action_config.get("guard") or {}
+    guard: dict[str, str] = (
+        {"clause": raw_guard, "behavior": "skip"} if isinstance(raw_guard, str) else raw_guard
+    )
 
     hash_input = {
         "prompt": prompt_content or action_config.get("prompt", ""),
