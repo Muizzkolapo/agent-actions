@@ -167,7 +167,6 @@ class PromptPreparationService:
 
         llm_context = PromptPreparationService._build_llm_context(
             mode=mode,
-            contents=contents,
             llm_additional_context=llm_additional_context,
             context_scope=context_scope,
         )
@@ -265,7 +264,6 @@ class PromptPreparationService:
 
         llm_context = PromptPreparationService._build_llm_context(
             mode=request.mode,
-            contents=request.contents,
             llm_additional_context=llm_additional_context,
             context_scope=context_scope,
         )
@@ -607,7 +605,6 @@ class PromptPreparationService:
     @staticmethod
     def _build_llm_context(
         mode: str,
-        contents: dict[str, Any],
         llm_additional_context: dict[str, Any],
         context_scope: dict[str, Any] | None = None,
     ) -> dict[str, Any]:

@@ -204,7 +204,6 @@ class TestHardErrorOnMissingContextScope:
         with pytest.raises(ConfigurationError, match="context_scope is required"):
             PromptPreparationService._build_llm_context(
                 mode="online",
-                contents={"text": "hello"},
                 llm_additional_context={},
                 context_scope=None,
             )
@@ -217,7 +216,6 @@ class TestHardErrorOnMissingContextScope:
         with pytest.raises(ConfigurationError, match="context_scope is required"):
             PromptPreparationService._build_llm_context(
                 mode="online",
-                contents={"text": "hello"},
                 llm_additional_context={},
                 context_scope={},
             )
@@ -228,7 +226,6 @@ class TestHardErrorOnMissingContextScope:
 
         result = PromptPreparationService._build_llm_context(
             mode="online",
-            contents={"text": "hello"},
             llm_additional_context={"observed": "value"},
             context_scope={"observe": ["source.text"]},
         )
@@ -243,7 +240,6 @@ class TestHardErrorOnMissingContextScope:
 
         result = PromptPreparationService._build_llm_context(
             mode="batch",
-            contents={"raw_field": "should not appear", "another": "also not"},
             llm_additional_context={"observed_field": "yes"},
             context_scope={"observe": ["source.observed_field"]},
         )

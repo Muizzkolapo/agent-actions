@@ -258,7 +258,7 @@ class TestCallApiCachingIntegration:
         mock_client.messages.create.return_value = mock_response
 
         config = _make_agent_config(enable_prompt_caching=True)
-        AnthropicClient._call_api("test-key", config, PROMPT, {}, None, "non_json")
+        AnthropicClient._call_api("test-key", config, PROMPT, {}, None)
 
         call_kwargs = mock_client.messages.create.call_args
         api_args = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]
@@ -287,7 +287,7 @@ class TestCallApiCachingIntegration:
         mock_client.messages.create.return_value = mock_response
 
         config = _make_agent_config(enable_prompt_caching=False)
-        AnthropicClient._call_api("test-key", config, PROMPT, {}, None, "non_json")
+        AnthropicClient._call_api("test-key", config, PROMPT, {}, None)
 
         call_kwargs = mock_client.messages.create.call_args
         api_args = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]
@@ -313,7 +313,7 @@ class TestCallApiCachingIntegration:
         mock_client.messages.create.return_value = mock_response
 
         config = _make_agent_config(enable_prompt_caching=True)
-        AnthropicClient._call_api("test-key", config, PROMPT, {}, SCHEMA, "json")
+        AnthropicClient._call_api("test-key", config, PROMPT, {}, SCHEMA)
 
         call_kwargs = mock_client.messages.create.call_args
         api_args = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]

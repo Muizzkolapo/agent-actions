@@ -75,11 +75,6 @@ def resolve_absolute_path(path: str | Path) -> Path:
     return get_path_manager().normalize_path(path)
 
 
-def check_path_exists(path: str | Path) -> bool:
-    """Check if a path exists."""
-    return Path(path).exists()
-
-
 def find_project_root(start_path: Path | None = None) -> Path:
     """Find project root by looking for marker file.
 
@@ -88,36 +83,6 @@ def find_project_root(start_path: Path | None = None) -> Path:
     """
     pm = get_path_manager()
     return pm.get_project_root(start_path)
-
-
-def create_mirror_source_path(target_path: str | Path) -> Path:
-    """Create a source path by mirroring the target path structure."""
-    return get_path_manager().create_mirror_path(Path(target_path), "target", "source")
-
-
-def validate_path_permissions(
-    path: str | Path, readable: bool = False, writable: bool = False
-) -> bool:
-    """Validate path permissions, returning False on failure."""
-    requirements = {}
-    if readable:
-        requirements["must_be_readable"] = True
-    if writable:
-        requirements["must_be_writable"] = True
-    try:
-        return get_path_manager().validate_path(Path(path), requirements)
-    except (PermissionError, OSError, ValueError) as e:
-        logger.debug(
-            "Path validation failed, returning False: %s",
-            e,
-            extra={
-                "path": str(path),
-                "readable": readable,
-                "writable": writable,
-                "operation": "path_permission_validation",
-            },
-        )
-        return False
 
 
 def clean_directory(directory: str | Path, recursive: bool = False) -> bool:
@@ -130,46 +95,6 @@ def get_relative_path(path: str | Path, base: str | Path) -> Path:
     abs_path = resolve_absolute_path(path)
     abs_base = resolve_absolute_path(base)
     return abs_path.relative_to(abs_base)
-
-
-def find_files_by_extension(directory: str | Path, extension: str) -> list[Path]:
-    """Find all files with the given extension in directory (recursive)."""
-    if not extension.startswith("."):
-        extension = f".{extension}"
-    pattern = f"**/*{extension}"
-    return get_path_manager().find_files_by_pattern(pattern, Path(directory))
-
-
-def safe_path_join(*parts: str | Path) -> Path:
-    """Join path parts, raising FileSystemError if result is outside the project."""
-    joined_path = Path()
-    for part in parts:
-        joined_path = joined_path / Path(part)
-    resolved_path = resolve_absolute_path(joined_path)
-    from agent_actions.errors import FileSystemError
-
-    pm = get_path_manager()
-    if not pm.is_within_project(resolved_path):
-        raise FileSystemError(
-            f"Path {resolved_path} is outside project bounds",
-            context={
-                "resolved_path": str(resolved_path),
-                "project_root": str(pm.get_project_root()),
-                "operation": "safe_join_paths",
-            },
-        )
-    return resolved_path
-
-
-def create_agent_directory_structure(agent_name: str) -> dict[str, Path]:
-    """Create the standard agent directory structure under the project root."""
-    pm = get_path_manager()
-    agent_paths = pm.get_agent_paths(agent_name)
-    created_paths = {}
-    for name, path in agent_paths.items():
-        created_paths[name] = ensure_directory_exists(path)
-    logger.info("Created agent directory structure for %s", agent_name)
-    return created_paths
 
 
 def derive_workflow_root(target_path: str | Path) -> Path:

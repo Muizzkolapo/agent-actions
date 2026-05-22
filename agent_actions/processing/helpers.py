@@ -53,7 +53,6 @@ def run_dynamic_agent(
 
     response = agent_builder.create_dynamic_agent(
         agent_config,
-        agent_name,
         llm_data,
         formatted_prompt,
         tools_path=tools_path,

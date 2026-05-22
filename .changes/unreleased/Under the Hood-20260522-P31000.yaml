@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove 12 dead functions, 11 backward-compat aliases, 6 vestigial parameters, and ghost mistral provider directory"
+time: 2026-05-22T03:10:00.000000Z

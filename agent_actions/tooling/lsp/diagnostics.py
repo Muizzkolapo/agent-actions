@@ -109,7 +109,7 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
 
     for action in actions.values():
         if action.guard_condition and action.guard_variables:
-            available = _action_guard_variables(action, index)
+            available = _action_guard_variables(action)
             for variable in action.guard_variables:
                 if variable not in available:
                     message = (
@@ -173,7 +173,7 @@ def collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> s
     return variables
 
 
-def _action_guard_variables(action, index: ProjectIndex) -> set[str]:
+def _action_guard_variables(action) -> set[str]:
     """Variables available to a specific action's guard condition.
 
     An action's guard runs before the action, so it can only see what
