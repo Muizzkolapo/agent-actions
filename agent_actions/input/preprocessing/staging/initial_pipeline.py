@@ -21,6 +21,7 @@ from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
+from agent_actions.utils.id_generation import IDGenerator
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -330,8 +331,6 @@ def _prepare_text_chunks_batch(
     content: str, agent_config: dict[str, Any], batch_id: str, node_id: str
 ) -> list[dict[str, Any]]:
     """Prepare text chunks for batch mode."""
-    from agent_actions.utils.id_generation import IDGenerator
-
     chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
     chunk_size = chunk_config.get("chunk_size", get_default("chunk_size"))
     chunk_overlap = chunk_config.get("overlap", get_default("chunk_overlap"))
@@ -376,8 +375,6 @@ def _add_batch_metadata(
     rows: list[dict[str, Any]], batch_id: str, node_id: str
 ) -> list[dict[str, Any]]:
     """Add batch metadata to rows of data."""
-    from agent_actions.utils.id_generation import IDGenerator
-
     result = []
     for idx, row in enumerate(rows):
         target_id = str(uuid.uuid4())
@@ -503,8 +500,6 @@ def _prepare_online_data(ctx: DataPreparationContext):
         data_chunk = chunks
 
         # GUIDs must match what UnifiedProcessor/OnlineLLMStrategy will generate
-        from agent_actions.utils.id_generation import IDGenerator
-
         src_text = []
         for text in data_chunk:
             guid = IDGenerator.generate_source_guid()
@@ -517,8 +512,6 @@ def _prepare_online_data(ctx: DataPreparationContext):
             data_chunk = [data_chunk]
 
         # Do NOT mutate data_chunk: OnlineLLMStrategy hashes raw items for source_guid
-        from agent_actions.utils.id_generation import IDGenerator
-
         src_text = []
         for item in data_chunk:
             if isinstance(item, dict):
