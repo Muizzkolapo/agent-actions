@@ -271,6 +271,11 @@ class AgentWorkflow:
 
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
+        from agent_actions.llm.batch.services.submission import BATCH_CARRY_FORWARD_FILENAME
+
+        project_root = self.config.resolve_project_root()
+        target_dir = project_root / "agent_io" / "target"
+
         for action_name in self.execution_order:
             try:
                 self.storage_backend.delete_target(action_name)
@@ -278,14 +283,31 @@ class AgentWorkflow:
                 self.storage_backend.clear_prompt_traces(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
+
+            # Batch artifacts live on disk, not in the DB
+            batch_dir = target_dir / action_name / "batch"
+            if batch_dir.is_dir():
+                for pattern in [
+                    ".recovery_state_*.json",
+                    ".batch_registry.json",
+                    BATCH_CARRY_FORWARD_FILENAME,
+                ]:
+                    for f in batch_dir.glob(pattern):
+                        try:
+                            f.unlink()
+                            logger.debug("Removed batch artifact: %s", f)
+                        except OSError as e:
+                            logger.warning("Failed to remove %s: %s", f, e)
+
+        try:
+            self.storage_backend.clear_source_data()
+        except Exception as e:
+            logger.warning("Failed to clear source data: %s", e)
+
         self.services.core.state_manager.reset()
 
-        # Clear event log files so --fresh gives a clean debugging slate.
-        # JSONFileHandler opens lazily (on first flush), so deleting between
-        # handler init and first event write is safe.
-        # Path convention mirrors LoggerFactory.initialize() (logging/factory.py).
-        project_root = self.config.resolve_project_root()
-        target_dir = project_root / "agent_io" / "target"
+        # JSONFileHandler opens lazily, so deleting between handler init
+        # and first event write is safe.
         for events_file in ("events.json", "errors.json"):
             events_path = target_dir / events_file
             try:

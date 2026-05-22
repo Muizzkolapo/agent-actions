@@ -257,6 +257,10 @@ class StorageBackend(ABC):
         """Delete traces for an action, or all if action_name is None."""
         return 0
 
+    def clear_source_data(self) -> None:
+        """Delete all rows from the source_data table."""
+        raise NotImplementedError(f"{type(self).__name__} must implement clear_source_data()")
+
     def delete_target(self, action_name: str) -> int:
         """Delete all target data for an action. Returns count deleted.
 
