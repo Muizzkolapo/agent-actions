@@ -164,10 +164,7 @@ class ActionExecutor:
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
-                try:
-                    storage_backend.clear_disposition(action_name)
-                except Exception as e:
-                    logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
+                storage_backend.clear_disposition(action_name)
             return ActionStatus.PENDING
         return current_status
 

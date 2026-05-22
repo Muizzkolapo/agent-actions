@@ -87,12 +87,9 @@ class ActionStateManager:
         }
 
     def _save_status(self):
-        """Persist current status to file."""
-        try:
-            self.status_file.parent.mkdir(parents=True, exist_ok=True)
-            atomic_json_write(self.status_file, self.action_status, indent=4)
-        except (OSError, ValueError, TypeError) as e:
-            logger.error("Error saving status: %s", e)
+        """Persist current status to file. Raises on I/O failure."""
+        self.status_file.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json_write(self.status_file, self.action_status, indent=4)
 
     def update_status(self, action_name: str, status: ActionStatus, **metadata):
         """Update action status and persist to file."""
