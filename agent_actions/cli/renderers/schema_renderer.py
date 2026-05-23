@@ -65,19 +65,6 @@ class SchemaRenderer:
             for dep in schema.dependencies:
                 deps_branch.add(dep)
 
-        if schema.upstream_refs:
-            inputs_branch = tree.add("[green]uses (from templates):[/green]")
-            by_source: dict[str, list] = {}
-            for ref in schema.upstream_refs:
-                if ref.source_agent not in by_source:
-                    by_source[ref.source_agent] = []
-                by_source[ref.source_agent].append(ref)
-
-            for source, refs in sorted(by_source.items()):
-                source_branch = inputs_branch.add(f"[bold]{source}[/bold]")
-                for ref in refs:
-                    source_branch.add(f"{ref.field_name} [dim]({ref.location})[/dim]")
-
         if schema.kind == ActionKind.TOOL and schema.input_fields:
             schema_branch = tree.add("[green]expects (input schema):[/green]")
             for field in schema.input_fields:
@@ -87,11 +74,6 @@ class SchemaRenderer:
                     schema_branch.add(f"{field.name} [dim](optional)[/dim]")
 
         self._add_outputs_to_tree(tree, schema)
-
-        if schema.downstream:
-            downstream_branch = tree.add("[magenta]downstream (used by):[/magenta]")
-            for d in schema.downstream:
-                downstream_branch.add(d)
 
         return Panel(tree, title=f"Action: {schema.name}")
 
@@ -138,11 +120,7 @@ class SchemaRenderer:
         """Add an action node to the flow tree."""
         action_branch = tree.add(f"[cyan]{schema.name}[/cyan] ({schema.kind.value})")
 
-        if schema.upstream_refs:
-            inputs_branch = action_branch.add("[green]uses:[/green]")
-            for ref in schema.upstream_refs:
-                inputs_branch.add(f"{ref.source_agent}.{ref.field_name}")
-        elif schema.kind == ActionKind.TOOL and schema.input_fields:
+        if schema.kind == ActionKind.TOOL and schema.input_fields:
             inputs_branch = action_branch.add("[green]expects:[/green]")
             for field in schema.input_fields:
                 if field.is_required:
@@ -153,11 +131,6 @@ class SchemaRenderer:
             action_branch.add("[dim](workflow input)[/dim]")
 
         self._add_outputs_to_tree(action_branch, schema, show_dropped=verbose)
-
-        if verbose and schema.downstream:
-            downstream_branch = action_branch.add("[magenta]downstream:[/magenta]")
-            for d in schema.downstream:
-                downstream_branch.add(d)
 
     def _add_outputs_to_tree(
         self,

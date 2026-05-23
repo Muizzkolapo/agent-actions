@@ -103,45 +103,6 @@ class TestWorkflowSchemaService:
         # first should come before second
         assert order.index("first") < order.index("second")
 
-    def test_get_downstream_actions(self):
-        """Test get_downstream_actions returns dependents."""
-        service = self._create_service(
-            [
-                {"name": "producer", "model_vendor": "openai"},
-                {
-                    "name": "consumer1",
-                    "model_vendor": "openai",
-                    "depends_on": ["producer"],
-                },
-                {
-                    "name": "consumer2",
-                    "model_vendor": "openai",
-                    "depends_on": ["producer"],
-                },
-            ]
-        )
-
-        downstream = service.get_downstream_actions("producer")
-
-        assert sorted(downstream) == ["consumer1", "consumer2"]
-
-    def test_get_downstream_actions_empty(self):
-        """Test get_downstream_actions returns empty for leaf action."""
-        service = self._create_service(
-            [
-                {"name": "producer", "model_vendor": "openai"},
-                {
-                    "name": "consumer",
-                    "model_vendor": "openai",
-                    "depends_on": ["producer"],
-                },
-            ]
-        )
-
-        downstream = service.get_downstream_actions("consumer")
-
-        assert downstream == []
-
     def test_workflow_name(self):
         """Test workflow_name property."""
         config = {
@@ -174,31 +135,6 @@ class TestWorkflowSchemaService:
         # All should be SCHEMA source
         for f in schema.output_fields:
             assert f.source == FieldSource.SCHEMA
-
-    def test_action_schema_includes_upstream_refs(self):
-        """Test action schema correctly includes upstream references."""
-        service = self._create_service(
-            [
-                {
-                    "name": "extractor",
-                    "model_vendor": "openai",
-                    "schema": {"text": "str"},
-                },
-                {
-                    "name": "consumer",
-                    "model_vendor": "openai",
-                    "depends_on": ["extractor"],
-                    "prompt": "Process: {{ action.extractor.text }}",
-                },
-            ]
-        )
-
-        schema = service.get_action_schema("consumer")
-
-        assert len(schema.upstream_refs) >= 1
-        ref = schema.upstream_refs[0]
-        assert ref.source_agent == "extractor"
-        assert ref.field_name == "text"
 
     def test_hitl_action_schema_preserves_hitl_kind(self):
         """Test HITL action is classified as HITL kind with canonical output fields."""
@@ -236,23 +172,6 @@ class TestWorkflowSchemaService:
         schema = service.get_action_schema("downstream")
 
         assert "upstream" in schema.dependencies
-
-    def test_action_schema_includes_downstream(self):
-        """Test action schema includes downstream actions."""
-        service = self._create_service(
-            [
-                {"name": "producer", "model_vendor": "openai"},
-                {
-                    "name": "consumer",
-                    "model_vendor": "openai",
-                    "depends_on": ["producer"],
-                },
-            ]
-        )
-
-        schema = service.get_action_schema("producer")
-
-        assert "consumer" in schema.downstream
 
 
 class TestExtractFieldMetadata:

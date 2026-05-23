@@ -138,7 +138,6 @@ Both `.agent_status.json` AND the store DB must be cleared. Clearing only one ca
 ```bash
 agac run -a workflow                    # Run
 agac run -a workflow --fresh            # Clear and re-run
-agac run -a workflow --downstream       # Run from a specific action forward
 agac render -a workflow                 # Compiled YAML
 agac list-udfs                          # List registered tools
 agac validate-udfs                      # Check tool implementations

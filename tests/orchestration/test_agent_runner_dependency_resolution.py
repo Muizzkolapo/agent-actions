@@ -110,7 +110,6 @@ class TestDependencyPatterns:
         runner.action_indices = {}
         runner.manifest_manager = None
         runner.storage_backend = None
-        runner.virtual_actions = {}
         return runner
 
     @pytest.fixture
@@ -318,7 +317,6 @@ class TestResolveDependencyDirectories:
         runner.action_indices = {"action_A": 0, "action_B": 1, "action_C": 2}
         runner.manifest_manager = None  # No manifest manager for simple tests
         runner.storage_backend = None
-        runner.virtual_actions = {}
         return runner
 
     @pytest.fixture
@@ -472,7 +470,6 @@ class TestResolveDependencyDirectoriesIntegration:
         """Create ActionRunner with workflow indices."""
         runner = ActionRunner.__new__(ActionRunner)
         runner.storage_backend = None
-        runner.virtual_actions = {}
         runner.action_indices = {
             "extract_raw_qa": 0,
             "flatten_raw_questions": 1,
@@ -522,7 +519,6 @@ class TestResolveDependencyDirectoriesIntegration:
         runner.action_indices = {"validate_1": 0, "validate_2": 1, "validate_3": 2, "aggregate": 3}
         runner.manifest_manager = None
         runner.storage_backend = None
-        runner.virtual_actions = {}
 
         dependencies = ["validate_1", "validate_2", "validate_3"]
         result = runner._resolve_dependency_directories(

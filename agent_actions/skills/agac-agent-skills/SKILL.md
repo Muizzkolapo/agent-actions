@@ -1,6 +1,6 @@
 ---
 name: agac
-description: Build, configure, and debug agent-actions agentic workflows. Trigger on workflow YAML, UDFs, context_scope, guards, versions, schemas, seed data, prompts, reprompt, HITL, cross-workflow chaining, or debugging empty/filtered/mismatched output.
+description: Build, configure, and debug agent-actions agentic workflows. Trigger on workflow YAML, UDFs, context_scope, guards, versions, schemas, seed data, prompts, reprompt, HITL, or debugging empty/filtered/mismatched output.
 ---
 
 # Agent Actions Workflow Builder
@@ -527,17 +527,6 @@ LLM output checked by a UDF. If validation fails, LLM is re-prompted with the er
 
 The validation UDF returns `{"valid": true}` or `{"valid": false, "feedback": "Too short"}`.
 
-### Cross-Workflow Chaining
-
-Workflow B consumes output from Workflow A. All namespaces cross the boundary.
-
-```yaml
-# In workflow B's config:
-upstream_workflows:
-  - workflow: workflow_a
-    actions: [final_action]          # which actions to import
-```
-
 ### Passthrough Routing (Zero-Token Forwarding)
 
 Carry fields downstream without putting them in the prompt (saves tokens).
@@ -565,8 +554,7 @@ Carry fields downstream without putting them in the prompt (saves tokens).
 | 7 | Grounded retrieval | LLM → tool search → LLM rank |
 | 8 | Guard gates | `guard.on_false: filter` or `skip` |
 | 9 | HITL | `kind: hitl`, `granularity: file` |
-| 10 | Cross-workflow | `upstream_workflows` config |
-| 11 | Context isolation | `drop` directive in context_scope |
+| 10 | Context isolation | `drop` directive in context_scope |
 | 12 | Reprompt validation | `reprompt.validation` UDF |
 | 13 | Non-JSON field-by-field | `json_mode: false`, `output_field` |
 | 14 | 1→N flatten | Record tool returns `list[dict]` |

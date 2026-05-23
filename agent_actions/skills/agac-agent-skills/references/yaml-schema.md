@@ -229,51 +229,6 @@ Execute actions in parallel or sequential versions:
   reduce_key: content_id
 ```
 
-## Cross-Workflow Dependencies
-
-Chain workflows together using the `upstream` field at the workflow level. Upstream actions are injected into the downstream workflow's namespace — use them in `dependencies` and `context_scope` with the same syntax as local actions.
-
-```yaml
-# agent_config/enrich.yml
-name: enrich
-description: "Enrich extracted data"
-upstream:
-  - workflow: ingest
-    actions: [extract, classify]
-
-defaults:
-  model_vendor: openai
-  model_name: gpt-4o
-
-actions:
-  - name: enrich_text
-    intent: "Enrich with additional context"
-    dependencies: [extract]          # References ingest's extract action
-    context_scope:
-      observe:
-        - extract.*                  # All fields from upstream extract
-        - classify.category          # Specific field from upstream classify
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `upstream` | list | Workflow-level list of upstream references |
-| `upstream[].workflow` | string | Name of upstream workflow |
-| `upstream[].actions` | list[string] | Actions to import (at least 1 required) |
-
-**Rules:**
-- Action names cannot collide between local and upstream actions
-- Same action cannot be imported from multiple upstream workflows
-- Without `--upstream`/`--downstream` flags, upstream outputs must already exist
-
-**CLI flags for chaining:**
-
-```bash
-agac run -a ingest --downstream     # Run ingest, then all dependents
-agac run -a analyze --upstream      # Run all dependencies, then analyze
-agac run -a enrich --upstream --downstream  # Run full lineage
-```
-
 ## Guards
 
 ```yaml

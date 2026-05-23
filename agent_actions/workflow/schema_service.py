@@ -12,7 +12,6 @@ from agent_actions.models.action_schema import (
     ActionSchema,
     FieldInfo,
     FieldSource,
-    UpstreamReference,
 )
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.validation.static_analyzer import (
@@ -160,11 +159,6 @@ class WorkflowSchemaService:
 
         return [name for name in order if not self.graph.is_special_namespace(name)]
 
-    def get_downstream_actions(self, action_name: str) -> list[str]:
-        """Return sorted list of action names that depend on action_name."""
-        downstream_nodes = self.graph.get_downstream_nodes(action_name)
-        return sorted(node.name for node in downstream_nodes)
-
     def to_dict(self) -> dict[str, Any]:
         """Convert full analysis to dictionary for JSON serialization."""
         validation = self.validate()
@@ -255,16 +249,6 @@ class WorkflowSchemaService:
 
     def _build_action_schema(self, node: DataFlowNode) -> ActionSchema:
         """Build ActionSchema from a DataFlowNode."""
-        upstream_refs = [
-            UpstreamReference(
-                source_agent=req.source_agent,
-                field_name=req.field_path,
-                location=req.location,
-                raw_reference=req.raw_reference,
-            )
-            for req in node.input_requirements
-        ]
-
         input_fields = []
         if node.input_schema:
             for field_name in node.input_schema.required_fields:
@@ -322,8 +306,6 @@ class WorkflowSchemaService:
 
         output_fields = list(seen.values())
 
-        downstream = self.get_downstream_actions(node.name)
-
         is_template_based = False
         if node.input_schema:
             is_template_based = node.input_schema.is_template_based
@@ -331,11 +313,9 @@ class WorkflowSchemaService:
         return ActionSchema(
             name=node.name,
             kind=ActionKind(node.agent_kind.value),
-            upstream_refs=upstream_refs,
             input_fields=sorted(input_fields, key=lambda f: (not f.is_required, f.name)),
             output_fields=sorted(output_fields, key=lambda f: f.name),
             dependencies=sorted(node.dependencies),
-            downstream=downstream,
             is_dynamic=out.is_dynamic,
             is_schemaless=out.is_schemaless,
             is_template_based=is_template_based,

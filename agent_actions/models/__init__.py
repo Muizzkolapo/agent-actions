@@ -5,7 +5,6 @@ from .action_schema import (
     ActionSchema,
     FieldInfo,
     FieldSource,
-    UpstreamReference,
 )
 
 __all__ = [
@@ -13,5 +12,4 @@ __all__ = [
     "ActionSchema",
     "FieldInfo",
     "FieldSource",
-    "UpstreamReference",
 ]

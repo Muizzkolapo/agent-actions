@@ -1,6 +1,6 @@
 """Dataclass models for action workflow orchestration."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -33,7 +33,6 @@ class WorkflowRuntimeConfig:
     verify_keys: bool = False
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None
-    upstream_scope: list[str] | None = None
 
     def resolve_project_root(self) -> Path:
         """Resolve effective project root from manager, config, or cwd."""
@@ -58,19 +57,6 @@ class RuntimeContext:
 
 
 @dataclass
-class VirtualAction:
-    """An action from an upstream workflow, injected as pre-completed.
-
-    Virtual actions appear in the downstream workflow's namespace so that
-    ``context_scope`` and ``dependencies`` can reference them, but they
-    are NOT added to the execution order (they already ran).
-    """
-
-    source_workflow: str
-    action_name: str
-
-
-@dataclass
 class WorkflowMetadata:
     """Workflow configuration metadata."""
 
@@ -78,7 +64,6 @@ class WorkflowMetadata:
     execution_order: list[str]
     action_indices: dict[str, int]
     action_configs: dict[str, dict[str, Any]]
-    virtual_actions: dict[str, VirtualAction] = field(default_factory=dict)
 
 
 @dataclass

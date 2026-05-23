@@ -84,30 +84,6 @@ Under `seed` namespace, keyed by `seed_path:` name:
 ```
 Access: `data["seed"]["rubric"]["min_score"]`
 
-## Cross-Workflow Chaining
-
-Declare `upstream` at workflow level. Upstream actions injected as virtual completed actions -- downstream reads directly from upstream's output directories.
-
-```yaml
-name: enrich
-upstream:
-  - workflow: ingest
-    actions: [extract, classify]
-
-actions:
-  - name: enrich_text
-    dependencies: [extract]
-    context_scope:
-      observe: [extract.*, classify.category]
-```
-
-```bash
-agac run -a ingest                  # Run upstream only
-agac run -a enrich                  # Run downstream (upstream must exist)
-agac run -a ingest --downstream     # Run ingest then everything after
-agac run -a enrich --upstream       # Run ingest first, then enrich
-```
-
 ## Grounded Retrieval
 
 Prevent hallucination by constraining LLM to real data: LLM generates search criteria -> tool retrieves real candidates -> LLM ranks from candidates only.
