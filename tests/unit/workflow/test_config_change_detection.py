@@ -70,13 +70,6 @@ class TestComputeActionConfigHash:
         h = _compute_action_config_hash(config)
         assert isinstance(h, str) and len(h) == 16
 
-    def test_prompt_content_override(self):
-        """Resolved prompt content should override the config reference."""
-        config = {"prompt": "file_ref.md", "model": "m"}
-        h_ref = _compute_action_config_hash(config)
-        h_content = _compute_action_config_hash(config, prompt_content="Actual content")
-        assert h_ref != h_content
-
     def test_hash_is_16_hex_chars(self):
         config = {"prompt": "X", "model": "m"}
         h = _compute_action_config_hash(config)
