@@ -98,5 +98,3 @@ def build_guard_context(
                     )
 
     return field_context
-
-
