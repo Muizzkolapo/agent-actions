@@ -94,35 +94,6 @@ def sample_agent_config_no_json_mode() -> dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
-# Shared workflow test helpers
-# ---------------------------------------------------------------------------
-
-
-def write_workflow_config(config_dir: Path, name: str, upstream: list[dict] | None = None) -> None:
-    """Write a minimal workflow YAML to *config_dir* for orchestrator tests."""
-    lines = [f"name: {name}", "description: test", "actions:"]
-    lines.append(f"  - name: {name}_action")
-    lines.append("    intent: do something")
-    if upstream:
-        lines.append("upstream:")
-        for ref in upstream:
-            lines.append(f"  - workflow: {ref['workflow']}")
-            actions = ref.get("actions", [f"{ref['workflow']}_action"])
-            lines.append(f"    actions: [{', '.join(actions)}]")
-    config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / f"{name}.yml").write_text("\n".join(lines))
-
-
-def make_mock_config_manager(upstream_refs: list[dict], agent_name: str = "downstream_wf") -> Mock:
-    """Create a mock ConfigManager with upstream declarations."""
-    manager = Mock()
-    manager.agent_name = agent_name
-    manager.user_config = {"upstream": upstream_refs}
-    manager.project_root = None
-    return manager
-
-
 def wire_batch_disposition_delegate(backend: MagicMock) -> None:
     """Wire ``set_dispositions_batch`` to forward calls to ``set_disposition``.
 

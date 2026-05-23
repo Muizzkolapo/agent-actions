@@ -159,20 +159,7 @@ Tool results ground the next LLM call. Same namespace rules for both.
 
 ---
 
-## 7. Cross-Workflow Chaining
-
-```yaml
-# In downstream workflow config
-upstream:
-  workflow: upstream_workflow_name
-  actions: [format_output]
-```
-
-All upstream namespaces preserved. Downstream adds its own on top.
-
----
-
-## 8. Context Isolation (Bias Prevention)
+## 7. Context Isolation (Bias Prevention)
 
 ```yaml
 - name: score_quality

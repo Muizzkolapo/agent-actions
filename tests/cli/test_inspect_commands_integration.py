@@ -73,25 +73,21 @@ def _make_action_schemas():
         "extract": ActionSchema(
             name="extract",
             kind=ActionKind.LLM,
-            upstream_refs=[],
             input_fields=[],
             output_fields=[
                 FieldInfo(name="fact", source=FieldSource.SCHEMA, field_type="string"),
             ],
             dependencies=[],
-            downstream=["summarize"],
         ),
         "summarize": ActionSchema(
             name="summarize",
             kind=ActionKind.LLM,
-            upstream_refs=[],
             input_fields=[],
             output_fields=[
                 FieldInfo(name="score", source=FieldSource.SCHEMA, field_type="number"),
                 FieldInfo(name="summary", source=FieldSource.SCHEMA, field_type="string"),
             ],
             dependencies=["extract"],
-            downstream=[],
         ),
     }
 

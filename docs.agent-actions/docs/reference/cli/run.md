@@ -42,8 +42,6 @@ agac run -a my_workflow --execution-mode parallel
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
 | `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json`) before execution. Gives a clean slate for debugging. |
 | `--verify-keys` | Verify API keys before execution |
-| `--downstream` | Also run all downstream dependencies |
-| `--upstream` | Run all upstream dependencies first |
 
 ## Parallel Execution
 

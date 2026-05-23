@@ -1,15 +1,13 @@
-"""Tests for spec 046: reprompt batch source.* resolution + downstream pause gating.
+"""Tests for reprompt batch source data resolution.
 
-Bug 1: Reprompt batch fails because source_data is not passed to prepare_tasks().
-Bug 2: --downstream launches downstream workflows when parent is paused for batch.
+Covers _load_source_data_for_reprompt and source_data forwarding
+to prepare_tasks in both sync and async reprompt paths.
 """
 
 from unittest.mock import MagicMock, patch
 
-from agent_actions.validation.run_validator import RunCommandArgs
-
 # ---------------------------------------------------------------------------
-# Bug 1: _load_source_data_for_reprompt
+# _load_source_data_for_reprompt
 # ---------------------------------------------------------------------------
 
 
@@ -98,7 +96,7 @@ class TestLoadSourceDataForReprompt:
 
 
 # ---------------------------------------------------------------------------
-# Bug 1: source_data forwarded to prepare_tasks in both reprompt paths
+# source_data forwarded to prepare_tasks in both reprompt paths
 # ---------------------------------------------------------------------------
 
 
@@ -230,156 +228,3 @@ class TestRepromptPassesSourceData:
         # Verify source_data was passed to prepare_tasks
         prep_call = mock_prep_instance.prepare_tasks.call_args
         assert prep_call.kwargs.get("source_data") is fake_source
-
-
-# ---------------------------------------------------------------------------
-# Bug 2: downstream deferred during batch pause
-# ---------------------------------------------------------------------------
-
-
-class TestExecuteChainBatchPauseGating:
-    """_execute_chain defers downstream workflows when parent is PAUSED."""
-
-    def test_defers_downstream_when_parent_paused(self, tmp_path):
-        from agent_actions.cli.run import RunCommand
-
-        args = RunCommandArgs(agent="parent_wf", downstream=True)
-        cmd = RunCommand(args)
-
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.resolve_execution_plan.return_value = [
-            "parent_wf",
-            "child_wf",
-            "grandchild_wf",
-        ]
-
-        executed = []
-
-        def mock_execute_single(self_inner, project_root=None):
-            executed.append(self_inner.agent_name)
-            return "PAUSED"
-
-        with (
-            patch(
-                "agent_actions.workflow.orchestrator.WorkflowOrchestrator",
-                return_value=mock_orchestrator,
-            ),
-            patch.object(RunCommand, "_execute_single", mock_execute_single),
-        ):
-            cmd._execute_chain(project_root=tmp_path)
-
-        # Only the first workflow should have executed
-        assert executed == ["parent_wf"]
-
-    def test_prints_deferral_messages(self, tmp_path, capsys):
-        from agent_actions.cli.run import RunCommand
-
-        args = RunCommandArgs(agent="parent_wf", downstream=True)
-        cmd = RunCommand(args)
-
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.resolve_execution_plan.return_value = [
-            "parent_wf",
-            "child_wf",
-            "grandchild_wf",
-        ]
-
-        def mock_execute_single(self_inner, project_root=None):
-            return "PAUSED"
-
-        with (
-            patch(
-                "agent_actions.workflow.orchestrator.WorkflowOrchestrator",
-                return_value=mock_orchestrator,
-            ),
-            patch.object(RunCommand, "_execute_single", mock_execute_single),
-        ):
-            cmd._execute_chain(project_root=tmp_path)
-
-        output = capsys.readouterr().out
-        assert "Downstream workflow 'child_wf' deferred" in output
-        assert "Downstream workflow 'grandchild_wf' deferred" in output
-        assert "waiting for parent batch to complete" in output
-
-    def test_continues_downstream_when_parent_succeeds(self, tmp_path):
-        from agent_actions.cli.run import RunCommand
-
-        args = RunCommandArgs(agent="parent_wf", downstream=True)
-        cmd = RunCommand(args)
-
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.resolve_execution_plan.return_value = [
-            "parent_wf",
-            "child_wf",
-            "grandchild_wf",
-        ]
-
-        executed = []
-
-        def mock_execute_single(self_inner, project_root=None):
-            executed.append(self_inner.agent_name)
-            return "SUCCESS"
-
-        with (
-            patch(
-                "agent_actions.workflow.orchestrator.WorkflowOrchestrator",
-                return_value=mock_orchestrator,
-            ),
-            patch.object(RunCommand, "_execute_single", mock_execute_single),
-        ):
-            cmd._execute_chain(project_root=tmp_path)
-
-        assert executed == ["parent_wf", "child_wf", "grandchild_wf"]
-
-    def test_paused_mid_chain_defers_remaining(self, tmp_path):
-        """When the second workflow pauses, only the third is deferred."""
-        from agent_actions.cli.run import RunCommand
-
-        args = RunCommandArgs(agent="wf_a", downstream=True)
-        cmd = RunCommand(args)
-
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.resolve_execution_plan.return_value = ["wf_a", "wf_b", "wf_c"]
-
-        executed = []
-        statuses = iter(["SUCCESS", "PAUSED"])
-
-        def mock_execute_single(self_inner, project_root=None):
-            executed.append(self_inner.agent_name)
-            return next(statuses)
-
-        with (
-            patch(
-                "agent_actions.workflow.orchestrator.WorkflowOrchestrator",
-                return_value=mock_orchestrator,
-            ),
-            patch.object(RunCommand, "_execute_single", mock_execute_single),
-        ):
-            cmd._execute_chain(project_root=tmp_path)
-
-        assert executed == ["wf_a", "wf_b"]
-
-    def test_no_deferral_when_last_workflow_pauses(self, tmp_path, capsys):
-        """No deferral message when the last workflow in the chain pauses."""
-        from agent_actions.cli.run import RunCommand
-
-        args = RunCommandArgs(agent="only_wf", downstream=True)
-        cmd = RunCommand(args)
-
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.resolve_execution_plan.return_value = ["only_wf"]
-
-        def mock_execute_single(self_inner, project_root=None):
-            return "PAUSED"
-
-        with (
-            patch(
-                "agent_actions.workflow.orchestrator.WorkflowOrchestrator",
-                return_value=mock_orchestrator,
-            ),
-            patch.object(RunCommand, "_execute_single", mock_execute_single),
-        ):
-            cmd._execute_chain(project_root=tmp_path)
-
-        output = capsys.readouterr().out
-        assert "deferred" not in output

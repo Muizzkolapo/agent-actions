@@ -1,11 +1,10 @@
-"""Tests for ActionSchema, FieldInfo, ActionKind, FieldSource, UpstreamReference."""
+"""Tests for ActionSchema, FieldInfo, ActionKind, FieldSource."""
 
 from agent_actions.models.action_schema import (
     ActionKind,
     ActionSchema,
     FieldInfo,
     FieldSource,
-    UpstreamReference,
 )
 
 # ---------------------------------------------------------------------------
@@ -157,60 +156,6 @@ class TestFieldInfo:
 
 
 # ---------------------------------------------------------------------------
-# UpstreamReference dataclass
-# ---------------------------------------------------------------------------
-
-
-class TestUpstreamReference:
-    """UpstreamReference creation and serialization."""
-
-    def test_construction(self):
-        ref = UpstreamReference(
-            source_agent="agent_a",
-            field_name="output_1",
-            location="prompt",
-            raw_reference="{{agent_a.output_1}}",
-        )
-        assert ref.source_agent == "agent_a"
-        assert ref.field_name == "output_1"
-        assert ref.location == "prompt"
-        assert ref.raw_reference == "{{agent_a.output_1}}"
-
-    def test_to_dict(self):
-        ref = UpstreamReference(
-            source_agent="src",
-            field_name="fld",
-            location="loc",
-            raw_reference="raw",
-        )
-        assert ref.to_dict() == {
-            "source_agent": "src",
-            "field_name": "fld",
-            "location": "loc",
-            "raw_reference": "raw",
-        }
-
-    def test_equality(self):
-        args = dict(
-            source_agent="a",
-            field_name="f",
-            location="l",
-            raw_reference="r",
-        )
-        assert UpstreamReference(**args) == UpstreamReference(**args)
-
-    def test_inequality(self):
-        base = dict(
-            source_agent="a",
-            field_name="f",
-            location="l",
-            raw_reference="r",
-        )
-        altered = {**base, "source_agent": "b"}
-        assert UpstreamReference(**base) != UpstreamReference(**altered)
-
-
-# ---------------------------------------------------------------------------
 # ActionSchema dataclass — construction and defaults
 # ---------------------------------------------------------------------------
 
@@ -222,11 +167,9 @@ class TestActionSchemaConstruction:
         s = ActionSchema(name="act", kind=ActionKind.LLM)
         assert s.name == "act"
         assert s.kind is ActionKind.LLM
-        assert s.upstream_refs == []
         assert s.input_fields == []
         assert s.output_fields == []
         assert s.dependencies == []
-        assert s.downstream == []
         assert s.is_dynamic is False
         assert s.is_schemaless is False
         assert s.is_template_based is False
@@ -236,15 +179,13 @@ class TestActionSchemaConstruction:
             s = ActionSchema(name="x", kind=kind)
             assert s.kind is kind
 
-    def test_with_dependencies_and_downstream(self):
+    def test_with_dependencies(self):
         s = ActionSchema(
             name="mid",
             kind=ActionKind.TOOL,
             dependencies=["a", "b"],
-            downstream=["c"],
         )
         assert s.dependencies == ["a", "b"]
-        assert s.downstream == ["c"]
 
     def test_boolean_flags(self):
         s = ActionSchema(
@@ -285,20 +226,6 @@ class TestActionSchemaProperties:
                     is_dropped=True,
                 ),
             ],
-            upstream_refs=[
-                UpstreamReference(
-                    source_agent="src1",
-                    field_name="f1",
-                    location="prompt",
-                    raw_reference="{{src1.f1}}",
-                ),
-                UpstreamReference(
-                    source_agent="src2",
-                    field_name="f2",
-                    location="prompt",
-                    raw_reference="{{src2.f2}}",
-                ),
-            ],
         )
 
     def test_available_outputs_excludes_dropped(self):
@@ -317,10 +244,6 @@ class TestActionSchemaProperties:
         s = self._make_schema()
         assert s.optional_inputs == ["opt1"]
 
-    def test_uses_fields(self):
-        s = self._make_schema()
-        assert s.uses_fields == ["src1.f1", "src2.f2"]
-
     def test_available_outputs_sorted(self):
         s = ActionSchema(
             name="s",
@@ -331,28 +254,6 @@ class TestActionSchemaProperties:
             ],
         )
         assert s.available_outputs == ["a", "z"]
-
-    def test_uses_fields_deduplicates(self):
-        """Duplicate upstream references to the same agent.field are collapsed."""
-        s = ActionSchema(
-            name="s",
-            kind=ActionKind.LLM,
-            upstream_refs=[
-                UpstreamReference(
-                    source_agent="x",
-                    field_name="y",
-                    location="a",
-                    raw_reference="r1",
-                ),
-                UpstreamReference(
-                    source_agent="x",
-                    field_name="y",
-                    location="b",
-                    raw_reference="r2",
-                ),
-            ],
-        )
-        assert s.uses_fields == ["x.y"]
 
 
 # ---------------------------------------------------------------------------
@@ -372,10 +273,6 @@ class TestActionSchemaEdgeCases:
         s = ActionSchema(name="e", kind=ActionKind.HITL)
         assert s.required_inputs == []
         assert s.optional_inputs == []
-
-    def test_empty_upstream_refs(self):
-        s = ActionSchema(name="e", kind=ActionKind.HITL)
-        assert s.uses_fields == []
 
     def test_all_outputs_dropped(self):
         s = ActionSchema(
@@ -415,11 +312,9 @@ class TestActionSchemaToDict:
         d = s.to_dict()
         assert d["name"] == "min"
         assert d["kind"] == "source"
-        assert d["upstream_refs"] == []
         assert d["input_fields"] == []
         assert d["output_fields"] == []
         assert d["dependencies"] == []
-        assert d["downstream"] == []
         assert d["is_dynamic"] is False
         assert d["is_schemaless"] is False
         assert d["is_template_based"] is False
@@ -427,20 +322,11 @@ class TestActionSchemaToDict:
         assert d["dropped_outputs"] == []
         assert d["required_inputs"] == []
         assert d["optional_inputs"] == []
-        assert d["uses_fields"] == []
 
     def test_full_to_dict(self):
         s = ActionSchema(
             name="full",
             kind=ActionKind.TOOL,
-            upstream_refs=[
-                UpstreamReference(
-                    source_agent="a",
-                    field_name="f",
-                    location="l",
-                    raw_reference="r",
-                ),
-            ],
             input_fields=[
                 FieldInfo(name="in1", source=FieldSource.SCHEMA, is_required=True),
                 FieldInfo(name="in2", source=FieldSource.OBSERVE, is_required=False),
@@ -454,7 +340,6 @@ class TestActionSchemaToDict:
                 ),
             ],
             dependencies=["dep1"],
-            downstream=["ds1", "ds2"],
             is_dynamic=True,
             is_schemaless=False,
             is_template_based=True,
@@ -465,16 +350,11 @@ class TestActionSchemaToDict:
         assert d["is_dynamic"] is True
         assert d["is_template_based"] is True
         assert d["dependencies"] == ["dep1"]
-        assert d["downstream"] == ["ds1", "ds2"]
         # Computed properties included in serialization
         assert d["available_outputs"] == ["out1"]
         assert d["dropped_outputs"] == ["out2"]
         assert d["required_inputs"] == ["in1"]
         assert d["optional_inputs"] == ["in2"]
-        assert d["uses_fields"] == ["a.f"]
-        # Nested dicts
-        assert len(d["upstream_refs"]) == 1
-        assert d["upstream_refs"][0]["source_agent"] == "a"
         assert len(d["input_fields"]) == 2
         assert len(d["output_fields"]) == 2
 
