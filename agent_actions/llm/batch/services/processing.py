@@ -757,7 +757,11 @@ class BatchProcessingService:
                 content = item.get("content")
                 if content is None:
                     continue
-                response_text = json.dumps(content, ensure_ascii=False, default=str)
+                # Extract only the action's output namespace — matches online prompt trace shape
+                action_output = (
+                    content.get(action_name, content) if isinstance(content, dict) else content
+                )
+                response_text = json.dumps(action_output, ensure_ascii=False, default=str)
                 self._storage_backend.update_prompt_trace_response(
                     action_name=action_name,
                     record_id=target_id,

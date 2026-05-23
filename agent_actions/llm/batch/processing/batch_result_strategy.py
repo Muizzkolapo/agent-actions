@@ -21,7 +21,6 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.record_helpers import (
-    apply_version_merge,
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
@@ -32,12 +31,17 @@ from agent_actions.processing.types import (
     ProcessingStatus,
     RecoveryMetadata,
 )
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
+from agent_actions.record.envelope import (
+    _PERSISTENT_FIELDS,
+    RECORD_FRAMEWORK_FIELDS,
+    RecordEnvelope,
+)
 from agent_actions.record.reasons import (
     BATCH_NOT_RETURNED,
     GUARD_SKIP,
     PREP_FAILED,
 )
+from agent_actions.utils.content import is_version_merge
 
 logger = logging.getLogger(__name__)
 
@@ -336,17 +340,35 @@ class BatchResultStrategy:
         is_first_stage = not ctx.agent_config.get("dependencies")
         existing_content = extract_existing_content(original_row, is_first_stage=is_first_stage)
 
+        action_name = ctx.agent_config["action_name"]
+        is_tool_version_merge = ctx.agent_config.get("kind") == "tool" and is_version_merge(
+            ctx.agent_config
+        )
+
+        # Precompute persistent fields and envelope input outside the loop
+        _vm_fields = tuple(f for f in _PERSISTENT_FIELDS if f != "source_guid")
+        if not is_tool_version_merge:
+            # Inject first-stage-aware content into the envelope input (matches online)
+            if existing_content and existing_content != original_row.get("content"):
+                envelope_input: dict[str, Any] = {**original_row, "content": existing_content}
+            else:
+                envelope_input = original_row
+
         structured_items = []
         for item in generated_list:
             item_dict = item if isinstance(item, dict) else {}
-            content = apply_version_merge(ctx.agent_config, item_dict, existing_content)
-            structured_items.append({"source_guid": original_source_guid, "content": content})
+            if is_tool_version_merge:
+                content = {**(existing_content or {}), **item_dict}
+                record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}
+                carry_framework_fields(original_row, record, fields=_vm_fields)
+            else:
+                record = RecordEnvelope.build(action_name, item_dict, envelope_input)
+                record["source_guid"] = original_source_guid  # reconciler is authority for guid
+            structured_items.append(record)
 
-        # Batch items inherit target_id and version_correlation_id from the original input row.
+        # target_id is a per-stage field — not carried by RecordEnvelope.build()
         for item in structured_items:
-            carry_framework_fields(
-                original_row, item, fields=("target_id", "version_correlation_id")
-            )
+            carry_framework_fields(original_row, item, fields=("target_id",))
 
         record_index = ctx.reconciler.get_record_index(custom_id)
 
@@ -455,6 +477,7 @@ class BatchResultStrategy:
             error=error_message,
             source_guid=source_guid,
             source_snapshot=source_snapshot,
+            input_record=original_input,
         )
         result.data = [error_item]
         result.recovery_metadata = recovery_metadata
