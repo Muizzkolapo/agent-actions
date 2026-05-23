@@ -62,8 +62,8 @@ def _compute_action_config_hash(
         "prompt": action_config.get("prompt", ""),
         "model": action_config.get("model", ""),
         "schema": action_config.get("schema", ""),
-        "guard_clause": guard.get("clause", "") if isinstance(guard, dict) else "",
-        "guard_behavior": guard.get("behavior", "") if isinstance(guard, dict) else "",
+        "guard_clause": guard.get("clause", ""),
+        "guard_behavior": guard.get("behavior", ""),
     }
 
     serialized = json.dumps(hash_input, sort_keys=True)
