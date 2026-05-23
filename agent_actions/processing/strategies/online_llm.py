@@ -184,10 +184,11 @@ class OnlineLLMStrategy:
 
             except RecordContextError as e:
                 # Per-record recoverable — build tombstone, continue processing
+                record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx
                 logger.warning(
-                    "[%s] Record %d prep failed (context incomplete): %s",
+                    "[%s] Record %s prep failed (context incomplete): %s",
                     context.agent_name,
-                    idx,
+                    record_id,
                     e,
                 )
                 result = _build_prep_failed_result(item, context, str(e))
@@ -205,10 +206,11 @@ class OnlineLLMStrategy:
                     # TemplateSyntaxError wrapped — broken template, action-fatal
                     raise
                 # Missing variables — per-record recoverable
+                record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx
                 logger.warning(
-                    "[%s] Record %d prep failed (missing template vars): %s",
+                    "[%s] Record %s prep failed (missing template vars): %s",
                     context.agent_name,
-                    idx,
+                    record_id,
                     e,
                 )
                 result = _build_prep_failed_result(item, context, str(e))
