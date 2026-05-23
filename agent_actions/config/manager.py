@@ -314,14 +314,13 @@ class ConfigManager:
             self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
 
         workflow_actions = list(self.agent_configs.keys())
-        all_known_actions = workflow_actions
 
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
                 try:
                     input_sources, context_sources = infer_dependencies(
-                        config.model_dump(), all_known_actions, agent_type
+                        config.model_dump(), workflow_actions, agent_type
                     )
                     all_deps: list[Any] = input_sources + context_sources
                 except Exception as e:

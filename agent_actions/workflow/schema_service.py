@@ -53,7 +53,6 @@ class WorkflowSchemaService:
         project_root: Path | None = None,
         with_udf_registry: bool = False,
         tool_schemas: dict[str, Any] | None = None,
-        external_action_names: set[str] | None = None,
     ) -> WorkflowSchemaService:
         """Factory: build_workflow_config + optional UDF resolution in one call.
 
@@ -84,7 +83,6 @@ class WorkflowSchemaService:
             project_root=project_root,
             workflow_name=name,
             tool_schemas=tool_schemas,
-            external_action_names=external_action_names,
         )
 
     def __init__(
@@ -95,7 +93,6 @@ class WorkflowSchemaService:
         project_root: Any | None = None,
         workflow_name: str | None = None,
         tool_schemas: dict[str, Any] | None = None,
-        external_action_names: set[str] | None = None,
     ):
         self._config = workflow_config
         self.workflow_name = workflow_name or workflow_config.get("name", "unknown")
@@ -106,7 +103,6 @@ class WorkflowSchemaService:
             project_root=project_root,
             workflow_name=self.workflow_name,
             tool_schemas=tool_schemas,
-            external_action_names=external_action_names,
         )
         self._schemas: dict[str, ActionSchema] = {}
         self._schema_lock = threading.Lock()
