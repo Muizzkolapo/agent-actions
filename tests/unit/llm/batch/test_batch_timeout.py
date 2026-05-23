@@ -27,6 +27,7 @@ class TestWaitForBatchCompletionTimeout:
             0,  # first while check
             0,  # first current_time
             100,  # second while check — exceeds timeout
+            100,  # elapsed calculation after loop
         ]
         mock_time.sleep = MagicMock()
 
