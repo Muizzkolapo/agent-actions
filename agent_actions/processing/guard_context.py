@@ -63,13 +63,13 @@ def build_guard_context(
         record_content = record.get("content", {})
         if isinstance(record_content, dict) and "source" in record_content:
             resolved_source = record
-        elif source_data:
+        elif source_data and record.get("source_guid"):
             from agent_actions.input.preprocessing.transformation.transformer import (
                 DataTransformer,
             )
 
             resolved_source = DataTransformer.get_content_by_source_guid(
-                source_data, record.get("source_guid")
+                source_data, record["source_guid"]
             )
             if resolved_source is None:
                 resolved_source = record
