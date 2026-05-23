@@ -1,0 +1,6 @@
+kind: Breaking Change
+body: |
+  Removed cross-workflow chaining: upstream: config key, --upstream/--downstream CLI flags,
+  WorkflowOrchestrator, and VirtualAction injection. Workflows are self-contained.
+  Users with upstream: in config will see an unknown-key warning.
+time: 2026-05-23T06:27:00.000000Z
