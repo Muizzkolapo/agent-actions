@@ -35,8 +35,3 @@ class IDGenerator:
         else:
             content_for_hash = str(content)
         return str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
-
-    @staticmethod
-    def generate_deterministic_source_guid(content: Any) -> str:
-        """Deprecated: use generate_content_hash() instead."""
-        return IDGenerator.generate_content_hash(content)

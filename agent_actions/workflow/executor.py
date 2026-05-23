@@ -46,13 +46,12 @@ WHERE_SKIP_REASON = "WHERE clause — action skipped"
 
 def _compute_action_config_hash(
     action_config: ActionConfigDict,
-    prompt_content: str | None = None,
 ) -> str:
     """Compute a deterministic hash of semantically-meaningful action config.
 
-    Covers: prompt content (or reference), model, schema reference,
-    guard clause + behavior. Changes to these fields invalidate prior
-    results. Cosmetic fields (description, tags) are excluded.
+    Covers: prompt reference, model, schema reference, guard clause + behavior.
+    Changes to these fields invalidate prior results.
+    Cosmetic fields (description, tags) are excluded.
     """
     raw_guard: Any = action_config.get("guard") or {}
     guard: dict[str, str] = (
@@ -60,7 +59,7 @@ def _compute_action_config_hash(
     )
 
     hash_input = {
-        "prompt": prompt_content or action_config.get("prompt", ""),
+        "prompt": action_config.get("prompt", ""),
         "model": action_config.get("model", ""),
         "schema": action_config.get("schema", ""),
         "guard_clause": guard.get("clause", "") if isinstance(guard, dict) else "",

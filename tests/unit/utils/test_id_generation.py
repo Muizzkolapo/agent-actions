@@ -44,13 +44,3 @@ class TestGenerateContentHash:
         h = IDGenerator.generate_content_hash("test")
         parsed = uuid.UUID(h)
         assert parsed.version == 5
-
-
-class TestDeprecatedWrapper:
-    """generate_deterministic_source_guid() still works as deprecated wrapper."""
-
-    def test_matches_content_hash(self):
-        content = {"key": "value"}
-        old = IDGenerator.generate_deterministic_source_guid(content)
-        new = IDGenerator.generate_content_hash(content)
-        assert old == new

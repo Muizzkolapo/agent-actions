@@ -1312,10 +1312,11 @@ class SQLiteBackend(StorageBackend):
                 )
 
     def _enforce_prompt_trace_retention(self, retention_runs: int) -> None:
-        """Delete prompt traces older than the N most recent workflow runs.
+        """Delete prompt traces older than the N most recent distinct days.
 
-        Uses created_at timestamps to identify run boundaries. Traces from the
-        most recent ``retention_runs`` distinct runs are kept.
+        Uses DATE(created_at) as the retention boundary, so ``retention_runs``
+        effectively means "keep traces from the N most recent calendar days."
+        Multiple runs on the same day count as one boundary.
         """
         if retention_runs < 1:
             return
