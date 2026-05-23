@@ -715,10 +715,15 @@ class SQLiteBackend(StorageBackend):
             return
 
         rows: list[DispositionRow] = []
+        seen: set[tuple[str, str, str]] = set()
         for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
             action_name, record_id, rp, snapshot = self._validate_disposition_fields(
                 action_name, record_id, disposition, rp, snapshot
             )
+            key = (action_name, record_id, disposition)
+            if key in seen:
+                continue
+            seen.add(key)
             rows.append((action_name, record_id, disposition, reason, rp, snapshot, detail))
 
         with self._lock:
