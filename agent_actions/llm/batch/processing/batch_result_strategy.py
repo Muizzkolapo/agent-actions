@@ -25,6 +25,7 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
+    extract_existing_content,
 )
 from agent_actions.processing.types import (
     ProcessingResult,
@@ -37,7 +38,6 @@ from agent_actions.record.reasons import (
     GUARD_SKIP,
     PREP_FAILED,
 )
-from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +333,8 @@ class BatchResultStrategy:
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
 
-        existing_content = get_existing_content(original_row)
+        is_first_stage = not ctx.agent_config.get("dependencies")
+        existing_content = extract_existing_content(original_row, is_first_stage=is_first_stage)
 
         structured_items = []
         for item in generated_list:
