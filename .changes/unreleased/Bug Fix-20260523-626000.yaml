@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: |
+  Batch disposition dedup prevents UNIQUE constraint violations on resume.
+  Deferred dispositions now cleared using per-action name instead of workflow name.
+  Prep failure logs show source_guid instead of array index.
+time: 2026-05-23T06:26:00.000000Z
