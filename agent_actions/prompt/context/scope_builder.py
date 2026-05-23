@@ -48,10 +48,6 @@ class SourceNamespaceBuilder:
             if "content" in source_content and isinstance(source_content["content"], dict):
                 source_namespace = source_content["content"]
             elif "source" in source_content and isinstance(source_content["source"], dict):
-                # Fallback content dict from non-first-stage: the record's
-                # content dict contains a "source" sub-namespace with the
-                # original input fields.  Extract it so that references
-                # like source.page_content resolve correctly.
                 source_namespace = source_content["source"]
             else:
                 source_namespace = dict(source_content)
