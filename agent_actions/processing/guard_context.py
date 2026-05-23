@@ -21,6 +21,7 @@ def build_guard_context(
     agent_name: str,
     agent_config: dict[str, Any],
     agent_indices: dict[str, int] | None = None,
+    source_data: list[dict[str, Any]] | None = None,
     source_content: Any = None,
     is_first_stage: bool = False,
     version_context: dict[str, Any] | None = None,
@@ -59,7 +60,21 @@ def build_guard_context(
     elif is_first_stage:
         resolved_source = content
     else:
-        resolved_source = record
+        record_content = record.get("content", {})
+        if isinstance(record_content, dict) and "source" in record_content:
+            resolved_source = record
+        elif source_data:
+            from agent_actions.input.preprocessing.transformation.transformer import (
+                DataTransformer,
+            )
+
+            resolved_source = DataTransformer.get_content_by_source_guid(
+                source_data, record.get("source_guid")
+            )
+            if resolved_source is None:
+                resolved_source = record
+        else:
+            resolved_source = record
 
     field_context = build_field_context_with_history(
         agent_name=agent_name,
