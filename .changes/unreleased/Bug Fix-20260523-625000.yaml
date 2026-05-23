@@ -1,5 +1,0 @@
-kind: Bug Fix
-body: |
-  Batch/online content parity: first-stage batch actions now synthesize the source namespace,
-  matching online mode. Fixes source.page_content resolving as null in batch workflows.
-time: 2026-05-23T06:25:00.000000Z
