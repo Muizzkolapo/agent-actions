@@ -60,9 +60,7 @@ class TaskPreparer:
         else:
             source_content = self._get_source_content(source_guid, context)
             if source_content is None:
-                # Fall back to the full record (with content envelope) so
-                # SourceNamespaceBuilder can extract the source sub-namespace.
-                source_content = item if isinstance(item, dict) else content
+                source_content = item
 
         current_item = item if isinstance(item, dict) else context.current_item
         field_context = self._load_full_context(content, source_content, context, current_item)
