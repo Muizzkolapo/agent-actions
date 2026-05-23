@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Version merge no longer double-nests content — version namespaces spread directly into content"
-time: 2026-04-24T09:30:00.000000Z

@@ -1,6 +1,7 @@
 """Tests for ActionStateManager state persistence and queries."""
 
 import json
+import threading
 
 import pytest
 
@@ -373,3 +374,78 @@ class TestResetRetryable:
         reset = mgr.reset_retryable()
 
         assert reset == []
+
+
+class TestConcurrentUpdateStatus:
+    """Verify thread safety of ActionStateManager under concurrent access."""
+
+    def test_no_lost_updates_under_contention(self, tmp_path):
+        """N threads updating different actions must not lose any updates."""
+        num_actions = 20
+        action_names = [f"action_{i}" for i in range(num_actions)]
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, action_names)
+
+        errors: list[Exception] = []
+        barrier = threading.Barrier(num_actions)
+
+        def updater(name: str):
+            try:
+                barrier.wait(timeout=5)
+                mgr.update_status(name, ActionStatus.COMPLETED, thread=name)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=updater, args=(n,)) for n in action_names]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert errors == [], f"Errors during concurrent updates: {errors}"
+
+        # Every action must be COMPLETED with its metadata
+        for name in action_names:
+            assert mgr.get_status(name) == ActionStatus.COMPLETED, f"{name} status lost"
+            assert mgr.get_status_details(name)["thread"] == name
+
+        # Verify persistence: reload and check
+        saved = json.loads(status_file.read_text())
+        for name in action_names:
+            assert saved[name]["status"] == "completed"
+            assert saved[name]["thread"] == name
+
+    def test_concurrent_update_and_reset(self, tmp_path):
+        """Concurrent update_status and reset must not corrupt state."""
+        status_file = tmp_path / "status.json"
+        actions = ["a", "b", "c"]
+        mgr = ActionStateManager(status_file, actions)
+
+        errors: list[Exception] = []
+
+        def do_updates():
+            try:
+                for _ in range(50):
+                    mgr.update_status("a", ActionStatus.RUNNING)
+                    mgr.update_status("a", ActionStatus.COMPLETED)
+            except Exception as e:
+                errors.append(e)
+
+        def do_resets():
+            try:
+                for _ in range(50):
+                    mgr.reset()
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=do_updates)
+        t2 = threading.Thread(target=do_resets)
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert errors == [], f"Errors during concurrent update/reset: {errors}"
+        # State must be valid JSON on disk
+        saved = json.loads(status_file.read_text())
+        assert isinstance(saved, dict)

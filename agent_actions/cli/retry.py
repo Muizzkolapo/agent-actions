@@ -5,8 +5,11 @@ Uses the disposition table to identify what failed and delegates to
 the existing workflow execution engine for re-processing.
 """
 
+import datetime
+import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -21,6 +24,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     NODE_LEVEL_RECORD_ID,
 )
+from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.validation.retry_validator import RetryCommandArgs
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,52 @@ logger = logging.getLogger(__name__)
 #   filtered    — removed by predicate; not a failure
 #   deferred    — pending HITL/batch; retrying would clobber in-flight state
 _FAILURE_DISPOSITIONS = (DISPOSITION_FAILED, DISPOSITION_EXHAUSTED)
+
+_RETRY_MANIFEST_NAME = "_retry_manifest.json"
+
+
+def _manifest_path(store_dir: Path) -> Path:
+    """Return the retry manifest file path within the workflow store directory."""
+    return store_dir / _RETRY_MANIFEST_NAME
+
+
+def _write_manifest(
+    path: Path,
+    from_action: str,
+    record_ids: list[str],
+    downstream_actions: list[str],
+    dispositions: list[dict],
+) -> None:
+    """Write a retry manifest before clearing dispositions."""
+    manifest = {
+        "from_action": from_action,
+        "record_ids": sorted(record_ids),
+        "downstream_actions": downstream_actions,
+        "dispositions": dispositions,
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_json_write(path, manifest, indent=2)
+
+
+def _read_manifest(path: Path) -> dict[str, Any] | None:
+    """Read and return the retry manifest, or None if absent/corrupt."""
+    if not path.exists():
+        return None
+    try:
+        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        return data
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Corrupt retry manifest at %s: %s — ignoring", path, e)
+        return None
+
+
+def _delete_manifest(path: Path) -> None:
+    """Delete the retry manifest after successful completion."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as e:
+        logger.warning("Could not delete retry manifest %s: %s", path, e)
 
 
 class RetryCommand:
@@ -56,6 +106,31 @@ class RetryCommand:
             workflow_name=self.agent_name,
         )
         backend.initialize()
+
+        store_dir = paths.io_dir / "store" / self.agent_name
+        manifest_file = _manifest_path(store_dir)
+        prior_manifest = _read_manifest(manifest_file)
+
+        if prior_manifest:
+            self.console.print(
+                "[yellow]Found incomplete retry manifest — "
+                "prior retry was interrupted. Restoring dispositions...[/yellow]"
+            )
+            disposition_rows = prior_manifest.get("dispositions", [])
+            for row in disposition_rows:
+                backend.set_disposition(
+                    row["action_name"],
+                    row["record_id"],
+                    row["disposition"],
+                    reason=row.get("reason"),
+                    detail=row.get("detail"),
+                    input_snapshot=row.get("input_snapshot"),
+                )
+            _delete_manifest(manifest_file)
+            self.console.print(
+                f"[cyan]Restored {len(disposition_rows)} disposition(s). "
+                f"Proceeding with retry.[/cyan]"
+            )
 
         workflow = load_workflow(self.agent_name, paths, project_root)
         execution_order = list(workflow.execution_order)
@@ -115,6 +190,21 @@ class RetryCommand:
             downstream_actions,
         )
 
+        # Snapshot dispositions BEFORE clearing — this is the crash-recovery payload.
+        snapshot_dispositions: list[dict] = []
+        for action in downstream_actions:
+            rows = backend.get_disposition(action)
+            snapshot_dispositions.extend(r for r in rows if r.get("record_id") in record_ids)
+
+        # Write manifest — if this fails, we abort (no dispositions cleared).
+        _write_manifest(
+            manifest_file,
+            from_action,
+            list(record_ids),
+            downstream_actions,
+            snapshot_dispositions,
+        )
+
         cleared = 0
         for action in downstream_actions:
             for record_id in record_ids:
@@ -143,6 +233,10 @@ class RetryCommand:
             state_mgr.update_status(action, ActionStatus.PENDING)
 
         workflow.run()
+
+        # Retry completed successfully — delete the manifest.
+        _delete_manifest(manifest_file)
+
         self.console.print("\n[green]Retry complete.[/green]")
 
     @staticmethod

@@ -1,0 +1,127 @@
+"""Tests for OpenAI JSON parse failure handling.
+
+Verifies that parse failures always return the _parse_error sentinel dict,
+matching Anthropic's behavior for provider parity. The sentinel is what the
+reprompt pipeline checks to trigger corrective retry.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+from agent_actions.llm.providers.openai.client import OpenAIClient
+
+
+def _make_response(content: str):
+    """Create a mock OpenAI response with given content."""
+    message = MagicMock()
+    message.content = content
+
+    choice = MagicMock()
+    choice.message = message
+
+    response = MagicMock()
+    response.choices = [choice]
+    response.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    response.model = "gpt-4"
+    return response
+
+
+class TestOpenAIParseFailure:
+    """Parse failures return _parse_error sentinel for reprompt pipeline."""
+
+    @patch("agent_actions.llm.providers.openai.client.OpenAI")
+    def test_parse_failure_returns_sentinel_with_reprompt(self, mock_openai_cls):
+        """With reprompt configured, parse failure returns sentinel (not raises)."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_response(
+            "this is not valid json {"
+        )
+
+        agent_config = {
+            "model_name": "gpt-4",
+            "reprompt": {"max_attempts": 3},
+        }
+        result = OpenAIClient.call_json(
+            api_key="test-key",
+            agent_config=agent_config,
+            prompt_config="extract data",
+            context_data={"text": "hello"},
+            schema=None,
+        )
+
+        assert len(result) == 1
+        assert "_parse_error" in result[0]
+        assert "raw_response" in result[0]
+        assert "Failed to parse JSON" in result[0]["_parse_error"]
+
+    @patch("agent_actions.llm.providers.openai.client.OpenAI")
+    def test_parse_failure_returns_sentinel_without_reprompt(self, mock_openai_cls):
+        """Without reprompt config, parse failure also returns sentinel."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_response(
+            "this is not valid json {"
+        )
+
+        agent_config = {
+            "model_name": "gpt-4",
+        }
+        result = OpenAIClient.call_json(
+            api_key="test-key",
+            agent_config=agent_config,
+            prompt_config="extract data",
+            context_data={"text": "hello"},
+            schema=None,
+        )
+
+        assert len(result) == 1
+        assert "_parse_error" in result[0]
+        assert "raw_response" in result[0]
+
+    @patch("agent_actions.llm.providers.openai.client.OpenAI")
+    def test_valid_json_response_unaffected(self, mock_openai_cls):
+        """Valid JSON responses are unaffected regardless of reprompt config."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_response(
+            '{"sentiment": "positive"}'
+        )
+
+        agent_config = {
+            "model_name": "gpt-4",
+            "reprompt": {"max_attempts": 3},
+        }
+        result = OpenAIClient.call_json(
+            api_key="test-key",
+            agent_config=agent_config,
+            prompt_config="extract data",
+            context_data={"text": "hello"},
+            schema=None,
+        )
+
+        assert len(result) == 1
+        assert result[0]["sentiment"] == "positive"
+
+    @patch("agent_actions.llm.providers.openai.client.OpenAI")
+    def test_empty_response_returns_sentinel(self, mock_openai_cls):
+        """Empty response returns sentinel even with reprompt."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_response(None)
+
+        agent_config = {
+            "model_name": "gpt-4",
+            "reprompt": {"max_attempts": 3},
+        }
+        result = OpenAIClient.call_json(
+            api_key="test-key",
+            agent_config=agent_config,
+            prompt_config="extract data",
+            context_data={"text": "hello"},
+            schema=None,
+        )
+
+        assert len(result) == 1
+        assert result[0]["_parse_error"] == "Empty response from API"

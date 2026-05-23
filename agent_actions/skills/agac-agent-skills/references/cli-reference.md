@@ -227,7 +227,7 @@ Run actions asynchronously via vendor batch APIs for up to 50% cost savings:
   model_name: gpt-4o-mini
 ```
 
-**Supported vendors:** OpenAI, Anthropic, Google (Gemini), Groq, Mistral, Ollama
+**Supported vendors:** OpenAI, Anthropic, Google (Gemini), Groq, Ollama
 
 **How it works:**
 1. Framework submits all records as a batch job to the vendor

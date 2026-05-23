@@ -3,7 +3,6 @@ Tests for ProcessorUtils thread safety, specifically the loop correlation ID rac
 """
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pytest
@@ -44,7 +43,6 @@ class TestProcessorUtilsThreadSafety:
                     source_guid, version_base_name, self.get_test_session_id()
                 )
                 local_ids.append(correlation_id)
-                time.sleep(0.001)
             with correlation_ids_lock:
                 correlation_ids.extend(local_ids)
 
@@ -147,8 +145,8 @@ class TestProcessorUtilsThreadSafety:
             clear_completed.set()
 
         def access_worker():
-            """Worker that tries to access the registry during clearing."""
-            time.sleep(0.01)
+            """Worker that accesses the registry after clearing."""
+            clear_completed.wait()
             return VersionIdGenerator.get_or_create_version_correlation_id(
                 source_guid, version_base_name, self.get_test_session_id()
             )

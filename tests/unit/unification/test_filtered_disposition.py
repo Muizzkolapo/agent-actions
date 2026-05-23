@@ -23,6 +23,7 @@ from agent_actions.processing.types import (
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.storage.backend import DISPOSITION_FILTERED
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
+from tests.conftest import wire_batch_disposition_delegate
 
 
 def _make_evaluator(pass_fn):
@@ -259,6 +260,7 @@ class TestFilteredDispositionWritten:
             {"content": {"score": 40}, "source_guid": "sg-filter"},
         ]
         mock_backend = MagicMock()
+        wire_batch_disposition_delegate(mock_backend)
         context = _make_context(
             guard={"clause": "score >= 80", "behavior": "filter"},
             storage_backend=mock_backend,
@@ -301,6 +303,7 @@ class TestFilteredDispositionWritten:
         ]
         raw = records
         mock_backend = MagicMock()
+        wire_batch_disposition_delegate(mock_backend)
         context = _make_context(
             guard={"clause": "score >= 80", "behavior": "filter"},
             storage_backend=mock_backend,
@@ -339,6 +342,7 @@ class TestFilteredDispositionWritten:
         """Record without source_guid -> no disposition write (no crash)."""
         records = [{"content": {"score": 40}}]
         mock_backend = MagicMock()
+        wire_batch_disposition_delegate(mock_backend)
         context = _make_context(
             guard={"clause": "score >= 80", "behavior": "filter"},
             storage_backend=mock_backend,

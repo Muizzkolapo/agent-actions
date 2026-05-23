@@ -11,9 +11,13 @@ from typing import Any
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
     VALID_DISPOSITIONS,
     Disposition,
+    DispositionRow,
     StorageBackend,
 )
 
@@ -607,6 +611,33 @@ class SQLiteBackend(StorageBackend):
     # commit/rollback as well.
     # ------------------------------------------------------------------
 
+    def _validate_disposition_fields(
+        self,
+        action_name: str,
+        record_id: str,
+        disposition: str | Disposition,
+        relative_path: str | None,
+        input_snapshot: str | None,
+    ) -> tuple[str, str, str | None, str | None]:
+        """Validate and normalize fields shared by set_disposition and set_dispositions_batch.
+
+        Returns (action_name, record_id, relative_path, input_snapshot) after validation.
+        """
+        action_name = self._validate_identifier(action_name, "action_name")
+        record_id = self._validate_identifier(record_id, "record_id")
+        if relative_path is not None:
+            relative_path = self._validate_identifier(relative_path, "relative_path")
+        if disposition not in VALID_DISPOSITIONS:
+            raise ValueError(
+                f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
+            )
+        # Cap input_snapshot at 10KB to prevent storage bloat.
+        if input_snapshot and len(input_snapshot) > 10240:
+            input_snapshot = (
+                '{"__truncated__": true, "partial": ' + json.dumps(input_snapshot[:8192]) + "}"
+            )
+        return action_name, record_id, relative_path, input_snapshot
+
     def set_disposition(
         self,
         action_name: str,
@@ -617,28 +648,22 @@ class SQLiteBackend(StorageBackend):
         input_snapshot: str | None = None,
         detail: str | None = None,
     ) -> None:
-        """Write a disposition record (INSERT OR REPLACE)."""
-        action_name = self._validate_identifier(action_name, "action_name")
-        record_id = self._validate_identifier(record_id, "record_id")
-        if relative_path is not None:
-            relative_path = self._validate_identifier(relative_path, "relative_path")
-        if disposition not in VALID_DISPOSITIONS:
-            raise ValueError(
-                f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
-            )
-        # Cap input_snapshot at 10KB to prevent storage bloat.
-        # Wrap truncated content so consumers can detect and skip invalid JSON.
-        if input_snapshot and len(input_snapshot) > 10240:
-            input_snapshot = (
-                '{"__truncated__": true, "partial": ' + json.dumps(input_snapshot[:8192]) + "}"
-            )
+        """Write a disposition record, clearing any prior disposition for this (action, record)."""
+        action_name, record_id, relative_path, input_snapshot = self._validate_disposition_fields(
+            action_name, record_id, disposition, relative_path, input_snapshot
+        )
 
         with self._lock:
             cursor = self.connection.cursor()
             try:
+                # UNIQUE is on (action_name, record_id, disposition), so DELETE first to prevent coexistence.
+                cursor.execute(
+                    "DELETE FROM record_disposition WHERE action_name = ? AND record_id = ?",
+                    (action_name, record_id),
+                )
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO record_disposition
+                    INSERT INTO record_disposition
                     (action_name, record_id, disposition, reason, relative_path,
                      input_snapshot, detail, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -672,6 +697,66 @@ class SQLiteBackend(StorageBackend):
                         "disposition": disposition,
                         "workflow_name": self.workflow_name,
                     },
+                )
+                raise
+
+    def set_dispositions_batch(
+        self,
+        dispositions: list[DispositionRow],
+    ) -> None:
+        """Batch-write dispositions in a single transaction.
+
+        Validates every record before touching the DB — on first invalid
+        record the entire batch is rejected with no partial writes.  Uses
+        DELETE-then-INSERT (matching set_disposition) to prevent phantom
+        coexistence of conflicting dispositions for the same record.
+        """
+        if not dispositions:
+            return
+
+        rows: list[DispositionRow] = []
+        seen: set[tuple[str, str, str]] = set()
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            action_name, record_id, rp, snapshot = self._validate_disposition_fields(
+                action_name, record_id, disposition, rp, snapshot
+            )
+            key = (action_name, record_id, disposition)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append((action_name, record_id, disposition, reason, rp, snapshot, detail))
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                # DELETE prior dispositions for each (action_name, record_id) pair,
+                # matching set_disposition's DELETE-before-INSERT pattern (P0-5).
+                cursor.executemany(
+                    "DELETE FROM record_disposition WHERE action_name = ? AND record_id = ?",
+                    [(r[0], r[1]) for r in rows],
+                )
+                cursor.executemany(
+                    """
+                    INSERT INTO record_disposition
+                    (action_name, record_id, disposition, reason, relative_path,
+                     input_snapshot, detail, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    rows,
+                )
+                self.connection.commit()
+                logger.debug(
+                    "Batch set %d dispositions",
+                    len(rows),
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to batch set dispositions: %s (count=%d)",
+                    e,
+                    len(rows),
+                    extra={"workflow_name": self.workflow_name},
                 )
                 raise
 
@@ -773,13 +858,23 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(query, params)
                 self.connection.commit()
                 deleted = cursor.rowcount
-                logger.debug(
-                    "Cleared %d dispositions: action=%s disp=%s",
-                    deleted,
-                    action_name,
-                    disposition,
-                    extra={"workflow_name": self.workflow_name},
-                )
+                if deleted > 0:
+                    logger.info(
+                        "Cleared %d dispositions: action=%s disp=%s record_id=%s",
+                        deleted,
+                        action_name,
+                        disposition,
+                        record_id,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                else:
+                    logger.debug(
+                        "Cleared %d dispositions: action=%s disp=%s",
+                        deleted,
+                        action_name,
+                        disposition,
+                        extra={"workflow_name": self.workflow_name},
+                    )
                 return deleted
             except sqlite3.Error as e:
                 self.connection.rollback()
@@ -1133,6 +1228,178 @@ class SQLiteBackend(StorageBackend):
                 return f"{size:.1f} {unit}"
             size /= 1024
         return f"{size:.1f} TB"
+
+    # ------------------------------------------------------------------
+    # Maintenance operations
+    # ------------------------------------------------------------------
+
+    def perform_maintenance(
+        self,
+        prompt_trace_retention_runs: int = StorageDefaults.PROMPT_TRACE_RETENTION_RUNS,
+        source_data_ttl_days: int | None = StorageDefaults.SOURCE_DATA_TTL_DAYS,
+    ) -> None:
+        """Run post-workflow maintenance: WAL checkpoint, disposition cleanup,
+        prompt trace retention, and source data TTL.
+
+        All operations are idempotent and safe to run concurrently.
+        """
+        self._checkpoint_wal()
+        self._cleanup_stale_dispositions()
+        self._enforce_prompt_trace_retention(prompt_trace_retention_runs)
+        if source_data_ttl_days is not None:
+            self._enforce_source_data_ttl(source_data_ttl_days)
+
+    def _checkpoint_wal(self) -> None:
+        """Checkpoint and truncate the WAL file to reclaim disk space."""
+        with self._lock:
+            try:
+                result = self.connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+                busy, log_pages, checkpointed = result if result else (0, 0, 0)
+                if log_pages > 0 or checkpointed > 0:
+                    logger.info(
+                        "WAL checkpoint: %d pages checkpointed, %d busy",
+                        checkpointed,
+                        busy,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                else:
+                    logger.debug(
+                        "WAL checkpoint: nothing to checkpoint",
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                logger.warning(
+                    "WAL checkpoint failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+
+    def _cleanup_stale_dispositions(self) -> None:
+        """Remove disposition records for items that completed successfully on re-run.
+
+        When a workflow re-runs, records that previously FAILED may now succeed.
+        This removes the old FAILED/EXHAUSTED dispositions for records that have
+        a newer SUCCESS disposition, preventing stale data from accumulating.
+        """
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    """
+                    DELETE FROM record_disposition
+                    WHERE id IN (
+                        SELECT old.id
+                        FROM record_disposition old
+                        INNER JOIN record_disposition success
+                            ON old.action_name = success.action_name
+                            AND old.record_id = success.record_id
+                        WHERE success.disposition = ?
+                          AND old.disposition IN (?, ?)
+                          AND old.id < success.id
+                    )
+                    """,
+                    (DISPOSITION_SUCCESS, DISPOSITION_FAILED, DISPOSITION_EXHAUSTED),
+                )
+                self.connection.commit()
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    logger.info(
+                        "Cleaned up %d stale disposition records",
+                        deleted,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Disposition cleanup failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+
+    def _enforce_prompt_trace_retention(self, retention_runs: int) -> None:
+        """Delete prompt traces older than the N most recent distinct days.
+
+        Uses DATE(created_at) as the retention boundary, so ``retention_runs``
+        effectively means "keep traces from the N most recent calendar days."
+        Multiple runs on the same day count as one boundary.
+        """
+        if retention_runs < 1:
+            return
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                # Find the Nth most recent distinct run timestamp boundary.
+                # Each workflow run writes traces with created_at within the same
+                # second range, so we use DATE(created_at) as a run boundary.
+                cursor.execute(
+                    """
+                    SELECT DISTINCT DATE(created_at) as run_date
+                    FROM prompt_trace
+                    ORDER BY run_date DESC
+                    LIMIT 1 OFFSET ?
+                    """,
+                    (retention_runs - 1,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    # Fewer runs than retention window — nothing to delete
+                    return
+
+                cutoff_date = row[0]
+                # Compare created_at directly (not via DATE()) so indexes can be used.
+                # cutoff_date is "YYYY-MM-DD"; all timestamps before that date sort lower.
+                cursor.execute(
+                    "DELETE FROM prompt_trace WHERE created_at < ?",
+                    (cutoff_date,),
+                )
+                self.connection.commit()
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    logger.info(
+                        "Pruned %d prompt traces older than %s (keeping %d runs)",
+                        deleted,
+                        cutoff_date,
+                        retention_runs,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Prompt trace retention enforcement failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+
+    def _enforce_source_data_ttl(self, ttl_days: int) -> None:
+        """Delete source_data rows older than ``ttl_days`` days."""
+        if ttl_days < 1:
+            return
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    """
+                    DELETE FROM source_data
+                    WHERE created_at < datetime('now', '-' || ? || ' days')
+                    """,
+                    (ttl_days,),
+                )
+                self.connection.commit()
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    logger.info(
+                        "Deleted %d source_data rows older than %d days",
+                        deleted,
+                        ttl_days,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.warning(
+                    "Source data TTL enforcement failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
 
     def close(self) -> None:
         """Close the database connection."""

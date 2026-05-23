@@ -8,23 +8,6 @@ from agent_actions.utils.module_loader import load_module_from_path
 from agent_actions.utils.safe_format import safe_format_error
 
 
-def _split_udf_name(udf_name: str) -> tuple[str, str]:
-    """Split ``module_name.function_name`` into its parts.
-
-    Raises:
-        ConfigurationError: If the format is invalid.
-    """
-    try:
-        module_name, func_name = udf_name.rsplit(".", 1)
-        return (module_name, func_name)
-    except ValueError as e:
-        raise ConfigurationError(
-            "Invalid UDF format. Expected 'module.function'",
-            context={"udf_name": udf_name},
-            cause=e,
-        ) from e
-
-
 def load_user_defined_function(module_name: str, function_name: str) -> Callable:
     """Load a user-defined function from a specified module.
 

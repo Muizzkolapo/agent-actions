@@ -43,7 +43,6 @@ class TestProcessorUtilsIntegration:
                 correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
                     source_guid, version_base_name, self.get_test_session_id()
                 )
-                time.sleep(0.001)
                 with results_lock:
                     if source_guid not in results:
                         results[source_guid] = []
@@ -86,7 +85,6 @@ class TestProcessorUtilsIntegration:
                         position, version_base_name, self.get_test_session_id(), file_context
                     )
                 )
-                time.sleep(0.002)
                 with results_lock:
                     if position not in results:
                         results[position] = []

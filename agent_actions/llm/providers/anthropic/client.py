@@ -8,6 +8,7 @@ SDK errors are wrapped into unified agent-actions error types to enable
 consistent retry handling across all providers.
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, ClassVar
@@ -27,6 +28,8 @@ from agent_actions.logging.events import (
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
+
+logger = logging.getLogger(__name__)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="anthropic",
@@ -74,8 +77,8 @@ class AnthropicClient(BaseClient):
             key_map={"stop": "stop_sequences"},
             stop_as_list=True,
         )
-        # max_tokens is always required for Anthropic; default 1024
-        params.setdefault("max_tokens", 1024)
+        # max_tokens is always required for Anthropic; default 4096
+        params.setdefault("max_tokens", 4096)
 
         api_args: dict[str, Any] = {
             "model": model_name,
@@ -120,7 +123,6 @@ class AnthropicClient(BaseClient):
         prompt_config: str,
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
-        mode: str,
     ) -> tuple:
         """Shared API call with timing, usage tracking, and event handling.
 
@@ -138,6 +140,7 @@ class AnthropicClient(BaseClient):
             schema=schema,
             json_mode=json_mode,
             enable_prompt_caching=enable_caching,
+            model_name=model_name,
         )
         messages = envelope.to_dicts()
 
@@ -178,22 +181,23 @@ class AnthropicClient(BaseClient):
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
         response, model_name, request_id = AnthropicClient._call_api(
-            api_key, agent_config, prompt_config, context_data, schema, "json"
+            api_key, agent_config, prompt_config, context_data, schema
         )
         try:
             result = AnthropicClient._extract_response_content(response, model_name)
             return result if isinstance(result, list) else [result]
-        except VendorAPIError as e:
+        except VendorAPIError:
             fire_event(
                 LLMErrorEvent(
                     provider="anthropic",
                     model=model_name,
-                    error_type="ContentExtractionError",
-                    error_message=str(e),
+                    error_type="EmptyResponse",
+                    error_message="No extractable content in Anthropic response",
                     request_id=request_id,
                 )
             )
-            raise
+            logger.debug("Empty/unusable response from Anthropic API, model=%s", model_name)
+            return [{"raw_response": "", "_parse_error": "Empty response from API"}]
 
     @staticmethod
     def call_non_json(
@@ -204,7 +208,7 @@ class AnthropicClient(BaseClient):
     ) -> list[dict[str, str]]:
         """Plain-text (non-JSON) mode for Claude."""
         response, model_name, request_id = AnthropicClient._call_api(
-            api_key, agent_config, prompt_config, context_data, None, "non_json"
+            api_key, agent_config, prompt_config, context_data, None
         )
 
         content = next(

@@ -16,7 +16,7 @@ from agent_actions.config.path_config import (
     resolve_project_root,
 )
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
-from agent_actions.config.schema import WorkflowConfig
+from agent_actions.config.schema import DefaultsConfig, WorkflowConfig
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
@@ -193,14 +193,34 @@ class ConfigManager:
             try:
                 workflow = WorkflowConfig.model_validate(self.user_config)
             except ValidationError as e:
+                field_errors = [
+                    {
+                        "field": ".".join(str(x) for x in err["loc"]),
+                        "message": err["msg"],
+                        "type": err["type"],
+                    }
+                    for err in e.errors()
+                ][:10]
                 raise ConfigurationError(
                     "Workflow configuration is invalid",
                     context={
                         "config_path": str(self.constructor_path),
                         "workflow_name": self.user_config.get("name", "unknown"),
+                        "validation_errors": field_errors,
                     },
                     cause=e,
                 ) from e
+
+            raw_defaults = self.user_config.get("defaults") or {}
+            if raw_defaults:
+                known_fields = set(DefaultsConfig.model_fields.keys())
+                unknown = sorted(set(raw_defaults.keys()) - known_fields)
+                if unknown:
+                    logger.warning(
+                        "Unknown keys in defaults config: %s. Known keys: %s",
+                        ", ".join(unknown),
+                        ", ".join(sorted(known_fields)),
+                    )
 
             validated_actions = [
                 action.model_dump(mode="python", exclude_unset=True, by_alias=True)

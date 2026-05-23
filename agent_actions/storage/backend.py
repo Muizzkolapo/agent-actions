@@ -5,7 +5,11 @@ from enum import Enum
 from types import TracebackType
 from typing import Any
 
+from agent_actions.config.defaults import StorageDefaults
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
+
+_MAINTENANCE_RETENTION_DEFAULT = StorageDefaults.PROMPT_TRACE_RETENTION_RUNS
+_MAINTENANCE_TTL_DEFAULT = StorageDefaults.SOURCE_DATA_TTL_DAYS
 
 NODE_LEVEL_RECORD_ID = "__node__"
 """Sentinel record_id for node-level disposition signals."""
@@ -33,6 +37,9 @@ class Disposition(str, Enum):
 
 
 VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
+
+DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]
+"""(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
 
 
 class StorageBackend(ABC):
@@ -146,6 +153,26 @@ class StorageBackend(ABC):
             detail: Extended error message or context for the disposition.
         """
         # No-op: subclass must override to persist dispositions.
+
+    def set_dispositions_batch(
+        self,
+        dispositions: list[DispositionRow],
+    ) -> None:
+        """Write multiple disposition records in a single transaction.
+
+        Default implementation loops over set_disposition. Backends may
+        override for batch-optimized writes.
+        """
+        for action_name, record_id, disposition, reason, rp, snapshot, detail in dispositions:
+            self.set_disposition(
+                action_name,
+                record_id,
+                disposition,
+                reason=reason,
+                relative_path=rp,
+                input_snapshot=snapshot,
+                detail=detail,
+            )
 
     def get_disposition(
         self,
@@ -269,6 +296,17 @@ class StorageBackend(ABC):
         leave stale data behind.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
+
+    def perform_maintenance(  # noqa: B027
+        self,
+        prompt_trace_retention_runs: int = _MAINTENANCE_RETENTION_DEFAULT,
+        source_data_ttl_days: int | None = _MAINTENANCE_TTL_DEFAULT,
+    ) -> None:
+        """Run post-workflow maintenance (WAL checkpoint, cleanup stale data).
+
+        Default is no-op. SQLiteBackend overrides with actual maintenance.
+        """
+        pass
 
     def close(self) -> None:  # noqa: B027
         """Close the storage backend and release resources."""

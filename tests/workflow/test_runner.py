@@ -135,7 +135,7 @@ class TestResolveStartNodeDirectories:
         mock_resolve.return_value = mock_result
         result = runner._resolve_start_node_directories(tmp_path, "agent")
         assert result == [staging]
-        mock_resolve.assert_called_once()
+        mock_resolve.assert_called_once_with(tmp_path, None, "agent")
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ class TestSetupDirectories:
         staging.mkdir()
         mock_resolve.return_value = [staging]
         config = {"agent_type": "analyzer"}
-        dirs, output = runner.setup_directories(str(tmp_path), config, None, 0)
+        dirs, output = runner.setup_directories(str(tmp_path), config, None)
         assert dirs == [str(staging)]
         assert "target/analyzer" in output
         mock_resolve.assert_called_once()
@@ -220,29 +220,29 @@ class TestSetupDirectories:
         mock_dep.return_value = [dep_dir]
         runner.action_indices = {"analyzer": 0, "dep1": 1}
         config = {"agent_type": "analyzer", "dependencies": ["dep1"]}
-        dirs, output = runner.setup_directories(str(tmp_path), config, None, 0)
+        dirs, output = runner.setup_directories(str(tmp_path), config, None)
         assert dirs == [str(dep_dir)]
-        mock_dep.assert_called_once()
+        mock_dep.assert_called_once_with(tmp_path, ["dep1"], "analyzer")
 
     def test_has_previous_agent_type(self, runner, tmp_path):
         config = {"agent_type": "analyzer"}
-        dirs, output = runner.setup_directories(str(tmp_path), config, "extractor", 0)
+        dirs, output = runner.setup_directories(str(tmp_path), config, "extractor")
         assert dirs == [str(tmp_path / "target" / "extractor")]
 
     def test_fallback_to_staging(self, runner, tmp_path):
         runner.action_indices = {}
         config = {"agent_type": "analyzer", "dependencies": ["dep1"]}
-        dirs, output = runner.setup_directories(str(tmp_path), config, None, 0)
+        dirs, output = runner.setup_directories(str(tmp_path), config, None)
         assert dirs == [str(tmp_path / "staging")]
 
     def test_creates_output_dir_no_backend(self, runner, tmp_path):
         config = {"agent_type": "analyzer"}
-        _dirs, output = runner.setup_directories(str(tmp_path), config, "prev", 0)
+        _dirs, output = runner.setup_directories(str(tmp_path), config, "prev")
         assert Path(output).exists()
 
     def test_skips_mkdir_with_backend(self, runner_with_backend, tmp_path):
         config = {"agent_type": "analyzer"}
-        _dirs, output = runner_with_backend.setup_directories(str(tmp_path), config, "prev", 0)
+        _dirs, output = runner_with_backend.setup_directories(str(tmp_path), config, "prev")
         assert not Path(output).exists()
 
 

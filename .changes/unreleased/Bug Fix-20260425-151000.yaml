@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Stale upstream FAILED disposition no longer blocks downstream when upstream has output"
-time: 2026-04-25T151000.000000Z

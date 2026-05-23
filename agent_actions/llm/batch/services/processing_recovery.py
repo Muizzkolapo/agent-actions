@@ -526,7 +526,7 @@ def finalize_batch_output(
     # an explicit write here to match online ResultCollector parity (Phase 7b /
     # U-3.2a). DEFERRED clearing and prompt trace updates also remain batch-specific.
     if service._storage_backend and effective_action_name:
-        service._clear_deferred_dispositions(processed_data)
+        service._clear_deferred_dispositions(processed_data, effective_action_name)
         service._write_filtered_dispositions(context_map, effective_action_name)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
 

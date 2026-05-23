@@ -246,12 +246,13 @@ class TestEdgeCases:
     """Edge cases for Jinja namespace access."""
 
     def test_none_value_renders(self):
+        # P2-6: None values now render as empty string, not "None"
         result = _scope_and_render(
             "Value: {{ dep.field }}",
             {"dep": {"field": None}},
             {"observe": ["dep.field"]},
         )
-        assert result == "Value: None"
+        assert result == "Value: "
 
     def test_empty_string_renders(self):
         result = _scope_and_render(

@@ -52,3 +52,15 @@ class RateLimitError(VendorAPIError):
     """Raised when API rate limits are exceeded."""
 
     pass
+
+
+class PromptTooLargeError(VendorAPIError):
+    """Raised when the assembled prompt exceeds the model's context window."""
+
+    pass
+
+
+class LLMResponseParseError(VendorAPIError):
+    """Raised when JSON parsing fails and reprompt/recovery is configured."""
+
+    pass

@@ -46,7 +46,14 @@ class SourceNamespaceBuilder:
         source_namespace: dict = {}
         if source_content and isinstance(source_content, dict):
             if "content" in source_content and isinstance(source_content["content"], dict):
-                source_namespace = source_content["content"]
+                # Record envelope ({content: {source: ..., action1: ...}, source_guid: ...}).
+                # Extract the "source" sub-namespace from the content dict so
+                # references like source.page_content resolve correctly.
+                inner = source_content["content"]
+                if "source" in inner and isinstance(inner["source"], dict):
+                    source_namespace = inner["source"]
+                else:
+                    source_namespace = dict(inner)
             else:
                 source_namespace = dict(source_content)
 

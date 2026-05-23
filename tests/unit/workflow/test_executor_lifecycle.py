@@ -1,7 +1,7 @@
 """Tests for ActionExecutor lifecycle: execute_action_sync and helper methods."""
 
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -286,7 +286,7 @@ class TestHandleRunSuccess:
         assert result.status == ActionStatus.COMPLETED
         assert result.output_folder == "/out"
         mock_deps.state_manager.update_status.assert_called_with(
-            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None
+            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None, config_hash=ANY
         )
 
     def test_normal_completion_with_tokens(self, executor, mock_deps):
@@ -548,7 +548,7 @@ class TestHandleAgentSkip:
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED
         mock_deps.state_manager.update_status.assert_called_with(
-            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None
+            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None, config_hash=ANY
         )
         mock_fire.assert_called_once()
 

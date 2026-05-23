@@ -1,0 +1,21 @@
+kind: Enhancement or New Feature
+body: |
+  v0.2.0 Quality Hardening — 25 fixes from comprehensive codebase audit:
+  - Storage errors now propagate instead of silently returning COMPLETED
+  - Schema migration uses ALTER TABLE instead of DROP TABLE (preserves data on upgrade)
+  - Disposition table clears conflicting rows before writing terminal state
+  - --fresh flag clears all state (source_data, batch recovery, batch registry)
+  - Preflight key verifier fails on infrastructure errors (SSL, proxy, DNS)
+  - Batch SQLite commits batched (10-50x perf improvement for 1000+ records)
+  - Config change detection invalidates stale completed actions on prompt/model/schema change
+  - Retry Ctrl+C writes manifest checkpoint for crash recovery
+  - LLM hardening (token overflow guard, prompt injection fix, parse error parity across providers)
+  - Source GUID uses uuid4 to prevent collision on duplicate/expanded records
+  - Thread safety for ActionStateManager and atomic_json_write
+  - O(n²) lineage lookup replaced with dict index
+  - Dead code removed (12 functions, 11 aliases, ghost mistral directory)
+  - 33 new tests covering 7 previously untested critical paths
+  - 15 false-positive tests fixed
+  - Observability gaps closed (record identity in logs, LLM call duration, batch events)
+  - DB maintenance (WAL checkpoint, disposition cleanup, prompt trace retention)
+time: 2026-05-22T20:00:00.000000Z

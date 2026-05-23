@@ -1,6 +1,8 @@
 """Single action execution with batch support."""
 
 import asyncio
+import hashlib
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,7 +23,11 @@ from agent_actions.logging.events import (
 from agent_actions.record.reasons import GUARD_FILTERED_ALL
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
+    DISPOSITION_SUCCESS,
+    DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
@@ -36,6 +42,32 @@ UPSTREAM_SKIP_PREFIX = "Upstream dependency"
 
 # Reason string for WHERE-clause skip (action skipped, record unchanged).
 WHERE_SKIP_REASON = "WHERE clause — action skipped"
+
+
+def _compute_action_config_hash(
+    action_config: ActionConfigDict,
+) -> str:
+    """Compute a deterministic hash of semantically-meaningful action config.
+
+    Covers: prompt reference, model, schema reference, guard clause + behavior.
+    Changes to these fields invalidate prior results.
+    Cosmetic fields (description, tags) are excluded.
+    """
+    raw_guard: Any = action_config.get("guard") or {}
+    guard: dict[str, str] = (
+        {"clause": raw_guard, "behavior": "skip"} if isinstance(raw_guard, str) else raw_guard
+    )
+
+    hash_input = {
+        "prompt": action_config.get("prompt", ""),
+        "model": action_config.get("model", ""),
+        "schema": action_config.get("schema", ""),
+        "guard_clause": guard.get("clause", ""),
+        "guard_behavior": guard.get("behavior", ""),
+    }
+
+    serialized = json.dumps(hash_input, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -142,25 +174,36 @@ class ActionExecutor:
         return self.deps == other.deps
 
     @staticmethod
-    def _limit_metadata(action_config: ActionConfigDict) -> dict[str, int | None]:
-        """Extract limit fields for status metadata storage."""
+    def _completion_metadata(action_config: ActionConfigDict) -> dict[str, Any]:
+        """Build metadata dict for completed action status."""
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
             "record_limit": cfg.get("record_limit"),
             "file_limit": cfg.get("file_limit"),
+            "config_hash": _compute_action_config_hash(action_config),
         }
 
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
     ) -> ActionStatus:
-        """Reset to pending if limit config changed since last completion."""
+        """Reset to pending if limit or semantic config changed since last completion."""
         if current_status not in COMPLETED_STATUSES:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
-        if details.get("record_limit") != action_config.get("record_limit") or details.get(
-            "file_limit"
-        ) != action_config.get("file_limit"):
-            logger.info("Limit config changed for %s, resetting to pending", action_name)
+
+        limits_changed = details.get("record_limit") != action_config.get(
+            "record_limit"
+        ) or details.get("file_limit") != action_config.get("file_limit")
+
+        config_hash = _compute_action_config_hash(action_config)
+        stored_hash = details.get("config_hash")
+        config_changed = stored_hash is not None and stored_hash != config_hash
+
+        if limits_changed or config_changed:
+            reason = (
+                "limit config" if limits_changed else "action config (prompt/model/schema/guard)"
+            )
+            logger.info("%s changed for %s, resetting to pending", reason, action_name)
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
@@ -222,17 +265,39 @@ class ActionExecutor:
                 self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                 return (False, None)
 
-        if not storage_backend.list_target_files(action_name):
-            logger.info("Action %s completed but no output in storage — re-running", action_name)
-            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-            return (False, None)
-
-        return (
+        completed = (
             True,
             ActionExecutionResult(
-                success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics(duration=0.0)
+                success=True,
+                status=ActionStatus.COMPLETED,
+                metrics=ExecutionMetrics(duration=0.0),
             ),
         )
+
+        if storage_backend.list_target_files(action_name):
+            return completed
+
+        # No target files. Check if the action intentionally produced no
+        # output (guard-filtered all records, WHERE-skipped, etc.) by
+        # looking for a node-level terminal disposition that is NOT
+        # FAILED/SKIPPED (those were already handled above).
+        for disp in (
+            DISPOSITION_FILTERED,
+            DISPOSITION_PASSTHROUGH,
+            DISPOSITION_SUCCESS,
+            DISPOSITION_UNPROCESSED,
+        ):
+            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
+                logger.info(
+                    "Action %s has no output but node-level %s — intentional, skipping re-run",
+                    action_name,
+                    disp,
+                )
+                return completed
+
+        logger.info("Action %s completed but no output in storage — re-running", action_name)
+        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+        return (False, None)
 
     def _handle_action_skip(
         self,
@@ -251,7 +316,7 @@ class ActionExecutor:
         # No disposition written: the record is unchanged, downstream
         # proceeds normally reading existing namespaces.
         self.deps.state_manager.update_status(
-            action_name, ActionStatus.COMPLETED, **self._limit_metadata(action_config)
+            action_name, ActionStatus.COMPLETED, **self._completion_metadata(action_config)
         )
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -329,7 +394,7 @@ class ActionExecutor:
             self.deps.state_manager.update_status(
                 params.action_name,
                 ActionStatus.COMPLETED,
-                **self._limit_metadata(params.action_config),
+                **self._completion_metadata(params.action_config),
             )
             logger.info(
                 "Action completed (passthrough)",
@@ -354,7 +419,7 @@ class ActionExecutor:
             params.action_name,
             final_status,
             execution_time=duration,
-            **self._limit_metadata(params.action_config),
+            **self._completion_metadata(params.action_config),
         )
         tokens = get_last_usage()
         self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
@@ -928,7 +993,7 @@ class ActionExecutor:
                 final_status,
                 execution_time=wall_clock,
                 execution_mode="batch",
-                **self._limit_metadata(action_config),
+                **self._completion_metadata(action_config),
             )
             fire_event(
                 BatchCompleteEvent(

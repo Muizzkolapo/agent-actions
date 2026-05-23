@@ -41,6 +41,14 @@ class LineageEnricher(Enricher):
 
         use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
 
+        source_index: dict[str, dict] | None = None
+        if use_per_item_parent_lookup and context.source_data:
+            source_index = {
+                sg: item
+                for item in context.source_data
+                if (sg := item.get("source_guid")) is not None
+            }
+
         parent_item = None
         if not use_per_item_parent_lookup:
             parent_item = self._get_parent_item(result.source_guid, context)
@@ -58,6 +66,12 @@ class LineageEnricher(Enricher):
                 item["target_id"] = IDGenerator.generate_target_id()
                 if old_target_id:
                     item["parent_target_id"] = old_target_id
+                # Each expansion child gets its own source_guid to prevent
+                # UNIQUE constraint collisions when written to source_data.
+                old_source_guid = item.get("source_guid")
+                item["source_guid"] = IDGenerator.generate_source_guid()
+                if old_source_guid:
+                    item["parent_source_guid"] = old_source_guid
 
             if (
                 result.source_mapping is not None
@@ -74,11 +88,13 @@ class LineageEnricher(Enricher):
                     skipped = len(source_idx) - len(source_items)
                     if skipped:
                         logger.warning(
-                            "source_mapping[%d]: %d of %d indices out of bounds (source_data has %d items)",
+                            "source_mapping[%d]: %d of %d indices out of bounds "
+                            "(source_data has %d items, action=%s)",
                             i,
                             skipped,
                             len(source_idx),
                             source_data_len,
+                            context.action_name,
                         )
                     result.data[i] = LineageBuilder.add_lineage_tracking_from_sources(
                         obj=item,
@@ -95,15 +111,17 @@ class LineageEnricher(Enricher):
                         parent_item = context.source_data[source_idx]
                     else:
                         logger.warning(
-                            "source_mapping[%d] -> %d is out of bounds (source_data has %d items)",
+                            "source_mapping[%d] -> %d is out of bounds "
+                            "(source_data has %d items, action=%s)",
                             i,
                             source_idx,
                             source_data_len,
+                            context.action_name,
                         )
                         parent_item = None
             elif use_per_item_parent_lookup:
                 item_source_guid = item.get("source_guid")
-                parent_item = self._get_parent_item(item_source_guid, context)
+                parent_item = self._get_parent_item(item_source_guid, context, source_index)
 
             result.data[i] = LineageBuilder.add_unified_lineage(
                 obj=item,
@@ -114,7 +132,12 @@ class LineageEnricher(Enricher):
         result.node_id = base_node_id
         return result
 
-    def _get_parent_item(self, source_guid: str | None, context: ProcessingContext) -> dict | None:
+    def _get_parent_item(
+        self,
+        source_guid: str | None,
+        context: ProcessingContext,
+        source_index: dict[str, dict] | None = None,
+    ) -> dict | None:
         """Look up parent item for lineage chaining; returns None for first-stage."""
         if context.is_first_stage or not source_guid:
             return None
@@ -124,6 +147,9 @@ class LineageEnricher(Enricher):
 
         if not context.source_data:
             return None
+
+        if source_index is not None:
+            return source_index.get(source_guid)
 
         for source_item in context.source_data:
             if source_item.get("source_guid") == source_guid:
@@ -281,6 +307,25 @@ class EnrichmentPipeline:
         """Run result through all enrichers in sequence."""
         start_time = datetime.now(UTC)
 
+        # LLM can return malformed data (strings, lists, None) that would
+        # crash every enricher's .get() calls with AttributeError.
+        if any(not isinstance(item, dict) for item in result.data):
+            valid_items = [item for item in result.data if isinstance(item, dict)]
+            invalid_count = len(result.data) - len(valid_items)
+            logger.warning(
+                "Filtered %d non-dict items from result.data (action=%s)",
+                invalid_count,
+                context.action_name,
+            )
+            result.data = valid_items
+            if not valid_items:
+                result.status = ProcessingStatus.FAILED
+                result.error = (
+                    f"All {invalid_count} items in result.data were non-dict "
+                    f"(action={context.action_name}) — enrichment skipped"
+                )
+                return result
+
         fire_event(
             EnrichmentPipelineStartedEvent(
                 enricher_count=len(self.enrichers),
@@ -299,7 +344,12 @@ class EnrichmentPipeline:
                         )
                     )
                 except Exception:
-                    logger.exception("Enricher %s failed", enricher_name)
+                    logger.exception(
+                        "Enricher %s failed for action=%s source_guid=%s",
+                        enricher_name,
+                        context.action_name,
+                        result.source_guid,
+                    )
                     fire_event(
                         EnricherExecutedEvent(
                             enricher_name=enricher_name,

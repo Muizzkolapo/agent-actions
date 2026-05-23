@@ -1,5 +1,7 @@
 """Detector for unknown/unexpected keys in action configuration."""
 
+import difflib
+
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
@@ -25,8 +27,23 @@ class UnknownKeysDetector(BaseActionEntryValidator):
 
         if unknown_keys:
             sorted_unknown = sorted(unknown_keys)
+            all_known_list = sorted(all_known_keys)
+            suggestions = {}
+            for key in sorted_unknown:
+                matches = difflib.get_close_matches(key, all_known_list, n=1, cutoff=0.6)
+                if matches:
+                    suggestions[key] = matches[0]
+
+            hint = ""
+            if suggestions:
+                hint = (
+                    " Did you mean: "
+                    + ", ".join(f"{k} -> {v}" for k, v in suggestions.items())
+                    + "?"
+                )
+
             warning_msg = (
-                f"{desc} has unknown key(s): {', '.join(sorted_unknown)}. "
+                f"{desc} has unknown key(s): {', '.join(sorted_unknown)}.{hint} "
                 f"Ensure these are intended or correct typos."
             )
             return ActionEntryValidationResult.with_warnings([warning_msg])

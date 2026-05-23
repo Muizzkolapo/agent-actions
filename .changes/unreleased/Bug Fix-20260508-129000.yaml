@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Unify tools_path resolution — preflight validator and custom split method now use canonical resolve_tools_path / project root instead of direct config reads"
-time: 2026-05-08T12:90:00.000000Z

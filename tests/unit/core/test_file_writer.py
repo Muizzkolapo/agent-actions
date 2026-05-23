@@ -2,6 +2,9 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from agent_actions.errors import ProcessingError
 from agent_actions.output.writer import FileWriter
 
 
@@ -52,8 +55,8 @@ class TestFileWriterRelativePath:
         call_args = mock_backend.write_target.call_args
         assert call_args[0][1] == "data.json"
 
-    def test_handles_file_not_under_output_directory(self, tmp_path):
-        """Should fall back to filename when file is not under output_directory."""
+    def test_rejects_file_not_under_output_directory(self, tmp_path):
+        """Should reject writes when file path escapes output_directory."""
         mock_backend = MagicMock()
 
         output_dir = tmp_path / "output"
@@ -66,11 +69,11 @@ class TestFileWriterRelativePath:
             output_directory=str(output_dir),
         )
 
-        writer.write_target([{"key": "value"}])
+        with pytest.raises(ProcessingError, match="Path escapes containment"):
+            writer.write_target([{"key": "value"}])
 
-        # Verify falls back to filename only
-        call_args = mock_backend.write_target.call_args
-        assert call_args[0][1] == "data.json"
+        # Backend should NOT have been called
+        mock_backend.write_target.assert_not_called()
 
     def test_prevents_collision_for_same_filename_different_dirs(self, tmp_path):
         """Should prevent collision when same filename exists in different subdirs."""

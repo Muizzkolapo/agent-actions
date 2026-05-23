@@ -40,16 +40,6 @@ def reset():
     _failed_batch_ids.clear()
 
 
-def is_online_injection_enabled() -> bool:
-    """Check if online failure injection is configured."""
-    return int(os.getenv("OLLAMA_FAIL_FIRST_N", "0")) > 0
-
-
-def is_batch_injection_enabled() -> bool:
-    """Check if batch failure injection is configured."""
-    return int(os.getenv("OLLAMA_FAIL_FIRST_N", "0")) > 0
-
-
 def maybe_inject_online_failure(model: str, vendor_slug: str = "ollama_local") -> None:
     """
     Inject failure for online calls if configured.
@@ -116,13 +106,3 @@ def should_fail_batch_record(custom_id: str, record_index: int) -> bool:
             return True
 
     return False
-
-
-def get_injection_status() -> dict:
-    """Get current injection status for debugging."""
-    return {
-        "online_call_count": _online_call_count,
-        "online_fail_threshold": int(os.getenv("OLLAMA_FAIL_FIRST_N", "0")),
-        "batch_fail_records": int(os.getenv("OLLAMA_FAIL_FIRST_N", "0")),
-        "failed_batch_ids": list(_failed_batch_ids),
-    }

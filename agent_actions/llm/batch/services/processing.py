@@ -665,20 +665,27 @@ class BatchProcessingService:
         _cleanup_recovery_impl(self, manager, output_directory, file_name)
         return output_path
 
-    def _clear_deferred_dispositions(self, items: list[dict[str, Any]]) -> None:
+    def _clear_deferred_dispositions(
+        self, items: list[dict[str, Any]], action_name: str | None = None
+    ) -> None:
         """Clear DEFERRED dispositions for batch records entering output.
 
-        Batch records receive DEFERRED dispositions at submit time.
-        After retrieve, the shared collector writes final dispositions
-        (SUCCESS, FAILED, etc.), but DEFERRED entries remain unless
-        explicitly cleared.
+        Batch records receive DEFERRED dispositions at submit time under
+        the per-action name.  After retrieve, the shared collector writes
+        final dispositions (SUCCESS, FAILED, etc.), but DEFERRED entries
+        remain unless explicitly cleared.
+
+        Args:
+            action_name: Per-action name used when DEFERRED was written.
+                Falls back to self._action_name (workflow name) if not given.
         """
-        if not self._storage_backend or not self._action_name:
+        effective_name = action_name or self._action_name
+        if not self._storage_backend or not effective_name:
             return
         for item in items:
             source_guid = item.get("source_guid")
             if source_guid:
-                self._try_clear_deferred(self._action_name, source_guid)
+                self._try_clear_deferred(effective_name, source_guid)
 
     def _write_filtered_dispositions(self, context_map: dict[str, Any], action_name: str) -> None:
         """Write FILTERED dispositions for records excluded from output.
@@ -788,9 +795,10 @@ class BatchProcessingService:
             )
         except Exception:
             logger.warning(
-                "Could not load context_map for failed batch %s — "
+                "Could not load context_map for failed batch %s (action=%s) — "
                 "records may remain with stale DEFERRED dispositions",
                 file_name,
+                action_name,
                 exc_info=True,
             )
             return
@@ -827,10 +835,12 @@ class BatchProcessingService:
             failed_count += 1
 
         if failed_count:
-            logger.info(
-                "Wrote FAILED disposition for %d records in failed batch %s",
+            logger.warning(
+                "Wrote FAILED disposition for %d abandoned records in batch %s (action=%s): %s",
                 failed_count,
                 file_name,
+                action_name,
+                str(error)[:200],
             )
 
     @staticmethod

@@ -111,8 +111,8 @@ class TestLoggerFactoryConfig:
         with patch.dict("os.environ", {"AGENT_ACTIONS_LOG_LEVEL": "WARNING"}):
             LoggerFactory.initialize()
             config = LoggerFactory.get_config()
-            # Config should exist
-            assert config is not None
+            assert isinstance(config, LoggingConfig)
+            assert config.default_level == "WARNING"
 
 
 class TestLoggerFactoryLoggingBridge:

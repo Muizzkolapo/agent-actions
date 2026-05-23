@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Batch reprompt metadata now matches online shape — failure-type counters populated, validation name is actual UDF name, per-record attempt counts used instead of global counter"
-time: 2026-05-21T04:17:00.000000Z

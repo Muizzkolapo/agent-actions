@@ -55,8 +55,8 @@ pip install agent-actions
 ## Quick start
 
 ```bash
-agac init my-project && cd my-project                # scaffold a project
-agac init --example contract_reviewer my-project     # or start from an example
+agac init my_project && cd my_project                # scaffold a project
+agac init example contract_reviewer my_project       # or start from an example
 agac run -a my_workflow                              # execute
 ```
 
@@ -83,15 +83,15 @@ You will, until you have 15 steps, 3 models, batch retry, and a teammate asks wh
 | [Product Listing Enrichment](examples/product_listing_enrichment) | Tool + LLM hybrid | LLM generates copy, tool fetches pricing, LLM optimizes |
 | [Book Catalog Enrichment](examples/book_catalog_enrichment) | Multi-step enrichment | BISAC classification, marketing copy, SEO metadata, reading level |
 | [Incident Triage](examples/incident_triage) | Parallel consensus | Severity classification, impact assessment, team assignment, response plan |
+| [Support Resolution](examples/support_resolution) | Non-JSON pipeline | Classify, route, and draft responses using `output_field` — works with any model including local Ollama |
 
 ## Providers
 
 | Provider | Batch | Provider | Batch |
 |----------|-------|----------|-------|
 | OpenAI | Yes | Groq | Yes |
-| Anthropic | Yes | Mistral | Yes |
-| Google Gemini | Yes | Cohere | Online only |
-| Ollama (local) | Online only | | |
+| Anthropic | Yes | Cohere | Online only |
+| Google Gemini | Yes | Ollama (local) | Yes |
 
 Switch providers per-action by changing `model_vendor`.
 
@@ -114,7 +114,7 @@ Switch providers per-action by changing `model_vendor`.
 
 ```bash
 git clone https://github.com/Muizzkolapo/agent-actions.git && cd agent-actions
-pip install -e ".[dev]"
+uv sync
 pytest
 ```
 

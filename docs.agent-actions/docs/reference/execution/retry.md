@@ -54,7 +54,7 @@ For invalid LLM outputs, Agent Actions uses [reprompting](../validation/reprompt
 
 ## Provider Support
 
-All provider-specific errors are normalized into unified `RateLimitError` and `NetworkError` types, ensuring consistent retry behavior across OpenAI, Anthropic, Gemini, Cohere, Mistral, Groq, and Ollama.
+All provider-specific errors are normalized into unified `RateLimitError` and `NetworkError` types, ensuring consistent retry behavior across OpenAI, Anthropic, Gemini, Cohere, Groq, and Ollama.
 
 ## Best Practices
 

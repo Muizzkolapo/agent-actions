@@ -92,8 +92,8 @@ class TestRunDynamicAgentNamespaced:
         )
 
         call_args = mock_builder.call_args
-        # context_data_str (positional arg 2) should be the namespaced dict
-        assert call_args[0][2] == namespaced
+        # context_data_str is the second positional arg (index 1)
+        assert call_args[0][1] == namespaced
 
     @patch("agent_actions.llm.realtime.builder.create_dynamic_agent")
     def test_content_key_not_unwrapped(self, mock_builder):
@@ -114,7 +114,7 @@ class TestRunDynamicAgentNamespaced:
 
         call_args = mock_builder.call_args
         # The full dict should be passed, not context["content"]
-        assert call_args[0][2] == data
+        assert call_args[0][1] == data
 
     @patch("agent_actions.llm.realtime.builder.create_dynamic_agent")
     def test_llm_context_takes_precedence(self, mock_builder):
@@ -136,7 +136,7 @@ class TestRunDynamicAgentNamespaced:
 
         call_args = mock_builder.call_args
         # llm_context should be used as context_data_str
-        assert call_args[0][2] == llm_ctx
+        assert call_args[0][1] == llm_ctx
 
     @patch("agent_actions.llm.realtime.builder.create_dynamic_agent")
     def test_file_mode_list_passed_directly(self, mock_builder):
@@ -158,7 +158,7 @@ class TestRunDynamicAgentNamespaced:
         )
 
         call_args = mock_builder.call_args
-        assert call_args[0][2] == data
+        assert call_args[0][1] == data
 
 
 # ---------------------------------------------------------------------------
