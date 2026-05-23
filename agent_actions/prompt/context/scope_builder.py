@@ -45,12 +45,17 @@ class SourceNamespaceBuilder:
         """
         source_namespace: dict = {}
         if source_content and isinstance(source_content, dict):
+            # Unwrap {"content": {...}} envelope if present
+            inner = source_content
             if "content" in source_content and isinstance(source_content["content"], dict):
-                source_namespace = source_content["content"]
-            elif "source" in source_content and isinstance(source_content["source"], dict):
-                source_namespace = source_content["source"]
+                inner = source_content["content"]
+
+            # Extract the "source" sub-namespace if it exists (multi-action
+            # content dicts contain {source: {...}, action1: {...}, ...})
+            if "source" in inner and isinstance(inner["source"], dict):
+                source_namespace = inner["source"]
             else:
-                source_namespace = dict(source_content)
+                source_namespace = dict(inner)
 
         if not source_namespace:
             return None
