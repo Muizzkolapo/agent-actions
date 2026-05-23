@@ -44,7 +44,7 @@ dependencies = [
     "python-dotenv>=1.0.1,<2",
     "ollama>=0.1.0,<1",
 
-    "cohere>=5.0.0,<7",
+    "cohere>=5.0.0,<8",
     "groq>=0.1.0,<2",
     "rich>=13.0.0,<16",
     "pyyaml>=6.0.0,<7",
