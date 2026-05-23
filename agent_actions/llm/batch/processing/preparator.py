@@ -318,7 +318,7 @@ class BatchTaskPreparator:
         return PreparationContext(
             agent_config=agent_config,
             agent_name=agent_name,
-            is_first_stage=False,  # Batch is always subsequent-stage
+            is_first_stage=not agent_config.get("dependencies"),
             mode=RunMode.BATCH,
             source_data=source_data,
             agent_indices=self.action_indices,
