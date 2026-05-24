@@ -425,6 +425,8 @@ class MessageBuilder:
             return str(ensure_json_safe(context_data))
         return str(StringProcessor.process_as_string(context_data))
 
+    _SCHEMA_META_KEYS = frozenset({"name", "title", "description"})
+
     @staticmethod
     def _strip_schema_metadata(schema: Any) -> Any:
         """Remove framework metadata keys before injecting schema into prompts.
@@ -434,7 +436,7 @@ class MessageBuilder:
         LLM context and can trigger schema-echo behavior where the model
         returns the schema definition itself instead of conforming data.
         """
-        _META_KEYS = {"name", "title", "description"}
+        _META_KEYS = MessageBuilder._SCHEMA_META_KEYS
         if isinstance(schema, dict):
             stripped = {k: v for k, v in schema.items() if k not in _META_KEYS}
             # Also strip from nested schema wrappers (OpenAI: {"name":..., "schema": {...}})
