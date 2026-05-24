@@ -165,7 +165,12 @@ def handle_retry_recovery(
         )
         if submission:
             _register_recovery_batch(
-                context.manager, submission, identity.file_name, identity.entry.provider, RecoveryType.RETRY, next_attempt
+                context.manager,
+                submission,
+                identity.file_name,
+                identity.entry.provider,
+                RecoveryType.RETRY,
+                next_attempt,
             )
             state.retry_attempt = next_attempt
             state.missing_ids = list(still_missing)
@@ -260,7 +265,12 @@ def handle_reprompt_recovery(
         )
         if submission:
             _register_recovery_batch(
-                context.manager, submission, identity.file_name, identity.entry.provider, RecoveryType.REPROMPT, next_attempt
+                context.manager,
+                submission,
+                identity.file_name,
+                identity.entry.provider,
+                RecoveryType.REPROMPT,
+                next_attempt,
             )
             fire_event(
                 RepromptRetryEvent(
@@ -400,7 +410,12 @@ def check_and_submit_reprompt(
         return True
 
     _register_recovery_batch(
-        context.manager, submission, identity.file_name, identity.entry.provider, RecoveryType.REPROMPT, next_attempt
+        context.manager,
+        submission,
+        identity.file_name,
+        identity.entry.provider,
+        RecoveryType.REPROMPT,
+        next_attempt,
     )
 
     state = RecoveryState(
@@ -472,7 +487,9 @@ def finalize_batch_output(
         exhausted_recovery=exhausted_recovery,
     )
 
-    effective_action_name = context.action_name if context.action_name is not None else service._action_name
+    effective_action_name = (
+        context.action_name if context.action_name is not None else service._action_name
+    )
 
     # SUCCESS/FAILED/EXHAUSTED dispositions and state stamping are handled by the
     # shared collector inside _convert_batch_results_to_workflow_format. FILTERED
@@ -484,8 +501,12 @@ def finalize_batch_output(
         service._write_filtered_dispositions(context_map, effective_action_name)
         service._update_prompt_trace_responses(processed_data, effective_action_name)
 
-    output_file = service._determine_output_path(context.output_directory, identity.file_name, identity.batch_id)
-    service._write_batch_output(output_file, processed_data, context.output_directory, context.action_name)
+    output_file = service._determine_output_path(
+        context.output_directory, identity.file_name, identity.batch_id
+    )
+    service._write_batch_output(
+        output_file, processed_data, context.output_directory, context.action_name
+    )
 
     # Remove batch placeholder file if storage backend wrote to SQLite instead.
     # The placeholder (written at batch submission) persists on disk when

@@ -113,9 +113,7 @@ class BatchRegistryManager:
                 )
             file_name = (self._batch_id_index or {}).get(batch_id)
             if file_name and file_name in self._cache:
-                fire_event(
-                    CacheHitEvent(cache_type="batch_registry", key=f"batch_id:{batch_id}")
-                )
+                fire_event(CacheHitEvent(cache_type="batch_registry", key=f"batch_id:{batch_id}"))
                 return self._cache[file_name]
 
             fire_event(
@@ -278,8 +276,7 @@ class BatchRegistryManager:
     def _rebuild_batch_id_index(self) -> None:
         """Rebuild secondary index from cache. Must be called under lock."""
         self._batch_id_index = {
-            entry.batch_id: file_name
-            for file_name, entry in (self._cache or {}).items()
+            entry.batch_id: file_name for file_name, entry in (self._cache or {}).items()
         }
 
     def _ensure_cache_loaded(self) -> None:

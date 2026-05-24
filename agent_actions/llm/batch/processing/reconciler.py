@@ -26,9 +26,7 @@ class BatchResultReconciler:
         """Initialize reconciler with context map."""
         self.context_map = context_map or {}
         self._processed_ids: set[str] = set()
-        self._key_index: dict[str, int] = {
-            str(k): i for i, k in enumerate(self.context_map)
-        }
+        self._key_index: dict[str, int] = {str(k): i for i, k in enumerate(self.context_map)}
 
     def mark_processed(self, custom_id: Any) -> None:
         """Mark a custom_id as processed."""
