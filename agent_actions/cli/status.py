@@ -23,15 +23,15 @@ class StatusCommand:
             self.agent_name, self.args.agent, auto_create=False, project_root=project_root
         )
         status_file = paths.io_dir / ".agent_status.json"
-        if not status_file.exists():
+        try:
+            with open(status_file, encoding="utf-8") as f:
+                status_data = json.load(f)
+        except FileNotFoundError:
             self.console.print(
                 f"[yellow]No status file found for agent '{self.agent_name}'. "
                 "Has a workflow been run?[/yellow]"
             )
             return
-        try:
-            with open(status_file, encoding="utf-8") as f:
-                status_data = json.load(f)
         except json.JSONDecodeError as e:
             raise click.ClickException(f"Status file is corrupted: {status_file}\n{e}") from e
         if not isinstance(status_data, dict):
