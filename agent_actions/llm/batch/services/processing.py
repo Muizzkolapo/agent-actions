@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -503,14 +503,14 @@ class BatchProcessingService:
                         record_count=record_count,
                         file_name=recovery_file_name,
                         parent_file_name=file_name,
-                        recovery_type="retry",
+                        recovery_type=RecoveryType.RETRY,
                         recovery_attempt=1,
                     )
                     manager.save_batch_job(recovery_file_name, recovery_entry)
 
                     record_failure_counts = {rid: 1 for rid in missing_ids}
                     state = RecoveryState(
-                        phase="retry",
+                        phase=RecoveryPhase.RETRY,
                         retry_attempt=1,
                         retry_max_attempts=max_attempts,
                         missing_ids=list(missing_ids),

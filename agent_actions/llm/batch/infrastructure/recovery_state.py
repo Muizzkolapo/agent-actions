@@ -6,13 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
-
-
-_VALID_PHASES = {"retry", "reprompt", "done"}
 
 
 @dataclass
@@ -23,14 +21,12 @@ class RecoveryState:
     service can track progress across multiple async batch submissions.
     """
 
-    phase: str  # "retry" | "reprompt" | "done"
+    phase: RecoveryPhase = RecoveryPhase.RETRY
 
     def __post_init__(self):
-        if self.phase not in _VALID_PHASES:
-            raise ValueError(
-                f"Invalid recovery phase '{self.phase}'. "
-                f"Expected one of: {', '.join(sorted(_VALID_PHASES))}"
-            )
+        # Coerce raw strings from JSON deserialization
+        if isinstance(self.phase, str):
+            self.phase = RecoveryPhase(self.phase)
 
     # Retry state
     retry_attempt: int = 0

@@ -15,9 +15,9 @@ import logging
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
@@ -93,7 +93,7 @@ def process_recovery_batch(
 
     accumulated = BatchRetryService.deserialize_results(state.accumulated_results)
 
-    if entry.recovery_type == "retry":
+    if entry.recovery_type == RecoveryType.RETRY:
         return handle_retry_recovery(
             service,
             state=state,
@@ -109,7 +109,7 @@ def process_recovery_batch(
             action_name=action_name,
             start_time=start_time,
         )
-    elif entry.recovery_type == "reprompt":
+    elif entry.recovery_type == RecoveryType.REPROMPT:
         return handle_reprompt_recovery(
             service,
             state=state,
@@ -171,7 +171,7 @@ def handle_retry_recovery(
         )
         if submission:
             _register_recovery_batch(
-                manager, submission, parent_file_name, entry.provider, "retry", next_attempt
+                manager, submission, parent_file_name, entry.provider, RecoveryType.RETRY, next_attempt
             )
             state.retry_attempt = next_attempt
             state.missing_ids = list(still_missing)
@@ -290,7 +290,7 @@ def handle_reprompt_recovery(
         )
         if submission:
             _register_recovery_batch(
-                manager, submission, parent_file_name, entry.provider, "reprompt", next_attempt
+                manager, submission, parent_file_name, entry.provider, RecoveryType.REPROMPT, next_attempt
             )
             fire_event(
                 RepromptRetryEvent(
@@ -441,11 +441,11 @@ def check_and_submit_reprompt(
         return True
 
     _register_recovery_batch(
-        manager, submission, file_name, entry.provider, "reprompt", next_attempt
+        manager, submission, file_name, entry.provider, RecoveryType.REPROMPT, next_attempt
     )
 
     state = RecoveryState(
-        phase="reprompt",
+        phase=RecoveryPhase.REPROMPT,
         reprompt_attempt=next_attempt,
         reprompt_max_attempts=max_attempts,
         validation_name=strategy.name,
@@ -611,7 +611,7 @@ def _register_recovery_batch(
     submission: tuple[str, int],
     parent_file_name: str,
     provider: str,
-    recovery_type: Literal["retry", "reprompt"],
+    recovery_type: RecoveryType,
     attempt: int,
 ) -> None:
     """Register a new recovery batch entry in the manager."""
