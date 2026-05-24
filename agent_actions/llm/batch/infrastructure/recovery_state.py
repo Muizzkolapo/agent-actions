@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_actions.llm.batch.core.batch_constants import OnExhaustedPolicy
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_utils import ensure_directory_exists
 
@@ -31,6 +32,10 @@ class RecoveryState:
                 f"Invalid recovery phase '{self.phase}'. "
                 f"Expected one of: {', '.join(sorted(_VALID_PHASES))}"
             )
+        if isinstance(self.on_exhausted, str) and not isinstance(
+            self.on_exhausted, OnExhaustedPolicy
+        ):
+            self.on_exhausted = OnExhaustedPolicy(self.on_exhausted)
 
     # Retry state
     retry_attempt: int = 0
@@ -44,7 +49,7 @@ class RecoveryState:
     validation_name: str | None = None
     reprompt_attempts_per_record: dict[str, int] = field(default_factory=dict)
     validation_status: dict[str, bool] = field(default_factory=dict)
-    on_exhausted: str = "return_last"
+    on_exhausted: OnExhaustedPolicy = OnExhaustedPolicy.RETURN_LAST
 
     # Accumulated results (serialized BatchResult dicts)
     accumulated_results: list[dict[str, Any]] = field(default_factory=list)
