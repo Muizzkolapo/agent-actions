@@ -148,12 +148,13 @@ class BatchRegistryManager:
                 total_jobs=len(self._cache), completed=0, failed=0, in_progress=0, cancelled=0
             )
 
+            in_flight = BatchStatus.in_flight_states()
             for entry in self._cache.values():
                 if entry.status == BatchStatus.COMPLETED:
                     stats.completed += 1
                 elif entry.status == BatchStatus.FAILED:
                     stats.failed += 1
-                elif entry.status in BatchStatus.in_flight_states():
+                elif entry.status in in_flight:
                     stats.in_progress += 1
                 elif entry.status == BatchStatus.CANCELLED:
                     stats.cancelled += 1

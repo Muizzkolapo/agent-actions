@@ -56,8 +56,8 @@ class BatchProcessingContext:
     json_mode: bool = True
     output_field: str = "raw_response"
 
-    # Reconciliation — always set by _init_context()
-    reconciler: BatchResultReconciler = None  # type: ignore[assignment]
+    # Reconciliation — set by _init_context() before any method accesses it
+    reconciler: BatchResultReconciler | None = None
 
     # Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None
