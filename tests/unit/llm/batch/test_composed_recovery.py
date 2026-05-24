@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
 )
@@ -77,6 +77,37 @@ def _mock_service():
     return service
 
 
+def _make_context_and_identity(
+    service=None,
+    entry=None,
+    manager=None,
+    provider=None,
+    agent_config=None,
+    output_directory="/tmp",
+    action_name="test_action",
+    start_time=0.0,
+    parent_file_name="test_file",
+):
+    """Build RecoveryContext + BatchIdentity for tests."""
+    service = service or _mock_service()
+    entry = entry or _make_entry()
+    context = RecoveryContext(
+        service=service,
+        manager=manager or MagicMock(),
+        provider=provider or MagicMock(),
+        agent_config=agent_config or {"kind": "llm"},
+        output_directory=output_directory,
+        action_name=action_name,
+        start_time=start_time,
+    )
+    identity = BatchIdentity(
+        batch_id=entry.batch_id,
+        file_name=parent_file_name,
+        entry=entry,
+    )
+    return context, identity
+
+
 # ---------------------------------------------------------------------------
 # TestComposedRecoveryPaths
 # ---------------------------------------------------------------------------
@@ -111,20 +142,15 @@ class TestComposedRecoveryPaths:
         loop.split.return_value = ([_make_result("id-1")], [], {})
         mock_build_loop.return_value = (loop, strategy)
 
+        context, identity = _make_context_and_identity(service=service)
+
         result = handle_retry_recovery(
-            service,
+            context,
+            identity,
             state=state,
             recovery_results=[_make_result("id-1")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         # Composed path completed: output written
@@ -159,20 +185,15 @@ class TestComposedRecoveryPaths:
         loop.split.return_value = ([], [failing_result], {})
         mock_build_loop.return_value = (loop, strategy)
 
+        context, identity = _make_context_and_identity(service=service)
+
         result = handle_retry_recovery(
-            service,
+            context,
+            identity,
             state=state,
             recovery_results=[_make_result("id-1")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         # Exhaustion metadata applied (return_last path — no raise)
@@ -213,21 +234,16 @@ class TestComposedRecoveryPaths:
             lambda **kwargs: apply_exhausted_reprompt(**kwargs)
         )
 
+        context, identity = _make_context_and_identity(service=service)
+
         with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):
             handle_retry_recovery(
-                service,
+                context,
+                identity,
                 state=state,
                 recovery_results=[_make_result("id-1")],
                 accumulated=[],
                 context_map={},
-                output_directory="/tmp",
-                parent_file_name="test_file",
-                entry=_make_entry(),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
-                action_name="test_action",
-                start_time=0.0,
             )
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
@@ -248,20 +264,15 @@ class TestComposedRecoveryPaths:
         # No reprompt configured
         mock_build_loop.return_value = None
 
+        context, identity = _make_context_and_identity(service=service)
+
         result = handle_retry_recovery(
-            service,
+            context,
+            identity,
             state=state,
             recovery_results=[_make_result("id-1")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         # Finalizes directly without reprompt
@@ -285,20 +296,17 @@ class TestComposedRecoveryPaths:
         loop.split.return_value = ([_make_result("id-1"), _make_result("id-2")], [], {})
         mock_build_loop.return_value = (loop, strategy)
 
+        context, identity = _make_context_and_identity(
+            service=service, entry=_make_entry(recovery_type="reprompt"),
+        )
+
         result = handle_reprompt_recovery(
-            service,
+            context,
+            identity,
             state=state,
             recovery_results=[_make_result("id-1"), _make_result("id-2")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(recovery_type="reprompt"),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         assert result == "/tmp/output.json"
@@ -367,7 +375,7 @@ class TestRecoveryStateRoundtrip:
 
     def test_invalid_phase_raises(self):
         """Invalid phase value raises ValueError."""
-        with pytest.raises(ValueError, match="Invalid recovery phase"):
+        with pytest.raises(ValueError, match="is not a valid RecoveryPhase"):
             RecoveryState(phase="invalid")
 
 
@@ -403,20 +411,17 @@ class TestGraduatedPoolMonotonicity:
 
         recovery_results = [_make_result("id-new"), _make_result("id-still-bad")]
 
+        context, identity = _make_context_and_identity(
+            service=service, entry=_make_entry(recovery_type="reprompt"),
+        )
+
         handle_reprompt_recovery(
-            service,
+            context,
+            identity,
             state=state,
             recovery_results=recovery_results,
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(recovery_type="reprompt"),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         # Key invariant: split() received ONLY recovery_results, not prior graduated
@@ -448,20 +453,17 @@ class TestGraduatedPoolMonotonicity:
             graduated_results=[{"custom_id": "id-1", "content": "c1", "success": True}],
         )
 
+        context, identity = _make_context_and_identity(
+            service=service, entry=_make_entry(recovery_type="reprompt"),
+        )
+
         handle_reprompt_recovery(
-            service,
+            context,
+            identity,
             state=state,
             recovery_results=[_make_result("id-2"), _make_result("id-3")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(recovery_type="reprompt"),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         # Monotonicity: prior graduate preserved + new one appended

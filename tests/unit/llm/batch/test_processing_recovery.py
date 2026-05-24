@@ -17,7 +17,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
+from agent_actions.llm.batch.core.batch_models import (
+    BatchIdentity,
+    BatchJobEntry,
+    BatchRegistryStats,
+    RecoveryContext,
+)
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.processing_recovery import (
@@ -94,6 +99,47 @@ def _mock_service():
     service._cleanup_recovery_entries = MagicMock()
     service._update_prompt_trace_responses = MagicMock()
     return service
+
+
+def _make_context_and_identity(
+    service=None,
+    entry=None,
+    manager=None,
+    provider=None,
+    agent_config=None,
+    output_directory="/tmp",
+    action_name="test_action",
+    start_time=0.0,
+    file_name="test_file",
+    batch_id="batch-123",
+):
+    """Construct a (RecoveryContext, BatchIdentity) pair for tests."""
+    if service is None:
+        service = _mock_service()
+    if entry is None:
+        entry = _make_entry()
+    if manager is None:
+        manager = MagicMock()
+    if provider is None:
+        provider = MagicMock()
+    if agent_config is None:
+        agent_config = {"kind": "llm"}
+
+    context = RecoveryContext(
+        service=service,
+        manager=manager,
+        provider=provider,
+        agent_config=agent_config,
+        output_directory=output_directory,
+        action_name=action_name,
+        start_time=start_time,
+    )
+    identity = BatchIdentity(
+        batch_id=batch_id,
+        file_name=file_name,
+        entry=entry,
+    )
+    return context, identity
 
 
 # ---------------------------------------------------------------------------
@@ -243,23 +289,20 @@ class TestHandleRetryRecovery:
         )
         service._retry_service.submit_retry_batch.return_value = ("new-batch-id", 1)
 
+        ctx, ident = _make_context_and_identity(
+            service=service, manager=manager, file_name="test_file"
+        )
+
         with patch(
             "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
         ) as mock_mgr:
             result = handle_retry_recovery(
-                service,
+                ctx,
+                ident,
                 state=state,
                 recovery_results=[_make_result("id-1")],
                 accumulated=[],
                 context_map={},
-                output_directory="/tmp",
-                parent_file_name="test_file",
-                entry=_make_entry(),
-                agent_config={"kind": "llm"},
-                manager=manager,
-                provider=MagicMock(),
-                action_name="test_action",
-                start_time=0.0,
             )
 
         assert result is None  # More retries pending
@@ -311,23 +354,18 @@ class TestHandleRetryRecovery:
         loop.split.return_value = ([_make_result("id-1")], [], {})  # all pass
         mock_build_loop.return_value = (loop, strategy)
 
+        ctx, ident = _make_context_and_identity(service=service, file_name="test_file")
+
         with patch(
             "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
         ) as mock_mgr:
             result = handle_retry_recovery(
-                service,
+                ctx,
+                ident,
                 state=state,
                 recovery_results=[_make_result("id-1")],
                 accumulated=[],
                 context_map={},
-                output_directory="/tmp",
-                parent_file_name="test_file",
-                entry=_make_entry(),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
-                action_name="test_action",
-                start_time=0.0,
             )
 
         # Observable: phase transition happened (reprompt ran), then finalized
@@ -356,23 +394,20 @@ class TestHandleRetryRecovery:
         )
         mock_build_loop.return_value = None  # no reprompt configured
 
+        ctx, ident = _make_context_and_identity(
+            service=service, manager=manager, file_name="test_file"
+        )
+
         with patch(
             "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
         ) as mock_mgr:
             result = handle_retry_recovery(
-                service,
+                ctx,
+                ident,
                 state=state,
                 recovery_results=[_make_result("id-1"), _make_result("id-2")],
                 accumulated=[],
                 context_map={},
-                output_directory="/tmp",
-                parent_file_name="test_file",
-                entry=_make_entry(),
-                agent_config={"kind": "llm"},
-                manager=manager,
-                provider=MagicMock(),
-                action_name="test_action",
-                start_time=0.0,
             )
 
         # Observable: output written, event fired with correct payload, state cleaned
@@ -419,24 +454,21 @@ class TestHandleRepromptRecovery:
         service = _mock_service()
         state = _make_state(phase="reprompt", reprompt_attempt=1)
 
+        ctx, ident = _make_context_and_identity(
+            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
+        )
+
         with patch(
             "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
             return_value="/tmp/output.json",
         ) as mock_finalize:
             result = handle_reprompt_recovery(
-                service,
+                ctx,
+                ident,
                 state=state,
                 recovery_results=[_make_result("id-1"), _make_result("id-2")],
                 accumulated=[],
                 context_map={},
-                output_directory="/tmp",
-                parent_file_name="test_file",
-                entry=_make_entry(recovery_type="reprompt"),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
-                action_name="test_action",
-                start_time=0.0,
             )
 
         assert result == "/tmp/output.json"
@@ -456,20 +488,20 @@ class TestHandleRepromptRecovery:
 
         service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch-2", 1)
 
+        ctx, ident = _make_context_and_identity(
+            service=service,
+            manager=manager,
+            entry=_make_entry(recovery_type="reprompt"),
+            file_name="test_file",
+        )
+
         result = handle_reprompt_recovery(
-            service,
+            ctx,
+            ident,
             state=state,
             recovery_results=[_make_result("id-1"), _make_result("id-2")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(recovery_type="reprompt"),
-            agent_config={"kind": "llm"},
-            manager=manager,
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         assert result is None  # More reprompts pending
@@ -488,24 +520,21 @@ class TestHandleRepromptRecovery:
         # reprompt_attempt == max → exhausted
         state = _make_state(phase="reprompt", reprompt_attempt=2, reprompt_max_attempts=2)
 
+        ctx, ident = _make_context_and_identity(
+            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
+        )
+
         with patch(
             "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
             return_value="/tmp/output.json",
         ):
             result = handle_reprompt_recovery(
-                service,
+                ctx,
+                ident,
                 state=state,
                 recovery_results=[_make_result("id-1"), _make_result("id-2")],
                 accumulated=[],
                 context_map={},
-                output_directory="/tmp",
-                parent_file_name="test_file",
-                entry=_make_entry(recovery_type="reprompt"),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
-                action_name="test_action",
-                start_time=0.0,
             )
 
         assert result == "/tmp/output.json"
@@ -525,20 +554,17 @@ class TestHandleRepromptRecovery:
 
         service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
 
+        ctx, ident = _make_context_and_identity(
+            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
+        )
+
         handle_reprompt_recovery(
-            service,
+            ctx,
+            ident,
             state=state,
             recovery_results=[_make_result("id-1"), _make_result("id-2")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(recovery_type="reprompt"),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         assert len(state.graduated_results) == 2  # 1 old + 1 new (id-1 graduated)
@@ -559,21 +585,18 @@ class TestFinalizeBatchOutput:
         if results is None:
             results = [_make_result("id-1"), _make_result("id-2", success=False)]
 
+        ctx, ident = _make_context_and_identity(
+            service=service, manager=manager, batch_id=batch_id, file_name="test_file"
+        )
+
         with (
             patch("agent_actions.llm.batch.services.processing_recovery.fire_event") as mock_event,
         ):
             output_path = finalize_batch_output(
-                service,
+                ctx,
+                ident,
                 batch_results=results,
-                exhausted_recovery=None,
                 context_map={},
-                output_directory="/tmp",
-                file_name="test_file",
-                batch_id=batch_id,
-                agent_config={"kind": "llm"},
-                manager=manager,
-                action_name="test_action",
-                start_time=0.0,
             )
 
         event = mock_event.call_args[0][0]
@@ -619,19 +642,16 @@ class TestFinalizeBatchOutput:
         manager = MagicMock()
         context_map = {"custom-filtered-1": {"source_guid": "sg-001"}}
 
+        ctx, ident = _make_context_and_identity(
+            service=service, manager=manager, file_name="test_file"
+        )
+
         with patch("agent_actions.llm.batch.services.processing_recovery.fire_event"):
             finalize_batch_output(
-                service,
+                ctx,
+                ident,
                 batch_results=[_make_result("id-1")],
-                exhausted_recovery=None,
                 context_map=context_map,
-                output_directory="/tmp",
-                file_name="test_file",
-                batch_id="batch-123",
-                agent_config={"kind": "llm"},
-                manager=manager,
-                action_name="test_action",
-                start_time=0.0,
             )
 
         service._write_filtered_dispositions.assert_called_once_with(context_map, "test_action")
@@ -648,19 +668,16 @@ class TestFinalizeBatchOutput:
         manager = MagicMock()
         context_map = {"custom-filtered-1": {"source_guid": "sg-001"}}
 
+        ctx, ident = _make_context_and_identity(
+            service=service, manager=manager, action_name=None, file_name="test_file"
+        )
+
         with patch("agent_actions.llm.batch.services.processing_recovery.fire_event"):
             finalize_batch_output(
-                service,
+                ctx,
+                ident,
                 batch_results=[_make_result("id-1")],
-                exhausted_recovery=None,
                 context_map=context_map,
-                output_directory="/tmp",
-                file_name="test_file",
-                batch_id="batch-123",
-                agent_config={"kind": "llm"},
-                manager=manager,
-                action_name=None,
-                start_time=0.0,
             )
 
         service._write_filtered_dispositions.assert_called_once_with(context_map, "fallback_action")
@@ -687,23 +704,18 @@ class TestRecoveryStatePersistence:
         )
         service._retry_service.submit_retry_batch.return_value = ("new-batch", 1)
 
+        ctx, ident = _make_context_and_identity(service=service, file_name="test_file")
+
         with patch(
             "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
         ) as mock_mgr:
             handle_retry_recovery(
-                service,
+                ctx,
+                ident,
                 state=state,
                 recovery_results=[],
                 accumulated=[],
                 context_map={},
-                output_directory="/tmp",
-                parent_file_name="test_file",
-                entry=_make_entry(),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
-                action_name="test_action",
-                start_time=0.0,
             )
 
         assert state.retry_attempt == 2
@@ -723,20 +735,17 @@ class TestRecoveryStatePersistence:
         state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
         service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
 
+        ctx, ident = _make_context_and_identity(
+            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
+        )
+
         handle_reprompt_recovery(
-            service,
+            ctx,
+            ident,
             state=state,
             recovery_results=[_make_result("id-1")],
             accumulated=[],
             context_map={},
-            output_directory="/tmp",
-            parent_file_name="test_file",
-            entry=_make_entry(recovery_type="reprompt"),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         assert state.reprompt_attempt == 2
@@ -1039,16 +1048,17 @@ class TestRecoveryLoopRootCauses:
             mock_build_loop.return_value = (loop, strategy)
             service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch-2", 1)
 
+            ctx, ident = _make_context_and_identity(
+                service=service,
+                entry=_make_parent_entry(record_count=1),
+                file_name="my_action",
+            )
+
             should_continue = check_and_submit_reprompt(
-                service,
+                ctx,
+                ident,
                 batch_results=results,
                 context_map={"id-fail": {"user_content": "test"}},
-                output_directory="/tmp",
-                file_name="my_action",
-                entry=_make_parent_entry(record_count=1),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
                 recovery_state=persisted_state,
             )
 
@@ -1069,16 +1079,17 @@ class TestRecoveryLoopRootCauses:
             loop.split.return_value = ([], results, {})
             mock_build_loop.return_value = (loop, strategy)
 
+            ctx, ident = _make_context_and_identity(
+                service=service,
+                entry=_make_parent_entry(record_count=1),
+                file_name="my_action",
+            )
+
             should_continue = check_and_submit_reprompt(
-                service,
+                ctx,
+                ident,
                 batch_results=results,
                 context_map={},
-                output_directory="/tmp",
-                file_name="my_action",
-                entry=_make_parent_entry(record_count=1),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
                 recovery_state=exhausted_state,
             )
 
@@ -1133,16 +1144,17 @@ class TestDownstreamBugs:
             accumulated_results=[{"custom_id": "id-1", "content": "retry-data", "success": True}],
         )
 
+        ctx, ident = _make_context_and_identity(
+            service=service,
+            entry=_make_parent_entry(record_count=1),
+            file_name="my_action",
+        )
+
         check_and_submit_reprompt(
-            service,
+            ctx,
+            ident,
             batch_results=[_make_result("id-1", success=False)],
             context_map={},
-            output_directory="/tmp",
-            file_name="my_action",
-            entry=_make_parent_entry(record_count=1),
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            provider=MagicMock(),
             recovery_state=state,
         )
 
@@ -1166,16 +1178,17 @@ class TestDownstreamBugs:
             mock_build_loop.return_value = (loop, strategy)
             service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
 
+            ctx, ident = _make_context_and_identity(
+                service=service,
+                entry=_make_parent_entry(record_count=2),
+                file_name="my_action",
+            )
+
             check_and_submit_reprompt(
-                service,
+                ctx,
+                ident,
                 batch_results=results,
                 context_map={"id-real-fail": {}, "id-none": {}},
-                output_directory="/tmp",
-                file_name="my_action",
-                entry=_make_parent_entry(record_count=2),
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                provider=MagicMock(),
             )
 
         submitted = service._retry_service.submit_reprompt_batch.call_args.kwargs["failed_results"]
@@ -1217,17 +1230,18 @@ class TestStaleRecoveryState:
         svc._storage_backend = MagicMock()
         svc._action_name = "test_action"
 
-        svc._finalize_batch_output(
-            batch_results=[_make_result("id-1")],
-            exhausted_recovery=None,
-            context_map={},
+        ctx, ident = _make_context_and_identity(
+            service=svc,
             output_directory="/tmp/output",
             file_name="my_action",
             batch_id="batch-123",
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
+        )
+
+        svc._finalize_batch_output(
+            context=ctx,
+            identity=ident,
+            batch_results=[_make_result("id-1")],
+            context_map={},
         )
 
         # Recovery state must be deleted before finalization
