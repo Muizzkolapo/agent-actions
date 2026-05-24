@@ -20,7 +20,6 @@ from agent_actions.prompt.context.scope_namespace import (
     _extract_content_data,
     _filter_and_store_fields,
 )
-from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 
 logger = logging.getLogger(__name__)
 
@@ -156,18 +155,6 @@ class DependencyNamespaceBuilder:
                         dep_namespaces[dep_name] = SKIPPED_NAMESPACE
                         continue
 
-                    # Detect corrupted namespace: compiled JSON Schema stored
-                    # as action content via schema-echo.
-                    if _is_schema_echo(dep_data) and dep_data.get("title") == "InlineSchema":
-                        logger.warning(
-                            "[OBSERVE NULL-SAFE] '%s': namespace contains InlineSchema "
-                            "definition instead of action output — treating as skipped. "
-                            "This indicates a bug in the output pipeline for this action.",
-                            dep_name,
-                        )
-                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
-                        continue
-
                     if not isinstance(dep_data, dict):
                         logger.warning(
                             "[RECORD NAMESPACE] '%s' for action '%s' is %s, not dict — skipping",
@@ -178,6 +165,23 @@ class DependencyNamespaceBuilder:
                         continue
 
                     allowed_fields = allowed_fields_map.get(dep_name)
+
+                    # Zero-overlap guard: if specific fields are declared but
+                    # none of them exist in the namespace, the content is
+                    # corrupted (e.g. schema-echo, wrong action output).
+                    # Wrap as SKIPPED_NAMESPACE to prevent RecordContextError.
+                    if allowed_fields and not set(dep_data.keys()) & set(allowed_fields):
+                        logger.warning(
+                            "[OBSERVE NULL-SAFE] '%s': namespace has zero overlap "
+                            "with declared fields %s (actual keys: %s) — "
+                            "treating as skipped",
+                            dep_name,
+                            sorted(allowed_fields),
+                            sorted(dep_data.keys()),
+                        )
+                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
+                        continue
+
                     _filter_and_store_fields(
                         dep_namespaces,
                         dep_name,
