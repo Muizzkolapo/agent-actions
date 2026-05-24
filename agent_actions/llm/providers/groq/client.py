@@ -12,8 +12,8 @@ as Groq's json_object mode can produce malformed output.
 """
 
 import logging
+import time
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 import groq
@@ -100,7 +100,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
             ),
         }
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             llm = client.chat.completions.create(**json_completion_kwargs)
         except (RateLimitError, NetworkError, VendorAPIError):
@@ -127,7 +127,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
                 cause=e,
             ) from e
 
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(llm, "groq", model_name, latency_ms, request_id)
@@ -163,13 +163,13 @@ class GroqClient(BaseClient, JSONResponseMixin):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except groq.APIError as e:
             raise _wrap_groq_error(e, model_name, request_id) from e
 
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(response, "groq", model_name, latency_ms, request_id)

@@ -7,8 +7,8 @@ without real API calls. Generates realistic data based on schema and prompts.
 
 import json
 import logging
+import time
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
@@ -138,7 +138,7 @@ class AgacClient(BaseClient):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
 
         logger.info(
             "AgacClient.call_json: id=%s, attempt=%d, schema=%s, prompt_len=%d",
@@ -170,7 +170,7 @@ class AgacClient(BaseClient):
             }
             logger.debug("No schema provided, using generic response")
 
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(
@@ -214,7 +214,7 @@ class AgacClient(BaseClient):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
 
         logger.info(
             "AgacClient.call_non_json: id=%s, attempt=%d, prompt_len=%d",
@@ -226,7 +226,7 @@ class AgacClient(BaseClient):
         # Generate text response based on prompt
         content = FakeDataGenerator.generate_text_response(prompt, attempt)
 
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(

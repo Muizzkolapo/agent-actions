@@ -91,9 +91,7 @@ class BatchRetryService:
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None
 
         if retry_enabled:
-            expected_ids = BatchResultReconciler.collect_expected_custom_ids(context_map)
-            received_ids = BatchResultReconciler.collect_result_custom_ids(all_results)
-            missing_ids = expected_ids - received_ids
+            missing_ids = BatchResultReconciler.find_missing_ids(context_map, all_results)
 
             if missing_ids:
                 from datetime import UTC, datetime
