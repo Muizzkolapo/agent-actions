@@ -80,6 +80,58 @@ def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
     return "warn"
 
 
+def _is_schema_echo(data: dict[str, Any]) -> bool:
+    """Detect if a response dict is a schema-echo.
+
+    An LLM sometimes returns the JSON Schema definition itself instead of
+    conforming data.  The Ollama compiled format is the most common echo
+    shape: ``{"title": "InlineSchema", "type": "object", "properties": {...}}``.
+
+    Detection uses three structural keys (``type == "object"`` + ``properties``
+    as a dict + ``title`` present) which are extremely unlikely to appear
+    together in legitimate action output.
+    """
+    return (
+        isinstance(data, dict)
+        and data.get("type") == "object"
+        and isinstance(data.get("properties"), dict)
+        and "title" in data
+    )
+
+
+def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
+    """Replace schema-echo items in a response list with ``_parse_error`` dicts.
+
+    Runs unconditionally — not gated by ``skip_schema_validation`` — because
+    schema echoes are never valid output regardless of validation settings.
+    """
+    if not isinstance(response, list):
+        return response
+
+    changed = False
+    result: list[Any] = []
+    for item in response:
+        if isinstance(item, dict) and _is_schema_echo(item):
+            logger.warning(
+                "[%s] Schema-echo detected in LLM response — the model returned "
+                "the JSON Schema definition instead of conforming data. "
+                "Replacing with _parse_error.",
+                agent_name,
+            )
+            result.append(
+                {
+                    "raw_response": str(item),
+                    "_parse_error": "Schema-echo: LLM returned the schema definition "
+                    "instead of conforming data",
+                }
+            )
+            changed = True
+        else:
+            result.append(item)
+
+    return result if changed else response
+
+
 def _validate_llm_output_schema(
     response: Any,
     agent_config: dict[str, Any],
@@ -93,9 +145,15 @@ def _validate_llm_output_schema(
     "reprompt" and ``skip_schema_validation`` is True, validation is deferred
     to the outer reprompt loop.
 
+    Schema-echo detection runs unconditionally (not gated by
+    ``skip_schema_validation``) because echoed schemas are never valid output.
+
     Raises:
         SchemaValidationError: If on_schema_mismatch="reject" and validation fails.
     """
+    # Unconditional schema-echo rejection — runs even when validation is skipped
+    response = _reject_schema_echo_items(response, agent_name)
+
     schema = agent_config.get(SCHEMA_KEY)
     if not schema or not isinstance(schema, dict):
         mismatch_mode = _resolve_schema_mismatch_mode(agent_config)
