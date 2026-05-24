@@ -2,9 +2,9 @@
 
 import dataclasses
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from typing import Any
 
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 
 
 @dataclass
@@ -23,7 +23,7 @@ class BatchJobEntry:
     version_base_name: str | None = None
     # Recovery fields for async retry/reprompt batches
     parent_file_name: str | None = None  # links to original batch's file_name key
-    recovery_type: Literal["retry", "reprompt"] | None = None
+    recovery_type: RecoveryType | None = None
     recovery_attempt: int | None = None  # attempt number (1, 2, 3...)
 
     def __post_init__(self):
@@ -43,6 +43,10 @@ class BatchJobEntry:
         """Create BatchJobEntry from dictionary (JSON deserialization)."""
         known_fields = {f.name for f in dataclasses.fields(cls)}
         filtered = {k: v for k, v in data.items() if k in known_fields}
+        # Coerce recovery_type string to enum (JSON stores "retry"/"reprompt")
+        rt = filtered.get("recovery_type")
+        if rt is not None and isinstance(rt, str):
+            filtered["recovery_type"] = RecoveryType(rt)
         return cls(**filtered)
 
     def to_dict(self) -> dict:
@@ -152,6 +156,28 @@ class PreparedBatchTasks:
     def task_count(self) -> int:
         """Get number of prepared tasks."""
         return len(self.tasks)
+
+
+@dataclass
+class RecoveryContext:
+    """Execution context shared across all recovery operations."""
+
+    service: Any  # BatchProcessingService (avoid circular import)
+    manager: Any  # BatchRegistryManager
+    provider: Any
+    agent_config: dict[str, Any]
+    output_directory: str
+    action_name: str | None
+    start_time: float
+
+
+@dataclass
+class BatchIdentity:
+    """Identifies a specific batch job."""
+
+    batch_id: str
+    file_name: str
+    entry: BatchJobEntry
 
 
 @dataclass

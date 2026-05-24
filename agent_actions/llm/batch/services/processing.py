@@ -12,9 +12,9 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
@@ -336,12 +336,11 @@ class BatchProcessingService:
         )
 
         carry_path = Path(output_directory) / "batch" / BATCH_CARRY_FORWARD_FILENAME
-        if not carry_path.exists():
-            return batch_output
-
         try:
             carry_data = json.loads(carry_path.read_text())
             carry_guids = set(carry_data.get("guids", []))
+        except FileNotFoundError:
+            return batch_output
         except (json.JSONDecodeError, KeyError):
             logger.warning("Malformed .batch_carry_forward.json — skipping merge")
             return batch_output
@@ -504,14 +503,14 @@ class BatchProcessingService:
                         record_count=record_count,
                         file_name=recovery_file_name,
                         parent_file_name=file_name,
-                        recovery_type="retry",
+                        recovery_type=RecoveryType.RETRY,
                         recovery_attempt=1,
                     )
                     manager.save_batch_job(recovery_file_name, recovery_entry)
 
                     record_failure_counts = {rid: 1 for rid in missing_ids}
                     state = RecoveryState(
-                        phase="retry",
+                        phase=RecoveryPhase.RETRY,
                         retry_attempt=1,
                         retry_max_attempts=max_attempts,
                         missing_ids=list(missing_ids),
@@ -535,36 +534,42 @@ class BatchProcessingService:
                     )
                     return None  # Recovery pending
 
+        # Build context objects for recovery functions
+        context = RecoveryContext(
+            service=self,
+            manager=manager,
+            provider=provider,
+            agent_config=agent_config or {},
+            output_directory=output_directory,
+            action_name=action_name,
+            start_time=start_time,
+        )
+        identity = BatchIdentity(
+            batch_id=batch_id,
+            file_name=file_name,
+            entry=entry,
+        )
+
         # Do NOT load recovery state here. The original batch path processes
         # from scratch — any existing recovery_state file is stale (left by a
         # crashed run). Passing it would poison the reprompt check with a stale
         # reprompt_attempt counter, causing it to think attempts are exhausted.
         # Stale files are cleaned up in _finalize_batch_output.
         should_continue = self._check_and_submit_reprompt(
+            context=context,
+            identity=identity,
             batch_results=batch_results,
             context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            entry=entry,
-            agent_config=agent_config,
-            manager=manager,
-            provider=provider,
             recovery_state=None,
         )
         if not should_continue:
             return None  # Reprompt submitted, processing paused
 
         return self._finalize_batch_output(
+            context=context,
+            identity=identity,
             batch_results=batch_results,
-            exhausted_recovery=None,
             context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            batch_id=batch_id,
-            agent_config=agent_config,
-            manager=manager,
-            action_name=action_name,
-            start_time=start_time,
         )
 
     # =========================================================================
@@ -598,14 +603,10 @@ class BatchProcessingService:
 
     def _check_and_submit_reprompt(
         self,
+        context: RecoveryContext,
+        identity: BatchIdentity,
         batch_results: list[BatchResult],
         context_map: dict[str, Any],
-        output_directory: str,
-        file_name: str,
-        entry: BatchJobEntry,
-        agent_config: dict[str, Any] | None,
-        manager: BatchRegistryManager,
-        provider: Any,
         recovery_state: RecoveryState | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
     ) -> bool:
@@ -614,31 +615,21 @@ class BatchProcessingService:
         Delegates to processing_recovery.check_and_submit_reprompt.
         """
         return _check_and_submit_reprompt_impl(
-            self,
+            context,
+            identity,
             batch_results=batch_results,
             context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            entry=entry,
-            agent_config=agent_config,
-            manager=manager,
-            provider=provider,
             recovery_state=recovery_state,
             exhausted_recovery=exhausted_recovery,
         )
 
     def _finalize_batch_output(
         self,
+        context: RecoveryContext,
+        identity: BatchIdentity,
         batch_results: list[BatchResult],
-        exhausted_recovery: dict[str, RecoveryMetadata] | None,
         context_map: dict[str, Any],
-        output_directory: str,
-        file_name: str,
-        batch_id: str,
-        agent_config: dict[str, Any] | None,
-        manager: BatchRegistryManager,
-        action_name: str | None,
-        start_time: float,
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
     ) -> str:
         """Finalize batch processing: convert, write output, fire events, cleanup.
 
@@ -648,21 +639,15 @@ class BatchProcessingService:
         # Clean up stale recovery state (e.g. from a crashed previous run).
         # The recovery path already does this in _finalize_and_cleanup, but the
         # original batch path goes through this method instead and must also clean up.
-        RecoveryStateManager.delete(output_directory, file_name)
+        RecoveryStateManager.delete(context.output_directory, identity.file_name)
         output_path = _finalize_batch_output_impl(
-            self,
+            context,
+            identity,
             batch_results=batch_results,
-            exhausted_recovery=exhausted_recovery,
             context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            batch_id=batch_id,
-            agent_config=agent_config,
-            manager=manager,
-            action_name=action_name,
-            start_time=start_time,
+            exhausted_recovery=exhausted_recovery,
         )
-        _cleanup_recovery_impl(self, manager, output_directory, file_name)
+        _cleanup_recovery_impl(context, identity)
         return output_path
 
     def _clear_deferred_dispositions(

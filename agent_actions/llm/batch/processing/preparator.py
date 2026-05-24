@@ -70,8 +70,8 @@ class BatchTaskPreparator:
                 },
             )
 
-        # Validate configuration
-        self._validate_config(agent_config, provider)
+        # Validate configuration and get compiled schema
+        schema = self._validate_config(agent_config, provider)
 
         from agent_actions.prompt.formatter import PromptFormatter
 
@@ -89,8 +89,6 @@ class BatchTaskPreparator:
 
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
-
-        schema = self._prepare_schema(agent_config, provider)
 
         context_map_builder: dict[str, Any] = {}
         tasks_builder: list[dict[str, Any]] = []
@@ -265,8 +263,8 @@ class BatchTaskPreparator:
                     reason=error_str[:500],
                 )
 
-    def _validate_config(self, agent_config: dict[str, Any], provider) -> None:
-        """Validate agent configuration."""
+    def _validate_config(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
+        """Validate agent configuration. Returns compiled schema."""
         schema = self._prepare_schema(agent_config, provider)
         json_mode = agent_config.get(JSON_MODE_KEY, True)
 
@@ -279,6 +277,7 @@ class BatchTaskPreparator:
                     "hint": "Either provide a schema or set json_mode: false",
                 },
             )
+        return schema
 
     def _prepare_schema(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
         """Prepare and compile schema for provider."""

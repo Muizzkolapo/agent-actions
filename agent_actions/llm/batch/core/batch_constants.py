@@ -50,6 +50,29 @@ class FilterStatus(str, Enum):
         return self.value
 
 
+class RecoveryType(str, Enum):
+    """Type of recovery operation for async batch processing."""
+
+    RETRY = "retry"
+    REPROMPT = "reprompt"
+
+    def __str__(self) -> str:
+        """Return the string value for str() conversion."""
+        return self.value
+
+
+class RecoveryPhase(str, Enum):
+    """Current phase in the recovery state machine."""
+
+    RETRY = "retry"
+    REPROMPT = "reprompt"
+    DONE = "done"
+
+    def __str__(self) -> str:
+        """Return the string value for str() conversion."""
+        return self.value
+
+
 class ContextMetaKeys:
     """Internal underscore-prefixed metadata keys used in batch context maps."""
 

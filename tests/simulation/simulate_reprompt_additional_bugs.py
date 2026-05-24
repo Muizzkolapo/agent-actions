@@ -17,7 +17,12 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
+from agent_actions.llm.batch.core.batch_models import (
+    BatchIdentity,
+    BatchJobEntry,
+    BatchRegistryStats,
+    RecoveryContext,
+)
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.processing_recovery import check_and_submit_reprompt
@@ -138,16 +143,27 @@ def run_bug8_no_state_mutation():
         loop.split.return_value = ([], [_make_result("id-1", success=False)], {})
         mock_build.return_value = (loop, strategy)
 
-        check_and_submit_reprompt(
-            service,
-            batch_results=[_make_result("id-1", success=False)],
-            context_map={},
-            output_directory="/tmp",
-            file_name="my_action",
-            entry=_make_parent_entry(),
-            agent_config={"kind": "llm"},
+        entry = _make_parent_entry()
+        ctx = RecoveryContext(
+            service=service,
             manager=MagicMock(),
             provider=MagicMock(),
+            agent_config={"kind": "llm"},
+            output_directory="/tmp",
+            action_name=None,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name="my_action",
+            entry=entry,
+        )
+
+        check_and_submit_reprompt(
+            context=ctx,
+            identity=identity,
+            batch_results=[_make_result("id-1", success=False)],
+            context_map={},
             recovery_state=state,
         )
 
@@ -196,16 +212,27 @@ def run_bug10_none_content_filtered():
         loop.split.return_value = ([], results, {})
         mock_build.return_value = (loop, strategy)
 
-        check_and_submit_reprompt(
-            service,
-            batch_results=results,
-            context_map={"id-real-fail": {}, "id-none": {}},
-            output_directory="/tmp",
-            file_name="my_action",
-            entry=_make_parent_entry(),
-            agent_config={"kind": "llm"},
+        entry = _make_parent_entry()
+        ctx = RecoveryContext(
+            service=service,
             manager=MagicMock(),
             provider=MagicMock(),
+            agent_config={"kind": "llm"},
+            output_directory="/tmp",
+            action_name=None,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name="my_action",
+            entry=entry,
+        )
+
+        check_and_submit_reprompt(
+            context=ctx,
+            identity=identity,
+            batch_results=results,
+            context_map={"id-real-fail": {}, "id-none": {}},
         )
 
     call_kwargs = service._retry_service.submit_reprompt_batch.call_args.kwargs

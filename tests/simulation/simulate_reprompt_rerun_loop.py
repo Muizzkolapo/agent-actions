@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
 )
@@ -155,16 +155,26 @@ def run_max_attempts_enforced(work_dir):
         loop.split.return_value = ([], results, {})
         mock_build.return_value = (loop, strategy)
 
-        should_continue = check_and_submit_reprompt(
-            service,
-            batch_results=results,
-            context_map={"id-fail": {}},
-            output_directory=str(work_dir),
-            file_name="my_action",
-            entry=entry,
-            agent_config={"kind": "llm"},
+        ctx = RecoveryContext(
+            service=service,
             manager=MagicMock(),
             provider=MagicMock(),
+            agent_config={"kind": "llm"},
+            output_directory=str(work_dir),
+            action_name=None,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name="my_action",
+            entry=entry,
+        )
+
+        should_continue = check_and_submit_reprompt(
+            context=ctx,
+            identity=identity,
+            batch_results=results,
+            context_map={"id-fail": {}},
             recovery_state=None,
         )
 
@@ -186,16 +196,26 @@ def run_max_attempts_enforced(work_dir):
         loop.split.return_value = ([], results, {})
         mock_build.return_value = (loop, strategy)
 
-        should_continue = check_and_submit_reprompt(
-            service,
-            batch_results=results,
-            context_map={"id-fail": {}},
-            output_directory=str(work_dir),
-            file_name="my_action",
-            entry=entry,
-            agent_config={"kind": "llm"},
+        ctx = RecoveryContext(
+            service=service,
             manager=MagicMock(),
             provider=MagicMock(),
+            agent_config={"kind": "llm"},
+            output_directory=str(work_dir),
+            action_name=None,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name="my_action",
+            entry=entry,
+        )
+
+        should_continue = check_and_submit_reprompt(
+            context=ctx,
+            identity=identity,
+            batch_results=results,
+            context_map={"id-fail": {}},
             recovery_state=state_run2,
         )
 
@@ -214,16 +234,26 @@ def run_max_attempts_enforced(work_dir):
         loop.split.return_value = ([], results, {})
         mock_build.return_value = (loop, strategy)
 
-        should_continue = check_and_submit_reprompt(
-            service,
-            batch_results=results,
-            context_map={},
-            output_directory=str(work_dir),
-            file_name="my_action",
-            entry=entry,
-            agent_config={"kind": "llm"},
+        ctx = RecoveryContext(
+            service=service,
             manager=MagicMock(),
             provider=MagicMock(),
+            agent_config={"kind": "llm"},
+            output_directory=str(work_dir),
+            action_name=None,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name="my_action",
+            entry=entry,
+        )
+
+        should_continue = check_and_submit_reprompt(
+            context=ctx,
+            identity=identity,
+            batch_results=results,
+            context_map={},
             recovery_state=state_run3,
         )
 
@@ -298,16 +328,26 @@ def run_graduated_pool_persists(work_dir):
         loop.split.return_value = ([], results, {})
         mock_build.return_value = (loop, strategy)
 
-        check_and_submit_reprompt(
-            service,
-            batch_results=results,
-            context_map={"id-still-bad": {}},
-            output_directory=str(work_dir),
-            file_name="my_action",
-            entry=entry,
-            agent_config={"kind": "llm"},
+        ctx = RecoveryContext(
+            service=service,
             manager=MagicMock(),
             provider=MagicMock(),
+            agent_config={"kind": "llm"},
+            output_directory=str(work_dir),
+            action_name=None,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name="my_action",
+            entry=entry,
+        )
+
+        check_and_submit_reprompt(
+            context=ctx,
+            identity=identity,
+            batch_results=results,
+            context_map={"id-still-bad": {}},
             recovery_state=prior_state,
         )
 

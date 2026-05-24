@@ -10,7 +10,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.core.batch_models import (
+    BatchIdentity,
+    BatchJobEntry,
+    RecoveryContext,
+)
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryStateManager,
 )
@@ -145,7 +149,29 @@ class TestHandleRepromptRecoveryGraduatedPool:
             start_time=0.0,
         )
         defaults.update(kwargs)
-        return handle_reprompt_recovery(service, **defaults)
+        context = RecoveryContext(
+            service=service,
+            manager=defaults.pop("manager"),
+            provider=defaults.pop("provider"),
+            agent_config=defaults.pop("agent_config"),
+            output_directory=defaults.pop("output_directory"),
+            action_name=defaults.pop("action_name"),
+            start_time=defaults.pop("start_time"),
+        )
+        entry = defaults.pop("entry")
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name=defaults.pop("parent_file_name"),
+            entry=entry,
+        )
+        return handle_reprompt_recovery(
+            context=context,
+            identity=identity,
+            state=defaults["state"],
+            recovery_results=defaults["recovery_results"],
+            accumulated=defaults["accumulated"],
+            context_map=defaults["context_map"],
+        )
 
     def test_split_called_with_only_recovery_results(self, mock_loop):
         """loop.split() receives recovery_results, NOT merged accumulated."""
@@ -310,9 +336,33 @@ class TestCheckAndSubmitRepromptGraduatedPool:
             agent_config={"reprompt": {"validation": "v", "max_attempts": 2}},
             manager=MagicMock(),
             provider=MagicMock(),
+            recovery_state=None,
+            exhausted_recovery=None,
         )
         defaults.update(kwargs)
-        return check_and_submit_reprompt(service, **defaults)
+        context = RecoveryContext(
+            service=service,
+            manager=defaults.pop("manager"),
+            provider=defaults.pop("provider"),
+            agent_config=defaults.pop("agent_config"),
+            output_directory=defaults.pop("output_directory"),
+            action_name=None,
+            start_time=0.0,
+        )
+        entry = defaults.pop("entry")
+        identity = BatchIdentity(
+            batch_id=entry.batch_id,
+            file_name=defaults.pop("file_name"),
+            entry=entry,
+        )
+        return check_and_submit_reprompt(
+            context=context,
+            identity=identity,
+            batch_results=defaults["batch_results"],
+            context_map=defaults["context_map"],
+            recovery_state=defaults["recovery_state"],
+            exhausted_recovery=defaults["exhausted_recovery"],
+        )
 
     def test_uses_evaluation_loop_split(self, mock_loop):
         """EvaluationLoop.split() is used instead of validate_results()."""

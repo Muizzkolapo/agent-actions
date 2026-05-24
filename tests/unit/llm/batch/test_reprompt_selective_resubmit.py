@@ -10,6 +10,7 @@ that actually failed validation.
 import contextlib
 from unittest.mock import MagicMock, patch
 
+from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
 from agent_actions.llm.providers.batch_base import BatchResult
 
 # ---------------------------------------------------------------------------
@@ -296,21 +297,30 @@ class TestSelectiveRepromptResubmission:
         entry.provider = "openai"
         entry.batch_id = "batch_rp_1"
         manager = MagicMock()
+        provider = MagicMock()
+
+        context = RecoveryContext(
+            service=service,
+            manager=manager,
+            provider=provider,
+            agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            output_directory="/tmp/out",
+            action_name="test_action",
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id="batch_rp_1",
+            file_name="batch_1",
+            entry=entry,
+        )
 
         result = handle_reprompt_recovery(
-            service,
+            context,
+            identity,
             state=state,
             recovery_results=recovery_results,
             accumulated=accumulated,
             context_map=_make_context_map(10),
-            output_directory="/tmp/out",
-            parent_file_name="batch_1",
-            entry=entry,
-            agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
-            manager=manager,
-            provider=MagicMock(),
-            action_name="test_action",
-            start_time=0.0,
         )
 
         assert result is None
@@ -685,17 +695,28 @@ class TestCheckAndSubmitRepromptSelectivity:
         entry = MagicMock()
         entry.provider = "openai"
         manager = MagicMock()
+        provider = MagicMock()
 
-        result = check_and_submit_reprompt(
-            service,
-            batch_results=all_results,
-            context_map=_make_context_map(10),
+        context = RecoveryContext(
+            service=service,
+            manager=manager,
+            provider=provider,
+            agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
             output_directory="/tmp/out",
+            action_name=None,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id="batch_1",
             file_name="batch_1",
             entry=entry,
-            agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
-            manager=manager,
-            provider=MagicMock(),
+        )
+
+        result = check_and_submit_reprompt(
+            context,
+            identity,
+            batch_results=all_results,
+            context_map=_make_context_map(10),
         )
 
         assert result is False

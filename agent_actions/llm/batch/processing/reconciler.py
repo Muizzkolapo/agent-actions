@@ -26,6 +26,7 @@ class BatchResultReconciler:
         """Initialize reconciler with context map."""
         self.context_map = context_map or {}
         self._processed_ids: set[str] = set()
+        self._key_index: dict[str, int] = {str(k): i for i, k in enumerate(self.context_map)}
 
     def mark_processed(self, custom_id: Any) -> None:
         """Mark a custom_id as processed."""
@@ -95,11 +96,7 @@ class BatchResultReconciler:
 
     def get_record_index(self, custom_id: str) -> int:
         """Get the index of a custom_id in context_map order, or -1 if not found."""
-        context_keys = list(self.context_map.keys())
-        try:
-            return context_keys.index(str(custom_id))
-        except ValueError:
-            return -1
+        return self._key_index.get(str(custom_id), -1)
 
     @staticmethod
     def collect_expected_custom_ids(context_map: dict[str, Any]) -> set:
