@@ -57,7 +57,7 @@ class BatchRegistryManager:
                     "cache initialization failed"
                 )
             self._cache[file_name] = entry
-            self._rebuild_batch_id_index()
+            self._batch_id_index = None
             self._persist_registry(self._cache)
             logger.info("Saved batch job %s for file %s", entry.batch_id, file_name)
 
@@ -75,7 +75,7 @@ class BatchRegistryManager:
             if file_name not in self._cache:
                 return False
             del self._cache[file_name]
-            self._rebuild_batch_id_index()
+            self._batch_id_index = None
             self._persist_registry(self._cache)
             logger.info("Removed batch job entry for %s", file_name)
             return True
@@ -111,6 +111,8 @@ class BatchRegistryManager:
                     "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
                     "cache initialization failed"
                 )
+            if self._batch_id_index is None:
+                self._rebuild_batch_id_index()
             file_name = (self._batch_id_index or {}).get(batch_id)
             if file_name and file_name in self._cache:
                 fire_event(CacheHitEvent(cache_type="batch_registry", key=f"batch_id:{batch_id}"))
@@ -135,6 +137,8 @@ class BatchRegistryManager:
                     "cache initialization failed"
                 )
 
+            if self._batch_id_index is None:
+                self._rebuild_batch_id_index()
             file_name = (self._batch_id_index or {}).get(batch_id)
             if file_name and file_name in self._cache:
                 updated_entry = dataclasses.replace(self._cache[file_name], status=new_status)
