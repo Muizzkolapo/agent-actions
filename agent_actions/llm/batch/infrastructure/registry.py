@@ -249,11 +249,11 @@ class BatchRegistryManager:
         """Lazy load cache if not already loaded."""
         if self._cache is None:
             self._cache = self._load_registry()
+            if self._cache is None:
+                raise RuntimeError("Cache initialization failed")
             self._batch_id_index = {
                 entry.batch_id: file_name for file_name, entry in self._cache.items()
             }
-        if self._cache is None:
-            raise RuntimeError("Cache initialization failed")
 
     def _load_registry(self) -> dict[str, BatchJobEntry]:
         """

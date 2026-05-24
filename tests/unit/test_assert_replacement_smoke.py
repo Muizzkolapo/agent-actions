@@ -40,14 +40,16 @@ class TestBatchRegistryManagerCacheGuard:
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
         mgr = BatchRegistryManager(tmp_path / "registry.json")
-        # Force cache to None after init (simulating a corrupted state)
+        # Force cache to None and make _load_registry return None
+        # to simulate a corrupted state where cache init fails.
+        # Guard is now inside _ensure_cache_loaded itself.
         mgr._cache = None
-        mgr._ensure_cache_loaded = lambda: None  # no-op to keep cache None
+        mgr._load_registry = lambda: None  # type: ignore[assignment]
 
         entry = BatchJobEntry(
             batch_id="b1", status="pending", timestamp="2026-01-01T00:00:00", provider="test"
         )
-        with pytest.raises(RuntimeError, match="_cache is None"):
+        with pytest.raises(RuntimeError, match="Cache initialization failed"):
             mgr.save_batch_job("test.json", entry)
 
 
