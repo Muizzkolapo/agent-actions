@@ -155,6 +155,25 @@ class DependencyNamespaceBuilder:
                         dep_namespaces[dep_name] = SKIPPED_NAMESPACE
                         continue
 
+                    # Detect corrupted namespace: compiled JSON Schema stored
+                    # as action content instead of actual LLM output.
+                    # (InlineSchema from vendor_compilation.py leaking into
+                    # record output via schema-echo.)
+                    if (
+                        isinstance(dep_data, dict)
+                        and dep_data.get("type") == "object"
+                        and isinstance(dep_data.get("properties"), dict)
+                        and dep_data.get("title") == "InlineSchema"
+                    ):
+                        logger.warning(
+                            "[OBSERVE NULL-SAFE] '%s': namespace contains InlineSchema "
+                            "definition instead of action output — treating as skipped. "
+                            "This indicates a bug in the output pipeline for this action.",
+                            dep_name,
+                        )
+                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
+                        continue
+
                     if not isinstance(dep_data, dict):
                         logger.warning(
                             "[RECORD NAMESPACE] '%s' for action '%s' is %s, not dict — skipping",
