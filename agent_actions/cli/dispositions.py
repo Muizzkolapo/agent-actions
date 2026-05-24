@@ -17,17 +17,12 @@ from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
-    DISPOSITION_EXHAUSTED,
-    DISPOSITION_FAILED,
+    FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
 
 logger = logging.getLogger(__name__)
 
-# Records shown by --quarantined: only primary failures that a user can
-# act on via `retry`.  UNPROCESSED (cascade casualties) are excluded —
-# they resolve automatically when the upstream failure is retried.
-_QUARANTINE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
 
 
 class DispositionsCommand:
@@ -123,7 +118,7 @@ class DispositionsCommand:
             for row in rows:
                 if row.get("record_id") == NODE_LEVEL_RECORD_ID:
                     continue
-                if row.get("disposition") not in _QUARANTINE_DISPOSITIONS:
+                if row.get("disposition") not in FAILURE_DISPOSITIONS:
                     continue
                 found += 1
                 table.add_row(

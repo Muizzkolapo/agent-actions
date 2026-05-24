@@ -38,6 +38,9 @@ class Disposition(str, Enum):
 
 VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 
+# Dispositions representing actionable failures eligible for retry.
+FAILURE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
+
 DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]
 """(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
 
