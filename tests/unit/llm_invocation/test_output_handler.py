@@ -47,8 +47,9 @@ class TestSaveMainOutputUnboundLocal:
         src.touch()
 
         with (
-            patch.object(
-                handler, "_ensure_directory_exists", side_effect=PermissionError("denied")
+            patch(
+                "agent_actions.llm.realtime.output.ensure_directory_exists",
+                side_effect=PermissionError("denied"),
             ),
             pytest.raises(AgentActionsError, match="IOError saving main output") as exc_info,
         ):
