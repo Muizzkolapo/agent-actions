@@ -14,6 +14,15 @@ if TYPE_CHECKING:
     from agent_actions.workflow.coordinator import AgentWorkflow
 
 
+def validate_action_exists(action_name: str, workflow: "AgentWorkflow") -> None:
+    """Raise ClickException if action_name is not in the workflow's action configs."""
+    import click
+
+    if action_name not in workflow.action_configs:
+        available = ", ".join(sorted(workflow.action_configs.keys()))
+        raise click.ClickException(f"Action '{action_name}' not found. Available: {available}")
+
+
 def load_workflow(
     agent_name: str,
     paths: ProjectPaths,
