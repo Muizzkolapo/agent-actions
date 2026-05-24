@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.output.writer import FileWriter
+from agent_actions.utils.path_utils import ensure_directory_exists
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -56,7 +57,7 @@ class OutputHandler:
             output_file_path = Path(output_directory) / relative_path
             # Only create directory if not using storage backend
             if self.storage_backend is None:
-                self._ensure_directory_exists(str(output_file_path))
+                ensure_directory_exists(str(output_file_path), is_file=True)
             file_writer = FileWriter(
                 str(output_file_path),
                 storage_backend=self.storage_backend,
@@ -85,7 +86,3 @@ class OutputHandler:
                 cause=e,
             ) from e
 
-    def _ensure_directory_exists(self, file_path):
-        """Ensure the directory for the file path exists."""
-        directory = Path(file_path).parent
-        directory.mkdir(parents=True, exist_ok=True)
