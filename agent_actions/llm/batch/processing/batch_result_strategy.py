@@ -542,6 +542,21 @@ class BatchResultStrategy:
 
         return results
 
+    def _attach_passthrough_context(
+        self,
+        result: ProcessingResult,
+        ctx: BatchProcessingContext,
+        original_row: dict[str, Any],
+        record_index: int,
+    ) -> None:
+        """Attach processing context to a passthrough result."""
+        result.processing_context = BatchContextAdapter.to_processing_context(
+            agent_config=ctx.agent_config or {},
+            original_row=original_row,
+            record_index=record_index,
+            output_directory=ctx.output_directory,
+        )
+
     def _build_exhausted_passthrough(
         self,
         ctx: BatchProcessingContext,
@@ -583,12 +598,6 @@ class BatchResultStrategy:
             source_guid=source_guid,
         )
 
-        processing_context = BatchContextAdapter.to_processing_context(
-            agent_config=ctx.agent_config or {},
-            original_row=original_row,
-            record_index=record_index,
-            output_directory=ctx.output_directory,
-        )
         processing_result = ProcessingResult.exhausted(
             error=f"Retry exhausted after {recovery_meta.retry.attempts} attempts",
             data=[exhausted_item],
@@ -596,7 +605,7 @@ class BatchResultStrategy:
             recovery_metadata=recovery_meta,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
-        processing_result.processing_context = processing_context
+        self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         return processing_result
 
     def _build_unprocessed_passthrough(
@@ -624,19 +633,13 @@ class BatchResultStrategy:
             source_guid=source_guid,
         )
 
-        processing_context = BatchContextAdapter.to_processing_context(
-            agent_config=ctx.agent_config or {},
-            original_row=original_row,
-            record_index=record_index,
-            output_directory=ctx.output_directory,
-        )
         processing_result = ProcessingResult.unprocessed(
             data=[passthrough_item],
             reason=reason,
             source_guid=source_guid,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
-        processing_result.processing_context = processing_context
+        self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         return processing_result
 
     def _build_failed_passthrough(
@@ -662,18 +665,12 @@ class BatchResultStrategy:
             source_guid=source_guid,
         )
 
-        processing_context = BatchContextAdapter.to_processing_context(
-            agent_config=ctx.agent_config or {},
-            original_row=original_row,
-            record_index=record_index,
-            output_directory=ctx.output_directory,
-        )
         processing_result = ProcessingResult.failed(
             error=reason,
             source_guid=source_guid,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
         processing_result.data = [passthrough_item]
-        processing_result.processing_context = processing_context
+        self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         processing_result.skip_reason = reason
         return processing_result
