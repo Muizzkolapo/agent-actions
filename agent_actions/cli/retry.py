@@ -219,13 +219,11 @@ class RetryCommand:
         )
 
         self.console.print("\n[bold]Re-running workflow...[/bold]\n")
-        # Fresh workflow: dispositions were cleared above, so the coordinator
-        # needs to see the updated storage state at construction time.
-        workflow = load_workflow(self.agent_name, paths, project_root)
 
         # Reset action-level status for downstream actions to PENDING so the
         # coordinator doesn't skip them as "already completed."
-        # Deferred import: avoid circular import at module load time.
+        # Dispositions were cleared in the DB above; the storage backend
+        # queries SQLite directly so the existing workflow sees the updates.
         from agent_actions.workflow.managers.state import ActionStatus
 
         state_mgr = workflow.services.core.state_manager
