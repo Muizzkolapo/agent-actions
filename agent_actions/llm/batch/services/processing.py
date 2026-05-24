@@ -336,12 +336,11 @@ class BatchProcessingService:
         )
 
         carry_path = Path(output_directory) / "batch" / BATCH_CARRY_FORWARD_FILENAME
-        if not carry_path.exists():
-            return batch_output
-
         try:
             carry_data = json.loads(carry_path.read_text())
             carry_guids = set(carry_data.get("guids", []))
+        except FileNotFoundError:
+            return batch_output
         except (json.JSONDecodeError, KeyError):
             logger.warning("Malformed .batch_carry_forward.json — skipping merge")
             return batch_output
