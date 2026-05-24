@@ -327,6 +327,88 @@ class TestOllamaCloudClient:
         assert result[0]["label"] == "fruit"
         assert "_parse_error" not in result[0]
 
+
+# ---------------------------------------------------------------------------
+# Schema-echo prevention: title stripped from format param
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaEchoPrevention:
+    """Regression: _extract_ollama_schema strips ``title`` to prevent echo."""
+
+    def test_title_stripped_from_ollama_format(self):
+        """Compiled Ollama schema has title — format param must NOT."""
+        from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
+
+        compiled = {
+            "title": "InlineSchema",
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": False,
+        }
+        result = _extract_ollama_schema(compiled)
+        assert "title" not in result
+        assert result["type"] == "object"
+        assert "answer" in result["properties"]
+
+    def test_title_stripped_from_nested_schema(self):
+        """OpenAI-wrapped schema with title in inner dict — title stripped."""
+        from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
+
+        wrapped = {
+            "name": "InlineSchema",
+            "schema": {
+                "title": "InlineSchema",
+                "type": "object",
+                "properties": {"x": {"type": "string"}},
+            },
+        }
+        result = _extract_ollama_schema(wrapped)
+        assert "title" not in result
+        assert result["type"] == "object"
+
+    def test_schema_without_title_unchanged(self):
+        """Schema without title passes through unmodified."""
+        from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
+
+        schema = {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+            "required": [],
+        }
+        result = _extract_ollama_schema(schema)
+        assert result == schema
+
+    @patch("agent_actions.llm.providers.ollama.client.ResponseBuilder")
+    @patch("agent_actions.llm.providers.ollama.client.fire_event")
+    @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
+    @patch("agent_actions.llm.providers.ollama.client.MessageBuilder")
+    def test_local_chat_format_has_no_title(self, mock_mb, mock_build, mock_fire, mock_rb):
+        """End-to-end: title never reaches client.chat(format=...) for local."""
+        mock_envelope = MagicMock()
+        mock_envelope.to_dicts.return_value = [{"role": "user", "content": "hi"}]
+        mock_mb.build.return_value = mock_envelope
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = _fake_chat_response()
+        mock_build.return_value = mock_client
+
+        compiled_schema = {
+            "title": "InlineSchema",
+            "type": "object",
+            "properties": {"label": {"type": "string"}},
+            "required": [],
+            "additionalProperties": False,
+        }
+        config = _make_agent_config()
+        OllamaLocalClient.invoke(config, PROMPT, CONTEXT, compiled_schema)
+
+        chat_kwargs = mock_client.chat.call_args
+        format_param = chat_kwargs.kwargs.get("format") or chat_kwargs[1].get("format")
+        assert isinstance(format_param, dict)
+        assert "title" not in format_param
+
     @patch("agent_actions.llm.providers.ollama.client.ResponseBuilder")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
