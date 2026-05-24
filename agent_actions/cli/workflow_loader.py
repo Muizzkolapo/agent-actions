@@ -18,6 +18,12 @@ def load_workflow(
     agent_name: str,
     paths: ProjectPaths,
     project_root: Path | None = None,
+    *,
+    user_code_path: str | None = None,
+    use_tools: bool = False,
+    fresh: bool = False,
+    verify_keys: bool = False,
+    upstream_scope: list[str] | None = None,
 ) -> AgentWorkflow:
     """Load and return an initialized AgentWorkflow.
 
@@ -49,10 +55,13 @@ def load_workflow(
         WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(full_path),
-                user_code_path=None,
+                user_code_path=user_code_path,
                 default_path=str(paths.default_config_path),
             ),
-            use_tools=False,
+            use_tools=use_tools,
+            fresh=fresh,
+            verify_keys=verify_keys,
             project_root=project_root,
+            upstream_scope=upstream_scope,
         )
     )

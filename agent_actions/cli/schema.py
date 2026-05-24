@@ -9,13 +9,11 @@ from rich.console import Console
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.renderers import SchemaRenderer
-from agent_actions.config.project_paths import ProjectPathsFactory, find_config_file
+from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import DependencyError
 from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.workflow import WorkflowSchemaService
-from agent_actions.workflow.coordinator import AgentWorkflow
-from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 
 
 class SchemaCommand:
@@ -41,25 +39,11 @@ class SchemaCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.agent, auto_create=False, project_root=project_root
         )
-        filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(
-            self.agent_name, paths.agent_config_dir, filename, check_alternatives=True
-        )
-
-        ConfigRenderingService().render_and_load_config(
-            self.agent_name, full_path, paths.template_dir, project_root=project_root
-        )
-
-        workflow = AgentWorkflow(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    user_code_path=str(self.user_code) if self.user_code else None,
-                    default_path=str(paths.default_config_path),
-                ),
-                use_tools=False,
-                project_root=project_root,
-            )
+        workflow = load_workflow(
+            self.agent_name,
+            paths,
+            project_root,
+            user_code_path=str(self.user_code) if self.user_code else None,
         )
 
         workflow_config = WorkflowSchemaService.build_workflow_config(
