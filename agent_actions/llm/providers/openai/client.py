@@ -9,8 +9,8 @@ consistent retry handling across all providers.
 """
 
 import logging
+import time
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
@@ -107,12 +107,12 @@ class OpenAIClient(BaseClient):
             ),
         }
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
             raise _wrap_openai_error(e, model_name, request_id) from e
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(
@@ -207,12 +207,12 @@ class OpenAIClient(BaseClient):
             ),
         }
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
             raise _wrap_openai_error(e, model_name, request_id) from e
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(

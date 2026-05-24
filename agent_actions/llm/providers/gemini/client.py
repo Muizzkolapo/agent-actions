@@ -9,8 +9,8 @@ consistent retry handling across all providers.
 """
 
 import logging
+import time
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 from google import genai
@@ -83,7 +83,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             client = _build_client(api_key)
             gen_params = extract_generation_params(
@@ -117,7 +117,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
             GeminiClient.handle_generic_error(e, "Gemini", "call_json", model_name)
 
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(
@@ -148,7 +148,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             client = _build_client(api_key)
             gen_params = extract_generation_params(
@@ -191,7 +191,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 cause=e,
             ) from e
 
-        duration = (datetime.now() - start_time).total_seconds()
+        duration = time.perf_counter() - start_time
         latency_ms = duration * 1000
 
         ResponseBuilder.record_usage_and_event(
