@@ -20,6 +20,7 @@ from agent_actions.prompt.context.scope_namespace import (
     _extract_content_data,
     _filter_and_store_fields,
 )
+from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 
 logger = logging.getLogger(__name__)
 
@@ -156,15 +157,8 @@ class DependencyNamespaceBuilder:
                         continue
 
                     # Detect corrupted namespace: compiled JSON Schema stored
-                    # as action content instead of actual LLM output.
-                    # (InlineSchema from vendor_compilation.py leaking into
-                    # record output via schema-echo.)
-                    if (
-                        isinstance(dep_data, dict)
-                        and dep_data.get("type") == "object"
-                        and isinstance(dep_data.get("properties"), dict)
-                        and dep_data.get("title") == "InlineSchema"
-                    ):
+                    # as action content via schema-echo.
+                    if _is_schema_echo(dep_data) and dep_data.get("title") == "InlineSchema":
                         logger.warning(
                             "[OBSERVE NULL-SAFE] '%s': namespace contains InlineSchema "
                             "definition instead of action output — treating as skipped. "

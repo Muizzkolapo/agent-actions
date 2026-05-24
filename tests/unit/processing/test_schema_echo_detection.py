@@ -5,10 +5,8 @@ data, the schema-echo guard must detect and replace the response with a
 ``_parse_error`` dict.
 """
 
-from agent_actions.processing.helpers import (
-    _is_schema_echo,
-    _reject_schema_echo_items,
-)
+from agent_actions.processing.helpers import _reject_schema_echo_items
+from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 
 # ---------------------------------------------------------------------------
 # Fixture: exact schema-echo payloads from production bug evidence

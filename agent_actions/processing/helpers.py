@@ -7,6 +7,8 @@ from typing import Any
 
 from agent_actions.errors import SchemaValidationError
 from agent_actions.utils.constants import SCHEMA_KEY
+from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
+from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation import PassthroughTransformer
 
 logger = logging.getLogger(__name__)
@@ -80,56 +82,36 @@ def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
     return "warn"
 
 
-def _is_schema_echo(data: dict[str, Any]) -> bool:
-    """Detect if a response dict is a schema-echo.
-
-    An LLM sometimes returns the JSON Schema definition itself instead of
-    conforming data.  The Ollama compiled format is the most common echo
-    shape: ``{"title": "InlineSchema", "type": "object", "properties": {...}}``.
-
-    Detection uses three structural keys (``type == "object"`` + ``properties``
-    as a dict + ``title`` present) which are extremely unlikely to appear
-    together in legitimate action output.
-    """
-    return (
-        isinstance(data, dict)
-        and data.get("type") == "object"
-        and isinstance(data.get("properties"), dict)
-        and "title" in data
-    )
-
-
 def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
     """Replace schema-echo items in a response list with ``_parse_error`` dicts.
 
-    Runs unconditionally — not gated by ``skip_schema_validation`` — because
-    schema echoes are never valid output regardless of validation settings.
+    Runs unconditionally because schema echoes are never valid output
+    regardless of validation settings.
     """
     if not isinstance(response, list):
         return response
 
-    changed = False
-    result: list[Any] = []
-    for item in response:
-        if isinstance(item, dict) and _is_schema_echo(item):
+    # Fast path: scan for echoes before allocating a new list
+    first_echo = None
+    for i, item in enumerate(response):
+        if _is_schema_echo(item):
+            first_echo = i
+            break
+    if first_echo is None:
+        return response
+
+    # Build replacement list only when at least one echo was found
+    result: list[Any] = list(response[:first_echo])
+    for item in response[first_echo:]:
+        if _is_schema_echo(item):
             logger.warning(
-                "[%s] Schema-echo detected in LLM response — the model returned "
-                "the JSON Schema definition instead of conforming data. "
-                "Replacing with _parse_error.",
+                "[%s] Schema-echo detected in LLM response — replacing with _parse_error.",
                 agent_name,
             )
-            result.append(
-                {
-                    "raw_response": str(item),
-                    "_parse_error": "Schema-echo: LLM returned the schema definition "
-                    "instead of conforming data",
-                }
-            )
-            changed = True
+            result.append(_make_schema_echo_error(item))
         else:
             result.append(item)
-
-    return result if changed else response
+    return result
 
 
 def _validate_llm_output_schema(

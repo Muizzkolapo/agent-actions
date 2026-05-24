@@ -20,7 +20,6 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.helpers import _is_schema_echo
 from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
@@ -43,6 +42,8 @@ from agent_actions.record.reasons import (
     PREP_FAILED,
 )
 from agent_actions.utils.content import is_version_merge
+from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
+from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 
 logger = logging.getLogger(__name__)
 
@@ -321,22 +322,15 @@ class BatchResultStrategy:
             else:
                 generated_obj = {ctx.output_field: generated_obj}
 
-        # Schema-echo guard: LLM returned the JSON Schema definition itself
-        # instead of conforming data (e.g. {"title": "InlineSchema", ...}).
-        # Replace with _parse_error so reprompt can retry.
-        if isinstance(generated_obj, dict) and _is_schema_echo(generated_obj):
+        # Schema-echo guard: replace with _parse_error so reprompt can retry
+        if _is_schema_echo(generated_obj):
             logger.warning(
-                "[%s] Schema-echo detected in batch result — the model returned "
-                "the JSON Schema definition instead of conforming data. "
-                "Replacing with _parse_error for custom_id=%s.",
+                "[%s] Schema-echo detected in batch result — replacing with "
+                "_parse_error for custom_id=%s.",
                 ctx.agent_config.get("action_name", "unknown") if ctx.agent_config else "unknown",
                 custom_id,
             )
-            generated_obj = {
-                "raw_response": str(generated_obj),
-                "_parse_error": "Schema-echo: LLM returned the schema definition "
-                "instead of conforming data",
-            }
+            generated_obj = _make_schema_echo_error(generated_obj)
 
         generated_list = DataTransformer.ensure_list(generated_obj)
 
