@@ -606,7 +606,11 @@ def _remove_batch_placeholder(output_file: Path) -> None:
         logger.warning("Malformed JSON at %s during placeholder cleanup", output_file)
         return
 
-    if isinstance(data, dict) and "batch_job_id" in data and data.get("status") == BatchStatus.SUBMITTED:
+    if (
+        isinstance(data, dict)
+        and "batch_job_id" in data
+        and data.get("status") == BatchStatus.SUBMITTED
+    ):
         try:
             output_file.unlink()
             logger.debug("Removed batch placeholder: %s", output_file)

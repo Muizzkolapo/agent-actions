@@ -297,7 +297,8 @@ class TestComposedRecoveryPaths:
         mock_build_loop.return_value = (loop, strategy)
 
         context, identity = _make_context_and_identity(
-            service=service, entry=_make_entry(recovery_type="reprompt"),
+            service=service,
+            entry=_make_entry(recovery_type="reprompt"),
         )
 
         result = handle_reprompt_recovery(
@@ -412,7 +413,8 @@ class TestGraduatedPoolMonotonicity:
         recovery_results = [_make_result("id-new"), _make_result("id-still-bad")]
 
         context, identity = _make_context_and_identity(
-            service=service, entry=_make_entry(recovery_type="reprompt"),
+            service=service,
+            entry=_make_entry(recovery_type="reprompt"),
         )
 
         handle_reprompt_recovery(
@@ -454,7 +456,8 @@ class TestGraduatedPoolMonotonicity:
         )
 
         context, identity = _make_context_and_identity(
-            service=service, entry=_make_entry(recovery_type="reprompt"),
+            service=service,
+            entry=_make_entry(recovery_type="reprompt"),
         )
 
         handle_reprompt_recovery(

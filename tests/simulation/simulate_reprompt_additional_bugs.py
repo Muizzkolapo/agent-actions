@@ -17,7 +17,12 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, BatchRegistryStats, RecoveryContext
+from agent_actions.llm.batch.core.batch_models import (
+    BatchIdentity,
+    BatchJobEntry,
+    BatchRegistryStats,
+    RecoveryContext,
+)
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.processing_recovery import check_and_submit_reprompt
