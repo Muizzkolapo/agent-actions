@@ -67,18 +67,12 @@ class TestBatchSchemaEchoDetection:
             agent_config=agent_config,
         )
 
-        # The result should contain a record with _parse_error
+        # The result should contain a record with _parse_error in the action namespace
         assert len(results) >= 1
-        data = results[0].data
-        assert len(data) >= 1
-        record = data[0]
-        content = record.get("content", record)
-        # The content namespace for the action should contain _parse_error
-        action_ns = content.get(agent_config["action_name"], content)
-        assert "_parse_error" in action_ns or "_parse_error" in record
-        assert any("Schema-echo" in str(v) for v in action_ns.values()) or any(
-            "Schema-echo" in str(v) for v in record.values()
-        )
+        record = results[0].data[0]
+        action_ns = record["content"][agent_config["action_name"]]
+        assert "_parse_error" in action_ns
+        assert "Schema-echo" in action_ns["_parse_error"]
 
     def test_valid_output_not_affected(self):
         """Normal LLM output flows through unchanged."""

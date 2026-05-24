@@ -86,6 +86,39 @@ class TestDetectParseError:
         """None content → not a parse error."""
         assert detect_parse_error(None, json_mode=True) is None
 
+    def test_schema_echo_detected(self):
+        """Schema-echo dict (LLM returned schema definition) → parse error."""
+        content = {
+            "title": "InlineSchema",
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": [],
+            "additionalProperties": False,
+        }
+        error = detect_parse_error(content, json_mode=True)
+        assert error is not None
+        assert "Schema-echo" in error
+
+    def test_named_schema_echo_detected(self):
+        """Named schema echo (not InlineSchema) also detected."""
+        content = {
+            "title": "QuizOutput",
+            "type": "object",
+            "properties": {"score": {"type": "number"}},
+        }
+        error = detect_parse_error(content, json_mode=True)
+        assert error is not None
+        assert "Schema-echo" in error
+
+    def test_schema_echo_detected_non_json_mode(self):
+        """Schema echo detected even in non-json mode."""
+        content = {
+            "title": "InlineSchema",
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+        }
+        assert detect_parse_error(content, json_mode=False) is not None
+
 
 # ---------------------------------------------------------------------------
 # ValidationStrategy.evaluate() parse error detection
@@ -194,6 +227,33 @@ class TestParseErrorDetectionInEvaluate:
 
         assert outcome.passed is False
         assert outcome.failure_type == "api_error"
+
+    def test_schema_echo_detected_before_udf(self):
+        """Schema-echo content fails with failure_type='parse_error', UDF never called."""
+        call_log = []
+
+        def tracking_validate(response):
+            call_log.append(response)
+            return True
+
+        strategy = ValidationStrategy(
+            validation_func=tracking_validate,
+            feedback_message="fix",
+            json_mode=True,
+        )
+        content = {
+            "title": "InlineSchema",
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": [],
+            "additionalProperties": False,
+        }
+        result = _make_result("r1", content=content)
+        outcome = strategy.evaluate(result)
+
+        assert outcome.passed is False
+        assert outcome.failure_type == "parse_error"
+        assert call_log == [], "UDF should NOT have been called"
 
     def test_non_json_mode_string_content_reaches_udf(self):
         """In non-json-mode, string content is NOT a parse error — UDF is called."""
