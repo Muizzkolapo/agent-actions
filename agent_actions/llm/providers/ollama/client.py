@@ -92,16 +92,27 @@ def _extract_ollama_schema(schema: dict[str, Any] | None) -> dict[str, Any] | No
 
     OpenAI wraps as ``{"name": "...", "schema": {...}}``; Ollama expects the
     raw ``{"type": "object", "properties": {...}}`` directly.
+
+    Strips ``title`` — Ollama's format param uses only structural keys
+    (type, properties, required, additionalProperties).  Including ``title``
+    leaks framework metadata (e.g. "InlineSchema") into the LLM context and
+    can trigger schema-echo behavior where the model returns the schema
+    definition itself instead of conforming data.
     """
     if not schema:
         return None
     if not isinstance(schema, dict):
         raise ConfigurationError(f"Schema must be a dict, got {type(schema).__name__}")
     if "schema" in schema and isinstance(schema["schema"], dict):
-        return schema["schema"]
-    if "type" in schema or "properties" in schema:
-        return schema
-    raise ConfigurationError(f"Unrecognised schema format (keys: {list(schema.keys())})")
+        inner = schema["schema"]
+    elif "type" in schema or "properties" in schema:
+        inner = schema
+    else:
+        raise ConfigurationError(f"Unrecognised schema format (keys: {list(schema.keys())})")
+    # Strip title — not a structural constraint, leaks framework metadata
+    if "title" in inner:
+        inner = {k: v for k, v in inner.items() if k != "title"}
+    return inner
 
 
 def _call_ollama_json(

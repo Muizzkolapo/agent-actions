@@ -652,3 +652,96 @@ class TestContextSerialisationJsonSafety:
         # After split: context is in user message (messages[1])
         content = env.messages[1].content
         assert isinstance(content, str)
+
+
+# ---------------------------------------------------------------------------
+# Schema metadata stripping (schema-echo prevention)
+# ---------------------------------------------------------------------------
+
+
+class TestStripSchemaMetadata:
+    """_strip_schema_metadata removes name/title/description before prompt injection."""
+
+    def test_strips_title_from_ollama_schema(self):
+        schema = {
+            "title": "InlineSchema",
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+        }
+        result = MessageBuilder._strip_schema_metadata(schema)
+        assert "title" not in result
+        assert result["type"] == "object"
+        assert "x" in result["properties"]
+
+    def test_strips_name_from_openai_wrapper(self):
+        schema = {
+            "name": "InlineSchema",
+            "schema": {
+                "type": "object",
+                "properties": {"x": {"type": "string"}},
+            },
+        }
+        result = MessageBuilder._strip_schema_metadata(schema)
+        assert "name" not in result
+        assert result["schema"]["type"] == "object"
+
+    def test_strips_name_and_description_from_anthropic(self):
+        schema = {
+            "name": "InlineSchema",
+            "description": "Tool description",
+            "input_schema": {
+                "type": "object",
+                "properties": {"x": {"type": "string"}},
+            },
+        }
+        result = MessageBuilder._strip_schema_metadata(schema)
+        assert "name" not in result
+        assert "description" not in result
+        assert result["input_schema"]["type"] == "object"
+
+    def test_strips_from_list(self):
+        schema = [
+            {"name": "InlineSchema", "input_schema": {"type": "object", "properties": {}}},
+        ]
+        result = MessageBuilder._strip_schema_metadata(schema)
+        assert "name" not in result[0]
+
+    def test_preserves_structural_keys(self):
+        schema = {
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": False,
+        }
+        result = MessageBuilder._strip_schema_metadata(schema)
+        assert result == schema
+
+    def test_ollama_cloud_prompt_injection_has_no_title(self):
+        """End-to-end: ollama_cloud prompt injection strips title."""
+        schema = {
+            "title": "InlineSchema",
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": [],
+            "additionalProperties": False,
+        }
+        env = MessageBuilder.build(
+            "ollama_cloud", PROMPT, CONTEXT_STR, schema=schema, json_mode=True
+        )
+        prompt_text = env.messages[0].content
+        assert "InlineSchema" not in prompt_text
+        assert '"answer"' in prompt_text
+
+    def test_gemini_inline_injection_has_no_name(self):
+        """End-to-end: Gemini INLINE_FULL_LIST strips name."""
+        schema = {
+            "name": "InlineSchema",
+            "schema": {
+                "type": "object",
+                "properties": {"answer": {"type": "string"}},
+            },
+        }
+        env = MessageBuilder.build("gemini", PROMPT, CONTEXT_STR, schema=schema, json_mode=True)
+        body = env.prompt_body
+        assert "InlineSchema" not in body
+        assert "answer" in body

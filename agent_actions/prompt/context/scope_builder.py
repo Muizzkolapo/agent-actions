@@ -165,6 +165,23 @@ class DependencyNamespaceBuilder:
                         continue
 
                     allowed_fields = allowed_fields_map.get(dep_name)
+
+                    # Zero-overlap guard: if specific fields are declared but
+                    # none of them exist in the namespace, the content is
+                    # corrupted (e.g. schema-echo, wrong action output).
+                    # Wrap as SKIPPED_NAMESPACE to prevent RecordContextError.
+                    if allowed_fields and not set(dep_data.keys()) & set(allowed_fields):
+                        logger.warning(
+                            "[OBSERVE NULL-SAFE] '%s': namespace has zero overlap "
+                            "with declared fields %s (actual keys: %s) — "
+                            "treating as skipped",
+                            dep_name,
+                            sorted(allowed_fields),
+                            sorted(dep_data.keys()),
+                        )
+                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
+                        continue
+
                     _filter_and_store_fields(
                         dep_namespaces,
                         dep_name,

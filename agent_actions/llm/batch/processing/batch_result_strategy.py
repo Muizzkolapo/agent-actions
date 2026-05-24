@@ -42,6 +42,8 @@ from agent_actions.record.reasons import (
     PREP_FAILED,
 )
 from agent_actions.utils.content import is_version_merge
+from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
+from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +321,16 @@ class BatchResultStrategy:
                 }
             else:
                 generated_obj = {ctx.output_field: generated_obj}
+
+        # Schema-echo guard: replace with _parse_error so reprompt can retry
+        if _is_schema_echo(generated_obj):
+            logger.warning(
+                "[%s] Schema-echo detected in batch result — replacing with "
+                "_parse_error for custom_id=%s.",
+                ctx.agent_config.get("action_name", "unknown") if ctx.agent_config else "unknown",
+                custom_id,
+            )
+            generated_obj = _make_schema_echo_error(generated_obj)
 
         generated_list = DataTransformer.ensure_list(generated_obj)
 
