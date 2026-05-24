@@ -52,12 +52,6 @@ class BatchContextManager:
         try:
             context_path = BatchContextManager._get_context_path(output_directory, batch_name)
 
-            if not context_path.exists():
-                raise ProcessingError(
-                    f"Context map file not found: {context_path}",
-                    context={"output_directory": output_directory, "batch_name": batch_name},
-                )
-
             with open(context_path, encoding="utf-8") as f:
                 context_map = json.load(f)
 
@@ -105,9 +99,9 @@ class BatchContextManager:
         """Delete batch context map file if it exists."""
         context_path = BatchContextManager._get_context_path(output_directory, batch_name)
 
-        if context_path.exists():
+        try:
             context_path.unlink()
             logger.debug("Deleted context map at %s", context_path)
             return True
-
-        return False
+        except FileNotFoundError:
+            return False

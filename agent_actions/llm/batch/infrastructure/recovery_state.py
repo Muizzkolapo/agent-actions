@@ -109,13 +109,12 @@ class RecoveryStateManager:
     def load(output_directory: str, file_name: str) -> RecoveryState | None:
         """Load recovery state from disk, or None if not found."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
-        if not state_path.exists():
-            return None
-
         try:
             with open(state_path, encoding="utf-8") as f:
                 data = json.load(f)
             return RecoveryState(**data)
+        except FileNotFoundError:
+            return None
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning("Failed to load recovery state from %s: %s", state_path, e)
             return None
@@ -124,11 +123,12 @@ class RecoveryStateManager:
     def delete(output_directory: str, file_name: str) -> bool:
         """Delete recovery state file. Returns True if deleted, False if not found."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
-        if state_path.exists():
+        try:
             state_path.unlink()
             logger.debug("Deleted recovery state at %s", state_path)
             return True
-        return False
+        except FileNotFoundError:
+            return False
 
     @staticmethod
     def exists(output_directory: str, file_name: str) -> bool:
