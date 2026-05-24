@@ -5,9 +5,12 @@ import logging
 import time
 import traceback
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import click
+
+if TYPE_CHECKING:
+    from agent_actions.workflow.coordinator import AgentWorkflow
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
@@ -25,7 +28,7 @@ class RunCommand:
         self.args = args
         self.agent_name = Path(args.agent).stem
 
-    def _determine_execution_mode(self, workflow: AgentWorkflow) -> bool:
+    def _determine_execution_mode(self, workflow: "AgentWorkflow") -> bool:
         mode = getattr(self.args, "execution_mode", "auto")
 
         if mode == "parallel":
@@ -42,7 +45,7 @@ class RunCommand:
         click.echo("Using sequential execution...")
         return False
 
-    def _run_workflow_execution(self, workflow: AgentWorkflow, use_parallel: bool) -> None:
+    def _run_workflow_execution(self, workflow: "AgentWorkflow", use_parallel: bool) -> None:
         if use_parallel:
             asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
         else:

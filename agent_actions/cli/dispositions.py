@@ -24,7 +24,6 @@ from agent_actions.storage.backend import (
 logger = logging.getLogger(__name__)
 
 
-
 class DispositionsCommand:
     """Display per-action disposition breakdown for a workflow."""
 

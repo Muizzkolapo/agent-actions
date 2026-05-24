@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from agent_actions.workflow.coordinator import AgentWorkflow
 
 
-def validate_action_exists(action_name: str, workflow: "AgentWorkflow") -> None:
+def validate_action_exists(action_name: str, workflow: AgentWorkflow) -> None:
     """Raise ClickException if action_name is not in the workflow's action configs."""
     import click
 
