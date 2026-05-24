@@ -36,27 +36,21 @@ class TestRunCommandProjectRootWiring:
         """When project_root is provided, the global PathManager is set with that root."""
         cmd = RunCommand(_make_args())
 
+        mock_wf_instance = MagicMock()
+        mock_wf_instance.execution_order = ["a1"]
+        mock_wf_instance.action_configs = {"a1": {}}
+
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow") as mock_wf,
+            patch("agent_actions.cli.run.load_workflow", return_value=mock_wf_instance),
             patch("agent_actions.cli.run.RunTracker") as mock_tracker,
             patch.object(cmd, "_run_workflow_execution"),
         ):
             mock_paths.return_value = MagicMock(
                 prompt_dir=tmp_path,
-                agent_config_dir=tmp_path,
-                template_dir=tmp_path,
-                rendered_workflows_dir=tmp_path,
-                default_config_path=tmp_path / "default.yml",
                 io_dir=tmp_path,
             )
-            mock_wf_instance = MagicMock()
-            mock_wf_instance.execution_order = ["a1"]
-            mock_wf_instance.action_configs = {"a1": {}}
-            mock_wf.return_value = mock_wf_instance
             mock_tracker_instance = MagicMock()
             mock_tracker_instance.start_workflow_run.return_value = "run-123"
             mock_tracker.return_value = mock_tracker_instance
@@ -70,28 +64,22 @@ class TestRunCommandProjectRootWiring:
         """When project_root is None, set_path_manager is not called."""
         cmd = RunCommand(_make_args())
 
+        mock_wf_instance = MagicMock()
+        mock_wf_instance.execution_order = ["a1"]
+        mock_wf_instance.action_configs = {"a1": {}}
+
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow") as mock_wf,
+            patch("agent_actions.cli.run.load_workflow", return_value=mock_wf_instance),
             patch("agent_actions.cli.run.RunTracker") as mock_tracker,
             patch.object(cmd, "_run_workflow_execution"),
             patch("agent_actions.utils.path_utils.set_path_manager") as mock_set_pm,
         ):
             mock_paths.return_value = MagicMock(
                 prompt_dir=tmp_path,
-                agent_config_dir=tmp_path,
-                template_dir=tmp_path,
-                rendered_workflows_dir=tmp_path,
-                default_config_path=tmp_path / "default.yml",
                 io_dir=tmp_path,
             )
-            mock_wf_instance = MagicMock()
-            mock_wf_instance.execution_order = ["a1"]
-            mock_wf_instance.action_configs = {"a1": {}}
-            mock_wf.return_value = mock_wf_instance
             mock_tracker_instance = MagicMock()
             mock_tracker_instance.start_workflow_run.return_value = "run-123"
             mock_tracker.return_value = mock_tracker_instance
@@ -143,19 +131,13 @@ class TestRunCommandStatusMessages:
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow", return_value=wf_mock),
+            patch("agent_actions.cli.run.load_workflow", return_value=wf_mock),
             patch("agent_actions.cli.run.RunTracker") as mock_tracker,
             patch.object(cmd, "_run_workflow_execution"),
         ):
             mock_paths.return_value = MagicMock(
                 prompt_dir=tmp_path,
-                agent_config_dir=tmp_path,
-                template_dir=tmp_path,
-                rendered_workflows_dir=tmp_path,
-                default_config_path=tmp_path / "default.yml",
                 io_dir=tmp_path,
             )
             tracker_inst = MagicMock()
@@ -239,20 +221,14 @@ class TestRunCommandStatusMessages:
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow", return_value=wf_mock),
+            patch("agent_actions.cli.run.load_workflow", return_value=wf_mock),
             patch("agent_actions.cli.run.RunTracker", return_value=tracker_inst),
             patch.object(cmd, "_run_workflow_execution"),
             pytest.raises(SystemExit),
         ):
             mock_paths.return_value = MagicMock(
                 prompt_dir=tmp_path,
-                agent_config_dir=tmp_path,
-                template_dir=tmp_path,
-                rendered_workflows_dir=tmp_path,
-                default_config_path=tmp_path / "default.yml",
                 io_dir=tmp_path,
             )
             cmd.execute(project_root=tmp_path)
