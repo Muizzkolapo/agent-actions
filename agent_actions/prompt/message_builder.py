@@ -305,7 +305,8 @@ class MessageBuilder:
         # output support ships (ollama/ollama#12362).
         effective_prompt = prompt_config
         if schema_injection == SchemaInjection.PROMPT and schema is not None:
-            schema_text = json.dumps(schema, indent=2, ensure_ascii=False)
+            clean_schema = MessageBuilder._strip_schema_metadata(schema)
+            schema_text = json.dumps(clean_schema, indent=2, ensure_ascii=False)
             effective_prompt = (
                 f"{prompt_config}\n\n"
                 f"You MUST respond with valid JSON matching this schema:\n"
@@ -372,7 +373,8 @@ class MessageBuilder:
         effective_prompt = prompt
         config = PROVIDER_MESSAGE_CONFIGS.get(provider)
         if config and config.schema_injection == SchemaInjection.PROMPT and schema is not None:
-            schema_text = json.dumps(schema, indent=2, ensure_ascii=False)
+            clean_schema = MessageBuilder._strip_schema_metadata(schema)
+            schema_text = json.dumps(clean_schema, indent=2, ensure_ascii=False)
             effective_prompt = (
                 f"{prompt}\n\n"
                 f"You MUST respond with valid JSON matching this schema:\n"
@@ -424,6 +426,32 @@ class MessageBuilder:
         return str(StringProcessor.process_as_string(context_data))
 
     @staticmethod
+    def _strip_schema_metadata(schema: Any) -> Any:
+        """Remove framework metadata keys before injecting schema into prompts.
+
+        Keys like ``name``, ``title``, and ``description`` are framework
+        labels (e.g. "InlineSchema") that leak implementation details into
+        LLM context and can trigger schema-echo behavior where the model
+        returns the schema definition itself instead of conforming data.
+        """
+        _META_KEYS = {"name", "title", "description"}
+        if isinstance(schema, dict):
+            stripped = {k: v for k, v in schema.items() if k not in _META_KEYS}
+            # Also strip from nested schema wrappers (OpenAI: {"name":..., "schema": {...}})
+            if "schema" in stripped and isinstance(stripped["schema"], dict):
+                stripped["schema"] = {
+                    k: v for k, v in stripped["schema"].items() if k not in _META_KEYS
+                }
+            if "input_schema" in stripped and isinstance(stripped["input_schema"], dict):
+                stripped["input_schema"] = {
+                    k: v for k, v in stripped["input_schema"].items() if k not in _META_KEYS
+                }
+            return stripped
+        if isinstance(schema, list):
+            return [MessageBuilder._strip_schema_metadata(item) for item in schema]
+        return schema
+
+    @staticmethod
     def _assemble_body(
         *,
         style: PromptStyle,
@@ -473,12 +501,15 @@ class MessageBuilder:
             f"<|begin_of_text|>: {str(context_str)} :<|end_of_text|>",
         ]
 
-        # Schema injection (only in json mode)
+        # Schema injection (only in json mode) — strip metadata keys to
+        # prevent schema-echo (model returning the definition as content)
         if schema_injection == SchemaInjection.INLINE_FULL and schema is not None:
-            parts.append(f"<|begin_of_output_schema|> : {schema} : <|end_of_output_schema|>")
+            clean = MessageBuilder._strip_schema_metadata(schema)
+            parts.append(f"<|begin_of_output_schema|> : {clean} : <|end_of_output_schema|>")
         elif schema_injection == SchemaInjection.INLINE_FULL_LIST and schema is not None:
+            clean = MessageBuilder._strip_schema_metadata(schema)
             parts.append(
-                f"<|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>"
+                f"<|begin_of_output_schema|> : list of this [{clean}] : <|end_of_output_schema|>"
             )
         elif schema_injection == SchemaInjection.INLINE_FIELDS:
             parts.append(MessageBuilder._build_field_schema_instruction(schema))
