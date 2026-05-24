@@ -35,6 +35,7 @@ class BatchRegistryManager:
         """
         self._registry_path = Path(registry_path)
         self._cache: dict[str, BatchJobEntry] | None = None
+        self._batch_id_index: dict[str, str] | None = None  # batch_id -> file_name
         self._lock = threading.Lock()
         logger.debug("Initialized BatchRegistryManager for %s", registry_path)
 
@@ -50,6 +51,12 @@ class BatchRegistryManager:
         """
         with self._lock:
             self._ensure_cache_loaded()
+            # Evict stale index entry if file_name was mapped to a different batch_id
+            old = self._cache.get(file_name)
+            if old and self._batch_id_index and old.batch_id != entry.batch_id:
+                self._batch_id_index.pop(old.batch_id, None)
+            if self._batch_id_index is not None:
+                self._batch_id_index[entry.batch_id] = file_name
             self._cache[file_name] = entry
             self._persist_registry(self._cache)
             logger.info("Saved batch job %s for file %s", entry.batch_id, file_name)
@@ -62,6 +69,9 @@ class BatchRegistryManager:
             self._ensure_cache_loaded()
             if file_name not in self._cache:
                 return False
+            old_entry = self._cache[file_name]
+            if self._batch_id_index and old_entry.batch_id in self._batch_id_index:
+                del self._batch_id_index[old_entry.batch_id]
             del self._cache[file_name]
             self._persist_registry(self._cache)
             logger.info("Removed batch job entry for %s", file_name)
@@ -85,11 +95,13 @@ class BatchRegistryManager:
             return entry
 
     def get_batch_job_by_id(self, batch_id: str) -> BatchJobEntry | None:
-        """Retrieve batch job entry by batch ID."""
+        """Retrieve batch job entry by batch ID (O(1) via index)."""
         with self._lock:
             self._ensure_cache_loaded()
-            for entry in self._cache.values():
-                if entry.batch_id == batch_id:
+            file_name = self._batch_id_index.get(batch_id) if self._batch_id_index else None
+            if file_name is not None:
+                entry = self._cache.get(file_name)
+                if entry is not None:
                     fire_event(
                         CacheHitEvent(cache_type="batch_registry", key=f"batch_id:{batch_id}")
                     )
@@ -109,13 +121,14 @@ class BatchRegistryManager:
         with self._lock:
             self._ensure_cache_loaded()
 
-            for file_name, entry in self._cache.items():
-                if entry.batch_id == batch_id:
-                    updated_entry = dataclasses.replace(entry, status=new_status)
-                    self._cache[file_name] = updated_entry
-                    self._persist_registry(self._cache)
-                    logger.info("Updated batch %s status to %s", batch_id, new_status)
-                    return True
+            file_name = self._batch_id_index.get(batch_id) if self._batch_id_index else None
+            if file_name is not None and file_name in self._cache:
+                entry = self._cache[file_name]
+                updated_entry = dataclasses.replace(entry, status=new_status)
+                self._cache[file_name] = updated_entry
+                self._persist_registry(self._cache)
+                logger.info("Updated batch %s status to %s", batch_id, new_status)
+                return True
 
             logger.warning("Batch ID %s not found in registry", batch_id)
             return False
@@ -217,6 +230,7 @@ class BatchRegistryManager:
         with self._lock:
             entries_removed = len(self._cache) if self._cache is not None else 0
             self._cache = None
+            self._batch_id_index = None
             logger.debug("Registry cache invalidated")
 
             fire_event(
@@ -235,6 +249,9 @@ class BatchRegistryManager:
         """Lazy load cache if not already loaded."""
         if self._cache is None:
             self._cache = self._load_registry()
+            self._batch_id_index = {
+                entry.batch_id: file_name for file_name, entry in self._cache.items()
+            }
         if self._cache is None:
             raise RuntimeError("Cache initialization failed")
 
