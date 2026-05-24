@@ -159,6 +159,28 @@ class PreparedBatchTasks:
 
 
 @dataclass
+class RecoveryContext:
+    """Execution context shared across all recovery operations."""
+
+    service: Any  # BatchProcessingService (avoid circular import)
+    manager: Any  # BatchRegistryManager
+    provider: Any
+    agent_config: dict[str, Any]
+    output_directory: str
+    action_name: str | None
+    start_time: float
+
+
+@dataclass
+class BatchIdentity:
+    """Identifies a specific batch job."""
+
+    batch_id: str
+    file_name: str
+    entry: BatchJobEntry
+
+
+@dataclass
 class SubmissionResult:
     """Result of a batch submission."""
 
