@@ -58,25 +58,14 @@ class TaskPreparer:
         if context.is_first_stage:
             source_content = content
         else:
-            # Use the record (with content envelope) so SourceNamespaceBuilder
-            # can extract the source sub-namespace.  If the record's content
-            # dict lacks a "source" key (batch mode), fall back to looking up
-            # the original staging record by source_guid.
-            record_content = item.get("content", {}) if isinstance(item, dict) else {}
-            if isinstance(record_content, dict) and "source" in record_content:
-                source_content = item
-            elif source_guid and context.source_data:
-                from agent_actions.input.preprocessing.transformation.transformer import (
-                    DataTransformer,
-                )
+            from agent_actions.processing.source_resolution import resolve_source_content
 
-                source_content = DataTransformer.get_content_by_source_guid(
-                    context.source_data, source_guid
-                )
-                if source_content is None:
-                    source_content = item
-            else:
-                source_content = item
+            source_content = resolve_source_content(
+                item if isinstance(item, dict) else {},
+                source_guid,
+                context.source_data,
+                action_name=context.agent_name,
+            )
 
         current_item = item if isinstance(item, dict) else context.current_item
         field_context = self._load_full_context(content, source_content, context, current_item)

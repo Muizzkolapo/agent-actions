@@ -53,6 +53,13 @@ class SourceNamespaceBuilder:
                 if "source" in inner and isinstance(inner["source"], dict):
                     source_namespace = inner["source"]
                 else:
+                    # No "source" sub-namespace — use full content as source
+                    logger.debug(
+                        "Action '%s': no 'source' in content envelope "
+                        "(keys: %s) — using full content as source namespace",
+                        agent_name,
+                        sorted(inner.keys()),
+                    )
                     source_namespace = dict(inner)
             else:
                 source_namespace = dict(source_content)
