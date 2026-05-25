@@ -1,0 +1,38 @@
+"""Schema-echo detection utilities.
+
+An LLM sometimes returns the JSON Schema definition itself instead of
+conforming data.  The Ollama compiled format is the most common echo
+shape: ``{"title": "InlineSchema", "type": "object", "properties": {...}}``.
+
+These helpers detect and replace schema-echo responses so they can be
+treated as parse errors and retried via reprompt.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+
+def is_schema_echo(data: Any) -> bool:
+    """Detect if a response dict is a schema-echo.
+
+    Detection uses three structural keys (``type == "object"`` + ``properties``
+    as a dict + ``title`` present) which are extremely unlikely to appear
+    together in legitimate action output.
+    """
+    return (
+        isinstance(data, dict)
+        and data.get("type") == "object"
+        and isinstance(data.get("properties"), dict)
+        and "title" in data
+    )
+
+
+def make_schema_echo_error(raw: dict[str, Any]) -> dict[str, Any]:
+    """Build a ``_parse_error`` sentinel for a schema-echo response."""
+    return {
+        "raw_response": json.dumps(raw, ensure_ascii=False, default=str),
+        "_parse_error": "Schema-echo: LLM returned the schema definition "
+        "instead of conforming data",
+    }
