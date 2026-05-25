@@ -28,7 +28,6 @@ from agent_actions.validation.retry_validator import RetryCommandArgs
 
 logger = logging.getLogger(__name__)
 
-
 _RETRY_MANIFEST_NAME = "_retry_manifest.json"
 
 

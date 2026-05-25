@@ -17,12 +17,12 @@ from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
+from agent_actions.validation.run_validator import RunCommandArgs
 
 if TYPE_CHECKING:
     from agent_actions.workflow.coordinator import AgentWorkflow
 
 logger = logging.getLogger(__name__)
-from agent_actions.validation.run_validator import RunCommandArgs
 
 
 class RunCommand:
