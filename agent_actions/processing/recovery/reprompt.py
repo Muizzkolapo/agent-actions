@@ -12,7 +12,6 @@ from agent_actions.logging.events.validation_events import (
     RepromptRetryEvent,
     RepromptValidationFailedEvent,
 )
-
 from agent_actions.processing.helpers import get_parse_error_marker
 
 from .critique import format_critique_feedback
@@ -59,7 +58,6 @@ def _build_json_parse_feedback(field_names: list[str]) -> str:
         "JSON object. No markdown. No code fences. No explanation. No "
         "preamble. Just the raw JSON object."
     )
-
 
 
 if TYPE_CHECKING:
