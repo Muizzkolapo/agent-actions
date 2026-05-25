@@ -90,7 +90,7 @@ class TestPassthroughTransformerInputRecord:
         assert "metadata" not in results[0]
 
     def test_existing_content_wins_when_richer_than_input_record_content(self):
-        """First-stage records: existing_content (synthesised by extract_existing_content)
+        """First-stage records: existing_content (synthesised by get_existing_content(is_first_stage=True))
         may be richer than input_record['content']. Both are honoured — tracking fields
         come from input_record, namespaces come from existing_content.
         """

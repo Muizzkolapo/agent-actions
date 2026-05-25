@@ -93,7 +93,7 @@ class PassthroughTransformer:
         #
         # When input_record is provided we use it as-is, EXCEPT when existing_content
         # is also provided and differs from input_record["content"]. This happens on
-        # first-stage records: extract_existing_content synthesises {"source": raw_fields}
+        # first-stage records: get_existing_content(is_first_stage=True) synthesises {"source": raw_fields}
         # even when the record has no "content" key, so existing_content can be richer
         # than input_record.get("content"). We honour existing_content in that case so
         # upstream namespaces are not lost.

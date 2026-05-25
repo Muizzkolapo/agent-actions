@@ -53,6 +53,18 @@ class SourceNamespaceBuilder:
                 if "source" in inner and isinstance(inner["source"], dict):
                     source_namespace = inner["source"]
                 else:
+                    # Content envelope has no "source" sub-namespace.  This
+                    # happens for non-first-stage records whose source_content
+                    # fell back to the record itself (no guid lookup).  Use
+                    # all content keys as source namespace — downstream
+                    # actions expect to find upstream outputs here.
+                    logger.debug(
+                        "Record envelope for action '%s' has no 'source' "
+                        "sub-namespace (content keys: %s) — using full "
+                        "content as source namespace",
+                        agent_name,
+                        sorted(inner.keys()),
+                    )
                     source_namespace = dict(inner)
             else:
                 source_namespace = dict(source_content)

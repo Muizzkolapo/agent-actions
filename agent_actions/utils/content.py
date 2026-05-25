@@ -82,12 +82,23 @@ def is_version_merge(agent_config: Mapping[str, Any]) -> bool:
     return bool(agent_config.get("version_consumption_config"))
 
 
-def get_existing_content(record: dict[str, Any]) -> dict[str, Any]:
-    """Return the existing namespaced content dict from a record.
+def get_existing_content(
+    record: dict[str, Any],
+    *,
+    is_first_stage: bool = False,
+) -> dict[str, Any]:
+    """Return existing namespaced content, synthesizing source for first-stage.
 
-    Returns an empty dict if the record has no content.
+    This is the SINGLE function for content extraction — batch and online
+    paths both use this. Never bypass with raw record.get("content").
     """
     content = record.get("content")
     if isinstance(content, dict):
         return content
+    if is_first_stage:
+        from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
+
+        raw = {k: v for k, v in record.items() if k not in RECORD_FRAMEWORK_FIELDS}
+        if raw:
+            return {"source": raw}
     return {}

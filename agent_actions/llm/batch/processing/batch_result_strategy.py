@@ -24,7 +24,6 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
-    extract_existing_content,
 )
 from agent_actions.processing.types import (
     ProcessingResult,
@@ -41,7 +40,7 @@ from agent_actions.record.reasons import (
     GUARD_SKIP,
     PREP_FAILED,
 )
-from agent_actions.utils.content import is_version_merge
+from agent_actions.utils.content import get_existing_content, is_version_merge
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 
@@ -350,7 +349,7 @@ class BatchResultStrategy:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
 
         is_first_stage = not ctx.agent_config.get("dependencies")
-        existing_content = extract_existing_content(original_row, is_first_stage=is_first_stage)
+        existing_content = get_existing_content(original_row, is_first_stage=is_first_stage)
 
         action_name = ctx.agent_config["action_name"]
         is_tool_version_merge = ctx.agent_config.get("kind") == "tool" and is_version_merge(

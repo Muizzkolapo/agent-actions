@@ -6,8 +6,8 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
-    extract_existing_content,
 )
+from agent_actions.utils.content import get_existing_content
 
 # ---------------------------------------------------------------------------
 # build_tombstone
@@ -308,26 +308,26 @@ class TestApplyVersionMerge:
 
 
 # ---------------------------------------------------------------------------
-# extract_existing_content
+# get_existing_content
 # ---------------------------------------------------------------------------
 
 
 class TestExtractExistingContent:
-    """Tests for extract_existing_content()."""
+    """Tests for get_existing_content()."""
 
     def test_returns_content_dict(self):
         record = {"content": {"ns_a": {"x": 1}}, "source_guid": "sg"}
-        assert extract_existing_content(record) == {"ns_a": {"x": 1}}
+        assert get_existing_content(record) == {"ns_a": {"x": 1}}
 
     def test_returns_empty_dict_when_no_content(self):
-        assert extract_existing_content({"source_guid": "sg"}) == {}
+        assert get_existing_content({"source_guid": "sg"}) == {}
 
     def test_returns_empty_dict_when_content_is_not_dict(self):
-        assert extract_existing_content({"content": "string_value"}) == {}
+        assert get_existing_content({"content": "string_value"}) == {}
 
     def test_first_stage_wraps_raw_fields(self):
         record = {"field_a": 1, "field_b": "two", "source_guid": "sg"}
-        result = extract_existing_content(record, is_first_stage=True)
+        result = get_existing_content(record, is_first_stage=True)
         assert result == {"source": {"field_a": 1, "field_b": "two"}}
 
     def test_first_stage_excludes_framework_fields(self):
@@ -338,22 +338,22 @@ class TestExtractExistingContent:
             "metadata": {},
             "user_field": "val",
         }
-        result = extract_existing_content(record, is_first_stage=True)
+        result = get_existing_content(record, is_first_stage=True)
         assert result == {"source": {"user_field": "val"}}
 
     def test_first_stage_with_existing_content_returns_content(self):
         """First-stage fallback only applies when content is missing."""
         record = {"content": {"ns": {"x": 1}}, "field_a": 1}
-        result = extract_existing_content(record, is_first_stage=True)
+        result = get_existing_content(record, is_first_stage=True)
         assert result == {"ns": {"x": 1}}
 
     def test_first_stage_empty_raw_fields_returns_empty(self):
         """If only framework fields remain after filtering, return {}."""
         record = {"source_guid": "sg", "target_id": "tid"}
-        result = extract_existing_content(record, is_first_stage=True)
+        result = get_existing_content(record, is_first_stage=True)
         assert result == {}
 
     def test_non_first_stage_ignores_raw_fields(self):
         record = {"field_a": 1, "field_b": "two"}
-        result = extract_existing_content(record, is_first_stage=False)
+        result = get_existing_content(record, is_first_stage=False)
         assert result == {}
