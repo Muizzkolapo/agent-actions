@@ -36,7 +36,7 @@ class ActionCommand(BaseInspectCommand):
     def execute(self, project_root: Path | None = None) -> None:
         workflow = self._load_workflow(project_root=project_root)
 
-        validate_action_exists(self.action_name, workflow)
+        validate_action_exists(self.action_name, workflow.action_configs)
 
         action_config = workflow.action_configs[self.action_name]
         dependency_info = self._analyze_dependencies(workflow)
@@ -170,7 +170,7 @@ class ContextCommand(BaseInspectCommand):
     def execute(self, project_root: Path | None = None) -> None:
         workflow = self._load_workflow(project_root=project_root)
 
-        validate_action_exists(self.target_action_name, workflow)
+        validate_action_exists(self.target_action_name, workflow.action_configs)
 
         action_config = workflow.action_configs[self.target_action_name]
         dependency_info = self._analyze_dependencies(workflow)

@@ -17,8 +17,8 @@ from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
-    FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
+    QUARANTINED_DISPOSITIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,7 +117,7 @@ class DispositionsCommand:
             for row in rows:
                 if row.get("record_id") == NODE_LEVEL_RECORD_ID:
                     continue
-                if row.get("disposition") not in FAILURE_DISPOSITIONS:
+                if row.get("disposition") not in QUARANTINED_DISPOSITIONS:
                     continue
                 found += 1
                 table.add_row(

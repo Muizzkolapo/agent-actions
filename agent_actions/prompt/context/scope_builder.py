@@ -51,6 +51,13 @@ class SourceNamespaceBuilder:
                 # by extract_existing_content() for first-stage actions and carried
                 # forward for all subsequent actions.
                 inner = source_content["content"]
+                if "source" not in inner:
+                    raise ConfigurationError(
+                        f"Record envelope for action '{agent_name}' missing "
+                        f"'source' sub-namespace (content keys: "
+                        f"{sorted(inner.keys())}). Should be synthesized by "
+                        f"extract_existing_content() — contract violation.",
+                    )
                 source_namespace = inner["source"]
             else:
                 source_namespace = dict(source_content)

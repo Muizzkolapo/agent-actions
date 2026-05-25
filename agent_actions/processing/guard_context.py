@@ -60,21 +60,11 @@ def build_guard_context(
     elif is_first_stage:
         resolved_source = content
     else:
-        record_content = record.get("content", {})
-        if isinstance(record_content, dict) and "source" in record_content:
-            resolved_source = record
-        elif source_data and record.get("source_guid"):
-            from agent_actions.input.preprocessing.transformation.transformer import (
-                DataTransformer,
-            )
+        from agent_actions.processing.source_resolution import resolve_source_content
 
-            resolved_source = DataTransformer.get_content_by_source_guid(
-                source_data, record["source_guid"]
-            )
-            if resolved_source is None:
-                resolved_source = record
-        else:
-            resolved_source = record
+        resolved_source = resolve_source_content(
+            record, record.get("source_guid"), source_data
+        )
 
     field_context = build_field_context_with_history(
         agent_name=agent_name,

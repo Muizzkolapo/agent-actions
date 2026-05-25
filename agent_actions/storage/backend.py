@@ -49,6 +49,8 @@ VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 #   filtered    — removed by predicate; not a failure
 #   deferred    — pending HITL/batch; retrying would clobber in-flight state
 FAILURE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
+RETRYABLE_DISPOSITIONS = FAILURE_DISPOSITIONS  # explicit alias — retry eligibility
+QUARANTINED_DISPOSITIONS = FAILURE_DISPOSITIONS  # explicit alias — quarantine display
 
 DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]
 """(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""

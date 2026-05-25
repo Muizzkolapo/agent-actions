@@ -20,8 +20,8 @@ from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
-    FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
+    RETRYABLE_DISPOSITIONS,
 )
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.validation.retry_validator import RetryCommandArgs
@@ -234,7 +234,7 @@ class RetryCommand:
         failures: dict[str, list[dict]] = {}
         for action in execution_order:
             rows = backend.get_disposition(action)
-            action_failures = [r for r in rows if r.get("disposition") in FAILURE_DISPOSITIONS]
+            action_failures = [r for r in rows if r.get("disposition") in RETRYABLE_DISPOSITIONS]
             if action_failures:
                 failures[action] = action_failures
         return failures

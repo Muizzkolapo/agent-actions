@@ -6,20 +6,21 @@ paths, avoiding duplicate config loading / rendering across commands.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import click
 
 if TYPE_CHECKING:
     from agent_actions.config.project_paths import ProjectPaths
     from agent_actions.workflow.coordinator import AgentWorkflow
 
 
-def validate_action_exists(action_name: str, workflow: AgentWorkflow) -> None:
-    """Raise ClickException if action_name is not in the workflow's action configs."""
-    import click
-
-    if action_name not in workflow.action_configs:
-        available = ", ".join(sorted(workflow.action_configs.keys()))
+def validate_action_exists(action_name: str, action_configs: Mapping[str, Any]) -> None:
+    """Raise ClickException if action_name is not in action_configs."""
+    if action_name not in action_configs:
+        available = ", ".join(sorted(action_configs.keys()))
         raise click.ClickException(f"Action '{action_name}' not found. Available: {available}")
 
 
