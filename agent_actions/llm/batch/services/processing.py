@@ -11,7 +11,12 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
-from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
+from agent_actions.llm.batch.core.batch_constants import (
+    BatchStatus,
+    OnExhaustedPolicy,
+    RecoveryPhase,
+    RecoveryType,
+)
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -517,7 +522,7 @@ class BatchProcessingService:
                     if reprompt_parsed:
                         state.reprompt_max_attempts = reprompt_parsed.max_attempts
                         state.validation_name = reprompt_parsed.validation_name
-                        state.on_exhausted = reprompt_parsed.on_exhausted
+                        state.on_exhausted = OnExhaustedPolicy(reprompt_parsed.on_exhausted)
 
                     RecoveryStateManager.save(output_directory, file_name, state)
                     logger.info(
