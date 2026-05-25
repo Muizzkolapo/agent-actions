@@ -9,9 +9,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from agent_actions.processing.helpers import get_parse_error_marker as _get_parse_error
 from agent_actions.processing.recovery.reprompt import (
     RepromptService,
-    _get_parse_error,
     create_reprompt_service_from_config,
     parse_reprompt_config,
 )

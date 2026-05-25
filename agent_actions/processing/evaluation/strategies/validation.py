@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.processing.helpers import get_parse_error_marker
 from agent_actions.processing.recovery.response_validator import (
     build_validation_feedback,
     safe_validate,
@@ -37,15 +38,13 @@ def detect_parse_error(content: Any, *, json_mode: bool) -> str | None:
     # String content in json_mode = provider couldn't parse JSON
     if json_mode and isinstance(content, str):
         return "Failed to parse JSON from LLM response"
-    # Dict with _parse_error = pre-wrapped parse error (online convention)
-    if isinstance(content, dict) and "_parse_error" in content:
-        return content["_parse_error"] or None
+    # Dict/list with _parse_error marker (shared with reprompt path)
+    marker = get_parse_error_marker(content)
+    if marker is not None:
+        return marker
     # Schema-echo: LLM returned the JSON Schema definition instead of data
     if is_schema_echo(content):
         return "Schema-echo: LLM returned the schema definition instead of conforming data"
-    # List with _parse_error at index 0 = online list-wrapped format
-    if isinstance(content, list) and content and isinstance(content[0], dict):
-        return content[0].get("_parse_error") or None
     return None
 
 

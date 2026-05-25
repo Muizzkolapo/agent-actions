@@ -93,6 +93,11 @@ class SchemaValidator:
         self._strict_mode = strict_mode
         self._last_feedback: str = ""
         self._validator_available = self._check_import()
+        self._validator_module = None
+        if self._validator_available:
+            from agent_actions.validation import schema_output_validator
+
+            self._validator_module = schema_output_validator
 
     @classmethod
     def _check_import(cls) -> bool:
@@ -114,15 +119,11 @@ class SchemaValidator:
             return False
 
     def validate(self, response: Any) -> bool:  # noqa: D401
-        if not self._validator_available:
+        if not self._validator_available or self._validator_module is None:
             return True
 
         try:
-            from agent_actions.validation.schema_output_validator import (
-                validate_output_against_schema,
-            )
-
-            report = validate_output_against_schema(
+            report = self._validator_module.validate_output_against_schema(
                 response,
                 self._schema,
                 self._action_name,
