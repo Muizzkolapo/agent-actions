@@ -50,15 +50,10 @@ class BatchRegistryManager:
             IOError: If write fails
         """
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
-            self._cache[file_name] = entry
+            cache = self._get_cache()
+            cache[file_name] = entry
             self._batch_id_index = None
-            self._persist_registry(self._cache)
+            self._persist_registry(cache)
             logger.info("Saved batch job %s for file %s", entry.batch_id, file_name)
 
             fire_event(CacheUpdateEvent(cache_type="batch_registry", key=file_name))
@@ -66,30 +61,20 @@ class BatchRegistryManager:
     def remove_batch_job(self, file_name: str) -> bool:
         """Remove a batch job entry. Returns True if removed, False if not found."""
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
-            if file_name not in self._cache:
+            cache = self._get_cache()
+            if file_name not in cache:
                 return False
-            del self._cache[file_name]
+            del cache[file_name]
             self._batch_id_index = None
-            self._persist_registry(self._cache)
+            self._persist_registry(cache)
             logger.info("Removed batch job entry for %s", file_name)
             return True
 
     def get_batch_job(self, file_name: str) -> BatchJobEntry | None:
         """Retrieve batch job entry by file name."""
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
-            entry = self._cache.get(file_name)
+            cache = self._get_cache()
+            entry = cache.get(file_name)
 
             if entry is not None:
                 fire_event(CacheHitEvent(cache_type="batch_registry", key=file_name))
@@ -105,18 +90,14 @@ class BatchRegistryManager:
     def get_batch_job_by_id(self, batch_id: str) -> BatchJobEntry | None:
         """Retrieve batch job entry by batch ID."""
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
+            cache = self._get_cache()
             if self._batch_id_index is None:
                 self._rebuild_batch_id_index()
-            file_name = (self._batch_id_index or {}).get(batch_id)
-            if file_name and file_name in self._cache:
+            assert self._batch_id_index is not None  # guaranteed by _rebuild above
+            file_name = self._batch_id_index.get(batch_id)
+            if file_name and file_name in cache:
                 fire_event(CacheHitEvent(cache_type="batch_registry", key=f"batch_id:{batch_id}"))
-                return self._cache[file_name]
+                return cache[file_name]
 
             fire_event(
                 CacheMissEvent(
@@ -130,20 +111,16 @@ class BatchRegistryManager:
     def update_status(self, batch_id: str, new_status: str) -> bool:
         """Update status for a batch job. Returns False if batch_id not found."""
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
+            cache = self._get_cache()
 
             if self._batch_id_index is None:
                 self._rebuild_batch_id_index()
-            file_name = (self._batch_id_index or {}).get(batch_id)
-            if file_name and file_name in self._cache:
-                updated_entry = dataclasses.replace(self._cache[file_name], status=new_status)
-                self._cache[file_name] = updated_entry
-                self._persist_registry(self._cache)
+            assert self._batch_id_index is not None  # guaranteed by _rebuild above
+            file_name = self._batch_id_index.get(batch_id)
+            if file_name and file_name in cache:
+                updated_entry = dataclasses.replace(cache[file_name], status=new_status)
+                cache[file_name] = updated_entry
+                self._persist_registry(cache)
                 logger.info("Updated batch %s status to %s", batch_id, new_status)
                 return True
 
@@ -153,29 +130,18 @@ class BatchRegistryManager:
     def get_all_jobs(self) -> dict[str, BatchJobEntry]:
         """Get all batch jobs in registry."""
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
-            return self._cache.copy()  # Return copy to prevent external mutation
+            return self._get_cache().copy()
 
     def get_registry_stats(self) -> BatchRegistryStats:
         """Get aggregated statistics for all batches."""
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
+            cache = self._get_cache()
 
             stats = BatchRegistryStats(
-                total_jobs=len(self._cache), completed=0, failed=0, in_progress=0, cancelled=0
+                total_jobs=len(cache), completed=0, failed=0, in_progress=0, cancelled=0
             )
 
-            for entry in self._cache.values():
+            for entry in cache.values():
                 if entry.status == BatchStatus.COMPLETED:
                     stats.completed += 1
                 elif entry.status == BatchStatus.FAILED:
@@ -199,21 +165,16 @@ class BatchRegistryManager:
             check_provider: Optional callable(batch_id) -> status to refresh from provider
         """
         with self._lock:
-            self._ensure_cache_loaded()
-            if self._cache is None:
-                raise RuntimeError(
-                    "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
-                    "cache initialization failed"
-                )
+            cache = self._get_cache()
 
-            if not self._cache:
+            if not cache:
                 return True  # No jobs = all complete
 
             # Collect entries that need a provider check (non-terminal) while holding the lock
             if check_provider:
                 to_check = [
                     (file_name, entry)
-                    for file_name, entry in self._cache.items()
+                    for file_name, entry in cache.items()
                     if not entry.is_terminal
                 ]
             else:
@@ -221,7 +182,7 @@ class BatchRegistryManager:
 
             # Fast path: no provider checks needed
             if not check_provider:
-                return all(entry.is_terminal for entry in self._cache.values())
+                return all(entry.is_terminal for entry in cache.values())
 
         # Release the lock before performing network I/O
         updates: list[tuple[str, str]] = []  # (file_name, new_status)
@@ -288,6 +249,16 @@ class BatchRegistryManager:
         if self._cache is None:
             self._cache = self._load_registry()
             self._rebuild_batch_id_index()
+
+    def _get_cache(self) -> dict[str, BatchJobEntry]:
+        """Load cache and return it, raising if load fails. Must be called under lock."""
+        self._ensure_cache_loaded()
+        if self._cache is None:
+            raise RuntimeError(
+                "BatchRegistryManager._cache is None after _ensure_cache_loaded(); "
+                "cache initialization failed"
+            )
+        return self._cache
 
     def _load_registry(self) -> dict[str, BatchJobEntry]:
         """
