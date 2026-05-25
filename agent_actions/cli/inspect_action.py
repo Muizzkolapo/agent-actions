@@ -15,6 +15,7 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 from .inspect_base import BaseInspectCommand
+from .workflow_loader import validate_action_exists
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +35,7 @@ class ActionCommand(BaseInspectCommand):
 
     def execute(self, project_root: Path | None = None) -> None:
         workflow = self._load_workflow(project_root=project_root)
-
-        if self.action_name not in workflow.action_configs:
-            available = ", ".join(workflow.action_configs.keys())
-            raise click.ClickException(
-                f"Action '{self.action_name}' not found. Available: {available}"
-            )
+        validate_action_exists(self.action_name, workflow.action_configs)
 
         action_config = workflow.action_configs[self.action_name]
         dependency_info = self._analyze_dependencies(workflow)
@@ -172,12 +168,7 @@ class ContextCommand(BaseInspectCommand):
 
     def execute(self, project_root: Path | None = None) -> None:
         workflow = self._load_workflow(project_root=project_root)
-
-        if self.target_action_name not in workflow.action_configs:
-            available = ", ".join(workflow.action_configs.keys())
-            raise click.ClickException(
-                f"Action '{self.target_action_name}' not found. Available: {available}"
-            )
+        validate_action_exists(self.target_action_name, workflow.action_configs)
 
         action_config = workflow.action_configs[self.target_action_name]
         dependency_info = self._analyze_dependencies(workflow)
