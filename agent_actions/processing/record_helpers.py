@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.content import get_existing_content, is_version_merge
 
@@ -140,15 +140,8 @@ def extract_existing_content(
     *,
     is_first_stage: bool = False,
 ) -> dict[str, Any]:
-    """Extract existing content with consistent first-stage fallback.
+    """Deprecated — use ``get_existing_content(record, is_first_stage=...)`` directly.
 
-    On first-stage records that have no ``content`` dict, the raw
-    non-framework fields are wrapped under ``{"source": ...}`` so
-    downstream actions can reference source data.
+    Kept as a thin redirect so in-flight imports don't break.
     """
-    existing = get_existing_content(record)
-    if not existing and is_first_stage:
-        raw = {k: v for k, v in record.items() if k not in RECORD_FRAMEWORK_FIELDS}
-        if raw:
-            return {"source": raw}
-    return existing
+    return get_existing_content(record, is_first_stage=is_first_stage)
