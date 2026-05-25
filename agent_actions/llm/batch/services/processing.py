@@ -4,7 +4,6 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -32,6 +31,9 @@ from agent_actions.llm.batch.processing.batch_result_strategy import (
     BatchResultStrategy,
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.llm.batch.services.processing_recovery import (
+    _register_recovery_batch,
+)
 from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_reprompt as _check_and_submit_reprompt_impl,
 )
@@ -492,21 +494,15 @@ class BatchProcessingService:
                     agent_config=agent_config,
                 )
                 if submission:
-                    retry_batch_id, record_count = submission
-                    # Register recovery entry
-                    recovery_file_name = f"{file_name}_retry_1"
-                    recovery_entry = BatchJobEntry(
-                        batch_id=retry_batch_id,
-                        status=BatchStatus.SUBMITTED,
-                        timestamp=datetime.now(UTC).isoformat(),
-                        provider=entry.provider,
-                        record_count=record_count,
-                        file_name=recovery_file_name,
-                        parent_file_name=file_name,
-                        recovery_type=RecoveryType.RETRY,
-                        recovery_attempt=1,
+                    retry_batch_id, _record_count = submission
+                    _register_recovery_batch(
+                        manager,
+                        submission,
+                        file_name,
+                        entry.provider,
+                        RecoveryType.RETRY,
+                        1,
                     )
-                    manager.save_batch_job(recovery_file_name, recovery_entry)
 
                     record_failure_counts = {rid: 1 for rid in missing_ids}
                     state = RecoveryState(
