@@ -12,8 +12,8 @@ ProviderMessageConfig from SchemaInjection.PROMPT to SchemaInjection.NONE.
 
 import logging
 import os
+import time
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 import httpx
@@ -143,7 +143,7 @@ def _call_ollama_json(
         agent_config, key_map={"max_tokens": "num_predict"}, stop_as_list=True
     )
 
-    start_time = datetime.now()
+    start_time = time.perf_counter()
     try:
         chat_kwargs: dict[str, Any] = {
             "model": model,
@@ -170,7 +170,7 @@ def _call_ollama_json(
             e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
         ) from e
 
-    latency_ms = (datetime.now() - start_time).total_seconds() * 1000
+    latency_ms = (time.perf_counter() - start_time) * 1000
     ResponseBuilder.record_usage_and_event(response, vendor_slug, model, latency_ms, request_id)
     maybe_inject_online_failure(model, vendor_slug=vendor_slug)
 
@@ -215,7 +215,7 @@ def _call_ollama_non_json(
     request_id = str(uuid.uuid4())
     fire_event(LLMRequestEvent(provider=vendor_slug, model=model, request_id=request_id))
 
-    start_time = datetime.now()
+    start_time = time.perf_counter()
     try:
         non_json_options = extract_generation_params(
             agent_config, key_map={"max_tokens": "num_predict"}, stop_as_list=True
@@ -235,7 +235,7 @@ def _call_ollama_non_json(
             e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
         ) from e
 
-    latency_ms = (datetime.now() - start_time).total_seconds() * 1000
+    latency_ms = (time.perf_counter() - start_time) * 1000
     ResponseBuilder.record_usage_and_event(response, vendor_slug, model, latency_ms, request_id)
     maybe_inject_online_failure(model, vendor_slug=vendor_slug)
 

@@ -66,8 +66,10 @@ def _resolve_client(model_vendor: str) -> Any:
                     "install_command": f"uv pip install {package}",
                 },
             ) from err
-        CLIENT_REGISTRY[model_vendor] = cls
-        return cls
+        # Atomic under CPython GIL — if two threads resolve the same vendor
+        # concurrently, setdefault ensures only one class wins the race.
+        CLIENT_REGISTRY.setdefault(model_vendor, cls)
+        return CLIENT_REGISTRY[model_vendor]
     return entry
 
 
