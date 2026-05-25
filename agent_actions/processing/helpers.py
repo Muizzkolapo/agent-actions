@@ -14,6 +14,19 @@ from agent_actions.utils.transformation import PassthroughTransformer
 logger = logging.getLogger(__name__)
 
 
+def get_parse_error_marker(response: Any) -> str | None:
+    """Return ``_parse_error`` string if *response* contains a provider JSON parse failure.
+
+    Checks both dict and list-wrapped formats used by online providers.
+    Returns ``None`` when no parse error is present.
+    """
+    if isinstance(response, dict):
+        return response.get("_parse_error") or None
+    if isinstance(response, list) and response and isinstance(response[0], dict):
+        return response[0].get("_parse_error") or None
+    return None
+
+
 def run_dynamic_agent(
     agent_config: dict[str, Any],
     agent_name: str,
@@ -83,11 +96,19 @@ def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
 
 
 def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
-    """Replace schema-echo items in a response list with ``_parse_error`` dicts.
+    """Replace schema-echo responses with ``_parse_error`` dicts.
 
-    Runs unconditionally because schema echoes are never valid output
-    regardless of validation settings.
+    Handles both dict responses (single schema-echo) and list responses
+    (schema-echo items within a list).  Runs unconditionally because
+    schema echoes are never valid output regardless of validation settings.
     """
+    if isinstance(response, dict) and _is_schema_echo(response):
+        logger.warning(
+            "[%s] Schema-echo detected in LLM response (dict) — replacing with _parse_error.",
+            agent_name,
+        )
+        return _make_schema_echo_error(response)
+
     if not isinstance(response, list):
         return response
 

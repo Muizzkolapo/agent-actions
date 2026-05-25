@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS, RecordEnvelope
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import RETRY_EXHAUSTED
-from agent_actions.utils.content import get_existing_content, is_version_merge
+from agent_actions.utils.content import is_version_merge
 
 # Framework fields carried from input to output when the envelope builder
 # does not manage them automatically.
@@ -133,22 +133,3 @@ def apply_version_merge(
         return {**(existing_content or {}), **action_output}
     action_name = agent_config["action_name"]
     return RecordEnvelope.build_content(action_name, action_output, existing_content)
-
-
-def extract_existing_content(
-    record: dict[str, Any],
-    *,
-    is_first_stage: bool = False,
-) -> dict[str, Any]:
-    """Extract existing content with consistent first-stage fallback.
-
-    On first-stage records that have no ``content`` dict, the raw
-    non-framework fields are wrapped under ``{"source": ...}`` so
-    downstream actions can reference source data.
-    """
-    existing = get_existing_content(record)
-    if not existing and is_first_stage:
-        raw = {k: v for k, v in record.items() if k not in RECORD_FRAMEWORK_FIELDS}
-        if raw:
-            return {"source": raw}
-    return existing

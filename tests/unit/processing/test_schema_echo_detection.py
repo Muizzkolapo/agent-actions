@@ -115,8 +115,21 @@ class TestRejectSchemaEchoItems:
         assert "_parse_error" in result[1]
         assert "Schema-echo" in result[1]["_parse_error"]
 
-    def test_non_list_passthrough(self):
-        """Non-list responses pass through unchanged."""
+    def test_dict_schema_echo_replaced(self):
+        """Dict response that is itself a schema-echo — replaced with _parse_error."""
+        result = _reject_schema_echo_items(FULL_ECHO, "test_action")
+        assert isinstance(result, dict)
+        assert "_parse_error" in result
+        assert "raw_response" in result
+        assert "Schema-echo" in result["_parse_error"]
+
+    def test_dict_valid_output_passthrough(self):
+        """Dict response that is NOT a schema-echo — passed through unchanged."""
+        result = _reject_schema_echo_items(VALID_OUTPUT, "test_action")
+        assert result is VALID_OUTPUT
+
+    def test_non_list_non_dict_passthrough(self):
+        """Non-list, non-dict responses pass through unchanged."""
         result = _reject_schema_echo_items("not a list", "test_action")
         assert result == "not a list"
 

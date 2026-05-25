@@ -7,8 +7,8 @@ actions).
 """
 
 from agent_actions.workflow.managers.state import (
-    ActionStatus,
     ActionStateManager,
+    ActionStatus,
 )
 
 

@@ -39,6 +39,16 @@ class BatchStrategy(InvocationStrategy):
         self._queued: list[PreparedTask] = []
         self._context_map: dict[str, Any] = {}
 
+    @staticmethod
+    def _build_context_entry(task: PreparedTask, status: str, executed: bool) -> dict:
+        return {
+            "status": status,
+            "original": task.original_content,
+            "passthrough_fields": task.passthrough_fields,
+            "source_guid": task.source_guid,
+            "executed": executed,
+        }
+
     def invoke(
         self,
         task: PreparedTask,
@@ -46,13 +56,9 @@ class BatchStrategy(InvocationStrategy):
     ) -> InvocationResult:
         """Queue task for batch submission; returns deferred InvocationResult."""
         if not task.should_execute:
-            self._context_map[task.target_id] = {
-                "status": task.guard_behavior or "filtered",
-                "original": task.original_content,
-                "passthrough_fields": task.passthrough_fields,
-                "source_guid": task.source_guid,
-                "executed": False,
-            }
+            self._context_map[task.target_id] = self._build_context_entry(
+                task, status=task.guard_behavior or "filtered", executed=False
+            )
 
             if task.is_passthrough:
                 return InvocationResult.skipped(
@@ -69,13 +75,9 @@ class BatchStrategy(InvocationStrategy):
 
         if task.target_id in self._context_map:
             logger.warning("Duplicate target_id %s, overwriting", task.target_id)
-        self._context_map[task.target_id] = {
-            "status": "included",
-            "original": task.original_content,
-            "passthrough_fields": task.passthrough_fields,
-            "source_guid": task.source_guid,
-            "executed": True,  # Will be executed when batch runs
-        }
+        self._context_map[task.target_id] = self._build_context_entry(
+            task, status="included", executed=True
+        )
 
         return InvocationResult.queued(
             task_id=task.target_id,

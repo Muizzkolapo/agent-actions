@@ -9,8 +9,8 @@ consistent retry handling across all providers.
 """
 
 import logging
+import time
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 import anthropic
@@ -158,13 +158,12 @@ class AnthropicClient(BaseClient):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             response = client.messages.create(**api_args)
         except anthropic.APIError as e:
             raise _wrap_anthropic_error(e, model_name, request_id) from e
-        duration = (datetime.now() - start_time).total_seconds()
-        latency_ms = duration * 1000
+        latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
             response, "anthropic", model_name, latency_ms, request_id

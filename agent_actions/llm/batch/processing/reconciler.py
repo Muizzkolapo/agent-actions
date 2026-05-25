@@ -99,6 +99,16 @@ class BatchResultReconciler:
         return self._key_index.get(str(custom_id), -1)
 
     @staticmethod
+    def find_missing_ids(
+        context_map: dict[str, Any],
+        batch_results: list[Any],
+    ) -> set[str]:
+        """Find custom_ids expected but not received in batch results."""
+        expected = BatchResultReconciler.collect_expected_custom_ids(context_map)
+        received = BatchResultReconciler.collect_result_custom_ids(batch_results)
+        return expected - received
+
+    @staticmethod
     def collect_expected_custom_ids(context_map: dict[str, Any]) -> set:
         """Collect custom_ids of records submitted to batch API (status='included' only)."""
         return {

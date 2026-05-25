@@ -20,26 +20,13 @@ from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
-    DISPOSITION_EXHAUSTED,
-    DISPOSITION_FAILED,
+    FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.validation.retry_validator import RetryCommandArgs
 
 logger = logging.getLogger(__name__)
-
-# Dispositions eligible for retry.  Allowlist — new disposition types
-# won't accidentally become retryable.
-#
-# Excluded (and why):
-#   success     — already done
-#   unprocessed — cascade casualty; resolves when upstream failure is retried
-#   passthrough — guard-skipped; not a failure
-#   skipped     — deliberately skipped (WHERE clause)
-#   filtered    — removed by predicate; not a failure
-#   deferred    — pending HITL/batch; retrying would clobber in-flight state
-_FAILURE_DISPOSITIONS = (DISPOSITION_FAILED, DISPOSITION_EXHAUSTED)
 
 _RETRY_MANIFEST_NAME = "_retry_manifest.json"
 
@@ -219,9 +206,6 @@ class RetryCommand:
         )
 
         self.console.print("\n[bold]Re-running workflow...[/bold]\n")
-        # Fresh workflow: dispositions were cleared above, so the coordinator
-        # needs to see the updated storage state at construction time.
-        workflow = load_workflow(self.agent_name, paths, project_root)
 
         # Reset action-level status for downstream actions to PENDING so the
         # coordinator doesn't skip them as "already completed."
@@ -248,7 +232,7 @@ class RetryCommand:
         failures: dict[str, list[dict]] = {}
         for action in execution_order:
             rows = backend.get_disposition(action)
-            action_failures = [r for r in rows if r.get("disposition") in _FAILURE_DISPOSITIONS]
+            action_failures = [r for r in rows if r.get("disposition") in FAILURE_DISPOSITIONS]
             if action_failures:
                 failures[action] = action_failures
         return failures

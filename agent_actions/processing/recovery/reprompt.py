@@ -12,6 +12,7 @@ from agent_actions.logging.events.validation_events import (
     RepromptRetryEvent,
     RepromptValidationFailedEvent,
 )
+from agent_actions.processing.helpers import get_parse_error_marker
 
 from .critique import format_critique_feedback
 from .response_validator import (
@@ -36,10 +37,8 @@ def _extract_field_names(schema: dict) -> list[str]:
     return sorted(all_fields)
 
 
-def _build_json_parse_feedback(validator: Any) -> str:
+def _build_json_parse_feedback(field_names: list[str]) -> str:
     """Build forceful JSON parse error feedback with expected schema fields."""
-    schema = getattr(validator, "_schema", None)
-    field_names = _extract_field_names(schema) if isinstance(schema, dict) else []
 
     if field_names:
         fields_str = ", ".join(field_names)
@@ -59,15 +58,6 @@ def _build_json_parse_feedback(validator: Any) -> str:
         "JSON object. No markdown. No code fences. No explanation. No "
         "preamble. Just the raw JSON object."
     )
-
-
-def _get_parse_error(response: Any) -> str | None:
-    """Return ``_parse_error`` string if *response* signals a provider JSON parse failure."""
-    if isinstance(response, list) and response and isinstance(response[0], dict):
-        return response[0].get("_parse_error") or None
-    if isinstance(response, dict):
-        return response.get("_parse_error") or None
-    return None
 
 
 if TYPE_CHECKING:
@@ -122,6 +112,16 @@ def parse_reprompt_config(reprompt_config: dict | None) -> ParsedRepromptConfig 
 class RepromptService:
     """Wraps LLM execution with a validate-and-reprompt loop."""
 
+    _VALID_EXHAUSTED_OPTIONS = ("return_last", "raise")
+
+    @staticmethod
+    def _validate_exhausted_option(value: str) -> None:
+        if value not in RepromptService._VALID_EXHAUSTED_OPTIONS:
+            raise ValueError(
+                f"on_exhausted must be one of {RepromptService._VALID_EXHAUSTED_OPTIONS}, "
+                f"got: '{value}'"
+            )
+
     def __init__(
         self,
         validation_name: str = "",
@@ -151,11 +151,7 @@ class RepromptService:
         if max_attempts < 1:
             raise ValueError(f"max_attempts must be >= 1, got: {max_attempts}")
 
-        valid_exhausted_options = ("return_last", "raise")
-        if on_exhausted not in valid_exhausted_options:
-            raise ValueError(
-                f"on_exhausted must be one of {valid_exhausted_options}, got: '{on_exhausted}'"
-            )
+        self._validate_exhausted_option(on_exhausted)
 
         self.max_attempts = max_attempts
         self.on_exhausted = on_exhausted
@@ -171,6 +167,9 @@ class RepromptService:
 
         self.validation_func = self._validator.validate
         self._strategies = strategies or []
+
+        schema = getattr(self._validator, "_schema", None)
+        self._schema_field_names = _extract_field_names(schema) if isinstance(schema, dict) else []
 
     @property
     def feedback_message(self) -> str:
@@ -190,12 +189,7 @@ class RepromptService:
             RuntimeError: If on_exhausted="raise" and validation exhausted.
         """
         exhausted_behavior = on_exhausted if on_exhausted is not None else self.on_exhausted
-
-        valid_exhausted_options = ("return_last", "raise")
-        if exhausted_behavior not in valid_exhausted_options:
-            raise ValueError(
-                f"on_exhausted must be one of {valid_exhausted_options}, got: '{exhausted_behavior}'"
-            )
+        self._validate_exhausted_option(exhausted_behavior)
 
         attempts = 0
         current_prompt = original_prompt
@@ -247,7 +241,7 @@ class RepromptService:
 
             last_response = response
 
-            parse_error = _get_parse_error(response)
+            parse_error = get_parse_error_marker(response)
             if parse_error is not None:
                 is_valid = False
                 parse_error_count += 1
@@ -312,7 +306,7 @@ class RepromptService:
             )
 
             if parse_error is not None:
-                feedback = _build_json_parse_feedback(self._validator)
+                feedback = _build_json_parse_feedback(self._schema_field_names)
             else:
                 feedback = build_validation_feedback(
                     response, self._validator.feedback_message, strategies=self._strategies
@@ -365,7 +359,7 @@ class RepromptService:
                 f"(validation: {self.validation_name})"
             )
 
-        if _get_parse_error(last_response) is not None:
+        if get_parse_error_marker(last_response) is not None:
             logger.warning(
                 "[%s] Exhausted after %d attempts with persistent parse errors "
                 "— returning empty fields so downstream actions are not blocked",

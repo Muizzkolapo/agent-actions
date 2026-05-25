@@ -42,7 +42,7 @@ class LineageEnricher(Enricher):
         use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
 
         source_index: dict[str, dict] | None = None
-        if use_per_item_parent_lookup and context.source_data:
+        if context.source_data:
             source_index = {
                 sg: item
                 for item in context.source_data
@@ -51,7 +51,7 @@ class LineageEnricher(Enricher):
 
         parent_item = None
         if not use_per_item_parent_lookup:
-            parent_item = self._get_parent_item(result.source_guid, context)
+            parent_item = self._get_parent_item(result.source_guid, context, source_index)
 
         source_data_len = len(context.source_data) if context.source_data else 0
 

@@ -4,7 +4,6 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -12,7 +11,12 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
-from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
+from agent_actions.llm.batch.core.batch_constants import (
+    BatchStatus,
+    OnExhaustedPolicy,
+    RecoveryPhase,
+    RecoveryType,
+)
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -43,6 +47,9 @@ from agent_actions.llm.batch.services.processing_recovery import (
 )
 from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
+    register_recovery_batch,
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
@@ -477,9 +484,7 @@ class BatchProcessingService:
         retry_enabled = retry_config and retry_config.get("enabled", True)
 
         if retry_enabled:
-            expected_ids = BatchResultReconciler.collect_expected_custom_ids(context_map)
-            received_ids = BatchResultReconciler.collect_result_custom_ids(batch_results)
-            missing_ids = expected_ids - received_ids
+            missing_ids = BatchResultReconciler.find_missing_ids(context_map, batch_results)
 
             if missing_ids:
                 max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
@@ -492,21 +497,15 @@ class BatchProcessingService:
                     agent_config=agent_config,
                 )
                 if submission:
-                    retry_batch_id, record_count = submission
-                    # Register recovery entry
-                    recovery_file_name = f"{file_name}_retry_1"
-                    recovery_entry = BatchJobEntry(
-                        batch_id=retry_batch_id,
-                        status=BatchStatus.SUBMITTED,
-                        timestamp=datetime.now(UTC).isoformat(),
-                        provider=entry.provider,
-                        record_count=record_count,
-                        file_name=recovery_file_name,
-                        parent_file_name=file_name,
-                        recovery_type=RecoveryType.RETRY,
-                        recovery_attempt=1,
+                    retry_batch_id, _record_count = submission
+                    register_recovery_batch(
+                        manager,
+                        submission,
+                        file_name,
+                        entry.provider,
+                        RecoveryType.RETRY,
+                        1,
                     )
-                    manager.save_batch_job(recovery_file_name, recovery_entry)
 
                     record_failure_counts = {rid: 1 for rid in missing_ids}
                     state = RecoveryState(
@@ -523,7 +522,7 @@ class BatchProcessingService:
                     if reprompt_parsed:
                         state.reprompt_max_attempts = reprompt_parsed.max_attempts
                         state.validation_name = reprompt_parsed.validation_name
-                        state.on_exhausted = reprompt_parsed.on_exhausted
+                        state.on_exhausted = OnExhaustedPolicy(reprompt_parsed.on_exhausted)
 
                     RecoveryStateManager.save(output_directory, file_name, state)
                     logger.info(

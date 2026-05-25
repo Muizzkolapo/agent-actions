@@ -9,8 +9,8 @@ consistent retry handling across all providers.
 """
 
 import logging
+import time
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 import cohere
@@ -93,7 +93,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             co = cohere.ClientV2(api_key=api_key)
             envelope = MessageBuilder.build(
@@ -129,8 +129,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
             CohereClient.handle_generic_error(e, "Cohere", "call_json", model_name)
 
-        duration = (datetime.now() - start_time).total_seconds()
-        latency_ms = duration * 1000
+        latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
             response, "cohere", model_name, latency_ms, request_id
@@ -168,7 +167,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
-        start_time = datetime.now()
+        start_time = time.perf_counter()
         try:
             co = cohere.ClientV2(api_key=api_key)
             envelope = MessageBuilder.build("cohere", prompt_config, context_data, json_mode=False)
@@ -213,8 +212,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 cause=e,
             ) from e
 
-        duration = (datetime.now() - start_time).total_seconds()
-        latency_ms = duration * 1000
+        latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
             response, "cohere", model_name, latency_ms, request_id

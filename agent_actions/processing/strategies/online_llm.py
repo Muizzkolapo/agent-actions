@@ -32,7 +32,6 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
-    extract_existing_content,
 )
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
@@ -53,6 +52,7 @@ from agent_actions.record.reasons import (
 )
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
+from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
@@ -481,7 +481,7 @@ class OnlineLLMStrategy:
 
         # Transform response
         item_existing_content = (
-            extract_existing_content(item, is_first_stage=context.is_first_stage)
+            get_existing_content(item, is_first_stage=context.is_first_stage)
             if isinstance(item, dict)
             else None
         )
