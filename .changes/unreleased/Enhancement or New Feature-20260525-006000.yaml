@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Processing module cleanup: O(1) source GUID lookups, cached validator imports, deduplicated parse error detection and context assembly, single-pass snapshot serialization."
-time: 2026-05-25T00:60:00.000000Z

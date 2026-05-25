@@ -1,0 +1,10 @@
+kind: Under the Hood
+body: |
+  Codebase simplification — 6 parallel cleanup PRs merged:
+  CLI workflow loading deduplicated, TOCTOU fixes, disposition constants consolidated;
+  source namespace contract enforced with unified get_existing_content(is_first_stage);
+  InlineSchema leak prevented via schema-echo detection in dict response path;
+  batch recovery registration and cache helpers deduplicated;
+  processing N×M source lookups replaced with O(1) index, validator imports cached;
+  LLM provider timing standardized to perf_counter, redundant null guards removed.
+time: 2026-05-25T12:00:00.000000Z

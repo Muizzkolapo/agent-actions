@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "LLM module cleanup: removed redundant null guards (registry, batch_result_strategy), incremental batch_id index, TOCTOU fixes (recovery_state, context), find_missing_ids consolidation, OnExhaustedPolicy enum, standardized perf_counter timing across 7 providers, shared mkdir utility, thread-safe CLIENT_REGISTRY"
-time: 2026-05-25T06:32:00.000000Z
