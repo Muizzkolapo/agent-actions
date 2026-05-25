@@ -61,7 +61,7 @@ class BatchContextManager:
 
         except FileNotFoundError as e:
             raise ProcessingError(
-                f"Context map file not found: {BatchContextManager._get_context_path(output_directory, batch_name)}",
+                f"Context map file not found: {context_path}",
                 context={"output_directory": output_directory, "batch_name": batch_name},
             ) from e
         except json.JSONDecodeError as e:

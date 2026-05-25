@@ -567,8 +567,7 @@ class BatchResultStrategy:
         on_exhausted = OnExhaustedPolicy.RETURN_LAST
         if ctx.agent_config:
             retry_config = ctx.agent_config.get("retry", {})
-            raw = retry_config.get("on_exhausted", "return_last")
-            on_exhausted = OnExhaustedPolicy(raw) if isinstance(raw, str) else raw
+            on_exhausted = OnExhaustedPolicy(retry_config.get("on_exhausted", "return_last"))
 
         recovery_meta = ctx.exhausted_recovery[custom_id]
         if recovery_meta.retry is None:
