@@ -14,6 +14,19 @@ from agent_actions.utils.transformation import PassthroughTransformer
 logger = logging.getLogger(__name__)
 
 
+def get_parse_error_marker(response: Any) -> str | None:
+    """Return ``_parse_error`` string if *response* contains a provider JSON parse failure.
+
+    Checks both dict and list-wrapped formats used by online providers.
+    Returns ``None`` when no parse error is present.
+    """
+    if isinstance(response, dict):
+        return response.get("_parse_error") or None
+    if isinstance(response, list) and response and isinstance(response[0], dict):
+        return response[0].get("_parse_error") or None
+    return None
+
+
 def run_dynamic_agent(
     agent_config: dict[str, Any],
     agent_name: str,
