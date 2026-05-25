@@ -21,23 +21,29 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.record_helpers import (
-    apply_version_merge,
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
+    extract_existing_content,
 )
 from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
     RecoveryMetadata,
 )
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
+from agent_actions.record.envelope import (
+    _PERSISTENT_FIELDS,
+    RECORD_FRAMEWORK_FIELDS,
+    RecordEnvelope,
+)
 from agent_actions.record.reasons import (
     BATCH_NOT_RETURNED,
     GUARD_SKIP,
     PREP_FAILED,
 )
-from agent_actions.utils.content import get_existing_content
+from agent_actions.utils.content import is_version_merge
+from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
+from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +62,7 @@ class BatchProcessingContext:
     json_mode: bool = True
     output_field: str = "raw_response"
 
-    # Reconciliation — set by _init_context() before any method accesses it
+    # Reconciliation
     reconciler: BatchResultReconciler | None = None
 
     # Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
@@ -152,6 +158,7 @@ class BatchResultStrategy:
             agent_config,
             exhausted_recovery,
         )
+        ctx.reconciler = BatchResultReconciler(ctx.context_map)
 
         results = self._process_batch_results(ctx)
         results.extend(self._reconcile_passthroughs(ctx))
@@ -197,7 +204,6 @@ class BatchResultStrategy:
             agent_config=agent_config,
             json_mode=json_mode,
             output_field=output_field,
-            reconciler=BatchResultReconciler(context_map),
             exhausted_recovery=exhausted_recovery,
         )
 
@@ -213,6 +219,11 @@ class BatchResultStrategy:
 
     def _process_batch_results(self, ctx: BatchProcessingContext) -> list[ProcessingResult]:
         """Process all batch results, returning one ProcessingResult per result."""
+        if ctx.reconciler is None:
+            raise RuntimeError(
+                "BatchProcessingContext.reconciler is None; "
+                "reconciler must be initialized before processing results"
+            )
         results: list[ProcessingResult] = []
 
         for batch_result in ctx.batch_results:
@@ -288,6 +299,11 @@ class BatchResultStrategy:
         custom_id: str,
     ) -> ProcessingResult:
         """Parse a successful batch result into a ProcessingResult."""
+        if ctx.reconciler is None:
+            raise RuntimeError(
+                "BatchProcessingContext.reconciler is None; "
+                "reconciler must be initialized before processing results"
+            )
         generated_obj = batch_result.content
         if isinstance(generated_obj, str):
             if ctx.json_mode:
@@ -306,6 +322,16 @@ class BatchResultStrategy:
             else:
                 generated_obj = {ctx.output_field: generated_obj}
 
+        # Schema-echo guard: replace with _parse_error so reprompt can retry
+        if _is_schema_echo(generated_obj):
+            logger.warning(
+                "[%s] Schema-echo detected in batch result — replacing with "
+                "_parse_error for custom_id=%s.",
+                ctx.agent_config.get("action_name", "unknown") if ctx.agent_config else "unknown",
+                custom_id,
+            )
+            generated_obj = _make_schema_echo_error(generated_obj)
+
         generated_list = DataTransformer.ensure_list(generated_obj)
 
         original_row = ctx.reconciler.get_record_by_id(custom_id)
@@ -323,19 +349,38 @@ class BatchResultStrategy:
         if not ctx.agent_config or "action_name" not in ctx.agent_config:
             raise ValueError("agent_config must contain 'action_name' for content namespacing")
 
-        existing_content = get_existing_content(original_row)
+        is_first_stage = not ctx.agent_config.get("dependencies")
+        existing_content = extract_existing_content(original_row, is_first_stage=is_first_stage)
+
+        action_name = ctx.agent_config["action_name"]
+        is_tool_version_merge = ctx.agent_config.get("kind") == "tool" and is_version_merge(
+            ctx.agent_config
+        )
+
+        # Precompute persistent fields and envelope input outside the loop
+        _vm_fields = tuple(f for f in _PERSISTENT_FIELDS if f != "source_guid")
+        if not is_tool_version_merge:
+            # Inject first-stage-aware content into the envelope input (matches online)
+            if existing_content and existing_content != original_row.get("content"):
+                envelope_input: dict[str, Any] = {**original_row, "content": existing_content}
+            else:
+                envelope_input = original_row
 
         structured_items = []
         for item in generated_list:
             item_dict = item if isinstance(item, dict) else {}
-            content = apply_version_merge(ctx.agent_config, item_dict, existing_content)
-            structured_items.append({"source_guid": original_source_guid, "content": content})
+            if is_tool_version_merge:
+                content = {**(existing_content or {}), **item_dict}
+                record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}
+                carry_framework_fields(original_row, record, fields=_vm_fields)
+            else:
+                record = RecordEnvelope.build(action_name, item_dict, envelope_input)
+                record["source_guid"] = original_source_guid  # reconciler is authority for guid
+            structured_items.append(record)
 
-        # Batch items inherit target_id and version_correlation_id from the original input row.
+        # target_id is a per-stage field — not carried by RecordEnvelope.build()
         for item in structured_items:
-            carry_framework_fields(
-                original_row, item, fields=("target_id", "version_correlation_id")
-            )
+            carry_framework_fields(original_row, item, fields=("target_id",))
 
         record_index = ctx.reconciler.get_record_index(custom_id)
 
@@ -418,6 +463,11 @@ class BatchResultStrategy:
 
         Error results are NOT enriched (matching the original pipeline behaviour).
         """
+        if ctx.reconciler is None:
+            raise RuntimeError(
+                "BatchProcessingContext.reconciler is None; "
+                "reconciler must be initialized before creating error items"
+            )
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
 
         error_item: dict[str, Any] = {
@@ -439,6 +489,7 @@ class BatchResultStrategy:
             error=error_message,
             source_guid=source_guid,
             source_snapshot=source_snapshot,
+            input_record=original_input,
         )
         result.data = [error_item]
         result.recovery_metadata = recovery_metadata
@@ -452,6 +503,11 @@ class BatchResultStrategy:
         Routes exhausted-retry and passthrough records through enrichment
         for consistent lineage, metadata, and version_correlation_id.
         """
+        if ctx.reconciler is None:
+            raise RuntimeError(
+                "BatchProcessingContext.reconciler is None; "
+                "reconciler must be initialized before merging passthroughs"
+            )
         reconciliation = ctx.reconciler.reconcile()
         results: list[ProcessingResult] = []
 
@@ -498,6 +554,21 @@ class BatchResultStrategy:
 
         return results
 
+    def _attach_passthrough_context(
+        self,
+        result: ProcessingResult,
+        ctx: BatchProcessingContext,
+        original_row: dict[str, Any],
+        record_index: int,
+    ) -> None:
+        """Attach processing context to a passthrough result."""
+        result.processing_context = BatchContextAdapter.to_processing_context(
+            agent_config=ctx.agent_config or {},
+            original_row=original_row,
+            record_index=record_index,
+            output_directory=ctx.output_directory,
+        )
+
     def _build_exhausted_passthrough(
         self,
         ctx: BatchProcessingContext,
@@ -539,12 +610,6 @@ class BatchResultStrategy:
             source_guid=source_guid,
         )
 
-        processing_context = BatchContextAdapter.to_processing_context(
-            agent_config=ctx.agent_config or {},
-            original_row=original_row,
-            record_index=record_index,
-            output_directory=ctx.output_directory,
-        )
         processing_result = ProcessingResult.exhausted(
             error=f"Retry exhausted after {recovery_meta.retry.attempts} attempts",
             data=[exhausted_item],
@@ -552,7 +617,7 @@ class BatchResultStrategy:
             recovery_metadata=recovery_meta,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
-        processing_result.processing_context = processing_context
+        self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         return processing_result
 
     def _build_unprocessed_passthrough(
@@ -580,19 +645,13 @@ class BatchResultStrategy:
             source_guid=source_guid,
         )
 
-        processing_context = BatchContextAdapter.to_processing_context(
-            agent_config=ctx.agent_config or {},
-            original_row=original_row,
-            record_index=record_index,
-            output_directory=ctx.output_directory,
-        )
         processing_result = ProcessingResult.unprocessed(
             data=[passthrough_item],
             reason=reason,
             source_guid=source_guid,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
-        processing_result.processing_context = processing_context
+        self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         return processing_result
 
     def _build_failed_passthrough(
@@ -618,18 +677,12 @@ class BatchResultStrategy:
             source_guid=source_guid,
         )
 
-        processing_context = BatchContextAdapter.to_processing_context(
-            agent_config=ctx.agent_config or {},
-            original_row=original_row,
-            record_index=record_index,
-            output_directory=ctx.output_directory,
-        )
         processing_result = ProcessingResult.failed(
             error=reason,
             source_guid=source_guid,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )
         processing_result.data = [passthrough_item]
-        processing_result.processing_context = processing_context
+        self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         processing_result.skip_reason = reason
         return processing_result
