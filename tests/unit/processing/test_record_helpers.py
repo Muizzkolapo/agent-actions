@@ -312,7 +312,7 @@ class TestApplyVersionMerge:
 # ---------------------------------------------------------------------------
 
 
-class TestExtractExistingContent:
+class TestGetExistingContent:
     """Tests for get_existing_content()."""
 
     def test_returns_content_dict(self):

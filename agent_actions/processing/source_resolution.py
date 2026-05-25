@@ -25,7 +25,7 @@ def resolve_source_content(
     2. source_guid + source_data -> look up by guid
     3. Fall back to item (scope_builder enforces the source contract)
     """
-    record_content = item.get("content", {}) if isinstance(item, dict) else {}
+    record_content = item.get("content", {})
     if isinstance(record_content, dict) and "source" in record_content:
         return item
 
