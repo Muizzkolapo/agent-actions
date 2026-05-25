@@ -32,9 +32,6 @@ from agent_actions.llm.batch.processing.batch_result_strategy import (
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.processing_recovery import (
-    _register_recovery_batch,
-)
-from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_reprompt as _check_and_submit_reprompt_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
@@ -45,6 +42,9 @@ from agent_actions.llm.batch.services.processing_recovery import (
 )
 from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
+    register_recovery_batch,
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
@@ -493,7 +493,7 @@ class BatchProcessingService:
                 )
                 if submission:
                     retry_batch_id, _record_count = submission
-                    _register_recovery_batch(
+                    register_recovery_batch(
                         manager,
                         submission,
                         file_name,

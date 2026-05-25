@@ -164,7 +164,7 @@ def handle_retry_recovery(
             agent_config=context.agent_config,
         )
         if submission:
-            _register_recovery_batch(
+            register_recovery_batch(
                 context.manager,
                 submission,
                 identity.file_name,
@@ -264,7 +264,7 @@ def handle_reprompt_recovery(
             attempt=next_attempt,
         )
         if submission:
-            _register_recovery_batch(
+            register_recovery_batch(
                 context.manager,
                 submission,
                 identity.file_name,
@@ -409,7 +409,7 @@ def check_and_submit_reprompt(
     if not submission:
         return True
 
-    _register_recovery_batch(
+    register_recovery_batch(
         context.manager,
         submission,
         identity.file_name,
@@ -567,7 +567,7 @@ def _finalize_and_cleanup(
     return output_path
 
 
-def _register_recovery_batch(
+def register_recovery_batch(
     manager: BatchRegistryManager,
     submission: tuple[str, int],
     parent_file_name: str,
