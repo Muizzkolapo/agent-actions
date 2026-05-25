@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Batch recovery cleanup: deduplicate registry entry creation via _register_recovery_batch, extract _get_cache helper in BatchRegistryManager, remove dead defensive code"
+time: 2026-05-25T06:30:00.000000Z

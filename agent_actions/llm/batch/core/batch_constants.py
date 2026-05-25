@@ -15,7 +15,6 @@ class BatchStatus(str, Enum):
     CANCELLED = "cancelled"
 
     def __str__(self) -> str:
-        """Return the string value for str() conversion."""
         return self.value
 
     @classmethod
@@ -46,7 +45,6 @@ class FilterStatus(str, Enum):
     FAILED = "failed"
 
     def __str__(self) -> str:
-        """Return the string value for str() conversion."""
         return self.value
 
 
@@ -57,7 +55,6 @@ class RecoveryType(str, Enum):
     REPROMPT = "reprompt"
 
     def __str__(self) -> str:
-        """Return the string value for str() conversion."""
         return self.value
 
 
@@ -69,7 +66,6 @@ class RecoveryPhase(str, Enum):
     DONE = "done"
 
     def __str__(self) -> str:
-        """Return the string value for str() conversion."""
         return self.value
 
 
