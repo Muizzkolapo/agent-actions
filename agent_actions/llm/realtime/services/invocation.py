@@ -66,8 +66,8 @@ def _resolve_client(model_vendor: str) -> Any:
                     "install_command": f"uv pip install {package}",
                 },
             ) from err
-        CLIENT_REGISTRY.setdefault(model_vendor, cls)  # atomic under CPython GIL
-        return CLIENT_REGISTRY[model_vendor]  # return whatever won the race
+        CLIENT_REGISTRY[model_vendor] = cls
+        return cls
     return entry
 
 
