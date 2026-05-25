@@ -35,13 +35,14 @@ class TestRunCommandProjectRootWiring:
     def test_execute_sets_path_manager_with_project_root(self, tmp_path):
         """When project_root is provided, the global PathManager is set with that root."""
         cmd = RunCommand(_make_args())
+        wf_mock = MagicMock()
+        wf_mock.execution_order = ["a1"]
+        wf_mock.action_configs = {"a1": {}}
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow") as mock_wf,
+            patch("agent_actions.cli.run.load_workflow", return_value=wf_mock),
             patch("agent_actions.cli.run.RunTracker") as mock_tracker,
             patch.object(cmd, "_run_workflow_execution"),
         ):
@@ -53,10 +54,6 @@ class TestRunCommandProjectRootWiring:
                 default_config_path=tmp_path / "default.yml",
                 io_dir=tmp_path,
             )
-            mock_wf_instance = MagicMock()
-            mock_wf_instance.execution_order = ["a1"]
-            mock_wf_instance.action_configs = {"a1": {}}
-            mock_wf.return_value = mock_wf_instance
             mock_tracker_instance = MagicMock()
             mock_tracker_instance.start_workflow_run.return_value = "run-123"
             mock_tracker.return_value = mock_tracker_instance
@@ -69,13 +66,14 @@ class TestRunCommandProjectRootWiring:
     def test_execute_without_project_root_skips_set_path_manager(self, tmp_path):
         """When project_root is None, set_path_manager is not called."""
         cmd = RunCommand(_make_args())
+        wf_mock = MagicMock()
+        wf_mock.execution_order = ["a1"]
+        wf_mock.action_configs = {"a1": {}}
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow") as mock_wf,
+            patch("agent_actions.cli.run.load_workflow", return_value=wf_mock),
             patch("agent_actions.cli.run.RunTracker") as mock_tracker,
             patch.object(cmd, "_run_workflow_execution"),
             patch("agent_actions.utils.path_utils.set_path_manager") as mock_set_pm,
@@ -88,10 +86,6 @@ class TestRunCommandProjectRootWiring:
                 default_config_path=tmp_path / "default.yml",
                 io_dir=tmp_path,
             )
-            mock_wf_instance = MagicMock()
-            mock_wf_instance.execution_order = ["a1"]
-            mock_wf_instance.action_configs = {"a1": {}}
-            mock_wf.return_value = mock_wf_instance
             mock_tracker_instance = MagicMock()
             mock_tracker_instance.start_workflow_run.return_value = "run-123"
             mock_tracker.return_value = mock_tracker_instance
@@ -143,10 +137,8 @@ class TestRunCommandStatusMessages:
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow", return_value=wf_mock),
+            patch("agent_actions.cli.run.load_workflow", return_value=wf_mock),
             patch("agent_actions.cli.run.RunTracker") as mock_tracker,
             patch.object(cmd, "_run_workflow_execution"),
         ):
@@ -239,10 +231,8 @@ class TestRunCommandStatusMessages:
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
-            patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
-            patch("agent_actions.cli.run.AgentWorkflow", return_value=wf_mock),
+            patch("agent_actions.cli.run.load_workflow", return_value=wf_mock),
             patch("agent_actions.cli.run.RunTracker", return_value=tracker_inst),
             patch.object(cmd, "_run_workflow_execution"),
             pytest.raises(SystemExit),
@@ -295,3 +285,51 @@ class TestRunCommandStatusMessages:
         assert "Run again to continue" in out
         assert "batch" not in out.lower()
         assert tracker.finalize_workflow_run.call_args[1]["status"] == "PAUSED"
+
+
+class TestLoadWorkflowKwargsPassthrough:
+    """Verify load_workflow receives use_tools/fresh/verify_keys from RunCommand."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_singleton(self):
+        reset_path_manager()
+        yield
+        reset_path_manager()
+
+    def test_load_workflow_receives_runtime_flags(self, tmp_path):
+        """use_tools, fresh, verify_keys, user_code_path forwarded to load_workflow."""
+        user_code_dir = tmp_path / "user_code"
+        user_code_dir.mkdir()
+        cmd = RunCommand(
+            _make_args(
+                use_tools=True,
+                fresh=True,
+                verify_keys=True,
+                user_code=user_code_dir,
+            )
+        )
+        wf_mock = MagicMock()
+        wf_mock.execution_order = ["a1"]
+
+        with (
+            patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
+            patch("agent_actions.cli.run.PromptValidator"),
+            patch("agent_actions.cli.run.load_workflow", return_value=wf_mock) as mock_load,
+            patch("agent_actions.cli.run.RunTracker") as mock_tracker,
+            patch.object(cmd, "_run_workflow_execution"),
+        ):
+            mock_paths.return_value = MagicMock(
+                prompt_dir=tmp_path,
+                io_dir=tmp_path,
+            )
+            mock_tracker.return_value = MagicMock(
+                start_workflow_run=MagicMock(return_value="run-123")
+            )
+
+            cmd.execute(project_root=tmp_path)
+
+        _, kwargs = mock_load.call_args
+        assert kwargs["use_tools"] is True
+        assert kwargs["fresh"] is True
+        assert kwargs["verify_keys"] is True
+        assert kwargs["user_code_path"] == str(user_code_dir)
