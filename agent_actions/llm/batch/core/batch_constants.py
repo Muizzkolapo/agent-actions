@@ -69,6 +69,17 @@ class RecoveryPhase(str, Enum):
         return self.value
 
 
+class OnExhaustedPolicy(str, Enum):
+    """Policy when retry/reprompt attempts are exhausted."""
+
+    RETURN_LAST = "return_last"
+    RAISE = "raise"
+
+    def __str__(self) -> str:
+        """Return the string value for str() conversion."""
+        return self.value
+
+
 class ContextMetaKeys:
     """Internal underscore-prefixed metadata keys used in batch context maps."""
 

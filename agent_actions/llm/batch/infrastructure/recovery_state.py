@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
+from agent_actions.llm.batch.core.batch_constants import OnExhaustedPolicy, RecoveryPhase
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_utils import ensure_directory_exists
 
@@ -27,6 +27,8 @@ class RecoveryState:
         # Coerce raw strings from JSON deserialization
         if isinstance(self.phase, str):
             self.phase = RecoveryPhase(self.phase)
+        if isinstance(self.on_exhausted, str):
+            self.on_exhausted = OnExhaustedPolicy(self.on_exhausted)
 
     # Retry state
     retry_attempt: int = 0
@@ -40,7 +42,7 @@ class RecoveryState:
     validation_name: str | None = None
     reprompt_attempts_per_record: dict[str, int] = field(default_factory=dict)
     validation_status: dict[str, bool] = field(default_factory=dict)
-    on_exhausted: str = "return_last"
+    on_exhausted: OnExhaustedPolicy = OnExhaustedPolicy.RETURN_LAST
 
     # Accumulated results (serialized BatchResult dicts)
     accumulated_results: list[dict[str, Any]] = field(default_factory=list)
@@ -105,13 +107,12 @@ class RecoveryStateManager:
     def load(output_directory: str, file_name: str) -> RecoveryState | None:
         """Load recovery state from disk, or None if not found."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
-        if not state_path.exists():
-            return None
-
         try:
             with open(state_path, encoding="utf-8") as f:
                 data = json.load(f)
             return RecoveryState(**data)
+        except FileNotFoundError:
+            return None
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning("Failed to load recovery state from %s: %s", state_path, e)
             return None
@@ -120,11 +121,12 @@ class RecoveryStateManager:
     def delete(output_directory: str, file_name: str) -> bool:
         """Delete recovery state file. Returns True if deleted, False if not found."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
-        if state_path.exists():
+        try:
             state_path.unlink()
-            logger.debug("Deleted recovery state at %s", state_path)
-            return True
-        return False
+        except FileNotFoundError:
+            return False
+        logger.debug("Deleted recovery state at %s", state_path)
+        return True
 
     @staticmethod
     def exists(output_directory: str, file_name: str) -> bool:
