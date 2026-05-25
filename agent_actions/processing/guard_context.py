@@ -39,9 +39,8 @@ def build_guard_context(
         agent_name: Current action name.
         agent_config: Action configuration (contains context_scope, guard, etc.).
         agent_indices: Map of action names to workflow positions (enables dep loading).
-        source_data: Original source records (for resolving source_guid lookups).
         source_content: Pre-resolved source content (batch path provides this
-            directly; when given, source_data resolution is skipped).
+            directly; when given, the record itself is used for non-first-stage).
         is_first_stage: Whether this is the first action in the workflow.
         version_context: Loop iteration metadata (i, idx, length, first, last).
         workflow_metadata: Workflow-level metadata.
@@ -56,16 +55,26 @@ def build_guard_context(
 
     content = get_existing_content(record)
 
-    # Resolve source_content: use pre-resolved value if provided (batch path),
-    # otherwise resolve from source_data (online path).
     if source_content is not None:
         resolved_source = source_content
     elif is_first_stage:
         resolved_source = content
     else:
-        resolved_source = _resolve_source_content(record, source_data)
-        if resolved_source is None:
-            resolved_source = content
+        record_content = record.get("content", {})
+        if isinstance(record_content, dict) and "source" in record_content:
+            resolved_source = record
+        elif source_data and record.get("source_guid"):
+            from agent_actions.input.preprocessing.transformation.transformer import (
+                DataTransformer,
+            )
+
+            resolved_source = DataTransformer.get_content_by_source_guid(
+                source_data, record["source_guid"]
+            )
+            if resolved_source is None:
+                resolved_source = record
+        else:
+            resolved_source = record
 
     field_context = build_field_context_with_history(
         agent_name=agent_name,
@@ -104,25 +113,3 @@ def build_guard_context(
                     )
 
     return field_context
-
-
-def _resolve_source_content(
-    record: dict[str, Any],
-    source_data: list[dict[str, Any]] | None,
-) -> Any | None:
-    """Look up source content by source_guid, matching TaskPreparer._get_source_content.
-
-    Uses DataTransformer.get_content_by_source_guid for consistency with the
-    batch path.
-    """
-    if not source_data:
-        return None
-    source_guid = record.get("source_guid")
-    if not source_guid:
-        return None
-
-    from agent_actions.input.preprocessing.transformation.transformer import (
-        DataTransformer,
-    )
-
-    return DataTransformer.get_content_by_source_guid(source_data, source_guid)

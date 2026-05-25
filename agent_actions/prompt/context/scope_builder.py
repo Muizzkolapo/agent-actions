@@ -46,7 +46,12 @@ class SourceNamespaceBuilder:
         source_namespace: dict = {}
         if source_content and isinstance(source_content, dict):
             if "content" in source_content and isinstance(source_content["content"], dict):
-                source_namespace = source_content["content"]
+                # Record envelope: {content: {source: {...}, action1: {...}, ...}}
+                # The "source" sub-namespace is always present — it's synthesized
+                # by extract_existing_content() for first-stage actions and carried
+                # forward for all subsequent actions.
+                inner = source_content["content"]
+                source_namespace = inner["source"]
             else:
                 source_namespace = dict(source_content)
 
@@ -158,6 +163,23 @@ class DependencyNamespaceBuilder:
                         continue
 
                     allowed_fields = allowed_fields_map.get(dep_name)
+
+                    # Zero-overlap guard: if specific fields are declared but
+                    # none of them exist in the namespace, the content is
+                    # corrupted (e.g. schema-echo, wrong action output).
+                    # Wrap as SKIPPED_NAMESPACE to prevent RecordContextError.
+                    if allowed_fields and not set(dep_data.keys()) & set(allowed_fields):
+                        logger.warning(
+                            "[OBSERVE NULL-SAFE] '%s': namespace has zero overlap "
+                            "with declared fields %s (actual keys: %s) — "
+                            "treating as skipped",
+                            dep_name,
+                            sorted(allowed_fields),
+                            sorted(dep_data.keys()),
+                        )
+                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
+                        continue
+
                     _filter_and_store_fields(
                         dep_namespaces,
                         dep_name,

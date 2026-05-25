@@ -25,7 +25,7 @@ class BatchContextAdapter:
             agent_config=cast(ActionConfigDict, agent_config),
             agent_name=agent_config.get("agent_type", "unknown_action"),
             mode=RunMode.BATCH,
-            is_first_stage=False,
+            is_first_stage=not agent_config.get("dependencies"),
             current_item=original_row,
             record_index=record_index,
             output_directory=output_directory,

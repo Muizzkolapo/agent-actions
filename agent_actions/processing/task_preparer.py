@@ -58,9 +58,25 @@ class TaskPreparer:
         if context.is_first_stage:
             source_content = content
         else:
-            source_content = self._get_source_content(source_guid, context)
-            if source_content is None:
-                source_content = content
+            # Use the record (with content envelope) so SourceNamespaceBuilder
+            # can extract the source sub-namespace.  If the record's content
+            # dict lacks a "source" key (batch mode), fall back to looking up
+            # the original staging record by source_guid.
+            record_content = item.get("content", {}) if isinstance(item, dict) else {}
+            if isinstance(record_content, dict) and "source" in record_content:
+                source_content = item
+            elif source_guid and context.source_data:
+                from agent_actions.input.preprocessing.transformation.transformer import (
+                    DataTransformer,
+                )
+
+                source_content = DataTransformer.get_content_by_source_guid(
+                    context.source_data, source_guid
+                )
+                if source_content is None:
+                    source_content = item
+            else:
+                source_content = item
 
         current_item = item if isinstance(item, dict) else context.current_item
         field_context = self._load_full_context(content, source_content, context, current_item)
@@ -168,36 +184,6 @@ class TaskPreparer:
         else:
             snapshot = item.copy() if isinstance(item, dict) else item
         return snapshot
-
-    def _get_source_content(
-        self, source_guid: str | None, context: PreparationContext
-    ) -> Any | None:
-        """Look up source content by source_guid, or return None."""
-        if source_guid is None:
-            return None
-
-        if not context.source_data:
-            logger.debug(
-                "Source data not available for %s; cannot look up source_guid=%s",
-                context.agent_name,
-                source_guid,
-            )
-            return None
-
-        from agent_actions.input.preprocessing.transformation.transformer import (
-            DataTransformer,
-        )
-
-        source_content = DataTransformer.get_content_by_source_guid(
-            context.source_data, source_guid
-        )
-        if source_content is None:
-            logger.debug(
-                "Could not resolve source content for %s (%s source_data items)",
-                context.agent_name,
-                len(context.source_data),
-            )
-        return source_content
 
     def _load_full_context(
         self,

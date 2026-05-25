@@ -10,6 +10,7 @@ from agent_actions.processing.recovery.response_validator import (
     safe_validate,
 )
 from agent_actions.processing.types import EvaluationOutcome
+from agent_actions.utils.schema_echo import is_schema_echo
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,6 +40,9 @@ def detect_parse_error(content: Any, *, json_mode: bool) -> str | None:
     # Dict with _parse_error = pre-wrapped parse error (online convention)
     if isinstance(content, dict) and "_parse_error" in content:
         return content["_parse_error"] or None
+    # Schema-echo: LLM returned the JSON Schema definition instead of data
+    if is_schema_echo(content):
+        return "Schema-echo: LLM returned the schema definition instead of conforming data"
     # List with _parse_error at index 0 = online list-wrapped format
     if isinstance(content, list) and content and isinstance(content[0], dict):
         return content[0].get("_parse_error") or None
