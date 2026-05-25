@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.llm.batch.core.batch_constants import FilterStatus
+from agent_actions.llm.batch.core.batch_constants import FilterStatus, OnExhaustedPolicy
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
@@ -218,11 +218,6 @@ class BatchResultStrategy:
 
     def _process_batch_results(self, ctx: BatchProcessingContext) -> list[ProcessingResult]:
         """Process all batch results, returning one ProcessingResult per result."""
-        if ctx.reconciler is None:
-            raise RuntimeError(
-                "BatchProcessingContext.reconciler is None; "
-                "reconciler must be initialized before processing results"
-            )
         results: list[ProcessingResult] = []
 
         for batch_result in ctx.batch_results:
@@ -298,11 +293,6 @@ class BatchResultStrategy:
         custom_id: str,
     ) -> ProcessingResult:
         """Parse a successful batch result into a ProcessingResult."""
-        if ctx.reconciler is None:
-            raise RuntimeError(
-                "BatchProcessingContext.reconciler is None; "
-                "reconciler must be initialized before processing results"
-            )
         generated_obj = batch_result.content
         if isinstance(generated_obj, str):
             if ctx.json_mode:
@@ -462,11 +452,6 @@ class BatchResultStrategy:
 
         Error results are NOT enriched (matching the original pipeline behaviour).
         """
-        if ctx.reconciler is None:
-            raise RuntimeError(
-                "BatchProcessingContext.reconciler is None; "
-                "reconciler must be initialized before creating error items"
-            )
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
 
         error_item: dict[str, Any] = {
@@ -502,11 +487,6 @@ class BatchResultStrategy:
         Routes exhausted-retry and passthrough records through enrichment
         for consistent lineage, metadata, and version_correlation_id.
         """
-        if ctx.reconciler is None:
-            raise RuntimeError(
-                "BatchProcessingContext.reconciler is None; "
-                "reconciler must be initialized before merging passthroughs"
-            )
         reconciliation = ctx.reconciler.reconcile()
         results: list[ProcessingResult] = []
 
@@ -584,10 +564,11 @@ class BatchResultStrategy:
                 "but record was identified as exhausted; "
                 f"expected exhausted_recovery dict for custom_id={custom_id}"
             )
-        on_exhausted = "return_last"  # default
+        on_exhausted = OnExhaustedPolicy.RETURN_LAST
         if ctx.agent_config:
             retry_config = ctx.agent_config.get("retry", {})
-            on_exhausted = retry_config.get("on_exhausted", "return_last")
+            raw = retry_config.get("on_exhausted", "return_last")
+            on_exhausted = OnExhaustedPolicy(raw) if isinstance(raw, str) else raw
 
         recovery_meta = ctx.exhausted_recovery[custom_id]
         if recovery_meta.retry is None:
@@ -596,7 +577,7 @@ class BatchResultStrategy:
                 f"custom_id={custom_id}; expected retry metadata with attempt count"
             )
 
-        if on_exhausted == "raise":
+        if on_exhausted == OnExhaustedPolicy.RAISE:
             raise RuntimeError(
                 f"Retry exhausted for record {custom_id} after "
                 f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
