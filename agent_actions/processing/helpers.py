@@ -89,7 +89,6 @@ def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
     (schema-echo items within a list).  Runs unconditionally because
     schema echoes are never valid output regardless of validation settings.
     """
-    # Single dict response — check and replace directly
     if isinstance(response, dict) and _is_schema_echo(response):
         logger.warning(
             "[%s] Schema-echo detected in LLM response (dict) — replacing with _parse_error.",
