@@ -66,9 +66,6 @@ def _resolve_client(model_vendor: str) -> Any:
                     "install_command": f"uv pip install {package}",
                 },
             ) from err
-        # Direct assignment — setdefault is WRONG here because the registry
-        # already holds "module:Class" placeholder strings. setdefault sees the
-        # key exists and never replaces the string with the resolved class.
         CLIENT_REGISTRY[model_vendor] = cls
         return cls
     return entry
