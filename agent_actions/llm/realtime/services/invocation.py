@@ -66,6 +66,8 @@ def _resolve_client(model_vendor: str) -> Any:
                     "install_command": f"uv pip install {package}",
                 },
             ) from err
+        # Direct assignment — race-safe because resolution is deterministic
+        # and idempotent; concurrent threads resolve the same class object.
         CLIENT_REGISTRY[model_vendor] = cls
         return cls
     return entry

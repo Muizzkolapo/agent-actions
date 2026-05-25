@@ -39,6 +39,15 @@ class Disposition(str, Enum):
 VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 
 # Dispositions representing actionable failures eligible for retry.
+# Allowlist — new disposition types won't accidentally become retryable.
+#
+# Excluded (and why):
+#   success     — already done
+#   unprocessed — cascade casualty; resolves when upstream failure is retried
+#   passthrough — guard-skipped; not a failure
+#   skipped     — deliberately skipped (WHERE clause)
+#   filtered    — removed by predicate; not a failure
+#   deferred    — pending HITL/batch; retrying would clobber in-flight state
 FAILURE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
 
 DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]

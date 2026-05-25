@@ -43,7 +43,7 @@ class TestRunCommandProjectRootWiring:
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
             patch("agent_actions.cli.run.PromptValidator"),
-            patch("agent_actions.cli.run.load_workflow", return_value=mock_wf_instance),
+            patch("agent_actions.cli.run.load_workflow", return_value=mock_wf_instance) as mock_lw,
             patch("agent_actions.cli.run.RunTracker") as mock_tracker,
             patch.object(cmd, "_run_workflow_execution"),
         ):
@@ -59,6 +59,11 @@ class TestRunCommandProjectRootWiring:
 
         pm = get_path_manager()
         assert pm._project_root == tmp_path.resolve()
+
+        # Verify load_workflow receives the right kwargs from RunCommand
+        lw_kwargs = mock_lw.call_args
+        assert lw_kwargs.kwargs["use_tools"] is False
+        assert lw_kwargs.kwargs["fresh"] is False
 
     def test_execute_without_project_root_skips_set_path_manager(self, tmp_path):
         """When project_root is None, set_path_manager is not called."""
@@ -87,6 +92,44 @@ class TestRunCommandProjectRootWiring:
             cmd.execute(project_root=None)
 
         mock_set_pm.assert_not_called()
+
+
+class TestLoadWorkflowKwargsPassthrough:
+    """Verify RunCommand passes all runtime kwargs to load_workflow."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_singleton(self):
+        reset_path_manager()
+        yield
+        reset_path_manager()
+
+    def test_all_kwargs_forwarded(self, tmp_path):
+        args = _make_args(use_tools=True, fresh=True, verify_keys=True)
+        cmd = RunCommand(args)
+
+        mock_wf = MagicMock()
+        mock_wf.execution_order = ["a1"]
+        mock_wf.action_configs = {"a1": {}}
+        mock_wf.services.core.state_manager.is_workflow_complete.return_value = True
+
+        with (
+            patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
+            patch("agent_actions.cli.run.PromptValidator"),
+            patch("agent_actions.cli.run.load_workflow", return_value=mock_wf) as mock_lw,
+            patch("agent_actions.cli.run.RunTracker") as mock_tracker,
+            patch.object(cmd, "_run_workflow_execution"),
+        ):
+            mock_paths.return_value = MagicMock(prompt_dir=tmp_path, io_dir=tmp_path)
+            mock_tracker.return_value = MagicMock(
+                start_workflow_run=MagicMock(return_value="run-1")
+            )
+            cmd.execute(project_root=tmp_path)
+
+        kw = mock_lw.call_args.kwargs
+        assert kw["use_tools"] is True
+        assert kw["fresh"] is True
+        assert kw["verify_keys"] is True
+        assert kw["user_code_path"] is None
 
 
 # ---------------------------------------------------------------------------
