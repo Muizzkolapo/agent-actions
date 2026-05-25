@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fixed dict-shaped schema-echo responses bypassing detection in _reject_schema_echo_items — raw InlineSchema dicts from LLM now correctly replaced with _parse_error for reprompt"
+time: 2026-05-25T06:35:00.000000Z
