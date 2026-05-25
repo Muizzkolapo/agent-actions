@@ -1,25 +1,28 @@
 """Run command for the Agent Actions CLI."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 import traceback
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.config.project_paths import ProjectPathsFactory, find_config_file
+from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
-from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
-from agent_actions.workflow.coordinator import AgentWorkflow
-from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
+from agent_actions.validation.run_validator import RunCommandArgs
+
+if TYPE_CHECKING:
+    from agent_actions.workflow.coordinator import AgentWorkflow
 
 logger = logging.getLogger(__name__)
-from agent_actions.validation.run_validator import RunCommandArgs
 
 
 class RunCommand:
@@ -66,33 +69,14 @@ class RunCommand:
             self.agent_name, self.args.agent, project_root=project_root
         )
         PromptValidator().validate(paths.prompt_dir, config={"workflow_name": self.agent_name})
-        filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(
+        workflow = load_workflow(
             self.agent_name,
-            paths.agent_config_dir,
-            filename,
-            check_alternatives=True,
-            project_root=project_root,
-        )
-        ConfigRenderingService().render_and_load_config(
-            self.agent_name,
-            full_path,
-            paths.template_dir,
-            paths.rendered_workflows_dir,
-            project_root=project_root,
-        )
-        workflow = AgentWorkflow(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    user_code_path=str(self.args.user_code) if self.args.user_code else None,
-                    default_path=str(paths.default_config_path),
-                ),
-                use_tools=self.args.use_tools,
-                fresh=self.args.fresh,
-                verify_keys=self.args.verify_keys,
-                project_root=project_root,
-            )
+            paths,
+            project_root,
+            user_code_path=str(self.args.user_code) if self.args.user_code else None,
+            use_tools=self.args.use_tools,
+            fresh=self.args.fresh,
+            verify_keys=self.args.verify_keys,
         )
 
         tracker = RunTracker(project_root=project_root)

@@ -62,8 +62,8 @@ class RenderCommand:
             ) from e
 
     def execute(self, create_dirs: bool = False) -> None:
-        if create_dirs and not self.template_dir.exists():
-            self.template_dir.mkdir(parents=True)
+        if create_dirs:
+            self.template_dir.mkdir(parents=True, exist_ok=True)
         logger.info("Starting template rendering for agent: %s", self.args.agent_name)
         paths = ProjectPathsFactory.create_project_paths(
             self.args.agent_name, self.args.agent_name, project_root=self._project_root

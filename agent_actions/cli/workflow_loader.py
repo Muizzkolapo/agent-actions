@@ -6,8 +6,11 @@ paths, avoiding duplicate config loading / rendering across commands.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import click
 
 if TYPE_CHECKING:
     from agent_actions.config.project_paths import ProjectPaths
@@ -18,6 +21,11 @@ def load_workflow(
     agent_name: str,
     paths: ProjectPaths,
     project_root: Path | None = None,
+    *,
+    user_code_path: str | None = None,
+    use_tools: bool = False,
+    fresh: bool = False,
+    verify_keys: bool = False,
 ) -> AgentWorkflow:
     """Load and return an initialized AgentWorkflow.
 
@@ -49,10 +57,19 @@ def load_workflow(
         WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(full_path),
-                user_code_path=None,
+                user_code_path=user_code_path,
                 default_path=str(paths.default_config_path),
             ),
-            use_tools=False,
+            use_tools=use_tools,
+            fresh=fresh,
+            verify_keys=verify_keys,
             project_root=project_root,
         )
     )
+
+
+def validate_action_exists(action_name: str, action_configs: Mapping[str, Any]) -> None:
+    """Raise ClickException if *action_name* is not in *action_configs*."""
+    if action_name not in action_configs:
+        available = ", ".join(action_configs.keys())
+        raise click.ClickException(f"Action '{action_name}' not found. Available: {available}")

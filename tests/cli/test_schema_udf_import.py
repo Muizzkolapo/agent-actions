@@ -11,16 +11,12 @@ from agent_actions.errors import DependencyError
 class TestUDFRegistryImportError:
     """Verify broken UDF registry import surfaces a DependencyError."""
 
-    @patch("agent_actions.cli.schema.AgentWorkflow")
-    @patch("agent_actions.cli.schema.ConfigRenderingService.render_and_load_config")
-    @patch("agent_actions.cli.schema.find_config_file", return_value="/fake/config.yml")
+    @patch("agent_actions.cli.schema.load_workflow")
     @patch("agent_actions.cli.schema.ProjectPathsFactory.create_project_paths")
     def test_import_error_raises_dependency_error(
         self,
         mock_paths_factory,
-        mock_find_config,
-        mock_render,
-        mock_workflow,
+        mock_load_workflow,
     ):
         """ImportError from UDF registry must raise DependencyError, not pass silently."""
         mock_paths = MagicMock()
@@ -33,7 +29,7 @@ class TestUDFRegistryImportError:
 
         mock_workflow_instance = MagicMock()
         mock_workflow_instance.action_configs = {"action1": {"kind": "llm"}}
-        mock_workflow.return_value = mock_workflow_instance
+        mock_load_workflow.return_value = mock_workflow_instance
 
         command = SchemaCommand(
             agent="test_agent",
@@ -53,16 +49,12 @@ class TestUDFRegistryImportError:
 
     @patch("agent_actions.cli.schema.WorkflowSchemaService")
     @patch("agent_actions.cli.schema.SchemaLoader")
-    @patch("agent_actions.cli.schema.AgentWorkflow")
-    @patch("agent_actions.cli.schema.ConfigRenderingService.render_and_load_config")
-    @patch("agent_actions.cli.schema.find_config_file", return_value="/fake/config.yml")
+    @patch("agent_actions.cli.schema.load_workflow")
     @patch("agent_actions.cli.schema.ProjectPathsFactory.create_project_paths")
     def test_successful_import_proceeds_normally(
         self,
         mock_paths_factory,
-        mock_find_config,
-        mock_render,
-        mock_workflow,
+        mock_load_workflow,
         mock_schema_loader,
         mock_schema_service,
     ):
@@ -78,7 +70,7 @@ class TestUDFRegistryImportError:
         mock_workflow_instance = MagicMock()
         mock_workflow_instance.action_configs = {"action1": {"kind": "llm"}}
         mock_workflow_instance.execution_order = ["action1"]
-        mock_workflow.return_value = mock_workflow_instance
+        mock_load_workflow.return_value = mock_workflow_instance
 
         mock_service_instance = MagicMock()
         mock_service_instance.get_all_schemas.return_value = {}
