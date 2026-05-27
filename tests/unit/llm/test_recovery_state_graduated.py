@@ -246,7 +246,10 @@ class TestRecoveryStateCorruptionHandling:
             result = RecoveryStateManager.load(str(tmp_path), "test_action")
 
         assert result is None
-        assert any("Corrupt recovery state" in r.message for r in caplog.records)
+        assert any(
+            "Corrupt recovery state" in r.message and r.levelno == logging.ERROR
+            for r in caplog.records
+        )
 
     def test_valid_state_loads_without_error(self, tmp_path, caplog):
         """Valid recovery state loads normally, no error logs."""
