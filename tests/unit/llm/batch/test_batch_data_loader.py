@@ -120,7 +120,7 @@ class TestBatchDataLoaderAsync:
         assert result == [{"async": True}]
 
     async def test_async_rejects_traversal(self, tmp_path: Path) -> None:
-        """load_data_async forwards allowed_root, so traversal is rejected."""
+        """Async path rejects path traversal."""
         safe = tmp_path / "safe"
         safe.mkdir()
         evil_path = str(safe / ".." / ".." / "etc" / "passwd.json")
