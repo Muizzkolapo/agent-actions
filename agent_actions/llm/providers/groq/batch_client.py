@@ -3,7 +3,6 @@ Groq Batch API client implementation.
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -44,14 +43,13 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         Initialize Groq client with optional API key.
 
         Args:
-            api_key: Groq API key (falls back to GROQ_API_KEY env var)
+            api_key: Groq API key
         """
         try:
             from groq import Groq
 
             self._groq_module = Groq
-            resolved_key = api_key or os.getenv("GROQ_API_KEY")
-            self.client = Groq(api_key=resolved_key)
+            self.client = Groq(api_key=api_key)
         except ImportError as e:
             from agent_actions.errors import DependencyError
 

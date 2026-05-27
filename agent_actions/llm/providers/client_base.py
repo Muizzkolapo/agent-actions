@@ -65,6 +65,11 @@ class BaseClient(ABC):
         """
         Return the API key using the name specified in ``agent_config``.
 
+        Treats ``agent_config["api_key"]`` as an **env var name** and resolves
+        it via ``os.getenv``.  Used by online clients.  The batch-side
+        counterpart is ``_resolve_api_key()`` in ``batch_client_factory.py``,
+        which treats the value as a literal secret instead.
+
         Supports two formats:
         1. Environment variable interpolation: ${VAR_NAME}
         2. Direct environment variable name: VAR_NAME (legacy)
