@@ -17,12 +17,36 @@ from agent_actions.logging.events.validation_events import (
 )
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.evaluation.loop import accumulate_failure_types
+from agent_actions.processing.recovery.retry import is_retriable_error
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+
+def _stamp_reprompt_failed(
+    records: list["BatchResult"],
+    reprompted_ids: dict[str, int],
+    validation_name: str,
+) -> None:
+    """Mark records with ``passed=False`` reprompt metadata.
+
+    Used when records cannot continue the reprompt loop — batch did not
+    complete, provider dropped them, or a transient submission error
+    interrupted the cycle.  Mutates records in-place.
+    """
+    from agent_actions.processing.types import RepromptMetadata
+
+    for r in records:
+        if not r.recovery_metadata:
+            r.recovery_metadata = RecoveryMetadata()
+        r.recovery_metadata.reprompt = RepromptMetadata(
+            attempts=reprompted_ids.get(r.custom_id, 1),
+            passed=False,
+            validation=validation_name,
+        )
 
 
 def _load_source_data_for_reprompt(
@@ -280,7 +304,7 @@ def validate_and_reprompt(
                     )
                 except Exception:
                     logger.warning(
-                        "Critique failed for %s, continuing without",
+                        "LLM critique failed for %s, using un-critiqued feedback",
                         custom_id,
                         exc_info=True,
                     )
@@ -338,6 +362,7 @@ def validate_and_reprompt(
                     batch_id,
                     final_status,
                 )
+                _stamp_reprompt_failed(still_failing, reprompted_ids, validation_name)
                 all_graduated.extend(still_failing)
                 break
 
@@ -355,16 +380,9 @@ def validate_and_reprompt(
                     len(submitted_ids),
                     sorted(dropped_ids),
                 )
-                for r in still_failing:
-                    if r.custom_id in dropped_ids:
-                        if not r.recovery_metadata:
-                            r.recovery_metadata = RecoveryMetadata()
-                        r.recovery_metadata.reprompt = RepromptMetadata(
-                            attempts=reprompted_ids.get(r.custom_id, 1),
-                            passed=False,
-                            validation=validation_name,
-                        )
-                        all_graduated.append(r)
+                dropped = [r for r in still_failing if r.custom_id in dropped_ids]
+                _stamp_reprompt_failed(dropped, reprompted_ids, validation_name)
+                all_graduated.extend(dropped)
 
             failing_map = {r.custom_id: r for r in still_failing}
             for reprompt_result in reprompt_results:
@@ -380,9 +398,13 @@ def validate_and_reprompt(
             active_results = reprompt_results
 
         except Exception as e:
-            logger.exception("Error during reprompt batch submission: %s", e)
-            all_graduated.extend(still_failing)
-            break
+            if is_retriable_error(e):
+                logger.warning("Transient error submitting reprompt batch: %s", e)
+                _stamp_reprompt_failed(still_failing, reprompted_ids, validation_name)
+                all_graduated.extend(still_failing)
+                break
+            logger.exception("Reprompt batch submission failed: %s", e)
+            raise
 
     recovered_count = 0
     for r in all_graduated:
