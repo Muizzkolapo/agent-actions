@@ -113,8 +113,8 @@ class RecoveryStateManager:
             return RecoveryState(**data)
         except FileNotFoundError:
             return None
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.warning("Failed to load recovery state from %s: %s", state_path, e)
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            logger.error("Corrupt recovery state at %s: %s", state_path, e)
             return None
 
     @staticmethod
