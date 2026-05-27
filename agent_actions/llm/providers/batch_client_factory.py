@@ -72,9 +72,10 @@ def _resolve_api_key(config: dict[str, Any], hint_env_var: str) -> str:
 
     * ``BaseClient.get_api_key`` treats ``config["api_key"]`` as an **env var
       name** and always resolves it via ``os.getenv``.  Used by online clients.
-    * This function treats ``config["api_key"]`` as a **literal secret** (the
-      resolver already called ``get_api_key`` upstream).  Used by the batch
-      client factory.
+    * This function receives a **pre-resolved literal** (the
+      ``BatchClientResolver`` calls ``get_api_key`` upstream).  ``${VAR_NAME}``
+      interpolation is supported as a safety net for direct factory calls
+      that bypass the resolver.
 
     No silent fallbacks — if no key is provided, raises ``ConfigurationError``.
     The resolver (``BatchClientResolver``) is responsible for env var resolution
@@ -139,6 +140,7 @@ def _create_gemini(config: dict[str, Any]) -> BaseBatchClient:
 def _create_ollama_local(config: dict[str, Any]) -> BaseBatchClient:
     from .ollama.batch_client import OllamaBatchClient
 
+    # Base URL, not an API key — os.getenv is intentional here.
     base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
     max_workers = config.get("batch_max_workers")
     return OllamaBatchClient(
@@ -150,6 +152,7 @@ def _create_ollama_cloud(config: dict[str, Any]) -> BaseBatchClient:
     from .ollama.batch_client import OllamaBatchClient
 
     api_key = _resolve_api_key(config, "OLLAMA_API_KEY")
+    # Base URL, not an API key — os.getenv is intentional here.
     base_url = config.get("base_url") or os.getenv(
         "OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL
     )
