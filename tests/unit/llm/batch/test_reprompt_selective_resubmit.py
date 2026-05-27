@@ -741,3 +741,147 @@ class TestCheckAndSubmitRepromptSelectivity:
         )
         assert len(submitted) == 2
         assert {r.custom_id for r in submitted} == fail_ids
+
+
+class TestRepromptErrorPathBehavior:
+    """Prove that error paths don't silently lose or mis-graduate records."""
+
+    @patch("agent_actions.llm.batch.processing.preparator.BatchTaskPreparator")
+    def test_transient_error_graduates_with_failed_metadata(self, MockPreparator):
+        """NetworkError during submission → records graduate with passed=False."""
+        from agent_actions.errors.external_services import NetworkError
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+
+        results = _make_results(5, fail_ids={"rec_001", "rec_002"})
+        context_map = _make_context_map(5)
+
+        mock_prep = MockPreparator.return_value
+        mock_prepared = MagicMock()
+        mock_prepared.tasks = [MagicMock(), MagicMock()]
+        mock_prep.prepare_tasks.return_value = mock_prepared
+
+        provider = MagicMock()
+        provider.submit_batch.side_effect = NetworkError("connection reset")
+
+        with (
+            _reprompt_patches(),
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(_validation_func_for_bad_content, "fix it"),
+            ),
+        ):
+            final = validate_and_reprompt(
+                action_indices={},
+                dependency_configs={},
+                storage_backend=None,
+                results=results,
+                provider=provider,
+                context_map=context_map,
+                output_directory="/tmp/out",
+                file_name="batch_1",
+                agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            )
+
+        final_ids = {r.custom_id for r in final}
+        input_ids = {r.custom_id for r in results}
+        assert final_ids == input_ids, f"Missing records: {input_ids - final_ids}"
+
+        for r in final:
+            if r.custom_id in {"rec_001", "rec_002"}:
+                assert r.recovery_metadata is not None
+                assert r.recovery_metadata.reprompt is not None
+                assert r.recovery_metadata.reprompt.passed is False
+                assert r.recovery_metadata.reprompt.validation == "check_it"
+
+    @patch("agent_actions.llm.batch.processing.preparator.BatchTaskPreparator")
+    def test_permanent_error_propagates(self, MockPreparator):
+        """Non-retriable error during submission → exception raised to caller."""
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+
+        results = _make_results(5, fail_ids={"rec_001"})
+        context_map = _make_context_map(5)
+
+        mock_prep = MockPreparator.return_value
+        mock_prepared = MagicMock()
+        mock_prepared.tasks = [MagicMock()]
+        mock_prep.prepare_tasks.return_value = mock_prepared
+
+        provider = MagicMock()
+        provider.submit_batch.side_effect = ValueError("auth token expired")
+
+        import pytest
+
+        with (
+            _reprompt_patches(),
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(_validation_func_for_bad_content, "fix it"),
+            ),
+        ):
+            with pytest.raises(ValueError, match="auth token expired"):
+                validate_and_reprompt(
+                    action_indices={},
+                    dependency_configs={},
+                    storage_backend=None,
+                    results=results,
+                    provider=provider,
+                    context_map=context_map,
+                    output_directory="/tmp/out",
+                    file_name="batch_1",
+                    agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+                )
+
+    @patch("agent_actions.llm.batch.processing.preparator.BatchTaskPreparator")
+    def test_incomplete_batch_graduates_with_failed_metadata(self, MockPreparator):
+        """Batch status != COMPLETED → records graduate with passed=False."""
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+
+        fail_ids = {"rec_001", "rec_002"}
+        results = _make_results(5, fail_ids=fail_ids)
+        context_map = _make_context_map(5)
+
+        mock_prep = MockPreparator.return_value
+        mock_prepared = MagicMock()
+        mock_prepared.tasks = [MagicMock(), MagicMock()]
+        mock_prep.prepare_tasks.return_value = mock_prepared
+
+        provider = MagicMock()
+        provider.submit_batch.return_value = ("batch_rp_1", "submitted")
+
+        with (
+            _reprompt_patches(),
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(_validation_func_for_bad_content, "fix it"),
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                return_value="failed",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+            ) as MockBatchStatus,
+        ):
+            MockBatchStatus.COMPLETED = "completed"
+            final = validate_and_reprompt(
+                action_indices={},
+                dependency_configs={},
+                storage_backend=None,
+                results=results,
+                provider=provider,
+                context_map=context_map,
+                output_directory="/tmp/out",
+                file_name="batch_1",
+                agent_config={"reprompt": {"validation": "check_it", "max_attempts": 3}},
+            )
+
+        final_ids = {r.custom_id for r in final}
+        input_ids = {r.custom_id for r in results}
+        assert final_ids == input_ids, f"Missing records: {input_ids - final_ids}"
+
+        for r in final:
+            if r.custom_id in fail_ids:
+                assert r.recovery_metadata is not None
+                assert r.recovery_metadata.reprompt is not None
+                assert r.recovery_metadata.reprompt.passed is False
+                assert r.recovery_metadata.reprompt.validation == "check_it"
