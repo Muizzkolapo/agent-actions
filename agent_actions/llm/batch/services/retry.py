@@ -8,6 +8,8 @@ Implementation is split across:
 """
 
 import logging
+import random
+import time
 from typing import TYPE_CHECKING, Any, Optional
 
 # Import operation modules for delegation
@@ -77,6 +79,8 @@ class BatchRetryService:
         retry_config = (agent_config or {}).get("retry")
         retry_enabled = retry_config and retry_config.get("enabled", True)
         max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
+        base_delay = retry_config.get("base_delay", 5.0) if retry_config else 5.0
+        max_delay = retry_config.get("max_delay", 120.0) if retry_config else 120.0
 
         all_results = retrieve_and_reconcile(
             provider,
@@ -101,6 +105,18 @@ class BatchRetryService:
 
                 while missing_ids and retry_attempts < max_attempts:
                     retry_attempts += 1
+                    if retry_attempts > 1:
+                        backoff = min(base_delay * (2 ** (retry_attempts - 2)), max_delay)
+                        # Jitter adds 0-30% on top of backoff; total sleep may exceed max_delay.
+                        jitter = random.uniform(0, backoff * 0.3)
+                        sleep_time = backoff + jitter
+                        logger.info(
+                            "Batch retry backoff: sleeping %.1fs before attempt %d/%d",
+                            sleep_time,
+                            retry_attempts,
+                            max_attempts,
+                        )
+                        time.sleep(sleep_time)
                     logger.info(
                         "Batch retry attempt %d/%d: resubmitting %d missing records",
                         retry_attempts,
