@@ -86,8 +86,13 @@ def _resolve_api_key(config: dict[str, Any], hint_env_var: str) -> str:
     key = raw.get_secret_value() if isinstance(raw, SecretStr) else raw
 
     if key is not None and key != "":
+        if not isinstance(key, str):
+            raise ConfigurationError(
+                f"api_key must be a string, got {type(key).__name__}",
+                context={"value_type": type(key).__name__, "hint_env_var": hint_env_var},
+            )
         # Support ${VAR_NAME} interpolation (same as BaseClient.get_api_key)
-        if isinstance(key, str) and key.startswith("${") and key.endswith("}"):
+        if key.startswith("${") and key.endswith("}"):
             env_var = key[2:-1]
             resolved = os.getenv(env_var)
             if not resolved:

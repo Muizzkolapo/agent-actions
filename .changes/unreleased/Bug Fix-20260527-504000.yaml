@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Remove silent os.getenv API key fallbacks in batch client factory — batch clients now raise ConfigurationError when no key is configured instead of silently trying hardcoded vendor env vars"
+time: 2026-05-27T05:04:00.000000Z

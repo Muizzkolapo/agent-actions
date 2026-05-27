@@ -112,6 +112,7 @@ class TestBatchClientFactorySecretStr:
         "factory_name,env_var",
         [
             ("_create_gemini", "GEMINI_API_KEY"),
+            ("_create_ollama_cloud", "OLLAMA_API_KEY"),
             ("_create_anthropic", "ANTHROPIC_API_KEY"),
             ("_create_groq", "GROQ_API_KEY"),
         ],
@@ -167,6 +168,14 @@ class TestBatchClientFactorySecretStr:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         with pytest.raises(ConfigurationError, match="API key not configured"):
             _create_openai({"api_key": SecretStr("")})
+
+    def test_non_string_api_key_raises(self):
+        """Non-string api_key (e.g. YAML parsed int) must raise, not pass through to SDK."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.llm.providers.batch_client_factory import _create_openai
+
+        with pytest.raises(ConfigurationError, match="must be a string"):
+            _create_openai({"api_key": 12345})
 
     def test_missing_api_key_raises_even_when_env_var_set(self, monkeypatch):
         """When config has no api_key, raise even if the vendor env var is set."""
