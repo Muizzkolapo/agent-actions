@@ -131,10 +131,14 @@ class TestSelectiveRepromptResubmission:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.retry_polling.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
                 return_value="completed",
             ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+            ) as MockBatchStatus,
         ):
+            MockBatchStatus.COMPLETED = "completed"
             validate_and_reprompt(
                 action_indices={},
                 dependency_configs={},
@@ -226,10 +230,14 @@ class TestSelectiveRepromptResubmission:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.retry_polling.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
                 return_value="completed",
             ),
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+            ) as MockBatchStatus,
         ):
+            MockBatchStatus.COMPLETED = "completed"
             validate_and_reprompt(
                 action_indices={},
                 dependency_configs={},

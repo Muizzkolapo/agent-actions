@@ -17,6 +17,7 @@ from agent_actions.logging.events.validation_events import (
 )
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.evaluation.loop import accumulate_failure_types
+from agent_actions.processing.recovery.retry import is_retriable_error
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -280,7 +281,7 @@ def validate_and_reprompt(
                     )
                 except Exception:
                     logger.warning(
-                        "Critique failed for %s, continuing without",
+                        "LLM critique failed for %s, using un-critiqued feedback",
                         custom_id,
                         exc_info=True,
                     )
@@ -338,6 +339,14 @@ def validate_and_reprompt(
                     batch_id,
                     final_status,
                 )
+                for r in still_failing:
+                    if not r.recovery_metadata:
+                        r.recovery_metadata = RecoveryMetadata()
+                    r.recovery_metadata.reprompt = RepromptMetadata(
+                        attempts=reprompted_ids.get(r.custom_id, 1),
+                        passed=False,
+                        validation=validation_name,
+                    )
                 all_graduated.extend(still_failing)
                 break
 
@@ -380,9 +389,14 @@ def validate_and_reprompt(
             active_results = reprompt_results
 
         except Exception as e:
-            logger.exception("Error during reprompt batch submission: %s", e)
-            all_graduated.extend(still_failing)
-            break
+            if is_retriable_error(e):
+                logger.warning(
+                    "Transient error submitting reprompt batch (will retry next cycle): %s",
+                    e,
+                )
+                break
+            logger.exception("Reprompt batch submission failed: %s", e)
+            raise
 
     recovered_count = 0
     for r in all_graduated:
