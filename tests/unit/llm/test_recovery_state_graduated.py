@@ -1,6 +1,7 @@
 """Tests for graduated results tracking in RecoveryState."""
 
 import json
+import logging
 from pathlib import Path
 from unittest.mock import patch
 
@@ -199,6 +200,65 @@ class TestRecoveryStateManagerIntegration:
         assert loaded is not None
         assert len(loaded.graduated_results) == 2
         assert loaded.evaluation_strategy_name == "validation"
+
+
+class TestRecoveryStateCorruptionHandling:
+    """Verify load() logs at error-level on corruption and returns None."""
+
+    def _write_raw(self, tmp_path, content: str) -> Path:
+        """Write raw content to the recovery state file location."""
+        state_path = tmp_path / "batch" / ".recovery_state_test_action.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(content)
+        return state_path
+
+    _LOGGER = "agent_actions"
+
+    def test_corrupt_json_logs_error_and_returns_none(self, tmp_path, caplog):
+        """Truncated/invalid JSON logs at error-level, returns None."""
+        self._write_raw(tmp_path, '{"phase": "retry", "retry_at')
+
+        with caplog.at_level(logging.ERROR, logger=self._LOGGER):
+            result = RecoveryStateManager.load(str(tmp_path), "test_action")
+
+        assert result is None
+        assert any(
+            "Corrupt recovery state" in r.message and r.levelno == logging.ERROR
+            for r in caplog.records
+        )
+
+    def test_missing_file_returns_none_silently(self, tmp_path, caplog):
+        """Missing file (first run) returns None with no error log."""
+        with caplog.at_level(logging.DEBUG, logger=self._LOGGER):
+            result = RecoveryStateManager.load(str(tmp_path), "nonexistent")
+
+        assert result is None
+        assert not any(r.levelno >= logging.WARNING for r in caplog.records)
+
+    def test_invalid_enum_value_logs_error(self, tmp_path, caplog):
+        """Valid JSON with bad enum value triggers ValueError in __post_init__."""
+        self._write_raw(
+            tmp_path,
+            json.dumps({"phase": "not_a_real_phase", "retry_attempt": 0, "reprompt_attempt": 0}),
+        )
+
+        with caplog.at_level(logging.ERROR, logger=self._LOGGER):
+            result = RecoveryStateManager.load(str(tmp_path), "test_action")
+
+        assert result is None
+        assert any("Corrupt recovery state" in r.message for r in caplog.records)
+
+    def test_valid_state_loads_without_error(self, tmp_path, caplog):
+        """Valid recovery state loads normally, no error logs."""
+        state = RecoveryState(phase="retry", retry_attempt=1)
+        RecoveryStateManager.save(str(tmp_path), "test_action", state)
+
+        with caplog.at_level(logging.DEBUG, logger=self._LOGGER):
+            result = RecoveryStateManager.load(str(tmp_path), "test_action")
+
+        assert result is not None
+        assert result.retry_attempt == 1
+        assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
 
 class TestRecoveryStateAtomicWrite:
