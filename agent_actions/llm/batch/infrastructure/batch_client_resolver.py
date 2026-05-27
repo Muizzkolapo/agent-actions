@@ -180,7 +180,7 @@ class BatchClientResolver:
         Resolution order:
         1. agent_config["api_key"] → resolve env var (same path online mode uses)
         2. Vendor config class default env var name (e.g. ANTHROPIC_API_KEY)
-        3. Empty dict → factory tries its own hardcoded fallback
+        3. Empty dict → factory raises ConfigurationError (no silent fallback)
         """
         import os
 

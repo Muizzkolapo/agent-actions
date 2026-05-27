@@ -99,6 +99,84 @@ class TestBatchClientFactorySecretStr:
         mock_cls.assert_called_once()
         assert mock_cls.call_args.kwargs["api_key"] == "sk-vendor-test"
 
+    def test_missing_api_key_raises_configuration_error(self, monkeypatch):
+        """Factory must raise ConfigurationError when no key is available."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.llm.providers.batch_client_factory import _create_openai
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        with pytest.raises(ConfigurationError, match="API key not configured"):
+            _create_openai({})
+
+    @pytest.mark.parametrize(
+        "factory_name,env_var",
+        [
+            ("_create_gemini", "GEMINI_API_KEY"),
+            ("_create_anthropic", "ANTHROPIC_API_KEY"),
+            ("_create_groq", "GROQ_API_KEY"),
+        ],
+    )
+    def test_optional_vendor_missing_key_raises(self, monkeypatch, factory_name, env_var):
+        """All vendor factories raise ConfigurationError when key is missing."""
+        import agent_actions.llm.providers.batch_client_factory as factory_module
+        from agent_actions.errors import ConfigurationError
+
+        monkeypatch.delenv(env_var, raising=False)
+        factory_fn = getattr(factory_module, factory_name)
+        mock_cls = MagicMock()
+        mock_cls.return_value = MagicMock()
+
+        with patch.object(factory_module, "_try_import", return_value=(mock_cls, True)):
+            with pytest.raises(ConfigurationError, match="API key not configured"):
+                factory_fn({})
+
+    def test_env_var_interpolation(self, monkeypatch):
+        """Factory must resolve ${VAR_NAME} syntax like online clients."""
+        from agent_actions.llm.providers.batch_client_factory import _create_openai
+
+        monkeypatch.setenv("MY_CUSTOM_KEY", "sk-custom-123")
+        with patch("agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            _create_openai({"api_key": "${MY_CUSTOM_KEY}"})
+
+        mock_cls.assert_called_once_with(api_key="sk-custom-123")
+
+    def test_env_var_interpolation_missing_raises(self, monkeypatch):
+        """Factory must raise when ${VAR_NAME} references an unset variable."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.llm.providers.batch_client_factory import _create_openai
+
+        monkeypatch.delenv("NONEXISTENT_VAR", raising=False)
+        with pytest.raises(ConfigurationError, match="NONEXISTENT_VAR"):
+            _create_openai({"api_key": "${NONEXISTENT_VAR}"})
+
+    def test_empty_string_api_key_raises(self, monkeypatch):
+        """Empty string api_key should not silently fall back to env var."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.llm.providers.batch_client_factory import _create_openai
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        with pytest.raises(ConfigurationError, match="API key not configured"):
+            _create_openai({"api_key": ""})
+
+    def test_empty_secret_str_api_key_raises(self, monkeypatch):
+        """SecretStr('') should not silently fall back to env var."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.llm.providers.batch_client_factory import _create_openai
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        with pytest.raises(ConfigurationError, match="API key not configured"):
+            _create_openai({"api_key": SecretStr("")})
+
+    def test_missing_api_key_raises_even_when_env_var_set(self, monkeypatch):
+        """When config has no api_key, raise even if the vendor env var is set."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.llm.providers.batch_client_factory import _create_openai
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-from-env")
+        with pytest.raises(ConfigurationError, match="API key not configured"):
+            _create_openai({})
+
     def test_cache_key_unwraps_secret_str(self):
         from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
             BatchClientResolver,

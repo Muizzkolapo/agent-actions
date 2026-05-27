@@ -63,26 +63,71 @@ def _require_class(cls, available: bool, client_type: str, package: str):
     return cls
 
 
+def _resolve_api_key(config: dict[str, Any], hint_env_var: str) -> str:
+    """Resolve API key from vendor config dict.
+
+    This is the batch-side counterpart to ``BaseClient.get_api_key()`` in
+    ``client_base.py``.  The two functions share ``SecretStr`` unwrapping and
+    ``${VAR_NAME}`` interpolation but differ in semantics:
+
+    * ``BaseClient.get_api_key`` treats ``config["api_key"]`` as an **env var
+      name** and always resolves it via ``os.getenv``.  Used by online clients.
+    * This function treats ``config["api_key"]`` as a **literal secret** (the
+      resolver already called ``get_api_key`` upstream).  Used by the batch
+      client factory.
+
+    No silent fallbacks — if no key is provided, raises ``ConfigurationError``.
+    The resolver (``BatchClientResolver``) is responsible for env var resolution
+    before calling the factory.
+    """
+    from agent_actions.errors import ConfigurationError
+
+    raw = config.get("api_key")
+    key = raw.get_secret_value() if isinstance(raw, SecretStr) else raw
+
+    if key is not None and key != "":
+        # Support ${VAR_NAME} interpolation (same as BaseClient.get_api_key)
+        if isinstance(key, str) and key.startswith("${") and key.endswith("}"):
+            env_var = key[2:-1]
+            resolved = os.getenv(env_var)
+            if not resolved:
+                raise ConfigurationError(
+                    f"Environment variable '{env_var}' is not set",
+                    context={
+                        "env_var": env_var,
+                        "config_value": key,
+                        "hint": f"Set the environment variable: export {env_var}=your-api-key",
+                    },
+                )
+            return resolved
+        return key
+
+    raise ConfigurationError(
+        "API key not configured for batch client",
+        context={
+            "env_var": hint_env_var,
+            "hint": (
+                f"Set 'api_key' in your vendor config or ensure the "
+                f"{hint_env_var} environment variable is set"
+            ),
+        },
+    )
+
+
 # --- Vendor factory functions ---
 
 
 def _create_openai(config: dict[str, Any]) -> BaseBatchClient:
     from .openai.batch_client import OpenAIBatchClient
 
-    _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
-        "OPENAI_API_KEY"
-    )
+    api_key = _resolve_api_key(config, "OPENAI_API_KEY")
     return OpenAIBatchClient(api_key=api_key)
 
 
 def _create_gemini(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".gemini.batch_client", "GeminiBatchClient")
     cls = _require_class(cls, available, "gemini", "google-genai")
-    _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
-        "GEMINI_API_KEY"
-    )
+    api_key = _resolve_api_key(config, "GEMINI_API_KEY")
     return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
@@ -99,10 +144,7 @@ def _create_ollama_local(config: dict[str, Any]) -> BaseBatchClient:
 def _create_ollama_cloud(config: dict[str, Any]) -> BaseBatchClient:
     from .ollama.batch_client import OllamaBatchClient
 
-    _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
-        "OLLAMA_API_KEY"
-    )
+    api_key = _resolve_api_key(config, "OLLAMA_API_KEY")
     base_url = config.get("base_url") or os.getenv(
         "OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL
     )
@@ -119,10 +161,7 @@ def _create_ollama_cloud(config: dict[str, Any]) -> BaseBatchClient:
 def _create_anthropic(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".anthropic.batch_client", "AnthropicBatchClient")
     cls = _require_class(cls, available, "anthropic", "anthropic")
-    _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
-        "ANTHROPIC_API_KEY"
-    )
+    api_key = _resolve_api_key(config, "ANTHROPIC_API_KEY")
     return cls(  # type: ignore[no-any-return]
         api_key=api_key,
         version=config.get("anthropic_version"),
@@ -133,10 +172,7 @@ def _create_anthropic(config: dict[str, Any]) -> BaseBatchClient:
 def _create_groq(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".groq.batch_client", "GroqBatchClient")
     cls = _require_class(cls, available, "groq", "groq")
-    _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
-        "GROQ_API_KEY"
-    )
+    api_key = _resolve_api_key(config, "GROQ_API_KEY")
     return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
