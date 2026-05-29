@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.schema import ResponseSchemaCompiler
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
@@ -51,7 +52,7 @@ def create_dynamic_agent(
     # - Few-shot sample injection
     # - Consistent behavior across batch and online modes
     if formatted_prompt is None:
-        raise ValueError(
+        raise ConfigurationError(
             "formatted_prompt is required. "
             "Please use PromptPreparationService.prepare_prompt_with_context() "
             "to prepare the prompt before calling create_dynamic_agent(). "
