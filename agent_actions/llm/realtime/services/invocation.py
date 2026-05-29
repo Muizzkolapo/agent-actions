@@ -110,11 +110,19 @@ class ClientInvocationService:
             List of response data from the LLM
 
         Raises:
-            ValueError: If client is not supported
+            ConfigurationError: If client is not supported
             DependencyError: If the provider's SDK package is not installed
         """
         if model_vendor not in CLIENT_REGISTRY:
-            raise ValueError(f"Unsupported model vendor: {model_vendor}")
+            from agent_actions.errors import ConfigurationError
+
+            raise ConfigurationError(
+                f"Unsupported model vendor: {model_vendor}",
+                context={
+                    "model_vendor": model_vendor,
+                    "supported_vendors": list(CLIENT_REGISTRY.keys()),
+                },
+            )
 
         client = _resolve_client(model_vendor)
 
