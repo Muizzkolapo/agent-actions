@@ -120,10 +120,9 @@ def create_dynamic_agent(
         source_content,
     )
 
-    # Merge captured results if any
     if captured_results:
-        for item in result:
-            if isinstance(item, dict):
-                item.update(captured_results)
+        result = [
+            {**item, **captured_results} if isinstance(item, dict) else item for item in result
+        ]
 
     return result

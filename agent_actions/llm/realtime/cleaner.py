@@ -59,9 +59,21 @@ class Cleaner:
         if not self.force and (not self._confirm(directories)):
             click.echo("Aborted – nothing was cleaned.")
             return
+        failures = []
         for directory in directories:
-            self.agent_manager.clean_directory(self.agent, directory)
-        click.echo(f"✅  Cleaned {len(directories)} directories for agent '{self.agent}'.")
+            try:
+                self.agent_manager.clean_directory(self.agent, directory)
+            except OSError as e:
+                failures.append((directory, e))
+                logger.warning("Failed to clean %s: %s", directory, e)
+        if failures:
+            click.echo(
+                f"⚠️  Cleaned {len(directories) - len(failures)}/{len(directories)} "
+                f"directories for agent '{self.agent}' "
+                f"({len(failures)} failed)."
+            )
+        else:
+            click.echo(f"✅  Cleaned {len(directories)} directories for agent '{self.agent}'.")
 
     def _confirm(self, directories: Iterable[Path]) -> bool:
         """Request user confirmation before executing a destructive action."""
