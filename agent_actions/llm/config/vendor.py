@@ -52,7 +52,7 @@ class BaseVendorConfig(BaseModel):
     top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
     )
-    model_config = {"extra": "allow"}
+    model_config = {"extra": "forbid"}
 
 
 class OpenAIConfig(BaseVendorConfig):
