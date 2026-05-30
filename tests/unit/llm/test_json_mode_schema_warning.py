@@ -274,7 +274,7 @@ class TestRuntimeInvokeWarning:
 class TestRuntimeBatchWarning:
     """BaseBatchClient.prepare_tasks() logs warning when schema is dropped."""
 
-    @patch("agent_actions.llm.providers.batch_base.logger")
+    @patch("agent_actions.llm.providers.client_base.logger")
     def test_batch_json_false_with_compiled_schema_warns(self, mock_logger):
         """prepare_tasks() with json_mode=false + compiled_schema logs warning."""
         config = {

@@ -15,6 +15,30 @@ from agent_actions.utils.constants import API_KEY_KEY, JSON_MODE_KEY
 
 logger = logging.getLogger(__name__)
 
+# Cache SDK client instances by (class, api_key) to reuse connection pools.
+_client_cache: dict[tuple[type, str], Any] = {}
+
+
+def get_or_create_client(cls: type, api_key: str | None, **kwargs: Any) -> Any:
+    """Return a cached SDK client instance, creating one if needed."""
+    cache_key = (cls, api_key or "")
+    client = _client_cache.get(cache_key)
+    if client is None:
+        client = cls(api_key=api_key, **kwargs)
+        _client_cache[cache_key] = client
+    return client
+
+
+def warn_schema_without_json_mode(agent_config: dict[str, Any]) -> None:
+    """Log a warning when a schema was compiled but json_mode is disabled."""
+    action_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
+    logger.warning(
+        "json_mode=false but schema was compiled for action '%s'. "
+        "The schema will not be sent to the LLM. "
+        "Set json_mode=true to enable schema enforcement.",
+        action_name,
+    )
+
 
 class BaseClient(ABC):
     """Common functionality shared by LLM clients."""
@@ -187,10 +211,5 @@ class BaseClient(ABC):
         if json_mode:
             return cls.call_json(api_key, agent_config, prompt_config, context_data, schema)
         if schema is not None:
-            logger.warning(
-                "json_mode=false but schema was compiled for action '%s'. "
-                "The schema will not be sent to the LLM. "
-                "Set json_mode=true to enable schema enforcement.",
-                agent_config["agent_type"],
-            )
+            warn_schema_without_json_mode(agent_config)
         return cls.call_non_json(api_key, agent_config, prompt_config, context_data)

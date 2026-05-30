@@ -69,7 +69,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
-        client = Groq(api_key=api_key)
+        from agent_actions.llm.providers.client_base import get_or_create_client
+
+        client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
             "groq", prompt_config, context_data, schema=schema, json_mode=True
@@ -139,7 +141,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
-        client = Groq(api_key=api_key)
+        from agent_actions.llm.providers.client_base import get_or_create_client
+
+        client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("groq", prompt_config, context_data, json_mode=False)
         params = extract_generation_params(agent_config)

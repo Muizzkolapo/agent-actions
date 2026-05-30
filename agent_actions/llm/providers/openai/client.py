@@ -70,7 +70,9 @@ class OpenAIClient(BaseClient):
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
-        client = OpenAI(api_key=api_key)
+        from agent_actions.llm.providers.client_base import get_or_create_client
+
+        client = get_or_create_client(OpenAI, api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
             "openai",
@@ -171,7 +173,9 @@ class OpenAIClient(BaseClient):
         prompt_config: str,
         context_data: dict[str, Any],
     ) -> list[dict[str, str]]:
-        client = OpenAI(api_key=api_key)
+        from agent_actions.llm.providers.client_base import get_or_create_client
+
+        client = get_or_create_client(OpenAI, api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
         messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
