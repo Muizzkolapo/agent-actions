@@ -321,8 +321,9 @@ class HitlServer:
             ), 400
         payload = self._get_request_payload()
         if self.record_count == 1:
+            comment = str(payload.get("comment", ""))[:2000]
             review = self._normalize_single_review(
-                {"hitl_status": "approved", "user_comment": payload.get("comment", "")}
+                {"hitl_status": "approved", "user_comment": comment}
             )
             with self._lock:
                 self.record_reviews[0] = review
@@ -341,9 +342,9 @@ class HitlServer:
                 }
             ), 400
         payload = self._get_request_payload()
-        comment = payload.get("comment", "")
+        comment = str(payload.get("comment", ""))[:2000]
         reject_error = self._validate_reject_comment(
-            {"hitl_status": "rejected", "user_comment": str(comment)}
+            {"hitl_status": "rejected", "user_comment": comment}
         )
         if reject_error:
             return jsonify({"success": False, "error": reject_error}), 400
