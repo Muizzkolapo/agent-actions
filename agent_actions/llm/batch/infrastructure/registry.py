@@ -12,7 +12,6 @@ from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegist
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import (
     CacheHitEvent,
-    CacheInvalidationEvent,
     CacheLoadEvent,
     CacheMissEvent,
     CacheUpdateEvent,
@@ -228,22 +227,6 @@ class BatchRegistryManager:
                 self._persist_registry(self._cache)
 
             return all(entry.is_terminal for entry in self._cache.values())
-
-    def invalidate_cache(self) -> None:
-        """Force cache reload on next access."""
-        with self._lock:
-            entries_removed = len(self._cache) if self._cache is not None else 0
-            self._cache = None
-            self._batch_id_index = None
-            logger.debug("Registry cache invalidated")
-
-            fire_event(
-                CacheInvalidationEvent(
-                    cache_type="batch_registry",
-                    entries_removed=entries_removed,
-                    reason="manual invalidation",
-                )
-            )
 
     # ============================================================
     # PRIVATE METHODS - Internal implementation

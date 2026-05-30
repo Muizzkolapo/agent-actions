@@ -163,7 +163,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     ) -> dict[str, Any] | None:
         """Process one batch task. Returns result dict, or None if injection-dropped."""
         custom_id = task["custom_id"]
-        logger.info("Processing request %d/%d: %s", idx + 1, total, custom_id)
+        logger.debug("Processing request %d/%d: %s", idx + 1, total, custom_id)
 
         try:
             body = task["body"]

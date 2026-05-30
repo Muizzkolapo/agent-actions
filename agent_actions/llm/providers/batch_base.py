@@ -186,7 +186,9 @@ class BaseBatchClient(ABC):
                     batch_result = self.parse_provider_response(raw_result)
                     batch_results.append(batch_result)
                 except json.JSONDecodeError as e:
-                    logger.error("JSON parsing error on line %s: %s", line_num, e)
+                    logger.warning(
+                        "JSON parsing error on line %d (%.120s): %s", line_num, line.strip(), e
+                    )
                     batch_results.append(
                         BatchResult(
                             custom_id=f"error_line_{line_num}",
@@ -245,10 +247,6 @@ class BaseBatchClient(ABC):
     @abstractmethod
     def _extract_usage_from_response(self, raw_response: Any) -> dict[str, Any] | None:
         """Extract token usage information from response."""
-
-    def get_supported_models(self) -> list[str]:
-        """Get list of model names supported by this provider."""
-        return []
 
     def validate_config(self, agent_config: dict[str, Any]) -> tuple[bool, str | None]:
         """Validate agent configuration compatibility with this provider (Template Method)."""
@@ -309,7 +307,9 @@ class BaseBatchClient(ABC):
                         batch_result = self.parse_provider_response(raw_result)
                         batch_results.append(batch_result)
                     except json.JSONDecodeError as e:
-                        logger.error("JSON parsing error on line %s: %s", line_num, e)
+                        logger.warning(
+                            "JSON parsing error on line %d (%.120s): %s", line_num, line.strip(), e
+                        )
                         batch_results.append(
                             BatchResult(
                                 custom_id=f"error_line_{line_num}",
