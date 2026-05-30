@@ -130,7 +130,9 @@ class AnthropicClient(BaseClient):
             Tuple of (response, model_name, request_id).
         """
         model_name: str = agent_config[MODEL_NAME_KEY]
-        client = anthropic.Anthropic(api_key=api_key)
+        from agent_actions.llm.providers.client_base import get_or_create_client
+
+        client = get_or_create_client(anthropic.Anthropic, api_key)
         json_mode = schema is not None
         enable_caching = agent_config.get("enable_prompt_caching", False)
         envelope = MessageBuilder.build(

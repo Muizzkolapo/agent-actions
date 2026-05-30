@@ -12,7 +12,7 @@ import uuid
 from typing import Any, ClassVar
 
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
-from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.client_base import BaseClient, warn_schema_without_json_mode
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
@@ -249,10 +249,5 @@ class AgacClient(BaseClient):
         if json_mode:
             return cls.call_json(None, agent_config, prompt_config, context_data, schema)
         if schema is not None:
-            logger.warning(
-                "json_mode=false but schema was compiled for action '%s'. "
-                "The schema will not be sent to the LLM. "
-                "Set json_mode=true to enable schema enforcement.",
-                agent_config["agent_type"],
-            )
+            warn_schema_without_json_mode(agent_config)
         return cls.call_non_json(None, agent_config, prompt_config, context_data)

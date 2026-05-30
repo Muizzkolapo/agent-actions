@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
 from agent_actions.output.response.config_fields import get_default
 
 if TYPE_CHECKING:
@@ -85,12 +86,7 @@ class BaseBatchClient(ABC):
         tasks = []
         json_mode = agent_config.get("json_mode", get_default("json_mode"))
         if not json_mode and agent_config.get("compiled_schema") is not None:
-            logger.warning(
-                "json_mode=false but schema was compiled for action '%s'. "
-                "The schema will not be sent to the LLM. "
-                "Set json_mode=true to enable schema enforcement.",
-                agent_config.get("agent_type", agent_config.get("name", "unknown")),
-            )
+            warn_schema_without_json_mode(agent_config)
         schema = agent_config.get("compiled_schema") if json_mode else None
 
         for row in data:
