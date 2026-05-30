@@ -78,6 +78,7 @@ def _load_source_data_for_reprompt(
                 records = storage_backend.read_source(path)
                 all_source_data.extend(records)
             except FileNotFoundError:
+                logger.warning("Source file not found during reprompt data load: %s", path)
                 continue
 
         return all_source_data if all_source_data else None

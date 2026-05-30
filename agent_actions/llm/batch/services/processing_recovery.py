@@ -614,5 +614,7 @@ def _remove_batch_placeholder(output_file: Path) -> None:
         try:
             output_file.unlink()
             logger.debug("Removed batch placeholder: %s", output_file)
-        except OSError:
+        except FileNotFoundError:
             pass  # Already removed by concurrent worker
+        except OSError as e:
+            logger.warning("Failed to remove batch placeholder %s: %s", output_file, e)

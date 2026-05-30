@@ -165,6 +165,8 @@ class GroqClient(BaseClient, JSONResponseMixin):
         start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
+        except (RateLimitError, NetworkError, VendorAPIError):
+            raise
         except groq.APIError as e:
             raise _wrap_groq_error(e, model_name, request_id) from e
 

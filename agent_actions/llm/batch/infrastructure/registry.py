@@ -172,7 +172,14 @@ class BatchRegistryManager:
             cache = self._get_cache()
 
             if not cache:
-                return True  # No jobs = all complete
+                if self._registry_path.exists():
+                    logger.warning(
+                        "Registry file exists at %s but cache is empty — "
+                        "possible corruption. Reporting jobs as NOT completed.",
+                        self._registry_path,
+                    )
+                    return False
+                return True  # No registry file = no jobs = all complete
 
             # Collect entries that need a provider check (non-terminal) while holding the lock
             if check_provider:

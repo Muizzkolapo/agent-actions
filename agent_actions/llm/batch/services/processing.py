@@ -291,7 +291,7 @@ class BatchProcessingService:
             status = provider.check_status(batch_id)
             return status == BatchStatus.COMPLETED
         except Exception as e:
-            logger.debug("Failed to check batch status for %s: %s", batch_id, e, exc_info=True)
+            logger.warning("Failed to check batch status for %s: %s", batch_id, e, exc_info=True)
             return False
 
     def _determine_output_path(
@@ -698,8 +698,11 @@ class BatchProcessingService:
                     action_name, source_guid, DISPOSITION_FILTERED, reason=reason
                 )
             except Exception:
-                logger.debug(
-                    "Failed to write FILTERED disposition for %s", source_guid, exc_info=True
+                logger.warning(
+                    "Failed to write FILTERED disposition for %s — "
+                    "record may be reprocessed on next run",
+                    source_guid,
+                    exc_info=True,
                 )
 
     def _try_clear_deferred(self, action_name: str, record_id: str) -> None:
