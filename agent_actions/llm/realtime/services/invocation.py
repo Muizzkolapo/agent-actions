@@ -41,10 +41,6 @@ CLIENT_REGISTRY: dict[str, Any] = {
     "hitl": HitlClient,
 }
 
-# All providers now normalise their return type to List[Dict] internally,
-# so no wrapping is needed here.
-SINGLE_RESPONSE_CLIENTS: set = set()
-
 
 def _resolve_client(model_vendor: str) -> Any:
     """Resolve provider client from registry, importing lazy entries on demand."""
@@ -143,9 +139,6 @@ class ClientInvocationService:
         else:
             # Standard client invocation (all providers, including Groq)
             result = client.invoke(agent_config, prompt_config, context_data, schema)
-            # Single-response clients return single item, wrap in list for consistency
-            if model_vendor in SINGLE_RESPONSE_CLIENTS:
-                result = [result]
 
         elapsed = time.perf_counter() - start
         logger.info(

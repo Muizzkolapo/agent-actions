@@ -984,20 +984,6 @@ class TestOllamaTopPStopForwarding:
 
 
 # ---------------------------------------------------------------------------
-# SINGLE_RESPONSE_CLIENTS audit (collapsed to 1 test)
-# ---------------------------------------------------------------------------
-
-
-class TestSingleResponseClients:
-    """All providers now return List[Dict] — SINGLE_RESPONSE_CLIENTS is empty."""
-
-    def test_set_is_empty(self):
-        from agent_actions.llm.realtime.services.invocation import SINGLE_RESPONSE_CLIENTS
-
-        assert SINGLE_RESPONSE_CLIENTS == set()
-
-
-# ---------------------------------------------------------------------------
 # call_json normalization: dict → List[Dict] (parameterized across providers)
 # ---------------------------------------------------------------------------
 

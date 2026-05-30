@@ -176,43 +176,6 @@ VendorConfig = (
 )
 
 
-class VendorRegistry(BaseModel):
-    """Registry for all configured vendors."""
-
-    vendors: dict[str, VendorConfig] = Field(
-        default_factory=dict, description="Map of vendor name to vendor configuration"
-    )
-    default_vendor: str | None = Field(
-        default=None,
-        description="Default vendor to use when not specified (must be explicitly configured)",
-    )
-
-    def get_vendor_config(self, vendor_name: str) -> VendorConfig | None:
-        """Get configuration for a specific vendor."""
-        return self.vendors.get(vendor_name)
-
-    def get_default_vendor_config(self) -> VendorConfig | None:
-        """Get the default vendor configuration."""
-        return self.vendors.get(self.default_vendor)  # type: ignore[arg-type]
-
-    def register_vendor(self, name: str, config: VendorConfig):
-        """Register a new vendor configuration."""
-        self.vendors[name] = config
-
-    def list_vendor_types(self) -> list[VendorType]:
-        """Get list of all registered vendor types."""
-        return [config.vendor_type for config in self.vendors.values()]
-
-    @classmethod
-    def create_default_registry(cls) -> "VendorRegistry":
-        """Create a registry with default vendor configurations."""
-        registry = cls()
-        registry.register_vendor("openai", OpenAIConfig(model_name="gpt-4o-mini"))
-        registry.register_vendor("claude", AnthropicConfig(model_name="claude-3-sonnet-20240229"))
-        registry.register_vendor("gemini", GoogleConfig(model_name="gemini-1.5-flash"))
-        return registry
-
-
 __all__ = [
     "VendorType",
     "ResponseFormat",
@@ -229,5 +192,4 @@ __all__ = [
     "HitlVendorConfig",
     "AgacProviderConfig",
     "VendorConfig",
-    "VendorRegistry",
 ]
