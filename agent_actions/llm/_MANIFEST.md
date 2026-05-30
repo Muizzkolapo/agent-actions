@@ -6,6 +6,8 @@ LLM integrations provide both batch and online execution paths, vendor profile
 configuration, and a growing set of provider adapters (OpenAI, Anthropic, Claude,
 Cohere, etc.).
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)** — full context graph with record flow, schema pipeline, prompt assembly, error handling, provider comparison, and observability.
+
 ## Sub-Modules
 
 | Sub-Module | Description |
@@ -30,7 +32,7 @@ Cohere, etc.).
 | `BatchRetrievalService.retrieve()` | `agent_io/target/{action}/` | Writes | — |
 | `batch_cli` | `agent_actions.yml` | Reads | — |
 
-**Internal only**: `VendorType`, `ResponseFormat`, `VendorRegistry`, `VendorConfig`, `BatchJobEntry`, `SubmissionResult`, `BatchContextManager`, `BatchRegistryManager`, `BatchContextMetadata`, `BatchTaskPreparator`, `BatchClientResolver`, `ContextService`, `PromptService`, `CLIENT_REGISTRY`, `SINGLE_RESPONSE_CLIENTS` -- no direct project surface.
+**Internal only**: `VendorType`, `ResponseFormat`, `VendorConfig`, `BatchJobEntry`, `SubmissionResult`, `BatchContextManager`, `BatchRegistryManager`, `BatchContextMetadata`, `BatchTaskPreparator`, `BatchClientResolver`, `ContextService`, `PromptService`, `CLIENT_REGISTRY` -- no direct project surface.
 
 ## Dependencies
 
