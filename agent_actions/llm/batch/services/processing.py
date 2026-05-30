@@ -349,7 +349,7 @@ class BatchProcessingService:
         except FileNotFoundError:
             return batch_output
         except (json.JSONDecodeError, KeyError):
-            logger.warning("Malformed .batch_carry_forward.json — skipping merge")
+            logger.warning("Malformed %s — skipping merge", carry_path)
             return batch_output
 
         if not carry_guids or not self._storage_backend or not action_name:

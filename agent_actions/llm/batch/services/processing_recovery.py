@@ -65,12 +65,18 @@ def process_recovery_batch(
     """
     parent_file_name = entry.parent_file_name
     if not parent_file_name:
-        logger.error("Recovery entry %s has no parent_file_name", file_name)
+        logger.error(
+            "Recovery entry file_name=%s batch_id=%s has no parent_file_name",
+            file_name,
+            entry.batch_id,
+        )
         return None
 
     state = RecoveryStateManager.load(output_directory, parent_file_name)
     if not state:
-        logger.error("No recovery state found for %s", parent_file_name)
+        logger.error(
+            "No recovery state found for parent=%s file_name=%s", parent_file_name, file_name
+        )
         return None
 
     agent_config = service._apply_workflow_session_id(agent_config, entry)

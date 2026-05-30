@@ -63,7 +63,11 @@ def submit_retry_batch(
 
     missing_records = _collect_missing_records(missing_ids, context_map)
     if not missing_records:
-        logger.warning("No records found in context_map for missing IDs")
+        logger.warning(
+            "No records found in context_map for %d missing IDs (file_name=%s)",
+            len(missing_ids),
+            file_name,
+        )
         return None
 
     try:
@@ -78,7 +82,7 @@ def submit_retry_batch(
         )
 
         if not prepared.tasks:
-            logger.warning("No tasks prepared for retry batch")
+            logger.warning("No tasks prepared for retry batch (file_name=%s)", file_name)
             return None
 
         retry_batch_id, _ = provider.submit_batch(
@@ -112,7 +116,11 @@ def resubmit_missing_records(
 
     missing_records = _collect_missing_records(missing_ids, context_map)
     if not missing_records:
-        logger.warning("No records found in context_map for missing IDs")
+        logger.warning(
+            "No records found in context_map for %d missing IDs (file_name=%s)",
+            len(missing_ids),
+            file_name,
+        )
         return []
 
     try:
@@ -127,7 +135,7 @@ def resubmit_missing_records(
         )
 
         if not prepared.tasks:
-            logger.warning("No tasks prepared for retry batch")
+            logger.warning("No tasks prepared for retry batch (file_name=%s)", file_name)
             return []
 
         retry_batch_id, _ = provider.submit_batch(

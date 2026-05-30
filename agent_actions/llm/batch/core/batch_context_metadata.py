@@ -39,11 +39,6 @@ class BatchContextMetadata:
         """Check if record has SKIPPED filter status."""
         return BatchContextMetadata.get_filter_status(record) == FilterStatus.SKIPPED
 
-    @staticmethod
-    def is_filtered(record: dict[str, Any]) -> bool:
-        """Check if record has FILTERED filter status."""
-        return BatchContextMetadata.get_filter_status(record) == FilterStatus.FILTERED
-
     # =========================================================================
     # Passthrough Fields Methods
     # =========================================================================
@@ -86,9 +81,3 @@ class BatchContextMetadata:
         """Return a copy of record with all internal metadata fields removed."""
         internal_keys = ContextMetaKeys.all_internal_keys()
         return {k: v for k, v in record.items() if k not in internal_keys}
-
-    @staticmethod
-    def has_internal_fields(record: dict[str, Any]) -> bool:
-        """Check if record contains any internal metadata fields."""
-        internal_keys = ContextMetaKeys.all_internal_keys()
-        return any(k in record for k in internal_keys)

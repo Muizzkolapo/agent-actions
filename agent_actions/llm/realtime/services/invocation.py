@@ -78,7 +78,6 @@ class ClientInvocationService:
         context_data: str | dict,
         schema: dict[str, Any] | None,
         granularity: str,
-        formatted_prompt: str | None = None,
         tool_args: dict[str, Any] | None = None,
         source_content: Any | None = None,
         action_name: str | None = None,
@@ -97,7 +96,6 @@ class ClientInvocationService:
             context_data: Context data (str or dict)
             schema: Prepared schema (optional)
             granularity: Processing granularity ('record' or 'file')
-            formatted_prompt: Pre-formatted prompt (unused, kept for API compat)
             tool_args: Tool arguments (optional)
             source_content: Source content for tool client (optional)
             action_name: Action name for logging (optional)

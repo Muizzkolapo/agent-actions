@@ -115,9 +115,8 @@ def create_dynamic_agent(
         context_data,
         schema,  # type: ignore[arg-type]
         granularity,
-        formatted_prompt,
-        tool_args,
-        source_content,
+        tool_args=tool_args,
+        source_content=source_content,
     )
 
     if captured_results:
