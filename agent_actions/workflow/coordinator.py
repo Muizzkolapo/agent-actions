@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         ComparisonNode,
     )
 from agent_actions.logging.core.manager import get_manager
+from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.state import ActionStatus
@@ -281,6 +282,7 @@ class AgentWorkflow:
                 self.storage_backend.delete_target(action_name)
                 self.storage_backend.clear_disposition(action_name)
                 self.storage_backend.clear_prompt_traces(action_name)
+                self.storage_backend.clear_checkpoint_records(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
 
@@ -322,17 +324,31 @@ class AgentWorkflow:
     def _reset_retryable_actions(self) -> None:
         """Reset failed/skipped/running actions to pending so re-runs retry them.
 
-        Clears ALL dispositions for each reset action — disposition is derived
-        state that must follow action status, not override it.  Stale
-        record-level dispositions (e.g. upstream_unprocessed) would otherwise
-        silently block the rerun.
+        For most statuses, clears ALL dispositions — disposition is derived
+        state that must follow action status.  For RUNNING actions (interrupted
+        mid-processing), only failure dispositions are cleared so that
+        checkpointed SUCCESS rows survive and the DispositionGate can carry
+        them forward on resume.
         """
-        reset_actions = self.services.core.state_manager.reset_retryable()
+        state_mgr = self.services.core.state_manager
+        # Snapshot RUNNING actions before reset_retryable() transitions them
+        # to PENDING — must be captured first so we know which actions had
+        # checkpointed progress to preserve.
+        running_actions = {
+            name
+            for name in state_mgr.execution_order
+            if state_mgr.get_status(name) == ActionStatus.RUNNING
+        }
+        reset_actions = state_mgr.reset_retryable()
         if not reset_actions:
             return
         for action_name in reset_actions:
             try:
-                self.storage_backend.clear_disposition(action_name)
+                if action_name in running_actions:
+                    for disp in RUNNING_CLEAR_DISPOSITIONS:
+                        self.storage_backend.clear_disposition(action_name, disp)
+                else:
+                    self.storage_backend.clear_disposition(action_name)
                 self.storage_backend.clear_prompt_traces(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)

@@ -44,6 +44,14 @@ VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 # filtered (predicate), deferred (in-flight HITL/batch).
 FAILURE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
 
+# Dispositions cleared when resuming an interrupted (RUNNING) action.
+# Includes DEFERRED because in-flight batch/HITL items must be re-submitted.
+# Excludes SUCCESS, PASSTHROUGH, FILTERED, SKIPPED so that checkpointed
+# progress survives and the DispositionGate can carry it forward.
+RUNNING_CLEAR_DISPOSITIONS = frozenset(
+    {DISPOSITION_FAILED, DISPOSITION_EXHAUSTED, DISPOSITION_DEFERRED}
+)
+
 DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]
 """(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
 
@@ -210,6 +218,37 @@ class StorageBackend(ABC):
     ) -> int:
         """Delete matching disposition records. Returns count deleted."""
         return 0
+
+    def save_checkpoint_records(  # noqa: B027
+        self,
+        action_name: str,
+        relative_path: str,
+        records: list[dict[str, Any]],
+    ) -> None:
+        """Upsert records into the checkpoint output table.
+
+        Used for incremental checkpointing during online processing.
+        Uses INSERT OR REPLACE keyed on (action_name, relative_path, source_guid).
+        """
+
+    def read_checkpoint_records(
+        self,
+        action_name: str,
+        relative_path: str,
+    ) -> list[dict[str, Any]]:
+        """Read all checkpointed records for an action/path."""
+        return []
+
+    def clear_checkpoint_records(  # noqa: B027
+        self,
+        action_name: str,
+        relative_path: str | None = None,
+    ) -> None:
+        """Delete checkpoint records for an action after successful completion.
+
+        If relative_path is provided, only records for that path are cleared.
+        Otherwise all checkpoint records for the action are removed.
+        """
 
     def get_failed_items(self, action_name: str) -> list[dict[str, Any]]:
         """Return item-level failure dispositions, excluding node-level sentinels."""

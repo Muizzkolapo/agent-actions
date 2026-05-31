@@ -6,6 +6,7 @@ transform output.
 
 import json
 import logging
+import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -32,6 +33,7 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
+    derive_relative_path,
 )
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
@@ -51,7 +53,7 @@ from agent_actions.record.reasons import (
     UPSTREAM_UNPROCESSED,
 )
 from agent_actions.record.state import RecordState
-from agent_actions.storage.backend import DISPOSITION_FAILED
+from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -171,6 +173,11 @@ class OnlineLLMStrategy:
                 elif result.status == ProcessingStatus.FAILED:
                     failures += 1
 
+                # Checkpoint: commit this record's result to SQLite immediately
+                # so interrupted runs can resume from where they left off.
+                if context.storage_backend and result.source_guid:
+                    self._checkpoint_record(result, context)
+
                 if (idx + 1) % 10 == 0 or (idx + 1) == len(records):
                     fire_event(
                         BatchProcessingProgressEvent(
@@ -258,6 +265,58 @@ class OnlineLLMStrategy:
         )
 
         return results
+
+    @staticmethod
+    def _checkpoint_record(result: ProcessingResult, context: ProcessingContext) -> None:
+        """Write a single record's disposition and output to SQLite immediately.
+
+        Called after each record's LLM call completes so that interrupted
+        runs can resume via the DispositionGate carry-forward path.
+        """
+        backend = context.storage_backend
+        if not backend or not result.source_guid:
+            return
+
+        disposition = (
+            DISPOSITION_SUCCESS if result.status == ProcessingStatus.SUCCESS else DISPOSITION_FAILED
+        )
+        reason = result.error if result.status == ProcessingStatus.FAILED else None
+
+        try:
+            backend.set_disposition(
+                context.action_name,
+                result.source_guid,
+                disposition,
+                reason=reason,
+            )
+            if result.data:
+                relative_path = derive_relative_path(context.file_path, context.output_directory)
+                if relative_path:
+                    # Copy records to avoid mutating result.data in-place —
+                    # downstream consumers (enrichment, collectors) hold
+                    # references to the same dicts.
+                    checkpoint_records = [
+                        {**item, "_state": RecordState.PROCESSED}
+                        if isinstance(item, dict) and "_state" not in item
+                        else item
+                        for item in result.data
+                    ]
+                    backend.save_checkpoint_records(
+                        context.action_name, relative_path, checkpoint_records
+                    )
+            logger.info(
+                "[%s] Checkpointed record %s (%s)",
+                context.action_name,
+                result.source_guid,
+                disposition,
+            )
+        except (OSError, sqlite3.Error):
+            logger.warning(
+                "[%s] Checkpoint write failed for %s — will reprocess on resume",
+                context.action_name,
+                result.source_guid,
+                exc_info=True,
+            )
 
     def process_record(
         self, item: Any, context: ProcessingContext, *, skip_guard: bool = False

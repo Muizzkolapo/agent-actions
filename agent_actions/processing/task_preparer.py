@@ -139,7 +139,12 @@ class TaskPreparer:
         """Normalize input to (content, source_guid, source_snapshot)."""
         if context.is_first_stage:
             source_guid: str | None
-            if self._id_generator:
+            # Prefer existing source_guid (e.g., deterministic content-hash
+            # assigned for checkpoint resume) over generating a new one.
+            existing = item.get("source_guid") if isinstance(item, dict) else None
+            if existing:
+                source_guid = existing
+            elif self._id_generator:
                 source_guid = self._id_generator(item)
             else:
                 source_guid = IDGenerator.generate_source_guid()

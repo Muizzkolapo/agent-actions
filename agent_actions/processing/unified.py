@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from agent_actions.processing.cascade_filter import partition_cascade_records
@@ -24,6 +23,7 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_PREFILTER_SKIP, GUARD_SKIP
+from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 if TYPE_CHECKING:
@@ -114,6 +114,15 @@ class UnifiedProcessor:
         else:
             passing, guard_results = self._guard_filter(records, context)
 
+        # First-stage records arrive without source_guid — assign a
+        # deterministic one (content hash) so the DispositionGate can match
+        # them to checkpointed dispositions across runs.  UUID5 from content
+        # ensures the same input record gets the same guid every time.
+        if context.is_first_stage:
+            for record in passing:
+                if not record.get("source_guid"):
+                    record["source_guid"] = IDGenerator.generate_content_hash(record)
+
         carry_results: list[ProcessingResult] = []
         if self._disposition_gate is not None and passing:
             to_process, carry_ids = self._disposition_gate.filter(passing, context.action_name)
@@ -194,23 +203,13 @@ class UnifiedProcessor:
 
     @staticmethod
     def _get_carry_forward_path(context: ProcessingContext) -> str | None:
-        """Derive relative_path for read_target from ProcessingContext.
+        """Derive relative_path for read_target from ProcessingContext."""
+        from agent_actions.processing.record_helpers import derive_relative_path
 
-        Mirrors FileWriter.write_target() path resolution: if output_directory
-        is set, compute the relative path from it (preserving subdirectories).
-        Falls back to filename-only when output_directory is unavailable.
-        """
-        file_path = getattr(context, "file_path", None)
-        if not file_path:
-            return None
-        p = Path(file_path)
-        output_dir = getattr(context, "output_directory", None)
-        if output_dir:
-            try:
-                return str(p.relative_to(output_dir))
-            except ValueError:
-                pass
-        return p.name
+        return derive_relative_path(
+            getattr(context, "file_path", None),
+            getattr(context, "output_directory", None),
+        )
 
     def _guard_filter(
         self,
@@ -330,6 +329,8 @@ class UnifiedProcessor:
         Used by batch retrieve where guard filtering and strategy invocation
         happened separately (at batch submit and result processing time).
         The results flow through the shared enrichment pipeline and collector.
+        Checkpointing is intentionally disabled — batch results arrive
+        atomically and do not need mid-collection checkpoints.
 
         Args:
             results: ProcessingResult objects (from BatchResultStrategy.process).

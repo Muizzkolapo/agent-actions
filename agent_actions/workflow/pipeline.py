@@ -588,6 +588,10 @@ class ProcessingPipeline:
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
+        # Clean up checkpoint records after successful output write.
+        if self.config.storage_backend:
+            self.config.storage_backend.clear_checkpoint_records(self.config.action_name)
+
     def _select_strategy(self) -> ProcessingStrategy:
         """Select the processing strategy based on granularity and action kind."""
         if self.granularity == "file":

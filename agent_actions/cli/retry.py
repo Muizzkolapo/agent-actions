@@ -199,6 +199,9 @@ class RetryCommand:
             # Clear node-level disposition so the executor doesn't see a
             # stale action-level FAILED/SKIPPED signal.
             backend.clear_disposition(action, record_id=NODE_LEVEL_RECORD_ID)
+            # Clear checkpoint records so stale partial output from a prior
+            # interrupted run is not carried forward instead of reprocessing.
+            backend.clear_checkpoint_records(action)
 
         self.console.print(
             f"\n[cyan]Cleared {cleared} disposition(s) for {len(record_ids)} record(s) "
