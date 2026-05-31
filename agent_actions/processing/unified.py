@@ -130,11 +130,6 @@ class UnifiedProcessor:
             to_process, carry_ids = self._disposition_gate.filter(passing, context.action_name)
             if carry_ids:
                 relative_path = self._get_carry_forward_path(context)
-                print(
-                    f"[CHECKPOINT DEBUG] carry_ids={len(carry_ids)}, "
-                    f"relative_path={relative_path}, "
-                    f"has_backend={context.storage_backend is not None}"
-                )
                 if relative_path and context.storage_backend:
                     from agent_actions.processing.disposition_gate import (
                         CARRY_FORWARD_REASON,

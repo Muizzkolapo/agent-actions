@@ -84,12 +84,6 @@ class DispositionGate:
             )
 
         terminal_ids = self._terminal_ids_cache[action_name]
-        print(
-            f"[CHECKPOINT DEBUG] DispositionGate[{action_name}]: "
-            f"{len(terminal_ids)} terminal IDs, {len(records)} input records"
-        )
-        if terminal_ids:
-            print(f"[CHECKPOINT DEBUG] Terminal IDs: {list(terminal_ids)[:5]}")
         if not terminal_ids:
             return records, set()
 
@@ -103,6 +97,12 @@ class DispositionGate:
                 carry_ids.add(rid)
 
         if carry_ids:
+            import click
+
+            click.echo(
+                f"  ⏩ Resuming {action_name}: {len(carry_ids)} record(s) carried forward, "
+                f"{len(to_process)} to process"
+            )
             logger.info(
                 "Action '%s': %d record(s) carried forward, %d to process",
                 action_name,
@@ -129,12 +129,10 @@ def build_carry_forward(
     """
     try:
         prior_output = storage_backend.read_target(action_name, relative_path)
-        print(f"[CHECKPOINT DEBUG] build_carry_forward: read_target returned {len(prior_output)} records")
     except FileNotFoundError:
         # No final output yet — check for checkpointed records from an
         # interrupted run.
         prior_output = storage_backend.read_checkpoint_records(action_name, relative_path)
-        print(f"[CHECKPOINT DEBUG] build_carry_forward: checkpoint fallback returned {len(prior_output)} records")
         if prior_output:
             logger.info(
                 "Action '%s': using %d checkpointed records for carry-forward",
@@ -158,8 +156,6 @@ def build_carry_forward(
             found.append(prior_by_guid[rid])
         else:
             missing.add(rid)
-    print(f"[CHECKPOINT DEBUG] build_carry_forward: found={len(found)}, missing={len(missing)}")
-
     if missing:
         logger.warning(
             "Action '%s': %d carry-forward records not found in prior output — will reprocess",

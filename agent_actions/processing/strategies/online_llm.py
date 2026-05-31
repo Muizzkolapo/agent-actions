@@ -290,25 +290,26 @@ class OnlineLLMStrategy:
                 reason=reason,
             )
             if result.data:
-                relative_path = context.file_path
-                if relative_path and context.output_directory:
-                    from pathlib import Path
+                from agent_actions.processing.unified import UnifiedProcessor
+                from agent_actions.record.state import RecordState
 
-                    try:
-                        relative_path = str(
-                            Path(relative_path).relative_to(context.output_directory)
-                        )
-                    except ValueError:
-                        relative_path = Path(relative_path).name
-                elif relative_path:
-                    from pathlib import Path
-
-                    relative_path = Path(relative_path).name
-
+                relative_path = UnifiedProcessor._get_carry_forward_path(context)
                 if relative_path:
+                    # Stamp lifecycle state so downstream actions accept
+                    # carried-forward records without validation errors.
+                    for item in result.data:
+                        if isinstance(item, dict) and "_state" not in item:
+                            item["_state"] = RecordState.PROCESSED
                     backend.save_checkpoint_records(context.action_name, relative_path, result.data)
-            print(
-                f"[CHECKPOINT DEBUG] Saved {result.source_guid[:8]} ({disposition})"
+            # Console: user sees progress. Logger: goes to log files.
+            import click
+
+            click.echo(f"  ✓ Checkpointed {result.source_guid[:8]}... ({disposition})")
+            logger.info(
+                "[%s] Checkpointed record %s (%s)",
+                context.action_name,
+                result.source_guid,
+                disposition,
             )
         except Exception:
             logger.warning(

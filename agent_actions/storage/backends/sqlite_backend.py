@@ -111,7 +111,8 @@ class SQLiteBackend(StorageBackend):
             relative_path TEXT NOT NULL,
             source_guid TEXT,
             record_data TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(action_name, relative_path, source_guid)
         )
     """
     CHECKPOINT_INDEX_SQL = """
@@ -935,7 +936,8 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             try:
                 cursor.executemany(
-                    "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
+                    "INSERT OR REPLACE INTO checkpoint_output "
+                    "(action_name, relative_path, source_guid, record_data) "
                     "VALUES (?, ?, ?, ?)",
                     rows,
                 )
