@@ -70,12 +70,14 @@ def simulate_llm_result(record, idx):
     """Fake an LLM SUCCESS result for a record."""
     return ProcessingResult(
         status=ProcessingStatus.SUCCESS,
-        data=[{
-            "source_guid": record["source_guid"],
-            "content": {"summary": f"Summary of {record['id']}"},
-            "target_id": f"target_{idx}",
-            "node_id": ACTION_NAME,
-        }],
+        data=[
+            {
+                "source_guid": record["source_guid"],
+                "content": {"summary": f"Summary of {record['id']}"},
+                "target_id": f"target_{idx}",
+                "node_id": ACTION_NAME,
+            }
+        ],
         source_guid=record["source_guid"],
     )
 
