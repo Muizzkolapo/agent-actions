@@ -97,12 +97,6 @@ class DispositionGate:
                 carry_ids.add(rid)
 
         if carry_ids:
-            import click
-
-            click.echo(
-                f"  ⏩ Resuming {action_name}: {len(carry_ids)} record(s) carried forward, "
-                f"{len(to_process)} to process"
-            )
             logger.info(
                 "Action '%s': %d record(s) carried forward, %d to process",
                 action_name,

@@ -23,6 +23,7 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_PREFILTER_SKIP, GUARD_SKIP
+from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 if TYPE_CHECKING:
@@ -118,8 +119,6 @@ class UnifiedProcessor:
         # them to checkpointed dispositions across runs.  UUID5 from content
         # ensures the same input record gets the same guid every time.
         if context.is_first_stage:
-            from agent_actions.utils.id_generation import IDGenerator
-
             for record in passing:
                 if not record.get("source_guid"):
                     record["source_guid"] = IDGenerator.generate_content_hash(record)

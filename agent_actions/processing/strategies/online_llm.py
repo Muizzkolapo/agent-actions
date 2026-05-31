@@ -304,9 +304,6 @@ class OnlineLLMStrategy:
                     backend.save_checkpoint_records(
                         context.action_name, relative_path, checkpoint_records
                     )
-            import click
-
-            click.echo(f"  ✓ Checkpointed {result.source_guid[:8]}... ({disposition})")
             logger.info(
                 "[%s] Checkpointed record %s (%s)",
                 context.action_name,
