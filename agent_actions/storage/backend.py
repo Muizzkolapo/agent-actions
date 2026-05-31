@@ -44,6 +44,14 @@ VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 # filtered (predicate), deferred (in-flight HITL/batch).
 FAILURE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
 
+# Dispositions cleared when resuming an interrupted (RUNNING) action.
+# Includes DEFERRED because in-flight batch/HITL items must be re-submitted.
+# Excludes SUCCESS, PASSTHROUGH, FILTERED, SKIPPED so that checkpointed
+# progress survives and the DispositionGate can carry it forward.
+RUNNING_CLEAR_DISPOSITIONS = frozenset(
+    {DISPOSITION_FAILED, DISPOSITION_EXHAUSTED, DISPOSITION_DEFERRED}
+)
+
 DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | None]
 """(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
 
