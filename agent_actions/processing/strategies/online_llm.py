@@ -6,6 +6,7 @@ transform output.
 
 import json
 import logging
+import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -32,6 +33,7 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
+    derive_relative_path,
 )
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
@@ -51,7 +53,7 @@ from agent_actions.record.reasons import (
     UPSTREAM_UNPROCESSED,
 )
 from agent_actions.record.state import RecordState
-from agent_actions.storage.backend import DISPOSITION_FAILED
+from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -275,8 +277,6 @@ class OnlineLLMStrategy:
         if not backend or not result.source_guid:
             return
 
-        from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
-
         disposition = (
             DISPOSITION_SUCCESS if result.status == ProcessingStatus.SUCCESS else DISPOSITION_FAILED
         )
@@ -290,18 +290,20 @@ class OnlineLLMStrategy:
                 reason=reason,
             )
             if result.data:
-                from agent_actions.processing.unified import UnifiedProcessor
-                from agent_actions.record.state import RecordState
-
-                relative_path = UnifiedProcessor._get_carry_forward_path(context)
+                relative_path = derive_relative_path(context.file_path, context.output_directory)
                 if relative_path:
-                    # Stamp lifecycle state so downstream actions accept
-                    # carried-forward records without validation errors.
-                    for item in result.data:
-                        if isinstance(item, dict) and "_state" not in item:
-                            item["_state"] = RecordState.PROCESSED
-                    backend.save_checkpoint_records(context.action_name, relative_path, result.data)
-            # Console: user sees progress. Logger: goes to log files.
+                    # Copy records to avoid mutating result.data in-place —
+                    # downstream consumers (enrichment, collectors) hold
+                    # references to the same dicts.
+                    checkpoint_records = [
+                        {**item, "_state": RecordState.PROCESSED}
+                        if isinstance(item, dict) and "_state" not in item
+                        else item
+                        for item in result.data
+                    ]
+                    backend.save_checkpoint_records(
+                        context.action_name, relative_path, checkpoint_records
+                    )
             import click
 
             click.echo(f"  ✓ Checkpointed {result.source_guid[:8]}... ({disposition})")
@@ -311,11 +313,12 @@ class OnlineLLMStrategy:
                 result.source_guid,
                 disposition,
             )
-        except Exception:
+        except (OSError, sqlite3.Error):
             logger.warning(
                 "[%s] Checkpoint write failed for %s — will reprocess on resume",
                 context.action_name,
                 result.source_guid,
+                exc_info=True,
             )
 
     def process_record(

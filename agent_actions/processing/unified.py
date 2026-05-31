@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from agent_actions.processing.cascade_filter import partition_cascade_records
@@ -205,23 +204,13 @@ class UnifiedProcessor:
 
     @staticmethod
     def _get_carry_forward_path(context: ProcessingContext) -> str | None:
-        """Derive relative_path for read_target from ProcessingContext.
+        """Derive relative_path for read_target from ProcessingContext."""
+        from agent_actions.processing.record_helpers import derive_relative_path
 
-        Mirrors FileWriter.write_target() path resolution: if output_directory
-        is set, compute the relative path from it (preserving subdirectories).
-        Falls back to filename-only when output_directory is unavailable.
-        """
-        file_path = getattr(context, "file_path", None)
-        if not file_path:
-            return None
-        p = Path(file_path)
-        output_dir = getattr(context, "output_directory", None)
-        if output_dir:
-            try:
-                return str(p.relative_to(output_dir))
-            except ValueError:
-                pass
-        return p.name
+        return derive_relative_path(
+            getattr(context, "file_path", None),
+            getattr(context, "output_directory", None),
+        )
 
     def _guard_filter(
         self,

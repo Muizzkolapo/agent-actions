@@ -225,10 +225,10 @@ class StorageBackend(ABC):
         relative_path: str,
         records: list[dict[str, Any]],
     ) -> None:
-        """Append records to the checkpoint output table.
+        """Upsert records into the checkpoint output table.
 
         Used for incremental checkpointing during online processing.
-        Each call appends new records — it does NOT replace prior rows.
+        Uses INSERT OR REPLACE keyed on (action_name, relative_path, source_guid).
         """
 
     def read_checkpoint_records(

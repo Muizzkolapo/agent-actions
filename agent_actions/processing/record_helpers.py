@@ -7,11 +7,31 @@ every processing path (online, batch, FILE) behaves identically.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.content import is_version_merge
+
+
+def derive_relative_path(file_path: str | None, output_directory: str | None) -> str | None:
+    """Derive relative storage key from file_path and output_directory.
+
+    Mirrors FileWriter.write_target() path resolution: if output_directory
+    is set, compute the relative path from it.  Falls back to filename-only.
+    Returns None if file_path is not set.
+    """
+    if not file_path:
+        return None
+    p = Path(file_path)
+    if output_directory:
+        try:
+            return str(p.relative_to(output_directory))
+        except ValueError:
+            pass
+    return p.name
+
 
 # Framework fields carried from input to output when the envelope builder
 # does not manage them automatically.
