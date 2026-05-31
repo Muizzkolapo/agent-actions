@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Add incremental checkpointing for online processing — interrupted runs resume from the last checkpoint instead of reprocessing all records"
-time: 2026-05-31T053600.000000Z

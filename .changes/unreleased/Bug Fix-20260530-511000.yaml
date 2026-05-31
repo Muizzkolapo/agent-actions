@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Log provider error records (error_line_*) filtered during batch reconciliation instead of silently discarding them"
-time: 2026-05-30T05:11:00.000000Z

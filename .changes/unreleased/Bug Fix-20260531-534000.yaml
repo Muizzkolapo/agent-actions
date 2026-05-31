@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Stop re-running partially-failed actions on workflow resume — only the retry command should go back to fix partial failures"
-time: 2026-05-31T053400.000000Z
