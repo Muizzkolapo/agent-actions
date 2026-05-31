@@ -82,7 +82,6 @@ class UnifiedProcessor:
         strategy: ProcessingStrategy,
         *,
         raw_records: list[dict[str, Any]] | None = None,
-        checkpoint_interval: int = 0,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Run records through the full processing pipeline.
 
@@ -191,7 +190,7 @@ class UnifiedProcessor:
         if carry_results:
             enriched.extend(carry_results)
 
-        return self._collect(enriched, context, checkpoint_interval=checkpoint_interval)
+        return self._collect(enriched, context)
 
     @staticmethod
     def _get_carry_forward_path(context: ProcessingContext) -> str | None:
@@ -384,21 +383,14 @@ class UnifiedProcessor:
         self,
         results: list[ProcessingResult],
         context: ProcessingContext,
-        *,
-        checkpoint_interval: int = 0,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Collect results into output records with stats."""
-        checkpoint_relative_path = (
-            self._get_carry_forward_path(context) if checkpoint_interval > 0 else None
-        )
         return ResultCollector.collect_results(
             results,
             cast(dict[str, Any], context.agent_config),
             context.agent_name,
             is_first_stage=context.is_first_stage,
             storage_backend=context.storage_backend,
-            checkpoint_interval=checkpoint_interval,
-            checkpoint_relative_path=checkpoint_relative_path,
         )
 
 

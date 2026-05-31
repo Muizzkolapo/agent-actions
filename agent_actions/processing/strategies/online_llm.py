@@ -171,6 +171,11 @@ class OnlineLLMStrategy:
                 elif result.status == ProcessingStatus.FAILED:
                     failures += 1
 
+                # Checkpoint: commit this record's result to SQLite immediately
+                # so interrupted runs can resume from where they left off.
+                if context.storage_backend and result.source_guid:
+                    self._checkpoint_record(result, context)
+
                 if (idx + 1) % 10 == 0 or (idx + 1) == len(records):
                     fire_event(
                         BatchProcessingProgressEvent(
@@ -258,6 +263,62 @@ class OnlineLLMStrategy:
         )
 
         return results
+
+    @staticmethod
+    def _checkpoint_record(result: ProcessingResult, context: ProcessingContext) -> None:
+        """Write a single record's disposition and output to SQLite immediately.
+
+        Called after each record's LLM call completes so that interrupted
+        runs can resume via the DispositionGate carry-forward path.
+        """
+        backend = context.storage_backend
+        if not backend or not result.source_guid:
+            return
+
+        from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
+
+        disposition = (
+            DISPOSITION_SUCCESS if result.status == ProcessingStatus.SUCCESS else DISPOSITION_FAILED
+        )
+        reason = result.error if result.status == ProcessingStatus.FAILED else None
+
+        try:
+            backend.set_disposition(
+                context.action_name,
+                result.source_guid,
+                disposition,
+                reason=reason,
+            )
+            if result.data:
+                relative_path = context.file_path
+                if relative_path and context.output_directory:
+                    from pathlib import Path
+
+                    try:
+                        relative_path = str(
+                            Path(relative_path).relative_to(context.output_directory)
+                        )
+                    except ValueError:
+                        relative_path = Path(relative_path).name
+                elif relative_path:
+                    from pathlib import Path
+
+                    relative_path = Path(relative_path).name
+
+                if relative_path:
+                    backend.save_checkpoint_records(context.action_name, relative_path, result.data)
+            logger.info(
+                "[%s] Checkpointed record %s (%s)",
+                context.action_name,
+                result.source_guid,
+                disposition,
+            )
+        except Exception:
+            logger.warning(
+                "[%s] Checkpoint write failed for %s — will reprocess on resume",
+                context.action_name,
+                result.source_guid,
+            )
 
     def process_record(
         self, item: Any, context: ProcessingContext, *, skip_guard: bool = False

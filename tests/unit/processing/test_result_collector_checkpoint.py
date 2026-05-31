@@ -1,15 +1,24 @@
-"""Tests for checkpoint flush in collect_results_from_processing_results.
+"""Tests for per-record checkpoint in OnlineLLMStrategy._checkpoint_record.
 
-Uses a real SQLite backend to verify that checkpointed records and
-dispositions actually survive in the database — not just that methods
-were called on a mock.
+Uses a real SQLite backend to verify that checkpointed dispositions and
+output records actually persist in the database after each LLM call.
 """
 
 import pytest
 
-from agent_actions.processing.result_collector import collect_results_from_processing_results
-from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
+from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+
+def _make_context(backend, action_name="action_a", file_path="output.json", output_dir="/out"):
+    return ProcessingContext(
+        agent_config={},
+        agent_name=action_name,
+        storage_backend=backend,
+        file_path=f"{output_dir}/{file_path}",
+        output_directory=output_dir,
+    )
 
 
 def _make_success_result(guid: str) -> ProcessingResult:
@@ -20,8 +29,13 @@ def _make_success_result(guid: str) -> ProcessingResult:
     )
 
 
-def _make_results(n: int) -> list[ProcessingResult]:
-    return [_make_success_result(f"r{i}") for i in range(n)]
+def _make_failed_result(guid: str, error: str = "LLM error") -> ProcessingResult:
+    return ProcessingResult(
+        status=ProcessingStatus.FAILED,
+        data=[],
+        source_guid=guid,
+        error=error,
+    )
 
 
 @pytest.fixture()
@@ -34,107 +48,94 @@ def backend(tmp_path):
     return db
 
 
-class TestCheckpointWithRealSQLite:
-    """Checkpoint flushing with real SQLite — data actually persists."""
+class TestCheckpointRecord:
+    """Per-record checkpoint writes disposition + output to SQLite."""
 
-    def test_checkpointed_dispositions_survive_in_db(self, backend):
-        """After checkpoint, SUCCESS dispositions are queryable from SQLite."""
-        results = _make_results(60)
+    def test_success_writes_disposition_and_output(self, backend):
+        """A successful record writes SUCCESS disposition and checkpoint output."""
+        ctx = _make_context(backend)
+        result = _make_success_result("r0")
 
-        collect_results_from_processing_results(
-            results,
-            "action_a",
-            storage_backend=backend,
-            checkpoint_interval=25,
-            checkpoint_relative_path="output.json",
-        )
+        OnlineLLMStrategy._checkpoint_record(result, ctx)
 
-        # All 60 records should have SUCCESS dispositions in the DB
         terminal_ids = backend.get_terminal_record_ids("action_a")
-        assert len(terminal_ids) == 60
-        for i in range(60):
-            assert f"r{i}" in terminal_ids
+        assert "r0" in terminal_ids
 
-    def test_checkpointed_records_survive_in_db(self, backend):
-        """After checkpoint, output records are readable from checkpoint table."""
-        results = _make_results(60)
-
-        collect_results_from_processing_results(
-            results,
-            "action_a",
-            storage_backend=backend,
-            checkpoint_interval=25,
-            checkpoint_relative_path="output.json",
-        )
-
-        # All 60 records should be in the checkpoint table
         records = backend.read_checkpoint_records("action_a", "output.json")
-        assert len(records) == 60
-        guids = {r["source_guid"] for r in records}
-        assert guids == {f"r{i}" for i in range(60)}
+        assert len(records) == 1
+        assert records[0]["source_guid"] == "r0"
 
-    def test_simulated_interrupt_preserves_first_50(self, backend):
-        """Simulate: process 75, checkpoint at 50, 'crash' before final write.
+    def test_failed_writes_disposition_no_output(self, backend):
+        """A failed record writes FAILED disposition but no checkpoint output (data=[])."""
+        ctx = _make_context(backend)
+        result = _make_failed_result("r0")
 
-        The first 50 records should be recoverable from checkpoint table,
-        and their dispositions should be in SQLite.
-        """
-        results = _make_results(75)
+        OnlineLLMStrategy._checkpoint_record(result, ctx)
 
-        # Process only the first 50 by using checkpoint_interval=50
-        # and simulating that the process was interrupted after the
-        # first checkpoint but before completion.
-        # We do this by running 50 records through with checkpoint_interval=50.
-        collect_results_from_processing_results(
-            results[:50],
-            "action_a",
-            storage_backend=backend,
-            checkpoint_interval=50,
-            checkpoint_relative_path="output.json",
-        )
+        # FAILED is not gate-terminal, so it won't show in get_terminal_record_ids
+        disps = backend.get_disposition("action_a", record_id="r0")
+        assert len(disps) == 1
+        assert disps[0]["disposition"] == "failed"
 
-        # 50 dispositions in DB
+        # No output records (data was empty)
+        records = backend.read_checkpoint_records("action_a", "output.json")
+        assert len(records) == 0
+
+    def test_multiple_records_accumulate(self, backend):
+        """Multiple checkpoint writes append to the checkpoint table."""
+        ctx = _make_context(backend)
+
+        for i in range(5):
+            result = _make_success_result(f"r{i}")
+            OnlineLLMStrategy._checkpoint_record(result, ctx)
+
         terminal_ids = backend.get_terminal_record_ids("action_a")
-        assert len(terminal_ids) == 50
+        assert len(terminal_ids) == 5
 
-        # 50 records in checkpoint table
-        checkpointed = backend.read_checkpoint_records("action_a", "output.json")
-        assert len(checkpointed) == 50
+        records = backend.read_checkpoint_records("action_a", "output.json")
+        assert len(records) == 5
+        assert {r["source_guid"] for r in records} == {f"r{i}" for i in range(5)}
 
-        # Records 50-74 are NOT in the DB (they weren't processed)
-        for i in range(50, 75):
-            assert f"r{i}" not in terminal_ids
+    def test_simulated_interrupt_preserves_completed(self, backend):
+        """Simulate: 3 records to process, checkpoint 2, 'crash' before 3rd.
 
-    def test_clear_checkpoint_after_completion(self, backend):
+        The first 2 records should be recoverable.
+        """
+        ctx = _make_context(backend)
+
+        # Process and checkpoint records 0 and 1
+        for i in range(2):
+            result = _make_success_result(f"r{i}")
+            OnlineLLMStrategy._checkpoint_record(result, ctx)
+
+        # "Crash" before record 2 — don't checkpoint it
+
+        terminal_ids = backend.get_terminal_record_ids("action_a")
+        assert terminal_ids == {"r0", "r1"}
+        assert "r2" not in terminal_ids
+
+        records = backend.read_checkpoint_records("action_a", "output.json")
+        assert len(records) == 2
+
+    def test_clear_after_completion(self, backend):
         """clear_checkpoint_records removes all checkpoint data."""
-        results = _make_results(50)
+        ctx = _make_context(backend)
 
-        collect_results_from_processing_results(
-            results,
-            "action_a",
-            storage_backend=backend,
-            checkpoint_interval=25,
-            checkpoint_relative_path="output.json",
-        )
+        for i in range(3):
+            OnlineLLMStrategy._checkpoint_record(_make_success_result(f"r{i}"), ctx)
 
-        assert len(backend.read_checkpoint_records("action_a", "output.json")) == 50
+        assert len(backend.read_checkpoint_records("action_a", "output.json")) == 3
 
         backend.clear_checkpoint_records("action_a")
         assert len(backend.read_checkpoint_records("action_a", "output.json")) == 0
 
-    def test_no_checkpoint_when_interval_zero(self, backend):
-        """Default: single batch write, no checkpoint records."""
-        results = _make_results(50)
+    def test_no_checkpoint_without_backend(self, backend):
+        """No crash when storage_backend is None."""
+        ctx = _make_context(backend)
+        ctx.storage_backend = None
 
-        collect_results_from_processing_results(
-            results,
-            "action_a",
-            storage_backend=backend,
-            checkpoint_interval=0,
-        )
+        result = _make_success_result("r0")
+        OnlineLLMStrategy._checkpoint_record(result, ctx)
 
-        # Dispositions exist (written in tail flush)
-        assert len(backend.get_terminal_record_ids("action_a")) == 50
-
-        # No checkpoint records (feature disabled)
+        # Nothing written (no backend)
         assert backend.read_checkpoint_records("action_a", "output.json") == []

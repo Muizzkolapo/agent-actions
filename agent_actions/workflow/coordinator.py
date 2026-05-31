@@ -282,6 +282,7 @@ class AgentWorkflow:
                 self.storage_backend.delete_target(action_name)
                 self.storage_backend.clear_disposition(action_name)
                 self.storage_backend.clear_prompt_traces(action_name)
+                self.storage_backend.clear_checkpoint_records(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
 
