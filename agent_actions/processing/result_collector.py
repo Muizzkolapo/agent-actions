@@ -327,6 +327,8 @@ def collect_results_from_processing_results(
     *,
     storage_backend: Optional["StorageBackend"] = None,
     agent_config: dict[str, Any] | None = None,
+    checkpoint_interval: int = 0,
+    checkpoint_relative_path: str | None = None,
 ) -> tuple[list[dict[str, Any]], CollectionStats]:
     """Shared collect logic for both online and batch retrieve paths.
 
@@ -341,6 +343,10 @@ def collect_results_from_processing_results(
             and guard metadata in completion events). Pass ``None`` when
             calling from batch retrieve — exhausted-raise is not applicable
             and guard metadata is absent.
+        checkpoint_interval: Flush dispositions and append output records
+            to the checkpoint table every N records.  0 (default) disables.
+        checkpoint_relative_path: Storage key for checkpoint output.
+            Required when checkpoint_interval > 0.
 
     Returns:
         Tuple of (output_records, stats). Stats contain counts by status.
@@ -365,6 +371,7 @@ def collect_results_from_processing_results(
     output: list[dict[str, Any]] = []
     stats: collections.Counter[str] = collections.Counter()
     pending_dispositions: list[DispositionRow] = []
+    last_checkpoint_len = 0
 
     for idx, result in enumerate(results):
         status = result.status
@@ -685,7 +692,35 @@ def collect_results_from_processing_results(
         else:
             logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
 
-    # Flush all accumulated dispositions in a single transaction.
+        # Periodic checkpoint: flush dispositions and append new output records
+        # to the checkpoint table so interrupted runs can resume.
+        # Disposition flush and output append are gated independently —
+        # a checkpoint boundary with no new dispositions still saves output.
+        if checkpoint_interval > 0 and storage_backend and (idx + 1) % checkpoint_interval == 0:
+            try:
+                if pending_dispositions:
+                    storage_backend.set_dispositions_batch(pending_dispositions)
+                    pending_dispositions.clear()
+                if checkpoint_relative_path and len(output) > last_checkpoint_len:
+                    storage_backend.save_checkpoint_records(
+                        action_name, checkpoint_relative_path, output[last_checkpoint_len:]
+                    )
+                    last_checkpoint_len = len(output)
+                logger.info(
+                    "[%s] Checkpoint at record %d/%d",
+                    action_name,
+                    idx + 1,
+                    len(results),
+                )
+            except Exception:
+                logger.exception(
+                    "[%s] Checkpoint flush failed at record %d/%d",
+                    action_name,
+                    idx + 1,
+                    len(results),
+                )
+
+    # Flush remaining dispositions (tail after last checkpoint, or all if no checkpointing).
     if storage_backend and pending_dispositions:
         try:
             storage_backend.set_dispositions_batch(pending_dispositions)
@@ -695,6 +730,19 @@ def collect_results_from_processing_results(
                 len(pending_dispositions),
                 action_name,
             )
+    # Append any remaining output records to the checkpoint table.
+    if (
+        checkpoint_interval > 0
+        and storage_backend
+        and checkpoint_relative_path
+        and len(output) > last_checkpoint_len
+    ):
+        try:
+            storage_backend.save_checkpoint_records(
+                action_name, checkpoint_relative_path, output[last_checkpoint_len:]
+            )
+        except Exception:
+            logger.exception("[%s] Final checkpoint append failed", action_name)
 
     guard_config = effective_config.get("guard", {})
     guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""
@@ -759,6 +807,8 @@ class ResultCollector:
         *,
         is_first_stage: bool,
         storage_backend: Optional["StorageBackend"] = None,
+        checkpoint_interval: int = 0,
+        checkpoint_relative_path: str | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Flatten ProcessingResult entries into output records.
 
@@ -776,6 +826,8 @@ class ResultCollector:
             agent_name,
             storage_backend=storage_backend,
             agent_config=agent_config,
+            checkpoint_interval=checkpoint_interval,
+            checkpoint_relative_path=checkpoint_relative_path,
         )
 
     @staticmethod

@@ -219,6 +219,37 @@ class StorageBackend(ABC):
         """Delete matching disposition records. Returns count deleted."""
         return 0
 
+    def save_checkpoint_records(  # noqa: B027
+        self,
+        action_name: str,
+        relative_path: str,
+        records: list[dict[str, Any]],
+    ) -> None:
+        """Append records to the checkpoint output table.
+
+        Used for incremental checkpointing during online processing.
+        Each call appends new records — it does NOT replace prior rows.
+        """
+
+    def read_checkpoint_records(
+        self,
+        action_name: str,
+        relative_path: str,
+    ) -> list[dict[str, Any]]:
+        """Read all checkpointed records for an action/path."""
+        return []
+
+    def clear_checkpoint_records(  # noqa: B027
+        self,
+        action_name: str,
+        relative_path: str | None = None,
+    ) -> None:
+        """Delete checkpoint records for an action after successful completion.
+
+        If relative_path is provided, only records for that path are cleared.
+        Otherwise all checkpoint records for the action are removed.
+        """
+
     def get_failed_items(self, action_name: str) -> list[dict[str, Any]]:
         """Return item-level failure dispositions, excluding node-level sentinels."""
         return [

@@ -104,6 +104,21 @@ class SQLiteBackend(StorageBackend):
         CREATE INDEX IF NOT EXISTS idx_trace_action_record ON prompt_trace(action_name, record_id)
     """
 
+    CHECKPOINT_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS checkpoint_output (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action_name TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            source_guid TEXT,
+            record_data TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    CHECKPOINT_INDEX_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_checkpoint_action
+        ON checkpoint_output(action_name, relative_path)
+    """
+
     _MAX_TRACE_FIELD_SIZE = 1_048_576  # 1MB
 
     # Required columns per table — schema enforcement drops tables missing any.
@@ -239,6 +254,8 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
+                cursor.execute(self.CHECKPOINT_TABLE_SQL)
+                cursor.execute(self.CHECKPOINT_INDEX_SQL)
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -888,6 +905,98 @@ class SQLiteBackend(StorageBackend):
                     },
                 )
                 raise
+
+    # ------------------------------------------------------------------
+    # Checkpoint output (incremental online processing)
+    # ------------------------------------------------------------------
+
+    def save_checkpoint_records(
+        self,
+        action_name: str,
+        relative_path: str,
+        records: list[dict[str, Any]],
+    ) -> None:
+        """Append records to the checkpoint output table."""
+        if not records:
+            return
+        action_name = self._validate_identifier(action_name, "action_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
+
+        rows = [
+            (
+                action_name,
+                relative_path,
+                r.get("source_guid", ""),
+                json.dumps(r, ensure_ascii=False),
+            )
+            for r in records
+        ]
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.executemany(
+                    "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
+                    "VALUES (?, ?, ?, ?)",
+                    rows,
+                )
+                self.connection.commit()
+                logger.debug(
+                    "Checkpointed %d records for %s/%s",
+                    len(records),
+                    action_name,
+                    relative_path,
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to save checkpoint records: %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                raise
+
+    def read_checkpoint_records(
+        self,
+        action_name: str,
+        relative_path: str,
+    ) -> list[dict[str, Any]]:
+        """Read all checkpointed records for an action/path."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT record_data FROM checkpoint_output "
+                "WHERE action_name = ? AND relative_path = ? ORDER BY id",
+                (action_name, relative_path),
+            )
+            return [json.loads(row["record_data"]) for row in cursor.fetchall()]
+
+    def clear_checkpoint_records(self, action_name: str, relative_path: str | None = None) -> None:
+        """Delete checkpoint records for an action (optionally scoped to one path)."""
+        action_name = self._validate_identifier(action_name, "action_name")
+
+        query = "DELETE FROM checkpoint_output WHERE action_name = ?"
+        params: list[str] = [action_name]
+        if relative_path is not None:
+            relative_path = self._validate_identifier(relative_path, "relative_path")
+            query += " AND relative_path = ?"
+            params.append(relative_path)
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(query, params)
+            deleted = cursor.rowcount
+            self.connection.commit()
+            if deleted > 0:
+                logger.debug(
+                    "Cleared %d checkpoint records for %s",
+                    deleted,
+                    action_name,
+                    extra={"workflow_name": self.workflow_name},
+                )
 
     # ------------------------------------------------------------------
     # Prompt trace tracking
