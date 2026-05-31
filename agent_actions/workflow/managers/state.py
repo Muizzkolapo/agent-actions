@@ -48,7 +48,6 @@ RETRYABLE_STATUSES: frozenset[ActionStatus] = frozenset(
         ActionStatus.SKIPPED,
         ActionStatus.RUNNING,
         ActionStatus.CHECKING_BATCH,
-        ActionStatus.COMPLETED_WITH_FAILURES,
     }
 )
 

@@ -305,16 +305,16 @@ class TestResetRetryable:
         assert mgr.get_status("a") == ActionStatus.COMPLETED
         assert reset == []
 
-    def test_resets_completed_with_failures(self, tmp_path):
-        """COMPLETED_WITH_FAILURES must be retried on rerun — partial failures need reprocessing."""
+    def test_preserves_completed_with_failures(self, tmp_path):
+        """COMPLETED_WITH_FAILURES is preserved on rerun — use `retry` to fix partial failures."""
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
         mgr.update_status("a", ActionStatus.COMPLETED_WITH_FAILURES)
 
         reset = mgr.reset_retryable()
 
-        assert mgr.get_status("a") == ActionStatus.PENDING
-        assert reset == ["a"]
+        assert mgr.get_status("a") == ActionStatus.COMPLETED_WITH_FAILURES
+        assert reset == []
 
     def test_resets_checking_batch_to_pending(self, tmp_path):
         """CHECKING_BATCH from a prior crash should be retried."""
