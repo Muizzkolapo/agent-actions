@@ -114,11 +114,27 @@ class UnifiedProcessor:
         else:
             passing, guard_results = self._guard_filter(records, context)
 
+        # First-stage records arrive without source_guid — assign a
+        # deterministic one (content hash) so the DispositionGate can match
+        # them to checkpointed dispositions across runs.  UUID5 from content
+        # ensures the same input record gets the same guid every time.
+        if context.is_first_stage:
+            from agent_actions.utils.id_generation import IDGenerator
+
+            for record in passing:
+                if not record.get("source_guid"):
+                    record["source_guid"] = IDGenerator.generate_content_hash(record)
+
         carry_results: list[ProcessingResult] = []
         if self._disposition_gate is not None and passing:
             to_process, carry_ids = self._disposition_gate.filter(passing, context.action_name)
             if carry_ids:
                 relative_path = self._get_carry_forward_path(context)
+                print(
+                    f"[CHECKPOINT DEBUG] carry_ids={len(carry_ids)}, "
+                    f"relative_path={relative_path}, "
+                    f"has_backend={context.storage_backend is not None}"
+                )
                 if relative_path and context.storage_backend:
                     from agent_actions.processing.disposition_gate import (
                         CARRY_FORWARD_REASON,

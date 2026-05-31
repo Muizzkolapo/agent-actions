@@ -307,11 +307,8 @@ class OnlineLLMStrategy:
 
                 if relative_path:
                     backend.save_checkpoint_records(context.action_name, relative_path, result.data)
-            logger.info(
-                "[%s] Checkpointed record %s (%s)",
-                context.action_name,
-                result.source_guid,
-                disposition,
+            print(
+                f"[CHECKPOINT DEBUG] Saved {result.source_guid[:8]} ({disposition})"
             )
         except Exception:
             logger.warning(
