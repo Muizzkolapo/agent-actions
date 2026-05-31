@@ -727,40 +727,41 @@ h4.md-heading { font-size: 13.5px; }
 
         /* ── Field visibility preferences (persisted in localStorage) ── */
         var FIELD_VIS_KEY = 'hitl-field-vis:' + HITL_TOKEN;
-        var fieldVisPrefs = {}; /* key: fieldLabel → true=expanded, false=collapsed */
-        var fieldVisLoaded = false;
+        var fieldVisPrefs = {};
         var fieldSettingsOpen = false;
+        var outsideClickRegistered = false;
+        var allFieldLabelsCache = null;
         function loadFieldVisPrefs() {
             try {
                 var raw = localStorage.getItem(FIELD_VIS_KEY);
                 if (raw) fieldVisPrefs = JSON.parse(raw);
             } catch(e) { fieldVisPrefs = {}; }
-            fieldVisLoaded = true;
         }
         function saveFieldVisPrefs() {
             try { localStorage.setItem(FIELD_VIS_KEY, JSON.stringify(fieldVisPrefs)); } catch(e) {}
         }
         function isFieldExpanded(label, idx) {
-            if (!fieldVisLoaded) loadFieldVisPrefs();
             if (label in fieldVisPrefs) return fieldVisPrefs[label];
-            return idx === 0; /* default: first expanded, rest collapsed */
+            return idx === 0;
         }
         function setFieldExpanded(label, expanded) {
             fieldVisPrefs[label] = expanded;
             saveFieldVisPrefs();
         }
         function setAllFieldsExpanded(expanded) {
-            getAllFieldLabels().forEach(function(label) { fieldVisPrefs[label] = expanded; });
+            getCachedFieldLabels().forEach(function(label) { fieldVisPrefs[label] = expanded; });
             saveFieldVisPrefs();
         }
-        function getAllFieldLabels() {
+        function getCachedFieldLabels() {
+            if (allFieldLabelsCache) return allFieldLabelsCache;
             var labels = {};
             records.forEach(function(rec) {
                 var display = getDisplayRecord(rec);
                 if (!display || typeof display !== 'object' || Array.isArray(display)) return;
                 buildFieldEntries(display).forEach(function(e) { labels[e.label] = true; });
             });
-            return Object.keys(labels);
+            allFieldLabelsCache = Object.keys(labels);
+            return allFieldLabelsCache;
         }
 
         /* ── Utilities ── */
@@ -1245,6 +1246,7 @@ h4.md-heading { font-size: 13.5px; }
             var btn = document.getElementById('btn-field-settings');
             if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
                 fieldSettingsOpen = false;
+                outsideClickRegistered = false;
                 document.removeEventListener('click', closeFieldSettingsOnOutsideClick);
                 renderRecordView();
             }
@@ -1378,10 +1380,14 @@ h4.md-heading { font-size: 13.5px; }
             });
 
             /* Close settings panel when clicking outside */
-            if (fieldSettingsOpen) {
+            if (fieldSettingsOpen && !outsideClickRegistered) {
+                outsideClickRegistered = true;
                 setTimeout(function() {
                     document.addEventListener('click', closeFieldSettingsOnOutsideClick);
                 }, 0);
+            } else if (!fieldSettingsOpen && outsideClickRegistered) {
+                outsideClickRegistered = false;
+                document.removeEventListener('click', closeFieldSettingsOnOutsideClick);
             }
         }
 
@@ -1650,6 +1656,7 @@ h4.md-heading { font-size: 13.5px; }
                 }
                 records = normalizeRecords(data);
                 recordDecisions = records.map(function() { return null; });
+                allFieldLabelsCache = null;
 
                 /* Restore saved state */
                 try {
@@ -1669,7 +1676,7 @@ h4.md-heading { font-size: 13.5px; }
                 } catch(stErr) { console.warn('Could not restore review state:', stErr); }
 
                 currentIndex = 0;
-                loadFieldCollapsePrefs();
+                loadFieldVisPrefs();
                 renderAll();
             } catch(error) {
                 recordView.innerHTML = '<div class="fields-empty">Error loading data: ' + esc(error.message) + '</div>';
