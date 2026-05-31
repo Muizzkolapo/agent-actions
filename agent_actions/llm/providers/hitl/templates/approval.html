@@ -202,7 +202,37 @@ button { font-family: inherit; cursor: pointer; }
 .rec-header-left { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); }
 .rec-header-left .id-val { color: var(--fg-1); font-weight: 600; font-size: 12px; }
 .rec-header-left .meta-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--fg-4); }
-.rec-header-right { font-family: var(--font-mono); font-size: 11px; color: var(--fg-4); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.rec-header-right { position: relative; display: flex; align-items: center; gap: 4px; }
+
+/* Field visibility settings panel */
+.field-settings-panel {
+    position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 50;
+    min-width: 220px; background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: var(--shadow-lg); padding: 6px 0;
+    animation: panelReveal 0.15s var(--ease-out) both;
+}
+@keyframes panelReveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.field-settings-panel .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 12px 8px; border-bottom: 1px solid var(--border);
+}
+.field-settings-panel .panel-title { font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fg-3); }
+.field-settings-panel .panel-actions { display: flex; gap: 8px; }
+.field-settings-panel .panel-action { font-family: var(--font-mono); font-size: 10px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 0; }
+.field-settings-panel .panel-action:hover { text-decoration: underline; }
+.field-settings-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; transition: background 80ms;
+}
+.field-settings-row:hover { background: var(--stone-100); }
+.field-settings-row .field-marker { display: inline-block; width: 12px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+.field-settings-row .field-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--fg-1); }
+/* Toggle switch */
+.field-toggle { position: relative; width: 28px; height: 16px; flex-shrink: 0; }
+.field-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.field-toggle .slider { position: absolute; inset: 0; background: var(--stone-300); border-radius: 8px; transition: background 150ms; cursor: pointer; }
+.field-toggle .slider::after { content: ''; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; background: white; border-radius: 50%; transition: transform 150ms var(--ease-out); }
+.field-toggle input:checked + .slider { background: var(--accent); }
+.field-toggle input:checked + .slider::after { transform: translateX(12px); }
 .rec-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .rec-status-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .rec-status-pill.pending { background: var(--info-bg); color: var(--info); }
@@ -695,6 +725,44 @@ h4.md-heading { font-size: 13.5px; }
         var showQueue = true;
         var showInspector = true;
 
+        /* ── Field visibility preferences (persisted in localStorage) ── */
+        var FIELD_VIS_KEY = 'hitl-field-vis:' + HITL_TOKEN;
+        var fieldVisPrefs = {}; /* key: fieldLabel → true=expanded, false=collapsed */
+        var fieldVisLoaded = false;
+        var fieldSettingsOpen = false;
+        function loadFieldVisPrefs() {
+            try {
+                var raw = localStorage.getItem(FIELD_VIS_KEY);
+                if (raw) fieldVisPrefs = JSON.parse(raw);
+            } catch(e) { fieldVisPrefs = {}; }
+            fieldVisLoaded = true;
+        }
+        function saveFieldVisPrefs() {
+            try { localStorage.setItem(FIELD_VIS_KEY, JSON.stringify(fieldVisPrefs)); } catch(e) {}
+        }
+        function isFieldExpanded(label, idx) {
+            if (!fieldVisLoaded) loadFieldVisPrefs();
+            if (label in fieldVisPrefs) return fieldVisPrefs[label];
+            return idx === 0; /* default: first expanded, rest collapsed */
+        }
+        function setFieldExpanded(label, expanded) {
+            fieldVisPrefs[label] = expanded;
+            saveFieldVisPrefs();
+        }
+        function setAllFieldsExpanded(expanded) {
+            getAllFieldLabels().forEach(function(label) { fieldVisPrefs[label] = expanded; });
+            saveFieldVisPrefs();
+        }
+        function getAllFieldLabels() {
+            var labels = {};
+            records.forEach(function(rec) {
+                var display = getDisplayRecord(rec);
+                if (!display || typeof display !== 'object' || Array.isArray(display)) return;
+                buildFieldEntries(display).forEach(function(e) { labels[e.label] = true; });
+            });
+            return Object.keys(labels);
+        }
+
         /* ── Utilities ── */
         function esc(s) {
             var r = '', c, str = String(s);
@@ -1172,6 +1240,37 @@ h4.md-heading { font-size: 13.5px; }
             }).join('');
         }
 
+        function closeFieldSettingsOnOutsideClick(e) {
+            var panel = document.querySelector('.field-settings-panel');
+            var btn = document.getElementById('btn-field-settings');
+            if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+                fieldSettingsOpen = false;
+                document.removeEventListener('click', closeFieldSettingsOnOutsideClick);
+                renderRecordView();
+            }
+        }
+
+        function renderFieldSettingsPanel(entries) {
+            var html = '<div class="field-settings-panel" id="field-settings-panel">';
+            html += '<div class="panel-header">';
+            html += '<span class="panel-title">Visible fields</span>';
+            html += '<div class="panel-actions">';
+            html += '<button class="panel-action" id="field-show-all" type="button">Show all</button>';
+            html += '<button class="panel-action" id="field-hide-all" type="button">Hide all</button>';
+            html += '</div></div>';
+            entries.forEach(function(entry, idx) {
+                var expanded = isFieldExpanded(entry.label, idx);
+                var markerColor = MARKER_COLORS[idx % MARKER_COLORS.length];
+                html += '<div class="field-settings-row" data-label="' + esc(entry.label) + '">';
+                html += '<span class="field-marker" style="background:' + markerColor + '"></span>';
+                html += '<span class="field-name">' + esc(entry.label) + '</span>';
+                html += '<label class="field-toggle"><input type="checkbox"' + (expanded ? ' checked' : '') + '><span class="slider"></span></label>';
+                html += '</div>';
+            });
+            html += '</div>';
+            return html;
+        }
+
         /* ── Render: Record Fields ── */
         function renderRecordView() {
             if (records.length === 0) {
@@ -1183,11 +1282,14 @@ h4.md-heading { font-size: 13.5px; }
             var status = dec ? dec.hitl_status : 'pending';
             var display = getDisplayRecord(rec);
 
+            var isObj = display && typeof display === 'object' && !Array.isArray(display);
+            var entries = isObj ? buildFieldEntries(display) : [];
+            var fieldCount = entries.length;
+
             var html = '';
             html += '<div class="rec-card status-' + status + '">';
 
             /* Record header */
-            var fieldCount = (display && typeof display === 'object' && !Array.isArray(display)) ? Object.keys(display).length : 0;
             html += '<div class="rec-header">';
             html += '<div class="rec-header-left">';
             html += '<span class="rec-status-pill ' + status + '"><span class="dot"></span> ' + status.toUpperCase() + '</span>';
@@ -1195,17 +1297,26 @@ h4.md-heading { font-size: 13.5px; }
             html += '<span class="id-val">' + (currentIndex + 1) + ' / ' + records.length + '</span>';
             if (fieldCount > 0) html += '<span class="meta-sep"></span><span style="color:var(--fg-4)">' + fieldCount + ' fields</span>';
             html += '</div>';
+            if (fieldCount > 1) {
+                html += '<div class="rec-header-right">';
+                html += '<button class="iconbtn' + (fieldSettingsOpen ? ' active' : '') + '" id="btn-field-settings" type="button" title="Field visibility">';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>';
+                html += '</button>';
+                if (fieldSettingsOpen) {
+                    html += renderFieldSettingsPanel(entries);
+                }
+                html += '</div>';
+            }
             html += '</div>';
 
-            /* Fields — all rendered uniformly, first expanded, rest collapsed */
+            /* Fields */
             html += '<div class="rec-fields">';
-            if (!display || typeof display !== 'object' || Array.isArray(display)) {
+            if (entries.length === 0) {
                 html += '<div class="fields-empty">No fields available.</div>';
             } else {
-                var entries = buildFieldEntries(display);
                 entries.forEach(function(entry, idx) {
                     var value = display[entry.key];
-                    html += renderFieldSection(entry.label, value, idx > 0, idx);
+                    html += renderFieldSection(entry.label, value, !isFieldExpanded(entry.label, idx), idx);
                 });
             }
             html += '</div>';
@@ -1215,11 +1326,63 @@ h4.md-heading { font-size: 13.5px; }
             recordView.innerHTML = html;
 
             /* Wire collapsible sections */
-            recordView.querySelectorAll('.field-section-head').forEach(function(head) {
+            recordView.querySelectorAll('.field-section').forEach(function(section) {
+                var head = section.querySelector('.field-section-head');
+                var label = section.getAttribute('data-field-label');
                 head.addEventListener('click', function() {
-                    head.parentElement.classList.toggle('collapsed');
+                    var willExpand = section.classList.contains('collapsed');
+                    section.classList.toggle('collapsed');
+                    setFieldExpanded(label, willExpand);
+                    /* Keep settings panel toggles in sync */
+                    var toggle = document.querySelector('.field-settings-row[data-label="' + label + '"] input');
+                    if (toggle) toggle.checked = willExpand;
                 });
             });
+
+            /* Wire field settings gear button */
+            var btnFieldSettings = document.getElementById('btn-field-settings');
+            if (btnFieldSettings) {
+                btnFieldSettings.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    fieldSettingsOpen = !fieldSettingsOpen;
+                    renderRecordView();
+                });
+            }
+
+            /* Wire settings panel toggle rows */
+            recordView.querySelectorAll('.field-settings-row').forEach(function(row) {
+                var label = row.getAttribute('data-label');
+                var input = row.querySelector('input');
+                row.addEventListener('click', function(e) {
+                    if (e.target === input) return; /* let checkbox handle itself */
+                    input.checked = !input.checked;
+                    input.dispatchEvent(new Event('change'));
+                });
+                input.addEventListener('change', function() {
+                    setFieldExpanded(label, input.checked);
+                    var section = recordView.querySelector('.field-section[data-field-label="' + label + '"]');
+                    if (section) section.classList.toggle('collapsed', !input.checked);
+                });
+            });
+
+            /* Wire show all / hide all links */
+            var showAllLink = document.getElementById('field-show-all');
+            var hideAllLink = document.getElementById('field-hide-all');
+            if (showAllLink) showAllLink.addEventListener('click', function() {
+                setAllFieldsExpanded(true);
+                renderRecordView();
+            });
+            if (hideAllLink) hideAllLink.addEventListener('click', function() {
+                setAllFieldsExpanded(false);
+                renderRecordView();
+            });
+
+            /* Close settings panel when clicking outside */
+            if (fieldSettingsOpen) {
+                setTimeout(function() {
+                    document.addEventListener('click', closeFieldSettingsOnOutsideClick);
+                }, 0);
+            }
         }
 
         function buildFieldEntries(display) {
@@ -1258,7 +1421,7 @@ h4.md-heading { font-size: 13.5px; }
                 bodyHtml = renderValue(value, 0);
             }
 
-            return '<div class="' + cls + '" style="animation-delay:' + (idx * 30) + 'ms">' +
+            return '<div class="' + cls + '" data-field-label="' + esc(label) + '" style="animation-delay:' + (idx * 30) + 'ms">' +
                 '<div class="field-section-head">' +
                     '<span class="chevron"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></span>' +
                     '<span class="field-marker" style="background:' + markerColor + '"></span>' +
@@ -1353,6 +1516,7 @@ h4.md-heading { font-size: 13.5px; }
             if (index < 0 || index >= records.length) return;
             currentIndex = index;
             pendingReason = null;
+            fieldSettingsOpen = false;
             renderAll();
             /* Scroll queue row into view */
             var row = queueList.querySelector('.queue-row.selected');
@@ -1505,6 +1669,7 @@ h4.md-heading { font-size: 13.5px; }
                 } catch(stErr) { console.warn('Could not restore review state:', stErr); }
 
                 currentIndex = 0;
+                loadFieldCollapsePrefs();
                 renderAll();
             } catch(error) {
                 recordView.innerHTML = '<div class="fields-empty">Error loading data: ' + esc(error.message) + '</div>';
