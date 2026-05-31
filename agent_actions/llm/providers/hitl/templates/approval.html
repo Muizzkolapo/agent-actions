@@ -731,6 +731,13 @@ h4.md-heading { font-size: 13.5px; }
         var fieldSettingsOpen = false;
         var outsideClickRegistered = false;
         var allFieldLabelsCache = null;
+        function closeFieldSettings() {
+            fieldSettingsOpen = false;
+            if (outsideClickRegistered) {
+                outsideClickRegistered = false;
+                document.removeEventListener('click', closeFieldSettingsOnOutsideClick);
+            }
+        }
         function loadFieldVisPrefs() {
             try {
                 var raw = localStorage.getItem(FIELD_VIS_KEY);
@@ -1245,9 +1252,7 @@ h4.md-heading { font-size: 13.5px; }
             var panel = document.querySelector('.field-settings-panel');
             var btn = document.getElementById('btn-field-settings');
             if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
-                fieldSettingsOpen = false;
-                outsideClickRegistered = false;
-                document.removeEventListener('click', closeFieldSettingsOnOutsideClick);
+                closeFieldSettings();
                 renderRecordView();
             }
         }
@@ -1522,7 +1527,7 @@ h4.md-heading { font-size: 13.5px; }
             if (index < 0 || index >= records.length) return;
             currentIndex = index;
             pendingReason = null;
-            fieldSettingsOpen = false;
+            closeFieldSettings();
             renderAll();
             /* Scroll queue row into view */
             var row = queueList.querySelector('.queue-row.selected');
@@ -1779,7 +1784,10 @@ h4.md-heading { font-size: 13.5px; }
                 case 's': e.preventDefault(); skipToUnreviewed(); break;
                 case 'n': e.preventDefault(); reviewerNote.focus(); break;
                 case '?': case '/': e.preventDefault(); helpOverlay.style.display = helpOverlay.style.display === 'flex' ? 'none' : 'flex'; break;
-                case 'escape': helpOverlay.style.display = 'none'; break;
+                case 'escape':
+                    if (fieldSettingsOpen) { closeFieldSettings(); renderRecordView(); }
+                    helpOverlay.style.display = 'none';
+                    break;
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
                     if (REJECTION_REASONS.length > 0) {
                         var n = parseInt(e.key, 10);
