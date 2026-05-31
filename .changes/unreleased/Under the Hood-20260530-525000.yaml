@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Remove dead code (unused methods, parameters), fix log levels, and add missing context to batch log messages"
-time: 2026-05-30T05:25:00.000000Z

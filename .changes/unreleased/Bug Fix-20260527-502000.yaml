@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Stop silently graduating records on reprompt batch submission failure; transient and permanent errors now handled distinctly with proper metadata"
-time: 2026-05-27T05:02:00.000000Z

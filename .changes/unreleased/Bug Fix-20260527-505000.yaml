@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Log recovery state corruption at error level instead of warning, catch ValueError from enum coercion"
-time: 2026-05-27T05:05:00.000000Z
