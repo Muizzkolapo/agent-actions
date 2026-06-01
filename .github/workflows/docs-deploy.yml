@@ -17,42 +17,25 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# This site is plain static HTML/CSS/JS — there is NO build step.
+# We upload the folder as-is and let GitHub Pages serve it.
 jobs:
-  build:
-    name: Build Docs
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: docs.agent-actions/package-lock.json
-
-      - name: Install dependencies
-        working-directory: docs.agent-actions
-        run: npm ci
-
-      - name: Build
-        working-directory: docs.agent-actions
-        run: npm run build
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: docs.agent-actions/build
-
   deploy:
     name: Deploy to GitHub Pages
-    needs: build
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          # the folder that contains index.html (this docs site)
+          path: docs.agent-actions
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

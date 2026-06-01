@@ -1,0 +1,132 @@
+/* ============================================================
+   agac docs — design tokens
+   "tree-command" technical docs system. Terminal-precise.
+   Charcoal + a single coral SIGNAL accent. Hairline grid.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+:root {
+  /* fonts */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* the SIGNAL — coral. used surgically. */
+  --signal: #ff5c3d;
+  --signal-hi: #ff7559;
+  --signal-dim: #d8492c;
+  --signal-soft: rgba(255, 92, 61, 0.13);
+  --signal-line: rgba(255, 92, 61, 0.42);
+
+  /* semantic (code/diff/status) */
+  --add: #54d98c;
+  --add-soft: rgba(84, 217, 140, 0.13);
+  --del: #ff5a68;
+  --del-soft: rgba(255, 90, 104, 0.12);
+  --warn: #f5b23d;
+  --info: #58a6ff;
+
+  /* radii — tight, instrument-like */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+
+  /* motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.4, 0, 0.1, 1);
+  --dur: 180ms;
+
+  /* ---- the CODE INSTRUMENT palette (fixed in both themes) ---- */
+  --code-bg: #0d1115;
+  --code-bg-raised: #11161b;
+  --code-gutter: #0a0d10;
+  --code-border: #1e262d;
+  --code-fg: #c6d0d4;
+  --code-line-hi: rgba(255, 92, 61, 0.09);
+  --tok-comment: #5b676d;
+  --tok-keyword: #ff7256;
+  --tok-string: #7ee0a0;
+  --tok-number: #74b6ff;
+  --tok-func: #cba6ff;
+  --tok-type: #ffb267;
+  --tok-punc: #8b969d;
+  --tok-prop: #9fb4bd;
+}
+
+/* ===================== DARK (primary) ===================== */
+:root, [data-theme="dark"] {
+  --bg: #0b0e10;
+  --bg-raised: #12171a;
+  --bg-sunken: #07090a;
+  --surface: #11161a;
+  --surface-2: #161c21;
+  --grid-line: rgba(255, 255, 255, 0.035);
+
+  --border: #1d242a;
+  --border-soft: #161c21;
+  --border-strong: #2b343b;
+
+  --fg-0: #e9edee;
+  --fg-1: #b7c0c4;
+  --fg-2: #828d93;
+  --fg-3: #5a6469;
+  --fg-inv: #0b0e10;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 8px 24px -8px rgba(0,0,0,0.6);
+  --shadow-lg: 0 24px 60px -16px rgba(0,0,0,0.7);
+}
+
+/* ===================== LIGHT ===================== */
+[data-theme="light"] {
+  --bg: #f3f5f4;
+  --bg-raised: #ffffff;
+  --bg-sunken: #e9ecea;
+  --surface: #ffffff;
+  --surface-2: #f6f8f7;
+  --grid-line: rgba(11, 14, 16, 0.035);
+
+  --border: #dde2df;
+  --border-soft: #e7ebe8;
+  --border-strong: #c6cdc8;
+
+  --fg-0: #11181c;
+  --fg-1: #3a444a;
+  --fg-2: #687077;
+  --fg-3: #98a0a6;
+  --fg-inv: #ffffff;
+
+  --shadow-sm: 0 1px 2px rgba(11,14,16,0.06);
+  --shadow-md: 0 10px 30px -10px rgba(11,14,16,0.14);
+  --shadow-lg: 0 28px 64px -18px rgba(11,14,16,0.22);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg-0);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--signal-soft); color: var(--fg-0); }
+
+/* shared mono micro-label */
+.caps {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* thin scrollbars */
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+*::-webkit-scrollbar-track { background: transparent; }
