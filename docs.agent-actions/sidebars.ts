@@ -50,7 +50,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'CLI',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-cli' },
           link: {
@@ -72,7 +72,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Configuration',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-configuration' },
           link: {
@@ -87,7 +87,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Context',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-context' },
           link: {
@@ -103,7 +103,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Data I/O',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-dataio' },
           link: {
@@ -120,7 +120,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Prompts',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-prompts' },
           link: {
@@ -136,7 +136,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Execution',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-execution' },
           link: {
@@ -156,7 +156,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Validation',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-validation' },
           link: {
@@ -172,7 +172,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Architecture',
-          collapsed: true,
+          collapsed: false,
           collapsible: true,
           customProps: { className: 'sidebar-item-architecture' },
           link: {
