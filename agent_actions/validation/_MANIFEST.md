@@ -1,5 +1,7 @@
 # Validation Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)** -- Three validation phases, data flow, caveats.
+
 ## Overview
 
 Validators guard every CLI command and runtime operation—from agent config

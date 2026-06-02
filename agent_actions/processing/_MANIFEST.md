@@ -1,5 +1,7 @@
 # Processing Manifest
 
+**[> Architecture Guide (ARCHITECTURE.md)](ARCHITECTURE.md)** — full data flow, record lifecycle, checkpoint/resume, ASCII diagrams.
+
 ## Overview
 
 Shared processing utilities used by batch/online runners: enrichment, error handling,

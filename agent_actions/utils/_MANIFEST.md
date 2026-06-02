@@ -1,5 +1,7 @@
 # Utils Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Overview
 
 Shared helpers for IDs, field management, metadata, lineage, UDF tooling, path

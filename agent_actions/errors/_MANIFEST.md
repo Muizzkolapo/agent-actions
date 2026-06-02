@@ -1,5 +1,7 @@
 # Errors Manifest
 
+**[> Architecture Guide (ARCHITECTURE.md)](ARCHITECTURE.md)** — error hierarchy, retry vs terminal classification, propagation patterns, invariants.
+
 ## Modules
 
 | Name | Type | Description | Signals |

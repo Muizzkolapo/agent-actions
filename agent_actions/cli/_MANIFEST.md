@@ -1,5 +1,7 @@
 # Cli Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)** -- bootstrap flow, decorator stack, error propagation, command execution flows, caveats.
+
 ## Conventions
 
 - **Read-only commands** (inspect, schema, status, preview) must pass `auto_create=False` to `ProjectPathsFactory.create_project_paths()` and omit `output_dir` from `ConfigRenderingService().render_and_load_config()` to avoid filesystem mutations.

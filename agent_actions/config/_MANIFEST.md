@@ -1,5 +1,7 @@
 # Config Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)** — config loading pipeline, two-stage validation, defaults cascade, path resolution, DI system, and 20 caveats.
+
 ## Overview
 
 What: Configuration and initialization surfaces for Agent Actions—schema models, environment

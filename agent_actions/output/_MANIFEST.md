@@ -1,5 +1,7 @@
 # Output Manifest
 
+**[> Architecture deep-dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Overview
 
 Writes processed workflow outputs (main/side files) and response artifacts while

@@ -1,5 +1,7 @@
 # Input Manifest
 
+**[> Architecture deep-dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Overview
 
 Input package centralizes context helpers, file loaders, and preprocessing pipelines

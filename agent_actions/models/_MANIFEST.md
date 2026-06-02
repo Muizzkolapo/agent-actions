@@ -1,5 +1,7 @@
 # Models Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Modules
 
 | Name | Type | Description | Signals |

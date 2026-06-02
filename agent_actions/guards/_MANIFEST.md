@@ -1,5 +1,7 @@
 # Guards
 
+**[> Architecture deep-dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 Guard expression parsing and configuration for conditional action execution.
 
 Extracted from `output/response/` to break the `config ↔ output` import cycle.
