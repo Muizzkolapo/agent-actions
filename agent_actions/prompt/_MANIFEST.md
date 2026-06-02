@@ -1,5 +1,7 @@
 # Prompt Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Overview
 
 Prompt utilities cover generation, templating, formatting, context scope helpers,

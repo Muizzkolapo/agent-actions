@@ -1,5 +1,7 @@
 # Tooling Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Overview
 
 Agent Actions tooling bundles helper packages that power documentation generation

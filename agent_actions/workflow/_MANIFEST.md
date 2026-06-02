@@ -1,5 +1,7 @@
 # Workflow Manifest
 
+**[> Architecture Guide (ARCHITECTURE.md)](ARCHITECTURE.md)** — full execution flow, status lifecycle, config pipeline, batch lifecycle, caveats.
+
 ## Overview
 
 Workflow orchestration, execution, schema services, and workspace metadata for

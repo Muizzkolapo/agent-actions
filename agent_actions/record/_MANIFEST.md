@@ -1,5 +1,7 @@
 # Record
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 Single authority for record content assembly. Every action type, granularity, and strategy converges here.
 
 ## Modules

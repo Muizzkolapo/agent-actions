@@ -1,5 +1,7 @@
 # Skills Manifest
 
+**[> Architecture deep-dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Overview
 
 Bundled skills for the Agent Actions CLI are stored under standardized directories

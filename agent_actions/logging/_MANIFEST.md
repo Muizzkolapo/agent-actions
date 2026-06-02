@@ -1,5 +1,7 @@
 # Logging Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
 ## Overview
 
 Structured logging helpers for the Agent Actions core—including configuration,

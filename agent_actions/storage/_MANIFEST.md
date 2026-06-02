@@ -1,5 +1,7 @@
 # Storage Manifest
 
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)** — table schemas, disposition system, checkpoint model, thread safety, schema migration, caveats.
+
 ## Overview
 
 Extensible storage backend module for workflow data persistence. Provides a pluggable
