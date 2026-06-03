@@ -227,25 +227,17 @@ code {
 }
 a:hover code { border-color: var(--ifm-color-primary); }
 
-/* blockquotes — terminal-inspired with left glyph bar */
+/* blockquotes — clean left border, matches the reference */
 .markdown blockquote {
-  border-left: 2px solid var(--agac-signal-line);
-  background: var(--ifm-color-emphasis-100);
-  border-radius: 0 var(--agac-r-md) var(--agac-r-md) 0;
-  padding: 16px 20px 16px 22px;
-  margin: 24px 0;
-  position: relative;
+  border-left: 2px solid var(--ifm-color-emphasis-300);
+  background: none;
+  border-radius: 0;
+  padding: 2px 0 2px 18px;
+  margin: 22px 0;
+  color: var(--ifm-color-content-secondary);
+  font-style: normal;
 }
-.markdown blockquote::before {
-  content: ">";
-  position: absolute;
-  left: -18px; top: 14px;
-  font-family: var(--agac-font-mono);
-  font-size: 14px;
-  color: var(--agac-signal-line);
-  font-weight: 600;
-}
-.markdown blockquote p { color: var(--ifm-blockquote-color); margin: 0; }
+.markdown blockquote p { margin-bottom: 8px; }
 
 /* =====================================================================
    NAVBAR
@@ -383,12 +375,16 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
 pre.prism-code, [class*="codeBlock"] pre {
   background: var(--agac-code-bg) !important;
   font-size: 13px;
+  line-height: 22px;
   font-family: var(--agac-font-mono) !important;
 }
 .theme-code-block-highlighted-line {
   background: var(--docusaurus-highlighted-code-line-bg);
   box-shadow: inset 2px 0 0 var(--agac-signal);
 }
+
+/* Token colors are defined via the custom PrismTheme in docusaurus.config.ts
+   (prism-react-renderer uses inline styles, not CSS classes). */
 
 /* =====================================================================
    ADMONITIONS  → our callouts
@@ -882,7 +878,6 @@ pre.prism-code, [class*="codeBlock"] pre {
   width: 38px; height: 38px; display: grid; place-items: center;
   border: 1px solid var(--bs); border-radius: var(--agac-r-md);
   color: var(--agac-signal); margin-bottom: 18px;
-  background: var(--agac-signal-soft);
   transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
 }
 .agac-feature:hover .agac-feature-ic {

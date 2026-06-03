@@ -1,6 +1,27 @@
-import {themes as prismThemes} from 'prism-react-renderer';
+import type {PrismTheme} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+
+// Custom agac instrument palette — matches tokens.css from the reference design.
+// prism-react-renderer applies inline styles, so CSS overrides don't work.
+const agacPrismTheme: PrismTheme = {
+  plain: {
+    color: '#c6d0d4',
+    backgroundColor: '#0d1115',
+  },
+  styles: [
+    { types: ['comment', 'prolog', 'doctype', 'cdata'], style: { color: '#5b676d', fontStyle: 'italic' as const } },
+    { types: ['keyword', 'boolean', 'important', 'atrule'], style: { color: '#ff7256' } },
+    { types: ['string', 'char', 'attr-value', 'regex', 'template-string', 'inserted', 'selector'], style: { color: '#7ee0a0' } },
+    { types: ['number'], style: { color: '#74b6ff' } },
+    { types: ['function', 'builtin'], style: { color: '#cba6ff' } },
+    { types: ['class-name', 'maybe-class-name', 'tag'], style: { color: '#ffb267' } },
+    { types: ['punctuation', 'operator', 'symbol'], style: { color: '#8b969d' } },
+    { types: ['property', 'attr-name', 'variable', 'parameter', 'constant'], style: { color: '#9fb4bd' } },
+    { types: ['deleted'], style: { color: '#ff5a68' } },
+    { types: ['changed'], style: { color: '#ffb267' } },
+  ],
+};
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -191,9 +212,9 @@ const config: Config = {
       copyright: `Copyright © ${new Date().getFullYear()} Agent Actions.`,
     },
     prism: {
-      // Both themes use dark — code blocks are always-dark (our signature)
-      theme: prismThemes.dracula,
-      darkTheme: prismThemes.dracula,
+      // Both themes use the agac instrument palette — code blocks are always-dark
+      theme: agacPrismTheme,
+      darkTheme: agacPrismTheme,
     },
     mermaid: {
       theme: {
