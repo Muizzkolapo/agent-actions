@@ -101,6 +101,7 @@ const config: Config = {
     // Enable light/dark mode toggle
     colorMode: {
       defaultMode: 'dark',
+      // Static design is dark-first; light is tuned to match its light tokens.
       disableSwitch: false,
       respectPrefersColorScheme: false,
     },
@@ -190,7 +191,8 @@ const config: Config = {
       copyright: `Copyright © ${new Date().getFullYear()} Agent Actions.`,
     },
     prism: {
-      theme: prismThemes.github,
+      // Both themes use dark — code blocks are always-dark (our signature)
+      theme: prismThemes.dracula,
       darkTheme: prismThemes.dracula,
     },
     mermaid: {

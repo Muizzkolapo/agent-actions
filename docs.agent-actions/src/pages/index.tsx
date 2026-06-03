@@ -51,6 +51,7 @@ const YAML_LINES: {h?: boolean; html: string}[] = [
   {html: ''},
   {html: '<span style="color:#9fb4bd">actions</span><span style="color:#8b969d">:</span>'},
   {html: '  <span style="color:#8b969d">-</span> <span style="color:#9fb4bd">name</span><span style="color:#8b969d">:</span> extract'},
+  {html: '    <span style="color:#9fb4bd">prompt</span><span style="color:#8b969d">:</span> <span style="color:#7ee0a0">$prompts.Extract</span>'},
   {html: '    <span style="color:#9fb4bd">schema</span><span style="color:#8b969d">:</span> facts_schema'},
   {html: '  <span style="color:#8b969d">-</span> <span style="color:#9fb4bd">name</span><span style="color:#8b969d">:</span> summarize'},
   {h: true, html: '    <span style="color:#9fb4bd">dependencies</span><span style="color:#8b969d">:</span> extract'},
@@ -64,10 +65,10 @@ const FEATURES = [
 ];
 
 const QNAV = [
-  {path: 'get-started/', t: 'Get started', d: 'Install agent-actions and run your first workflow in 30 seconds.', c: '2 docs', to: '/docs/installation'},
-  {path: 'tutorials/', t: 'Key concepts', d: 'Actions, dependencies, schemas, context scoping, and the execution DAG.', c: 'tutorial', to: '/docs/tutorials/concepts'},
-  {path: 'guides/', t: 'Design patterns', d: 'Fan-out, consensus aggregation, gating, retries, and multi-provider chains.', c: '5 guides', to: '/docs/guides/design-patterns'},
-  {path: 'reference/cli/', t: 'CLI reference', d: 'Every command and flag for the agac binary, end to end.', c: 'reference', to: '/docs/reference/cli'},
+  {path: 'get-started/', ic: IC.play, t: 'Get started', d: 'Install agent-actions and run your first workflow in 30 seconds.', c: '2 docs', to: '/docs/installation'},
+  {path: 'tutorials/', ic: IC.layers, t: 'Key concepts', d: 'Actions, dependencies, schemas, context scoping, and the execution DAG.', c: 'tutorial', to: '/docs/tutorials/concepts'},
+  {path: 'guides/', ic: IC.repeat, t: 'Design patterns', d: 'Fan-out, consensus aggregation, gating, retries, and multi-provider chains.', c: '5 guides', to: '/docs/guides/design-patterns'},
+  {path: 'reference/cli/', ic: IC.terminal, t: 'CLI reference', d: 'Every command and flag for the agac binary, end to end.', c: 'reference', to: '/docs/reference/cli'},
 ];
 
 export default function Home(): JSX.Element {
@@ -137,7 +138,7 @@ export default function Home(): JSX.Element {
                 <Link className="agac-qnav-card" to={c.to} key={c.path}>
                   <div className="agac-qnav-card-top">
                     <span className="path">{c.path}</span>
-                    {I(IC.branch)}
+                    {I(c.ic)}
                   </div>
                   <h4>{c.t}</h4>
                   <p>{c.d}</p>

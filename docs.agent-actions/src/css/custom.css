@@ -58,6 +58,7 @@
   --ifm-heading-color: #11181c;
   --ifm-color-content: #3a444a;
   --ifm-color-content-secondary: #687077;
+  --agac-fg-3: #98a0a6;
 
   --ifm-link-color: #11181c;
   --ifm-link-hover-color: var(--agac-signal-dim);
@@ -110,6 +111,7 @@
   --ifm-heading-color: #e9edee;
   --ifm-color-content: #b7c0c4;
   --ifm-color-content-secondary: #828d93;
+  --agac-fg-3: #5a6469;
 
   --ifm-link-color: #e9edee;
   --ifm-link-hover-color: var(--agac-signal-hi);
@@ -140,7 +142,38 @@
    GLOBAL
    ===================================================================== */
 html, body { -webkit-font-smoothing: antialiased; }
+html { scroll-behavior: smooth; }
 ::selection { background: var(--agac-signal-soft); }
+
+/* ---- motion primitives ---- */
+@keyframes agac-fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes agac-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes agac-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes agac-glow-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+@keyframes agac-grain {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-5%, -10%); }
+  30% { transform: translate(3%, -15%); }
+  50% { transform: translate(12%, 9%); }
+  70% { transform: translate(9%, 4%); }
+  90% { transform: translate(-1%, 7%); }
+}
+/* respect motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
 
 /* blueprint hairline grid behind everything — a fixed overlay layer at z-index -1.
    (NOT background-attachment:fixed, which mobile browsers drop — this is why
@@ -152,16 +185,37 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   pointer-events: none;
   background-image:
     linear-gradient(var(--agac-grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--agac-grid-line) 1px, transparent 1px);
   background-size: 64px 64px;
 }
+/* content sits above the grid; opaque surfaces (navbar/footer/cards) hide it,
+   transparent gutters reveal it — works in both themes via --agac-grid-line. */
+#__docusaurus { position: relative; z-index: 1; }
+
+/* film grain texture — very subtle, adds tactile depth to the flat surfaces */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -50%;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  opacity: 0.025;
+  animation: agac-grain 8s steps(10) infinite;
+}
+[data-theme='dark'] body::after { opacity: 0.04; }
 
 h1, h2, h3 { letter-spacing: -0.02em; }
 .markdown h1:first-child { font-size: var(--ifm-h1-font-size); }
+/* heading scale + rhythm — matches the static .prose */
+.markdown h2 { font-size: 25px; font-weight: 600; margin: 52px 0 18px; }
+.markdown h3 { font-size: 18px; font-weight: 600; margin: 36px 0 12px; }
+.markdown p { max-width: 68ch; }
 
 /* inline code */
 code {
@@ -169,12 +223,35 @@ code {
   border: 1px solid var(--ifm-color-emphasis-200);
   background: var(--ifm-color-emphasis-100);
   color: var(--ifm-color-primary);
+  transition: border-color 150ms ease;
 }
+a:hover code { border-color: var(--ifm-color-primary); }
+
+/* blockquotes — terminal-inspired with left glyph bar */
+.markdown blockquote {
+  border-left: 2px solid var(--agac-signal-line);
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 0 var(--agac-r-md) var(--agac-r-md) 0;
+  padding: 16px 20px 16px 22px;
+  margin: 24px 0;
+  position: relative;
+}
+.markdown blockquote::before {
+  content: ">";
+  position: absolute;
+  left: -18px; top: 14px;
+  font-family: var(--agac-font-mono);
+  font-size: 14px;
+  color: var(--agac-signal-line);
+  font-weight: 600;
+}
+.markdown blockquote p { color: var(--ifm-blockquote-color); margin: 0; }
 
 /* =====================================================================
    NAVBAR
    ===================================================================== */
-.navbar { backdrop-filter: blur(14px); }
+.navbar { backdrop-filter: blur(14px); transition: box-shadow 300ms ease; }
+.navbar--fixed-top { animation: agac-fade-in 400ms ease both; }
 .navbar__title {
   font-family: var(--agac-font-mono);
   font-weight: 600;
@@ -185,6 +262,7 @@ code {
 .navbar__link {
   font-family: var(--agac-font-mono);
   font-size: 13px;
+  transition: color 180ms ease;
 }
 .navbar__logo { height: 22px; }
 
@@ -194,6 +272,22 @@ code {
 /* search box */
 .navbar .DocSearch-Button,
 .navbar [class*="searchBox"] { font-family: var(--agac-font-mono); }
+
+/* local search modal — match the agac theme */
+[class*="searchModal"],
+[class*="searchQueryInput"] { font-family: var(--agac-font-mono); }
+[class*="searchResultItem"] { transition: background 150ms ease; }
+[class*="searchResultItemPath"] { font-family: var(--agac-font-mono); font-size: 11px; }
+
+/* =====================================================================
+   MAIN CONTENT  (constrain reading width so the TOC isn't pushed off-screen)
+   ===================================================================== */
+.theme-doc-markdown.markdown { max-width: 820px; }
+/* let flex/grid children shrink instead of forcing horizontal page overflow */
+main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
+.theme-doc-markdown { overflow-wrap: break-word; }
+/* wide tables scroll inside themselves rather than stretching the page */
+.theme-doc-markdown .table-wrapper, .markdown > table { display: block; max-width: 100%; overflow-x: auto; }
 
 /* =====================================================================
    CODE BLOCKS  (always-dark window + traffic lights)
@@ -205,38 +299,41 @@ code {
   border-radius: var(--agac-r-lg) !important;
   box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5);
   font-family: var(--agac-font-mono);
+  position: relative;
+  padding-top: 40px;            /* reserve the terminal header strip */
+  overflow: hidden;
+  transition: box-shadow 300ms ease, transform 250ms ease;
+}
+[class*="codeBlockContainer"]:hover {
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
+  transform: translateY(-1px);
 }
 
-/* header bar with a green language dot + language name (matches the static
-   site's "● bash" code header). Works on every fenced block via CSS — no swizzle. */
-[class*="codeBlockContainer"] { position: relative; }
-[class*="codeBlockContent"] { position: relative; }
-[class*="codeBlockContent"]::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 40px;
-  background: var(--agac-code-bg-raised);
-  border-bottom: 1px solid var(--agac-code-border);
-  z-index: 1;
-}
+/* terminal window header: three traffic lights (one element + box-shadow)
+   and a language label. Robust on Docusaurus's real DOM — no swizzle. */
 [class*="codeBlockContainer"]::before {
   content: "";
   position: absolute;
-  left: 17px; top: 15px;
-  width: 9px; height: 9px;
+  left: 17px; top: 16px;
+  width: 8px; height: 8px;
   border-radius: 99px;
-  background: var(--agac-add);
-  z-index: 3;
+  background: #ff5f57;
+  box-shadow: 15px 0 0 #febc2e, 30px 0 0 #28c840;
+  z-index: 4;
+  transition: box-shadow 300ms ease;
+}
+[class*="codeBlockContainer"]:hover::before {
+  box-shadow: 15px 0 0 #febc2e, 30px 0 0 #28c840, 0 0 6px rgba(255,95,87,0.5), 15px 0 6px rgba(254,188,46,0.4), 30px 0 6px rgba(40,200,64,0.4);
 }
 [class*="codeBlockContainer"]::after {
   content: "code";
   position: absolute;
-  left: 34px; top: 11px;
-  z-index: 3;
+  left: 62px; top: 12px;
+  z-index: 4;
   font-family: var(--agac-font-mono);
   font-size: 12px;
   color: var(--agac-code-fg);
+  opacity: 0.6;
 }
 [class*="codeBlockContainer"][class*="language-bash"]::after,
 [class*="codeBlockContainer"][class*="language-sh"]::after { content: "bash"; }
@@ -250,7 +347,18 @@ code {
 [class*="codeBlockContainer"][class*="language-js"]::after,
 [class*="codeBlockContainer"][class*="language-jsx"]::after { content: "javascript"; }
 [class*="codeBlockContainer"][class*="language-diff"]::after { content: "diff"; }
-pre.prism-code { padding-top: 50px !important; }
+
+/* thin divider under the header strip */
+[class*="codeBlockContent"] { position: relative; }
+[class*="codeBlockContent"]::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: 0; right: 0;
+  height: 1px;
+  background: var(--agac-code-border);
+  z-index: 3;
+}
+[class*="codeBlockContainer"] pre.prism-code { padding: 16px 20px !important; }
 
 /* copy + word-wrap buttons sit on the header bar */
 [class*="codeBlockContainer"] button[class*="copyButton"],
@@ -259,7 +367,17 @@ pre.prism-code { padding-top: 50px !important; }
   border: 1px solid var(--agac-code-border);
   color: var(--agac-code-fg);
   z-index: 4;
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
 }
+[class*="codeBlockContainer"] button[class*="copyButton"]:hover,
+[class*="codeBlockContainer"] button[class*="wordWrapButton"]:hover {
+  border-color: var(--agac-signal-line);
+  color: var(--agac-signal);
+  background: rgba(255,92,61,0.06);
+}
+
+/* code blocks fade in */
+.markdown [class*="codeBlockContainer"] { animation: agac-fade-up 500ms ease both; }
 
 /* highlighted line marker → coral bar */
 pre.prism-code, [class*="codeBlock"] pre {
@@ -282,6 +400,11 @@ pre.prism-code, [class*="codeBlock"] pre {
   box-shadow: none;
   position: relative;
   padding-left: 20px;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.theme-admonition:hover {
+  border-color: var(--ifm-color-emphasis-300);
+  box-shadow: 0 2px 8px -2px rgba(0,0,0,0.08);
 }
 .theme-admonition::before {
   content: "";
@@ -326,6 +449,8 @@ pre.prism-code, [class*="codeBlock"] pre {
   padding: 10px 14px;
 }
 .markdown table code { white-space: nowrap; }
+.markdown table tbody tr { transition: background 150ms ease; }
+.markdown table tbody tr:hover { background: var(--ifm-color-emphasis-100); }
 
 /* =====================================================================
    TABLE OF CONTENTS
@@ -336,7 +461,9 @@ pre.prism-code, [class*="codeBlock"] pre {
   position: relative;
   padding-left: 24px;
   color: var(--ifm-color-content-secondary);
+  transition: color 150ms ease, padding-left 150ms ease;
 }
+.table-of-contents .table-of-contents__link:hover { padding-left: 28px; }
 .table-of-contents .table-of-contents__link::before {
   content: "";
   position: absolute;
@@ -369,8 +496,9 @@ pre.prism-code, [class*="codeBlock"] pre {
 .pagination-nav__link {
   border: 1px solid var(--ifm-color-emphasis-200);
   border-radius: var(--agac-r-md);
+  transition: all 200ms ease;
 }
-.pagination-nav__link:hover { border-color: var(--ifm-color-emphasis-300); }
+.pagination-nav__link:hover { border-color: var(--ifm-color-emphasis-300); transform: translateY(-2px); box-shadow: 0 4px 12px -4px rgba(0,0,0,0.15); }
 .pagination-nav__sublabel {
   font-family: var(--agac-font-mono);
   font-size: 10.5px;
@@ -416,14 +544,17 @@ pre.prism-code, [class*="codeBlock"] pre {
   text-decoration: none;
   position: relative;
 }
+.agac-tree-node { transition: background 150ms ease, color 150ms ease, transform 150ms ease; }
 .agac-tree-node:hover { background: var(--ifm-color-emphasis-100); color: var(--ifm-font-color-base); }
-.agac-tree-glyph { color: var(--ifm-color-emphasis-300); white-space: pre; flex: none; }
+.agac-tree-glyph { color: var(--agac-fg-3); white-space: pre; flex: none; }
+.agac-tree-node:hover .agac-tree-glyph { color: var(--ifm-color-content-secondary); }
 .agac-tree-label { padding-left: 2px; }
 .agac-tree-node.is-dir > .agac-tree-label { color: var(--ifm-font-color-base); font-weight: 500; }
-.agac-tree-node.is-dir > .agac-tree-label::after { content: "/"; color: var(--ifm-color-emphasis-300); }
+.agac-tree-node.is-dir > .agac-tree-label::after { content: "/"; color: var(--agac-fg-3); }
 .agac-tree-node.active {
   background: var(--agac-signal-soft);
   color: var(--ifm-color-primary);
+  box-shadow: inset 0 0 12px -4px var(--agac-signal-soft);
 }
 .agac-tree-node.active .agac-tree-label { color: var(--ifm-color-primary); font-weight: 600; }
 .agac-tree-node.active::before {
@@ -436,15 +567,17 @@ pre.prism-code, [class*="codeBlock"] pre {
 .agac-tree-caret {
   margin-left: auto;
   padding-right: 8px;
-  color: var(--ifm-color-emphasis-300);
+  color: var(--agac-fg-3);
   font-size: 11px;
-  transition: transform 160ms ease;
+  opacity: 0.5;
+  transition: transform 160ms ease, opacity 160ms ease;
 }
+.agac-tree-node.is-dir:hover .agac-tree-caret { opacity: 1; }
 .agac-tree-node.open .agac-tree-caret { transform: rotate(90deg); }
 .agac-tree-arrow {
   margin-left: auto;
   padding-right: 8px;
-  color: var(--ifm-color-emphasis-300);
+  color: var(--agac-fg-3);
   font-size: 11px;
   opacity: 0;
   transition: opacity 160ms ease;
@@ -517,7 +650,7 @@ pre.prism-code, [class*="codeBlock"] pre {
 /* prose links — persistent hairline underline, coral on hover */
 .markdown a:not(.card):not(.button) {
   text-decoration: none;
-  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+  border-bottom: 1px solid var(--agac-signal-line);
   transition: color 160ms ease, border-color 160ms ease;
 }
 .markdown a:not(.card):not(.button):hover {
@@ -546,23 +679,74 @@ pre.prism-code, [class*="codeBlock"] pre {
   display: flex;
   justify-content: center;
 }
+.docusaurus-mermaid-container,
+.markdown [class*="mermaid"] {
+  transition: box-shadow 300ms ease, transform 250ms ease;
+}
+.docusaurus-mermaid-container:hover,
+.markdown [class*="mermaid"]:hover {
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
+  transform: translateY(-1px);
+}
 .docusaurus-mermaid-container svg { max-width: 100%; height: auto; }
 
 /* =====================================================================
-   FOOTER
+   FOOTER  (theme-aware — overrides Infima's footer.style:'dark' coloring
+   so it works correctly in BOTH light and dark themes)
    ===================================================================== */
 .footer {
+  /* override Infima dark-footer defaults that fight our theme tokens */
+  --ifm-footer-background-color: var(--ifm-background-surface-color);
+  --ifm-footer-color: var(--ifm-color-content);
+  --ifm-footer-title-color: var(--ifm-heading-color);
+  --ifm-footer-link-color: var(--ifm-color-content-secondary);
+  --ifm-footer-link-hover-color: var(--ifm-color-primary);
   background: var(--ifm-background-surface-color);
   border-top: 1px solid var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-content);
+  position: relative;
 }
-.footer__title {
+/* subtle top-edge glow in dark mode */
+[data-theme='dark'] .footer::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--agac-signal-line), transparent);
+  pointer-events: none;
+}
+.footer .footer__title {
   font-family: var(--agac-font-mono);
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--ifm-heading-color);
 }
-.footer__link-item { font-size: 14px; }
-.footer__copyright { font-family: var(--agac-font-mono); font-size: 12px; opacity: 0.7; }
+.footer .footer__link-item {
+  font-size: 14px;
+  color: var(--ifm-color-content-secondary);
+  transition: color 180ms ease;
+  position: relative;
+}
+.footer .footer__link-item:hover { color: var(--ifm-color-primary); }
+/* coral underline that slides in on hover */
+.footer .footer__link-item::after {
+  content: "";
+  position: absolute;
+  bottom: -2px; left: 0;
+  width: 0; height: 1px;
+  background: var(--ifm-color-primary);
+  transition: width 200ms ease;
+}
+.footer .footer__link-item:hover::after { width: 100%; }
+.footer .footer__copyright {
+  font-family: var(--agac-font-mono); font-size: 12px;
+  color: var(--ifm-color-content-secondary);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  padding-top: 24px;
+  margin-top: 8px;
+}
+.footer .footer__item { color: var(--ifm-color-content-secondary); }
 
 /* =====================================================================
    HOMEPAGE  (src/pages/index.tsx) — ported from the static site
@@ -570,41 +754,111 @@ pre.prism-code, [class*="codeBlock"] pre {
 .agac-home { --b: var(--ifm-color-emphasis-200); --bs: var(--ifm-color-emphasis-300); }
 .agac-home-inner { max-width: 1080px; margin: 0 auto; padding: 0 48px; }
 
-.agac-hero { padding: 80px 0 56px; border-bottom: 1px solid var(--b); }
+.agac-hero { padding: 88px 0 56px; border-bottom: 1px solid var(--b); position: relative; overflow: visible; }
+/* radial glow behind hero — subtle coral bloom (stronger in dark, soft in light) */
+.agac-hero::before {
+  content: "";
+  position: absolute;
+  top: -120px; left: -10%;
+  width: 60%; height: 400px;
+  background: radial-gradient(ellipse at 30% 50%, rgba(255,92,61,0.06) 0%, transparent 70%);
+  pointer-events: none;
+  animation: agac-glow-pulse 6s ease-in-out infinite;
+  z-index: -1;
+}
+[data-theme='dark'] .agac-hero::before {
+  background: radial-gradient(ellipse at 30% 50%, var(--agac-signal-soft) 0%, transparent 70%);
+}
 .agac-hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: center; }
+/* staggered hero entrance */
 .agac-eyebrow {
   display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--agac-font-mono); font-size: 12px;
   color: var(--ifm-color-content-secondary);
   border: 1px solid var(--b); background: var(--ifm-background-surface-color);
   border-radius: 99px; padding: 6px 14px; margin-bottom: 28px; white-space: nowrap;
+  animation: agac-fade-up 600ms ease both;
+  animation-delay: 100ms;
 }
-.agac-eyebrow .dot { width: 6px; height: 6px; border-radius: 99px; background: var(--agac-add); }
+.agac-eyebrow .dot {
+  width: 6px; height: 6px; border-radius: 99px; background: var(--agac-add);
+  box-shadow: 0 0 6px 1px rgba(84,217,140,0.4);
+  animation: agac-glow-pulse 2s ease-in-out infinite;
+}
 .agac-hero-title {
   font-family: var(--agac-font-display); font-weight: 600;
-  font-size: 60px; line-height: 0.98; letter-spacing: -0.04em;
+  font-size: 68px; line-height: 0.98; letter-spacing: -0.04em;
   color: var(--ifm-heading-color); margin: 0 0 24px; max-width: 16ch;
+  animation: agac-fade-up 700ms ease both;
+  animation-delay: 200ms;
 }
-.agac-hero-title .sig { color: var(--ifm-color-primary); }
+.agac-hero-title .sig {
+  color: var(--agac-signal);
+  text-shadow: 0 0 40px var(--agac-signal-soft);
+}
 .agac-hero-sub {
   font-size: 19px; line-height: 1.6; color: var(--ifm-color-content);
   max-width: 52ch; margin: 0 0 36px;
+  animation: agac-fade-up 700ms ease both;
+  animation-delay: 350ms;
 }
-.agac-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.agac-actions {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  animation: agac-fade-up 700ms ease both;
+  animation-delay: 500ms;
+}
 .agac-btn {
   display: inline-flex; align-items: center; gap: 9px; height: 44px; padding: 0 20px;
   border-radius: var(--agac-r-md); font-family: var(--agac-font-mono);
   font-size: 13.5px; font-weight: 500; cursor: pointer; text-decoration: none;
   white-space: nowrap; border: 1px solid transparent; transition: all 180ms ease;
 }
-.agac-btn-primary { background: var(--ifm-color-primary); color: #fff; }
-.agac-btn-primary:hover { background: var(--agac-signal-hi); color:#fff; transform: translateY(-1px); box-shadow: 0 8px 24px -8px var(--agac-signal-line); text-decoration: none; }
+.agac-btn-primary {
+  background: var(--agac-signal); color: #fff;
+  box-shadow: 0 0 0 0 rgba(255,92,61,0);
+  position: relative; overflow: hidden;
+}
+/* shimmer sweep on hover */
+.agac-btn-primary::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  transition: left 400ms ease;
+}
+.agac-btn-primary:hover::after { left: 100%; }
+.agac-btn-primary:hover {
+  background: var(--agac-signal-hi); color:#fff;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px -8px var(--agac-signal-line), 0 0 20px -4px rgba(255,92,61,0.3);
+  text-decoration: none;
+}
 .agac-btn-ghost { background: var(--ifm-background-surface-color); color: var(--ifm-heading-color); border-color: var(--bs); }
-.agac-btn-ghost:hover { background: var(--ifm-color-emphasis-100); color: var(--ifm-heading-color); text-decoration: none; }
+.agac-btn-ghost:hover { background: var(--ifm-color-emphasis-100); color: var(--ifm-heading-color); border-color: var(--agac-fg-3); text-decoration: none; }
 .agac-btn-ghost.copied { color: var(--agac-add); border-color: var(--agac-add); }
 
 /* hero code window */
-.agac-code { background: var(--agac-code-bg); border: 1px solid var(--agac-code-border); border-radius: var(--agac-r-lg); overflow: hidden; box-shadow: 0 8px 24px -8px rgba(0,0,0,.5); font-family: var(--agac-font-mono); }
+.agac-code {
+  background: var(--agac-code-bg); border: 1px solid var(--agac-code-border);
+  border-radius: var(--agac-r-lg); overflow: hidden;
+  box-shadow: 0 8px 24px -8px rgba(0,0,0,.5), 0 0 0 1px rgba(255,92,61,0.05);
+  font-family: var(--agac-font-mono);
+  animation: agac-fade-up 800ms ease both;
+  animation-delay: 400ms;
+  transition: box-shadow 300ms ease, transform 300ms ease;
+}
+.agac-code:hover {
+  box-shadow: 0 16px 48px -12px rgba(0,0,0,.6), 0 0 0 1px rgba(255,92,61,0.1);
+  transform: translateY(-2px);
+}
+/* blinking cursor after last code line */
+.agac-code-pre code .agac-code-line:last-child::after {
+  content: "▊";
+  color: var(--agac-signal);
+  animation: agac-cursor-blink 1.2s step-end infinite;
+  margin-left: 2px;
+  font-size: 12px;
+}
 .agac-code-head { display: flex; align-items: center; height: 42px; padding: 0 16px; gap: 8px; background: var(--agac-code-bg-raised); border-bottom: 1px solid var(--agac-code-border); }
 .agac-lights { display: flex; gap: 7px; }
 .agac-light { width: 11px; height: 11px; border-radius: 99px; }
@@ -618,10 +872,25 @@ pre.prism-code, [class*="codeBlock"] pre {
 
 /* features */
 .agac-features { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--b); }
-.agac-feature { padding: 36px 32px 40px; border-right: 1px solid var(--b); position: relative; }
+.agac-feature {
+  padding: 36px 32px 40px; border-right: 1px solid var(--b); position: relative;
+  transition: background 200ms ease;
+}
+.agac-feature:hover { background: var(--ifm-color-emphasis-100); }
 .agac-feature:last-child { border-right: none; }
-.agac-feature-ic { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--bs); border-radius: var(--agac-r-md); color: var(--ifm-color-primary); margin-bottom: 18px; }
-.agac-feature-idx { position: absolute; top: 20px; right: 24px; font-family: var(--agac-font-mono); font-size: 11px; color: var(--bs); }
+.agac-feature-ic {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border: 1px solid var(--bs); border-radius: var(--agac-r-md);
+  color: var(--agac-signal); margin-bottom: 18px;
+  background: var(--agac-signal-soft);
+  transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+.agac-feature:hover .agac-feature-ic {
+  transform: scale(1.08);
+  border-color: var(--agac-signal-line);
+  box-shadow: 0 0 16px -4px var(--agac-signal-soft);
+}
+.agac-feature-idx { position: absolute; top: 20px; right: 24px; font-family: var(--agac-font-mono); font-size: 11px; color: var(--agac-fg-3); }
 .agac-feature h3 { font-family: var(--agac-font-display); font-weight: 600; font-size: 17px; color: var(--ifm-heading-color); margin: 0 0 8px; }
 .agac-feature p { font-size: 14px; line-height: 1.6; color: var(--ifm-color-content-secondary); margin: 0; }
 
@@ -629,19 +898,46 @@ pre.prism-code, [class*="codeBlock"] pre {
 .agac-qnav { padding: 56px 0 96px; }
 .agac-qnav-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 28px; }
 .agac-qnav-title { font-family: var(--agac-font-display); font-weight: 600; font-size: 24px; letter-spacing: -0.02em; color: var(--ifm-heading-color); }
-.agac-qnav-cap { font-family: var(--agac-font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--bs); }
+.agac-qnav-cap { font-family: var(--agac-font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--agac-fg-3); }
 .agac-qnav-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.agac-qnav-card { display: flex; flex-direction: column; gap: 12px; padding: 22px 24px; border: 1px solid var(--b); border-radius: var(--agac-r-lg); background: var(--ifm-background-surface-color); text-decoration: none; transition: all 180ms ease; }
-.agac-qnav-card:hover { border-color: var(--bs); background: var(--ifm-color-emphasis-100); transform: translateY(-2px); text-decoration: none; }
+.agac-qnav-card {
+  display: flex; flex-direction: column; gap: 12px; padding: 22px 24px;
+  border: 1px solid var(--b); border-radius: var(--agac-r-lg);
+  background: var(--ifm-background-surface-color);
+  text-decoration: none; transition: all 250ms ease;
+  position: relative; overflow: hidden;
+}
+/* subtle gradient shimmer on hover */
+.agac-qnav-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% 50%, var(--agac-signal-soft) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.agac-qnav-card:hover::before { opacity: 1; }
+.agac-qnav-card:hover {
+  border-color: var(--agac-signal-line);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px -8px rgba(255,92,61,0.12);
+  text-decoration: none;
+}
 .agac-qnav-card-top { display: flex; align-items: center; justify-content: space-between; }
-.agac-qnav-card .path { font-family: var(--agac-font-mono); font-size: 12px; color: var(--ifm-color-primary); }
+.agac-qnav-card .path { font-family: var(--agac-font-mono); font-size: 12px; color: var(--agac-signal); }
+.agac-qnav-card-top svg { color: var(--agac-fg-3); }
 .agac-qnav-card h4 { font-family: var(--agac-font-display); font-weight: 600; font-size: 17px; color: var(--ifm-heading-color); margin: 0; }
 .agac-qnav-card p { font-size: 13.5px; line-height: 1.55; color: var(--ifm-color-content-secondary); margin: 0; }
-.agac-qnav-card .count { font-family: var(--agac-font-mono); font-size: 11px; color: var(--bs); }
+.agac-qnav-card .count { font-family: var(--agac-font-mono); font-size: 11px; color: var(--agac-fg-3); }
 
 @media (max-width: 980px) {
   .agac-hero-grid { grid-template-columns: 1fr; }
   .agac-features, .agac-qnav-grid { grid-template-columns: 1fr; }
   .agac-feature { border-right: none; border-bottom: 1px solid var(--b); }
   .agac-hero-title { font-size: 44px; }
+  .agac-hero::before { width: 100%; left: -20%; top: -80px; height: 300px; }
+  .agac-home-inner { padding: 0 20px; }
+  .agac-hero { padding: 56px 0 40px; }
+  .agac-qnav { padding: 40px 0 64px; }
 }
