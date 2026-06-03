@@ -282,96 +282,152 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
 .theme-doc-markdown .table-wrapper, .markdown > table { display: block; max-width: 100%; overflow-x: auto; }
 
 /* =====================================================================
-   CODE BLOCKS  (always-dark window + traffic lights)
-   token COLORS come from the custom Prism theme in docusaurus.config.ts
+   CODE BLOCKS  (always-dark "code instrument" with structured header)
+   Rendered by the swizzled CodeBlock/Layout component.
+   Token COLORS come from the custom Prism theme in docusaurus.config.ts
    ===================================================================== */
-[class*="codeBlockContainer"] {
+
+/* ---- outer container ---- */
+[class*="codeBlockContainer"].cb-instrument {
   background: var(--agac-code-bg) !important;
   border: 1px solid var(--agac-code-border);
   border-radius: var(--agac-r-lg) !important;
   box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5);
   font-family: var(--agac-font-mono);
   position: relative;
-  padding-top: 40px;            /* reserve the terminal header strip */
+  padding-top: 0;
   overflow: hidden;
   transition: box-shadow 300ms ease, transform 250ms ease;
 }
-[class*="codeBlockContainer"]:hover {
+[class*="codeBlockContainer"].cb-instrument:hover {
   box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
   transform: translateY(-1px);
 }
 
-/* terminal window header: three traffic lights (one element + box-shadow)
-   and a language label. Robust on Docusaurus's real DOM — no swizzle. */
-[class*="codeBlockContainer"]::before {
-  content: "";
-  position: absolute;
-  left: 17px; top: 16px;
-  width: 8px; height: 8px;
+/* kill inherited pseudo-elements — the old approach is gone */
+[class*="codeBlockContainer"].cb-instrument::before,
+[class*="codeBlockContainer"].cb-instrument::after { content: none !important; display: none !important; }
+
+/* ---- structured header bar ---- */
+.cb-head {
+  display: flex;
+  align-items: stretch;
+  height: 42px;
+  background: var(--agac-code-bg-raised);
+  border-bottom: 1px solid var(--agac-code-border);
+  flex-shrink: 0;
+}
+
+/* traffic lights panel */
+.cb-lights {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px 0 16px;
+  border-right: 1px solid var(--agac-code-border);
+  flex: none;
+}
+.cb-light {
+  width: 11px;
+  height: 11px;
   border-radius: 99px;
-  background: #ff5f57;
-  box-shadow: 15px 0 0 #febc2e, 30px 0 0 #28c840;
-  z-index: 4;
+  display: block;
+  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18);
   transition: box-shadow 300ms ease;
 }
-[class*="codeBlockContainer"]:hover::before {
-  box-shadow: 15px 0 0 #febc2e, 30px 0 0 #28c840, 0 0 6px rgba(255,95,87,0.5), 15px 0 6px rgba(254,188,46,0.4), 30px 0 6px rgba(40,200,64,0.4);
-}
-[class*="codeBlockContainer"]::after {
-  content: "code";
-  position: absolute;
-  left: 62px; top: 12px;
-  z-index: 4;
-  font-family: var(--agac-font-mono);
-  font-size: 12px;
+.cb-light--red   { background: #ff5f57; }
+.cb-light--amber { background: #febc2e; }
+.cb-light--green { background: #28c840; }
+/* glow on container hover */
+[class*="codeBlockContainer"].cb-instrument:hover .cb-light--red   { box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18), 0 0 6px rgba(255,95,87,0.5); }
+[class*="codeBlockContainer"].cb-instrument:hover .cb-light--amber { box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18), 0 0 6px rgba(254,188,46,0.4); }
+[class*="codeBlockContainer"].cb-instrument:hover .cb-light--green { box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18), 0 0 6px rgba(40,200,64,0.4); }
+
+/* filename / language label */
+.cb-head-name {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 12.5px;
   color: var(--agac-code-fg);
-  opacity: 0.6;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-[class*="codeBlockContainer"][class*="language-bash"]::after,
-[class*="codeBlockContainer"][class*="language-sh"]::after { content: "bash"; }
-[class*="codeBlockContainer"][class*="language-yaml"]::after { content: "yaml"; }
-[class*="codeBlockContainer"][class*="language-json"]::after { content: "json"; }
-[class*="codeBlockContainer"][class*="language-python"]::after,
-[class*="codeBlockContainer"][class*="language-py"]::after { content: "python"; }
-[class*="codeBlockContainer"][class*="language-toml"]::after { content: "toml"; }
-[class*="codeBlockContainer"][class*="language-ts"]::after,
-[class*="codeBlockContainer"][class*="language-tsx"]::after { content: "typescript"; }
-[class*="codeBlockContainer"][class*="language-js"]::after,
-[class*="codeBlockContainer"][class*="language-jsx"]::after { content: "javascript"; }
-[class*="codeBlockContainer"][class*="language-diff"]::after { content: "diff"; }
 
-/* thin divider under the header strip */
-[class*="codeBlockContent"] { position: relative; }
-[class*="codeBlockContent"]::before {
-  content: "";
-  position: absolute;
-  top: -1px; left: 0; right: 0;
-  height: 1px;
-  background: var(--agac-code-border);
-  z-index: 3;
+/* right-aligned section: chip + copy */
+.cb-head-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  flex: none;
 }
-[class*="codeBlockContainer"] pre.prism-code { padding: 16px 20px !important; }
 
-/* copy + word-wrap buttons sit on the header bar */
-[class*="codeBlockContainer"] button[class*="copyButton"],
-[class*="codeBlockContainer"] button[class*="wordWrapButton"] {
-  background: transparent;
+/* language chip badge */
+.cb-head-chip {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8b969d;
+  padding: 3px 8px;
   border: 1px solid var(--agac-code-border);
-  color: var(--agac-code-fg);
-  z-index: 4;
-  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+  border-radius: 99px;
+  white-space: nowrap;
+  line-height: 1;
 }
-[class*="codeBlockContainer"] button[class*="copyButton"]:hover,
-[class*="codeBlockContainer"] button[class*="wordWrapButton"]:hover {
-  border-color: var(--agac-signal-line);
-  color: var(--agac-signal);
-  background: rgba(255,92,61,0.06);
+
+/* copy button in header */
+.cb-head-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--agac-r-sm);
+  color: #8b969d;
+  font-family: var(--agac-font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.cb-head-btn:hover {
+  color: var(--agac-code-fg);
+  border-color: var(--agac-code-border);
+  background: var(--agac-code-bg);
+}
+.cb-head-btn--copied {
+  color: var(--agac-add) !important;
+  border-color: var(--agac-add) !important;
+}
+.cb-head-btn-label {
+  font-size: 11.5px;
+}
+
+/* ---- code body (wraps the Docusaurus <Content /> output) ---- */
+.cb-body-wrap {
+  position: relative;
+  /* rtl:ignore */
+  direction: ltr;
+}
+
+/* hide the default Docusaurus button group — we render our own copy in the header */
+.cb-instrument [class*="buttonGroup"] { display: none !important; }
+
+/* code block content area */
+.cb-instrument pre.prism-code,
+.cb-instrument [class*="codeBlock"] pre {
+  padding: 16px 20px !important;
 }
 
 /* code blocks fade in */
-.markdown [class*="codeBlockContainer"] { animation: agac-fade-up 500ms ease both; }
+.markdown [class*="codeBlockContainer"].cb-instrument { animation: agac-fade-up 500ms ease both; }
 
-/* highlighted line marker → coral bar */
+/* highlighted line marker -> coral bar */
 pre.prism-code, [class*="codeBlock"] pre {
   background: var(--agac-code-bg) !important;
   font-size: 13px;
