@@ -359,15 +359,6 @@ class RepromptService:
                 f"(validation: {self.validation_name})"
             )
 
-        if get_parse_error_marker(last_response) is not None:
-            logger.warning(
-                "[%s] Exhausted after %d attempts with persistent parse errors "
-                "— returning empty fields so downstream actions are not blocked",
-                context,
-                attempts,
-            )
-            last_response = [{}]
-
         return RepromptResult(
             response=last_response,
             executed=True,  # LLM was executed, validation just failed

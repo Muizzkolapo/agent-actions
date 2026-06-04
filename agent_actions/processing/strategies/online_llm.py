@@ -50,6 +50,8 @@ from agent_actions.record.reasons import (
     LLM_LAYER_GUARD_FILTER,
     LLM_LAYER_GUARD_SKIP,
     PREP_FAILED,
+    REPROMPT_EXHAUSTED,
+    RETRY_EXHAUSTED,
     UPSTREAM_UNPROCESSED,
 )
 from agent_actions.record.state import RecordState
@@ -63,8 +65,13 @@ def _is_empty_output(response: Any) -> bool:
     """Check if a tool/LLM response is effectively empty."""
     if response is None:
         return True
-    if isinstance(response, dict | list) and len(response) == 0:
+    if isinstance(response, dict) and len(response) == 0:
         return True
+    if isinstance(response, list):
+        if len(response) == 0:
+            return True
+        if all(isinstance(item, dict) and len(item) == 0 for item in response):
+            return True
     return False
 
 
@@ -434,18 +441,32 @@ class OnlineLLMStrategy:
         # Not executed — exhausted, filtered, or guard skip
         if not executed:
             if response is None:
-                if recovery_metadata and recovery_metadata.retry:
+                if recovery_metadata and (recovery_metadata.retry or recovery_metadata.reprompt):
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         cast(dict[str, Any], context.agent_config)
                     )
+                    if recovery_metadata.retry:
+                        tombstone_reason = RETRY_EXHAUSTED
+                        error_msg = (
+                            f"Retry exhausted after {recovery_metadata.retry.attempts} attempts"
+                        )
+                    else:
+                        reprompt = recovery_metadata.reprompt
+                        assert reprompt is not None
+                        tombstone_reason = REPROMPT_EXHAUSTED
+                        error_msg = (
+                            f"Reprompt exhausted after {reprompt.attempts} attempts "
+                            f"(validation: {reprompt.validation})"
+                        )
                     tombstone = build_exhausted_tombstone(
                         context.action_name,
                         input_record,
                         empty_content,
                         source_guid=source_guid,
+                        reason=tombstone_reason,
                     )
                     return ProcessingResult.exhausted(
-                        error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
+                        error=error_msg,
                         data=[tombstone],
                         source_guid=source_guid,
                         recovery_metadata=recovery_metadata,

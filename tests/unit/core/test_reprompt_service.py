@@ -829,8 +829,13 @@ class TestRepromptServiceParseError:
         assert "not valid JSON" in second_call_prompt
         assert "No markdown" in second_call_prompt
 
-    def test_parse_error_exhaustion_returns_empty(self):
-        """On exhaustion with persistent parse errors, return [{}] not the error dict."""
+    def test_parse_error_exhaustion_preserves_last_response(self):
+        """On exhaustion with persistent parse errors, preserve the last response as-is.
+
+        The caller (OnlineStrategy) detects exhaustion via RepromptResult.exhausted
+        and routes through the EXHAUSTED disposition path instead of treating the
+        response as SUCCESS output.
+        """
         service = RepromptService(
             validation_name="always_pass", max_attempts=2, on_exhausted="return_last"
         )
@@ -847,7 +852,7 @@ class TestRepromptServiceParseError:
         )
 
         assert llm_operation.call_count == 2
-        assert result.response == [{}]
+        assert result.response == [{"raw_response": "", "_parse_error": "Expecting value"}]
         assert result.passed is False
         assert result.exhausted is True
 

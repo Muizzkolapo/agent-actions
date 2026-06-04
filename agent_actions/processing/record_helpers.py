@@ -82,8 +82,9 @@ def build_exhausted_tombstone(
     *,
     source_guid: str | None = None,
     extra_metadata: dict[str, Any] | None = None,
+    reason: str = RETRY_EXHAUSTED,
 ) -> dict[str, Any]:
-    """Build an exhausted-retry tombstone that preserves existing content.
+    """Build an exhausted tombstone that preserves existing content.
 
     Unlike :func:`build_tombstone`, exhausted records need to carry
     the existing content (upstream namespaces) merged with an empty
@@ -96,14 +97,14 @@ def build_exhausted_tombstone(
     item = RecordEnvelope.build(action_name, empty_content, input_record)
     item["source_guid"] = source_guid
     item["metadata"] = {
-        "reason": RETRY_EXHAUSTED,
+        "reason": reason,
         "retry_exhausted": True,
         "agent_type": "tombstone",
     }
     if extra_metadata:
         item["metadata"].update(extra_metadata)
     item["_tombstone"] = True
-    item["_tombstone_reason"] = RETRY_EXHAUSTED
+    item["_tombstone_reason"] = reason
     carry_framework_fields(input_record, item, fields=("target_id",))
     return item
 
