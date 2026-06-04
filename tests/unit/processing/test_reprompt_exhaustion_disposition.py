@@ -29,6 +29,44 @@ def basic_context():
     )
 
 
+@pytest.fixture()
+def reprompt_exhausted_result():
+    """Run process_record with a reprompt-exhausted invocation result."""
+    from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
+
+    mock_invocation = MagicMock()
+    mock_invocation.invoke.return_value = InvocationResult.immediate(
+        response=None,
+        executed=False,
+        recovery=RecoveryMetadata(
+            reprompt=RepromptMetadata(
+                attempts=3,
+                passed=False,
+                validation="check_json",
+                parse_error_count=3,
+            )
+        ),
+    )
+
+    agent_config = {"name": "test_action", "intent": "test"}
+    strategy = OnlineLLMStrategy(agent_config, "test_action", invocation_strategy=mock_invocation)
+    context = ProcessingContext(agent_config=agent_config, agent_name="test_action", record_index=0)
+
+    with patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp:
+        mock_prepared = MagicMock()
+        mock_prepared.source_guid = "sg-1"
+        mock_prepared.source_snapshot = None
+        mock_prepared.original_content = {"field1": "val1"}
+        mock_prepared.guard_status = None
+        mock_tp.return_value.prepare.return_value = mock_prepared
+
+        return strategy.process_record(
+            {"content": {"field1": "val1"}, "source_guid": "sg-1"},
+            context,
+            skip_guard=False,
+        )
+
+
 class TestOnlineStrategyRepromptExhaustion:
     """Reprompt exhaustion must signal executed=False so online_llm routes to EXHAUSTED."""
 
@@ -116,131 +154,13 @@ class TestOnlineStrategyRepromptExhaustion:
 class TestProcessRecordRepromptExhaustion:
     """process_record must produce EXHAUSTED status for reprompt exhaustion."""
 
-    def test_reprompt_exhaustion_produces_exhausted_result(self):
+    def test_reprompt_exhaustion_produces_exhausted_tombstone(self, reprompt_exhausted_result):
         """When invocation returns executed=False with reprompt metadata, result is EXHAUSTED."""
-        from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
+        assert reprompt_exhausted_result.status == ProcessingStatus.EXHAUSTED
+        assert reprompt_exhausted_result.data is not None
+        assert len(reprompt_exhausted_result.data) == 1
+        assert reprompt_exhausted_result.data[0].get("_tombstone") is True
 
-        mock_invocation = MagicMock()
-        mock_invocation.invoke.return_value = InvocationResult.immediate(
-            response=None,
-            executed=False,
-            recovery=RecoveryMetadata(
-                reprompt=RepromptMetadata(
-                    attempts=3,
-                    passed=False,
-                    validation="check_json",
-                    parse_error_count=3,
-                )
-            ),
-        )
-
-        agent_config = {"name": "test_action", "intent": "test"}
-        strategy = OnlineLLMStrategy(
-            agent_config, "test_action", invocation_strategy=mock_invocation
-        )
-        context = ProcessingContext(
-            agent_config=agent_config, agent_name="test_action", record_index=0
-        )
-
-        with patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp:
-            mock_prepared = MagicMock()
-            mock_prepared.source_guid = "sg-1"
-            mock_prepared.source_snapshot = None
-            mock_prepared.original_content = {"field1": "val1"}
-            mock_prepared.guard_status = None
-            mock_tp.return_value.prepare.return_value = mock_prepared
-
-            result = strategy.process_record(
-                {"content": {"field1": "val1"}, "source_guid": "sg-1"},
-                context,
-                skip_guard=False,
-            )
-
-        assert result.status == ProcessingStatus.EXHAUSTED
-        assert result.data is not None
-        assert len(result.data) == 1
-        assert result.data[0].get("_tombstone") is True
-
-    def test_reprompt_exhaustion_not_success(self):
-        """Reprompt exhaustion must never produce SUCCESS status."""
-        from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
-
-        mock_invocation = MagicMock()
-        mock_invocation.invoke.return_value = InvocationResult.immediate(
-            response=None,
-            executed=False,
-            recovery=RecoveryMetadata(
-                reprompt=RepromptMetadata(
-                    attempts=2,
-                    passed=False,
-                    validation="check_json",
-                    parse_error_count=2,
-                )
-            ),
-        )
-
-        agent_config = {"name": "test_action", "intent": "test"}
-        strategy = OnlineLLMStrategy(
-            agent_config, "test_action", invocation_strategy=mock_invocation
-        )
-        context = ProcessingContext(
-            agent_config=agent_config, agent_name="test_action", record_index=0
-        )
-
-        with patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp:
-            mock_prepared = MagicMock()
-            mock_prepared.source_guid = "sg-1"
-            mock_prepared.source_snapshot = None
-            mock_prepared.original_content = {"field1": "val1"}
-            mock_prepared.guard_status = None
-            mock_tp.return_value.prepare.return_value = mock_prepared
-
-            result = strategy.process_record(
-                {"content": {"field1": "val1"}, "source_guid": "sg-1"},
-                context,
-                skip_guard=False,
-            )
-
-        assert result.status != ProcessingStatus.SUCCESS
-
-    def test_reprompt_exhaustion_tombstone_reason_is_reprompt(self):
+    def test_reprompt_exhaustion_tombstone_reason_is_reprompt(self, reprompt_exhausted_result):
         """Tombstone must carry _tombstone_reason='reprompt_exhausted', not 'retry_exhausted'."""
-        from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
-
-        mock_invocation = MagicMock()
-        mock_invocation.invoke.return_value = InvocationResult.immediate(
-            response=None,
-            executed=False,
-            recovery=RecoveryMetadata(
-                reprompt=RepromptMetadata(
-                    attempts=3,
-                    passed=False,
-                    validation="check_json",
-                    parse_error_count=3,
-                )
-            ),
-        )
-
-        agent_config = {"name": "test_action", "intent": "test"}
-        strategy = OnlineLLMStrategy(
-            agent_config, "test_action", invocation_strategy=mock_invocation
-        )
-        context = ProcessingContext(
-            agent_config=agent_config, agent_name="test_action", record_index=0
-        )
-
-        with patch("agent_actions.processing.strategies.online_llm.get_task_preparer") as mock_tp:
-            mock_prepared = MagicMock()
-            mock_prepared.source_guid = "sg-1"
-            mock_prepared.source_snapshot = None
-            mock_prepared.original_content = {"field1": "val1"}
-            mock_prepared.guard_status = None
-            mock_tp.return_value.prepare.return_value = mock_prepared
-
-            result = strategy.process_record(
-                {"content": {"field1": "val1"}, "source_guid": "sg-1"},
-                context,
-                skip_guard=False,
-            )
-
-        assert result.data[0]["_tombstone_reason"] == "reprompt_exhausted"
+        assert reprompt_exhausted_result.data[0]["_tombstone_reason"] == "reprompt_exhausted"
