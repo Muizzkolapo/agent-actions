@@ -43,7 +43,7 @@ def test_version_wildcard_expansion():
         "observe": ["gen_code_1.*", "gen_code_2.*", "gen_code_3.*"],
     }
 
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data,
         context_scope=context_scope,
         action_name="aggregate",
@@ -84,7 +84,7 @@ def test_version_specific_field_resolution():
         "observe": ["gen_code_1.code", "gen_code_2.code"],
     }
 
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data,
         context_scope=context_scope,
         action_name="aggregate",
@@ -134,7 +134,7 @@ def test_content_empty_fallback_trap():
         "observe": ["source.url", "upstream.*"],
     }
 
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data,
         context_scope=context_scope,
         action_name="downstream",

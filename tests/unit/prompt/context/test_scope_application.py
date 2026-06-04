@@ -105,15 +105,15 @@ class TestDropWildcard:
         # Field must NOT be removed (drop failed to parse — safe failure)
         assert prompt_context["dep"]["api_key"] == "secret"
 
-    def test_wildcard_drop_then_observe_specific_field_returns_none(self):
-        """After drop: ['dep.*'], observe: ['dep.name'] → None (U-4.2)."""
+    def test_wildcard_drop_then_observe_specific_field_raises(self):
+        """After drop: ['dep.*'], observe: ['dep.name'] → raises (contradictory config)."""
         field_context = {"dep": {"api_key": "secret", "name": "test", "value": "data"}}
-        _, llm_ctx, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"drop": ["dep.*"], "observe": ["dep.name"]},
-            action_name="test_action",
-        )
-        assert llm_ctx["dep"]["name"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"drop": ["dep.*"], "observe": ["dep.name"]},
+                action_name="test_action",
+            )
 
     def test_drop_then_observe_wildcard_excludes_dropped_field(self):
         """Existing security test: drop + observe wildcard must not leak dropped field."""
@@ -133,7 +133,7 @@ class TestDropWildcard:
 
 
 class TestFalsyFieldPassthrough:
-    """G-2: falsy values (0, "", False, None) must not be silently dropped."""
+    """Falsy values (0, "", False, None) must not be silently dropped."""
 
     def test_observe_includes_zero_value(self):
         """observe: field with value 0 must appear in llm_context."""
@@ -175,18 +175,18 @@ class TestFalsyFieldPassthrough:
         )
         assert passthrough["dep"]["enabled"] is False
 
-    def test_missing_field_returns_none(self):
-        """Fields absent from present namespace resolve to None (U-4.2)."""
+    def test_missing_field_raises_for_observe(self):
+        """Fields absent from present namespace raise RecordContextError for observe."""
         field_context = {"dep": {"other": "value"}}
-        _, llm_ctx, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"observe": ["dep.missing"]},
-            action_name="test_action",
-        )
-        assert llm_ctx["dep"]["missing"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"observe": ["dep.missing"]},
+                action_name="test_action",
+            )
 
     def test_observe_includes_explicit_none_value(self):
-        """G-2 boundary: field whose value IS None must still appear in llm_context.
+        """Field whose value IS None must still appear in llm_context.
         None is a valid observed value — only a missing field should be excluded."""
         field_context = {"dep": {"nullable_field": None}}
         _, llm_context, _ = apply_context_scope(
@@ -197,7 +197,7 @@ class TestFalsyFieldPassthrough:
         assert llm_context["dep"]["nullable_field"] is None
 
     def test_passthrough_nested_path_missing_field_returns_none(self):
-        """G-2 nested-path: missing nested field resolves to None (U-4.2)."""
+        """Missing nested field resolves to None."""
         field_context = {"dep": {"top": {"exists": 1}}}
         _, _, pt = apply_context_scope(
             field_context=field_context,

@@ -1,4 +1,4 @@
-"""Tests for null-safe observe/passthrough resolution (specs 401 + 402).
+"""Tests for null-safe observe/passthrough resolution.
 
 When a guard skips or filters an upstream action, its namespace is null
 on the record.  Downstream observe/passthrough must yield None for its
@@ -23,7 +23,7 @@ def _make_field_context(**namespaces):
 
 
 class TestObserveNullNamespace:
-    """Spec 401: observe from guard-skipped namespace yields None."""
+    """Observe from guard-skipped namespace yields None."""
 
     def test_specific_field_yields_none(self):
         """observe: ['skipped.field'] where skipped is None → field is None, no crash."""
@@ -84,17 +84,17 @@ class TestObserveNullNamespace:
 
 
 class TestObserveStrictPreserved:
-    """Observe null-safety: missing field from present namespace returns None (U-4.2)."""
+    """Observe strict: missing field from present namespace raises RecordContextError."""
 
-    def test_missing_field_from_present_namespace_returns_none(self):
-        """observe: ['dep.nonexistent'] where dep is a real dict → None (match guard semantics)."""
+    def test_missing_field_from_present_namespace_raises(self):
+        """observe: ['dep.nonexistent'] where dep is a real dict → RecordContextError."""
         fc = _make_field_context(dep={"actual_field": "value"})
-        _prompt_ctx, llm_ctx, _ = apply_context_scope(
-            field_context=fc,
-            context_scope={"observe": ["dep.nonexistent"]},
-            action_name="downstream",
-        )
-        assert llm_ctx["dep"]["nonexistent"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=fc,
+                context_scope={"observe": ["dep.nonexistent"]},
+                action_name="downstream",
+            )
 
     def test_undeclared_namespace_raises(self):
         """observe: ['ghost.field'] where ghost is not in field_context → ConfigurationError."""
@@ -111,7 +111,7 @@ class TestObserveStrictPreserved:
 
 
 class TestPassthroughNullNamespace:
-    """Spec 401/402: passthrough from guard-skipped namespace yields None."""
+    """Passthrough from guard-skipped namespace yields None."""
 
     def test_specific_field_yields_none(self):
         """passthrough: ['skipped.field'] where skipped is None → field is None."""
@@ -134,7 +134,7 @@ class TestPassthroughNullNamespace:
         assert "skipped" not in pt
 
     def test_passthrough_missing_field_returns_none(self):
-        """passthrough: ['dep.nonexistent'] from present namespace → None (U-4.2)."""
+        """passthrough: ['dep.nonexistent'] from present namespace → None."""
         fc = _make_field_context(dep={"actual": "value"})
         _prompt_ctx, _llm_ctx, pt = apply_context_scope(
             field_context=fc,
@@ -181,11 +181,11 @@ class TestGatingNullNamespace:
         assert prompt_ctx["present"]["f"] == 1
 
 
-# ── Fan-in: filter scenario (spec 402) ──────────────────────────────
+# ── Fan-in: filter scenario ──────────────────────────────────────────
 
 
 class TestFanInFilterScenario:
-    """Spec 402: fan-in where one branch was guard-filtered."""
+    """Fan-in where one branch was guard-filtered."""
 
     def test_observe_from_filtered_branch(self):
         """Action D depends on B and C; C was guard-filtered.

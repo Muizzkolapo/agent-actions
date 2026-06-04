@@ -75,12 +75,12 @@ class TestObserveDirective:
         assert llm_ctx["dep_a"]["x"] == 10
         assert llm_ctx["dep_b"]["y"] == 20
 
-    def test_observe_missing_field_returns_none(self):
-        """Missing field from present namespace resolves to None (U-4.2)."""
+    def test_observe_missing_field_raises(self):
+        """Missing field from present namespace raises RecordContextError for observe."""
         field_context = _fc(dep={"present": "yes"})
         scope = {"observe": ["dep.absent"]}
-        _, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert llm_ctx["dep"]["absent"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(field_context, scope, action_name="act")
 
     def test_observe_preserves_falsy_values(self):
         """0, False, None, '' must all survive observe extraction."""
@@ -200,12 +200,12 @@ class TestDropDirective:
         assert prompt_ctx.get("dep", {}) == {}
         assert llm_ctx.get("dep", {}) == {}
 
-    def test_drop_then_observe_specific_returns_none(self):
-        """Observing a dropped field resolves to None — secret not leaked (U-4.2)."""
+    def test_drop_then_observe_specific_raises(self):
+        """Observing a dropped field raises — secret not leaked, config contradiction detected."""
         field_context = _fc(dep={"field_a": "value"})
         scope = {"drop": ["dep.field_a"], "observe": ["dep.field_a"]}
-        _, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert llm_ctx["dep"]["field_a"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(field_context, scope, action_name="act")
 
     def test_drop_on_nonexistent_field_warns_no_crash(self):
         field_context = _fc(dep={"real": "value"})
@@ -304,7 +304,7 @@ class TestFileModeObserve:
             "dependencies": "dep",
             "context_scope": {"observe": ["dep.question", "dep.answer"]},
         }
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=agent_config["context_scope"],
             action_name="act",
@@ -327,7 +327,7 @@ class TestFileModeObserve:
             {"q": "Why?", "a": "because"},
         )
         context_scope = {"observe": ["dep.*"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="act",
@@ -351,7 +351,7 @@ class TestFileModeObserve:
             }
         ]
         context_scope = {"observe": ["dep_a.*", "dep_b.extra"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="act",
@@ -366,7 +366,9 @@ class TestFileModeObserve:
     def test_file_mode_no_observe_returns_data_unchanged(self):
         """No observe refs -> data returned as-is."""
         data = [{"content": {"dep": {"a": 1}}, "source_guid": "sg_0"}]
-        result = apply_context_scope_for_records(records=data, context_scope={}, action_name="act")
+        result, _ = apply_context_scope_for_records(
+            records=data, context_scope={}, action_name="act"
+        )
         assert result == data
 
 

@@ -5,6 +5,9 @@ structure as LLM outputs, so downstream observe references resolve
 identically regardless of source action kind.
 """
 
+import pytest
+
+from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope,
 )
@@ -90,13 +93,13 @@ class TestCrossActionToolFeedsLlm:
         )
         assert llm_ctx["tool_b"]["summary"] == "42"
 
-        # observe: ["tool_b.question_type"] → None because it's under "A", not top-level (U-4.2)
-        _, llm_ctx2, _ = apply_context_scope(
-            field_context,
-            {"observe": ["tool_b.question_type"]},
-            action_name="downstream_llm",
-        )
-        assert llm_ctx2["tool_b"]["question_type"] is None
+        # observe: ["tool_b.question_type"] → raises because field is missing from namespace
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context,
+                {"observe": ["tool_b.question_type"]},
+                action_name="downstream_llm",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +128,7 @@ class TestFileModeObserveToolUdf:
         ]
         context_scope = {"observe": ["upstream.question_type"]}
 
-        filtered = apply_context_scope_for_records(
+        filtered, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="tool_b",
