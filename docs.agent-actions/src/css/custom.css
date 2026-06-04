@@ -4,7 +4,8 @@
    Drop in at:  src/css/custom.css   (replace the file)
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+/* Fonts are loaded via docusaurus.config.ts stylesheets[] —
+   do NOT duplicate with @import (causes render-blocking double-fetch). */
 
 /* ---------- our raw palette (theme-agnostic refs) ---------- */
 :root {
@@ -19,11 +20,11 @@
   --agac-info: #58a6ff;
 
   /* the code panel is ALWAYS dark, both themes (our signature) */
-  --agac-code-bg: #0d1115;
-  --agac-code-bg-raised: #11161b;
-  --agac-code-gutter: #0a0d10;
-  --agac-code-border: #1e262d;
-  --agac-code-fg: #c6d0d4;
+  --agac-code-bg: #1a2028;
+  --agac-code-bg-raised: #1e2630;
+  --agac-code-gutter: #151b22;
+  --agac-code-border: rgba(255,255,255,0.06);
+  --agac-code-fg: #e2e8ec;
 
   --agac-font-display: 'Space Grotesk', system-ui, sans-serif;
   --agac-font-body: 'Hanken Grotesk', system-ui, sans-serif;
@@ -73,6 +74,12 @@
   --ifm-color-emphasis-100: #e9ecea;
   --ifm-color-emphasis-200: #dde2df;
   --ifm-color-emphasis-300: #c6cdc8;
+
+  /* always-dark code blocks — override Infima's light-mode pre background
+     so the v4 @layer system doesn't revert our dark panels to #f6f7f8.
+     Only pre-background (not code-background, which also hits inline code). */
+  --ifm-pre-background: var(--agac-code-bg);
+  --ifm-pre-color: var(--agac-code-fg);
 
   --ifm-heading-font-weight: 600;
   --ifm-h1-font-size: 2.6rem;
@@ -133,6 +140,10 @@
 
   --ifm-menu-color: #b7c0c4;
   --ifm-menu-color-active: var(--agac-signal);
+
+  /* always-dark code blocks — same override as light theme */
+  --ifm-pre-background: var(--agac-code-bg);
+  --ifm-pre-color: var(--agac-code-fg);
 
   --docusaurus-highlighted-code-line-bg: rgba(255, 92, 61, 0.09);
   --agac-grid-line: rgba(255, 255, 255, 0.07);
@@ -195,6 +206,23 @@ body::before {
 /* content sits above the grid; opaque surfaces (navbar/footer/cards) hide it,
    transparent gutters reveal it — works in both themes via --agac-grid-line. */
 #__docusaurus { position: relative; z-index: 1; }
+/* Ensure ALL layout wrappers are transparent so the grid shows through
+   everywhere — sidebar, main content, footer, empty space below content.
+   The grid is the page's texture; only cards/code-blocks are opaque. */
+.main-wrapper,
+[class*="docRoot"],
+[class*="docMainContainer"],
+[class*="docPage"],
+[class*="docItemWrapper"],
+[class*="docItemCol"],
+[class*="docSidebar"],
+[class*="sidebarViewContent"],
+aside[class*="sidebar"],
+nav[class*="sidebar"] {
+  background: transparent !important;
+}
+/* ensure the page fills the viewport so the grid never stops short */
+.main-wrapper { min-height: 100vh; }
 
 /* film grain texture — very subtle, adds tactile depth to the flat surfaces */
 body::after {
@@ -217,15 +245,23 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .markdown h3 { font-size: 18px; font-weight: 600; margin: 36px 0 12px; }
 .markdown p { max-width: 68ch; }
 
-/* inline code */
+/* inline code (NOT code inside pre blocks — those get always-dark treatment) */
 code {
   font-family: var(--agac-font-mono);
+}
+:not(pre) > code {
   border: 1px solid var(--ifm-color-emphasis-200);
   background: var(--ifm-color-emphasis-100);
   color: var(--ifm-color-primary);
   transition: border-color 150ms ease;
 }
 a:hover code { border-color: var(--ifm-color-primary); }
+/* code inside pre blocks must inherit the dark panel, not the inline style */
+pre code {
+  background: transparent;
+  border: none;
+  color: inherit;
+}
 
 /* blockquotes — clean left border, matches the reference */
 .markdown blockquote {
@@ -287,69 +323,95 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
    Token COLORS come from the custom Prism theme in docusaurus.config.ts
    ===================================================================== */
 
-/* ---- outer container ---- */
+/* ---- outer container: floating terminal window ---- */
 [class*="codeBlockContainer"].cb-instrument {
   background: var(--agac-code-bg) !important;
-  border: 1px solid var(--agac-code-border);
-  border-radius: var(--agac-r-lg) !important;
-  box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5);
+  border: none;
+  border-radius: 14px !important;
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.08),
+    0 8px 24px rgba(0,0,0,0.12),
+    0 24px 48px -12px rgba(0,0,0,0.18);
   font-family: var(--agac-font-mono);
   position: relative;
   padding-top: 0;
   overflow: hidden;
-  transition: box-shadow 300ms ease, transform 250ms ease;
+  transition: box-shadow 400ms ease, transform 350ms ease;
 }
 [class*="codeBlockContainer"].cb-instrument:hover {
-  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
-  transform: translateY(-1px);
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.1),
+    0 16px 40px rgba(0,0,0,0.18),
+    0 32px 64px -16px rgba(0,0,0,0.24);
+  transform: translateY(-2px);
 }
 
-/* kill inherited pseudo-elements — the old approach is gone */
+/* dark mode: richer shadow + subtle border glow */
+[data-theme='dark'] [class*="codeBlockContainer"].cb-instrument {
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.3),
+    0 12px 32px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(255,255,255,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.03);
+}
+[data-theme='dark'] [class*="codeBlockContainer"].cb-instrument:hover {
+  box-shadow:
+    0 8px 16px rgba(0,0,0,0.35),
+    0 20px 48px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(255,255,255,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* kill inherited pseudo-elements */
 [class*="codeBlockContainer"].cb-instrument::before,
 [class*="codeBlockContainer"].cb-instrument::after { content: none !important; display: none !important; }
 
-/* ---- structured header bar ---- */
+/* ---- header bar: seamless, no hard border ---- */
 .cb-head {
   display: flex;
-  align-items: stretch;
-  height: 42px;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
   background: var(--agac-code-bg-raised);
-  border-bottom: 1px solid var(--agac-code-border);
+  border-bottom: none;
   flex-shrink: 0;
+  /* subtle gradient fade from header to body instead of a border */
+  background-image: linear-gradient(to bottom, var(--agac-code-bg-raised), var(--agac-code-bg));
+  background-size: 100% 100%;
+  background-position: bottom;
 }
 
-/* traffic lights panel */
+/* traffic lights — larger, with subtle depth */
 .cb-lights {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 14px 0 16px;
-  border-right: 1px solid var(--agac-code-border);
+  gap: 8px;
+  padding-right: 16px;
   flex: none;
 }
 .cb-light {
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   border-radius: 99px;
   display: block;
-  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18);
-  transition: box-shadow 300ms ease;
+  transition: box-shadow 300ms ease, transform 200ms ease;
 }
-.cb-light--red   { background: #ff5f57; }
-.cb-light--amber { background: #febc2e; }
-.cb-light--green { background: #28c840; }
-/* glow on container hover */
-[class*="codeBlockContainer"].cb-instrument:hover .cb-light--red   { box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18), 0 0 6px rgba(255,95,87,0.5); }
-[class*="codeBlockContainer"].cb-instrument:hover .cb-light--amber { box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18), 0 0 6px rgba(254,188,46,0.4); }
-[class*="codeBlockContainer"].cb-instrument:hover .cb-light--green { box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18), 0 0 6px rgba(40,200,64,0.4); }
+.cb-light--red   { background: #ff5f57; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.12), inset 0 -1px 1px rgba(0,0,0,0.1); }
+.cb-light--amber { background: #febc2e; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.12), inset 0 -1px 1px rgba(0,0,0,0.1); }
+.cb-light--green { background: #28c840; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.12), inset 0 -1px 1px rgba(0,0,0,0.1); }
+/* gentle glow on hover */
+[class*="codeBlockContainer"].cb-instrument:hover .cb-light--red   { box-shadow: 0 0 8px rgba(255,95,87,0.45); transform: scale(1.05); }
+[class*="codeBlockContainer"].cb-instrument:hover .cb-light--amber { box-shadow: 0 0 8px rgba(254,188,46,0.35); transform: scale(1.05); }
+[class*="codeBlockContainer"].cb-instrument:hover .cb-light--green { box-shadow: 0 0 8px rgba(40,200,64,0.35); transform: scale(1.05); }
 
 /* filename / language label */
 .cb-head-name {
   display: flex;
   align-items: center;
-  padding: 0 16px;
-  font-size: 12.5px;
-  color: var(--agac-code-fg);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(226,232,236,0.65);
   white-space: nowrap;
   min-width: 0;
   overflow: hidden;
@@ -361,22 +423,24 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-right: 10px;
+  gap: 8px;
+  padding-right: 4px;
   flex: none;
 }
 
 /* language chip badge */
 .cb-head-chip {
   font-size: 10px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8b969d;
-  padding: 3px 8px;
-  border: 1px solid var(--agac-code-border);
-  border-radius: 99px;
+  color: rgba(226,232,236,0.35);
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.04);
+  border: none;
+  border-radius: 6px;
   white-space: nowrap;
   line-height: 1;
+  font-weight: 500;
 }
 
 /* copy button in header */
@@ -384,44 +448,43 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--agac-r-sm);
-  color: #8b969d;
+  height: 30px;
+  padding: 0 12px;
+  background: rgba(255,255,255,0.04);
+  border: none;
+  border-radius: 6px;
+  color: rgba(226,232,236,0.4);
   font-family: var(--agac-font-mono);
   font-size: 11.5px;
+  font-weight: 500;
   cursor: pointer;
-  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+  transition: color 180ms ease, background 180ms ease;
 }
 .cb-head-btn:hover {
-  color: var(--agac-code-fg);
-  border-color: var(--agac-code-border);
-  background: var(--agac-code-bg);
+  color: rgba(226,232,236,0.8);
+  background: rgba(255,255,255,0.08);
 }
 .cb-head-btn--copied {
   color: var(--agac-add) !important;
-  border-color: var(--agac-add) !important;
+  background: rgba(84,217,140,0.1) !important;
 }
 .cb-head-btn-label {
   font-size: 11.5px;
 }
 
-/* ---- code body (wraps the Docusaurus <Content /> output) ---- */
+/* ---- code body ---- */
 .cb-body-wrap {
   position: relative;
-  /* rtl:ignore */
   direction: ltr;
 }
 
-/* hide the default Docusaurus button group — we render our own copy in the header */
+/* hide the default Docusaurus button group */
 .cb-instrument [class*="buttonGroup"] { display: none !important; }
 
-/* code block content area */
+/* code block content area — generous padding */
 .cb-instrument pre.prism-code,
 .cb-instrument [class*="codeBlock"] pre {
-  padding: 16px 20px !important;
+  padding: 20px 24px !important;
 }
 
 /* code blocks fade in */
@@ -719,26 +782,29 @@ pre.prism-code, [class*="codeBlock"] pre {
   margin: 36px 0;
 }
 
-/* mermaid diagrams — wrap in the always-dark code panel like the static site */
+/* mermaid diagrams — floating terminal window treatment */
 .docusaurus-mermaid-container,
 .markdown [class*="mermaid"] {
   background: var(--agac-code-bg);
-  border: 1px solid var(--agac-code-border);
-  border-radius: var(--agac-r-lg);
-  box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5);
+  border: none;
+  border-radius: 14px;
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.08),
+    0 8px 24px rgba(0,0,0,0.12),
+    0 24px 48px -12px rgba(0,0,0,0.18);
   padding: 28px 24px;
   margin: 28px 0;
   display: flex;
   justify-content: center;
-}
-.docusaurus-mermaid-container,
-.markdown [class*="mermaid"] {
-  transition: box-shadow 300ms ease, transform 250ms ease;
+  transition: box-shadow 400ms ease, transform 350ms ease;
 }
 .docusaurus-mermaid-container:hover,
 .markdown [class*="mermaid"]:hover {
-  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
-  transform: translateY(-1px);
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.1),
+    0 16px 40px rgba(0,0,0,0.18),
+    0 32px 64px -16px rgba(0,0,0,0.24);
+  transform: translateY(-2px);
 }
 .docusaurus-mermaid-container svg { max-width: 100%; height: auto; }
 
@@ -748,12 +814,12 @@ pre.prism-code, [class*="codeBlock"] pre {
    ===================================================================== */
 .footer {
   /* override Infima dark-footer defaults that fight our theme tokens */
-  --ifm-footer-background-color: var(--ifm-background-surface-color);
+  --ifm-footer-background-color: transparent;
   --ifm-footer-color: var(--ifm-color-content);
   --ifm-footer-title-color: var(--ifm-heading-color);
   --ifm-footer-link-color: var(--ifm-color-content-secondary);
   --ifm-footer-link-hover-color: var(--ifm-color-primary);
-  background: var(--ifm-background-surface-color);
+  background: transparent;
   border-top: 1px solid var(--ifm-color-emphasis-200);
   color: var(--ifm-color-content);
   position: relative;
@@ -889,19 +955,39 @@ pre.prism-code, [class*="codeBlock"] pre {
 .agac-btn-ghost:hover { background: var(--ifm-color-emphasis-100); color: var(--ifm-heading-color); border-color: var(--agac-fg-3); text-decoration: none; }
 .agac-btn-ghost.copied { color: var(--agac-add); border-color: var(--agac-add); }
 
-/* hero code window */
+/* hero code window — floating terminal window */
 .agac-code {
-  background: var(--agac-code-bg); border: 1px solid var(--agac-code-border);
-  border-radius: var(--agac-r-lg); overflow: hidden;
-  box-shadow: 0 8px 24px -8px rgba(0,0,0,.5), 0 0 0 1px rgba(255,92,61,0.05);
+  background: var(--agac-code-bg); border: none;
+  border-radius: 14px; overflow: hidden;
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.08),
+    0 8px 24px rgba(0,0,0,0.12),
+    0 24px 48px -12px rgba(0,0,0,0.18);
   font-family: var(--agac-font-mono);
   animation: agac-fade-up 800ms ease both;
   animation-delay: 400ms;
-  transition: box-shadow 300ms ease, transform 300ms ease;
+  transition: box-shadow 400ms ease, transform 350ms ease;
 }
 .agac-code:hover {
-  box-shadow: 0 16px 48px -12px rgba(0,0,0,.6), 0 0 0 1px rgba(255,92,61,0.1);
-  transform: translateY(-2px);
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.1),
+    0 16px 40px rgba(0,0,0,0.18),
+    0 32px 64px -16px rgba(0,0,0,0.24);
+  transform: translateY(-3px);
+}
+[data-theme='dark'] .agac-code {
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.3),
+    0 12px 32px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(255,255,255,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.03);
+}
+[data-theme='dark'] .agac-code:hover {
+  box-shadow:
+    0 8px 16px rgba(0,0,0,0.35),
+    0 20px 48px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(255,92,61,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.04);
 }
 /* blinking cursor after last code line */
 .agac-code-pre code .agac-code-line:last-child::after {
@@ -911,15 +997,18 @@ pre.prism-code, [class*="codeBlock"] pre {
   margin-left: 2px;
   font-size: 12px;
 }
-.agac-code-head { display: flex; align-items: center; height: 42px; padding: 0 16px; gap: 8px; background: var(--agac-code-bg-raised); border-bottom: 1px solid var(--agac-code-border); }
-.agac-lights { display: flex; gap: 7px; }
-.agac-light { width: 11px; height: 11px; border-radius: 99px; }
-.agac-code-name { margin-left: 8px; font-size: 12.5px; color: var(--agac-code-fg); }
-.agac-code-body { display: flex; font-size: 13px; line-height: 22px; }
-.agac-gutter { padding: 14px 0; background: var(--agac-code-gutter); border-right: 1px solid var(--agac-code-border); text-align: right; color: #8b969d; opacity: .55; user-select: none; }
-.agac-gutter span { display: block; padding: 0 14px 0 16px; height: 22px; }
-.agac-code-pre { margin: 0; padding: 14px 0; overflow-x: auto; flex: 1; }
-.agac-code-line { display: block; padding: 0 20px; min-height: 22px; white-space: pre; }
+.agac-code-head {
+  display: flex; align-items: center; height: 48px; padding: 0 18px; gap: 10px;
+  background-image: linear-gradient(to bottom, var(--agac-code-bg-raised), var(--agac-code-bg));
+}
+.agac-lights { display: flex; gap: 8px; }
+.agac-light { width: 13px; height: 13px; border-radius: 99px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.12), inset 0 -1px 1px rgba(0,0,0,0.1); }
+.agac-code-name { margin-left: 10px; font-size: 13px; font-weight: 500; color: rgba(226,232,236,0.65); }
+.agac-code-body { display: flex; font-size: 13.5px; line-height: 24px; }
+.agac-gutter { padding: 16px 0; background: var(--agac-code-gutter); text-align: right; color: rgba(226,232,236,0.25); user-select: none; }
+.agac-gutter span { display: block; padding: 0 16px 0 18px; height: 24px; }
+.agac-code-pre { margin: 0; padding: 16px 0; overflow-x: auto; flex: 1; }
+.agac-code-line { display: block; padding: 0 24px; min-height: 24px; white-space: pre; }
 .agac-code-line.hi { background: rgba(255,92,61,.09); box-shadow: inset 2px 0 0 var(--ifm-color-primary); }
 
 /* features */

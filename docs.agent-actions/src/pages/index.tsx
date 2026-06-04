@@ -44,18 +44,18 @@ function InstallButton() {
 }
 
 const YAML_LINES: {h?: boolean; html: string}[] = [
-  {html: '<span style="color:#9fb4bd">name</span><span style="color:#8b969d">:</span> document-analysis'},
-  {html: '<span style="color:#9fb4bd">defaults</span><span style="color:#8b969d">:</span>'},
-  {html: '  <span style="color:#9fb4bd">model_vendor</span><span style="color:#8b969d">:</span> openai'},
-  {html: '  <span style="color:#9fb4bd">model_name</span><span style="color:#8b969d">:</span> gpt-4o-mini'},
+  {html: '<span style="color:#5ccfe6">name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">document-analysis</span>'},
+  {html: '<span style="color:#5ccfe6">defaults</span><span style="color:#7c878e">:</span>'},
+  {html: '  <span style="color:#5ccfe6">model_vendor</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">openai</span>'},
+  {html: '  <span style="color:#5ccfe6">model_name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">gpt-4o-mini</span>'},
   {html: ''},
-  {html: '<span style="color:#9fb4bd">actions</span><span style="color:#8b969d">:</span>'},
-  {html: '  <span style="color:#8b969d">-</span> <span style="color:#9fb4bd">name</span><span style="color:#8b969d">:</span> extract'},
-  {html: '    <span style="color:#9fb4bd">prompt</span><span style="color:#8b969d">:</span> <span style="color:#7ee0a0">$prompts.Extract</span>'},
-  {html: '    <span style="color:#9fb4bd">schema</span><span style="color:#8b969d">:</span> facts_schema'},
-  {html: '  <span style="color:#8b969d">-</span> <span style="color:#9fb4bd">name</span><span style="color:#8b969d">:</span> summarize'},
-  {h: true, html: '    <span style="color:#9fb4bd">dependencies</span><span style="color:#8b969d">:</span> extract'},
-  {html: '    <span style="color:#9fb4bd">prompt</span><span style="color:#8b969d">:</span> <span style="color:#7ee0a0">$prompts.Summarize</span>'},
+  {html: '<span style="color:#5ccfe6">actions</span><span style="color:#7c878e">:</span>'},
+  {html: '  <span style="color:#7c878e">-</span> <span style="color:#5ccfe6">name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">extract</span>'},
+  {html: '    <span style="color:#5ccfe6">prompt</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">$prompts.Extract</span>'},
+  {html: '    <span style="color:#5ccfe6">schema</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">facts_schema</span>'},
+  {html: '  <span style="color:#7c878e">-</span> <span style="color:#5ccfe6">name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">summarize</span>'},
+  {h: true, html: '    <span style="color:#5ccfe6">dependencies</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">extract</span>'},
+  {html: '    <span style="color:#5ccfe6">prompt</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">$prompts.Summarize</span>'},
 ];
 
 const FEATURES = [
