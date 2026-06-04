@@ -552,6 +552,10 @@ def apply_context_scope_for_records(
         # Records where an observe field is missing (upstream produced incomplete
         # output) are skipped — not enriched — so they don't proceed with None
         # values that would produce garbage LLM output downstream.
+        # Note: RecordContextError also fires for absent namespaces on any
+        # directive (Branch 3 of _resolve_missing_field). A passthrough ref
+        # with a typo would be caught here too — preflight validation catches
+        # those in practice, so the misclassification risk is low.
         try:
             apply_context_scope(field_context, context_scope, action_name=action_name)
         except RecordContextError as e:
