@@ -1,4 +1,4 @@
-"""Phase 9a: Guard/Observe null safety tests — U-4.2.
+"""Observe missing field behavior tests.
 
 Tests that observe correctly handles missing fields:
 - Null namespace (guard-skipped) → resolves to None (safe)
@@ -22,7 +22,7 @@ def _make_field_context(**namespaces):
 
 
 class TestObserveNullSafety:
-    """U-4.2 revised: Observe raises for missing fields in present namespaces."""
+    """Observe raises for missing fields in present namespaces."""
 
     def test_observe_missing_field_raises(self):
         """Observing a field that doesn't exist in a present namespace → raises."""

@@ -23,7 +23,11 @@ from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
+from agent_actions.storage.backend import (
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
+    DispositionRow,
+)
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
@@ -577,10 +581,10 @@ class ProcessingPipeline:
                 source_data=source_data,
             )
             if scope_skipped and self.config.storage_backend:
-                batch = [
+                batch: list[DispositionRow] = [
                     (
                         self.config.action_name,
-                        skip["source_guid"],
+                        str(skip["source_guid"]),
                         DISPOSITION_SKIPPED,
                         OBSERVE_FIELD_MISSING,
                         None,

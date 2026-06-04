@@ -133,7 +133,7 @@ class TestDropWildcard:
 
 
 class TestFalsyFieldPassthrough:
-    """G-2: falsy values (0, "", False, None) must not be silently dropped."""
+    """Falsy values (0, "", False, None) must not be silently dropped."""
 
     def test_observe_includes_zero_value(self):
         """observe: field with value 0 must appear in llm_context."""
@@ -186,7 +186,7 @@ class TestFalsyFieldPassthrough:
             )
 
     def test_observe_includes_explicit_none_value(self):
-        """G-2 boundary: field whose value IS None must still appear in llm_context.
+        """Field whose value IS None must still appear in llm_context.
         None is a valid observed value — only a missing field should be excluded."""
         field_context = {"dep": {"nullable_field": None}}
         _, llm_context, _ = apply_context_scope(
@@ -197,7 +197,7 @@ class TestFalsyFieldPassthrough:
         assert llm_context["dep"]["nullable_field"] is None
 
     def test_passthrough_nested_path_missing_field_returns_none(self):
-        """G-2 nested-path: missing nested field resolves to None (U-4.2)."""
+        """Missing nested field resolves to None."""
         field_context = {"dep": {"top": {"exists": 1}}}
         _, _, pt = apply_context_scope(
             field_context=field_context,
