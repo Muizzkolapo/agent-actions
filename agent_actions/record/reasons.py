@@ -34,6 +34,7 @@ EMPTY_OUTPUT = "empty_output"
 
 # -- Exhaustion --------------------------------------------------------------
 RETRY_EXHAUSTED = "retry_exhausted"
+REPROMPT_EXHAUSTED = "reprompt_exhausted"
 
 # -- Disposition fallbacks ---------------------------------------------------
 UNPROCESSED = "unprocessed"

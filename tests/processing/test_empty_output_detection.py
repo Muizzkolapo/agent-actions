@@ -46,6 +46,25 @@ class TestIsEmptyOutput:
     def test_false_is_not_empty(self):
         assert _is_empty_output(False) is False
 
+    def test_list_of_one_empty_dict_is_empty(self):
+        """[{}] is effectively empty — no usable fields in any item."""
+        assert _is_empty_output([{}]) is True
+
+    def test_list_of_two_empty_dicts_is_empty(self):
+        """[{}, {}] is effectively empty — all items are empty dicts."""
+        assert _is_empty_output([{}, {}]) is True
+
+    def test_list_with_mixed_dicts_is_not_empty(self):
+        """[{}, {"key": "val"}] has at least one non-empty item."""
+        assert _is_empty_output([{}, {"key": "val"}]) is False
+
+    def test_list_with_non_empty_dict_is_not_empty(self):
+        assert _is_empty_output([{"key": "val"}]) is False
+
+    def test_list_with_non_dict_items_is_not_empty(self):
+        """[1, 2] — non-dict items are not considered empty dicts."""
+        assert _is_empty_output([1, 2]) is False
+
 
 # =============================================================================
 # RecordEmptyOutputEvent tests

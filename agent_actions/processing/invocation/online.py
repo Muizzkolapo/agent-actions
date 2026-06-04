@@ -164,7 +164,7 @@ class OnlineStrategy(InvocationStrategy):
             context=f"action={context.agent_name}",
         )
 
-        if reprompt_result.attempts > 1:
+        if reprompt_result.attempts > 1 or reprompt_result.exhausted:
             recovery_metadata.reprompt = RepromptMetadata(
                 attempts=reprompt_result.attempts,
                 passed=reprompt_result.passed,
@@ -173,6 +173,14 @@ class OnlineStrategy(InvocationStrategy):
                 schema_fail_count=reprompt_result.schema_fail_count,
                 udf_fail_count=reprompt_result.udf_fail_count,
             )
+
+        if reprompt_result.exhausted:
+            logger.warning(
+                "Reprompt exhausted for action %s after %d attempts",
+                context.agent_name,
+                reprompt_result.attempts,
+            )
+            return None, False, recovery_metadata
 
         return reprompt_result.response, reprompt_result.executed, recovery_metadata
 
@@ -219,5 +227,6 @@ class OnlineStrategy(InvocationStrategy):
                 context.agent_name,
                 reprompt_result.attempts,
             )
+            return None, False, recovery_metadata
 
         return reprompt_result.response, reprompt_result.executed, recovery_metadata
