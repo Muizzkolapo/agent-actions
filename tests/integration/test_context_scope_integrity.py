@@ -109,15 +109,15 @@ class TestObserveBasic:
         assert llm_context["dep"]["none_val"] is None
         assert llm_context["dep"]["normal"] == "ok"
 
-    def test_observe_missing_field_returns_none(self):
-        """Missing field from present namespace resolves to None (U-4.2)."""
+    def test_observe_missing_field_raises(self):
+        """Missing field from present namespace raises RecordContextError for observe."""
         field_context = {
             "dep": {"existing_a": 1, "existing_b": 2, "existing_c": 3},
         }
         context_scope = {"observe": ["dep.nonexistent"]}
 
-        _, llm_ctx, _ = apply_context_scope(field_context, context_scope, action_name="test")
-        assert llm_ctx["dep"]["nonexistent"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(field_context, context_scope, action_name="test")
 
     def test_observe_multiple_namespaces(self):
         """observe: ['dep_a.x', 'dep_b.y'] -> llm_context has both namespaces."""
@@ -702,8 +702,8 @@ class TestDropSecurity:
         assert llm_context["dep"]["name"] == "public_name"
         assert llm_context["dep"]["value"] == "public_value"
 
-    def test_observe_dropped_field_returns_none(self):
-        """drop: ['dep.x'], observe: ['dep.x'] -> None, secret not leaked (U-4.2)."""
+    def test_observe_dropped_field_raises(self):
+        """drop: ['dep.x'], observe: ['dep.x'] -> raises (contradictory config, secret not leaked)."""
         field_context = {
             "dep": {"x": "secret_value", "y": "other", "z": "more"},
         }
@@ -712,8 +712,8 @@ class TestDropSecurity:
             "observe": ["dep.x"],
         }
 
-        _, llm_ctx, _ = apply_context_scope(field_context, context_scope, action_name="test")
-        assert llm_ctx["dep"]["x"] is None  # None, NOT "secret_value"
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(field_context, context_scope, action_name="test")
 
     def test_drop_happens_before_observe(self):
         """Execution order: drop first, then observe reads from post-drop state."""
@@ -824,7 +824,7 @@ class TestFileModeObserve:
             "dependencies": "dep",
         }
 
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=agent_config["context_scope"],
             action_name="consumer",
@@ -859,7 +859,7 @@ class TestFileModeObserve:
             "dependencies": "dep",
         }
 
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=agent_config["context_scope"],
             action_name="consumer",
@@ -891,7 +891,7 @@ class TestFileModeObserve:
             "dependencies": "extract",
         }
 
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=agent_config["context_scope"],
             action_name="enrich",
@@ -905,11 +905,12 @@ class TestFileModeObserve:
         assert result[0]["content"]["extract"]["length"] == 500
         assert result[0]["source_guid"] == "sg1"
 
-    def test_file_mode_missing_field_enriches_with_none(self):
-        """FILE-mode: missing observe field resolves to None in enriched record (U-4.2).
+    def test_file_mode_missing_field_skips_record(self):
+        """FILE-mode: missing observe field skips the record (not enriched with None).
 
-        Missing fields from present namespaces resolve to None (matching guard
-        semantics) instead of skipping enrichment for the entire record.
+        When upstream produced a namespace but is missing the observed field,
+        the record is skipped rather than enriched with None values that would
+        produce garbage LLM output downstream.
         """
         data = [
             {
@@ -921,20 +922,16 @@ class TestFileModeObserve:
         ]
         context_scope = {"observe": ["dep.title", "dep.nonexistent_field"]}
 
-        result = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="consumer",
         )
 
-        # Record is enriched (not skipped) — present field survives, missing field
-        # doesn't crash enrichment. Flat key injection only covers present fields.
-        assert result[0] is not data[0]  # enriched copy, not original
-        enriched_content = result[0]["content"]
-        assert enriched_content["dep"]["title"] == "Exists"
-        assert enriched_content["dep"]["body"] == "Also exists"
-        # Missing field not injected as flat key (only present fields get flat keys)
-        assert "nonexistent_field" not in enriched_content
+        assert len(enriched) == 0
+        assert len(skipped) == 1
+        assert skipped[0]["source_guid"] == "sg1"
+        assert skipped[0]["reason"] == "observe_field_missing"
 
     def test_file_mode_wildcard_on_partial_namespace_graceful(self):
         """FILE-mode: wildcard on namespace with missing fields is graceful."""
@@ -948,7 +945,7 @@ class TestFileModeObserve:
         ]
         context_scope = {"observe": ["dep.*"]}
 
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="consumer",

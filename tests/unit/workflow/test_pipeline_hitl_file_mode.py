@@ -326,7 +326,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
 
     # Apply the filter using unified context_scope
     context_scope = action_config.get("context_scope", {})
-    filtered = apply_context_scope_for_records(
+    filtered, _ = apply_context_scope_for_records(
         records=original_data,
         context_scope=context_scope,
         action_name="review_data",
@@ -503,7 +503,7 @@ def test_file_mode_hitl_bad_namespace_in_observe_warns():
 def test_no_observe_returns_data_as_is():
     """Without observe config, apply_context_scope_for_records returns data unchanged."""
     data = [{"content": {"a": 1, "b": 2}}]
-    result = apply_context_scope_for_records(records=data, context_scope={}, action_name="test")
+    result, _ = apply_context_scope_for_records(records=data, context_scope={}, action_name="test")
     assert result is data
 
 
@@ -517,7 +517,7 @@ def test_observe_extracts_from_namespace():
         },
     ]
     context_scope = {"observe": ["upstream.question", "upstream.answer"]}
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data, context_scope=context_scope, action_name="test"
     )
     assert result[0]["content"]["question"] == "Q1"
@@ -533,7 +533,7 @@ def test_wildcard_observe_preserves_all_content():
         {"content": {"upstream": {"question": "Q2", "answer": "A2", "extra": "also keep"}}},
     ]
     context_scope = {"observe": ["upstream.*"]}
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data, context_scope=context_scope, action_name="test"
     )
     assert result[0]["content"]["question"] == "Q1"
@@ -553,7 +553,7 @@ def test_collision_uses_qualified_keys():
         },
     ]
     context_scope = {"observe": ["dep_a.title", "dep_b.title", "dep_a.body"]}
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data, context_scope=context_scope, action_name="test"
     )
     assert result[0]["content"]["dep_a.title"] == "Title from A"
@@ -571,7 +571,7 @@ def test_no_collision_stays_bare():
         },
     ]
     context_scope = {"observe": ["upstream.question", "upstream.answer"]}
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data, context_scope=context_scope, action_name="test"
     )
     assert result[0]["content"]["question"] == "Q1"
@@ -589,7 +589,7 @@ def test_invalid_ref_does_not_misalign_pairs():
         },
     ]
     context_scope = {"observe": ["dep_a.title", "bad_ref_no_dot", "dep_b.title", "dep_a.body"]}
-    result = apply_context_scope_for_records(
+    result, _ = apply_context_scope_for_records(
         records=data, context_scope=context_scope, action_name="test"
     )
     # "title" collides → qualified

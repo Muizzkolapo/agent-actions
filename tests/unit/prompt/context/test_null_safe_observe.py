@@ -84,17 +84,17 @@ class TestObserveNullNamespace:
 
 
 class TestObserveStrictPreserved:
-    """Observe null-safety: missing field from present namespace returns None (U-4.2)."""
+    """Observe strict: missing field from present namespace raises RecordContextError."""
 
-    def test_missing_field_from_present_namespace_returns_none(self):
-        """observe: ['dep.nonexistent'] where dep is a real dict → None (match guard semantics)."""
+    def test_missing_field_from_present_namespace_raises(self):
+        """observe: ['dep.nonexistent'] where dep is a real dict → RecordContextError."""
         fc = _make_field_context(dep={"actual_field": "value"})
-        _prompt_ctx, llm_ctx, _ = apply_context_scope(
-            field_context=fc,
-            context_scope={"observe": ["dep.nonexistent"]},
-            action_name="downstream",
-        )
-        assert llm_ctx["dep"]["nonexistent"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=fc,
+                context_scope={"observe": ["dep.nonexistent"]},
+                action_name="downstream",
+            )
 
     def test_undeclared_namespace_raises(self):
         """observe: ['ghost.field'] where ghost is not in field_context → ConfigurationError."""

@@ -43,7 +43,7 @@ class TestAllDirectives:
             "observe": ["extract_qa.question"],
             "drop": ["validate.internal_token_count"],
         }
-        result = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
         validate = result[0]["content"]["validate"]
         assert "internal_token_count" not in validate
         assert validate["pass"] is True
@@ -54,13 +54,13 @@ class TestAllDirectives:
             "observe": ["extract_qa.question"],
             "passthrough": ["extract_qa.confidence"],
         }
-        result = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
         assert result[0]["content"]["extract_qa"]["confidence"] == 0.9
 
     def test_observe_injects_flat_keys(self):
         """Observe refs inject flat keys at the top level of content."""
         scope = {"observe": ["extract_qa.question", "extract_qa.answer"]}
-        result = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
         content = result[0]["content"]
         assert content["question"] == "What is X?"
         assert content["answer"] == "Y"
@@ -72,7 +72,7 @@ class TestAllDirectives:
             "drop": ["validate.internal_token_count"],
             "passthrough": ["extract_qa.confidence"],
         }
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             [deepcopy(RECORD)], scope, action_name="test", source_data=SOURCE_DATA
         )
         content = result[0]["content"]
@@ -92,7 +92,7 @@ class TestGuardVisibility:
     def test_all_namespaces_preserved(self):
         """Guards see ALL namespaces, not gated to observed ones only."""
         scope = {"observe": ["extract_qa.question"]}
-        result = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
         content = result[0]["content"]
         assert "extract_qa" in content
         assert "validate" in content
@@ -100,7 +100,7 @@ class TestGuardVisibility:
     def test_metadata_fields_preserved_on_record(self):
         """source_guid, node_id, etc. preserved on the record envelope."""
         scope = {"observe": ["extract_qa.question"]}
-        result = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([deepcopy(RECORD)], scope, action_name="test")
         assert result[0]["source_guid"] == "guid-1"
         assert result[0]["node_id"] == "node_123"
 
@@ -118,7 +118,7 @@ class TestCollisionDetection:
             },
         }
         scope = {"observe": ["action_a.*", "action_b.*"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         content = result[0]["content"]
         assert content["action_a.name"] == "Alice"
         assert content["action_b.name"] == "Bob"
@@ -134,7 +134,7 @@ class TestCollisionDetection:
             },
         }
         scope = {"observe": ["ns_a.id", "ns_b.id"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         content = result[0]["content"]
         assert content["ns_a.id"] == "a1"
         assert content["ns_b.id"] == "b1"
@@ -148,7 +148,7 @@ class TestCollisionDetection:
             },
         }
         scope = {"observe": ["ns_a.name", "ns_b.score"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         content = result[0]["content"]
         assert content["name"] == "Alice"
         assert content["score"] == 10
@@ -157,7 +157,7 @@ class TestCollisionDetection:
         """Single wildcard namespace -> bare keys (no qualification needed)."""
         record = {"content": {"dep": {"a": 1, "b": 2}}}
         scope = {"observe": ["dep.*"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         content = result[0]["content"]
         assert content["a"] == 1
         assert content["b"] == 2
@@ -170,20 +170,24 @@ class TestEmptyObserve:
     def test_empty_scope_returns_records_unchanged(self):
         """No directives = records returned as-is (identity)."""
         records = [deepcopy(RECORD)]
-        result = apply_context_scope_for_records(records, {}, action_name="test")
+        result, skipped = apply_context_scope_for_records(records, {}, action_name="test")
         assert result is records  # same list reference (no copy)
+        assert skipped == []
 
     def test_empty_lists_returns_records_unchanged(self):
         """Explicit empty lists = records returned as-is."""
         records = [deepcopy(RECORD)]
         scope = {"observe": [], "drop": [], "passthrough": []}
-        result = apply_context_scope_for_records(records, scope, action_name="test")
+        result, _ = apply_context_scope_for_records(records, scope, action_name="test")
         assert result is records
 
     def test_empty_records_list(self):
         """Empty input list returns empty output."""
-        result = apply_context_scope_for_records([], {"observe": ["x.y"]}, action_name="test")
+        result, skipped = apply_context_scope_for_records(
+            [], {"observe": ["x.y"]}, action_name="test"
+        )
         assert result == []
+        assert skipped == []
 
 
 # ── Source resolution ─────────────────────────────────────────────────
@@ -197,7 +201,7 @@ class TestSourceResolution:
             {"source_guid": "guid-2", "content": {"dep": {"f": 2}}},
         ]
         scope = {"observe": ["source.url", "dep.f"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert result[0]["content"]["url"] == "http://1.com"
@@ -207,25 +211,27 @@ class TestSourceResolution:
         """Unknown source_guid falls back to first source record."""
         records = [{"source_guid": "unknown", "content": {"dep": {"f": 1}}}]
         scope = {"observe": ["source.url", "dep.f"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert result[0]["content"]["url"] == "http://1.com"
 
     def test_no_source_data_with_source_refs_skips_record(self):
-        """Explicit source ref without source_data skips enrichment for that record."""
-        records = [{"content": {"dep": {"f": 1}}}]
+        """Explicit source ref without source_data → record skipped (source namespace absent)."""
+        records = [{"source_guid": "g1", "content": {"dep": {"f": 1}}}]
         scope = {"observe": ["source.url"]}
-        result = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records, scope, action_name="test", source_data=None
         )
-        assert result[0] is records[0]
+        assert len(enriched) == 0
+        assert len(skipped) == 1
+        assert skipped[0]["source_guid"] == "g1"
 
     def test_no_source_refs_skips_resolution(self):
         """If no directive references source, source_data is ignored."""
         records = [deepcopy(RECORD)]
         scope = {"observe": ["extract_qa.question"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         # Source not injected since no source.* refs
@@ -245,7 +251,7 @@ class TestNoneNamespace:
             },
         }
         scope = {"observe": ["skipped.*", "active.field"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         content = result[0]["content"]
         assert content["field"] == "value"
         assert "skipped" in content  # None namespace preserved for guards
@@ -254,7 +260,7 @@ class TestNoneNamespace:
         """Explicit field ref on guard-skipped namespace resolves as None (null-safe)."""
         record = {"content": {"skipped": None}}
         scope = {"observe": ["skipped.field"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         # Record is enriched (not skipped) — null namespace preserved in content
         assert result[0]["content"]["skipped"] is None
 
@@ -270,7 +276,7 @@ class TestDropPassthroughInteraction:
             "passthrough": ["dep.secret", "dep.public"],
             "drop": ["dep.secret"],
         }
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         assert "secret" not in result[0]["content"]["dep"]
         assert result[0]["content"]["dep"]["public"] == "p"
 
@@ -278,7 +284,7 @@ class TestDropPassthroughInteraction:
         """drop: [dep.*] clears all fields from the namespace."""
         record = {"content": {"dep": {"a": 1, "b": 2}, "other": {"c": 3}}}
         scope = {"observe": ["other.c"], "drop": ["dep.*"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         assert result[0]["content"]["dep"] == {}
         assert result[0]["content"]["other"]["c"] == 3
 
@@ -286,7 +292,7 @@ class TestDropPassthroughInteraction:
         """Dropped fields must not appear as flat observed keys."""
         record = {"content": {"dep": {"secret": "s", "name": "n"}}}
         scope = {"observe": ["dep.*"], "drop": ["dep.secret"]}
-        result = apply_context_scope_for_records([record], scope, action_name="test")
+        result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         content = result[0]["content"]
         assert "secret" not in {k for k in content if not isinstance(content[k], dict)}
         assert content["name"] == "n"
@@ -303,7 +309,7 @@ class TestMultipleRecords:
             {"content": {"dep": {"field": "B"}}},
         ]
         scope = {"observe": ["dep.field"]}
-        result = apply_context_scope_for_records(records, scope, action_name="test")
+        result, _ = apply_context_scope_for_records(records, scope, action_name="test")
         assert result[0]["content"]["field"] == "A"
         assert result[1]["content"]["field"] == "B"
 
@@ -314,3 +320,68 @@ class TestMultipleRecords:
         scope = {"drop": ["validate.internal_token_count"], "observe": ["extract_qa.*"]}
         apply_context_scope_for_records(records, scope, action_name="test")
         assert records[0]["content"] == original["content"]
+
+
+# ── Observe field missing from present namespace ─────────────────────
+
+
+class TestObserveFieldMissing:
+    """When upstream ran but produced incomplete output, observe-referenced
+    fields that are missing from a present (non-null) namespace should cause
+    the record to be skipped — not silently filled with None."""
+
+    def test_missing_observe_field_skips_record(self):
+        """Record with present namespace but missing observe field goes to skipped."""
+        record = {"source_guid": "g1", "content": {"dep": {"other": "x"}}}
+        scope = {"observe": ["dep.nonexistent"]}
+        enriched, skipped = apply_context_scope_for_records([record], scope, action_name="test")
+        assert len(enriched) == 0
+        assert len(skipped) == 1
+        assert skipped[0]["source_guid"] == "g1"
+        assert skipped[0]["reason"] == "observe_field_missing"
+
+    def test_passthrough_missing_field_still_enriches(self):
+        """Passthrough of missing field from present namespace still enriches (None-safe)."""
+        record = {"source_guid": "g1", "content": {"dep": {"actual": "value"}}}
+        scope = {"passthrough": ["dep.nonexistent"]}
+        enriched, skipped = apply_context_scope_for_records([record], scope, action_name="test")
+        assert len(enriched) == 1
+        assert len(skipped) == 0
+
+    def test_mixed_records_some_skip_some_enrich(self):
+        """Batch with good and bad records: good enriched, bad skipped."""
+        good = {"source_guid": "g1", "content": {"dep": {"field": "ok"}}}
+        bad = {"source_guid": "g2", "content": {"dep": {"other": "x"}}}
+        scope = {"observe": ["dep.field"]}
+        enriched, skipped = apply_context_scope_for_records([good, bad], scope, action_name="test")
+        assert len(enriched) == 1
+        assert enriched[0]["source_guid"] == "g1"
+        assert len(skipped) == 1
+        assert skipped[0]["source_guid"] == "g2"
+
+    def test_summary_warning_logged(self):
+        """One summary WARNING for N skipped records, not N individual warnings."""
+        from unittest.mock import patch
+
+        records = [{"source_guid": f"g{i}", "content": {"dep": {"other": "x"}}} for i in range(5)]
+        scope = {"observe": ["dep.missing_field"]}
+        with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
+            enriched, skipped = apply_context_scope_for_records(
+                records, scope, action_name="test_action"
+            )
+        assert len(skipped) == 5
+        # Per-record logs are DEBUG, not WARNING
+        for call in mock_logger.warning.call_args_list:
+            assert "Skipping record" not in str(call)
+        # One summary WARNING
+        assert mock_logger.warning.call_count == 1
+        summary_msg = mock_logger.warning.call_args[0][0] % mock_logger.warning.call_args[0][1:]
+        assert "5 of 5 records skipped" in summary_msg
+
+    def test_null_namespace_still_enriches(self):
+        """Null namespace (guard-skipped upstream) still enriches — not skipped."""
+        record = {"source_guid": "g1", "content": {"skipped": None}}
+        scope = {"observe": ["skipped.field"]}
+        enriched, skipped = apply_context_scope_for_records([record], scope, action_name="test")
+        assert len(enriched) == 1
+        assert len(skipped) == 0

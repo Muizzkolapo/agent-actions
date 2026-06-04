@@ -6,7 +6,7 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
-from agent_actions.errors import ConfigurationError, RecordContextError
+from agent_actions.errors import RecordContextError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
@@ -19,6 +19,7 @@ from agent_actions.prompt.context.scope_parsing import (
     extract_field_value,
     parse_field_reference,
 )
+from agent_actions.record.reasons import OBSERVE_FIELD_MISSING
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -34,11 +35,13 @@ def _resolve_missing_field(
     action_name: str,
     directive: str,
 ) -> None:
-    """Return None if namespace exists (null or present), raise if namespace absent.
+    """Handle a missing field reference during scope application.
 
     Three cases:
     1. Namespace is null (NullNamespace sentinel or legacy None) → return None
-    2. Namespace exists as dict but field is missing → return None (match guard semantics)
+    2. Namespace exists as dict but field is missing:
+       - observe → raise RecordContextError (prevents None injection into prompts)
+       - passthrough/drop → return None (match guard semantics)
     3. Namespace not in prompt_context at all → raise (config bug / typo)
     """
     if ns_name in prompt_context and is_null_namespace(prompt_context[ns_name]):
@@ -53,6 +56,18 @@ def _resolve_missing_field(
         return None
 
     if ns_name in prompt_context and isinstance(prompt_context[ns_name], dict):
+        if directive == "observe":
+            raise RecordContextError(
+                f"context_scope.observe field '{field_ref}' not found in namespace '{ns_name}'",
+                context={
+                    "action": action_name,
+                    "field_ref": field_ref,
+                    "directive": directive,
+                    "operation": "apply_context_scope",
+                    "hint": f"Namespace '{ns_name}' exists but field is missing. "
+                    f"Upstream action may have produced incomplete output.",
+                },
+            )
         logger.warning(
             "[%s NULL-SAFE] '%s' on action '%s': field not found in namespace '%s', "
             "resolving as None to match guard semantics",
@@ -477,7 +492,7 @@ def apply_context_scope_for_records(
     context_scope: dict,
     action_name: str = "unknown",
     source_data: list[dict] | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     """Apply context_scope to a list of records (FILE mode).
 
     For each record:
@@ -489,13 +504,18 @@ def apply_context_scope_for_records(
     Unlike apply_context_scope() which gates prompt_context to observed namespaces
     only (correct for Jinja), this function preserves ALL original namespaces in the
     enriched record because downstream guards need full namespace visibility.
+
+    Returns:
+        Tuple of (enriched_records, skipped_records).  Skipped records had
+        missing observe fields (upstream produced incomplete output) and carry
+        ``{"source_guid": ..., "reason": "observe_field_missing"}``.
     """
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
     drop_refs = context_scope.get("drop", [])
 
     if not observe_refs and not passthrough_refs and not drop_refs:
-        return records
+        return records, []
 
     # Check if any directive references the source namespace
     has_source_refs = (
@@ -513,6 +533,7 @@ def apply_context_scope_for_records(
 
     source_cache: dict[str | None, dict] = {}
     enriched: list[dict] = []
+    skipped: list[dict] = []
 
     for record in records:
         content = get_existing_content(record)
@@ -528,18 +549,19 @@ def apply_context_scope_for_records(
                 field_context["source"] = source_content
 
         # Call unified bus filter (validates refs, fires events).
-        # Records where an upstream action failed may have empty namespaces —
-        # skip enrichment for those rather than failing the entire file.
+        # Records where an observe field is missing (upstream produced incomplete
+        # output) are skipped — not enriched — so they don't proceed with None
+        # values that would produce garbage LLM output downstream.
         try:
             apply_context_scope(field_context, context_scope, action_name=action_name)
-        except ConfigurationError as e:
-            logger.warning(
-                "[%s] Skipping record %s — observe field missing (likely upstream failure): %s",
+        except RecordContextError as e:
+            logger.debug(
+                "[%s] Skipping record %s — observe field missing (upstream incomplete): %s",
                 action_name,
                 sguid,
                 e,
             )
-            enriched.append(record)
+            skipped.append({"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING})
             continue
 
         # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
@@ -551,4 +573,12 @@ def apply_context_scope_for_records(
 
         enriched.append({**record, "content": enriched_content})
 
-    return enriched
+    if skipped:
+        logger.warning(
+            "[%s] %d of %d records skipped — missing upstream observe fields",
+            action_name,
+            len(skipped),
+            len(records),
+        )
+
+    return enriched, skipped

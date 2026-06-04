@@ -90,7 +90,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["extract.text"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="classify"
         )
         assert result[0]["content"]["text"] == "article about physics"
@@ -108,7 +108,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["extract.text", "classify.topic"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="summarize"
         )
         assert result[0]["content"]["text"] == "physics article"
@@ -125,7 +125,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["extract.*"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="summarize"
         )
         assert result[0]["content"]["text"] == "hello"
@@ -142,7 +142,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["extract.*", "classify.*"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="summarize"
         )
         # Qualified keys because multiple wildcards
@@ -163,7 +163,7 @@ class TestApplyContextScopeForRecords:
             {"source_guid": "sg-1", "content": {"url": "https://example.com", "title": "Ex"}},
         ]
         context_scope = {"observe": ["extract.text", "source.url"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="classify",
@@ -183,7 +183,7 @@ class TestApplyContextScopeForRecords:
             {"source_guid": "sg-B", "content": {"url": "https://b.com"}},
         ]
         context_scope = {"observe": ["extract.text", "source.url"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="classify",
@@ -203,7 +203,7 @@ class TestApplyContextScopeForRecords:
             {"source_guid": "sg-other", "content": {"url": "https://fallback.com"}},
         ]
         context_scope = {"observe": ["extract.text", "source.url"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="classify",
@@ -217,7 +217,7 @@ class TestApplyContextScopeForRecords:
         data = [{"content": {"extract": {"text": "Q"}}}]
         source_data = [{"url": "https://example.com", "title": "Example"}]
         context_scope = {"observe": ["extract.text", "source.url"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="classify",
@@ -227,26 +227,27 @@ class TestApplyContextScopeForRecords:
         assert result[0]["content"]["url"] == "https://example.com"
 
     def test_explicit_ref_to_missing_namespace_skips_record(self):
-        """Explicit ref to absent namespace skips enrichment for that record.
+        """Explicit ref to absent namespace skips the record (not enriched).
 
-        FILE mode is tolerant of missing fields because individual records
-        may have failed upstream (empty namespaces). The record passes through
-        unenriched rather than crashing the entire action.
+        When an observe field references a namespace that doesn't exist,
+        the record is skipped rather than enriched with None values.
         """
         data = [
             {
+                "source_guid": "g1",
                 "content": {
                     "generate": {"question": "Q?"},
                     "validate": {"pass": True},
-                }
+                },
             },
         ]
         context_scope = {"observe": ["rewrite.output", "generate.question"]}
-        result = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="review"
         )
-        # Record passes through unenriched
-        assert result[0] is data[0]
+        assert len(enriched) == 0
+        assert len(skipped) == 1
+        assert skipped[0]["source_guid"] == "g1"
 
     def test_wildcard_on_missing_namespace_graceful(self):
         """Wildcard on absent namespace is graceful — no crash, no fields injected."""
@@ -259,7 +260,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["rewrite.*", "generate.question"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="review"
         )
         assert result[0]["content"]["question"] == "Q?"
@@ -267,23 +268,27 @@ class TestApplyContextScopeForRecords:
         assert "output" not in result[0]["content"]
 
     def test_missing_namespace_explicit_ref_skips_record(self):
-        """Explicit ref to a guard-skipped action's namespace skips that record."""
+        """Explicit ref to absent namespace skips the record."""
         data = [
             {
+                "source_guid": "g1",
                 "content": {
                     "generate": {"question": "Q?"},
-                }
+                },
             },
         ]
         context_scope = {"observe": ["rewrite.output", "generate.question"]}
-        result = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="review"
         )
-        assert result[0] is data[0]
+        assert len(enriched) == 0
+        assert len(skipped) == 1
 
     def test_no_observe_returns_data_as_is(self):
         data = [{"content": {"extract": {"a": 1}}}]
-        result = apply_context_scope_for_records(records=data, context_scope={}, action_name="test")
+        result, _ = apply_context_scope_for_records(
+            records=data, context_scope={}, action_name="test"
+        )
         assert result is data
 
     def test_no_mutation_of_input_data(self):
@@ -317,7 +322,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["dep_a.title", "dep_b.title", "dep_a.body"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="merge"
         )
         # "title" collides → qualified keys
@@ -336,7 +341,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["extract.text", "classify.topic"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="summarize",
@@ -354,7 +359,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["extract.text"], "drop": ["extract.secret"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
         assert result[0]["content"]["text"] == "hello"
@@ -373,7 +378,7 @@ class TestApplyContextScopeForRecords:
             "observe": ["extract.text"],
             "passthrough": ["extract.metadata"],
         }
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
         assert result[0]["content"]["text"] == "hello"
@@ -390,7 +395,7 @@ class TestApplyContextScopeForRecords:
             },
         ]
         context_scope = {"observe": ["action_a.*"], "drop": ["action_a.secret"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
         assert result[0]["content"]["field1"] == "keep"
@@ -427,7 +432,7 @@ class TestVersionNamespaceObserve:
         context_scope = {
             "observe": ["gen_code_1.*", "gen_code_2.*", "gen_code_3.*"],
         }
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="aggregate"
         )
         content = result[0]["content"]
@@ -443,7 +448,7 @@ class TestVersionNamespaceObserve:
         context_scope = {
             "observe": ["gen_code_1.code", "gen_code_2.code"],
         }
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="aggregate"
         )
         content = result[0]["content"]
@@ -461,7 +466,7 @@ class TestVersionNamespaceObserve:
             },
         ]
         context_scope = {"observe": ["gen_code_1.*"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="aggregate"
         )
         content = result[0]["content"]
@@ -487,7 +492,7 @@ class TestVersionNamespaceObserve:
         context_scope = {
             "observe": ["gen_code_1.code", "gen_code_2.code"],
         }
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="aggregate"
         )
         assert result[0]["content"]["gen_code_1.code"] == "code_A1"
@@ -501,7 +506,7 @@ class TestVersionNamespaceObserve:
         context_scope = {
             "observe": ["gen_code_1.*", "gen_code_2.*"],
         }
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="aggregate"
         )
         content = result[0]["content"]
@@ -533,55 +538,58 @@ class TestEdgeCases:
     """Edge case tests for file-mode context_scope."""
 
     def test_empty_content_explicit_ref_skips(self):
-        """Record with empty content {} — explicit ref skips enrichment."""
-        data = [{"content": {}}]
+        """Record with empty content {} — explicit ref skips the record."""
+        data = [{"source_guid": "g1", "content": {}}]
         context_scope = {"observe": ["extract.text"]}
-        result = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
-        assert result[0] is data[0]
+        assert len(enriched) == 0
+        assert len(skipped) == 1
 
     def test_empty_content_wildcard_graceful(self):
         """Record with empty content {} — wildcard is graceful, no fields extracted."""
         data = [{"content": {}}]
         context_scope = {"observe": ["extract.*"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
         assert result[0]["content"] == {}
 
     def test_no_content_key_explicit_ref_skips(self):
-        """Record without content key — explicit ref skips enrichment."""
+        """Record without content key — explicit ref skips the record."""
         data = [{"source_guid": "sg-1"}]
         context_scope = {"observe": ["extract.text"]}
-        result = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
-        assert result[0] is data[0]
+        assert len(enriched) == 0
+        assert len(skipped) == 1
 
     def test_no_content_key_wildcard_graceful(self):
         """Record without content key — wildcard is graceful."""
         data = [{"source_guid": "sg-1"}]
         context_scope = {"observe": ["extract.*"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
         assert result[0]["content"] == {}
 
     def test_namespace_is_not_dict_explicit_ref_skips(self):
-        """Namespace value is not a dict — explicit ref skips enrichment."""
-        data = [{"content": {"extract": "not_a_dict"}}]
+        """Namespace value is not a dict — explicit ref skips the record."""
+        data = [{"source_guid": "g1", "content": {"extract": "not_a_dict"}}]
         context_scope = {"observe": ["extract.text"]}
-        result = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
-        assert result[0] is data[0]
+        assert len(enriched) == 0
+        assert len(skipped) == 1
 
     def test_namespace_is_not_dict_wildcard_graceful(self):
         """Namespace value is not a dict — wildcard is graceful."""
         data = [{"content": {"extract": "not_a_dict"}}]
         context_scope = {"observe": ["extract.*"]}
-        result = apply_context_scope_for_records(
+        result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="test"
         )
         assert "text" not in result[0]["content"]

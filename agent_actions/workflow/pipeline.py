@@ -22,7 +22,8 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
+from agent_actions.record.reasons import OBSERVE_FIELD_MISSING
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
@@ -567,7 +568,7 @@ class ProcessingPipeline:
             # enrich + collect to UnifiedProcessor with raw_records for
             # pre-observe alignment.  UnifiedProcessor sets context.source_data
             # to original_passing after the guard filter runs.
-            filtered = apply_context_scope_for_records(
+            filtered, scope_skipped = apply_context_scope_for_records(
                 records=data,
                 context_scope=cast(dict[str, Any], self.config.action_config).get(
                     "context_scope", {}
@@ -575,6 +576,29 @@ class ProcessingPipeline:
                 action_name=self.config.action_name,
                 source_data=source_data,
             )
+            if scope_skipped and self.config.storage_backend:
+                batch = [
+                    (
+                        self.config.action_name,
+                        skip["source_guid"],
+                        DISPOSITION_SKIPPED,
+                        OBSERVE_FIELD_MISSING,
+                        None,
+                        None,
+                        None,
+                    )
+                    for skip in scope_skipped
+                    if skip.get("source_guid")
+                ]
+                if batch:
+                    try:
+                        self.config.storage_backend.set_dispositions_batch(batch)
+                    except Exception:
+                        logger.exception(
+                            "Failed to batch-write %d scope-skip dispositions for %s",
+                            len(batch),
+                            self.config.action_name,
+                        )
             output, stats = self._unified_processor.process(
                 filtered, context, strategy, raw_records=data
             )

@@ -1,10 +1,13 @@
 """Phase 9a: Guard/Observe null safety tests — U-4.2.
 
-Tests that observe resolves missing fields from present namespaces to None
-(matching guard semantics) instead of raising RecordContextError.
+Tests that observe correctly handles missing fields:
+- Null namespace (guard-skipped) → resolves to None (safe)
+- Present namespace, missing field → raises RecordContextError (prevents
+  garbage LLM output from None injection)
+- Absent namespace → raises RecordContextError (config bug)
 
-Preflight still catches config typos. Only VALID references to
-legitimately-missing data resolve to null at runtime.
+Passthrough still resolves missing fields to None (matching guard semantics)
+since passthrough fields are not rendered into prompts.
 """
 
 import pytest
@@ -19,28 +22,27 @@ def _make_field_context(**namespaces):
 
 
 class TestObserveNullSafety:
-    """U-4.2: Observe must resolve missing fields to None, not throw."""
+    """U-4.2 revised: Observe raises for missing fields in present namespaces."""
 
-    def test_observe_missing_field_returns_none(self):
-        """Observing a field that doesn't exist in a present namespace → None, not error."""
+    def test_observe_missing_field_raises(self):
+        """Observing a field that doesn't exist in a present namespace → raises."""
         fc = _make_field_context(upstream_step={"field_a": "value"})
-        _prompt_ctx, llm_ctx, _ = apply_context_scope(
-            field_context=fc,
-            context_scope={"observe": ["upstream_step.field_b"]},
-            action_name="downstream",
-        )
-        assert llm_ctx["upstream_step"]["field_b"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=fc,
+                context_scope={"observe": ["upstream_step.field_b"]},
+                action_name="downstream",
+            )
 
-    def test_observe_missing_field_preserves_present_fields(self):
-        """Missing field returns None without affecting existing field resolution."""
+    def test_observe_missing_field_raises_even_with_present_fields(self):
+        """Missing field raises even when other fields in the namespace exist."""
         fc = _make_field_context(dep={"real_field": "real_value"})
-        _prompt_ctx, llm_ctx, _ = apply_context_scope(
-            field_context=fc,
-            context_scope={"observe": ["dep.real_field", "dep.ghost_field"]},
-            action_name="downstream",
-        )
-        assert llm_ctx["dep"]["real_field"] == "real_value"
-        assert llm_ctx["dep"]["ghost_field"] is None
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=fc,
+                context_scope={"observe": ["dep.real_field", "dep.ghost_field"]},
+                action_name="downstream",
+            )
 
     def test_observe_undeclared_namespace_still_raises(self):
         """Namespace not in field_context at all → still errors (config bug)."""
@@ -62,18 +64,12 @@ class TestObserveNullSafety:
         )
         assert llm_ctx["skipped"]["field"] is None
 
-    def test_guard_and_observe_agree_on_missing(self):
-        """Guard returns None for missing field; observe must do the same.
-
-        Guards treat missing fields as 'condition not matched' (falsy/None).
-        Observe must resolve the same field to None — not throw.
-        """
+    def test_passthrough_missing_field_returns_none(self):
+        """Passthrough still resolves missing field to None (not rendered in prompts)."""
         fc = _make_field_context(ns={"existing": "value"})
-        # Observe a field that doesn't exist → should be None (matching guard)
-        _prompt_ctx, llm_ctx, _ = apply_context_scope(
+        _prompt_ctx, _llm_ctx, pt = apply_context_scope(
             field_context=fc,
-            context_scope={"observe": ["ns.missing"]},
+            context_scope={"passthrough": ["ns.missing"]},
             action_name="downstream",
         )
-        observe_result = llm_ctx["ns"]["missing"]
-        assert observe_result is None
+        assert pt["ns"]["missing"] is None
