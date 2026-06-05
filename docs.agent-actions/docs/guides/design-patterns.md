@@ -229,8 +229,10 @@ actions:
         - parse_resume.skills
 ```
 
-:::tip Fan-in Pattern
+:::tip[Fan-in Pattern]
+
 When multiple different actions feed into one action, the system uses **fan-in**: the first dependency drives execution count, while others are loaded from record namespaces with lineage matching. This ensures each execution sees data from the same record lineage.
+
 :::
 
 **Advantages:**

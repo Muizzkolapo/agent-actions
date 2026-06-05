@@ -1,6 +1,35 @@
-import {themes as prismThemes} from 'prism-react-renderer';
+import type {PrismTheme} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Read version from pyproject.toml at build time
+const pyproject = fs.readFileSync(path.resolve(__dirname, '../pyproject.toml'), 'utf-8');
+const versionMatch = pyproject.match(/^version\s*=\s*"([^"]+)"/m);
+const AGENT_ACTIONS_VERSION = versionMatch ? versionMatch[1] : '0.0.0';
+
+// Custom agac instrument palette — high-contrast dark theme on #0d1115.
+// Each token type uses a distinct hue so they're visually separable at a glance.
+// prism-react-renderer applies inline styles, so CSS overrides don't work.
+const agacPrismTheme: PrismTheme = {
+  plain: {
+    color: '#e2e8ec',           // bright cool white — default/fallback text
+    backgroundColor: '#1a2028',
+  },
+  styles: [
+    { types: ['comment', 'prolog', 'doctype', 'cdata'], style: { color: '#6e7a81', fontStyle: 'italic' as const } },
+    { types: ['keyword', 'boolean', 'important', 'atrule'], style: { color: '#ff6e4a' } },   // hot coral — commands/keywords
+    { types: ['string', 'char', 'attr-value', 'regex', 'template-string', 'inserted', 'selector'], style: { color: '#5ef0a6' } },  // vivid mint green — strings
+    { types: ['number'], style: { color: '#6eb8ff' } },           // sky blue — numbers
+    { types: ['function', 'builtin'], style: { color: '#c9a0ff' } },  // lavender — functions
+    { types: ['class-name', 'maybe-class-name', 'tag'], style: { color: '#ffb454' } },  // amber — types/tags
+    { types: ['punctuation', 'operator', 'symbol'], style: { color: '#7c878e' } },  // muted — stays quiet
+    { types: ['property', 'attr-name', 'variable', 'parameter', 'constant'], style: { color: '#5ccfe6' } },  // cyan — keys/properties (distinct from plain white)
+    { types: ['deleted'], style: { color: '#ff5a68' } },
+    { types: ['changed'], style: { color: '#ffb454' } },
+  ],
+};
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -8,6 +37,9 @@ const config: Config = {
   title: 'Agent Actions',
   tagline: 'YAML-native multi-agent DAG workflows with schema-first validation',
   favicon: 'img/favicon.svg',
+  customFields: {
+    agentActionsVersion: AGENT_ACTIONS_VERSION,
+  },
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -34,7 +66,8 @@ const config: Config = {
   ],
   stylesheets: [
     {
-      href: 'https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap',
+      // agac reskin fonts: Space Grotesk (display) + Hanken Grotesk (body) + JetBrains Mono (data)
+      href: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap',
       type: 'text/css',
     },
   ],
@@ -100,6 +133,7 @@ const config: Config = {
     // Enable light/dark mode toggle
     colorMode: {
       defaultMode: 'dark',
+      // Static design is dark-first; light is tuned to match its light tokens.
       disableSwitch: false,
       respectPrefersColorScheme: false,
     },
@@ -132,7 +166,10 @@ const config: Config = {
       ],
     },
     footer: {
-      style: 'dark',
+      /* style: 'light' — footer colors are fully controlled by custom.css
+         using theme-aware CSS vars. Avoid 'dark' which injects Infima's
+         forced-dark overrides that collide with our custom tokens. */
+      style: 'light',
       links: [
         {
           title: 'Docs',
@@ -189,8 +226,9 @@ const config: Config = {
       copyright: `Copyright © ${new Date().getFullYear()} Agent Actions.`,
     },
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      // Both themes use the agac instrument palette — code blocks are always-dark
+      theme: agacPrismTheme,
+      darkTheme: agacPrismTheme,
     },
     mermaid: {
       theme: {
@@ -198,7 +236,7 @@ const config: Config = {
         dark: 'dark',
       },
       options: {
-        fontFamily: '"Space Grotesk", "Inter", -apple-system, sans-serif',
+        fontFamily: '"Space Grotesk", system-ui, sans-serif',
         fontSize: 15,
         flowchart: {
           curve: 'basis',
