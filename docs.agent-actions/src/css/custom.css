@@ -206,23 +206,32 @@ body::before {
 /* content sits above the grid; opaque surfaces (navbar/footer/cards) hide it,
    transparent gutters reveal it — works in both themes via --agac-grid-line. */
 #__docusaurus { position: relative; z-index: 1; }
-/* Ensure ALL layout wrappers are transparent so the grid shows through
-   everywhere — sidebar, main content, footer, empty space below content.
-   The grid is the page's texture; only cards/code-blocks are opaque. */
+/* Structural wrappers: transparent so the grid shows in true negative space */
 .main-wrapper,
-[class*="docRoot"],
-[class*="docMainContainer"],
 [class*="docPage"],
-[class*="docItemWrapper"],
-[class*="docItemCol"],
-[class*="docSidebar"],
-[class*="sidebarViewContent"],
-aside[class*="sidebar"],
-nav[class*="sidebar"] {
+[class*="docItemWrapper"] {
   background: transparent !important;
 }
-/* ensure the page fills the viewport so the grid never stops short */
 .main-wrapper { min-height: 100vh; }
+
+/* ---- Doc layout: one solid surface for the entire row ----
+   The docRoot holds sidebar + main + TOC as a single opaque band.
+   Grid shows above (between navbar and doc row) and below (before footer).
+   Internal panel dividers create the three-column structure. */
+[class*="docRoot"] {
+  background: var(--ifm-background-color) !important;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+/* internal panel dividers */
+aside[class*="docSidebar"] {
+  border-right: 1px solid var(--ifm-color-emphasis-200);
+}
+/* TOC — the full-height column border creates dead space below a short TOC.
+   Instead, put the border on the TOC list itself so it's compact. */
+.theme-doc-toc-desktop {
+  border-left: none;
+}
 
 /* film grain texture — very subtle, adds tactile depth to the flat surfaces */
 body::after {
@@ -243,7 +252,14 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 /* heading scale + rhythm — matches the static .prose */
 .markdown h2 { font-size: 25px; font-weight: 600; margin: 52px 0 18px; }
 .markdown h3 { font-size: 18px; font-weight: 600; margin: 36px 0 12px; }
-.markdown p { max-width: 68ch; }
+.markdown p { max-width: 68ch; line-height: 1.75; }
+
+/* breadcrumb row — anchor it with a bottom border */
+.theme-doc-breadcrumbs {
+  padding-bottom: 16px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
 
 /* inline code (NOT code inside pre blocks — those get always-dark treatment) */
 code {
@@ -316,6 +332,8 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
 .theme-doc-markdown { overflow-wrap: break-word; }
 /* wide tables scroll inside themselves rather than stretching the page */
 .theme-doc-markdown .table-wrapper, .markdown > table { display: block; max-width: 100%; overflow-x: auto; }
+/* code blocks must stay within the content column — no overflow into margins */
+.markdown [class*="codeBlockContainer"] { max-width: 100%; overflow: hidden; }
 
 /* =====================================================================
    CODE BLOCKS  (always-dark "code instrument" with structured header)
@@ -571,7 +589,9 @@ pre.prism-code, [class*="codeBlock"] pre {
    TABLE OF CONTENTS
    ===================================================================== */
 .table-of-contents { font-family: var(--agac-font-mono); font-size: 12px; padding-left: 0; }
-.table-of-contents.table-of-contents__left-border { border-left: none; }
+.table-of-contents.table-of-contents__left-border {
+  border-left: none !important;
+}
 .table-of-contents .table-of-contents__link {
   position: relative;
   padding-left: 24px;
@@ -819,7 +839,7 @@ pre.prism-code, [class*="codeBlock"] pre {
   --ifm-footer-title-color: var(--ifm-heading-color);
   --ifm-footer-link-color: var(--ifm-color-content-secondary);
   --ifm-footer-link-hover-color: var(--ifm-color-primary);
-  background: transparent;
+  background: var(--ifm-background-color);
   border-top: 1px solid var(--ifm-color-emphasis-200);
   color: var(--ifm-color-content);
   position: relative;
