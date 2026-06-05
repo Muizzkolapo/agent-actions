@@ -13,6 +13,7 @@
  */
 import React, {useState} from 'react';
 import Link from '@docusaurus/Link';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import {useLocation} from '@docusaurus/router';
 
 const norm = (p?: string) => (p || '').replace(/\/+$/, '') || '/';
@@ -82,13 +83,15 @@ export default function AgacTree({sidebar, className, onNavigate}: any): JSX.Ele
     setOpen((o) => ({...o, [key]: !(key in o ? o[key] : fallback)}));
 
   const rows = buildRows(sidebar || [], '', open, path, '');
+  const {siteConfig} = useDocusaurusContext();
+  const version = (siteConfig.customFields?.agentActionsVersion as string) || '0.0.0';
 
   return (
     <nav className={'agac-tree ' + (className || '')} aria-label="Docs sidebar">
       <div className="agac-tree-root">
         <span>agent-actions</span>
         <span style={{color: 'var(--ifm-color-emphasis-300)'}}>·</span>
-        <span className="dot">v1.0</span>
+        <span className="dot">v{version}</span>
       </div>
 
       {rows.map((row, idx) => {

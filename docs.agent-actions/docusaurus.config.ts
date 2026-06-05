@@ -1,6 +1,13 @@
 import type {PrismTheme} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Read version from pyproject.toml at build time
+const pyproject = fs.readFileSync(path.resolve(__dirname, '../pyproject.toml'), 'utf-8');
+const versionMatch = pyproject.match(/^version\s*=\s*"([^"]+)"/m);
+const AGENT_ACTIONS_VERSION = versionMatch ? versionMatch[1] : '0.0.0';
 
 // Custom agac instrument palette — high-contrast dark theme on #0d1115.
 // Each token type uses a distinct hue so they're visually separable at a glance.
@@ -30,6 +37,9 @@ const config: Config = {
   title: 'Agent Actions',
   tagline: 'YAML-native multi-agent DAG workflows with schema-first validation',
   favicon: 'img/favicon.svg',
+  customFields: {
+    agentActionsVersion: AGENT_ACTIONS_VERSION,
+  },
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
