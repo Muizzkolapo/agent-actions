@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Empty dict responses [{}] no longer bypass _is_empty_output check; reprompt exhaustion now routes through EXHAUSTED disposition instead of SUCCESS"
-time: 2026-06-04T05:39:00.000000Z
