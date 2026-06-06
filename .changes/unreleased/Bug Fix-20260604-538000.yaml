@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Observe directives on missing fields now skip the record instead of silently injecting None into prompts"
-time: 2026-06-04T05:38:00.000000Z
