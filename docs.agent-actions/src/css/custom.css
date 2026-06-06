@@ -394,8 +394,8 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
 .cb-head {
   display: flex;
   align-items: center;
-  height: 48px;
-  padding: 0 16px;
+  height: 40px;
+  padding: 0 14px;
   background: var(--agac-code-bg-raised);
   border-bottom: none;
   flex-shrink: 0;
@@ -505,10 +505,14 @@ main[class*="docMainContainer"] [class*="col"] { min-width: 0; }
 /* hide the default Docusaurus button group */
 .cb-instrument [class*="buttonGroup"] { display: none !important; }
 
-/* code block content area — generous padding */
+/* code block content area — padding on <pre>, zero on inner <code> wrapper
+   (Docusaurus's codeBlockLines adds its own var(--ifm-pre-padding) which doubles up) */
 .cb-instrument pre.prism-code,
 .cb-instrument [class*="codeBlock"] pre {
-  padding: 20px 24px !important;
+  padding: 10px 14px !important;
+}
+.cb-instrument [class*="codeBlockLines"] {
+  padding: 0 !important;
 }
 
 /* code blocks fade in */
@@ -601,7 +605,7 @@ pre.prism-code, [class*="codeBlock"] pre {
 .table-of-contents .table-of-contents__link {
   position: relative;
   padding-left: 24px;
-  color: var(--ifm-color-content-secondary);
+  color: var(--ifm-color-content);
   transition: color 150ms ease, padding-left 150ms ease;
 }
 .table-of-contents .table-of-contents__link:hover { padding-left: 28px; }
@@ -612,11 +616,11 @@ pre.prism-code, [class*="codeBlock"] pre {
   top: 50%;
   width: 14px;
   height: 1px;
-  background: var(--ifm-color-emphasis-300);
+  background: var(--agac-fg-3);
   transition: width 160ms ease, background 160ms ease;
 }
 .table-of-contents__link:hover { color: var(--ifm-font-color-base); }
-.table-of-contents .table-of-contents__link--active { color: var(--ifm-color-primary); }
+.table-of-contents .table-of-contents__link--active { color: var(--ifm-color-primary); font-weight: 500; }
 .table-of-contents .table-of-contents__link--active::before { background: var(--ifm-color-primary); width: 22px; }
 /* "# on this page" cap */
 .table-of-contents::before {
@@ -626,7 +630,7 @@ pre.prism-code, [class*="codeBlock"] pre {
   font-size: 10.5px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-content-secondary);
   padding-left: 24px;
   margin-bottom: 12px;
 }
@@ -1110,10 +1114,26 @@ pre.prism-code, [class*="codeBlock"] pre {
   .agac-hero { padding: 56px 0 40px; }
   .agac-qnav { padding: 40px 0 64px; }
 
-  /* code blocks: constrain to viewport on mobile */
+  /* code blocks on mobile: tighter padding, slight margin from edges */
   [class*="codeBlockContainer"].cb-instrument {
     border-radius: 10px !important;
+    margin-left: 4px;
+    margin-right: 4px;
   }
+  .cb-instrument pre.prism-code,
+  .cb-instrument [class*="codeBlock"] pre {
+    padding: 14px 14px !important;
+  }
+  .cb-head {
+    height: 40px;
+    padding: 0 12px;
+  }
+  .cb-lights { gap: 6px; }
+  .cb-light { width: 11px; height: 11px; }
+  .cb-head-name { font-size: 12px; padding: 0 8px; }
+  .cb-head-chip { font-size: 9px; padding: 3px 7px; }
+  .cb-head-btn { height: 26px; padding: 0 8px; font-size: 11px; }
+  .cb-head-btn-label { font-size: 11px; }
 
   /* mobile navbar sidebar — solid background */
   .navbar-sidebar {
