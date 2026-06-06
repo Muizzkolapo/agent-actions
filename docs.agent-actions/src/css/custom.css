@@ -294,7 +294,13 @@ pre code {
 /* =====================================================================
    NAVBAR
    ===================================================================== */
-.navbar { backdrop-filter: blur(14px); transition: box-shadow 300ms ease; }
+/* backdrop-filter on .navbar breaks the mobile sidebar on many devices —
+   it creates a stacking context that renders the menu behind the page.
+   Only apply it on desktop where the mobile sidebar isn't used. */
+@media (min-width: 997px) {
+  .navbar { backdrop-filter: blur(14px); }
+}
+.navbar { transition: box-shadow 300ms ease; }
 .navbar--fixed-top { animation: agac-fade-in 400ms ease both; }
 .navbar__title {
   font-family: var(--agac-font-mono);
@@ -720,8 +726,11 @@ pre.prism-code, [class*="codeBlock"] pre {
 .agac-tree-node:hover .agac-tree-arrow { opacity: 1; }
 .agac-tree-node.active .agac-tree-arrow { opacity: 1; color: var(--ifm-color-primary); }
 
-/* hide Infima's default sidebar menu when our tree is present (safety) */
-.agac-tree + .menu { display: none; }
+/* hide Infima's default sidebar menu when our tree is present (desktop only).
+   On mobile, the .menu is used for the primary navbar-sidebar items and must stay visible. */
+@media (min-width: 997px) {
+  .agac-tree + .menu { display: none; }
+}
 
 /* --- mobile drawer variant (swizzled DocSidebar/Mobile) --------------- */
 /* The tree renders inside Docusaurus's slide-in secondary menu. Give it a
@@ -1100,4 +1109,14 @@ pre.prism-code, [class*="codeBlock"] pre {
   .agac-home-inner { padding: 0 20px; }
   .agac-hero { padding: 56px 0 40px; }
   .agac-qnav { padding: 40px 0 64px; }
+
+  /* code blocks: constrain to viewport on mobile */
+  [class*="codeBlockContainer"].cb-instrument {
+    border-radius: 10px !important;
+  }
+
+  /* mobile navbar sidebar — solid background */
+  .navbar-sidebar {
+    background: var(--ifm-background-color);
+  }
 }
