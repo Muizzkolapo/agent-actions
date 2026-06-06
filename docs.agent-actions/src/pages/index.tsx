@@ -84,7 +84,7 @@ export default function Home(): JSX.Element {
             <div className="agac-hero-grid">
               <div>
                 <div className="agac-eyebrow"><span className="dot"></span> v{version} · YAML-native agent orchestration</div>
-                <h1 className="agac-hero-title">One action tips.<br />The rest <span className="sig">cascade.</span></h1>
+                <h1 className="agac-hero-title">One action falls.<br />The rest <span className="sig">cascade.</span></h1>
                 <p className="agac-hero-sub">
                   agent-actions is an agentic workflow engine that runs in your terminal.
                   Define an LLM pipeline in YAML — the engine handles orchestration,

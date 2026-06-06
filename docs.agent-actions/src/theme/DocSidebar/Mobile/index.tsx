@@ -1,35 +1,33 @@
 /**
  * Swizzled: @theme/DocSidebar/Mobile
- * Renders the agent-actions ASCII file-tree inside Docusaurus's slide-in mobile
- * drawer, instead of Infima's default <menu> list.
- *
- * Drop in at:  src/theme/DocSidebar/Mobile/index.tsx
- *
- * Same shared <AgacTree> the desktop rail uses — so the look, routing, active
- * state, and collapse behaviour all match. `onNavigate` closes the drawer when
- * the user taps a doc link (categories that toggle keep the drawer open).
- *
- * Loosely typed on purpose so `docusaurus build` (Babel) never trips.
+ * Renders the agent-actions ASCII file-tree in the mobile drawer.
+ * Matches the default Docusaurus pattern exactly, just swaps DocSidebarItems for AgacTree.
  */
 import React from 'react';
 import {
   NavbarSecondaryMenuFiller,
-  useNavbarMobileSidebar,
-} from '@docusaurus/theme-common/internal';
+  type NavbarSecondaryMenuComponent,
+} from '@docusaurus/theme-common';
+import {useNavbarMobileSidebar} from '@docusaurus/theme-common/internal';
 import AgacTree from '../_AgacTree';
+import type {Props} from '@theme/DocSidebar/Mobile';
 
-function DocSidebarMobileSecondaryMenu({sidebar}: any): JSX.Element {
+const DocSidebarMobileSecondaryMenu: NavbarSecondaryMenuComponent<Props> = ({
+  sidebar,
+  path,
+}) => {
   const mobileSidebar = useNavbarMobileSidebar();
   return (
     <AgacTree
       sidebar={sidebar}
+      path={path}
       className="agac-tree--mobile"
       onNavigate={() => mobileSidebar.toggle()}
     />
   );
-}
+};
 
-function DocSidebarMobile(props: any): JSX.Element {
+function DocSidebarMobile(props: Props) {
   return (
     <NavbarSecondaryMenuFiller
       component={DocSidebarMobileSecondaryMenu}

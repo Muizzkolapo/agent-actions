@@ -229,6 +229,9 @@ const config: Config = {
       // Both themes use the agac instrument palette — code blocks are always-dark
       theme: agacPrismTheme,
       darkTheme: agacPrismTheme,
+      // Load full grammars for languages where prism-react-renderer's built-in
+      // subset misses tokens (e.g. bash comments after blank lines)
+      additionalLanguages: ['bash', 'python', 'json', 'yaml', 'toml', 'diff'],
     },
     mermaid: {
       theme: {
