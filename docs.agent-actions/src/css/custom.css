@@ -57,9 +57,9 @@
 
   --ifm-font-color-base: #11181c;
   --ifm-heading-color: #11181c;
-  --ifm-color-content: #3a444a;
-  --ifm-color-content-secondary: #687077;
-  --agac-fg-3: #98a0a6;
+  --ifm-color-content: #2c353b;
+  --ifm-color-content-secondary: #556068;
+  --agac-fg-3: #8a9298;
 
   --ifm-link-color: #11181c;
   --ifm-link-hover-color: var(--agac-signal-dim);
@@ -71,9 +71,9 @@
   --ifm-navbar-link-hover-color: #11181c;
 
   --ifm-toc-border-color: #dde2df;
-  --ifm-color-emphasis-100: #e9ecea;
-  --ifm-color-emphasis-200: #dde2df;
-  --ifm-color-emphasis-300: #c6cdc8;
+  --ifm-color-emphasis-100: #e4e8e6;
+  --ifm-color-emphasis-200: #d4dad6;
+  --ifm-color-emphasis-300: #b8c0bb;
 
   /* always-dark code blocks — override Infima's light-mode pre background
      so the v4 @layer system doesn't revert our dark panels to #f6f7f8.
@@ -96,7 +96,7 @@
   --ifm-menu-color-background-active: transparent;
   --ifm-menu-color-background-hover: transparent;
 
-  --agac-grid-line: rgba(11, 14, 16, 0.055);
+  --agac-grid-line: rgba(11, 14, 16, 0.09);
 }
 
 /* =====================================================================
@@ -129,9 +129,9 @@
   --ifm-navbar-link-hover-color: #e9edee;
 
   --ifm-toc-border-color: #1d242a;
-  --ifm-color-emphasis-100: #161c21;
-  --ifm-color-emphasis-200: #1d242a;
-  --ifm-color-emphasis-300: #2b343b;
+  --ifm-color-emphasis-100: #181f25;
+  --ifm-color-emphasis-200: #252e36;
+  --ifm-color-emphasis-300: #354050;
 
   --ifm-blockquote-color: #828d93;
   --ifm-blockquote-border-color: #2b343b;
