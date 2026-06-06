@@ -116,9 +116,9 @@
 
   --ifm-font-color-base: #e9edee;
   --ifm-heading-color: #e9edee;
-  --ifm-color-content: #b7c0c4;
-  --ifm-color-content-secondary: #828d93;
-  --agac-fg-3: #5a6469;
+  --ifm-color-content: #c0c8cc;
+  --ifm-color-content-secondary: #929da3;
+  --agac-fg-3: #738087;
 
   --ifm-link-color: #e9edee;
   --ifm-link-hover-color: var(--agac-signal-hi);
@@ -875,7 +875,7 @@ pre.prism-code, [class*="codeBlock"] pre {
 }
 .footer .footer__link-item {
   font-size: 14px;
-  color: var(--ifm-color-content-secondary);
+  color: var(--ifm-color-content);
   transition: color 180ms ease;
   position: relative;
 }
