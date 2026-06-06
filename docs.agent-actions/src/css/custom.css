@@ -212,7 +212,8 @@ body::before {
 [class*="docItemWrapper"] {
   background: transparent !important;
 }
-.main-wrapper { min-height: 100vh; }
+/* min-height lives on #__docusaurus (Docusaurus's own flex layout).
+   Do NOT set it here — it pushes the footer below the fold on short pages. */
 
 /* ---- Doc layout: one solid surface for the entire row ----
    The docRoot holds sidebar + main + TOC as a single opaque band.

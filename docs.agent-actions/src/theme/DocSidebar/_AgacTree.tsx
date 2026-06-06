@@ -118,7 +118,7 @@ export default function AgacTree({sidebar, className, onNavigate}: any): JSX.Ele
                 to={item.href}
                 className={cls}
                 onClick={() => {
-                  if (collapsible && !isOpen) toggle(key, true);
+                  if (collapsible) toggle(key, isOpen);
                   if (onNavigate) onNavigate();
                 }}>
                 {inner}
