@@ -96,11 +96,6 @@ class FileToolStrategy:
 
             is_expansion = len(structured_data) > len(records)
 
-            # Detect missing records — tool dropped input without output.
-            # Skip for expansion tools (N→M, M>N) where output GUIDs
-            # legitimately differ from input GUIDs.
-            # Also skip when synthetic records exist (source_mapping contains
-            # None) — we can't determine which inputs a synthetic consumed.
             has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
             missing_results: list[ProcessingResult] = []
             if not is_expansion and not has_synthetic:
@@ -108,11 +103,6 @@ class FileToolStrategy:
                 for input_record in records:
                     rid = input_record.get("source_guid")
                     if rid and rid not in output_guids:
-                        logger.warning(
-                            "Tool '%s' did not return record %s — producing passthrough tombstone",
-                            context.agent_name,
-                            rid,
-                        )
                         missing_results.append(
                             ProcessingResult.unprocessed(
                                 data=[
@@ -127,6 +117,37 @@ class FileToolStrategy:
                                 source_guid=rid,
                                 input_record=input_record,
                             )
+                        )
+
+                if missing_results:
+                    n_missing = len(missing_results)
+                    n_total = len(records)
+                    n_output = len(structured_data)
+                    ratio = n_missing / n_total
+
+                    if ratio > 0.5:
+                        logger.warning(
+                            "Tool '%s' did not return %d of %d input records "
+                            "(produced %d outputs). "
+                            "If this is a many-to-one tool (N inputs -> M outputs), "
+                            "use a list for source_index to map all inputs:\n"
+                            '  FileUDFResult(outputs=[{"source_index": [0, 1, 2, ...], "data": ...}])\n'
+                            "Unmapped records will be passed through as tombstones.",
+                            context.agent_name,
+                            n_missing,
+                            n_total,
+                            n_output,
+                        )
+                    else:
+                        missing_guids = [r.source_guid for r in missing_results if r.source_guid]
+                        logger.warning(
+                            "Tool '%s' did not return %d of %d records — "
+                            "producing passthrough tombstones. "
+                            "Missing source_guids: %s",
+                            context.agent_name,
+                            n_missing,
+                            n_total,
+                            missing_guids[:10],
                         )
 
             result = ProcessingResult.success(

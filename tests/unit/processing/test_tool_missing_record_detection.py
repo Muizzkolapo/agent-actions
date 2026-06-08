@@ -197,6 +197,56 @@ class TestToolMissingRecordDetection:
         assert "dropper_tool" in stderr
         assert "r2" in stderr
 
+    def test_high_drop_ratio_logs_many_to_one_guidance(self, capsys):
+        """When >50% of records are missing, log guidance about source_index lists."""
+        records = _make_records("r1", "r2", "r3", "r4", "r5")
+        context = _make_context("batch_tool")
+        context.source_data = records
+
+        # Tool returns 1 output for 5 inputs — 80% missing
+        with patch(
+            "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+            return_value=(
+                [TrackedItem({"v": 1}, source_index=0)],
+                True,
+            ),
+        ):
+            FileToolStrategy().invoke(records, context)
+
+        stderr = capsys.readouterr().err
+        assert "batch_tool" in stderr
+        assert "4 of 5" in stderr
+        assert "many-to-one" in stderr
+        assert "source_index" in stderr
+        # No per-record spam
+        assert stderr.count("did not return") == 1
+
+    def test_low_drop_ratio_logs_summary_with_guids(self, capsys):
+        """When <=50% of records are missing, log summary with missing GUIDs."""
+        records = _make_records("r1", "r2", "r3", "r4")
+        context = _make_context("filter_tool")
+        context.source_data = records
+
+        # Tool drops r3 — 25% missing
+        with patch(
+            "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+            return_value=(
+                [
+                    TrackedItem({"v": 1}, source_index=0),
+                    TrackedItem({"v": 2}, source_index=1),
+                    TrackedItem({"v": 4}, source_index=3),
+                ],
+                True,
+            ),
+        ):
+            FileToolStrategy().invoke(records, context)
+
+        stderr = capsys.readouterr().err
+        assert "filter_tool" in stderr
+        assert "1 of 4" in stderr
+        assert "r3" in stderr
+        assert "many-to-one" not in stderr
+
     def test_synthetic_record_no_false_positives(self):
         """Tool merging N inputs into synthetic output — no false tombstones."""
         records = _make_records("r1", "r2")
