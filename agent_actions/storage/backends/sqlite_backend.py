@@ -516,6 +516,9 @@ class SQLiteBackend(StorageBackend):
         if relative_path is not None:
             relative_path = self._validate_identifier(relative_path, "relative_path")
 
+        if self.target_dir is None:
+            raise ValueError("Cannot preview target data without target_dir configured")
+
         limit = min(max(1, limit), 1000)
         offset = max(0, offset)
 
@@ -563,9 +566,6 @@ class SQLiteBackend(StorageBackend):
             if skipped + file_record_count <= offset:
                 skipped += file_record_count
                 continue
-
-            if self.target_dir is None:
-                break
 
             fs_path = self.target_dir / action_name / file_path
             try:
