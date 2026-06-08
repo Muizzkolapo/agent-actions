@@ -41,8 +41,6 @@ class TestSQLiteBackendLifecycle:
     def test_creates_tables_on_initialize(self):
         """Backend creates source_data and target_data tables."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
-
             backend = _make_backend(tmpdir)
             backend.initialize()
 
@@ -58,8 +56,6 @@ class TestSQLiteBackendLifecycle:
     def test_context_manager_cleanup(self):
         """Context manager properly closes connection."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
-
             with _make_backend(tmpdir) as backend:
                 backend.initialize()
                 # Connection is active inside context
@@ -76,7 +72,6 @@ class TestTargetDataOperations:
     def backend(self):
         """Create and initialize a test backend."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
             backend = _make_backend(tmpdir)
             backend.initialize()
             yield backend
@@ -172,7 +167,6 @@ class TestSourceDataOperations:
     def backend(self):
         """Create and initialize a test backend."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
             backend = _make_backend(tmpdir)
             backend.initialize()
             yield backend
@@ -261,7 +255,6 @@ class TestPreviewAndStats:
     def backend_with_data(self):
         """Create backend with sample data."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
             backend = _make_backend(tmpdir)
             backend.initialize()
 
@@ -424,8 +417,6 @@ class TestConcurrencyAndResilience:
     def test_multiple_writes_to_same_node(self):
         """Multiple sequential writes to same node work correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
-
             with _make_backend(tmpdir) as backend:
                 backend.initialize()
 
@@ -446,8 +437,6 @@ class TestConcurrencyAndResilience:
     def test_handles_unicode_data(self):
         """Backend correctly handles unicode data."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
-
             with _make_backend(tmpdir) as backend:
                 backend.initialize()
 
@@ -467,8 +456,6 @@ class TestConcurrencyAndResilience:
     def test_handles_large_records(self):
         """Backend handles large JSON records."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
-
             with _make_backend(tmpdir) as backend:
                 backend.initialize()
 
@@ -487,7 +474,6 @@ class TestConcurrencyAndResilience:
         """Concurrent writes from multiple threads don't cause transaction errors."""
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
             backend = _make_backend(tmpdir)
             backend.initialize()
 
@@ -548,7 +534,6 @@ class TestBackendTypeProperty:
     def test_backend_type_returns_sqlite(self):
         """SQLiteBackend returns 'sqlite' as backend_type."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "test.db"
             backend = _make_backend(tmpdir)
 
             assert backend.backend_type == "sqlite"
@@ -561,8 +546,6 @@ class TestWorkflowIntegration:
     def test_action_chain_data_flow(self):
         """Simulates data flowing through action chain."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 
@@ -601,8 +584,6 @@ class TestWorkflowIntegration:
     def test_parallel_actions_write_to_different_nodes(self):
         """Parallel actions can write to different nodes."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 
@@ -635,8 +616,6 @@ class TestWorkflowIntegration:
     def test_merge_pattern_combines_upstream_data(self):
         """Merge pattern can read from multiple upstream nodes."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 
@@ -670,8 +649,6 @@ class TestDispositionLifecycle:
     def test_passthrough_lifecycle(self):
         """Passthrough disposition can be set, queried, and cleared."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 
@@ -696,8 +673,6 @@ class TestDispositionLifecycle:
     def test_skip_disposition_lifecycle(self):
         """Skip disposition works end-to-end."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 
@@ -715,8 +690,6 @@ class TestDispositionLifecycle:
     def test_multiple_nodes_independent(self):
         """Dispositions for different nodes are independent."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 
@@ -735,8 +708,6 @@ class TestDispositionLifecycle:
     def test_per_record_dispositions(self):
         """Individual record dispositions work alongside node-level ones."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 
@@ -761,8 +732,6 @@ class TestDispositionLifecycle:
     def test_disposition_stats_in_storage_stats(self):
         """Storage stats include disposition count."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            Path(tmpdir) / "workflow.db"
-
             with _make_backend(tmpdir, "my_workflow") as backend:
                 backend.initialize()
 

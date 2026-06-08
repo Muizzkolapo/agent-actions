@@ -12,7 +12,8 @@ class TestDeleteTarget:
     def backend(self, tmp_path):
         """Create a fresh SQLite backend for testing."""
         db_path = tmp_path / "agent_io" / "test.db"
-        backend = SQLiteBackend(str(db_path), "test_workflow")
+        target_dir = tmp_path / "agent_io" / "target"
+        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
         backend.initialize()
         yield backend
         backend.close()
@@ -38,7 +39,8 @@ class TestDeleteTarget:
     def test_works_with_real_sqlite_backend(self, tmp_path):
         """Full roundtrip: write, verify, delete, verify gone."""
         db_path = tmp_path / "test.db"
-        backend = SQLiteBackend(str(db_path), "wf")
+        target_dir = tmp_path / "target"
+        backend = SQLiteBackend(str(db_path), "wf", target_dir=str(target_dir))
         backend.initialize()
 
         try:

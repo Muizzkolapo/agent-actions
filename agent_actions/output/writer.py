@@ -129,6 +129,9 @@ class FileWriter(ProcessorErrorHandlerMixin):
             if self.output_directory:
                 assert_path_contained(file_path, Path(self.output_directory))
 
+            # FileWriter writes to the caller's file_path; the backend also
+            # writes to target_dir/action/relative_path (same path in production,
+            # can differ in tests where output_directory != target_dir).
             file_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_json_write(file_path, data)
 

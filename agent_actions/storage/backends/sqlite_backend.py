@@ -21,6 +21,7 @@ from agent_actions.storage.backend import (
     StorageBackend,
 )
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.path_safety import assert_path_contained
 
 logger = logging.getLogger(__name__)
 
@@ -323,10 +324,16 @@ class SQLiteBackend(StorageBackend):
 
         record_count = len(data)
 
-        if self.target_dir is not None:
-            file_path = self.target_dir / action_name / relative_path
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            atomic_json_write(file_path, data)
+        if self.target_dir is None:
+            raise ValueError(
+                f"Cannot write target data without target_dir configured "
+                f"({action_name}/{relative_path})"
+            )
+
+        file_path = self.target_dir / action_name / relative_path
+        assert_path_contained(file_path, self.target_dir)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json_write(file_path, data)
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -376,6 +383,7 @@ class SQLiteBackend(StorageBackend):
             )
 
         file_path = self.target_dir / action_name / relative_path
+        assert_path_contained(file_path, self.target_dir)
         try:
             result: list[dict[str, Any]] = json.loads(file_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
@@ -557,7 +565,7 @@ class SQLiteBackend(StorageBackend):
                 continue
 
             if self.target_dir is None:
-                continue
+                break
 
             fs_path = self.target_dir / action_name / file_path
             try:
