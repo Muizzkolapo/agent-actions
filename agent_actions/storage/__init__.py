@@ -30,7 +30,10 @@ def get_storage_backend(
 
     workflow_dir = Path(workflow_path)
     db_path = workflow_dir / "agent_io" / "store" / f"{workflow_name}.db"
-    backend = backend_class.create(db_path=str(db_path), workflow_name=workflow_name)
+    target_dir = workflow_dir / "agent_io" / "target"
+    backend = backend_class.create(
+        db_path=str(db_path), workflow_name=workflow_name, target_dir=str(target_dir)
+    )
 
     return backend
 

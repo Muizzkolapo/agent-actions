@@ -130,10 +130,10 @@ class FileWriter(ProcessorErrorHandlerMixin):
             if self.output_directory:
                 assert_path_contained(file_path, Path(self.output_directory))
 
-            self.storage_backend.write_target(self.action_name, relative_path, data)
-
             ensure_directory_exists(file_path, is_file=True)
             atomic_json_write(file_path, data)
+
+            self.storage_backend.write_target(self.action_name, relative_path, data)
 
             return file_path.stat().st_size
 

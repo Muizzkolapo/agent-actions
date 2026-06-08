@@ -20,6 +20,7 @@ from agent_actions.storage.backend import (
     DispositionRow,
     StorageBackend,
 )
+from agent_actions.utils.atomic_write import atomic_json_write
 
 logger = logging.getLogger(__name__)
 
@@ -168,10 +169,11 @@ class SQLiteBackend(StorageBackend):
     # Restrictive as defense-in-depth; all SQL is parameterized.
     _VALID_IDENTIFIER_CHARS = set(string.ascii_letters + string.digits + "_-./ ")
 
-    def __init__(self, db_path: str, workflow_name: str):
+    def __init__(self, db_path: str, workflow_name: str, target_dir: str | None = None):
         """Initialize SQLite backend."""
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
+        self.target_dir: Path | None = Path(target_dir) if target_dir else None
         self._connection: sqlite3.Connection | None = None
         self._lock = (
             threading.RLock()
@@ -184,15 +186,17 @@ class SQLiteBackend(StorageBackend):
         Required kwargs:
             db_path: Path to the SQLite database file.
             workflow_name: Name of the workflow.
+            target_dir: Path to agent_io/target directory.
         """
         db_path = kwargs.pop("db_path")
         workflow_name = kwargs.pop("workflow_name")
+        target_dir = kwargs.pop("target_dir", None)
         if kwargs:
             raise ConfigValidationError(
                 f"Unknown kwargs for SQLiteBackend: {list(kwargs)}",
                 context={"unknown_kwargs": list(kwargs)},
             )
-        return cls(str(db_path), workflow_name)
+        return cls(str(db_path), workflow_name, target_dir=str(target_dir) if target_dir else None)
 
     def _validate_identifier(self, name: str, field: str) -> str:
         """Validate and POSIX-normalize an identifier to prevent injection.
@@ -313,12 +317,16 @@ class SQLiteBackend(StorageBackend):
                 )
 
     def write_target(self, action_name: str, relative_path: str, data: list[dict[str, Any]]) -> str:
-        """Write target data for a specific node."""
+        """Write target data to filesystem and metadata to DB."""
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
-        data_json = json.dumps(data, ensure_ascii=False)
         record_count = len(data)
+
+        if self.target_dir is not None:
+            file_path = self.target_dir / action_name / relative_path
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_json_write(file_path, data)
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -327,9 +335,9 @@ class SQLiteBackend(StorageBackend):
                     """
                     INSERT OR REPLACE INTO target_data
                     (action_name, relative_path, data, record_count, created_at)
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, '[]', ?, CURRENT_TIMESTAMP)
                     """,
-                    (action_name, relative_path, data_json, record_count),
+                    (action_name, relative_path, record_count),
                 )
                 self.connection.commit()
                 logger.debug(
@@ -354,25 +362,29 @@ class SQLiteBackend(StorageBackend):
                 raise
 
     def _read_target_raw(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
-        """Read raw target data from SQLite.
+        """Read raw target data from the filesystem.
 
         Raises:
             FileNotFoundError: If no data exists for the given path.
         """
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
-        with self._lock:
-            cursor = self.connection.cursor()
-            cursor.execute(
-                "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
-                (action_name, relative_path),
-            )
-            row = cursor.fetchone()
 
-        if row is None:
+        if self.target_dir is None:
+            raise FileNotFoundError(
+                f"No target_dir configured — cannot read {action_name}/{relative_path}"
+            )
+
+        file_path = self.target_dir / action_name / relative_path
+        if not file_path.is_file():
             raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
 
-        result: list[dict[str, Any]] = json.loads(row["data"])
+        result: list[dict[str, Any]] = json.loads(file_path.read_text(encoding="utf-8"))
+        if not isinstance(result, list):
+            raise FileNotFoundError(
+                f"Target data at {action_name}/{relative_path} is not a list "
+                f"(got {type(result).__name__})"
+            )
         return result
 
     def write_source(
@@ -485,7 +497,10 @@ class SQLiteBackend(StorageBackend):
         offset: int = 0,
         relative_path: str | None = None,
     ) -> dict[str, Any]:
-        """Preview target data for a node with pagination."""
+        """Preview target data for a node with pagination.
+
+        Reads file metadata from DB, actual data from filesystem.
+        """
         action_name = self._validate_identifier(action_name, "action_name")
         if relative_path is not None:
             relative_path = self._validate_identifier(relative_path, "relative_path")
@@ -499,7 +514,7 @@ class SQLiteBackend(StorageBackend):
             cursor.execute(
                 """
                 SELECT relative_path,
-                       COALESCE(record_count, json_array_length(data)) as record_count
+                       COALESCE(record_count, 0) as record_count
                 FROM target_data
                 WHERE action_name = ?
                 ORDER BY relative_path
@@ -508,60 +523,64 @@ class SQLiteBackend(StorageBackend):
             )
             file_metadata = cursor.fetchall()
 
-            files = [row["relative_path"] for row in file_metadata]
+        files = [row["relative_path"] for row in file_metadata]
 
-            if relative_path:
-                if relative_path not in files:
-                    return {
-                        "records": [],
-                        "total_count": 0,
-                        "action_name": action_name,
-                        "files": files,
-                        "error": f"File '{relative_path}' not found for node '{action_name}'",
-                    }
-                file_metadata = [
-                    row for row in file_metadata if row["relative_path"] == relative_path
-                ]
+        if relative_path:
+            if relative_path not in files:
+                return {
+                    "records": [],
+                    "total_count": 0,
+                    "action_name": action_name,
+                    "files": files,
+                    "error": f"File '{relative_path}' not found for node '{action_name}'",
+                }
+            file_metadata = [row for row in file_metadata if row["relative_path"] == relative_path]
 
-            total_count = sum(row["record_count"] for row in file_metadata)
+        total_count = sum(row["record_count"] for row in file_metadata)
 
-            paginated_records: list[dict[str, Any]] = []
-            skipped = 0
-            collected = 0
+        paginated_records: list[dict[str, Any]] = []
+        skipped = 0
+        collected = 0
 
-            for row in file_metadata:
-                if collected >= limit:
-                    break
+        for row in file_metadata:
+            if collected >= limit:
+                break
 
-                file_path = row["relative_path"]
-                file_record_count = row["record_count"]
+            file_path = row["relative_path"]
+            file_record_count = row["record_count"]
 
-                if skipped + file_record_count <= offset:
-                    skipped += file_record_count
+            if skipped + file_record_count <= offset:
+                skipped += file_record_count
+                continue
+
+            if self.target_dir is None:
+                continue
+
+            fs_path = self.target_dir / action_name / file_path
+            if not fs_path.is_file():
+                continue
+
+            try:
+                records = json.loads(fs_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            if not isinstance(records, list):
+                continue
+
+            for record in records:
+                if skipped < offset:
+                    skipped += 1
                     continue
 
-                cursor.execute(
-                    "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
-                    (action_name, file_path),
-                )
-                data_row = cursor.fetchone()
-                if not data_row:
-                    continue
-
-                records = json.loads(data_row["data"])
-                for record in records:
-                    if skipped < offset:
-                        skipped += 1
-                        continue
-
-                    if collected < limit:
-                        if isinstance(record, dict):
-                            paginated_records.append({**record, "_file": file_path})
-                        else:
-                            paginated_records.append({"_file": file_path, "_value": record})
-                        collected += 1
+                if collected < limit:
+                    if isinstance(record, dict):
+                        paginated_records.append({**record, "_file": file_path})
                     else:
-                        break
+                        paginated_records.append({"_file": file_path, "_value": record})
+                    collected += 1
+                else:
+                    break
 
         return {
             "records": paginated_records,

@@ -286,6 +286,16 @@ class AgentWorkflow:
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
 
+            # Clear target output files from filesystem
+            action_target_dir = target_dir / action_name
+            if action_target_dir.is_dir():
+                for json_file in action_target_dir.glob("*.json"):
+                    try:
+                        json_file.unlink()
+                        logger.debug("Removed target file: %s", json_file)
+                    except OSError as e:
+                        logger.warning("Failed to remove %s: %s", json_file, e)
+
             # Batch artifacts live on disk, not in the DB
             batch_dir = target_dir / action_name / "batch"
             if batch_dir.is_dir():

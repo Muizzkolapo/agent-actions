@@ -108,7 +108,12 @@ def context_map(upstream_record) -> dict[str, Any]:
 
 @pytest.fixture
 def sqlite_backend(tmp_path) -> SQLiteBackend:
-    backend = SQLiteBackend(str(tmp_path / "test.db"), workflow_name="test_workflow")
+    target_dir = tmp_path / "target"
+    backend = SQLiteBackend(
+        str(tmp_path / "test.db"),
+        workflow_name="test_workflow",
+        target_dir=str(target_dir),
+    )
     backend.initialize()
     return backend
 
