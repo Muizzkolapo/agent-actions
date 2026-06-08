@@ -16,7 +16,6 @@ from agent_actions.logging.events import (
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_safety import assert_path_contained
-from agent_actions.utils.path_utils import ensure_directory_exists
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -130,7 +129,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
             if self.output_directory:
                 assert_path_contained(file_path, Path(self.output_directory))
 
-            ensure_directory_exists(file_path, is_file=True)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_json_write(file_path, data)
 
             self.storage_backend.write_target(self.action_name, relative_path, data)

@@ -226,8 +226,6 @@ def scan_sqlite_readonly(
                 if target_dir is None:
                     break
                 fs_path = target_dir / action_name / file_path
-                if not fs_path.is_file():
-                    continue
                 try:
                     row_data = _json.loads(fs_path.read_text(encoding="utf-8"))
                 except (ValueError, _json.JSONDecodeError, OSError):

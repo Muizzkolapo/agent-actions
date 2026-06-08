@@ -376,10 +376,13 @@ class SQLiteBackend(StorageBackend):
             )
 
         file_path = self.target_dir / action_name / relative_path
-        if not file_path.is_file():
-            raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
+        try:
+            result: list[dict[str, Any]] = json.loads(file_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"No target data found for {action_name}/{relative_path}"
+            ) from None
 
-        result: list[dict[str, Any]] = json.loads(file_path.read_text(encoding="utf-8"))
         if not isinstance(result, list):
             raise FileNotFoundError(
                 f"Target data at {action_name}/{relative_path} is not a list "
@@ -557,9 +560,6 @@ class SQLiteBackend(StorageBackend):
                 continue
 
             fs_path = self.target_dir / action_name / file_path
-            if not fs_path.is_file():
-                continue
-
             try:
                 records = json.loads(fs_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
