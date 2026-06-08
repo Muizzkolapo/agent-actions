@@ -96,11 +96,6 @@ class FileToolStrategy:
 
             is_expansion = len(structured_data) > len(records)
 
-            # Detect missing records — tool dropped input without output.
-            # Skip for expansion tools (N→M, M>N) where output GUIDs
-            # legitimately differ from input GUIDs.
-            # Also skip when synthetic records exist (source_mapping contains
-            # None) — we can't determine which inputs a synthetic consumed.
             has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
             missing_results: list[ProcessingResult] = []
             if not is_expansion and not has_synthetic:
@@ -128,7 +123,7 @@ class FileToolStrategy:
                     n_missing = len(missing_results)
                     n_total = len(records)
                     n_output = len(structured_data)
-                    ratio = n_missing / n_total if n_total > 0 else 0
+                    ratio = n_missing / n_total
 
                     if ratio > 0.5:
                         logger.warning(
