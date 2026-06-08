@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -129,15 +130,9 @@ class FileWriter(ProcessorErrorHandlerMixin):
             if self.output_directory:
                 assert_path_contained(file_path, Path(self.output_directory))
 
-            # FileWriter writes to the caller's file_path; the backend also
-            # writes to target_dir/action/relative_path (same path in production,
-            # can differ in tests where output_directory != target_dir).
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            atomic_json_write(file_path, data)
-
             self.storage_backend.write_target(self.action_name, relative_path, data)
 
-            return file_path.stat().st_size
+            return len(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
         self._execute_write("Write target file", do_write)
 

@@ -286,10 +286,14 @@ class AgentWorkflow:
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
 
-            # Clear target output files from filesystem
+            # Clear target output files from filesystem (rglob for nested paths,
+            # but skip batch/ — batch artifacts have their own cleanup below)
             action_target_dir = target_dir / action_name
+            batch_dir = action_target_dir / "batch"
             if action_target_dir.is_dir():
-                for json_file in action_target_dir.glob("*.json"):
+                for json_file in action_target_dir.rglob("*.json"):
+                    if batch_dir in json_file.parents or json_file.parent == batch_dir:
+                        continue
                     try:
                         json_file.unlink()
                         logger.debug("Removed target file: %s", json_file)
@@ -297,7 +301,6 @@ class AgentWorkflow:
                         logger.warning("Failed to remove %s: %s", json_file, e)
 
             # Batch artifacts live on disk, not in the DB
-            batch_dir = target_dir / action_name / "batch"
             if batch_dir.is_dir():
                 for pattern in [
                     ".recovery_state_*.json",
