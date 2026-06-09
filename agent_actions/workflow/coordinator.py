@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -424,6 +425,11 @@ class AgentWorkflow:
         manager = get_manager()
         with manager.context():
             try:
+                # Store execution order for delta storage reconstruction
+                backend = getattr(self, "storage_backend", None)
+                if backend is not None:
+                    backend.save_metadata("execution_order", json.dumps(self.execution_order))
+
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
                 self.services.core.action_level_orchestrator.log_execution_levels(
                     levels, self.action_indices
@@ -498,6 +504,10 @@ class AgentWorkflow:
         manager = get_manager()
         with manager.context():
             try:
+                # Store execution order for delta storage reconstruction
+                backend = getattr(self, "storage_backend", None)
+                if backend is not None:
+                    backend.save_metadata("execution_order", json.dumps(self.execution_order))
                 total_actions = len(self.execution_order)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
                 self.services.core.action_level_orchestrator.log_execution_levels(

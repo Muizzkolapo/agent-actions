@@ -168,8 +168,17 @@ class SQLiteBackend(StorageBackend):
     # Restrictive as defense-in-depth; all SQL is parameterized.
     _VALID_IDENTIFIER_CHARS = set(string.ascii_letters + string.digits + "_-./ ")
 
+    METADATA_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS workflow_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+
     def __init__(self, db_path: str, workflow_name: str):
         """Initialize SQLite backend."""
+        super().__init__()
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
         self._connection: sqlite3.Connection | None = None
@@ -257,6 +266,7 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
                 cursor.execute(self.CHECKPOINT_TABLE_SQL)
                 cursor.execute(self.CHECKPOINT_INDEX_SQL)
+                cursor.execute(self.METADATA_TABLE_SQL)
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -312,8 +322,10 @@ class SQLiteBackend(StorageBackend):
                     columns_to_add,
                 )
 
-    def write_target(self, action_name: str, relative_path: str, data: list[dict[str, Any]]) -> str:
-        """Write target data for a specific node."""
+    def _write_target_raw(
+        self, action_name: str, relative_path: str, data: list[dict[str, Any]]
+    ) -> str:
+        """Store delta-extracted records to SQLite. Called by base class write_target()."""
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
@@ -374,6 +386,48 @@ class SQLiteBackend(StorageBackend):
 
         result: list[dict[str, Any]] = json.loads(row["data"])
         return result
+
+    def _read_target_raw_batch(
+        self, action_names: list[str], relative_path: str
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Fetch raw target data for multiple actions in one batched query."""
+        if not action_names:
+            return {}
+        placeholders = ",".join("?" for _ in action_names)
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                f"SELECT action_name, data FROM target_data "
+                f"WHERE action_name IN ({placeholders}) AND relative_path = ?",
+                (*action_names, relative_path),
+            )
+            rows = cursor.fetchall()
+
+        result: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            result[row["action_name"]] = json.loads(row["data"])
+        return result
+
+    def save_metadata(self, key: str, value: str) -> None:
+        """Store a metadata key-value pair. Latest value wins (INSERT OR REPLACE)."""
+        with self._lock:
+            self.connection.execute(
+                "INSERT OR REPLACE INTO workflow_metadata (key, value, updated_at) "
+                "VALUES (?, ?, CURRENT_TIMESTAMP)",
+                (key, value),
+            )
+            self.connection.commit()
+
+    def load_metadata(self, key: str) -> str | None:
+        """Load a metadata value by key. Returns None if not found."""
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT value FROM workflow_metadata WHERE key = ?",
+                (key,),
+            )
+            row = cursor.fetchone()
+        return row["value"] if row else None
 
     def write_source(
         self,
@@ -549,6 +603,9 @@ class SQLiteBackend(StorageBackend):
                     continue
 
                 records = json.loads(data_row["data"])
+                # Reconstruct deltas for preview display
+                if records and isinstance(records[0], dict) and "_delta_mode" in records[0]:
+                    records = self._reconstruct_from_deltas(action_name, file_path, records)
                 for record in records:
                     if skipped < offset:
                         skipped += 1
