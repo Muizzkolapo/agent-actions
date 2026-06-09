@@ -425,7 +425,6 @@ class AgentWorkflow:
         manager = get_manager()
         with manager.context():
             try:
-                # Store execution order for delta storage reconstruction
                 backend = getattr(self, "storage_backend", None)
                 if backend is not None:
                     backend.save_metadata("execution_order", json.dumps(self.execution_order))
@@ -504,7 +503,6 @@ class AgentWorkflow:
         manager = get_manager()
         with manager.context():
             try:
-                # Store execution order for delta storage reconstruction
                 backend = getattr(self, "storage_backend", None)
                 if backend is not None:
                     backend.save_metadata("execution_order", json.dumps(self.execution_order))

@@ -325,7 +325,7 @@ class SQLiteBackend(StorageBackend):
     def _write_target_raw(
         self, action_name: str, relative_path: str, data: list[dict[str, Any]]
     ) -> str:
-        """Store delta-extracted records to SQLite. Called by base class write_target()."""
+        """Store records to SQLite."""
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
@@ -603,7 +603,6 @@ class SQLiteBackend(StorageBackend):
                     continue
 
                 records = json.loads(data_row["data"])
-                # Reconstruct deltas for preview display
                 if records and isinstance(records[0], dict) and "_delta_mode" in records[0]:
                     records = self._reconstruct_from_deltas(action_name, file_path, records)
                 for record in records:

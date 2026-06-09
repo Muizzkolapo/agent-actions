@@ -73,10 +73,7 @@ class StorageBackend(ABC):
     _STORAGE_FORMAT_VERSION = 2  # Version 1 = full records, Version 2 = delta storage
 
     def __init__(self) -> None:
-        """Initialize base storage backend state.
-
-        Subclasses MUST call super().__init__() in their __init__.
-        """
+        """Initialize base storage backend state."""
         self._reconstruction_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._execution_order_cache: list[str] | None = None
         self._format_version_written = False
@@ -102,10 +99,6 @@ class StorageBackend(ABC):
         """Create tables, indexes, and other infrastructure required by the backend."""
         ...
 
-    # ------------------------------------------------------------------
-    # Target data: delta-aware write/read (concrete in base class)
-    # ------------------------------------------------------------------
-
     def write_target(
         self,
         action_name: str,
@@ -114,11 +107,7 @@ class StorageBackend(ABC):
         *,
         is_first_action: bool | None = None,
     ) -> str:
-        """Write target data with delta extraction.
-
-        Concrete method — subclasses do NOT override. Subclasses implement
-        _write_target_raw() for the actual storage.
-        """
+        """Write target data with delta extraction."""
         if is_first_action is None:
             execution_order = self._get_execution_order()
             is_first_action = bool(execution_order) and execution_order[0] == action_name
@@ -142,8 +131,8 @@ class StorageBackend(ABC):
     def read_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Read target data, reconstruct from deltas, validate lifecycle, reset for downstream.
 
-        Concrete method — subclasses do NOT override. Subclasses implement
-        _read_target_raw() for the actual storage.
+        Raises:
+            FileNotFoundError: If the target data doesn't exist.
         """
         if not self._format_version_checked:
             stored_version = self.load_metadata("storage_format_version")
@@ -183,46 +172,33 @@ class StorageBackend(ABC):
         self._reconstruction_cache[cache_key] = result
         return copy.deepcopy(result)
 
-    # ------------------------------------------------------------------
-    # Abstract methods subclasses must implement
-    # ------------------------------------------------------------------
-
     @abstractmethod
     def _write_target_raw(
         self, action_name: str, relative_path: str, data: list[dict[str, Any]]
     ) -> str:
-        """Store data to the backend. Called with delta-extracted records."""
+        """Store delta-extracted records to the backend."""
         ...
 
     @abstractmethod
     def _read_target_raw(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
-        """Read raw target data from storage. Subclasses implement this."""
+        """Read raw target data from storage."""
         ...
 
     def _read_target_raw_batch(
         self, action_names: list[str], relative_path: str
     ) -> dict[str, list[dict[str, Any]]]:
-        """Fetch raw target data for multiple actions in one call.
-
-        Default loops over _read_target_raw. Backends may override with
-        a batched query (e.g., SQL IN clause) for efficiency.
-        """
+        """Fetch target data for multiple actions. Override for batched queries."""
         result: dict[str, list[dict[str, Any]]] = {}
         for action in action_names:
             try:
                 result[action] = self._read_target_raw(action, relative_path)
             except FileNotFoundError:
-                logger.debug(
-                    "Upstream action '%s' has no data for file '%s' — "
-                    "will be flagged as incomplete during reconstruction.",
-                    action,
-                    relative_path,
-                )
+                pass
         return result
 
     @abstractmethod
     def save_metadata(self, key: str, value: str) -> None:
-        """Store a metadata key-value pair (e.g., execution_order)."""
+        """Store a metadata key-value pair."""
         ...
 
     @abstractmethod
@@ -230,23 +206,13 @@ class StorageBackend(ABC):
         """Load a metadata value by key. Returns None if not found."""
         ...
 
-    # ------------------------------------------------------------------
-    # Delta extraction and reconstruction (concrete, backend-agnostic)
-    # ------------------------------------------------------------------
-
     def _extract_delta(
         self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
     ) -> dict[str, Any]:
         """Extract delta: preserve entire envelope, strip content to this action's namespace."""
         content = record.get("content")
         if not isinstance(content, dict):
-            # No content dict — store as full (raw records, test data, etc.)
             return {**record, "_delta_mode": "full"}
-
-        # Normal data bus behavior: records accumulate upstream namespaces.
-        # _extract_delta strips them to the current action's namespace only.
-        # This is correct — upstream content is stored in upstream action deltas
-        # and reconstructed on read via _reconstruct_from_deltas.
 
         if action_name not in content:
             return {**record, "_delta_mode": "full"}
@@ -272,14 +238,9 @@ class StorageBackend(ABC):
         relative_path: str,
         delta_records: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Reconstruct full records by joining upstream deltas.
-
-        Uses only abstract methods — no backend-specific access.
-        Strips _delta_mode from ALL returned records.
-        Flags records with missing upstream data as _reconstruction_incomplete.
-        """
+        """Reconstruct full records by joining upstream deltas."""
         if not delta_records or "_delta_mode" not in delta_records[0]:
-            return delta_records  # Legacy DB — no reconstruction needed
+            return delta_records
 
         execution_order = self._get_execution_order()
         try:
@@ -291,10 +252,8 @@ class StorageBackend(ABC):
         if not upstream_actions:
             return [{k: v for k, v in r.items() if k != "_delta_mode"} for r in delta_records]
 
-        # Batch fetch upstream deltas via abstract method
         upstream_data = self._read_target_raw_batch(upstream_actions, relative_path)
 
-        # Index by (action_name, source_guid)
         upstream: dict[str, dict[str, dict[str, Any]]] = {}
         for act, records in upstream_data.items():
             guid_map: dict[str, dict[str, Any]] = {}
@@ -308,7 +267,6 @@ class StorageBackend(ABC):
                     guid_map[guid] = rec_content
             upstream[act] = guid_map
 
-        # Cross-file fallback for missing source_guids
         all_guids = {r.get("source_guid") for r in delta_records if r.get("source_guid")}
         found_guids: set[str] = set()
         for guid_map in upstream.values():
@@ -326,7 +284,7 @@ class StorageBackend(ABC):
             still_missing = set(missing_guids)
             for act in upstream_actions:
                 if not still_missing:
-                    break  # All guids found
+                    break
                 try:
                     all_files = self.list_target_files(act)
                 except FileNotFoundError:
@@ -351,7 +309,6 @@ class StorageBackend(ABC):
                             upstream.setdefault(act, {})[guid] = rec_content
                             still_missing.discard(guid)
 
-        # Merge and strip _delta_mode
         reconstructed: list[dict[str, Any]] = []
         for record in delta_records:
             mode = record.get("_delta_mode")
@@ -400,7 +357,6 @@ class StorageBackend(ABC):
             return self._execution_order_cache
         raw = self.load_metadata("execution_order")
         if raw is None:
-            logger.debug("No execution_order in workflow_metadata — delta reconstruction disabled.")
             return []
         self._execution_order_cache = json.loads(raw)
         return self._execution_order_cache

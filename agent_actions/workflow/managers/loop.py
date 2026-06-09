@@ -385,8 +385,6 @@ class VersionOutputCorrelator:
 
         if self.storage_backend is not None and action_name:
             try:
-                # Tag as full — correlation merges multiple version namespaces
-                # into one record; delta extraction would strip them.
                 for record in cleaned_data:
                     record["_delta_mode"] = "full"
                 self.storage_backend.write_target(action_name, filename, cleaned_data)

@@ -379,8 +379,6 @@ class BatchProcessingService:
                 len(carry_records),
                 action_name,
             )
-            # Tag carry-forward records as full — they already have complete
-            # content from reconstruction and must not be delta-stripped.
             for record in carry_records:
                 record["_delta_mode"] = "full"
 
