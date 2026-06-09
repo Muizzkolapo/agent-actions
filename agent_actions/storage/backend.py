@@ -243,22 +243,10 @@ class StorageBackend(ABC):
             # No content dict — store as full (raw records, test data, etc.)
             return {**record, "_delta_mode": "full"}
 
-        # FM9: Warn on multi-namespace records that weren't pre-tagged
-        if (
-            record.get("_delta_mode") != "full"
-            and action_name in content
-            and not is_first_action
-            and len({k for k in content if k != "source"}) > 1
-        ):
-            logger.warning(
-                "Record for '%s' has %d content namespaces but was not tagged as full. "
-                "If this is a carry-forward, correlation, or expansion record, "
-                "tag it with _delta_mode='full' before calling write_target. "
-                "Namespaces: %s",
-                action_name,
-                len(content),
-                sorted(content.keys()),
-            )
+        # Normal data bus behavior: records accumulate upstream namespaces.
+        # _extract_delta strips them to the current action's namespace only.
+        # This is correct — upstream content is stored in upstream action deltas
+        # and reconstructed on read via _reconstruct_from_deltas.
 
         if action_name not in content:
             return {**record, "_delta_mode": "full"}
