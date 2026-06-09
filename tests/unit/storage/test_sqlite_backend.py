@@ -43,8 +43,7 @@ class TestSQLiteBackend:
     def backend(self, tmp_path):
         """Create a fresh SQLite backend for testing."""
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         yield backend
         backend.close()
@@ -52,8 +51,7 @@ class TestSQLiteBackend:
     def test_initialize_creates_tables(self, tmp_path):
         """Test that initialize creates required tables."""
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
 
         # Check tables exist
@@ -187,8 +185,7 @@ class TestSQLiteBackend:
         """Test that backend works as context manager."""
         db_path = tmp_path / "agent_io" / "test.db"
 
-        target_dir = tmp_path / "agent_io" / "target"
-        with SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir)) as backend:
+        with SQLiteBackend(str(db_path), "test_workflow") as backend:
             backend.initialize()
             backend.write_target("node_1", "file.json", [{"id": 1}])
 
@@ -211,8 +208,7 @@ class TestDispositionMethods:
     def backend(self, tmp_path):
         """Create a fresh SQLite backend for testing."""
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         yield backend
         backend.close()
@@ -357,8 +353,7 @@ class TestValidation:
     def backend(self, tmp_path):
         """Create a fresh SQLite backend for testing."""
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         yield backend
         backend.close()
@@ -415,8 +410,7 @@ class TestWriteSourceDropGuard:
     @pytest.fixture
     def backend(self, tmp_path):
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         yield backend
         backend.close()
@@ -456,14 +450,13 @@ class TestPreviewTargetNullRecordCount:
     @pytest.fixture
     def backend(self, tmp_path):
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         yield backend
         backend.close()
 
-    def test_null_record_count_uses_zero(self, backend):
-        """preview_target uses COALESCE(record_count, 0) when record_count IS NULL."""
+    def test_null_record_count_uses_json_length(self, backend):
+        """preview_target computes correct count from JSON when record_count IS NULL."""
         import json
 
         records = [{"id": 1}, {"id": 2}, {"id": 3}]
@@ -476,8 +469,8 @@ class TestPreviewTargetNullRecordCount:
         backend.connection.commit()
 
         result = backend.preview_target("node_1")
-        assert result["total_count"] == 0  # NULL record_count → COALESCE → 0
-        assert result["files"] == ["legacy.json"]
+        assert result["total_count"] == 3
+        assert len(result["records"]) == 3
 
 
 class TestGetStorageStatsNullRecordCount:
@@ -486,8 +479,7 @@ class TestGetStorageStatsNullRecordCount:
     @pytest.fixture
     def backend(self, tmp_path):
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         yield backend
         backend.close()
@@ -529,8 +521,7 @@ class TestSetDispositionRecordIdValidation:
     @pytest.fixture
     def backend(self, tmp_path):
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         yield backend
         backend.close()
@@ -578,8 +569,7 @@ class TestCloseThreadSafety:
     def test_double_close_is_safe(self, tmp_path):
         """Calling close() twice does not raise."""
         db_path = tmp_path / "agent_io" / "test.db"
-        target_dir = tmp_path / "agent_io" / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
         backend.close()
         backend.close()  # Should not raise
@@ -668,8 +658,7 @@ class TestSchemaEnforcement:
     def test_correct_schema_not_dropped(self, tmp_path):
         """Table with all columns is left intact on initialize()."""
         db_path = tmp_path / "test.db"
-        target_dir = tmp_path / "target"
-        backend = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend = SQLiteBackend(str(db_path), "test_workflow")
         backend.initialize()
 
         # Write some data
@@ -677,7 +666,7 @@ class TestSchemaEnforcement:
 
         # Re-initialize — data should survive
         backend.close()
-        backend2 = SQLiteBackend(str(db_path), "test_workflow", target_dir=str(target_dir))
+        backend2 = SQLiteBackend(str(db_path), "test_workflow")
         backend2.initialize()
 
         data = backend2.read_target("node1", "file.json")

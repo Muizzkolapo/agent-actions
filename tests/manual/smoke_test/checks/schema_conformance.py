@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 
 import yaml
 
@@ -103,29 +102,28 @@ class SchemaConformance(Check):
                 if not required_fields:
                     continue
 
-                # Discover action names (including versioned: _1, _2, _3)
-                action_names_to_check = [action_name]
                 cursor = conn.execute(
-                    "SELECT DISTINCT action_name FROM target_data WHERE action_name = ?",
+                    "SELECT data FROM target_data WHERE action_name = ?",
                     (action_name,),
                 )
-                if not cursor.fetchall():
-                    action_names_to_check = sorted(
+                rows = cursor.fetchall()
+
+                # Check versioned action names (e.g., classify_severity_1, _2, _3)
+                if not rows:
+                    for v_name in sorted(
                         a for a in all_db_actions if a.startswith(f"{action_name}_")
-                    )
+                    ):
+                        rows.extend(
+                            conn.execute(
+                                "SELECT data FROM target_data WHERE action_name = ?",
+                                (v_name,),
+                            ).fetchall()
+                        )
 
                 if action_name in skipped_actions:
                     continue
 
-                # Read target data from filesystem
-                target_files: list[tuple[str, str]] = []
-                for a_name in action_names_to_check:
-                    action_dir = ctx.target_dir / a_name
-                    if action_dir.is_dir():
-                        for f in sorted(action_dir.glob("*.json")):
-                            target_files.append((a_name, str(f)))
-
-                if not target_files:
+                if not rows:
                     if action_name in excused_actions:
                         continue
                     results.append(
@@ -140,9 +138,9 @@ class SchemaConformance(Check):
 
                 schema_actions_checked += 1
 
-                for _, file_path in target_files:
+                for row in rows:
                     try:
-                        data = json.loads(Path(file_path).read_text(encoding="utf-8"))
+                        data = json.loads(row[0])
                         records = data if isinstance(data, list) else [data]
                         for record in records:
                             if not isinstance(record, dict):
@@ -158,12 +156,12 @@ class SchemaConformance(Check):
                                     else "all required fields present",
                                 )
                             )
-                    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                    except (json.JSONDecodeError, UnicodeDecodeError):
                         results.append(
                             CheckResult(
                                 passed=False,
                                 name=f"schema({action_name})",
-                                message="failed to parse target data file",
+                                message="failed to parse target_data JSON",
                             )
                         )
 

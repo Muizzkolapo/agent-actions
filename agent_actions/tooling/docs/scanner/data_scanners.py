@@ -105,9 +105,7 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
             workflow_name = db_file.stem
 
             try:
-                data = scan_sqlite_readonly(
-                    db_file, workflow_name, target_dir=agent_io_dir / "target"
-                )
+                data = scan_sqlite_readonly(db_file, workflow_name)
                 if data is not None:
                     workflow_data[workflow_name] = data
             except (OSError, sqlite3.Error) as e:
@@ -144,9 +142,7 @@ def _unwrap_record_content(record: dict, action_name: str) -> dict:
     return record
 
 
-def scan_sqlite_readonly(
-    db_file: Path, workflow_name: str, target_dir: Path | None = None
-) -> dict[str, Any] | None:
+def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | None:
     """Open a workflow SQLite DB read-only and extract stats + preview data.
 
     Uses a direct sqlite3 connection in read-only mode so that scanning
@@ -217,25 +213,27 @@ def scan_sqlite_readonly(
             )
             files = [row["relative_path"] for row in cursor.fetchall()]
 
-            # Preview: read from filesystem (source of truth).
-            # Cap at 20 flattened records.
+            # Preview: iterate the cursor lazily so we never load every
+            # data blob into memory.  Cap at 20 flattened records.
+            cursor.execute(
+                "SELECT relative_path, data FROM target_data WHERE action_name = ?",
+                (action_name,),
+            )
             records: list[dict] = []
-            for file_path in files:
+            for target_row in cursor:
                 if len(records) >= 20:
                     break
-                if target_dir is None:
-                    break
-                fs_path = target_dir / action_name / file_path
                 try:
-                    row_data = _json.loads(fs_path.read_text(encoding="utf-8"))
-                except (ValueError, _json.JSONDecodeError, OSError):
+                    row_data = _json.loads(target_row["data"])
+                except (ValueError, _json.JSONDecodeError):
                     logger.debug(
-                        "Skipping unreadable target file %s/%s/%s",
+                        "Skipping malformed JSON in %s node %s, file %s",
                         workflow_name,
                         action_name,
-                        file_path,
+                        target_row["relative_path"],
                     )
                     continue
+                file_path = target_row["relative_path"]
                 if isinstance(row_data, list):
                     for item in row_data:
                         if len(records) >= 20:
