@@ -220,9 +220,7 @@ class TestSQLiteBackendThreadSafeReads:
     def test_list_target_files_acquires_lock(self, tmp_path):
         from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
-        backend = SQLiteBackend(
-            str(tmp_path / "test.db"), "test_workflow", target_dir=str(tmp_path / "target")
-        )
+        backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
         backend.write_target(
             "action_a", "out.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}]
@@ -244,20 +242,30 @@ class TestSQLiteBackendThreadSafeReads:
 
         assert "locked" in acquired, "list_target_files must acquire _lock"
 
-    def test_read_target_reads_from_filesystem(self, tmp_path):
+    def test_read_target_acquires_lock(self, tmp_path):
         from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
-        backend = SQLiteBackend(
-            str(tmp_path / "test.db"), "test_workflow", target_dir=str(tmp_path / "target")
-        )
+        backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
         backend.write_target(
             "action_a", "out.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}]
         )
 
-        result = backend.read_target("action_a", "out.json")
-        assert len(result) == 1
-        assert result[0]["id"] == 1
+        acquired = []
+        original_lock = backend._lock
+
+        class TrackingLock:
+            def __enter__(self_inner):
+                acquired.append("locked")
+                return original_lock.__enter__()
+
+            def __exit__(self_inner, *args):
+                return original_lock.__exit__(*args)
+
+        with patch.object(backend, "_lock", TrackingLock()):
+            backend.read_target("action_a", "out.json")
+
+        assert "locked" in acquired, "read_target must acquire _lock"
 
     def test_concurrent_reads_return_correct_data(self, tmp_path):
         """Multiple threads reading simultaneously must all return correct data."""
@@ -265,9 +273,7 @@ class TestSQLiteBackendThreadSafeReads:
 
         from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
-        backend = SQLiteBackend(
-            str(tmp_path / "test.db"), "test_workflow", target_dir=str(tmp_path / "target")
-        )
+        backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
         backend.write_target(
             "upstream",
@@ -320,9 +326,7 @@ class TestSQLiteBackendRemainingReadLocks:
     def _setup_backend(self, tmp_path):
         from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
-        backend = SQLiteBackend(
-            str(tmp_path / "test.db"), "test_workflow", target_dir=str(tmp_path / "target")
-        )
+        backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
         return backend
 

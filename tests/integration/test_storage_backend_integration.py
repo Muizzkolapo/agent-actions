@@ -9,7 +9,6 @@ Tests the full storage backend lifecycle including:
 """
 
 import tempfile
-import threading
 from pathlib import Path
 
 import pytest
@@ -18,30 +17,27 @@ from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 
-def _make_backend(tmpdir: str, workflow_name: str = "test_workflow") -> SQLiteBackend:
-    """Create a backend with target_dir set for filesystem reads."""
-    db_path = Path(tmpdir) / "test.db"
-    target_dir = Path(tmpdir) / "target"
-    return SQLiteBackend(str(db_path), workflow_name, target_dir=str(target_dir))
-
-
 class TestSQLiteBackendLifecycle:
     """Test SQLite backend initialization and cleanup."""
 
     def test_creates_database_file_on_initialize(self):
         """Backend creates database file when initialized."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            backend = _make_backend(tmpdir)
+            db_path = Path(tmpdir) / "test_workflow" / "agent_io" / "test.db"
+
+            backend = SQLiteBackend(str(db_path), "test_workflow")
             backend.initialize()
 
-            assert backend.db_path.exists()
+            assert db_path.exists()
             assert backend.backend_type == "sqlite"
             backend.close()
 
     def test_creates_tables_on_initialize(self):
         """Backend creates source_data and target_data tables."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            backend = _make_backend(tmpdir)
+            db_path = Path(tmpdir) / "test.db"
+
+            backend = SQLiteBackend(str(db_path), "test_workflow")
             backend.initialize()
 
             # Verify tables exist
@@ -56,7 +52,9 @@ class TestSQLiteBackendLifecycle:
     def test_context_manager_cleanup(self):
         """Context manager properly closes connection."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir) as backend:
+            db_path = Path(tmpdir) / "test.db"
+
+            with SQLiteBackend(str(db_path), "test_workflow") as backend:
                 backend.initialize()
                 # Connection is active inside context
                 assert backend._connection is not None
@@ -72,7 +70,8 @@ class TestTargetDataOperations:
     def backend(self):
         """Create and initialize a test backend."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            backend = _make_backend(tmpdir)
+            db_path = Path(tmpdir) / "test.db"
+            backend = SQLiteBackend(str(db_path), "test_workflow")
             backend.initialize()
             yield backend
             backend.close()
@@ -167,7 +166,8 @@ class TestSourceDataOperations:
     def backend(self):
         """Create and initialize a test backend."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            backend = _make_backend(tmpdir)
+            db_path = Path(tmpdir) / "test.db"
+            backend = SQLiteBackend(str(db_path), "test_workflow")
             backend.initialize()
             yield backend
             backend.close()
@@ -255,7 +255,8 @@ class TestPreviewAndStats:
     def backend_with_data(self):
         """Create backend with sample data."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            backend = _make_backend(tmpdir)
+            db_path = Path(tmpdir) / "test.db"
+            backend = SQLiteBackend(str(db_path), "test_workflow")
             backend.initialize()
 
             # Add sample target data
@@ -417,7 +418,9 @@ class TestConcurrencyAndResilience:
     def test_multiple_writes_to_same_node(self):
         """Multiple sequential writes to same node work correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir) as backend:
+            db_path = Path(tmpdir) / "test.db"
+
+            with SQLiteBackend(str(db_path), "test_workflow") as backend:
                 backend.initialize()
 
                 # Multiple writes to same node, different files
@@ -437,7 +440,9 @@ class TestConcurrencyAndResilience:
     def test_handles_unicode_data(self):
         """Backend correctly handles unicode data."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir) as backend:
+            db_path = Path(tmpdir) / "test.db"
+
+            with SQLiteBackend(str(db_path), "test_workflow") as backend:
                 backend.initialize()
 
                 test_data = [
@@ -456,7 +461,9 @@ class TestConcurrencyAndResilience:
     def test_handles_large_records(self):
         """Backend handles large JSON records."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir) as backend:
+            db_path = Path(tmpdir) / "test.db"
+
+            with SQLiteBackend(str(db_path), "test_workflow") as backend:
                 backend.initialize()
 
                 # Create a large record (~1MB of text)
@@ -472,9 +479,11 @@ class TestConcurrencyAndResilience:
 
     def test_concurrent_writes_from_multiple_threads(self):
         """Concurrent writes from multiple threads don't cause transaction errors."""
+        import threading
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            backend = _make_backend(tmpdir)
+            db_path = Path(tmpdir) / "test.db"
+            backend = SQLiteBackend(str(db_path), "test_workflow")
             backend.initialize()
 
             errors = []
@@ -534,7 +543,8 @@ class TestBackendTypeProperty:
     def test_backend_type_returns_sqlite(self):
         """SQLiteBackend returns 'sqlite' as backend_type."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            backend = _make_backend(tmpdir)
+            db_path = Path(tmpdir) / "test.db"
+            backend = SQLiteBackend(str(db_path), "test_workflow")
 
             assert backend.backend_type == "sqlite"
             backend.close()
@@ -546,7 +556,9 @@ class TestWorkflowIntegration:
     def test_action_chain_data_flow(self):
         """Simulates data flowing through action chain."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 # Action 1: Extract - writes target data
@@ -584,7 +596,9 @@ class TestWorkflowIntegration:
     def test_parallel_actions_write_to_different_nodes(self):
         """Parallel actions can write to different nodes."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 # Simulate parallel writes from different actions
@@ -616,7 +630,9 @@ class TestWorkflowIntegration:
     def test_merge_pattern_combines_upstream_data(self):
         """Merge pattern can read from multiple upstream nodes."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 # Two parallel upstream actions
@@ -649,7 +665,9 @@ class TestDispositionLifecycle:
     def test_passthrough_lifecycle(self):
         """Passthrough disposition can be set, queried, and cleared."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 # 1. Set passthrough disposition
@@ -673,7 +691,9 @@ class TestDispositionLifecycle:
     def test_skip_disposition_lifecycle(self):
         """Skip disposition works end-to-end."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 # Set skip disposition
@@ -690,7 +710,9 @@ class TestDispositionLifecycle:
     def test_multiple_nodes_independent(self):
         """Dispositions for different nodes are independent."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 backend.set_disposition("node_a", NODE_LEVEL_RECORD_ID, "passthrough")
@@ -708,7 +730,9 @@ class TestDispositionLifecycle:
     def test_per_record_dispositions(self):
         """Individual record dispositions work alongside node-level ones."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 # Node-level
@@ -732,7 +756,9 @@ class TestDispositionLifecycle:
     def test_disposition_stats_in_storage_stats(self):
         """Storage stats include disposition count."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with _make_backend(tmpdir, "my_workflow") as backend:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
                 backend.initialize()
 
                 # Write some target data and dispositions

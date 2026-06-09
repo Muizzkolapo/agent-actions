@@ -108,12 +108,7 @@ def context_map(upstream_record) -> dict[str, Any]:
 
 @pytest.fixture
 def sqlite_backend(tmp_path) -> SQLiteBackend:
-    target_dir = tmp_path / "target"
-    backend = SQLiteBackend(
-        str(tmp_path / "test.db"),
-        workflow_name="test_workflow",
-        target_dir=str(target_dir),
-    )
+    backend = SQLiteBackend(str(tmp_path / "test.db"), workflow_name="test_workflow")
     backend.initialize()
     return backend
 
@@ -192,10 +187,10 @@ class TestBatchToDBPipeline:
         output = _process_batch([batch_result], context_map, action_config, str(tmp_path))
 
         writer = FileWriter(
-            str(tmp_path / "target" / "verify_answer" / "out.json"),
+            str(tmp_path / "out.json"),
             storage_backend=sqlite_backend,
             action_name="verify_answer",
-            output_directory=str(tmp_path / "target" / "verify_answer"),
+            output_directory=str(tmp_path),
         )
         writer.write_target(output)
 
@@ -225,10 +220,10 @@ class TestBatchToDBPipeline:
 
         output = _process_batch(records, context_map, action_config, str(tmp_path))
         writer = FileWriter(
-            str(tmp_path / "target" / "verify_answer" / "batch.json"),
+            str(tmp_path / "batch.json"),
             storage_backend=sqlite_backend,
             action_name="verify_answer",
-            output_directory=str(tmp_path / "target" / "verify_answer"),
+            output_directory=str(tmp_path),
         )
         writer.write_target(output)
 
@@ -265,10 +260,10 @@ class TestVersionedBatchContent:
 
         output = _process_batch([result], context_map, config, str(tmp_path), "verify_answer_1")
         writer = FileWriter(
-            str(tmp_path / "target" / "verify_answer_1" / "out.json"),
+            str(tmp_path / "out.json"),
             storage_backend=sqlite_backend,
             action_name="verify_answer_1",
-            output_directory=str(tmp_path / "target" / "verify_answer_1"),
+            output_directory=str(tmp_path),
         )
         writer.write_target(output)
 
@@ -318,10 +313,10 @@ class TestPartialBatchFailure:
 
         output = _process_batch(batch_results, context_map, action_config, str(tmp_path))
         writer = FileWriter(
-            str(tmp_path / "target" / "verify_answer" / "partial.json"),
+            str(tmp_path / "partial.json"),
             storage_backend=sqlite_backend,
             action_name="verify_answer",
-            output_directory=str(tmp_path / "target" / "verify_answer"),
+            output_directory=str(tmp_path),
         )
         writer.write_target(output)
 
@@ -341,12 +336,12 @@ class TestDiskMaterialization:
     ):
         output = _process_batch([batch_result], context_map, action_config, str(tmp_path))
 
-        output_file = tmp_path / "target" / "verify_answer" / "target.json"
+        output_file = tmp_path / "target.json"
         writer = FileWriter(
             str(output_file),
             storage_backend=sqlite_backend,
             action_name="verify_answer",
-            output_directory=str(tmp_path / "target" / "verify_answer"),
+            output_directory=str(tmp_path),
         )
         writer.write_target(output)
 
@@ -424,10 +419,10 @@ class TestProviderParseChain:
 
         output = _process_batch([batch_result], context_map, action_config, str(tmp_path))
         writer = FileWriter(
-            str(tmp_path / "target" / "verify_answer" / "ollama.json"),
+            str(tmp_path / "ollama.json"),
             storage_backend=sqlite_backend,
             action_name="verify_answer",
-            output_directory=str(tmp_path / "target" / "verify_answer"),
+            output_directory=str(tmp_path),
         )
         writer.write_target(output)
 
