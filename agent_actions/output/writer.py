@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,7 +17,6 @@ from agent_actions.logging.events import (
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_safety import assert_path_contained
-from agent_actions.utils.path_utils import ensure_directory_exists
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -132,10 +132,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
 
             self.storage_backend.write_target(self.action_name, relative_path, data)
 
-            ensure_directory_exists(file_path, is_file=True)
-            atomic_json_write(file_path, data)
-
-            return file_path.stat().st_size
+            return len(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
         self._execute_write("Write target file", do_write)
 

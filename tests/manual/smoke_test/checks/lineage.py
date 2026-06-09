@@ -109,39 +109,44 @@ class LineageCheck(Check):
             with sqlite3.connect(str(db_path)) as conn:
                 conn.row_factory = sqlite3.Row
 
-                rows = conn.execute(
-                    "SELECT action_name, data FROM target_data ORDER BY action_name"
+                # Get action names from DB metadata
+                action_names_rows = conn.execute(
+                    "SELECT DISTINCT action_name FROM target_data ORDER BY action_name"
                 ).fetchall()
 
-                if not rows:
+                if not action_names_rows:
                     results.append(CheckResult(True, "lineage", "no target data to verify"))
                     return results
 
-                # --- Phase 1: Collect all records and build index ---
+                # --- Phase 1: Collect all records from filesystem ---
                 all_target_ids: set[str] = set()
                 action_records: dict[str, list[tuple[int, dict]]] = {}
 
-                for row in rows:
-                    action_name = row["action_name"]
-                    try:
-                        data = json.loads(row["data"])
-                    except (json.JSONDecodeError, TypeError):
-                        results.append(
-                            CheckResult(False, f"lineage({action_name}): parse", "bad JSON")
-                        )
+                for action_row in action_names_rows:
+                    action_name = action_row["action_name"]
+                    action_dir = ctx.target_dir / action_name
+                    if not action_dir.is_dir():
                         continue
-
-                    records = data if isinstance(data, list) else [data]
-                    indexed = []
-                    for idx, record in enumerate(records):
-                        if not isinstance(record, dict):
+                    for json_file in sorted(action_dir.glob("*.json")):
+                        try:
+                            data = json.loads(json_file.read_text(encoding="utf-8"))
+                        except (json.JSONDecodeError, TypeError, OSError):
+                            results.append(
+                                CheckResult(False, f"lineage({action_name}): parse", "bad JSON")
+                            )
                             continue
-                        indexed.append((idx, record))
-                        tid = record.get("target_id")
-                        if isinstance(tid, str) and tid:
-                            all_target_ids.add(tid)
 
-                    action_records.setdefault(action_name, []).extend(indexed)
+                        records = data if isinstance(data, list) else [data]
+                        indexed = []
+                        for idx, record in enumerate(records):
+                            if not isinstance(record, dict):
+                                continue
+                            indexed.append((idx, record))
+                            tid = record.get("target_id")
+                            if isinstance(tid, str) and tid:
+                                all_target_ids.add(tid)
+
+                        action_records.setdefault(action_name, []).extend(indexed)
 
                 total_records = sum(len(recs) for recs in action_records.values())
 

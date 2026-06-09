@@ -310,7 +310,9 @@ class TestExtractActionMetricsEnrichment:
 # ---------------------------------------------------------------------------
 
 
-def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
+def _create_test_db(
+    db_path: Path, *, with_traces: bool = False, target_dir: Path | None = None
+) -> None:
     """Create a minimal SQLite DB with source/target data and optionally prompt_trace."""
     conn = sqlite3.connect(str(db_path))
     conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
@@ -319,13 +321,21 @@ def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
         "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
     )
     # Insert one target record with known source_guid and target_id
-    record = json.dumps(
-        [{"source_guid": "guid-001", "target_id": "tid-001", "issue_type": "bug", "lineage": []}]
-    )
+    records_list = [
+        {"source_guid": "guid-001", "target_id": "tid-001", "issue_type": "bug", "lineage": []}
+    ]
+    record = json.dumps(records_list)
     conn.execute(
         "INSERT INTO target_data VALUES (?, ?, ?, ?)",
         ("classify", "issues.json", record, 1),
     )
+
+    # Write filesystem file for the scanner to read
+    if target_dir is not None:
+        fs_path = target_dir / "classify" / "issues.json"
+        fs_path.parent.mkdir(parents=True, exist_ok=True)
+        fs_path.write_text(record)
+
     # Insert a source row for count
     conn.execute(
         "INSERT INTO source_data VALUES (?, ?, ?)",
@@ -379,9 +389,10 @@ class TestScanSqliteReadonlyTraceAttachment:
 
     def test_trace_attached_when_table_exists(self, tmp_path):
         db_path = tmp_path / "test.db"
-        _create_test_db(db_path, with_traces=True)
+        target_dir = tmp_path / "target"
+        _create_test_db(db_path, with_traces=True, target_dir=target_dir)
 
-        result = scan_sqlite_readonly(db_path, "test_workflow")
+        result = scan_sqlite_readonly(db_path, "test_workflow", target_dir=target_dir)
         assert result is not None
         records = result["nodes"]["classify"]["preview"]
         assert len(records) == 1
@@ -397,9 +408,10 @@ class TestScanSqliteReadonlyTraceAttachment:
     def test_no_trace_when_table_missing(self, tmp_path):
         """Old DBs without prompt_trace table should not crash."""
         db_path = tmp_path / "test.db"
-        _create_test_db(db_path, with_traces=False)
+        target_dir = tmp_path / "target"
+        _create_test_db(db_path, with_traces=False, target_dir=target_dir)
 
-        result = scan_sqlite_readonly(db_path, "test_workflow")
+        result = scan_sqlite_readonly(db_path, "test_workflow", target_dir=target_dir)
         assert result is not None
         records = result["nodes"]["classify"]["preview"]
         assert len(records) == 1
@@ -408,6 +420,7 @@ class TestScanSqliteReadonlyTraceAttachment:
     def test_no_trace_when_no_matching_target_id(self, tmp_path):
         """Records without target_id should not get traces."""
         db_path = tmp_path / "test.db"
+        target_dir = tmp_path / "target"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
         conn.execute(
@@ -432,8 +445,12 @@ class TestScanSqliteReadonlyTraceAttachment:
         )
         conn.commit()
         conn.close()
+        # Write filesystem file
+        fs_path = target_dir / "act" / "f.json"
+        fs_path.parent.mkdir(parents=True, exist_ok=True)
+        fs_path.write_text(record)
 
-        result = scan_sqlite_readonly(db_path, "test_wf")
+        result = scan_sqlite_readonly(db_path, "test_wf", target_dir=target_dir)
         assert result is not None
         records = result["nodes"]["act"]["preview"]
         assert len(records) == 1
@@ -442,7 +459,8 @@ class TestScanSqliteReadonlyTraceAttachment:
     def test_latest_attempt_wins(self, tmp_path):
         """When multiple attempts exist, only the latest is attached."""
         db_path = tmp_path / "test.db"
-        _create_test_db(db_path, with_traces=True)
+        target_dir = tmp_path / "target"
+        _create_test_db(db_path, with_traces=True, target_dir=target_dir)
 
         # Add a second attempt with different response
         conn = sqlite3.connect(str(db_path))
@@ -466,7 +484,7 @@ class TestScanSqliteReadonlyTraceAttachment:
         conn.commit()
         conn.close()
 
-        result = scan_sqlite_readonly(db_path, "test_workflow")
+        result = scan_sqlite_readonly(db_path, "test_workflow", target_dir=target_dir)
         records = result["nodes"]["classify"]["preview"]
         trace = records[0]["_trace"]
         assert trace["attempt"] == 1
@@ -535,6 +553,7 @@ class TestScanSqliteNamespaceUnwrap:
     def test_preview_records_show_action_fields(self, tmp_path):
         """Preview records should have unwrapped content for the action."""
         db_path = tmp_path / "test.db"
+        target_dir = tmp_path / "target"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
         conn.execute(
@@ -548,15 +567,19 @@ class TestScanSqliteNamespaceUnwrap:
                 "classify": {"genre": "fiction"},
             },
         }
+        record_json = json.dumps([namespaced_record])
         conn.execute(
             "INSERT INTO target_data VALUES (?, ?, ?, ?)",
-            ("extract", "data.json", json.dumps([namespaced_record]), 1),
+            ("extract", "data.json", record_json, 1),
         )
         conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("g1", "data.json", "{}"))
         conn.commit()
         conn.close()
+        fs_path = target_dir / "extract" / "data.json"
+        fs_path.parent.mkdir(parents=True, exist_ok=True)
+        fs_path.write_text(record_json)
 
-        result = scan_sqlite_readonly(db_path, "test_wf")
+        result = scan_sqlite_readonly(db_path, "test_wf", target_dir=target_dir)
         records = result["nodes"]["extract"]["preview"]
         assert len(records) == 1
         # content should be unwrapped to show extract's fields
@@ -566,6 +589,7 @@ class TestScanSqliteNamespaceUnwrap:
     def test_flat_content_records_unchanged(self, tmp_path):
         """Records without namespaced content pass through unchanged."""
         db_path = tmp_path / "test.db"
+        target_dir = tmp_path / "target"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
         conn.execute(
@@ -576,15 +600,19 @@ class TestScanSqliteNamespaceUnwrap:
             "source_guid": "g1",
             "content": {"genre": "fiction", "confidence": 0.9},
         }
+        record_json = json.dumps([flat_record])
         conn.execute(
             "INSERT INTO target_data VALUES (?, ?, ?, ?)",
-            ("classify", "data.json", json.dumps([flat_record]), 1),
+            ("classify", "data.json", record_json, 1),
         )
         conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("g1", "data.json", "{}"))
         conn.commit()
         conn.close()
+        fs_path = target_dir / "classify" / "data.json"
+        fs_path.parent.mkdir(parents=True, exist_ok=True)
+        fs_path.write_text(record_json)
 
-        result = scan_sqlite_readonly(db_path, "test_wf")
+        result = scan_sqlite_readonly(db_path, "test_wf", target_dir=target_dir)
         records = result["nodes"]["classify"]["preview"]
         assert len(records) == 1
         assert records[0]["content"] == {"genre": "fiction", "confidence": 0.9}
