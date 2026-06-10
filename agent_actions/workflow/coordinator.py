@@ -509,15 +509,22 @@ class AgentWorkflow:
         with manager.context():
             try:
                 backend = getattr(self, "storage_backend", None)
-                if backend is not None:
-                    backend.save_metadata("execution_order", json.dumps(self.execution_order))
-                    dep_graph = {
-                        name: sorted(self._get_reachable_actions(name))
-                        for name in self.execution_order
-                    }
-                    backend.save_metadata("dependency_graph", json.dumps(dep_graph))
                 total_actions = len(self.execution_order)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
+
+                if backend is not None:
+                    backend.save_metadata("execution_order", json.dumps(self.execution_order))
+                    # Build dependency graph from levels: actions at level N
+                    # depend on all actions at levels 0..N-1. This correctly
+                    # handles versioned actions (extract_raw_qa_1/2/3) which
+                    # _get_reachable_actions misses due to base-name mismatch.
+                    prior_actions: list[str] = []
+                    dep_graph: dict[str, list[str]] = {}
+                    for level_actions in levels:
+                        for action in level_actions:
+                            dep_graph[action] = list(prior_actions)
+                        prior_actions.extend(level_actions)
+                    backend.save_metadata("dependency_graph", json.dumps(dep_graph))
                 self.services.core.action_level_orchestrator.log_execution_levels(
                     levels, self.action_indices
                 )
