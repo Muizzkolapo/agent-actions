@@ -258,7 +258,11 @@ class StorageBackend(ABC):
 
         upstream_data = self._read_target_raw_batch(upstream_actions, relative_path)
 
+        # Index upstream deltas by (action_name, source_guid).
+        # Track which guids have a "full" record — those are self-contained
+        # and we don't need to look further upstream for that guid.
         upstream: dict[str, dict[str, dict[str, Any]]] = {}
+        full_boundary_guids: dict[str, str] = {}  # guid → action that has full record
         for act, records in upstream_data.items():
             guid_map: dict[str, dict[str, Any]] = {}
             for rec in records:
@@ -269,50 +273,14 @@ class StorageBackend(ABC):
                         logger.warning("Upstream record %s in '%s' has no content.", guid, act)
                         rec_content = {}
                     guid_map[guid] = rec_content
+                    if rec.get("_delta_mode") == "full":
+                        full_boundary_guids[guid] = act
             upstream[act] = guid_map
 
-        all_guids = {r.get("source_guid") for r in delta_records if r.get("source_guid")}
-        found_guids: set[str] = set()
-        for guid_map in upstream.values():
-            found_guids.update(guid_map.keys())
-        missing_guids = all_guids - found_guids
-
-        if missing_guids:
-            logger.warning(
-                "Delta reconstruction for '%s': %d of %d source_guids not found in "
-                "same-file upstream deltas. Attempting cross-file lookup.",
-                action_name,
-                len(missing_guids),
-                len(all_guids),
-            )
-            still_missing = set(missing_guids)
-            for act in upstream_actions:
-                if not still_missing:
-                    break
-                try:
-                    all_files = self.list_target_files(act)
-                except FileNotFoundError:
-                    logger.warning(
-                        "Cross-file lookup: list_target_files('%s') failed.",
-                        act,
-                    )
-                    continue
-                for file_path in all_files:
-                    if file_path == relative_path:
-                        continue
-                    try:
-                        file_records = self._read_target_raw(act, file_path)
-                    except FileNotFoundError:
-                        continue
-                    for rec in file_records:
-                        guid = rec.get("source_guid")
-                        if guid and guid in still_missing:
-                            rec_content = rec.get("content")
-                            if rec_content is None:
-                                rec_content = {}
-                            upstream.setdefault(act, {})[guid] = rec_content
-                            still_missing.discard(guid)
-
+        # For each current record, determine how far back to reconstruct.
+        # If a "full" upstream record exists for this guid, only merge from
+        # that point forward — the full record already contains everything
+        # before it (expansion records embed upstream content).
         reconstructed: list[dict[str, Any]] = []
         for record in delta_records:
             mode = record.get("_delta_mode")
@@ -322,9 +290,19 @@ class StorageBackend(ABC):
                 continue
 
             guid = record.get("source_guid")
+
+            # Find the boundary: if this guid has a full record upstream,
+            # start merging from that action (inclusive), not from the beginning.
+            boundary_action = full_boundary_guids.get(guid) if guid else None
+            if boundary_action and boundary_action in upstream_actions:
+                boundary_idx = upstream_actions.index(boundary_action)
+                merge_actions = upstream_actions[boundary_idx:]
+            else:
+                merge_actions = upstream_actions
+
             full_content: dict[str, Any] = {}
             missing_upstream: list[str] = []
-            for act in upstream_actions:
+            for act in merge_actions:
                 act_deltas = upstream.get(act, {})
                 delta_content = act_deltas.get(guid) if guid else None
                 if delta_content is None:

@@ -530,3 +530,338 @@ class TestPreviewReconstruction:
         assert "action_1" in records[0]["content"]
         assert "action_2" in records[0]["content"]
         assert "_delta_mode" not in records[0]
+
+
+# ---------------------------------------------------------------------------
+# FILE-mode expansion and contraction through enrichment + delta storage
+# ---------------------------------------------------------------------------
+
+
+class TestFileToolExpansionDelta:
+    """FILE-mode tools that expand 1→N records get stored as full (not delta).
+
+    Expansion records get fresh source_guids in enrichment.py.
+    These GUIDs don't exist in any upstream action, so delta reconstruction
+    would fail. The enricher tags them _delta_mode="full" to prevent stripping.
+    """
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["extract", "flatten", "classify"])
+        yield b
+        b.close()
+
+    def _simulate_expansion_pipeline(self, backend):
+        """Simulate: extract (3 records) → flatten (10 records, 1→N expansion)."""
+        from unittest.mock import MagicMock
+
+        from agent_actions.processing.enrichment import LineageEnricher
+        from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+
+        # Step 1: Write extract action (3 records, first action)
+        extract_records = [
+            {
+                "source_guid": f"original-{i}",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {
+                    "source": {"title": f"Page {i}"},
+                    "extract": {"questions": [{"q": f"Q{j}"} for j in range(3)]},
+                },
+            }
+            for i in range(3)
+        ]
+        backend.write_target("extract", "file.json", extract_records, is_first_action=True)
+
+        # Step 2: Simulate flatten tool expanding 3→9 records
+        # Each input record produces 3 output records (one per question)
+        expanded_items = []
+        for i, rec in enumerate(extract_records):
+            for j, q in enumerate(rec["content"]["extract"]["questions"]):
+                expanded_items.append(
+                    {
+                        "source_guid": rec["source_guid"],  # parent guid (will be replaced)
+                        "target_id": f"tid-{i}-{j}",
+                        "_state": "processed",
+                        "_state_schema_version": 1,
+                        "content": {
+                            "source": rec["content"]["source"],
+                            "extract": rec["content"]["extract"],
+                            "flatten": {"question_text": q["q"], "index": j},
+                        },
+                    }
+                )
+
+        # Run through enrichment with is_expansion=True (like the real pipeline)
+        result = ProcessingResult(
+            data=expanded_items,
+            status=ProcessingStatus.SUCCESS,
+            is_expansion=True,
+        )
+        ctx = MagicMock()
+        ctx.action_name = "flatten"
+        ctx.agent_name = "flatten"
+        ctx.is_first_stage = False
+        ctx.source_data = extract_records
+        ctx.record_index = 0
+        ctx.agent_config = {}
+
+        enricher = LineageEnricher()
+        enriched = enricher.enrich(result, ctx)
+
+        # Write enriched expansion records
+        backend.write_target("flatten", "file.json", enriched.data)
+
+        return enriched.data
+
+    def test_expansion_records_stored_as_full(self, backend):
+        """Expansion records (fresh GUIDs) must be stored as _delta_mode=full."""
+        self._simulate_expansion_pipeline(backend)
+
+        raw = backend._read_target_raw("flatten", "file.json")
+        assert len(raw) == 9
+
+        modes = {r.get("_delta_mode") for r in raw}
+        assert modes == {"full"}, f"Expected all full, got: {modes}"
+
+    def test_expansion_records_have_fresh_source_guids(self, backend):
+        """Each expansion record has a unique source_guid, not the parent's."""
+        enriched = self._simulate_expansion_pipeline(backend)
+
+        guids = [r["source_guid"] for r in enriched]
+        assert len(set(guids)) == 9, "Each expansion record should have a unique GUID"
+        assert all(not g.startswith("original-") for g in guids), "GUIDs should be fresh UUIDs"
+
+    def test_expansion_records_preserve_parent_guid(self, backend):
+        """Expansion records carry parent_source_guid for lineage tracking."""
+        enriched = self._simulate_expansion_pipeline(backend)
+
+        for record in enriched:
+            assert "parent_source_guid" in record, "Missing parent_source_guid"
+            assert record["parent_source_guid"].startswith("original-")
+
+    def test_expansion_read_returns_full_content(self, backend):
+        """read_target for expansion records returns full content (no reconstruction needed)."""
+        self._simulate_expansion_pipeline(backend)
+
+        result = backend.read_target("flatten", "file.json")
+        assert len(result) == 9
+
+        for record in result:
+            assert "source" in record["content"], "Missing source namespace"
+            assert "extract" in record["content"], "Missing extract namespace"
+            assert "flatten" in record["content"], "Missing flatten namespace"
+            assert "_delta_mode" not in record, "_delta_mode leaked to consumer"
+
+    def test_downstream_after_expansion_uses_delta(self, backend):
+        """Action after expansion stores deltas (not full) for the expanded records."""
+        enriched = self._simulate_expansion_pipeline(backend)
+
+        # Simulate classify action processing the expanded records.
+        # In the real pipeline, enrichment for a non-expansion action
+        # does NOT set _delta_mode, so drop it from the simulated input.
+        classify_records = []
+        for rec in enriched:
+            classify_records.append(
+                {
+                    **{k: v for k, v in rec.items() if k not in ("content", "_delta_mode")},
+                    "content": {
+                        **rec["content"],
+                        "classify": {"difficulty": "medium"},
+                    },
+                }
+            )
+
+        backend.write_target("classify", "file.json", classify_records)
+
+        raw = backend._read_target_raw("classify", "file.json")
+        modes = {r.get("_delta_mode") for r in raw}
+        assert "delta" in modes, f"Expected delta mode for downstream, got: {modes}"
+
+    def test_downstream_reconstruction_uses_expansion_boundary(self, backend):
+        """Records downstream of expansion reconstruct from the expansion point, not from the start.
+
+        The expansion (flatten) creates new GUIDs. Actions before the expansion
+        (summarize, extract) have the old GUIDs. Reconstruction for actions after
+        flatten should start at flatten's full record — not try to find the new
+        GUIDs in summarize/extract (where they don't exist).
+        """
+        enriched = self._simulate_expansion_pipeline(backend)
+
+        # Write a downstream action that processes the expanded records
+        classify_records = []
+        for rec in enriched:
+            classify_records.append(
+                {
+                    **{k: v for k, v in rec.items() if k not in ("content", "_delta_mode")},
+                    "content": {
+                        **rec["content"],
+                        "classify": {"difficulty": "medium"},
+                    },
+                }
+            )
+        backend.write_target("classify", "file.json", classify_records)
+
+        # Read classify — should reconstruct from flatten (full) + classify (delta)
+        # Should NOT try to find these GUIDs in extract (they don't exist there)
+        result = backend.read_target("classify", "file.json")
+        assert len(result) == 9
+
+        for record in result:
+            # Must have flatten + classify content (from flatten's full + classify's delta)
+            assert "flatten" in record["content"], "Missing flatten namespace"
+            assert "classify" in record["content"], "Missing classify namespace"
+            # Must have source + extract content (baked into flatten's full record)
+            assert "source" in record["content"], "Missing source namespace"
+            assert "extract" in record["content"], "Missing extract namespace"
+            # Must NOT be flagged incomplete
+            assert "_reconstruction_incomplete" not in record, (
+                f"Record incorrectly flagged incomplete: {record.get('source_guid')}"
+            )
+            assert "_delta_mode" not in record
+
+
+class TestFileToolContractionDelta:
+    """FILE-mode tools that contract N→M records (M < N).
+
+    Contraction tools (e.g., grouping 100 records into 5 batches) produce
+    fewer output records than input. If output records have new GUIDs
+    (from enrichment expansion path), they should be stored as full.
+    If they reuse input GUIDs, they should be stored as delta.
+    """
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["input_action", "group_action"])
+        yield b
+        b.close()
+
+    def test_contraction_with_reused_guids_stores_delta(self, backend):
+        """Tool that returns fewer records but reuses input GUIDs → delta storage."""
+        # 5 input records
+        input_records = [
+            {
+                "source_guid": f"g{i}",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {
+                    "source": {"id": i},
+                    "input_action": {"value": f"v{i}"},
+                },
+            }
+            for i in range(5)
+        ]
+        backend.write_target("input_action", "file.json", input_records, is_first_action=True)
+
+        # Tool returns 3 records, reusing source_guids g0, g1, g2
+        output_records = [
+            {
+                "source_guid": f"g{i}",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {
+                    "source": {"id": i},
+                    "input_action": {"value": f"v{i}"},
+                    "group_action": {"group": f"batch_{i}"},
+                },
+            }
+            for i in range(3)
+        ]
+        backend.write_target("group_action", "file.json", output_records)
+
+        raw = backend._read_target_raw("group_action", "file.json")
+        modes = {r.get("_delta_mode") for r in raw}
+        assert modes == {"delta"}, f"Expected delta for reused GUIDs, got: {modes}"
+
+    def test_contraction_reconstruction_works(self, backend):
+        """Contracted records reconstruct upstream content correctly."""
+        input_records = [
+            {
+                "source_guid": f"g{i}",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {
+                    "source": {"id": i},
+                    "input_action": {"value": f"v{i}"},
+                },
+            }
+            for i in range(5)
+        ]
+        backend.write_target("input_action", "file.json", input_records, is_first_action=True)
+
+        output_records = [
+            {
+                "source_guid": f"g{i}",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {
+                    "source": {"id": i},
+                    "input_action": {"value": f"v{i}"},
+                    "group_action": {"group": f"batch_{i}"},
+                },
+            }
+            for i in range(3)
+        ]
+        backend.write_target("group_action", "file.json", output_records)
+
+        result = backend.read_target("group_action", "file.json")
+        assert len(result) == 3
+        for i, rec in enumerate(result):
+            assert rec["content"]["source"]["id"] == i
+            assert rec["content"]["input_action"]["value"] == f"v{i}"
+            assert rec["content"]["group_action"]["group"] == f"batch_{i}"
+            assert "_delta_mode" not in rec
+
+
+class TestForceFullParameter:
+    """write_target(force_full=True) bypasses delta extraction entirely."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["a1", "a2"])
+        yield b
+        b.close()
+
+    def test_force_full_stores_complete_content(self, backend):
+        """force_full=True stores all content namespaces regardless of action."""
+        data = [
+            {
+                "source_guid": "g1",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {
+                    "source": {"x": 1},
+                    "a1": {"q": "hi"},
+                    "a2": {"level": "easy"},
+                },
+            }
+        ]
+        backend.write_target("a2", "file.json", data, force_full=True)
+
+        raw = backend._read_target_raw("a2", "file.json")
+        assert raw[0]["_delta_mode"] == "full"
+        assert len(raw[0]["content"]) == 3
+
+    def test_force_full_records_read_without_reconstruction(self, backend):
+        """force_full records are returned as-is, no upstream lookup."""
+        data = [
+            {
+                "source_guid": "g1",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {
+                    "source": {"x": 1},
+                    "a1": {"q": "hi"},
+                    "a2": {"level": "easy"},
+                },
+            }
+        ]
+        backend.write_target("a2", "file.json", data, force_full=True)
+
+        result = backend.read_target("a2", "file.json")
+        assert result[0]["content"]["source"]["x"] == 1
+        assert result[0]["content"]["a1"]["q"] == "hi"
+        assert "_delta_mode" not in result[0]
