@@ -856,7 +856,7 @@ class TestGetFailedItems:
             def _write_target_raw(self, *a, **kw):
                 return ""
 
-            def save_metadata(self, *a, **kw):
+            def _save_metadata_raw(self, *a, **kw):
                 pass
 
             def load_metadata(self, *a, **kw):

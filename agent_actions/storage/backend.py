@@ -201,9 +201,17 @@ class StorageBackend(ABC):
                 pass
         return result
 
-    @abstractmethod
     def save_metadata(self, key: str, value: str) -> None:
-        """Store a metadata key-value pair."""
+        """Store a metadata key-value pair. Clears related caches."""
+        self._save_metadata_raw(key, value)
+        if key == "execution_order":
+            self._execution_order_cache = None
+        elif key == "dependency_graph":
+            self._dependency_graph_cache = None
+
+    @abstractmethod
+    def _save_metadata_raw(self, key: str, value: str) -> None:
+        """Store a metadata key-value pair to the backend."""
         ...
 
     @abstractmethod

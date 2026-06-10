@@ -408,7 +408,7 @@ class SQLiteBackend(StorageBackend):
             result[row["action_name"]] = json.loads(row["data"])
         return result
 
-    def save_metadata(self, key: str, value: str) -> None:
+    def _save_metadata_raw(self, key: str, value: str) -> None:
         """Store a metadata key-value pair. Latest value wins (INSERT OR REPLACE)."""
         with self._lock:
             self.connection.execute(
