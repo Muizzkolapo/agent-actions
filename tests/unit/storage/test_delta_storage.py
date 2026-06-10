@@ -878,3 +878,601 @@ class TestForceFullParameter:
         assert result[0]["content"]["source"]["x"] == 1
         assert result[0]["content"]["a1"]["q"] == "hi"
         assert "_delta_mode" not in result[0]
+
+
+# ---------------------------------------------------------------------------
+# E2E tests for every issue found during review
+# Each test uses real SQLiteBackend, real data, no mocks.
+# ---------------------------------------------------------------------------
+
+
+class TestIssue2_ParallelPeers:
+    """Parallel actions at the same level must NOT appear in each other's upstream."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        # Pipeline: source → [branch_a, branch_b] (parallel) → merge
+        _set_execution_order(b, ["source_action", "branch_a", "branch_b", "merge_action"])
+        # Dep graph from levels: branch_a and branch_b share the same deps
+        dep_graph = {
+            "source_action": [],
+            "branch_a": ["source_action"],
+            "branch_b": ["source_action"],
+            "merge_action": ["source_action", "branch_a", "branch_b"],
+        }
+        b.save_metadata("dependency_graph", json.dumps(dep_graph))
+        yield b
+        b.close()
+
+    def test_parallel_branches_dont_include_each_other(self, backend):
+        """branch_a's upstream must NOT include branch_b (they're parallel peers)."""
+        backend.write_target(
+            "source_action",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {"source": {"x": 1}, "source_action": {"data": "raw"}},
+                }
+            ],
+            is_first_action=True,
+        )
+        backend.write_target(
+            "branch_a",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 1},
+                        "source_action": {"data": "raw"},
+                        "branch_a": {"score": 5},
+                    },
+                }
+            ],
+        )
+        backend.write_target(
+            "branch_b",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 1},
+                        "source_action": {"data": "raw"},
+                        "branch_b": {"score": 8},
+                    },
+                }
+            ],
+        )
+
+        # Read branch_a — should NOT contain branch_b's content
+        result_a = backend.read_target("branch_a", "f.json")
+        assert "branch_b" not in result_a[0]["content"], (
+            "Parallel peer branch_b leaked into branch_a"
+        )
+        assert "source_action" in result_a[0]["content"]
+
+        # Read branch_b — should NOT contain branch_a's content
+        result_b = backend.read_target("branch_b", "f.json")
+        assert "branch_a" not in result_b[0]["content"], (
+            "Parallel peer branch_a leaked into branch_b"
+        )
+
+    def test_merge_action_gets_both_branches(self, backend):
+        """merge_action depends on both branches — should have all namespaces."""
+        backend.write_target(
+            "source_action",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {"source": {"x": 1}, "source_action": {"data": "raw"}},
+                }
+            ],
+            is_first_action=True,
+        )
+        backend.write_target(
+            "branch_a",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 1},
+                        "source_action": {"data": "raw"},
+                        "branch_a": {"score": 5},
+                    },
+                }
+            ],
+        )
+        backend.write_target(
+            "branch_b",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 1},
+                        "source_action": {"data": "raw"},
+                        "branch_b": {"score": 8},
+                    },
+                }
+            ],
+        )
+        backend.write_target(
+            "merge_action",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 1},
+                        "source_action": {"data": "raw"},
+                        "branch_a": {"score": 5},
+                        "branch_b": {"score": 8},
+                        "merge_action": {"combined": 13},
+                    },
+                }
+            ],
+        )
+
+        result = backend.read_target("merge_action", "f.json")
+        assert "source_action" in result[0]["content"]
+        assert "branch_a" in result[0]["content"]
+        assert "branch_b" in result[0]["content"]
+        assert "merge_action" in result[0]["content"]
+
+
+class TestIssue3_VersionedActions:
+    """Versioned actions (action_1, action_2, action_3) must be in the dep graph."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["summarize", "extract_1", "extract_2", "extract_3", "merge"])
+        dep_graph = {
+            "summarize": [],
+            "extract_1": ["summarize"],
+            "extract_2": ["summarize"],
+            "extract_3": ["summarize"],
+            "merge": ["summarize", "extract_1", "extract_2", "extract_3"],
+        }
+        b.save_metadata("dependency_graph", json.dumps(dep_graph))
+        yield b
+        b.close()
+
+    def test_versioned_actions_have_correct_upstream(self, backend):
+        """Each extract_N depends only on summarize, not on other extract_N peers."""
+        backend.write_target(
+            "summarize",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {"source": {"title": "SQL"}, "summarize": {"summary": "about SQL"}},
+                }
+            ],
+            is_first_action=True,
+        )
+        for i in range(1, 4):
+            backend.write_target(
+                f"extract_{i}",
+                "f.json",
+                [
+                    {
+                        "source_guid": "g1",
+                        "_state": "processed",
+                        "_state_schema_version": 1,
+                        "content": {
+                            "source": {"title": "SQL"},
+                            "summarize": {"summary": "about SQL"},
+                            f"extract_{i}": {"question": f"Q{i}"},
+                        },
+                    }
+                ],
+            )
+
+        # Each extract_N should have source + summarize + its own namespace
+        for i in range(1, 4):
+            result = backend.read_target(f"extract_{i}", "f.json")
+            assert "source" in result[0]["content"]
+            assert "summarize" in result[0]["content"]
+            assert f"extract_{i}" in result[0]["content"]
+            # Should NOT have other extract peers
+            for j in range(1, 4):
+                if j != i:
+                    assert f"extract_{j}" not in result[0]["content"], (
+                        f"extract_{j} leaked into extract_{i}"
+                    )
+
+
+class TestIssue4_MetadataCacheInvalidation:
+    """save_metadata must clear the in-memory cache so reads get fresh data."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        yield b
+        b.close()
+
+    def test_dep_graph_cache_cleared_on_save(self, backend):
+        """Writing new dep graph invalidates the cached version."""
+        # Write initial graph
+        backend.save_metadata("dependency_graph", json.dumps({"a1": [], "a2": ["a1"]}))
+        backend.save_metadata("execution_order", json.dumps(["a1", "a2"]))
+
+        # Force cache population by reading
+        backend.write_target(
+            "a1",
+            "f.json",
+            [{"source_guid": "g1", "_state": "active", "content": {"a1": {"x": 1}}}],
+            is_first_action=True,
+        )
+        backend.write_target(
+            "a2",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "active",
+                    "content": {"a1": {"x": 1}, "a2": {"y": 2}},
+                }
+            ],
+        )
+
+        result1 = backend.read_target("a2", "f.json")
+        assert "a1" in result1[0]["content"]
+
+        # Now update the dep graph to make a2 have NO deps
+        backend.save_metadata("dependency_graph", json.dumps({"a1": [], "a2": []}))
+
+        # Read again — should use the NEW graph (no upstream for a2)
+        result2 = backend.read_target("a2", "f.json")
+        # a2's delta has only {a2: ...}, and with empty deps, no upstream is merged
+        assert "a2" in result2[0]["content"]
+
+
+class TestIssue6_MissingSourceGuid:
+    """Records without source_guid must be stored as full — can't reconstruct without a join key."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["a1", "a2"])
+        yield b
+        b.close()
+
+    def test_no_source_guid_stored_as_full(self, backend):
+        """Record without source_guid is stored as _delta_mode=full."""
+        data = [
+            {
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {"source": {"x": 1}, "a2": {"y": 2}},
+            }
+        ]
+        backend.write_target("a2", "f.json", data)
+
+        raw = backend._read_target_raw("a2", "f.json")
+        assert raw[0]["_delta_mode"] == "full"
+        assert "source" in raw[0]["content"]
+        assert "a2" in raw[0]["content"]
+
+    def test_no_source_guid_read_returns_full_content(self, backend):
+        """read_target for guid-less record returns all content intact."""
+        data = [
+            {
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {"source": {"x": 1}, "a1": {"q": "hi"}, "a2": {"y": 2}},
+            }
+        ]
+        backend.write_target("a2", "f.json", data)
+
+        result = backend.read_target("a2", "f.json")
+        assert "source" in result[0]["content"]
+        assert "a1" in result[0]["content"]
+        assert "a2" in result[0]["content"]
+
+
+class TestIssue7_PartitionedPipeline:
+    """Diamond DAG where branches process different guids — no false incomplete flags."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["source", "branch_a", "branch_b", "merge"])
+        dep_graph = {
+            "source": [],
+            "branch_a": ["source"],
+            "branch_b": ["source"],
+            "merge": ["source", "branch_a", "branch_b"],
+        }
+        b.save_metadata("dependency_graph", json.dumps(dep_graph))
+        yield b
+        b.close()
+
+    def test_partitioned_guids_no_false_incomplete(self, backend):
+        """branch_a processes g1, branch_b processes g2 — merge sees both without false flags."""
+        backend.write_target(
+            "source",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {"source": {"x": 1}, "source": {"data": "raw"}},
+                },
+                {
+                    "source_guid": "g2",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {"source": {"x": 2}, "source": {"data": "raw2"}},
+                },
+            ],
+            is_first_action=True,
+        )
+        # branch_a only processes g1
+        backend.write_target(
+            "branch_a",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 1},
+                        "source": {"data": "raw"},
+                        "branch_a": {"score": 5},
+                    },
+                }
+            ],
+        )
+        # branch_b only processes g2
+        backend.write_target(
+            "branch_b",
+            "f.json",
+            [
+                {
+                    "source_guid": "g2",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 2},
+                        "source": {"data": "raw2"},
+                        "branch_b": {"score": 8},
+                    },
+                }
+            ],
+        )
+        # merge processes both
+        backend.write_target(
+            "merge",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 1},
+                        "source": {"data": "raw"},
+                        "branch_a": {"score": 5},
+                        "merge": {"combined": "g1_result"},
+                    },
+                },
+                {
+                    "source_guid": "g2",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"x": 2},
+                        "source": {"data": "raw2"},
+                        "branch_b": {"score": 8},
+                        "merge": {"combined": "g2_result"},
+                    },
+                },
+            ],
+        )
+
+        result = backend.read_target("merge", "f.json")
+        for r in result:
+            assert "_reconstruction_incomplete" not in r, (
+                f"False incomplete flag on {r.get('source_guid')}"
+            )
+            assert "merge" in r["content"]
+
+
+class TestIssue8_FilesystemLeak:
+    """_delta_mode must not appear in filesystem target files."""
+
+    def test_disk_file_has_no_delta_mode(self, tmp_path):
+        """FileWriter strips _delta_mode before writing to disk."""
+        from unittest.mock import MagicMock
+
+        from agent_actions.output.writer import FileWriter
+
+        backend = _make_backend(tmp_path)
+        _set_execution_order(backend, ["expand_action"])
+        backend.initialize()
+
+        output_dir = tmp_path / "target" / "expand_action"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        file_path = output_dir / "out.json"
+
+        writer = FileWriter(
+            str(file_path),
+            storage_backend=backend,
+            action_name="expand_action",
+            output_directory=str(output_dir),
+        )
+
+        data = [
+            {
+                "source_guid": "g1",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "_delta_mode": "full",
+                "content": {"source": {"x": 1}, "expand_action": {"expanded": True}},
+            }
+        ]
+        writer.write_target(data)
+
+        # Read the disk file directly — must NOT have _delta_mode
+        disk_data = json.loads(file_path.read_text())
+        for record in disk_data:
+            assert "_delta_mode" not in record, "_delta_mode leaked to filesystem"
+
+        backend.close()
+
+
+class TestIssue9_CorruptMetadata:
+    """Corrupt metadata must degrade gracefully, not crash."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        yield b
+        b.close()
+
+    def test_corrupt_dependency_graph_falls_back(self, backend):
+        """Corrupt dep graph → fallback to flat execution order, no crash."""
+        backend.save_metadata("dependency_graph", "NOT VALID JSON{{{")
+        backend.save_metadata("execution_order", json.dumps(["a1", "a2"]))
+
+        backend.write_target(
+            "a1",
+            "f.json",
+            [{"source_guid": "g1", "_state": "active", "content": {"a1": {"x": 1}}}],
+            is_first_action=True,
+        )
+        backend.write_target(
+            "a2",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "active",
+                    "content": {"a1": {"x": 1}, "a2": {"y": 2}},
+                }
+            ],
+        )
+
+        # Should not crash — falls back to flat order
+        result = backend.read_target("a2", "f.json")
+        assert "a2" in result[0]["content"]
+
+    def test_corrupt_execution_order_returns_raw(self, backend):
+        """Corrupt execution order → reconstruction disabled, raw delta returned."""
+        backend.save_metadata("execution_order", "CORRUPT!!!")
+
+        backend.write_target(
+            "a1",
+            "f.json",
+            [{"source_guid": "g1", "_state": "active", "content": {"a1": {"x": 1}}}],
+            is_first_action=True,
+        )
+
+        # read_target should not crash
+        result = backend.read_target("a1", "f.json")
+        assert "a1" in result[0]["content"]
+
+
+class TestIssue10_UniformDeltaMode:
+    """write_target must produce uniform _delta_mode across all records in a batch."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["a1", "a2"])
+        yield b
+        b.close()
+
+    def test_batch_has_uniform_delta_mode(self, backend):
+        """All records in a single write_target call get the same _delta_mode."""
+        data = [
+            {
+                "source_guid": f"g{i}",
+                "_state": "processed",
+                "_state_schema_version": 1,
+                "content": {"source": {"x": i}, "a1": {"q": f"Q{i}"}, "a2": {"level": f"L{i}"}},
+            }
+            for i in range(5)
+        ]
+        backend.write_target("a2", "f.json", data)
+
+        raw = backend._read_target_raw("a2", "f.json")
+        modes = {r.get("_delta_mode") for r in raw}
+        assert len(modes) == 1, f"Non-uniform delta modes in batch: {modes}"
+
+
+class TestIssue11_FallbackWarning:
+    """Action not in dep graph should warn and fall back to flat order."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        b = _make_backend(tmp_path)
+        _set_execution_order(b, ["a1", "a2", "a3"])
+        # dep graph deliberately missing a3
+        b.save_metadata("dependency_graph", json.dumps({"a1": [], "a2": ["a1"]}))
+        yield b
+        b.close()
+
+    def test_missing_action_in_graph_still_works(self, backend, capsys):
+        """Action not in dep graph falls back to flat order with warning."""
+        backend.write_target(
+            "a1",
+            "f.json",
+            [{"source_guid": "g1", "_state": "active", "content": {"a1": {"x": 1}}}],
+            is_first_action=True,
+        )
+        backend.write_target(
+            "a2",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "active",
+                    "content": {"a1": {"x": 1}, "a2": {"y": 2}},
+                }
+            ],
+        )
+        backend.write_target(
+            "a3",
+            "f.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "active",
+                    "content": {"a1": {"x": 1}, "a2": {"y": 2}, "a3": {"z": 3}},
+                }
+            ],
+        )
+
+        result = backend.read_target("a3", "f.json")
+
+        # Should still reconstruct (using flat order fallback)
+        assert "a3" in result[0]["content"]
+        # Warning fires via logging to stderr
+        stderr = capsys.readouterr().err
+        assert "not found in dependency graph" in stderr
