@@ -227,6 +227,9 @@ class StorageBackend(ABC):
         if not isinstance(content, dict):
             return {**record, "_delta_mode": "full"}
 
+        if not record.get("source_guid"):
+            return {**record, "_delta_mode": "full"}
+
         if action_name not in content:
             return {**record, "_delta_mode": "full"}
 
@@ -308,17 +311,20 @@ class StorageBackend(ABC):
                 merge_actions = upstream_actions
 
             full_content: dict[str, Any] = {}
-            missing_upstream: list[str] = []
             for act in merge_actions:
                 act_deltas = upstream.get(act, {})
                 if not act_deltas:
-                    # Upstream action has no data for this file at all —
-                    # likely a partitioned pipeline where this action only
-                    # processes a subset of records. Not incomplete.
                     continue
                 delta_content = act_deltas.get(guid) if guid else None
                 if delta_content is None:
-                    missing_upstream.append(act)
+                    # Upstream has data for this file but not this guid.
+                    # Could be routing/partitioning (action processes a
+                    # subset of guids) — log at debug, not warning.
+                    logger.debug(
+                        "Record %s not found in upstream '%s' — may be partitioned.",
+                        guid,
+                        act,
+                    )
                 else:
                     full_content.update(delta_content)
 
@@ -330,16 +336,6 @@ class StorageBackend(ABC):
 
             full_record = {k: v for k, v in record.items() if k != "content" and k != "_delta_mode"}
             full_record["content"] = full_content
-
-            if missing_upstream:
-                logger.warning(
-                    "Record %s in '%s' missing upstream deltas from: %s. "
-                    "Content may be incomplete.",
-                    guid,
-                    action_name,
-                    missing_upstream,
-                )
-                full_record["_reconstruction_incomplete"] = True
 
             reconstructed.append(full_record)
 

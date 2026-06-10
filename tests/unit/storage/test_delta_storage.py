@@ -242,9 +242,9 @@ class TestDeltaReconstruction:
         result2 = backend.read_target("action_3", "file.json")
         assert result2[0]["content"]["action_3"]["draft"] == "UPDATED"
 
-    def test_missing_upstream_flags_record(self, backend):
-        """Missing upstream delta produces _reconstruction_incomplete flag + warning."""
-        # Write action_1 with a DIFFERENT guid so action_3's guid is missing
+    def test_missing_upstream_guid_not_flagged_as_incomplete(self, backend):
+        """Upstream with data for other guids but not this one — partitioned, not incomplete."""
+        # Write action_1 with a DIFFERENT guid (partitioned pipeline)
         backend.write_target(
             "action_1",
             "file.json",
@@ -278,8 +278,8 @@ class TestDeltaReconstruction:
         )
 
         result = backend.read_target("action_3", "file.json")
-        # action_1 has data but not for g1 → flagged incomplete
-        assert result[0].get("_reconstruction_incomplete") is True
+        # Partitioned: upstream has other guids, not g1 — not flagged
+        assert "_reconstruction_incomplete" not in result[0]
         assert "action_3" in result[0]["content"]
 
 
