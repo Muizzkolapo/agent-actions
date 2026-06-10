@@ -311,6 +311,11 @@ class StorageBackend(ABC):
             missing_upstream: list[str] = []
             for act in merge_actions:
                 act_deltas = upstream.get(act, {})
+                if not act_deltas:
+                    # Upstream action has no data for this file at all —
+                    # likely a partitioned pipeline where this action only
+                    # processes a subset of records. Not incomplete.
+                    continue
                 delta_content = act_deltas.get(guid) if guid else None
                 if delta_content is None:
                     missing_upstream.append(act)
@@ -350,14 +355,26 @@ class StorageBackend(ABC):
         if self._dependency_graph_cache is None:
             raw = self.load_metadata("dependency_graph")
             if raw is not None:
-                self._dependency_graph_cache = json.loads(raw)
+                try:
+                    self._dependency_graph_cache = json.loads(raw)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Corrupt dependency_graph in metadata — reconstruction will use flat fallback."
+                    )
+                    self._dependency_graph_cache = {}
             else:
                 self._dependency_graph_cache = {}
 
         if self._dependency_graph_cache and action_name in self._dependency_graph_cache:
             return self._dependency_graph_cache[action_name]
 
-        # Fallback: flat execution order (wrong for parallel, but works for linear)
+        if self._dependency_graph_cache and action_name not in self._dependency_graph_cache:
+            logger.warning(
+                "Action '%s' not found in dependency graph — using flat execution order fallback. "
+                "This may include parallel peers as upstream.",
+                action_name,
+            )
+
         execution_order = self._get_execution_order()
         try:
             idx = execution_order.index(action_name)
@@ -372,7 +389,11 @@ class StorageBackend(ABC):
         raw = self.load_metadata("execution_order")
         if raw is None:
             return []
-        self._execution_order_cache = json.loads(raw)
+        try:
+            self._execution_order_cache = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("Corrupt execution_order in metadata — delta reconstruction disabled.")
+            return []
         return self._execution_order_cache
 
     @abstractmethod

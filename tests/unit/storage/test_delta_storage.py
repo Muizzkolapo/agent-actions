@@ -244,7 +244,21 @@ class TestDeltaReconstruction:
 
     def test_missing_upstream_flags_record(self, backend):
         """Missing upstream delta produces _reconstruction_incomplete flag + warning."""
-        # Write only action_3 — no action_1 or action_2 deltas
+        # Write action_1 with a DIFFERENT guid so action_3's guid is missing
+        backend.write_target(
+            "action_1",
+            "file.json",
+            [
+                {
+                    "source_guid": "other_guid",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {"source": {"title": "Other"}, "action_1": {"q": "Other"}},
+                }
+            ],
+            is_first_action=True,
+        )
+        # Write action_3 with guid g1 — action_1 has data but NOT for g1
         backend.write_target(
             "action_3",
             "file.json",
@@ -264,9 +278,8 @@ class TestDeltaReconstruction:
         )
 
         result = backend.read_target("action_3", "file.json")
-        # Should be flagged as incomplete — upstream deltas missing
+        # action_1 has data but not for g1 → flagged incomplete
         assert result[0].get("_reconstruction_incomplete") is True
-        # Content should still have action_3's namespace
         assert "action_3" in result[0]["content"]
 
 
