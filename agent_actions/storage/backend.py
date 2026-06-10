@@ -76,6 +76,7 @@ class StorageBackend(ABC):
         """Initialize base storage backend state."""
         self._reconstruction_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._execution_order_cache: list[str] | None = None
+        self._dependency_graph_cache: dict[str, list[str]] | None = None
         self._format_version_written = False
         self._format_version_checked = False
 
@@ -246,12 +247,7 @@ class StorageBackend(ABC):
         if not delta_records or "_delta_mode" not in delta_records[0]:
             return delta_records
 
-        execution_order = self._get_execution_order()
-        try:
-            idx = execution_order.index(action_name)
-        except ValueError:
-            return [{k: v for k, v in r.items() if k != "_delta_mode"} for r in delta_records]
-        upstream_actions = execution_order[:idx]
+        upstream_actions = self._get_upstream_actions(action_name)
 
         if not upstream_actions:
             return [{k: v for k, v in r.items() if k != "_delta_mode"} for r in delta_records]
@@ -332,6 +328,31 @@ class StorageBackend(ABC):
             reconstructed.append(full_record)
 
         return reconstructed
+
+    def _get_upstream_actions(self, action_name: str) -> list[str]:
+        """Get the transitive upstream actions for a given action.
+
+        Uses the dependency graph if available (correct for DAGs with parallel actions).
+        Falls back to execution_order[:idx] if no graph stored (legacy).
+        """
+        # Try dependency graph first (correct for parallel pipelines)
+        if self._dependency_graph_cache is None:
+            raw = self.load_metadata("dependency_graph")
+            if raw is not None:
+                self._dependency_graph_cache = json.loads(raw)
+            else:
+                self._dependency_graph_cache = {}
+
+        if self._dependency_graph_cache and action_name in self._dependency_graph_cache:
+            return self._dependency_graph_cache[action_name]
+
+        # Fallback: flat execution order (wrong for parallel, but works for linear)
+        execution_order = self._get_execution_order()
+        try:
+            idx = execution_order.index(action_name)
+        except ValueError:
+            return []
+        return execution_order[:idx]
 
     def _get_execution_order(self) -> list[str]:
         """Get the workflow execution order from metadata. Cached per instance."""
@@ -596,6 +617,7 @@ class StorageBackend(ABC):
         """Close the storage backend and release resources."""
         self._reconstruction_cache.clear()
         self._execution_order_cache = None
+        self._dependency_graph_cache = None
 
     def __enter__(self) -> "StorageBackend":
         """Context manager entry."""

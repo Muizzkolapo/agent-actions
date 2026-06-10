@@ -428,6 +428,11 @@ class AgentWorkflow:
                 backend = getattr(self, "storage_backend", None)
                 if backend is not None:
                     backend.save_metadata("execution_order", json.dumps(self.execution_order))
+                    dep_graph = {
+                        name: sorted(self._get_reachable_actions(name))
+                        for name in self.execution_order
+                    }
+                    backend.save_metadata("dependency_graph", json.dumps(dep_graph))
 
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
                 self.services.core.action_level_orchestrator.log_execution_levels(
@@ -506,6 +511,11 @@ class AgentWorkflow:
                 backend = getattr(self, "storage_backend", None)
                 if backend is not None:
                     backend.save_metadata("execution_order", json.dumps(self.execution_order))
+                    dep_graph = {
+                        name: sorted(self._get_reachable_actions(name))
+                        for name in self.execution_order
+                    }
+                    backend.save_metadata("dependency_graph", json.dumps(dep_graph))
                 total_actions = len(self.execution_order)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
                 self.services.core.action_level_orchestrator.log_execution_levels(
