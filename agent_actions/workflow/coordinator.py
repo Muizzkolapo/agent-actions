@@ -415,6 +415,20 @@ class AgentWorkflow:
 
     # ── Execution ───────────────────────────────────────────────────────
 
+    def _persist_execution_metadata(self, levels: list[list[str]]) -> None:
+        """Store execution order and dependency graph in workflow metadata."""
+        backend = getattr(self, "storage_backend", None)
+        if backend is None:
+            return
+        backend.save_metadata("execution_order", json.dumps(self.execution_order))
+        prior_actions: list[str] = []
+        dep_graph: dict[str, list[str]] = {}
+        for level_actions in levels:
+            for action in level_actions:
+                dep_graph[action] = list(prior_actions)
+            prior_actions.extend(level_actions)
+        backend.save_metadata("dependency_graph", json.dumps(dep_graph))
+
     async def async_run(self, concurrency_limit: int = 5):
         """Execute workflow level-by-level with parallelism within each level."""
         self._initialize_event_context()
@@ -425,18 +439,8 @@ class AgentWorkflow:
         manager = get_manager()
         with manager.context():
             try:
-                backend = getattr(self, "storage_backend", None)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
-
-                if backend is not None:
-                    backend.save_metadata("execution_order", json.dumps(self.execution_order))
-                    prior_actions: list[str] = []
-                    dep_graph: dict[str, list[str]] = {}
-                    for level_actions in levels:
-                        for action in level_actions:
-                            dep_graph[action] = list(prior_actions)
-                        prior_actions.extend(level_actions)
-                    backend.save_metadata("dependency_graph", json.dumps(dep_graph))
+                self._persist_execution_metadata(levels)
                 self.services.core.action_level_orchestrator.log_execution_levels(
                     levels, self.action_indices
                 )
@@ -510,26 +514,9 @@ class AgentWorkflow:
         manager = get_manager()
         with manager.context():
             try:
-                backend = getattr(self, "storage_backend", None)
                 total_actions = len(self.execution_order)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
-
-                if backend is not None:
-                    backend.save_metadata("execution_order", json.dumps(self.execution_order))
-                    prior_actions: list[str] = []
-                    dep_graph: dict[str, list[str]] = {}
-                    for level_actions in levels:
-                        for action in level_actions:
-                            dep_graph[action] = list(prior_actions)
-                        prior_actions.extend(level_actions)
-                    non_empty = sum(1 for v in dep_graph.values() if v)
-                    logger.info(
-                        "Delta storage: built dep graph from %d levels, %d actions, %d with deps",
-                        len(levels),
-                        len(dep_graph),
-                        non_empty,
-                    )
-                    backend.save_metadata("dependency_graph", json.dumps(dep_graph))
+                self._persist_execution_metadata(levels)
                 self.services.core.action_level_orchestrator.log_execution_levels(
                     levels, self.action_indices
                 )

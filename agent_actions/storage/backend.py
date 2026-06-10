@@ -252,6 +252,9 @@ class StorageBackend(ABC):
         delta_records: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Reconstruct full records by joining upstream deltas."""
+        # All records in a batch have the same _delta_mode (set uniformly by
+        # write_target). Checking records[0] is sufficient — mixed batches
+        # cannot occur through the write_target API.
         if not delta_records or "_delta_mode" not in delta_records[0]:
             return delta_records
 
