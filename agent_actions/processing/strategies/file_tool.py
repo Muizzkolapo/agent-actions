@@ -96,14 +96,7 @@ class FileToolStrategy:
 
             is_expansion = len(structured_data) > len(records)
 
-            if is_expansion:
-                for item in structured_data:
-                    item["_delta_mode"] = "full"
-
             has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
-            if has_synthetic:
-                for item in structured_data:
-                    item["_delta_mode"] = "full"
             missing_results: list[ProcessingResult] = []
             if not is_expansion and not has_synthetic:
                 output_guids = {item.get("source_guid") for item in structured_data}

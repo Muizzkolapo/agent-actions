@@ -72,6 +72,8 @@ class LineageEnricher(Enricher):
                 item["source_guid"] = IDGenerator.generate_source_guid()
                 if old_source_guid:
                     item["parent_source_guid"] = old_source_guid
+                # New GUIDs have no upstream deltas — store as full
+                item["_delta_mode"] = "full"
 
             if (
                 result.source_mapping is not None

@@ -106,20 +106,24 @@ class StorageBackend(ABC):
         data: list[dict[str, Any]],
         *,
         is_first_action: bool | None = None,
+        force_full: bool = False,
     ) -> str:
         """Write target data with delta extraction."""
-        if is_first_action is None:
-            execution_order = self._get_execution_order()
-            is_first_action = bool(execution_order) and execution_order[0] == action_name
+        if force_full:
+            delta_records = [{**r, "_delta_mode": "full"} for r in data]
+        else:
+            if is_first_action is None:
+                execution_order = self._get_execution_order()
+                is_first_action = bool(execution_order) and execution_order[0] == action_name
 
-        delta_records = []
-        for record in data:
-            if record.get("_delta_mode") == "full":
-                delta_records.append(record)
-            else:
-                delta_records.append(
-                    self._extract_delta(record, action_name, is_first_action=is_first_action)
-                )
+            delta_records = []
+            for record in data:
+                if record.get("_delta_mode") == "full":
+                    delta_records.append(record)
+                else:
+                    delta_records.append(
+                        self._extract_delta(record, action_name, is_first_action=is_first_action)
+                    )
 
         if not self._format_version_written:
             self.save_metadata("storage_format_version", str(self._STORAGE_FORMAT_VERSION))
