@@ -37,6 +37,7 @@ RECORD_LIFECYCLE_FIELDS: frozenset[str] = frozenset(
     {
         "_state_history",
         "_state_schema_version",
+        "_delta_mode",
     }
 )
 

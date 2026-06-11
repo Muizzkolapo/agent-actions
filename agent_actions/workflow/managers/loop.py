@@ -385,6 +385,8 @@ class VersionOutputCorrelator:
 
         if self.storage_backend is not None and action_name:
             try:
+                for record in cleaned_data:
+                    record["_delta_mode"] = "full"
                 self.storage_backend.write_target(action_name, filename, cleaned_data)
                 logger.debug(
                     "Wrote %d correlated records to storage backend for %s/%s",

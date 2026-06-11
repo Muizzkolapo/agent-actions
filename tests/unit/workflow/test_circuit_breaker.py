@@ -829,9 +829,6 @@ class TestGetFailedItems:
             def initialize(self):
                 pass
 
-            def write_target(self, *a, **kw):
-                pass
-
             def _read_target_raw(self, *a, **kw):
                 return []
 
@@ -855,6 +852,15 @@ class TestGetFailedItems:
 
             def delete_target(self, *a, **kw):
                 return 0
+
+            def _write_target_raw(self, *a, **kw):
+                return ""
+
+            def _save_metadata_raw(self, *a, **kw):
+                pass
+
+            def load_metadata(self, *a, **kw):
+                return None
 
             def get_disposition(self, action_name, record_id=None, disposition=None):
                 return [

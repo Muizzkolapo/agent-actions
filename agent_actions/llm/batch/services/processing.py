@@ -379,6 +379,8 @@ class BatchProcessingService:
                 len(carry_records),
                 action_name,
             )
+            for record in carry_records:
+                record["_delta_mode"] = "full"
 
         try:
             carry_path.unlink()

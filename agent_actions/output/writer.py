@@ -132,8 +132,16 @@ class FileWriter(ProcessorErrorHandlerMixin):
 
             self.storage_backend.write_target(self.action_name, relative_path, data)
 
+            # Strip _delta_mode before disk write — it's a storage-layer
+            # internal that must not leak to filesystem files.
+            clean_data = [
+                {k: v for k, v in record.items() if k != "_delta_mode"}
+                if isinstance(record, dict) and "_delta_mode" in record
+                else record
+                for record in data
+            ]
             ensure_directory_exists(file_path, is_file=True)
-            atomic_json_write(file_path, data)
+            atomic_json_write(file_path, clean_data)
 
             return file_path.stat().st_size
 

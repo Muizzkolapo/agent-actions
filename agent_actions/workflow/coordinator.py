@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -414,6 +415,20 @@ class AgentWorkflow:
 
     # ── Execution ───────────────────────────────────────────────────────
 
+    def _persist_execution_metadata(self, levels: list[list[str]]) -> None:
+        """Store execution order and dependency graph in workflow metadata."""
+        backend = getattr(self, "storage_backend", None)
+        if backend is None:
+            return
+        backend.save_metadata("execution_order", json.dumps(self.execution_order))
+        prior_actions: list[str] = []
+        dep_graph: dict[str, list[str]] = {}
+        for level_actions in levels:
+            for action in level_actions:
+                dep_graph[action] = list(prior_actions)
+            prior_actions.extend(level_actions)
+        backend.save_metadata("dependency_graph", json.dumps(dep_graph))
+
     async def async_run(self, concurrency_limit: int = 5):
         """Execute workflow level-by-level with parallelism within each level."""
         self._initialize_event_context()
@@ -425,6 +440,7 @@ class AgentWorkflow:
         with manager.context():
             try:
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
+                self._persist_execution_metadata(levels)
                 self.services.core.action_level_orchestrator.log_execution_levels(
                     levels, self.action_indices
                 )
@@ -500,6 +516,7 @@ class AgentWorkflow:
             try:
                 total_actions = len(self.execution_order)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
+                self._persist_execution_metadata(levels)
                 self.services.core.action_level_orchestrator.log_execution_levels(
                     levels, self.action_indices
                 )
