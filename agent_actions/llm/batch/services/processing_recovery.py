@@ -73,7 +73,9 @@ def process_recovery_batch(
         return None
 
     state = RecoveryStateManager.load(
-        service._storage_backend, service._action_name, parent_file_name
+        service._storage_backend,
+        service._action_name,
+        parent_file_name,  # type: ignore[arg-type]
     )
     if not state:
         logger.error(
@@ -102,7 +104,9 @@ def process_recovery_batch(
     )
 
     context_map = service._context_manager.load_batch_context_map(
-        service._storage_backend, service._action_name, parent_file_name
+        service._storage_backend,
+        service._action_name,
+        parent_file_name,  # type: ignore[arg-type]
     )
 
     recovery_results = retrieve_and_reconcile(
@@ -465,7 +469,10 @@ def check_and_submit_reprompt(
         }
 
     RecoveryStateManager.save(
-        context.service._storage_backend, context.service._action_name, identity.file_name, state
+        context.service._storage_backend,
+        context.service._action_name,
+        identity.file_name,
+        state,  # type: ignore[arg-type]
     )
     fire_event(
         RepromptRetryEvent(

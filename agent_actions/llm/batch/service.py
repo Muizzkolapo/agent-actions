@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_registry_manager_factory(
-    storage_backend: "StorageBackend",
+    storage_backend: "StorageBackend | None",
 ) -> Callable[[str], BatchRegistryManager]:
     """Create a factory that creates/caches registry managers.
 

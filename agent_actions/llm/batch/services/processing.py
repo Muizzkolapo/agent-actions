@@ -139,6 +139,8 @@ class BatchProcessingService:
             ProcessingError: If batch not completed, no registry entry,
                 recovery is pending, or processing fails
         """
+        assert self._action_name is not None, "action_name required for batch processing"
+        assert self._storage_backend is not None, "storage_backend required for batch processing"
         try:
             manager = self._registry_manager_factory(self._action_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
@@ -201,7 +203,8 @@ class BatchProcessingService:
         Raises:
             ProcessingError: If no registry found or no files processed (and no recovery pending)
         """
-        effective_action_name = action_name or self._action_name
+        effective_action_name: str = action_name or self._action_name  # type: ignore[assignment]
+        assert effective_action_name is not None, "action_name required"
         manager = self._registry_manager_factory(effective_action_name)
         all_jobs = manager.get_all_jobs()
         if not all_jobs:
@@ -282,6 +285,7 @@ class BatchProcessingService:
         Returns:
             True if batch status is COMPLETED, False otherwise
         """
+        assert self._action_name is not None, "action_name required for status check"
         try:
             manager = self._registry_manager_factory(self._action_name)
             provider = self._client_resolver.get_for_batch_id(
@@ -458,7 +462,9 @@ class BatchProcessingService:
         start_time = time.time()
 
         context_map = self._context_manager.load_batch_context_map(
-            self._storage_backend, self._action_name, file_name or "default"
+            self._storage_backend,
+            self._action_name,
+            file_name or "default",  # type: ignore[arg-type]
         )
         agent_config = self._apply_workflow_session_id(agent_config, entry)
         provider = self._client_resolver.get_for_batch_id(
@@ -519,7 +525,10 @@ class BatchProcessingService:
                         state.on_exhausted = OnExhaustedPolicy(reprompt_parsed.on_exhausted)
 
                     RecoveryStateManager.save(
-                        self._storage_backend, self._action_name, file_name, state
+                        self._storage_backend,
+                        self._action_name,
+                        file_name,
+                        state,  # type: ignore[arg-type]
                     )
                     logger.info(
                         "Async retry submitted for %s: %d missing records, batch %s",
@@ -634,7 +643,7 @@ class BatchProcessingService:
         # Clean up stale recovery state (e.g. from a crashed previous run).
         # The recovery path already does this in _finalize_and_cleanup, but the
         # original batch path goes through this method instead and must also clean up.
-        RecoveryStateManager.delete(self._storage_backend, self._action_name, identity.file_name)
+        RecoveryStateManager.delete(self._storage_backend, self._action_name, identity.file_name)  # type: ignore[arg-type]
         output_path = _finalize_batch_output_impl(
             context,
             identity,
@@ -778,7 +787,9 @@ class BatchProcessingService:
 
         try:
             context_map = self._context_manager.load_batch_context_map(
-                self._storage_backend, self._action_name, file_name or "default"
+                self._storage_backend,
+                self._action_name,
+                file_name or "default",  # type: ignore[arg-type]
             )
         except Exception:
             logger.warning(

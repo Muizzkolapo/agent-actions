@@ -182,6 +182,7 @@ class SQLiteBackend(StorageBackend):
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
         self._connection: sqlite3.Connection | None = None
+        self._readonly: bool = False
         self._lock = (
             threading.RLock()
         )  # Serialize write operations; RLock allows re-entry from connection property
@@ -278,7 +279,7 @@ class SQLiteBackend(StorageBackend):
 
     def initialize(self) -> None:
         """Create connection, enforce schema, create tables and indexes."""
-        if getattr(self, "_readonly", False):
+        if self._readonly:
             raise RuntimeError("Cannot initialize a read-only backend instance.")
         with self._lock:
             self._open_connection()
@@ -1635,6 +1636,8 @@ class SQLiteBackend(StorageBackend):
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner."""
+        if self._connection is None:
+            return None
         with self._lock:
             cursor = self._connection.cursor()
 
@@ -1669,7 +1672,7 @@ class SQLiteBackend(StorageBackend):
                     try:
                         data = self._read_target_raw(action_name, rp)
                         if not isinstance(data, list):
-                            data = [data] if data else []
+                            data = [data] if data else []  # type: ignore[unreachable]
                         if data and isinstance(data[0], dict) and "_delta_mode" in data[0]:
                             data = self._reconstruct_from_deltas(action_name, rp, data)
                         for item in data:

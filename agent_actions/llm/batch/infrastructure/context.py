@@ -59,7 +59,7 @@ class BatchContextManager:
                     f"Context map not found for {action_name}/{batch_name}",
                     context={"action_name": action_name, "batch_name": batch_name},
                 )
-            context_map = json.loads(raw)
+            context_map: dict[str, Any] = json.loads(raw)
             logger.debug(
                 "Loaded context map for %s/%s (%d entries)",
                 action_name,
