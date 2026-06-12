@@ -83,7 +83,7 @@ class TestLspIndexerReadError:
 
 
 # ---------------------------------------------------------------------------
-# I-2: COALESCE guards NULL record_count in scan_sqlite_readonly
+# I-2: COALESCE guards NULL record_count in scan_data
 # ---------------------------------------------------------------------------
 class TestScanSqliteCoalesce:
     def test_null_record_count_defaults_to_zero(self, tmp_path):
@@ -96,7 +96,6 @@ class TestScanSqliteCoalesce:
             "CREATE TABLE target_data "
             "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
         )
-        # Insert row with NULL record_count
         conn.execute(
             "INSERT INTO target_data VALUES (?, ?, ?, ?)",
             ("my_action", "file.json", '{"x":1}', None),
@@ -108,13 +107,13 @@ class TestScanSqliteCoalesce:
         conn.commit()
         conn.close()
 
-        from agent_actions.tooling.docs.scanner.data_scanners import scan_sqlite_readonly
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
-        result = scan_sqlite_readonly(db, "test_workflow")
+        backend = SQLiteBackend.create_readonly(db)
+        result = backend.scan_data()
+        backend.close()
         assert result is not None
-        # Per-node count must be 0 (not None) — this is where COALESCE applies
         assert result["nodes"]["my_action"]["record_count"] == 0
-        # Total target_count also guarded (separate SUM query)
         assert result["target_count"] == 0
 
 

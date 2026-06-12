@@ -311,8 +311,9 @@ class AgentWorkflow:
 
         # JSONFileHandler opens lazily, so deleting between handler init
         # and first event write is safe.
+        logs_dir = project_root / "agent_io" / "logs"
         for events_file in ("events.json", "errors.json"):
-            events_path = target_dir / events_file
+            events_path = logs_dir / events_file
             try:
                 events_path.unlink(missing_ok=True)
             except OSError as e:

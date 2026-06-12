@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
@@ -20,9 +21,18 @@ class TestVersionOutputCorrelator:
             yield Path(tmpdir)
 
     @pytest.fixture
-    def correlator(self, temp_agent_folder):
-        """Create a VersionOutputCorrelator instance."""
-        return VersionOutputCorrelator(temp_agent_folder)
+    def storage_backend(self, temp_agent_folder):
+        """Create a SQLite backend for testing."""
+        db_path = temp_agent_folder / "store" / "test.db"
+        backend = SQLiteBackend.create(db_path=str(db_path), workflow_name="test")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    @pytest.fixture
+    def correlator(self, temp_agent_folder, storage_backend):
+        """Create a VersionOutputCorrelator instance with storage backend."""
+        return VersionOutputCorrelator(temp_agent_folder, storage_backend=storage_backend)
 
     @pytest.fixture
     def sample_execution_order(self):
@@ -90,42 +100,39 @@ class TestVersionOutputCorrelator:
         }
         assert "validate_quiz" not in consumption_map
 
-    def test_filename_preservation(self, correlator, temp_agent_folder):
+    def test_filename_preservation(self, correlator, storage_backend, temp_agent_folder):
         """Test that original filenames are preserved during correlation."""
-        loop_dirs = []
         test_filename = "Azure_AI_Questions.json"
         for i in range(1, 4):
-            # Use simple directory names (no node_X_ prefix)
-            loop_dir = temp_agent_folder / "target" / f"generate_distractors_{i}"
-            loop_dir.mkdir(parents=True)
-            loop_dirs.append(loop_dir)
+            action_name = f"generate_distractors_{i}"
             test_data = [
                 {
                     "source_guid": "test-guid-1",
                     "version_correlation_id": "test-corr-1",
                     "target_id": "target-1",
-                    "content": {
-                        f"generate_distractors_{i}": {f"distractor_{i}": f"Wrong answer {i}"}
-                    },
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {action_name: {f"distractor_{i}": f"Wrong answer {i}"}},
                 }
             ]
-            with open(loop_dir / test_filename, "w") as f:
-                json.dump(test_data, f)
+            storage_backend._write_target_raw(action_name, test_filename, test_data)
         result_dir = correlator.prepare_correlated_input(
             "reconstruct_options",
             ["generate_distractors_1", "generate_distractors_2", "generate_distractors_3"],
             4,
         )
-        output_file = Path(result_dir) / test_filename
-        assert output_file.exists(), f"Expected file {test_filename} not found"
+        assert result_dir is not None, "prepare_correlated_input returned None"
+        target_files = storage_backend.list_target_files("reconstruct_options")
+        assert test_filename in target_files, f"Expected {test_filename} in backend target files"
         source_file = temp_agent_folder / "source" / test_filename
         assert source_file.exists(), f"Source file {test_filename} not created"
 
-    def test_correlation_source_includes_lineage(self, correlator, temp_agent_folder):
+    def test_correlation_source_includes_lineage(
+        self, correlator, storage_backend, temp_agent_folder
+    ):
         """Source file created by correlation must include lineage for downstream enrichment."""
         for i in range(1, 3):
-            loop_dir = temp_agent_folder / "target" / f"scorer_{i}"
-            loop_dir.mkdir(parents=True)
+            action_name = f"scorer_{i}"
             test_data = [
                 {
                     "source_guid": "guid-1",
@@ -133,11 +140,12 @@ class TestVersionOutputCorrelator:
                     "target_id": "tid-1",
                     "node_id": f"node_{i}_abc",
                     "lineage": ["node_0_root", f"node_{i}_abc"],
-                    "content": {f"scorer_{i}": {f"score_{i}": 8}},
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {action_name: {f"score_{i}": 8}},
                 }
             ]
-            with open(loop_dir / "data.json", "w") as f:
-                json.dump(test_data, f)
+            storage_backend._write_target_raw(action_name, "data.json", test_data)
 
         correlator.prepare_correlated_input("aggregate", ["scorer_1", "scorer_2"], 3)
 
@@ -152,28 +160,26 @@ class TestVersionOutputCorrelator:
         assert len(record["lineage"]) >= 2
         assert "node_0_root" in record["lineage"]
 
-    def test_partial_record_handling(self, correlator, temp_agent_folder):
+    def test_partial_record_handling(self, correlator, storage_backend, temp_agent_folder):
         """Test that records missing from some loops are still included."""
-        # Use simple directory names (no node_X_ prefix)
-        loop1_dir = temp_agent_folder / "target" / "distractor_1"
-        loop2_dir = temp_agent_folder / "target" / "distractor_2"
-        loop3_dir = temp_agent_folder / "target" / "distractor_3"
-        for dir in [loop1_dir, loop2_dir, loop3_dir]:
-            dir.mkdir(parents=True)
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
         data_loop1 = [
             {
                 "source_guid": "guid-1",
                 "version_correlation_id": "corr-1",
+                **lifecycle,
                 "content": {"distractor_1": {"field_1": "value1"}},
             },
             {
                 "source_guid": "guid-2",
                 "version_correlation_id": "corr-2",
+                **lifecycle,
                 "content": {"distractor_1": {"field_1": "value2"}},
             },
             {
                 "source_guid": "guid-3",
                 "version_correlation_id": "corr-3",
+                **lifecycle,
                 "content": {"distractor_1": {"field_1": "value3"}},
             },
         ]
@@ -181,11 +187,13 @@ class TestVersionOutputCorrelator:
             {
                 "source_guid": "guid-1",
                 "version_correlation_id": "corr-1",
+                **lifecycle,
                 "content": {"distractor_2": {"field_2": "value1"}},
             },
             {
                 "source_guid": "guid-2",
                 "version_correlation_id": "corr-2",
+                **lifecycle,
                 "content": {"distractor_2": {"field_2": "value2"}},
             },
         ]
@@ -193,21 +201,18 @@ class TestVersionOutputCorrelator:
             {
                 "source_guid": "guid-1",
                 "version_correlation_id": "corr-1",
+                **lifecycle,
                 "content": {"distractor_3": {"field_3": "value1"}},
-            }
+            },
         ]
-        with open(loop1_dir / "data.json", "w") as f:
-            json.dump(data_loop1, f)
-        with open(loop2_dir / "data.json", "w") as f:
-            json.dump(data_loop2, f)
-        with open(loop3_dir / "data.json", "w") as f:
-            json.dump(data_loop3, f)
+        storage_backend._write_target_raw("distractor_1", "data.json", data_loop1)
+        storage_backend._write_target_raw("distractor_2", "data.json", data_loop2)
+        storage_backend._write_target_raw("distractor_3", "data.json", data_loop3)
         result_dir = correlator.prepare_correlated_input(
             "consumer", ["distractor_1", "distractor_2", "distractor_3"], 4
         )
-        output_file = Path(result_dir) / "data.json"
-        with open(output_file) as f:
-            correlated_data = json.load(f)
+        assert result_dir is not None
+        correlated_data = storage_backend.read_target("consumer", "data.json")
         assert len(correlated_data) == 3
         record1 = next(r for r in correlated_data if r["source_guid"] == "guid-1")
         # Version namespaces are now nested, not prefixed
@@ -229,47 +234,40 @@ class TestVersionOutputCorrelator:
         assert "distractor_3" not in record3["content"]
         assert record3["content"]["distractor_1"]["field_1"] == "value3"
 
-    def test_multiple_file_correlation(self, correlator, temp_agent_folder):
+    def test_multiple_file_correlation(self, correlator, storage_backend, temp_agent_folder):
         """Test correlation when loop agents produce multiple files."""
-        # Use simple directory names (no node_X_ prefix)
-        loop1_dir = temp_agent_folder / "target" / "processor_1"
-        loop2_dir = temp_agent_folder / "target" / "processor_2"
-        loop1_dir.mkdir(parents=True)
-        loop2_dir.mkdir(parents=True)
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
         files = ["questions.json", "answers.json", "metadata.json"]
         for filename in files:
             data1 = [
                 {
                     "source_guid": f"{filename}-guid-1",
                     "version_correlation_id": f"{filename}-corr-1",
+                    **lifecycle,
                     "content": {"processor_1": {"loop1_data": f"data_from_{filename}"}},
                 }
             ]
-            with open(loop1_dir / filename, "w") as f:
-                json.dump(data1, f)
             data2 = [
                 {
                     "source_guid": f"{filename}-guid-1",
                     "version_correlation_id": f"{filename}-corr-1",
+                    **lifecycle,
                     "content": {"processor_2": {"loop2_data": f"data_from_{filename}"}},
                 }
             ]
-            with open(loop2_dir / filename, "w") as f:
-                json.dump(data2, f)
+            storage_backend._write_target_raw("processor_1", filename, data1)
+            storage_backend._write_target_raw("processor_2", filename, data2)
         result_dir = correlator.prepare_correlated_input(
             "aggregator", ["processor_1", "processor_2"], 3
         )
+        assert result_dir is not None
         for filename in files:
-            output_file = Path(result_dir) / filename
-            assert output_file.exists(), f"File {filename} not correlated"
-            with open(output_file) as f:
-                data = json.load(f)
-                assert len(data) == 1
-                # Version namespaces are now nested, not prefixed
-                assert "processor_1" in data[0]["content"]
-                assert "processor_2" in data[0]["content"]
-                assert data[0]["content"]["processor_1"]["loop1_data"] == f"data_from_{filename}"
-                assert data[0]["content"]["processor_2"]["loop2_data"] == f"data_from_{filename}"
+            data = storage_backend.read_target("aggregator", filename)
+            assert len(data) == 1
+            assert "processor_1" in data[0]["content"]
+            assert "processor_2" in data[0]["content"]
+            assert data[0]["content"]["processor_1"]["loop1_data"] == f"data_from_{filename}"
+            assert data[0]["content"]["processor_2"]["loop2_data"] == f"data_from_{filename}"
 
     def test_correlate_by_source_record(self, correlator):
         """Test the correlation logic for merging records with prefixed field names."""
@@ -364,32 +362,31 @@ class TestVersionOutputCorrelatorIntegration:
     def test_integration_with_agent_workflow(self, mock_agent_workflow):
         """Test integration with AgentWorkflow's _setup_correlation_if_needed."""
         workflow, agent_folder = mock_agent_workflow
-        correlator = VersionOutputCorrelator(agent_folder)
+        db_path = agent_folder / "store" / "test.db"
+        backend = SQLiteBackend.create(db_path=str(db_path), workflow_name="test")
+        backend.initialize()
+        correlator = VersionOutputCorrelator(agent_folder, storage_backend=backend)
         workflow.version_correlator = correlator
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
         for i in range(1, 4):
-            # Use simple directory names (no node_X_ prefix)
-            loop_dir = agent_folder / "target" / f"loop_{i}"
-            loop_dir.mkdir(parents=True)
+            action_name = f"loop_{i}"
             data = [
                 {
                     "source_guid": "test-guid",
                     "version_correlation_id": "test-corr",
-                    "content": {f"loop_{i}": {f"field_{i}": f"value_{i}"}},
+                    **lifecycle,
+                    "content": {action_name: {f"field_{i}": f"value_{i}"}},
                 }
             ]
-            with open(loop_dir / "output.json", "w") as f:
-                json.dump(data, f)
+            backend._write_target_raw(action_name, "output.json", data)
         result = correlator.prepare_correlated_input("consumer", ["loop_1", "loop_2", "loop_3"], 4)
         assert result is not None
-        output_file = Path(result) / "output.json"
-        assert output_file.exists()
-        with open(output_file) as f:
-            data = json.load(f)
-            assert len(data) == 1
-            # Content is nested by agent name (not flattened)
-            assert data[0]["content"]["loop_1"]["field_1"] == "value_1"
-            assert data[0]["content"]["loop_2"]["field_2"] == "value_2"
-            assert data[0]["content"]["loop_3"]["field_3"] == "value_3"
+        data = backend.read_target("consumer", "output.json")
+        assert len(data) == 1
+        assert data[0]["content"]["loop_1"]["field_1"] == "value_1"
+        assert data[0]["content"]["loop_2"]["field_2"] == "value_2"
+        assert data[0]["content"]["loop_3"]["field_3"] == "value_3"
+        backend.close()
 
 
 class TestLoopCorrelatorWithSequentialMode:
@@ -402,147 +399,140 @@ class TestLoopCorrelatorWithSequentialMode:
             yield Path(tmpdir)
 
     @pytest.fixture
-    def correlator(self, temp_agent_folder):
-        """Create a VersionOutputCorrelator instance."""
-        return VersionOutputCorrelator(temp_agent_folder)
+    def storage_backend(self, temp_agent_folder):
+        """Create a SQLite backend for testing."""
+        db_path = temp_agent_folder / "store" / "test.db"
+        backend = SQLiteBackend.create(db_path=str(db_path), workflow_name="test")
+        backend.initialize()
+        yield backend
+        backend.close()
 
-    def test_sequential_loop_correlation_works(self, correlator, temp_agent_folder):
+    @pytest.fixture
+    def correlator(self, temp_agent_folder, storage_backend):
+        """Create a VersionOutputCorrelator instance with storage backend."""
+        return VersionOutputCorrelator(temp_agent_folder, storage_backend=storage_backend)
+
+    def test_sequential_loop_correlation_works(
+        self, correlator, storage_backend, temp_agent_folder
+    ):
         """Test that correlator works correctly with sequential loop outputs."""
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
         for i in range(1, 4):
-            # Use simple directory names (no node_X_ prefix)
-            loop_dir = temp_agent_folder / "target" / f"refine_{i}"
-            loop_dir.mkdir(parents=True)
+            action_name = f"refine_{i}"
             test_data = [
                 {
                     "source_guid": f"test-{i}",
                     "version_correlation_id": f"test-corr-{i}",
-                    "content": {f"refine_{i}": {"iteration": i, "data": f"refined_data_{i}"}},
+                    **lifecycle,
+                    "content": {action_name: {"iteration": i, "data": f"refined_data_{i}"}},
                 }
             ]
-            with open(loop_dir / "output.json", "w") as f:
-                json.dump(test_data, f)
+            storage_backend._write_target_raw(action_name, "output.json", test_data)
         result_dir = correlator.prepare_correlated_input(
             "aggregate", ["refine_1", "refine_2", "refine_3"], 4
         )
         assert result_dir is not None
-        output_file = Path(result_dir) / "output.json"
-        assert output_file.exists()
-        with open(output_file) as f:
-            data = json.load(f)
-            assert len(data) == 3
-            # Content is nested by agent name
-            # Extract iteration values from nested namespaces
-            iterations = set()
-            for item in data:
-                for _agent_name, content in item["content"].items():
-                    if isinstance(content, dict) and "iteration" in content:
-                        iterations.add(content["iteration"])
-            assert iterations == {1, 2, 3}
+        data = storage_backend.read_target("aggregate", "output.json")
+        assert len(data) == 3
+        iterations = set()
+        for item in data:
+            for _agent_name, content in item["content"].items():
+                if isinstance(content, dict) and "iteration" in content:
+                    iterations.add(content["iteration"])
+        assert iterations == {1, 2, 3}
 
-    def test_partial_sequential_failure_correlation(self, correlator, temp_agent_folder):
+    def test_partial_sequential_failure_correlation(
+        self, correlator, storage_backend, temp_agent_folder
+    ):
         """Test correlation when some sequential iterations fail."""
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
         for i in range(1, 3):
-            loop_dir = temp_agent_folder / "target" / f"process_{i}"
-            loop_dir.mkdir(parents=True)
+            action_name = f"process_{i}"
             test_data = [
                 {
                     "source_guid": "test-guid",
                     "version_correlation_id": "test-corr",
-                    "content": {f"process_{i}": {f"field_{i}": f"value_{i}"}},
+                    **lifecycle,
+                    "content": {action_name: {f"field_{i}": f"value_{i}"}},
                 }
             ]
-            with open(loop_dir / "result.json", "w") as f:
-                json.dump(test_data, f)
+            storage_backend._write_target_raw(action_name, "result.json", test_data)
         result_dir = correlator.prepare_correlated_input(
             "consumer", ["process_1", "process_2", "process_3"], 4
         )
         assert result_dir is not None
-        output_file = Path(result_dir) / "result.json"
-        if output_file.exists():
-            with open(output_file) as f:
-                data = json.load(f)
-                assert len(data) <= 2
-                if len(data) > 0:
-                    # Content is nested by agent name
-                    content = data[0]["content"]
-                    # Check that process_1 or process_2 namespace exists
-                    assert "process_1" in content or "process_2" in content
+        data = storage_backend.read_target("consumer", "result.json")
+        assert len(data) <= 2
+        if len(data) > 0:
+            content = data[0]["content"]
+            assert "process_1" in content or "process_2" in content
 
-    def test_sequential_loop_with_mixed_metadata(self, correlator, temp_agent_folder):
+    def test_sequential_loop_with_mixed_metadata(
+        self, correlator, storage_backend, temp_agent_folder
+    ):
         """Test correlation when sequential loop agents have loop_mode metadata."""
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
         for i in range(1, 4):
-            loop_dir = temp_agent_folder / "target" / f"step_{i}"
-            loop_dir.mkdir(parents=True)
+            action_name = f"step_{i}"
             test_data = [
                 {
                     "source_guid": "test-guid",
                     "version_correlation_id": "test-corr",
                     "loop_mode": "sequential",
                     "version_number": i,
-                    "content": {f"step_{i}": {"step": i, "result": f"step_{i}_result"}},
+                    **lifecycle,
+                    "content": {action_name: {"step": i, "result": f"step_{i}_result"}},
                 }
             ]
-            with open(loop_dir / "data.json", "w") as f:
-                json.dump(test_data, f)
+            storage_backend._write_target_raw(action_name, "data.json", test_data)
         result_dir = correlator.prepare_correlated_input("final", ["step_1", "step_2", "step_3"], 4)
         assert result_dir is not None
-        output_file = Path(result_dir) / "data.json"
-        assert output_file.exists()
-        with open(output_file) as f:
-            data = json.load(f)
-            assert len(data) == 1
-            # Content is nested by agent name
-            content = data[0]["content"]
-            # Check that step namespaces exist with expected values
-            step_values = []
-            for i in range(1, 4):
-                if f"step_{i}" in content and isinstance(content[f"step_{i}"], dict):
-                    step_values.append(content[f"step_{i}"].get("step"))
-            assert any(v in [1, 2, 3] for v in step_values if v is not None)
+        data = storage_backend.read_target("final", "data.json")
+        assert len(data) == 1
+        content = data[0]["content"]
+        step_values = []
+        for i in range(1, 4):
+            if f"step_{i}" in content and isinstance(content[f"step_{i}"], dict):
+                step_values.append(content[f"step_{i}"].get("step"))
+        assert any(v in [1, 2, 3] for v in step_values if v is not None)
 
-    def test_sequential_vs_parallel_correlation_same_behavior(self, correlator, temp_agent_folder):
+    def test_sequential_vs_parallel_correlation_same_behavior(
+        self, correlator, storage_backend, temp_agent_folder
+    ):
         """Test that correlation behavior is identical for sequential and parallel loops."""
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
         for i in range(1, 3):
-            loop_dir = temp_agent_folder / "target" / f"seq_{i}"
-            loop_dir.mkdir(parents=True)
+            action_name = f"seq_{i}"
             test_data = [
                 {
                     "source_guid": "guid-1",
                     "version_correlation_id": "corr-1",
                     "loop_mode": "sequential",
-                    "content": {f"seq_{i}": {f"seq_field_{i}": f"seq_value_{i}"}},
+                    **lifecycle,
+                    "content": {action_name: {f"seq_field_{i}": f"seq_value_{i}"}},
                 }
             ]
-            with open(loop_dir / "output.json", "w") as f:
-                json.dump(test_data, f)
-        for i in range(3, 5):
-            loop_dir = temp_agent_folder / "target" / f"par_{i - 2}"
-            loop_dir.mkdir(parents=True)
+            storage_backend._write_target_raw(action_name, "output.json", test_data)
+        for i in range(1, 3):
+            action_name = f"par_{i}"
             test_data = [
                 {
                     "source_guid": "guid-2",
                     "version_correlation_id": "corr-2",
                     "loop_mode": "parallel",
-                    "content": {f"par_{i - 2}": {f"par_field_{i - 2}": f"par_value_{i - 2}"}},
+                    **lifecycle,
+                    "content": {action_name: {f"par_field_{i}": f"par_value_{i}"}},
                 }
             ]
-            with open(loop_dir / "output.json", "w") as f:
-                json.dump(test_data, f)
+            storage_backend._write_target_raw(action_name, "output.json", test_data)
         seq_result = correlator.prepare_correlated_input("seq_consumer", ["seq_1", "seq_2"], 5)
         par_result = correlator.prepare_correlated_input("par_consumer", ["par_1", "par_2"], 6)
         assert seq_result is not None
         assert par_result is not None
-        seq_file = Path(seq_result) / "output.json"
-        par_file = Path(par_result) / "output.json"
-        assert seq_file.exists()
-        assert par_file.exists()
-        with open(seq_file) as f:
-            seq_data = json.load(f)
-        with open(par_file) as f:
-            par_data = json.load(f)
+        seq_data = storage_backend.read_target("seq_consumer", "output.json")
+        par_data = storage_backend.read_target("par_consumer", "output.json")
         assert len(seq_data) == 1
         assert len(par_data) == 1
-        # Content is nested by agent name
         assert "seq_1" in seq_data[0]["content"]
         assert seq_data[0]["content"]["seq_1"]["seq_field_1"] == "seq_value_1"
         assert "seq_2" in seq_data[0]["content"]
@@ -560,9 +550,11 @@ class TestVersionCorrelatorSourceProtection:
         """Test that sparse correlation outputs don't overwrite rich source data."""
         with tempfile.TemporaryDirectory() as tmpdir:
             agent_folder = Path(tmpdir)
-            correlator = VersionOutputCorrelator(agent_folder)
+            db_path = agent_folder / "store" / "test.db"
+            backend = SQLiteBackend.create(db_path=str(db_path), workflow_name="test")
+            backend.initialize()
+            correlator = VersionOutputCorrelator(agent_folder, storage_backend=backend)
 
-            # Setup: Create rich source data with many fields
             source_dir = agent_folder / "agent_io" / "source"
             source_dir.mkdir(parents=True)
             source_file = source_dir / "data.json"
@@ -578,15 +570,10 @@ class TestVersionCorrelatorSourceProtection:
                     "created_at": "2024-01-01",
                     "tags": ["important"],
                 }
-            ]  # 8 fields
+            ]
             source_file.write_text(json.dumps(rich_source_data))
 
-            # Setup version outputs that will be correlated
-            target_dir = agent_folder / "agent_io" / "target" / "consumer"
-            target_dir.mkdir(parents=True)
-
-            version1_dir = agent_folder / "target" / "action_1"
-            version1_dir.mkdir(parents=True)
+            lifecycle = {"_state": "processed", "_state_schema_version": 1}
             version1_output = [
                 {
                     "source_guid": "guid-1",
@@ -594,13 +581,10 @@ class TestVersionCorrelatorSourceProtection:
                     "node_id": "node-1",
                     "version_correlation_id": "corr-1",
                     "lineage": [],
+                    **lifecycle,
                     "content": {"action_1": {"result": "v1"}},
                 }
             ]
-            (version1_dir / "data.json").write_text(json.dumps(version1_output))
-
-            version2_dir = agent_folder / "target" / "action_2"
-            version2_dir.mkdir(parents=True)
             version2_output = [
                 {
                     "source_guid": "guid-1",
@@ -608,27 +592,25 @@ class TestVersionCorrelatorSourceProtection:
                     "node_id": "node-1",
                     "version_correlation_id": "corr-1",
                     "lineage": [],
+                    **lifecycle,
                     "content": {"action_2": {"result": "v2"}},
                 }
             ]
-            (version2_dir / "data.json").write_text(json.dumps(version2_output))
+            backend._write_target_raw("action_1", "data.json", version1_output)
+            backend._write_target_raw("action_2", "data.json", version2_output)
 
-            # Run correlation (this will try to write sparse source data)
             result = correlator.prepare_correlated_input("consumer", ["action_1", "action_2"], 0)
-
             assert result is not None
 
-            # Verify: Rich source data should NOT be overwritten
             with open(source_file) as f:
                 final_source_data = json.load(f)
 
-            # Should still have rich data (8 fields), not sparse data (2 fields)
             assert len(final_source_data[0]) == 8, (
                 "Rich source data was overwritten by sparse correlation output!"
             )
             assert "page_content" in final_source_data[0], "page_content field lost!"
-            assert "title" in final_source_data[0], "title field lost!"
             assert final_source_data[0]["page_content"] == "Full page content here..."
+            backend.close()
 
     def test_correlation_richer_data_allowed(self):
         """Test that correlation outputs with MORE fields can update source."""

@@ -57,7 +57,8 @@ class TestManifestManagerInitialization:
 
         assert manager.agent_io_path == temp_agent_io
         assert manager.target_dir == temp_agent_io / "target"
-        assert manager.manifest_path == temp_agent_io / "target" / MANIFEST_FILENAME
+        assert manager.logs_dir == temp_agent_io / "logs"
+        assert manager.manifest_path == temp_agent_io / "logs" / MANIFEST_FILENAME
 
     def test_init_accepts_string_path(self, temp_agent_io):
         """Should accept string path and convert to Path."""
@@ -127,13 +128,13 @@ class TestManifestInitialization:
         transform = manifest_manager.manifest["actions"]["transform"]
         assert transform["dependencies"] == ["extract"]
 
-    def test_creates_target_directory(self, manifest_manager, sample_workflow_data):
-        """Should create target directory if it doesn't exist."""
-        assert not manifest_manager.target_dir.exists()
+    def test_creates_logs_directory(self, manifest_manager, sample_workflow_data):
+        """Should create logs directory if it doesn't exist."""
+        assert not manifest_manager.logs_dir.exists()
 
         manifest_manager.initialize_manifest(**sample_workflow_data)
 
-        assert manifest_manager.target_dir.exists()
+        assert manifest_manager.logs_dir.exists()
 
     def test_custom_workflow_run_id(self, manifest_manager, sample_workflow_data):
         """Should accept custom workflow run ID."""

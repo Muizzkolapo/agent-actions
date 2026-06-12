@@ -31,7 +31,7 @@ class TestRunResultsAtomicWrite:
         """Happy path: flush() creates run_results.json."""
         handler = self._make_handler(tmp_path)
         handler.flush()
-        output = tmp_path / "target" / "run_results.json"
+        output = tmp_path / "logs" / "run_results.json"
         assert output.exists()
         data = json.loads(output.read_text())
         assert "metadata" in data
@@ -39,7 +39,7 @@ class TestRunResultsAtomicWrite:
     def test_flush_cleans_up_tmp_on_write_failure(self, tmp_path):
         """If json.dump raises inside atomic_json_write, temp file is cleaned up."""
         handler = self._make_handler(tmp_path)
-        (tmp_path / "target").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "logs").mkdir(parents=True, exist_ok=True)
 
         def boom(*args, **kwargs):
             raise TypeError("unserializable sentinel")
@@ -49,14 +49,14 @@ class TestRunResultsAtomicWrite:
                 handler.flush()
 
         # No orphaned .tmp files should remain in the target dir
-        target = tmp_path / "target"
+        target = tmp_path / "logs"
         tmp_files = list(target.glob("*.tmp"))
         assert tmp_files == [], f"Orphaned temp files found: {tmp_files}"
 
     def test_flush_cleans_up_tmp_on_rename_failure(self, tmp_path):
         """If rename raises inside atomic_json_write, temp file is cleaned up."""
         handler = self._make_handler(tmp_path)
-        (tmp_path / "target").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "logs").mkdir(parents=True, exist_ok=True)
 
         _orig = Path.replace
 
@@ -69,6 +69,6 @@ class TestRunResultsAtomicWrite:
             with pytest.raises(OSError, match="disk full"):
                 handler.flush()
 
-        target = tmp_path / "target"
+        target = tmp_path / "logs"
         tmp_files = list(target.glob("*.tmp"))
         assert tmp_files == [], f"Orphaned temp files found: {tmp_files}"

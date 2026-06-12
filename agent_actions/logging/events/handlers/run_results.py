@@ -122,8 +122,8 @@ class RunResultsCollector:
         if not self.output_dir:
             return
 
-        target_dir = self.output_dir / "target"
-        target_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir = self.output_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
 
         output = {
             "metadata": self._metadata,
@@ -134,7 +134,7 @@ class RunResultsCollector:
             "tokens": self._total_tokens,
         }
 
-        output_path = target_dir / "run_results.json"
+        output_path = logs_dir / "run_results.json"
         atomic_json_write(output_path, output, indent=2, default=str)
 
     def _handle_workflow_start(self, event: BaseEvent) -> None:

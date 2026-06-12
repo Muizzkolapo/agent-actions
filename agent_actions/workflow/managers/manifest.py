@@ -33,7 +33,8 @@ class ManifestManager:
         """Initialize manifest manager."""
         self.agent_io_path = Path(agent_io_path)
         self.target_dir = self.agent_io_path / "target"
-        self.manifest_path = self.target_dir / MANIFEST_FILENAME
+        self.logs_dir = self.agent_io_path / "logs"
+        self.manifest_path = self.logs_dir / MANIFEST_FILENAME
         self._manifest: dict[str, Any] | None = None
         self._lock = threading.RLock()
 
@@ -113,8 +114,7 @@ class ManifestManager:
                     "error": None,
                 }
 
-            # Ensure target directory exists and save
-            self.target_dir.mkdir(parents=True, exist_ok=True)
+            self.logs_dir.mkdir(parents=True, exist_ok=True)
             self._save_manifest()
             logger.debug("Initialized manifest for workflow %s", workflow_name)
 

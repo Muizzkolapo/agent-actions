@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,18 +17,6 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class JsonLoadParams:
-    """Parameters for loading JSON from file."""
-
-    json_file: Path
-    outputs: list
-    corrupted_files: list
-    output_dir: Path
-    operation: str
-    add_source_file: bool = False
 
 
 class VersionOutputCorrelator:
@@ -89,19 +75,8 @@ class VersionOutputCorrelator:
         version_filenames = set()
 
         for version_agent in version_sources:
-            if self.storage_backend is not None:
-                outputs, filenames = self._load_from_storage_backend(version_agent)
-                if outputs:
-                    version_outputs[version_agent] = outputs
-                    version_filenames.update(filenames)
-                    continue
-
-            version_idx = self._find_agent_index(version_agent)
-            if version_idx is None:
-                continue
-            version_output_dir = self.agent_folder / "target" / version_agent
-            if version_output_dir.exists():
-                outputs, filenames = self._load_agent_outputs_with_filenames(version_output_dir)
+            outputs, filenames = self._load_from_storage_backend(version_agent)
+            if outputs:
                 version_outputs[version_agent] = outputs
                 version_filenames.update(filenames)
 
@@ -110,6 +85,10 @@ class VersionOutputCorrelator:
     def _load_from_storage_backend(self, version_agent: str) -> tuple[list[dict[str, Any]], set]:
         """Load outputs from storage backend for a version agent."""
         if self.storage_backend is None:
+            logger.warning(
+                "No storage backend configured — cannot load version outputs for %s",
+                version_agent,
+            )
             return [], set()
 
         outputs = []
@@ -189,115 +168,6 @@ class VersionOutputCorrelator:
         except (OSError, ValueError, KeyError) as e:
             logger.exception("Error preparing correlated input for %s: %s", agent_name, e)
             return None
-
-    def _find_agent_index(self, agent_name: str) -> int | None:
-        """Return 0 if the agent has data in storage or filesystem, None otherwise."""
-        if self.storage_backend is not None:
-            try:
-                target_files = self.storage_backend.list_target_files(agent_name)
-                if target_files:
-                    return 0
-            except Exception as e:
-                logger.debug("Failed to list target files for %s: %s", agent_name, e, exc_info=True)
-
-        target_dir = self.agent_folder / "target"
-        if not target_dir.exists():
-            return None
-        agent_dir = target_dir / agent_name
-        if agent_dir.exists() and agent_dir.is_dir():
-            return 0
-        return None
-
-    def _load_json_from_file(self, params: JsonLoadParams):
-        """Load JSON from a file and handle errors."""
-        try:
-            with open(params.json_file, encoding="utf-8") as f:
-                data = json.load(f)
-                if params.add_source_file:
-                    if isinstance(data, list):
-                        for record in data:
-                            record["_source_file"] = params.json_file.name
-                        params.outputs.extend(data)
-                    else:
-                        data["_source_file"] = params.json_file.name
-                        params.outputs.append(data)
-                elif isinstance(data, list):
-                    params.outputs.extend(data)
-                else:
-                    params.outputs.append(data)
-        except json.JSONDecodeError as e:
-            logger.warning(
-                "Skipping corrupted JSON file in version output",
-                extra={
-                    "operation": params.operation,
-                    "file": str(params.json_file),
-                    "output_dir": str(params.output_dir),
-                    "error": str(e),
-                    "line": e.lineno if hasattr(e, "lineno") else None,
-                },
-            )
-            params.corrupted_files.append(str(params.json_file.name))
-        except OSError as e:
-            logger.error(
-                "Failed to read version output file",
-                extra={
-                    "operation": params.operation,
-                    "file": str(params.json_file),
-                    "output_dir": str(params.output_dir),
-                    "error": str(e),
-                },
-            )
-            params.corrupted_files.append(str(params.json_file.name))
-        except (ValueError, TypeError, UnicodeDecodeError) as e:
-            logger.exception(
-                "Unexpected error loading version output file",
-                extra={
-                    "operation": params.operation,
-                    "file": str(params.json_file),
-                    "output_dir": str(params.output_dir),
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
-            params.corrupted_files.append(str(params.json_file.name))
-
-    def _load_agent_outputs_with_filenames(
-        self, output_dir: Path
-    ) -> tuple[list[dict[str, Any]], set]:
-        """Load all JSON outputs with filenames."""
-        outputs: list[dict[str, Any]] = []
-        filenames = set()
-        corrupted_files: list[str] = []
-
-        for json_file in output_dir.glob("*.json"):
-            before_count = len(outputs)
-            self._load_json_from_file(
-                JsonLoadParams(
-                    json_file=json_file,
-                    outputs=outputs,
-                    corrupted_files=corrupted_files,
-                    output_dir=output_dir,
-                    operation="load_version_outputs_with_filenames",
-                    add_source_file=True,
-                )
-            )
-            if len(outputs) > before_count:
-                filenames.add(json_file.name)
-
-        if corrupted_files:
-            logger.warning(
-                "Skipped %d corrupted files in version output",
-                len(corrupted_files),
-                extra={
-                    "operation": "load_loop_outputs_with_filenames",
-                    "output_dir": str(output_dir),
-                    "corrupted_count": len(corrupted_files),
-                    "corrupted_files": corrupted_files,
-                    "loaded_count": len(outputs),
-                },
-            )
-
-        return (outputs, filenames)
 
     def _build_correlation_groups(
         self, version_outputs: dict[str, list[dict[str, Any]]]
@@ -385,9 +255,8 @@ class VersionOutputCorrelator:
 
         if self.storage_backend is not None and action_name:
             try:
-                for record in cleaned_data:
-                    record["_delta_mode"] = "full"
-                self.storage_backend.write_target(action_name, filename, cleaned_data)
+                tagged_data = [{**r, "_delta_mode": "full"} for r in cleaned_data]
+                self.storage_backend.write_target(action_name, filename, tagged_data)
                 logger.debug(
                     "Wrote %d correlated records to storage backend for %s/%s",
                     len(cleaned_data),
@@ -400,6 +269,8 @@ class VersionOutputCorrelator:
                     action_name,
                     e,
                 )
+            output_file = output_dir / filename
+            self._create_correlation_source_data(output_file, cleaned_data)
         else:
             output_file = output_dir / filename
             atomic_json_write(output_file, cleaned_data, indent=2)

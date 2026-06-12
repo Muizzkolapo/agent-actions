@@ -4,7 +4,6 @@ Verifies that batch LLM results are injected into content.{action_name}
 and persisted to both the storage backend and the filesystem.
 """
 
-import json
 from typing import Any, cast
 
 import pytest
@@ -331,7 +330,7 @@ class TestPartialBatchFailure:
 
 
 class TestDiskMaterialization:
-    def test_target_json_materialized_on_disk(
+    def test_target_data_persisted_to_backend(
         self, action_config, batch_result, context_map, sqlite_backend, tmp_path
     ):
         output = _process_batch([batch_result], context_map, action_config, str(tmp_path))
@@ -345,11 +344,10 @@ class TestDiskMaterialization:
         )
         writer.write_target(output)
 
-        assert output_file.exists(), "Target file not materialized to disk"
+        assert not output_file.exists(), "Target file should not be written to disk"
 
-        with open(output_file) as f:
-            disk_data = json.load(f)
-        assert disk_data[0]["content"]["verify_answer"]["verified_answer"] == "C"
+        backend_data = sqlite_backend.read_target("verify_answer", "target.json")
+        assert backend_data[0]["content"]["verify_answer"]["verified_answer"] == "C"
 
 
 # ---------------------------------------------------------------------------

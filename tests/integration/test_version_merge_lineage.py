@@ -13,23 +13,17 @@ import pytest
 
 from agent_actions.processing.enrichment import LineageEnricher
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+LIFECYCLE = {"_state": "processed", "_state_schema_version": 1}
 
 
-def _write_version_outputs(agent_folder: Path, version_agents: dict):
-    """Write version agent output files to target directories.
-
-    version_agents: {"agent_name": [records...], ...}
-    """
+def _write_version_outputs_to_backend(backend, version_agents: dict):
+    """Write version agent output to the storage backend."""
     for agent_name, records in version_agents.items():
-        target_dir = agent_folder / "target" / agent_name
-        target_dir.mkdir(parents=True, exist_ok=True)
-        with open(target_dir / "data.json", "w") as f:
-            json.dump(records, f)
+        enriched = [{**r, **LIFECYCLE} for r in records]
+        backend._write_target_raw(agent_name, "data.json", enriched)
 
 
 def _load_source_data(agent_folder: Path, filename: str = "data.json") -> list[dict]:
@@ -54,13 +48,21 @@ class TestVersionMergeLineage:
         return tmp_path
 
     @pytest.fixture
-    def correlator(self, agent_folder):
-        return VersionOutputCorrelator(agent_folder)
+    def backend(self, agent_folder):
+        db_path = agent_folder / "store" / "test.db"
+        b = SQLiteBackend.create(db_path=str(db_path), workflow_name="test")
+        b.initialize()
+        yield b
+        b.close()
 
-    def test_merged_record_preserves_lineage(self, correlator, agent_folder):
+    @pytest.fixture
+    def correlator(self, agent_folder, backend):
+        return VersionOutputCorrelator(agent_folder, storage_backend=backend)
+
+    def test_merged_record_preserves_lineage(self, correlator, backend, agent_folder):
         """Merged record has union of all version agent lineages."""
-        _write_version_outputs(
-            agent_folder,
+        _write_version_outputs_to_backend(
+            backend,
             {
                 "score_quality_1": [
                     {
@@ -102,9 +104,7 @@ class TestVersionMergeLineage:
         )
         assert result_dir is not None
 
-        with open(Path(result_dir) / "data.json") as f:
-            merged_records = json.load(f)
-
+        merged_records = backend.read_target("aggregate_votes", "data.json")
         assert len(merged_records) == 1
         rec = merged_records[0]
         assert rec["source_guid"] == "sg-001"
@@ -113,10 +113,10 @@ class TestVersionMergeLineage:
         assert "score_quality_2_bbb" in rec["lineage"]
         assert "score_quality_3_ccc" in rec["lineage"]
 
-    def test_consuming_action_extends_merged_lineage(self, correlator, agent_folder):
+    def test_consuming_action_extends_merged_lineage(self, correlator, backend, agent_folder):
         """Consuming action's enricher extends merged lineage, not truncates."""
-        _write_version_outputs(
-            agent_folder,
+        _write_version_outputs_to_backend(
+            backend,
             {
                 "scorer_1": [
                     {
@@ -169,10 +169,10 @@ class TestVersionMergeLineage:
         # Must end with consumer's own node_id (not truncated to just this)
         assert len(lineage) > 1, "Lineage must not be truncated to [own_node_id]"
 
-    def test_merged_record_has_source_guid(self, correlator, agent_folder):
+    def test_merged_record_has_source_guid(self, correlator, backend, agent_folder):
         """Merged record source_guid is non-empty."""
-        _write_version_outputs(
-            agent_folder,
+        _write_version_outputs_to_backend(
+            backend,
             {
                 "v1": [
                     {
@@ -188,18 +188,17 @@ class TestVersionMergeLineage:
         )
 
         result_dir = correlator.prepare_correlated_input("consumer", ["v1"], 2)
-        with open(Path(result_dir) / "data.json") as f:
-            records = json.load(f)
-
+        assert result_dir is not None
+        records = backend.read_target("consumer", "data.json")
         assert records[0]["source_guid"] == "sg-abc"
 
         source_data = _load_source_data(agent_folder)
         assert source_data[0]["source_guid"] == "sg-abc"
 
-    def test_partial_merge_preserves_lineage(self, correlator, agent_folder):
+    def test_partial_merge_preserves_lineage(self, correlator, backend, agent_folder):
         """Missing versions don't break lineage on present versions."""
-        _write_version_outputs(
-            agent_folder,
+        _write_version_outputs_to_backend(
+            backend,
             {
                 "v1": [
                     {
@@ -234,9 +233,8 @@ class TestVersionMergeLineage:
         )
 
         result_dir = correlator.prepare_correlated_input("consumer", ["v1", "v2"], 3)
-        with open(Path(result_dir) / "data.json") as f:
-            records = json.load(f)
-
+        assert result_dir is not None
+        records = backend.read_target("consumer", "data.json")
         assert len(records) == 2
 
         # Record with both versions: full merged lineage
@@ -249,10 +247,10 @@ class TestVersionMergeLineage:
         rec2 = next(r for r in records if r["source_guid"] == "sg-002")
         assert rec2["lineage"] == ["root_001", "v1_bbb"]
 
-    def test_source_file_lineage_enables_enricher_chain(self, correlator, agent_folder):
+    def test_source_file_lineage_enables_enricher_chain(self, correlator, backend, agent_folder):
         """Source file with lineage lets enricher build correct chain for multiple records."""
-        _write_version_outputs(
-            agent_folder,
+        _write_version_outputs_to_backend(
+            backend,
             {
                 "gen_1": [
                     {

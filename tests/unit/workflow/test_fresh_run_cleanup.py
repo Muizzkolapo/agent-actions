@@ -187,13 +187,13 @@ class TestFreshRunExistingBehavior:
         stub.services.core.state_manager.reset.assert_called_once()
 
     def test_event_log_files_cleared(self, tmp_path: Path):
-        target_dir = tmp_path / "agent_io" / "target"
-        target_dir.mkdir(parents=True)
-        (target_dir / "events.json").write_text("[]")
-        (target_dir / "errors.json").write_text("[]")
+        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir.mkdir(parents=True)
+        (logs_dir / "events.json").write_text("[]")
+        (logs_dir / "errors.json").write_text("[]")
 
         stub = _make_coordinator_stub(tmp_path, ["a1"])
         stub._clear_for_fresh_run()
 
-        assert not (target_dir / "events.json").exists()
-        assert not (target_dir / "errors.json").exists()
+        assert not (logs_dir / "events.json").exists()
+        assert not (logs_dir / "errors.json").exists()

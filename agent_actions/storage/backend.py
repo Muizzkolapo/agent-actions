@@ -617,6 +617,13 @@ class StorageBackend(ABC):
         """Delete traces for an action, or all if action_name is None."""
         return 0
 
+    def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
+        """Return stats and preview records for the docs scanner.
+
+        Default returns None. Backends override to provide scan capability.
+        """
+        return None
+
     def clear_source_data(self) -> None:
         """Delete all rows from the source_data table."""
         raise NotImplementedError(f"{type(self).__name__} must implement clear_source_data()")

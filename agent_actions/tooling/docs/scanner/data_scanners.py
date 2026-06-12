@@ -90,6 +90,8 @@ def scan_schemas(project_root: Path) -> dict[str, Any]:
 
 def scan_workflow_data(project_root: Path) -> dict[str, Any]:
     """Scan project for SQLite target databases and export preview data."""
+    from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
     workflow_data = {}
     artefact_dir = project_root / "artefact"
 
@@ -105,223 +107,17 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
             workflow_name = db_file.stem
 
             try:
-                data = scan_sqlite_readonly(db_file, workflow_name)
-                if data is not None:
-                    workflow_data[workflow_name] = data
+                backend = SQLiteBackend.create_readonly(db_file)
+                try:
+                    data = backend.scan_data()
+                    if data is not None:
+                        workflow_data[workflow_name] = data
+                finally:
+                    backend.close()
             except (OSError, sqlite3.Error) as e:
                 logger.warning("Failed to scan workflow DB %s: %s", db_file, e, exc_info=True)
 
     return workflow_data
-
-
-def _unwrap_record_content(record: dict, action_name: str) -> dict:
-    """Unwrap namespaced content for a specific action.
-
-    With the additive model, record["content"] is
-    {"action_a": {...}, "action_b": {...}, ...}. Replace it with the
-    specific action's fields so consumers see actual output data.
-    """
-    content = record.get("content")
-    if not isinstance(content, dict):
-        return record
-    if action_name in content:
-        ns = content[action_name]
-        if ns is None:
-            # Guard-skipped — null namespace
-            return {**record, "content": {}}
-        if isinstance(ns, dict):
-            return {**record, "content": ns}
-        return {**record, "content": {action_name: ns}}
-    # Check if content looks namespaced (values are dicts/None = bus model)
-    # vs flat (values are strings/numbers = legacy or pre-namespace data)
-    looks_namespaced = any(isinstance(v, (dict, type(None))) for v in content.values())
-    if looks_namespaced:
-        # Namespaced but this action missing — guard-skipped without null marker
-        return {**record, "content": {}}
-    # Flat legacy content — pass through as-is
-    return record
-
-
-def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | None:
-    """Open a workflow SQLite DB read-only and extract stats + preview data.
-
-    Uses a direct sqlite3 connection in read-only mode so that scanning
-    never modifies the database (safe on read-only mounts/checkouts).
-
-    Tries ``mode=ro`` first so WAL data from active writers is visible.
-    Falls back to ``immutable=1`` when the filesystem is truly read-only
-    (``mode=ro`` still attempts WAL sidecar writes and raises
-    ``OperationalError`` on read-only mounts).
-    """
-    import json as _json
-    import sqlite3
-
-    # Percent-encode the path so that # and ? in directory names
-    # are treated as path bytes, not URI fragment/query separators.
-    import urllib.parse
-
-    # as_posix() ensures forward slashes on all platforms (Windows included).
-    posix_path = db_file.as_posix()
-    # Guarantee the path starts with / so file://{path} always has an
-    # empty URI authority.  Unix paths already start with /; Windows
-    # drive paths (C:/...) do not; UNC paths (//server/...) are fine.
-    if not posix_path.startswith("/"):
-        posix_path = "/" + posix_path
-    encoded_path = urllib.parse.quote(posix_path, safe="/:")
-
-    # mode=ro sees live WAL data; immutable=1 skips WAL but works on
-    # read-only filesystems.  Try the richer mode first.
-    ro_uri = f"file://{encoded_path}?mode=ro"
-    try:
-        conn = sqlite3.connect(ro_uri, uri=True)
-        conn.row_factory = sqlite3.Row
-        # Probe to surface WAL sidecar errors early.
-        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
-    except sqlite3.OperationalError:
-        conn = sqlite3.connect(f"file://{encoded_path}?immutable=1", uri=True)
-        conn.row_factory = sqlite3.Row
-    try:
-        cursor = conn.cursor()
-
-        # Source count
-        cursor.execute("SELECT COUNT(*) as count FROM source_data")
-        source_count = cursor.fetchone()["count"]
-
-        # Target counts per node — COALESCE guards against NULL record_count rows
-        cursor.execute(
-            "SELECT action_name, COALESCE(SUM(record_count), 0) as count "
-            "FROM target_data GROUP BY action_name ORDER BY action_name"
-        )
-        node_counts = {row["action_name"]: row["count"] for row in cursor.fetchall()}
-
-        # Total target count
-        cursor.execute("SELECT SUM(record_count) as count FROM target_data")
-        row = cursor.fetchone()
-        target_count = row["count"] if row["count"] else 0
-
-        # DB size
-        db_size = db_file.stat().st_size if db_file.exists() else 0
-
-        # Preview records per node
-        nodes = {}
-        for action_name, record_count in node_counts.items():
-            # Collect ALL files for this action (no limit)
-            cursor.execute(
-                "SELECT DISTINCT relative_path FROM target_data "
-                "WHERE action_name = ? ORDER BY relative_path",
-                (action_name,),
-            )
-            files = [row["relative_path"] for row in cursor.fetchall()]
-
-            # Preview: iterate the cursor lazily so we never load every
-            # data blob into memory.  Cap at 20 flattened records.
-            cursor.execute(
-                "SELECT relative_path, data FROM target_data WHERE action_name = ?",
-                (action_name,),
-            )
-            records: list[dict] = []
-            for target_row in cursor:
-                if len(records) >= 20:
-                    break
-                try:
-                    row_data = _json.loads(target_row["data"])
-                except (ValueError, _json.JSONDecodeError):
-                    logger.debug(
-                        "Skipping malformed JSON in %s node %s, file %s",
-                        workflow_name,
-                        action_name,
-                        target_row["relative_path"],
-                    )
-                    continue
-                file_path = target_row["relative_path"]
-                if isinstance(row_data, list):
-                    for item in row_data:
-                        if len(records) >= 20:
-                            break
-                        if isinstance(item, dict):
-                            item = _unwrap_record_content(item, action_name)
-                            records.append({**item, "_file": file_path})
-                        else:
-                            records.append({"_file": file_path, "_value": item})
-                elif isinstance(row_data, dict):
-                    row_data = _unwrap_record_content(row_data, action_name)
-                    records.append({**row_data, "_file": file_path})
-                else:
-                    records.append({"_file": file_path, "_value": row_data})
-            nodes[action_name] = {
-                "record_count": record_count,
-                "files": files,
-                "preview": records,
-            }
-
-        # Attach prompt traces to preview records (if table exists).
-        # The prompt_trace table was added in v0.1.6; older DBs won't have it.
-        # Traces are keyed by target_id (unique per record per stage).
-        try:
-            for action_name, node_data in nodes.items():
-                # Map target_id → list of records
-                tid_map: dict[str, list[dict]] = {}
-                for rec in node_data["preview"]:
-                    tid = rec.get("target_id")
-                    if tid:
-                        tid_map.setdefault(tid, []).append(rec)
-
-                if not tid_map:
-                    continue
-
-                placeholders = ",".join("?" for _ in tid_map)
-                cursor.execute(
-                    f"SELECT record_id, compiled_prompt, llm_context, "
-                    f"response_text, model_name, model_vendor, run_mode, "
-                    f"prompt_length, response_length, attempt "
-                    f"FROM prompt_trace "
-                    f"WHERE action_name = ? AND record_id IN ({placeholders})"
-                    f" ORDER BY attempt DESC",
-                    [action_name, *tid_map.keys()],
-                )
-                seen: set[str] = set()
-                for trace_row in cursor:
-                    rid = trace_row["record_id"]
-                    if rid in seen:
-                        continue
-                    seen.add(rid)
-                    trace_data = {
-                        "compiled_prompt": trace_row["compiled_prompt"],
-                        "llm_context": trace_row["llm_context"],
-                        "response_text": trace_row["response_text"],
-                        "model_name": trace_row["model_name"],
-                        "model_vendor": trace_row["model_vendor"],
-                        "run_mode": trace_row["run_mode"],
-                        "prompt_length": trace_row["prompt_length"],
-                        "response_length": trace_row["response_length"],
-                        "attempt": trace_row["attempt"],
-                    }
-                    for rec in tid_map.get(rid, []):
-                        rec["_trace"] = trace_data
-        except sqlite3.OperationalError:
-            logger.debug("No prompt_trace table in %s — skipping trace attachment", db_file)
-
-        # Format size
-        if db_size < 1024:
-            size_human = f"{db_size} B"
-        elif db_size < 1024 * 1024:
-            size_human = f"{db_size / 1024:.1f} KB"
-        elif db_size < 1024 * 1024 * 1024:
-            size_human = f"{db_size / (1024 * 1024):.1f} MB"
-        elif db_size < 1024 * 1024 * 1024 * 1024:
-            size_human = f"{db_size / (1024 * 1024 * 1024):.1f} GB"
-        else:
-            size_human = f"{db_size / (1024 * 1024 * 1024 * 1024):.1f} TB"
-
-        return {
-            "db_path": str(db_file),
-            "db_size": size_human,
-            "source_count": source_count,
-            "target_count": target_count,
-            "nodes": nodes,
-        }
-    finally:
-        conn.close()
 
 
 def scan_runs(project_root: Path) -> dict[str, Any]:
@@ -337,10 +133,6 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         if artefact_dir in agent_io_dir.parents or agent_io_dir == artefact_dir:
             continue
 
-        target_dir = agent_io_dir / "target"
-        if not target_dir.exists():
-            continue
-
         # Extract workflow name from path (parent of agent_io is workflow dir)
         workflow_dir = agent_io_dir.parent
         # Get the workflow name from agent_config if possible
@@ -354,8 +146,19 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         if not workflow_name:
             workflow_name = workflow_dir.name
 
+        logs_dir = agent_io_dir / "logs"
+        target_dir = agent_io_dir / "target"
+
+        def _resolve_log_file(
+            name: str, _logs: Path = logs_dir, _target: Path = target_dir
+        ) -> Path:
+            path = _logs / name
+            if path.exists():
+                return path
+            return _target / name
+
         # Load run_results.json for latest run metadata
-        run_results_path = target_dir / "run_results.json"
+        run_results_path = _resolve_log_file("run_results.json")
         latest_run = None
         if run_results_path.exists():
             try:
@@ -365,7 +168,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
                 logger.debug("Failed to load run_results %s: %s", run_results_path, e)
 
         # Load events.json for detailed execution data
-        events_path = target_dir / "events.json"
+        events_path = _resolve_log_file("events.json")
         action_metrics = {}
         runtime_warnings: list[dict[str, Any]] = []
         if events_path.exists():
@@ -388,7 +191,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
                 )
 
         # Load .manifest.json for execution plan and per-action status
-        manifest_path = target_dir / ".manifest.json"
+        manifest_path = _resolve_log_file(".manifest.json")
         manifest_data = None
         if manifest_path.exists():
             try:
