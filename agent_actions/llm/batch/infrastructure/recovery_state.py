@@ -119,13 +119,7 @@ class RecoveryStateManager:
     @staticmethod
     def delete(backend: "StorageBackend", action_name: str, file_name: str) -> bool:
         key = RecoveryStateManager._metadata_key(action_name, file_name)
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
-
-        if isinstance(backend, SQLiteBackend):
-            deleted = backend.delete_metadata(key)
-        else:
-            backend.save_metadata(key, "")
-            deleted = True
+        deleted = backend.delete_metadata(key)
         if deleted:
             logger.debug("Deleted recovery state for %s/%s", action_name, file_name)
         return deleted

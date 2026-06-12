@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -132,7 +131,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
 
             self.storage_backend.write_target(self.action_name, relative_path, data)
 
-            return len(json.dumps(data, default=str).encode())
+            return 0
 
         self._execute_write("Write target file", do_write)
 

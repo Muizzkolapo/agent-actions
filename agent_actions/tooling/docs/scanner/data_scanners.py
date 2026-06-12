@@ -149,16 +149,10 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         logs_dir = agent_io_dir / "logs"
         target_dir = agent_io_dir / "target"
 
-        def _resolve_log_file(
-            name: str, _logs: Path = logs_dir, _target: Path = target_dir
-        ) -> Path:
-            path = _logs / name
-            if path.exists():
-                return path
-            return _target / name
-
         # Load run_results.json for latest run metadata
-        run_results_path = _resolve_log_file("run_results.json")
+        run_results_path = logs_dir / "run_results.json"
+        if not run_results_path.exists():
+            run_results_path = target_dir / "run_results.json"
         latest_run = None
         if run_results_path.exists():
             try:
@@ -168,7 +162,9 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
                 logger.debug("Failed to load run_results %s: %s", run_results_path, e)
 
         # Load events.json for detailed execution data
-        events_path = _resolve_log_file("events.json")
+        events_path = logs_dir / "events.json"
+        if not events_path.exists():
+            events_path = target_dir / "events.json"
         action_metrics = {}
         runtime_warnings: list[dict[str, Any]] = []
         if events_path.exists():
@@ -191,7 +187,9 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
                 )
 
         # Load .manifest.json for execution plan and per-action status
-        manifest_path = _resolve_log_file(".manifest.json")
+        manifest_path = logs_dir / ".manifest.json"
+        if not manifest_path.exists():
+            manifest_path = target_dir / ".manifest.json"
         manifest_data = None
         if manifest_path.exists():
             try:

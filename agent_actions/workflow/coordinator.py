@@ -295,12 +295,13 @@ class AgentWorkflow:
         # JSONFileHandler opens lazily, so deleting between handler init
         # and first event write is safe.
         logs_dir = project_root / "agent_io" / "logs"
+        target_dir = project_root / "agent_io" / "target"
         for events_file in ("events.json", "errors.json"):
-            events_path = logs_dir / events_file
-            try:
-                events_path.unlink(missing_ok=True)
-            except OSError as e:
-                logger.warning("Failed to clear %s: %s", events_file, e)
+            for search_dir in (logs_dir, target_dir):
+                try:
+                    (search_dir / events_file).unlink(missing_ok=True)
+                except OSError as e:
+                    logger.warning("Failed to clear %s: %s", events_file, e)
 
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"

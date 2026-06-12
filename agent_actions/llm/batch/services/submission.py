@@ -39,8 +39,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-BATCH_CARRY_FORWARD_FILENAME = ".batch_carry_forward.json"
-
 
 class BatchSubmissionService:
     """Service for submitting batch jobs.

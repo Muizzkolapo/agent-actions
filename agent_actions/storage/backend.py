@@ -219,6 +219,15 @@ class StorageBackend(ABC):
         """Load a metadata value by key. Returns None if not found."""
         ...
 
+    def delete_metadata(self, key: str) -> bool:  # noqa: B027
+        """Delete a metadata key. Returns True if deleted.
+
+        Backends that support metadata deletion should override.
+        SQLiteBackend uses SQL DELETE; other backends may use their
+        native key-removal operation.
+        """
+        return False
+
     def _extract_delta(
         self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
     ) -> dict[str, Any]:

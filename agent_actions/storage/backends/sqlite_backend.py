@@ -1724,7 +1724,9 @@ class SQLiteBackend(StorageBackend):
                             for rec in tid_map.get(rid, []):
                                 rec["_trace"] = trace_data
                 except sqlite3.OperationalError:
-                    pass
+                    logger.debug(
+                        "No prompt_trace table for %s — skipping trace attachment", action_name
+                    )
 
                 nodes[action_name] = {
                     "record_count": record_count,
@@ -1732,18 +1734,9 @@ class SQLiteBackend(StorageBackend):
                     "preview": records,
                 }
 
-            if db_size < 1024:
-                size_human = f"{db_size} B"
-            elif db_size < 1024 * 1024:
-                size_human = f"{db_size / 1024:.1f} KB"
-            elif db_size < 1024 * 1024 * 1024:
-                size_human = f"{db_size / (1024 * 1024):.1f} MB"
-            else:
-                size_human = f"{db_size / (1024 * 1024 * 1024):.1f} GB"
-
             return {
                 "db_path": str(self.db_path),
-                "db_size": size_human,
+                "db_size": self._format_size(db_size),
                 "source_count": source_count,
                 "target_count": target_count,
                 "nodes": nodes,

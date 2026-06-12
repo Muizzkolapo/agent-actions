@@ -92,9 +92,4 @@ class BatchContextManager:
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> bool:
         key = BatchContextManager._metadata_key(action_name, batch_name)
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
-
-        if isinstance(backend, SQLiteBackend):
-            return backend.delete_metadata(key)
-        backend.save_metadata(key, "")
-        return True
+        return backend.delete_metadata(key)
