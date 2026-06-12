@@ -418,7 +418,9 @@ class TestHandleRetryRecovery:
         assert event.total == 2
         assert event.completed == 2
         assert event.failed == 0
-        mock_mgr.delete.assert_called_once_with("/tmp", "test_file")
+        mock_mgr.delete.assert_called_once()
+        delete_args = mock_mgr.delete.call_args[0]
+        assert delete_args[2] == "test_file"  # (backend, action_name, file_name)
         manager.update_status.assert_called_once_with("batch-123", BatchStatus.COMPLETED)
 
 
@@ -1064,7 +1066,9 @@ class TestRecoveryLoopRootCauses:
 
         assert not should_continue
         mock_state_mgr.save.assert_called_once()
-        saved_state = mock_state_mgr.save.call_args[0][2]
+        saved_state = mock_state_mgr.save.call_args[0][
+            3
+        ]  # (backend, action_name, file_name, state)
         assert saved_state.reprompt_attempt == 2
 
     def test_max_attempts_enforced_when_state_loaded(self):
@@ -1244,5 +1248,5 @@ class TestStaleRecoveryState:
             context_map={},
         )
 
-        # Recovery state must be deleted before finalization
-        mock_state_mgr.delete.assert_called_once_with("/tmp/output", "my_action")
+        mock_state_mgr.delete.assert_called_once()
+        assert mock_state_mgr.delete.call_args[0][2] == "my_action"

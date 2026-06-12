@@ -617,6 +617,12 @@ class StorageBackend(ABC):
         """Delete traces for an action, or all if action_name is None."""
         return 0
 
+    def clear_batch_state(self, action_name: str) -> None:  # noqa: B027
+        """Delete all batch state (registry, recovery, context) for an action.
+
+        Default is no-op. Backends override to clean up batch coordination data.
+        """
+
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner.
 

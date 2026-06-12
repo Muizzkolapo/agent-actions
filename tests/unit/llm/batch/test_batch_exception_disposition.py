@@ -156,7 +156,7 @@ class TestBatchExceptionDisposition:
         ctx_a = _make_context_map(("t1", "sg-1", FilterStatus.INCLUDED))
         ctx_b = _make_context_map(("t2", "sg-2", FilterStatus.INCLUDED))
 
-        def load_context(output_dir, file_name):
+        def load_context(backend, action_name, file_name):
             return ctx_a if file_name == "file_a" else ctx_b
 
         svc._context_manager.load_batch_context_map.side_effect = load_context

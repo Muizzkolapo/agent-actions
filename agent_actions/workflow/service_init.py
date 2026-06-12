@@ -113,8 +113,8 @@ def initialize_services(
     context_manager = BatchContextManager()
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     source_handler = BatchSourceHandler()
-    registry_manager_factory = create_registry_manager_factory()
-    job_manager = BatchJobManager(client_resolver=client_resolver)
+    registry_manager_factory = create_registry_manager_factory(storage_backend)
+    job_manager = BatchJobManager(client_resolver=client_resolver, storage_backend=storage_backend)
 
     processing_service = BatchProcessingService(
         client_resolver=client_resolver,

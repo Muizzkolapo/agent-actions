@@ -236,16 +236,17 @@ class BatchLifecycleManager:
         if configured_run_mode == RunMode.ONLINE:
             return None
 
-        node_output_dir = agent_io_path / "target" / agent_name
-        registry_file = node_output_dir / "batch" / ".batch_registry.json"
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
-        if registry_file.exists():
+        registry_manager = BatchRegistryManager(self.storage_backend, agent_name)
+        if registry_manager.has_jobs():
             return "batch_submitted"
 
         # Check passthrough disposition
         if self.storage_backend.has_disposition(agent_name, DISPOSITION_PASSTHROUGH):
             return "passthrough"
 
+        node_output_dir = agent_io_path / "target" / agent_name
         if node_output_dir.exists():
             # Output dir exists but no batch registry or passthrough
             return "no_batches"

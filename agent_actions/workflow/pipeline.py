@@ -28,7 +28,6 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     DispositionRow,
 )
-from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
 
@@ -233,7 +232,7 @@ class ProcessingPipeline:
         )
         client_resolver = BatchClientResolver(client_cache={}, default_client=None)
         context_manager = BatchContextManager()
-        registry_manager_factory = create_registry_manager_factory()
+        registry_manager_factory = create_registry_manager_factory(params.storage_backend)
         submission_service = BatchSubmissionService(
             task_preparator=task_preparator,
             client_resolver=client_resolver,
@@ -285,14 +284,8 @@ class ProcessingPipeline:
             )
             return str(output_file_path)
 
-        # Batch job placeholder - always JSON (tracking file, not data)
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
-        placeholder = {
-            "batch_job_id": result.batch_id,
-            "status": "submitted",
-            "agent": params.pipeline_action_name,
-        }
-        atomic_json_write(output_file_path, placeholder)
+        # The batch_jobs table in the storage backend signals "in-flight" —
+        # no placeholder file is needed on disk.
         return str(output_file_path)
 
     @staticmethod

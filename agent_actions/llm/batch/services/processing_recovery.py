@@ -72,7 +72,9 @@ def process_recovery_batch(
         )
         return None
 
-    state = RecoveryStateManager.load(output_directory, parent_file_name)
+    state = RecoveryStateManager.load(
+        service._storage_backend, service._action_name, parent_file_name
+    )
     if not state:
         logger.error(
             "No recovery state found for parent=%s file_name=%s", parent_file_name, file_name
@@ -100,7 +102,7 @@ def process_recovery_batch(
     )
 
     context_map = service._context_manager.load_batch_context_map(
-        output_directory, parent_file_name
+        service._storage_backend, service._action_name, parent_file_name
     )
 
     recovery_results = retrieve_and_reconcile(
@@ -182,7 +184,12 @@ def handle_retry_recovery(
             state.missing_ids = list(still_missing)
             state.record_failure_counts = updated_counts
             state.accumulated_results = BatchRetryService.serialize_results(merged)
-            RecoveryStateManager.save(context.output_directory, identity.file_name, state)
+            RecoveryStateManager.save(
+                context.service._storage_backend,
+                context.service._action_name,
+                identity.file_name,
+                state,
+            )
             return None
 
     exhausted_recovery = None
@@ -292,7 +299,12 @@ def handle_reprompt_recovery(
                     state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
                 )
             state.reprompt_attempt = next_attempt
-            RecoveryStateManager.save(context.output_directory, identity.file_name, state)
+            RecoveryStateManager.save(
+                context.service._storage_backend,
+                context.service._action_name,
+                identity.file_name,
+                state,
+            )
             return None
 
     # Exhausted or all graduated — finalize.
@@ -452,7 +464,9 @@ def check_and_submit_reprompt(
             rid: meta.retry.failures for rid, meta in exhausted_recovery.items() if meta.retry
         }
 
-    RecoveryStateManager.save(context.output_directory, identity.file_name, state)
+    RecoveryStateManager.save(
+        context.service._storage_backend, context.service._action_name, identity.file_name, state
+    )
     fire_event(
         RepromptRetryEvent(
             action_name=identity.file_name or "batch",
@@ -561,7 +575,9 @@ def _finalize_and_cleanup(
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
 ) -> str:
     """Delete recovery state, finalize output, then clean up registry entries."""
-    RecoveryStateManager.delete(context.output_directory, identity.file_name)
+    RecoveryStateManager.delete(
+        context.service._storage_backend, context.service._action_name, identity.file_name
+    )
     output_path = finalize_batch_output(
         context,
         identity,
@@ -601,15 +617,17 @@ def register_recovery_batch(
 def _remove_batch_placeholder(output_file: Path) -> None:
     """Remove a batch placeholder file from disk after results are in the backend.
 
-    Only removes if the file matches the placeholder shape (batch_job_id + status=submitted).
+    Since placeholders are no longer written at submission time, this is a
+    no-op for new runs. Kept as a guard for pre-migration data that may
+    still have placeholder files on disk.
     """
+    if not output_file.exists():
+        return
+
     try:
         with open(output_file, encoding="utf-8") as f:
             data = json.load(f)
-    except OSError:
-        return  # File already gone
-    except json.JSONDecodeError:
-        logger.warning("Malformed JSON at %s during placeholder cleanup", output_file)
+    except (OSError, json.JSONDecodeError):
         return
 
     if (
@@ -619,8 +637,8 @@ def _remove_batch_placeholder(output_file: Path) -> None:
     ):
         try:
             output_file.unlink()
-            logger.debug("Removed batch placeholder: %s", output_file)
+            logger.debug("Removed legacy batch placeholder: %s", output_file)
         except FileNotFoundError:
-            pass  # Already removed by concurrent worker
+            pass
         except OSError as e:
             logger.warning("Failed to remove batch placeholder %s: %s", output_file, e)

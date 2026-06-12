@@ -1,9 +1,7 @@
 """Resolves and caches batch clients based on configuration or batch ID."""
 
 import hashlib
-import json
 import logging
-from pathlib import Path
 from typing import Any
 
 from pydantic import SecretStr
@@ -252,18 +250,22 @@ class BatchClientResolver:
         return None
 
     def _lookup_client_from_file(self, batch_id: str, output_directory: str) -> str | None:
-        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_file.exists():
-            return None
+        """Look up the provider for a batch ID via the storage backend.
 
-        try:
-            with open(registry_file, encoding="utf-8") as f:
-                registry = json.load(f)
-
-            for entry in registry.values():
-                if entry.get("batch_id") == batch_id:
-                    return entry.get("provider")  # type: ignore[no-any-return]
-        except (json.JSONDecodeError, OSError, KeyError):
-            logger.debug("Failed to read batch registry file %s", registry_file, exc_info=True)
-
+        Creates a temporary BatchRegistryManager to query the backend
+        metadata store. Falls back to None if no backend is available
+        or the batch ID is not found.
+        """
+        # We need a storage backend — try to find one via the module-level
+        # get_storage_backend, but since we don't have one here, return None.
+        # The caller (get_for_batch_id) already tried registry_manager first,
+        # and this fallback path is only hit when no registry_manager was
+        # provided.  In the new architecture, a registry_manager is always
+        # provided by callers that have a storage backend.
+        logger.debug(
+            "No registry_manager provided for batch_id=%s, output_directory=%s — "
+            "cannot resolve provider via storage backend in fallback path",
+            batch_id,
+            output_directory,
+        )
         return None

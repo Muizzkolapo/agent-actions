@@ -33,15 +33,24 @@ def status(batch_id: str | None = None, project_root: Path | None = None):
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
+    from agent_actions.storage import get_storage_backend
+
+    storage_backend = get_storage_backend(
+        workflow_path=str(project_root) if project_root else ".",
+        workflow_name="batch_cli",
+        backend_type="sqlite",
+    )
+    storage_backend.initialize()
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
-    registry_manager_factory = create_registry_manager_factory()
+    registry_manager_factory = create_registry_manager_factory(storage_backend)
     task_preparator = BatchTaskPreparator()
     service = BatchSubmissionService(
         task_preparator=task_preparator,
         client_resolver=client_resolver,
         context_manager=context_manager,
         registry_manager_factory=registry_manager_factory,
+        storage_backend=storage_backend,
     )
     output_dir = str(project_root) if project_root else None
     batch_status = service.check_status(args.batch_id, output_directory=output_dir)
@@ -66,13 +75,22 @@ def retrieve(batch_id: str | None = None, project_root: Path | None = None):
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
+    from agent_actions.storage import get_storage_backend
+
+    storage_backend = get_storage_backend(
+        workflow_path=str(project_root) if project_root else ".",
+        workflow_name="batch_cli",
+        backend_type="sqlite",
+    )
+    storage_backend.initialize()
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
-    registry_manager_factory = create_registry_manager_factory()
+    registry_manager_factory = create_registry_manager_factory(storage_backend)
     service = BatchRetrievalService(
         client_resolver=client_resolver,
         context_manager=context_manager,
         registry_manager_factory=registry_manager_factory,
+        storage_backend=storage_backend,
     )
     result = service.retrieve_results(args.batch_id, str(resolve_project_root(project_root)))
     click.echo(result)

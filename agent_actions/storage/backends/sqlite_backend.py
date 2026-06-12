@@ -463,6 +463,37 @@ class SQLiteBackend(StorageBackend):
                 return None
         return row["value"] if row else None
 
+    def delete_metadata(self, key: str) -> bool:
+        """Delete a metadata key. Returns True if deleted."""
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute("DELETE FROM workflow_metadata WHERE key = ?", (key,))
+                self.connection.commit()
+                return cursor.rowcount > 0
+            except sqlite3.OperationalError:
+                return False
+
+    def delete_metadata_prefix(self, prefix: str) -> int:
+        """Delete all metadata keys starting with prefix. Returns count deleted."""
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(
+                    "DELETE FROM workflow_metadata WHERE key LIKE ?",
+                    (prefix + "%",),
+                )
+                self.connection.commit()
+                return cursor.rowcount
+            except sqlite3.OperationalError:
+                return 0
+
+    def clear_batch_state(self, action_name: str) -> None:
+        """Delete all batch state for an action."""
+        self.delete_metadata(f"batch_registry:{action_name}")
+        self.delete_metadata_prefix(f"recovery_state:{action_name}:")
+        self.delete_metadata_prefix(f"batch_context:{action_name}:")
+
     def write_source(
         self,
         relative_path: str,
