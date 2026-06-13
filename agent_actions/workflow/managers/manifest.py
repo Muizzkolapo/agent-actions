@@ -147,7 +147,7 @@ class ManifestManager:
         if self._manifest is None:
             return
 
-        self.target_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
 
         atomic_json_write(self.manifest_path, self._manifest, indent=2)
 
