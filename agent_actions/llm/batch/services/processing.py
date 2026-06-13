@@ -323,7 +323,7 @@ class BatchProcessingService:
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
         effective_action = action_name or self._action_name
-        main_output = self._merge_carry_forward(effective_action, main_output, output_directory)
+        main_output = self._merge_carry_forward(effective_action, main_output)
 
         if self._storage_backend is None:
             ensure_directory_exists(output_file, is_file=True)
@@ -338,7 +338,6 @@ class BatchProcessingService:
         self,
         action_name: str | None,
         batch_output: list[dict[str, Any]],
-        output_directory: str,
     ) -> list[dict[str, Any]]:
         """Merge carry-forward records from prior output into batch results.
 

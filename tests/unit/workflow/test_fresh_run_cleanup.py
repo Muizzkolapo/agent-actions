@@ -102,8 +102,6 @@ class TestFreshRunClearsBatchState:
     def test_multiple_actions_batch_cleanup(self, tmp_path: Path):
         """Batch state cleared for each action in execution_order."""
         stub = _make_coordinator_stub(tmp_path, ["action_a", "action_b"])
-
-        stub = _make_coordinator_stub(tmp_path, ["action_a", "action_b"])
         stub._clear_for_fresh_run()
 
         stub.storage_backend.clear_batch_state.assert_any_call("action_a")

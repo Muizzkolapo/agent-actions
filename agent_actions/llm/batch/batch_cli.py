@@ -18,13 +18,19 @@ def _discover_workflow_name(project_root: Path) -> str:
     """Discover the workflow name from the project's DB or config files."""
     store_dir = project_root / "agent_io" / "store"
     if store_dir.exists():
-        db_files = list(store_dir.glob("*.db"))
-        if db_files:
+        db_files = sorted(store_dir.glob("*.db"))
+        if len(db_files) == 1:
             return db_files[0].stem
+        if len(db_files) > 1:
+            names = ", ".join(f.stem for f in db_files)
+            raise click.UsageError(
+                f"Multiple workflow databases found: {names}. "
+                f"Cannot determine which batch to query."
+            )
 
     agent_config_dir = project_root / "agent_config"
     if agent_config_dir.exists():
-        yml_files = list(agent_config_dir.glob("*.yml"))
+        yml_files = sorted(agent_config_dir.glob("*.yml"))
         if yml_files:
             return yml_files[0].stem
 

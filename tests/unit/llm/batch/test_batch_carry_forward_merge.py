@@ -67,7 +67,7 @@ class TestMergeCarryForward:
         service = _make_service(storage_backend=backend)
 
         batch_output = [{"source_guid": "r9", "score_quality": {"score": 0.7}}]
-        result = service._merge_carry_forward("test_action", batch_output, "/unused")
+        result = service._merge_carry_forward("test_action", batch_output)
 
         assert len(result) == 10
         assert result[0]["source_guid"] == "r9"
@@ -80,7 +80,7 @@ class TestMergeCarryForward:
         service = _make_service(storage_backend=backend)
 
         batch_output = [{"source_guid": "r0"}]
-        result = service._merge_carry_forward("test_action", batch_output, "/unused")
+        result = service._merge_carry_forward("test_action", batch_output)
         assert result == batch_output
 
     def test_carry_forward_records_have_prior_run_data(self):
@@ -95,7 +95,7 @@ class TestMergeCarryForward:
         )
         service = _make_service(storage_backend=backend)
 
-        result = service._merge_carry_forward("test_action", [], "/unused")
+        result = service._merge_carry_forward("test_action", [])
 
         assert len(result) == 1
         assert result[0]["enriched_ns"] == {"key": "value"}
@@ -112,7 +112,7 @@ class TestCarryForwardEdgeCases:
         )
         service = _make_service(storage_backend=backend)
 
-        result = service._merge_carry_forward("test_action", [], "/unused")
+        result = service._merge_carry_forward("test_action", [])
         assert len(result) == 1
         assert result[0]["source_guid"] == "r0"
 
@@ -130,7 +130,7 @@ class TestCarryForwardEdgeCases:
         service = _make_service(storage_backend=backend)
 
         batch_output = [{"source_guid": "r0", "data": "new"}]
-        result = service._merge_carry_forward("test_action", batch_output, "/unused")
+        result = service._merge_carry_forward("test_action", batch_output)
 
         assert len(result) == 2
         r0s = [r for r in result if r["source_guid"] == "r0"]
@@ -142,5 +142,5 @@ class TestCarryForwardEdgeCases:
         service = _make_service(storage_backend=None)
 
         batch_output = [{"source_guid": "r1"}]
-        result = service._merge_carry_forward("test_action", batch_output, "/unused")
+        result = service._merge_carry_forward("test_action", batch_output)
         assert result == batch_output

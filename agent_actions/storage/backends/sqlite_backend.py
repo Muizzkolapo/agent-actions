@@ -222,12 +222,14 @@ class SQLiteBackend(StorageBackend):
         encoded_path = urllib.parse.quote(posix_path, safe="/:")
 
         ro_uri = f"file://{encoded_path}?mode=ro"
+        conn: sqlite3.Connection | None = None
         try:
             conn = sqlite3.connect(ro_uri, uri=True)
             conn.row_factory = sqlite3.Row
             conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
         except sqlite3.OperationalError:
-            conn.close()
+            if conn is not None:
+                conn.close()
             conn = sqlite3.connect(f"file://{encoded_path}?immutable=1", uri=True)
             conn.row_factory = sqlite3.Row
 
