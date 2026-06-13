@@ -462,9 +462,9 @@ class BatchProcessingService:
         start_time = time.time()
 
         context_map = self._context_manager.load_batch_context_map(
-            self._storage_backend,
-            self._action_name,
-            file_name or "default",  # type: ignore[arg-type]
+            self._storage_backend,  # type: ignore[arg-type]
+            self._action_name,  # type: ignore[arg-type]
+            file_name or "default",
         )
         agent_config = self._apply_workflow_session_id(agent_config, entry)
         provider = self._client_resolver.get_for_batch_id(
@@ -525,10 +525,10 @@ class BatchProcessingService:
                         state.on_exhausted = OnExhaustedPolicy(reprompt_parsed.on_exhausted)
 
                     RecoveryStateManager.save(
-                        self._storage_backend,
-                        self._action_name,
+                        self._storage_backend,  # type: ignore[arg-type]
+                        self._action_name,  # type: ignore[arg-type]
                         file_name,
-                        state,  # type: ignore[arg-type]
+                        state,
                     )
                     logger.info(
                         "Async retry submitted for %s: %d missing records, batch %s",
@@ -787,9 +787,9 @@ class BatchProcessingService:
 
         try:
             context_map = self._context_manager.load_batch_context_map(
-                self._storage_backend,
-                self._action_name,
-                file_name or "default",  # type: ignore[arg-type]
+                self._storage_backend,  # type: ignore[arg-type]
+                self._action_name,  # type: ignore[arg-type]
+                file_name or "default",
             )
         except Exception:
             logger.warning(

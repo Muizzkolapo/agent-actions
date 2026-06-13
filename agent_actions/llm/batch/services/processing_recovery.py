@@ -73,9 +73,9 @@ def process_recovery_batch(
         return None
 
     state = RecoveryStateManager.load(
-        service._storage_backend,
-        service._action_name,
-        parent_file_name,  # type: ignore[arg-type]
+        service._storage_backend,  # type: ignore[arg-type]
+        service._action_name,  # type: ignore[arg-type]
+        parent_file_name,
     )
     if not state:
         logger.error(
@@ -104,9 +104,9 @@ def process_recovery_batch(
     )
 
     context_map = service._context_manager.load_batch_context_map(
-        service._storage_backend,
-        service._action_name,
-        parent_file_name,  # type: ignore[arg-type]
+        service._storage_backend,  # type: ignore[arg-type]
+        service._action_name,  # type: ignore[arg-type]
+        parent_file_name,
     )
 
     recovery_results = retrieve_and_reconcile(

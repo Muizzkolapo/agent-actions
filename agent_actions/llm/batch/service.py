@@ -28,6 +28,8 @@ def create_registry_manager_factory(
 
     def get_registry_manager(action_name: str) -> BatchRegistryManager:
         if action_name not in _cache:
+            if storage_backend is None:
+                raise RuntimeError("storage_backend is required for batch registry operations")
             _cache[action_name] = BatchRegistryManager(storage_backend, action_name)
         return _cache[action_name]
 
