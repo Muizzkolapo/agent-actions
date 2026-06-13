@@ -14,6 +14,26 @@ from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
 
+def _discover_workflow_name(project_root: Path) -> str:
+    """Discover the workflow name from the project's DB or config files."""
+    store_dir = project_root / "agent_io" / "store"
+    if store_dir.exists():
+        db_files = list(store_dir.glob("*.db"))
+        if db_files:
+            return db_files[0].stem
+
+    agent_config_dir = project_root / "agent_config"
+    if agent_config_dir.exists():
+        yml_files = list(agent_config_dir.glob("*.yml"))
+        if yml_files:
+            return yml_files[0].stem
+
+    raise click.UsageError(
+        "Could not determine workflow name. "
+        "No database found in agent_io/store/ and no config in agent_config/."
+    )
+
+
 @click.group()
 def batch():
     """CLI command group for batch processing operations."""
@@ -35,9 +55,11 @@ def status(batch_id: str | None = None, project_root: Path | None = None):
         raise click.UsageError("--batch-id is required.")
     from agent_actions.storage import get_storage_backend
 
+    root = resolve_project_root(project_root)
+    workflow_name = _discover_workflow_name(root)
     storage_backend = get_storage_backend(
-        workflow_path=str(project_root) if project_root else ".",
-        workflow_name="batch_cli",
+        workflow_path=str(root),
+        workflow_name=workflow_name,
         backend_type="sqlite",
     )
     storage_backend.initialize()
@@ -52,8 +74,7 @@ def status(batch_id: str | None = None, project_root: Path | None = None):
         registry_manager_factory=registry_manager_factory,
         storage_backend=storage_backend,
     )
-    output_dir = str(project_root) if project_root else None
-    batch_status = service.check_status(args.batch_id, output_directory=output_dir)
+    batch_status = service.check_status(args.batch_id, output_directory=str(root))
     click.echo(f"Batch job status: {batch_status}")
 
 
@@ -77,9 +98,11 @@ def retrieve(batch_id: str | None = None, project_root: Path | None = None):
         raise click.UsageError("--batch-id is required.")
     from agent_actions.storage import get_storage_backend
 
+    root = resolve_project_root(project_root)
+    workflow_name = _discover_workflow_name(root)
     storage_backend = get_storage_backend(
-        workflow_path=str(project_root) if project_root else ".",
-        workflow_name="batch_cli",
+        workflow_path=str(root),
+        workflow_name=workflow_name,
         backend_type="sqlite",
     )
     storage_backend.initialize()
@@ -92,5 +115,5 @@ def retrieve(batch_id: str | None = None, project_root: Path | None = None):
         registry_manager_factory=registry_manager_factory,
         storage_backend=storage_backend,
     )
-    result = service.retrieve_results(args.batch_id, str(resolve_project_root(project_root)))
+    result = service.retrieve_results(args.batch_id, str(root))
     click.echo(result)
