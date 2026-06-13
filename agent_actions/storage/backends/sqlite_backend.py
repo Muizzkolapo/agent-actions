@@ -1687,8 +1687,8 @@ class SQLiteBackend(StorageBackend):
                                 elif ns is None:
                                     item = {**item, "content": {}}
                             records.append({**item, "_file": rp})
-                    except (FileNotFoundError, json.JSONDecodeError):
-                        pass
+                    except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
+                        logger.debug("Skipping %s/%s in scan: %s", action_name, rp, e)
 
                 # Attach prompt traces
                 try:
