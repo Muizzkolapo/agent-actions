@@ -241,31 +241,4 @@ class BatchClientResolver:
             entry = registry_manager.get_batch_job_by_id(batch_id)
             if entry:
                 return entry.provider  # type: ignore[no-any-return]
-
-        if output_directory:
-            client_type = self._lookup_client_from_file(batch_id, output_directory)
-            if client_type:
-                return client_type
-
-        return None
-
-    def _lookup_client_from_file(self, batch_id: str, output_directory: str) -> str | None:
-        """Look up the provider for a batch ID via the storage backend.
-
-        Creates a temporary BatchRegistryManager to query the backend
-        metadata store. Falls back to None if no backend is available
-        or the batch ID is not found.
-        """
-        # We need a storage backend — try to find one via the module-level
-        # get_storage_backend, but since we don't have one here, return None.
-        # The caller (get_for_batch_id) already tried registry_manager first,
-        # and this fallback path is only hit when no registry_manager was
-        # provided.  In the new architecture, a registry_manager is always
-        # provided by callers that have a storage backend.
-        logger.debug(
-            "No registry_manager provided for batch_id=%s, output_directory=%s — "
-            "cannot resolve provider via storage backend in fallback path",
-            batch_id,
-            output_directory,
-        )
         return None

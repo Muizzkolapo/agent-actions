@@ -260,7 +260,7 @@ class BatchRegistryManager:
 
     def _persist_registry(self, registry: dict[str, BatchJobEntry]) -> None:
         raw_data = {file_name: entry.to_dict() for file_name, entry in registry.items()}
-        self._backend.save_metadata(self._metadata_key, json.dumps(raw_data))
+        self._backend.save_metadata(self._metadata_key, json.dumps(raw_data, ensure_ascii=False))
         logger.debug(
             "Registry persisted for action %s (%d entries)", self._action_name, len(registry)
         )

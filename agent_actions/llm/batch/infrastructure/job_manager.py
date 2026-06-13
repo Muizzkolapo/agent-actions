@@ -39,10 +39,14 @@ class BatchJobManager:
         self._registry_manager = registry_manager
 
     def _check_status(
-        self, batch_id: str, output_directory: str, agent_config: dict | None = None
+        self,
+        batch_id: str,
+        output_directory: str,
+        agent_config: dict | None = None,
+        registry_manager: BatchRegistryManager | None = None,
     ) -> str:
         """Check status of a batch job via client."""
-        manager = self._registry_manager
+        manager = registry_manager or self._registry_manager
         client = self._client_resolver.get_for_batch_id(
             batch_id, manager, output_directory, agent_config=agent_config
         )
@@ -85,7 +89,9 @@ class BatchJobManager:
             return True
 
         def check_provider(batch_id: str) -> str:
-            return self._check_status(batch_id, output_directory, agent_config)
+            return self._check_status(
+                batch_id, output_directory, agent_config, registry_manager=manager
+            )
 
         return manager.are_all_jobs_completed(check_provider=check_provider)
 

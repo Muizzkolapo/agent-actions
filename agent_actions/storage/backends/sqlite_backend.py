@@ -227,6 +227,7 @@ class SQLiteBackend(StorageBackend):
             conn.row_factory = sqlite3.Row
             conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
         except sqlite3.OperationalError:
+            conn.close()
             conn = sqlite3.connect(f"file://{encoded_path}?immutable=1", uri=True)
             conn.row_factory = sqlite3.Row
 
