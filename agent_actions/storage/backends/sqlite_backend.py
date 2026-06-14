@@ -492,12 +492,6 @@ class SQLiteBackend(StorageBackend):
             except sqlite3.OperationalError:
                 return 0
 
-    def clear_batch_state(self, action_name: str) -> None:
-        """Delete all batch state for an action."""
-        self.delete_metadata(f"batch_registry:{action_name}")
-        self.delete_metadata_prefix(f"recovery_state:{action_name}:")
-        self.delete_metadata_prefix(f"batch_context:{action_name}:")
-
     def write_source(
         self,
         relative_path: str,
