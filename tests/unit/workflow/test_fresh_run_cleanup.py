@@ -7,7 +7,6 @@ the existing target_data/disposition/prompt_trace cleanup.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -148,3 +147,60 @@ class TestFreshRunExistingBehavior:
 
         assert not (logs_dir / "events.json").exists()
         assert not (logs_dir / "errors.json").exists()
+
+
+class TestFreshRunClearsBatchJsonlFiles:
+    """--fresh must delete batch JSONL/JSON artifacts from target/{action}/batch/."""
+
+    def test_jsonl_files_deleted(self, tmp_path: Path):
+        batch_dir = tmp_path / "agent_io" / "target" / "extract" / "batch"
+        batch_dir.mkdir(parents=True)
+        (batch_dir / "extract_openai_batch_input.jsonl").write_text("{}")
+        (batch_dir / "batch_abc123_results.jsonl").write_text("{}")
+
+        stub = _make_coordinator_stub(tmp_path, ["extract"])
+        stub._clear_for_fresh_run()
+
+        assert not (batch_dir / "extract_openai_batch_input.jsonl").exists()
+        assert not (batch_dir / "batch_abc123_results.jsonl").exists()
+
+    def test_json_files_deleted(self, tmp_path: Path):
+        """Anthropic writes .json input files, not .jsonl."""
+        batch_dir = tmp_path / "agent_io" / "target" / "classify" / "batch"
+        batch_dir.mkdir(parents=True)
+        (batch_dir / "classify_anthropic_batch_input.json").write_text("{}")
+
+        stub = _make_coordinator_stub(tmp_path, ["classify"])
+        stub._clear_for_fresh_run()
+
+        assert not (batch_dir / "classify_anthropic_batch_input.json").exists()
+
+    def test_non_json_files_preserved(self, tmp_path: Path):
+        """Non-JSON/JSONL files in batch/ are not deleted."""
+        batch_dir = tmp_path / "agent_io" / "target" / "extract" / "batch"
+        batch_dir.mkdir(parents=True)
+        (batch_dir / "notes.txt").write_text("keep me")
+
+        stub = _make_coordinator_stub(tmp_path, ["extract"])
+        stub._clear_for_fresh_run()
+
+        assert (batch_dir / "notes.txt").exists()
+
+    def test_no_batch_dir_no_error(self, tmp_path: Path):
+        """Actions without a batch/ directory don't cause errors."""
+        stub = _make_coordinator_stub(tmp_path, ["online_action"])
+        stub._clear_for_fresh_run()
+
+    def test_multiple_actions_cleaned(self, tmp_path: Path):
+        for action in ("a1", "a2"):
+            batch_dir = tmp_path / "agent_io" / "target" / action / "batch"
+            batch_dir.mkdir(parents=True)
+            (batch_dir / f"{action}_input.jsonl").write_text("{}")
+
+        stub = _make_coordinator_stub(tmp_path, ["a1", "a2"])
+        stub._clear_for_fresh_run()
+
+        for action in ("a1", "a2"):
+            assert not (
+                tmp_path / "agent_io" / "target" / action / "batch" / f"{action}_input.jsonl"
+            ).exists()

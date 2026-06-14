@@ -275,6 +275,7 @@ class AgentWorkflow:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
         project_root = self.config.resolve_project_root()
 
+        target_dir = project_root / "agent_io" / "target"
         for action_name in self.execution_order:
             try:
                 self.storage_backend.delete_target(action_name)
@@ -284,6 +285,15 @@ class AgentWorkflow:
                 self.storage_backend.clear_batch_state(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
+
+            batch_dir = target_dir / action_name / "batch"
+            if batch_dir.is_dir():
+                for f in batch_dir.iterdir():
+                    if f.suffix in (".jsonl", ".json"):
+                        try:
+                            f.unlink(missing_ok=True)
+                        except OSError:
+                            logger.debug("Could not delete batch artifact: %s", f)
 
         try:
             self.storage_backend.clear_source_data()
@@ -295,7 +305,6 @@ class AgentWorkflow:
         # JSONFileHandler opens lazily, so deleting between handler init
         # and first event write is safe.
         logs_dir = project_root / "agent_io" / "logs"
-        target_dir = project_root / "agent_io" / "target"
         for events_file in ("events.json", "errors.json"):
             for search_dir in (logs_dir, target_dir):
                 try:

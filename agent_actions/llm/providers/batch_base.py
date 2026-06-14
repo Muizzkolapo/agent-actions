@@ -136,7 +136,12 @@ class BaseBatchClient(ABC):
         batch_dir = self._get_batch_directory(output_directory)
         input_file = self._prepare_batch_input_file(tasks, batch_dir, batch_name)
         logger.info("Submitting batch with %s tasks to %s...", len(tasks), self.__class__.__name__)
-        return self._submit_to_provider_api(input_file, batch_name)
+        result = self._submit_to_provider_api(input_file, batch_name)
+        try:
+            input_file.unlink(missing_ok=True)
+        except OSError:
+            logger.debug("Could not delete batch input file: %s", input_file)
+        return result
 
     def check_status(self, batch_id: str) -> str:
         """Check the status of a batch job (Template Method)."""
@@ -168,10 +173,15 @@ class BaseBatchClient(ABC):
 
         raw_results = _fetch_safe()
 
-        # Optionally write to file
+        # Write to file, parse, then clean up
         if output_directory:
             result_file_path = self._write_results_to_file(batch_id, raw_results, output_directory)
-            return self._read_jsonl_file(result_file_path)
+            results = self._read_jsonl_file(result_file_path)
+            try:
+                result_file_path.unlink(missing_ok=True)
+            except OSError:
+                logger.debug("Could not delete batch result file: %s", result_file_path)
+            return results
 
         batch_results = []
         lines = raw_results.decode("utf-8").strip().split("\n")

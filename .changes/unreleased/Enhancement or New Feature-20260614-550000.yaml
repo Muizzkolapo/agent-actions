@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Clean up batch JSONL files after processing — input files deleted after provider upload, result files deleted after parsing, --fresh deletes remaining batch artifacts"
+time: 2026-06-14T05:50:00.000000Z
