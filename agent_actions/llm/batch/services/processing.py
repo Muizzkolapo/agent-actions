@@ -114,6 +114,20 @@ class BatchProcessingService:
         self._enrichment_pipeline = EnrichmentPipeline()
         self._unified_processor = UnifiedProcessor(enrichment_pipeline=self._enrichment_pipeline)
 
+    def _resolve_action_name(self, override: str | None = None) -> str:
+        """Resolve the effective action name from an override or the workflow-level fallback.
+
+        Raises:
+            ProcessingError: If neither override nor workflow_name is set.
+        """
+        resolved = override or self._workflow_name
+        if not resolved:
+            raise ProcessingError(
+                "action_name or workflow_name required for batch processing",
+                context={},
+            )
+        return resolved
+
     def process_batch_results(
         self,
         batch_id: str,
@@ -141,8 +155,7 @@ class BatchProcessingService:
             ProcessingError: If batch not completed, no registry entry,
                 recovery is pending, or processing fails
         """
-        effective_name = action_name or self._workflow_name
-        assert effective_name is not None, "workflow_name required for batch processing"
+        effective_name = self._resolve_action_name(action_name)
         assert self._storage_backend is not None, "storage_backend required for batch processing"
         try:
             manager = self._registry_manager_factory(effective_name)
@@ -206,8 +219,7 @@ class BatchProcessingService:
         Raises:
             ProcessingError: If no registry found or no files processed (and no recovery pending)
         """
-        effective_action_name: str = action_name or self._workflow_name  # type: ignore[assignment]
-        assert effective_action_name is not None, "workflow_name or action_name required"
+        effective_action_name = self._resolve_action_name(action_name)
         manager = self._registry_manager_factory(effective_action_name)
         all_jobs = manager.get_all_jobs()
         if not all_jobs:
@@ -292,8 +304,7 @@ class BatchProcessingService:
         Returns:
             True if batch status is COMPLETED, False otherwise
         """
-        resolved = action_name or self._workflow_name
-        assert resolved is not None, "workflow_name required for status check"
+        resolved = self._resolve_action_name(action_name)
         try:
             manager = self._registry_manager_factory(resolved)
             provider = self._client_resolver.get_for_batch_id(
@@ -330,7 +341,7 @@ class BatchProcessingService:
         action_name: str | None = None,
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
-        effective_action = action_name or self._workflow_name
+        effective_action = self._resolve_action_name(action_name)
         main_output = self._merge_carry_forward(effective_action, main_output)
 
         if self._storage_backend is None:
@@ -468,7 +479,7 @@ class BatchProcessingService:
         """
         start_time = time.time()
 
-        effective_name = action_name or self._workflow_name
+        effective_name = self._resolve_action_name(action_name)
         context_map = self._context_manager.load_batch_context_map(
             self._storage_backend,  # type: ignore[arg-type]
             effective_name,  # type: ignore[arg-type]
@@ -652,7 +663,9 @@ class BatchProcessingService:
         # The recovery path already does this in _finalize_and_cleanup, but the
         # original batch path goes through this method instead and must also clean up.
         RecoveryStateManager.delete(
-            self._storage_backend, context.action_name or self._workflow_name, identity.file_name
+            self._storage_backend,
+            self._resolve_action_name(context.action_name),
+            identity.file_name,
         )  # type: ignore[arg-type]
         output_path = _finalize_batch_output_impl(
             context,
