@@ -219,14 +219,13 @@ class StorageBackend(ABC):
         """Load a metadata value by key. Returns None if not found."""
         ...
 
-    def delete_metadata(self, key: str) -> bool:  # noqa: B027
-        """Delete a metadata key. Returns True if deleted.
+    def delete_metadata(self, key: str) -> bool:
+        """Delete a metadata key. Returns True if deleted."""
+        raise NotImplementedError(f"{type(self).__name__} must implement delete_metadata()")
 
-        Backends that support metadata deletion should override.
-        SQLiteBackend uses SQL DELETE; other backends may use their
-        native key-removal operation.
-        """
-        return False
+    def delete_metadata_prefix(self, prefix: str) -> int:
+        """Delete all metadata keys starting with prefix. Returns count deleted."""
+        raise NotImplementedError(f"{type(self).__name__} must implement delete_metadata_prefix()")
 
     def _extract_delta(
         self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
@@ -626,11 +625,11 @@ class StorageBackend(ABC):
         """Delete traces for an action, or all if action_name is None."""
         return 0
 
-    def clear_batch_state(self, action_name: str) -> None:  # noqa: B027
-        """Delete all batch state (registry, recovery, context) for an action.
-
-        Default is no-op. Backends override to clean up batch coordination data.
-        """
+    def clear_batch_state(self, action_name: str) -> None:
+        """Delete all batch state (registry, recovery, context) for an action."""
+        self.delete_metadata(f"batch_registry:{action_name}")
+        self.delete_metadata_prefix(f"recovery_state:{action_name}:")
+        self.delete_metadata_prefix(f"batch_context:{action_name}:")
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner.

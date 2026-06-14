@@ -862,6 +862,12 @@ class TestGetFailedItems:
             def load_metadata(self, *a, **kw):
                 return None
 
+            def delete_metadata(self, key):
+                return False
+
+            def delete_metadata_prefix(self, prefix):
+                return 0
+
             def get_disposition(self, action_name, record_id=None, disposition=None):
                 return [
                     {
