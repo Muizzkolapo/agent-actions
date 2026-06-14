@@ -28,7 +28,7 @@ def _make_service(
         context_manager=MagicMock(),
         result_processor=MagicMock(),
         registry_manager_factory=MagicMock(),
-        action_name=action_name,
+        workflow_name=action_name,
         storage_backend=storage_backend,
     )
 

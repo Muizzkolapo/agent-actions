@@ -91,7 +91,7 @@ def _mock_service():
     service._context_manager = MagicMock()
     service._client_resolver = MagicMock()
     service._storage_backend = MagicMock()
-    service._action_name = "test_action"
+    service._workflow_name = "test_action"
     service._apply_workflow_session_id = MagicMock(return_value={"kind": "llm"})
     service._convert_batch_results_to_workflow_format = MagicMock(return_value=([], None))
     service._determine_output_path = MagicMock(return_value=Path("/tmp/output.json"))
@@ -659,14 +659,14 @@ class TestFinalizeBatchOutput:
         service._write_filtered_dispositions.assert_called_once_with(context_map, "test_action")
 
     def test_finalize_uses_service_action_name_when_action_name_none(self):
-        """When action_name=None, _write_filtered_dispositions still uses service._action_name.
+        """When action_name=None, _write_filtered_dispositions still uses service._workflow_name.
 
         Mirrors how _clear_deferred_dispositions and _update_prompt_trace_responses
         fall back to effective_action_name. A None action_name must not silently
         skip filtered-disposition writes — the service knows its own name.
         """
         service = _mock_service()
-        service._action_name = "fallback_action"
+        service._workflow_name = "fallback_action"
         manager = MagicMock()
         context_map = {"custom-filtered-1": {"source_guid": "sg-001"}}
 
@@ -958,7 +958,7 @@ class TestRecoveryLoopRootCauses:
 
         svc = BatchProcessingService.__new__(BatchProcessingService)
         svc._registry_manager_factory = MagicMock(return_value=manager)
-        svc._action_name = "test_action"
+        svc._workflow_name = "test_action"
         svc._is_batch_ready_for_processing = MagicMock(return_value=True)
 
         calls_received = []
@@ -1004,7 +1004,7 @@ class TestRecoveryLoopRootCauses:
         svc._client_resolver = MagicMock()
         svc._retry_service = MagicMock()
         svc._storage_backend = MagicMock()
-        svc._action_name = "test_action"
+        svc._workflow_name = "test_action"
         svc._update_prompt_trace_responses = MagicMock()
         svc._finalize_batch_output = MagicMock(return_value="/tmp/output.json")
 
@@ -1122,7 +1122,7 @@ class TestDownstreamBugs:
         )
 
         svc._registry_manager_factory = MagicMock(return_value=manager)
-        svc._action_name = "test_action"
+        svc._workflow_name = "test_action"
         svc._is_batch_ready_for_processing = MagicMock(return_value=True)
         svc._process_single_batch_file = MagicMock(
             side_effect=RuntimeError("Reprompt validation exhausted")
@@ -1232,7 +1232,7 @@ class TestStaleRecoveryState:
 
         svc = BatchProcessingService.__new__(BatchProcessingService)
         svc._storage_backend = MagicMock()
-        svc._action_name = "test_action"
+        svc._workflow_name = "test_action"
 
         ctx, ident = _make_context_and_identity(
             service=svc,

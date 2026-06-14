@@ -47,8 +47,13 @@ class BatchRetrievalService:
             context_manager: Manager for batch context persistence
             registry_manager_factory: Factory function to create registry managers
             storage_backend: Storage backend for metadata persistence
-            action_name: Action name for backend lookups
+            action_name: Action name for backend lookups (required)
         """
+        if not action_name:
+            raise ExternalServiceError(
+                "BatchRetrievalService requires action_name",
+                context={},
+            )
         self._client_resolver = client_resolver
         self._context_manager = context_manager
         self._registry_manager_factory = registry_manager_factory
@@ -76,7 +81,7 @@ class BatchRetrievalService:
         """
         provider = None
         try:
-            action_name = self._action_name or Path(output_dir).name
+            action_name = self._action_name
             manager = self._registry_manager_factory(action_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_dir)
 

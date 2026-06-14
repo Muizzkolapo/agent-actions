@@ -62,25 +62,21 @@ class BatchJobManager:
         return BatchRegistryManager(self._storage_backend, action_name)
 
     def are_all_jobs_completed(
-        self, output_directory: str, agent_config: dict | None = None
+        self,
+        action_name: str,
+        output_directory: str,
+        agent_config: dict | None = None,
     ) -> bool:
         """Check if all batch jobs in the registry are completed.
 
         Args:
-            output_directory: Directory containing the batch registry (used as action_name)
+            action_name: Action name for registry lookup
+            output_directory: Directory for provider resolution
             agent_config: Optional agent config for API key resolution
 
         Returns:
             True if all jobs are completed, False otherwise
         """
-        if not output_directory:
-            return True
-
-        # Extract action_name from output_directory path
-        from pathlib import Path
-
-        action_name = Path(output_directory).name
-
         manager = self._get_registry_manager(action_name)
         if manager is None:
             return True
@@ -95,23 +91,16 @@ class BatchJobManager:
 
         return manager.are_all_jobs_completed(check_provider=check_provider)
 
-    def get_registry_status(self, output_directory: str) -> str:
+    def get_registry_status(self, action_name: str) -> str:
         """Get the overall status of all batch jobs in the registry.
 
         Args:
-            output_directory: Directory containing the batch registry
+            action_name: Action name for registry lookup
 
         Returns:
             Status string: 'completed', 'in_progress', 'partial_failed',
                           'no_batches', 'error', or 'unknown'
         """
-        if not output_directory:
-            return "no_batches"
-
-        from pathlib import Path
-
-        action_name = Path(output_directory).name
-
         manager = self._get_registry_manager(action_name)
         if manager is None:
             return "no_batches"

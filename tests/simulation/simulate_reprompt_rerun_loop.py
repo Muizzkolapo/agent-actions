@@ -87,7 +87,7 @@ def run_recovery_entry_consumed(work_dir):
 
     svc = BatchProcessingService.__new__(BatchProcessingService)
     svc._registry_manager_factory = MagicMock(return_value=manager)
-    svc._action_name = "test_action"
+    svc._workflow_name = "test_action"
     svc._is_batch_ready_for_processing = MagicMock(return_value=True)
 
     calls_received = []

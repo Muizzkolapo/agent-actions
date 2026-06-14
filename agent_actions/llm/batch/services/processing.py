@@ -82,7 +82,7 @@ class BatchProcessingService:
         action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         storage_backend: Optional["StorageBackend"] = None,
-        action_name: str | None = None,
+        workflow_name: str | None = None,
     ):
         """Initialize processing service with dependencies.
 
@@ -95,7 +95,7 @@ class BatchProcessingService:
             action_indices: Dict mapping agent names to node indices (for reprompt)
             dependency_configs: Dict mapping dependency names to configs (for reprompt)
             storage_backend: Optional storage backend for database persistence
-            action_name: Node name for backend writes (required if storage_backend provided)
+            workflow_name: Workflow-level name (fallback when per-action name unavailable)
         """
         self._client_resolver = client_resolver
         self._context_manager = context_manager
@@ -105,7 +105,7 @@ class BatchProcessingService:
         self._action_indices = action_indices or {}
         self._dependency_configs = dependency_configs or {}
         self._storage_backend = storage_backend
-        self._action_name = action_name
+        self._workflow_name = workflow_name
         self._retry_service = BatchRetryService(
             action_indices=self._action_indices,
             dependency_configs=self._dependency_configs,
@@ -139,10 +139,10 @@ class BatchProcessingService:
             ProcessingError: If batch not completed, no registry entry,
                 recovery is pending, or processing fails
         """
-        assert self._action_name is not None, "action_name required for batch processing"
+        assert self._workflow_name is not None, "action_name required for batch processing"
         assert self._storage_backend is not None, "storage_backend required for batch processing"
         try:
-            manager = self._registry_manager_factory(self._action_name)
+            manager = self._registry_manager_factory(self._workflow_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
             if provider.check_status(batch_id) != BatchStatus.COMPLETED:
@@ -164,7 +164,7 @@ class BatchProcessingService:
                 output_directory=output_directory,
                 agent_config=agent_config,
                 manager=manager,
-                action_name=self._action_name,
+                action_name=self._workflow_name,
             )
 
             if output_file is None:
@@ -195,7 +195,7 @@ class BatchProcessingService:
         Args:
             output_directory: Output directory path
             agent_config: Agent configuration
-            action_name: Override action_name for storage backend writes (uses self._action_name if not provided)
+            action_name: Override action_name for storage backend writes (uses self._workflow_name if not provided)
 
         Returns:
             List of output file paths
@@ -203,7 +203,7 @@ class BatchProcessingService:
         Raises:
             ProcessingError: If no registry found or no files processed (and no recovery pending)
         """
-        effective_action_name: str = action_name or self._action_name  # type: ignore[assignment]
+        effective_action_name: str = action_name or self._workflow_name  # type: ignore[assignment]
         assert effective_action_name is not None, "action_name required"
         manager = self._registry_manager_factory(effective_action_name)
         all_jobs = manager.get_all_jobs()
@@ -218,7 +218,9 @@ class BatchProcessingService:
             if not batch_id:
                 continue
 
-            if not self._is_batch_ready_for_processing(batch_id, output_directory, agent_config):
+            if not self._is_batch_ready_for_processing(
+                batch_id, output_directory, agent_config, action_name=effective_action_name
+            ):
                 continue
 
             try:
@@ -274,6 +276,7 @@ class BatchProcessingService:
         batch_id: str,
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
+        action_name: str | None = None,
     ) -> bool:
         """Check if batch is ready for processing (completed status).
 
@@ -281,13 +284,15 @@ class BatchProcessingService:
             batch_id: The batch job ID to check
             output_directory: Directory containing batch registry
             agent_config: Optional agent config for API key resolution
+            action_name: Per-action name for registry lookup
 
         Returns:
             True if batch status is COMPLETED, False otherwise
         """
-        assert self._action_name is not None, "action_name required for status check"
+        resolved = action_name or self._workflow_name
+        assert resolved is not None, "action_name required for status check"
         try:
-            manager = self._registry_manager_factory(self._action_name)
+            manager = self._registry_manager_factory(resolved)
             provider = self._client_resolver.get_for_batch_id(
                 batch_id, manager, output_directory, agent_config=agent_config
             )
@@ -322,7 +327,7 @@ class BatchProcessingService:
         action_name: str | None = None,
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
-        effective_action = action_name or self._action_name
+        effective_action = action_name or self._workflow_name
         main_output = self._merge_carry_forward(effective_action, main_output)
 
         if self._storage_backend is None:
@@ -460,9 +465,10 @@ class BatchProcessingService:
         """
         start_time = time.time()
 
+        effective_name = action_name or self._workflow_name
         context_map = self._context_manager.load_batch_context_map(
             self._storage_backend,  # type: ignore[arg-type]
-            self._action_name,  # type: ignore[arg-type]
+            effective_name,  # type: ignore[arg-type]
             file_name or "default",
         )
         agent_config = self._apply_workflow_session_id(agent_config, entry)
@@ -525,7 +531,7 @@ class BatchProcessingService:
 
                     RecoveryStateManager.save(
                         self._storage_backend,  # type: ignore[arg-type]
-                        self._action_name,  # type: ignore[arg-type]
+                        effective_name,  # type: ignore[arg-type]
                         file_name,
                         state,
                     )
@@ -544,7 +550,7 @@ class BatchProcessingService:
             provider=provider,
             agent_config=agent_config or {},
             output_directory=output_directory,
-            action_name=action_name,
+            action_name=effective_name,
             start_time=start_time,
         )
         identity = BatchIdentity(
@@ -642,7 +648,9 @@ class BatchProcessingService:
         # Clean up stale recovery state (e.g. from a crashed previous run).
         # The recovery path already does this in _finalize_and_cleanup, but the
         # original batch path goes through this method instead and must also clean up.
-        RecoveryStateManager.delete(self._storage_backend, self._action_name, identity.file_name)  # type: ignore[arg-type]
+        RecoveryStateManager.delete(
+            self._storage_backend, context.action_name or self._workflow_name, identity.file_name
+        )  # type: ignore[arg-type]
         output_path = _finalize_batch_output_impl(
             context,
             identity,
@@ -665,9 +673,9 @@ class BatchProcessingService:
 
         Args:
             action_name: Per-action name used when DEFERRED was written.
-                Falls back to self._action_name (workflow name) if not given.
+                Falls back to self._workflow_name (workflow name) if not given.
         """
-        effective_name = action_name or self._action_name
+        effective_name = action_name or self._workflow_name
         if not self._storage_backend or not effective_name:
             return
         for item in items:
@@ -787,7 +795,7 @@ class BatchProcessingService:
         try:
             context_map = self._context_manager.load_batch_context_map(
                 self._storage_backend,  # type: ignore[arg-type]
-                self._action_name,  # type: ignore[arg-type]
+                action_name,  # type: ignore[arg-type]
                 file_name or "default",
             )
         except Exception:

@@ -80,7 +80,9 @@ def status(batch_id: str | None = None, project_root: Path | None = None):
         registry_manager_factory=registry_manager_factory,
         storage_backend=storage_backend,
     )
-    batch_status = service.check_status(args.batch_id, output_directory=str(root))
+    batch_status = service.check_status(
+        args.batch_id, output_directory=str(root), action_name=workflow_name
+    )
     click.echo(f"Batch job status: {batch_status}")
 
 
@@ -120,6 +122,7 @@ def retrieve(batch_id: str | None = None, project_root: Path | None = None):
         context_manager=context_manager,
         registry_manager_factory=registry_manager_factory,
         storage_backend=storage_backend,
+        action_name=workflow_name,
     )
     result = service.retrieve_results(args.batch_id, str(root))
     click.echo(result)

@@ -175,6 +175,7 @@ class TestHandleEmptyTasksPrepFailed:
             context_map=context_map,
             data=[{"id": 1}],
             output_directory="/tmp/out",
+            action_name="test_action",
         )
 
         assert result.passthrough is not None

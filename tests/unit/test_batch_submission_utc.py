@@ -82,19 +82,21 @@ class TestCheckStatusGuardsNoneOutputDirectory:
             registry_manager_factory=MagicMock(),
         )
 
-    def test_none_output_directory_raises_configuration_error(self):
+    def test_none_output_directory_and_action_name_raises_configuration_error(self):
         svc = self._make_service()
-        with pytest.raises(ConfigurationError, match="output_directory"):
-            svc.check_status("batch-xyz", output_directory=None)
+        with pytest.raises(ConfigurationError, match="action_name"):
+            svc.check_status("batch-xyz", output_directory=None, action_name=None)
 
-    def test_valid_output_directory_does_not_raise(self, tmp_path):
+    def test_valid_action_name_does_not_raise(self, tmp_path):
         svc = self._make_service()
         svc._client_resolver.get_for_batch_id.return_value = MagicMock(
             check_status=MagicMock(return_value="completed")
         )
         svc._registry_manager_factory.return_value = MagicMock()
         with patch("agent_actions.llm.batch.services.submission.fire_event"):
-            result = svc.check_status("batch-xyz", output_directory=str(tmp_path))
+            result = svc.check_status(
+                "batch-xyz", output_directory=str(tmp_path), action_name="test_action"
+            )
         assert result == "completed"
 
 
