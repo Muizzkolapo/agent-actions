@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Make delete_metadata and delete_metadata_prefix required on StorageBackend — future backends must implement metadata deletion"
-time: 2026-06-14T05:51:00.000000Z
