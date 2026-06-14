@@ -319,9 +319,9 @@ class CatalogGenerator:
 
             # Count action types, schemas, and prompts
             for action in workflow["actions"].values():
-                if action.get("kind") == DEFAULT_ACTION_KIND:
+                if action.get("type") == DEFAULT_ACTION_KIND:
                     catalog["stats"]["llm_actions"] += 1
-                elif action.get("kind") == "tool":
+                elif action.get("type") == "tool":
                     catalog["stats"]["tool_actions"] += 1
 
                 # Count unique schemas (only string references, not inline dicts)

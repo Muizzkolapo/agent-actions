@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Fix missing edges in docs workflow graph when multiple workflows share action names"
+time: 2026-06-14T05:53:00.000000Z

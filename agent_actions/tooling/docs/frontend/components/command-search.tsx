@@ -72,12 +72,13 @@ export function CommandSearch({ open, onOpenChange, onNavigate }: CommandSearchP
       })
     }
 
-    // Actions (Record<string, Action> — key is action name)
-    for (const [name, a] of Object.entries(actions)) {
+    // Actions (Record<string, Action> — key is wfId/actionName)
+    for (const [key, a] of Object.entries(actions)) {
       const kind = a.type === "tool" ? "tool" : "llm"
+      const shortName = key.includes("/") ? key.split("/").pop()! : key
       items.push({
-        id: `action:${a.wf}:${name}`,
-        label: name,
+        id: `action:${a.wf}:${shortName}`,
+        label: shortName,
         description: a.intent || `${kind} action in ${a.wf}`,
         section: "actions",
         group: "Actions",

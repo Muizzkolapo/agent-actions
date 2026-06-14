@@ -149,13 +149,7 @@ export function transformActions(catalog: RawCatalogJson): Record<string, Action
         provider: rawAction.provider,
       }
 
-      // Handle name collision across workflows
-      let key = actionName
-      if (seen.has(actionName) && seen.get(actionName) !== wfId) {
-        key = `${wfId}__${actionName}`
-      }
-      seen.set(actionName, wfId)
-      result[key] = action
+      result[`${wfId}/${actionName}`] = action
     }
   }
 

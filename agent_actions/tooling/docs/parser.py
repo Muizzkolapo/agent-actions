@@ -172,8 +172,8 @@ class WorkflowParser:
             else:
                 # Default to LLM action
                 action["type"] = DEFAULT_ACTION_KIND
-                action["provider"] = action_data.get("model_vendor", "unknown")
-                action["model"] = action_data.get("model_name", "unknown")
+                action["provider"] = action_data.get("model_vendor") or defaults.get("model_vendor")
+                action["model"] = action_data.get("model_name") or defaults.get("model_name")
 
             # Extract schema (for field-level lineage)
             if "schema" in action_data:

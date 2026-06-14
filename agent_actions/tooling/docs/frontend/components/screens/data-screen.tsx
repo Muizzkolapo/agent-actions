@@ -425,7 +425,7 @@ function NodeDetail({
   const typo = useTypographyPrefs()
 
   // Look up action config for the card info section
-  const actionConfig = actions[node.node] || actions[`${node.workflow}__${node.node}`]
+  const actionConfig = actions[`${node.workflow}/${node.node}`]
   const actionInfo: ActionInfo | undefined = actionConfig
     ? {
         name: node.node,
