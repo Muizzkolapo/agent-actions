@@ -672,3 +672,70 @@ class TestSchemaEnforcement:
         data = backend2.read_target("node1", "file.json")
         assert data[0]["id"] == 1
         backend2.close()
+
+
+class TestMetadataDeletion:
+    """Test delete_metadata, delete_metadata_prefix, and clear_batch_state on SQLiteBackend."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_delete_metadata_removes_key(self, backend):
+        """delete_metadata returns True and removes the key."""
+        backend._save_metadata_raw("my_key", "my_value")
+        assert backend.load_metadata("my_key") == "my_value"
+
+        deleted = backend.delete_metadata("my_key")
+        assert deleted is True
+        assert backend.load_metadata("my_key") is None
+
+    def test_delete_metadata_returns_false_when_key_missing(self, backend):
+        """delete_metadata returns False when the key does not exist."""
+        deleted = backend.delete_metadata("nonexistent")
+        assert deleted is False
+
+    def test_delete_metadata_prefix_matches_prefix(self, backend):
+        """delete_metadata_prefix deletes keys starting with prefix, returns count."""
+        backend._save_metadata_raw("prefix:A", "1")
+        backend._save_metadata_raw("prefix:B", "2")
+        backend._save_metadata_raw("other:C", "3")
+
+        count = backend.delete_metadata_prefix("prefix:")
+        assert count == 2
+        assert backend.load_metadata("prefix:A") is None
+        assert backend.load_metadata("prefix:B") is None
+        assert backend.load_metadata("other:C") == "3"
+
+    def test_delete_metadata_prefix_returns_zero_when_no_match(self, backend):
+        """delete_metadata_prefix returns 0 when nothing matches."""
+        backend._save_metadata_raw("some_key", "value")
+        count = backend.delete_metadata_prefix("nomatch:")
+        assert count == 0
+        assert backend.load_metadata("some_key") == "value"
+
+    def test_clear_batch_state_removes_all_batch_keys(self, backend):
+        """clear_batch_state wipes registry, recovery, and context keys for an action."""
+        action = "my_action"
+        backend._save_metadata_raw(f"batch_registry:{action}", "reg")
+        backend._save_metadata_raw(f"recovery_state:{action}:file1", "rec1")
+        backend._save_metadata_raw(f"recovery_state:{action}:file2", "rec2")
+        backend._save_metadata_raw(f"batch_context:{action}:ctx1", "ctx1")
+        backend._save_metadata_raw("unrelated_key", "stay")
+
+        backend.clear_batch_state(action)
+
+        assert backend.load_metadata(f"batch_registry:{action}") is None
+        assert backend.load_metadata(f"recovery_state:{action}:file1") is None
+        assert backend.load_metadata(f"recovery_state:{action}:file2") is None
+        assert backend.load_metadata(f"batch_context:{action}:ctx1") is None
+        assert backend.load_metadata("unrelated_key") == "stay"
+
+    def test_clear_batch_state_is_idempotent(self, backend):
+        """clear_batch_state does not raise when there is nothing to delete."""
+        backend.clear_batch_state("nonexistent_action")
+        # Should not raise; no assertions needed beyond reaching this line.
