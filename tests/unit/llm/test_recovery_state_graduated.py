@@ -2,8 +2,6 @@
 
 import json
 import logging
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -11,6 +9,15 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
     RecoveryStateManager,
 )
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+
+@pytest.fixture
+def backend(tmp_path):
+    b = SQLiteBackend.create(db_path=str(tmp_path / "test.db"), workflow_name="test")
+    b.initialize()
+    yield b
+    b.close()
 
 
 class TestRecoveryStateGraduatedFields:
@@ -71,7 +78,7 @@ class TestRecoveryStateGraduatedFields:
 class TestRecoveryStateSerialization:
     """Verify JSON roundtrip for graduated fields via RecoveryStateManager."""
 
-    def test_serialize_roundtrip_with_graduated(self, tmp_path):
+    def test_serialize_roundtrip_with_graduated(self, backend):
         """State with graduated results survives save/load roundtrip."""
         state = RecoveryState(
             phase="reprompt",
@@ -82,8 +89,8 @@ class TestRecoveryStateSerialization:
             ],
             evaluation_strategy_name="validation",
         )
-        RecoveryStateManager.save(str(tmp_path), "test_action", state)
-        restored = RecoveryStateManager.load(str(tmp_path), "test_action")
+        RecoveryStateManager.save(backend, "test_action", "test_file", state)
+        restored = RecoveryStateManager.load(backend, "test_action", "test_file")
 
         assert restored is not None
         assert restored.graduated_results == state.graduated_results
@@ -91,19 +98,19 @@ class TestRecoveryStateSerialization:
         assert restored.phase == "reprompt"
         assert restored.reprompt_attempt == 1
 
-    def test_serialize_roundtrip_empty_graduated(self, tmp_path):
+    def test_serialize_roundtrip_empty_graduated(self, backend):
         """State with default (empty) graduated fields roundtrips correctly."""
         state = RecoveryState(phase="retry", retry_attempt=2)
-        RecoveryStateManager.save(str(tmp_path), "test_action", state)
-        restored = RecoveryStateManager.load(str(tmp_path), "test_action")
+        RecoveryStateManager.save(backend, "test_action", "test_file", state)
+        restored = RecoveryStateManager.load(backend, "test_action", "test_file")
 
         assert restored is not None
         assert restored.graduated_results == []
         assert restored.evaluation_strategy_name is None
         assert restored.retry_attempt == 2
 
-    def test_deserialize_old_state_without_graduated(self, tmp_path):
-        """Old checkpoint files without graduated fields load with defaults."""
+    def test_deserialize_old_state_without_graduated(self, backend):
+        """Old checkpoint data without graduated fields loads with defaults."""
         old_data = {
             "phase": "retry",
             "retry_attempt": 1,
@@ -118,12 +125,11 @@ class TestRecoveryStateSerialization:
             "on_exhausted": "return_last",
             "accumulated_results": [{"custom_id": "r1", "content": "x", "success": True}],
         }
-        state_path = tmp_path / "batch" / ".recovery_state_test_action.json"
-        state_path.parent.mkdir(parents=True)
-        with open(state_path, "w") as f:
-            json.dump(old_data, f)
+        # Write raw JSON directly to the metadata store, simulating an old-format state
+        key = RecoveryStateManager._metadata_key("test_action", "test_file")
+        backend.save_metadata(key, json.dumps(old_data))
 
-        state = RecoveryStateManager.load(str(tmp_path), "test_action")
+        state = RecoveryStateManager.load(backend, "test_action", "test_file")
 
         assert state is not None
         assert state.graduated_results == []
@@ -131,7 +137,7 @@ class TestRecoveryStateSerialization:
         assert state.accumulated_results == [{"custom_id": "r1", "content": "x", "success": True}]
         assert state.missing_ids == ["rec_001"]
 
-    def test_graduated_results_json_serializable(self, tmp_path):
+    def test_graduated_results_json_serializable(self, backend):
         """graduated_results content is plain JSON — no special types."""
         state = RecoveryState(
             phase="done",
@@ -144,9 +150,11 @@ class TestRecoveryStateSerialization:
                 },
             ],
         )
-        path = RecoveryStateManager.save(str(tmp_path), "test_action", state)
-        with open(path) as f:
-            raw = json.load(f)
+        RecoveryStateManager.save(backend, "test_action", "test_file", state)
+
+        # Read raw metadata and verify JSON structure
+        key = RecoveryStateManager._metadata_key("test_action", "test_file")
+        raw = json.loads(backend.load_metadata(key))
 
         assert raw["graduated_results"] == state.graduated_results
         assert raw["evaluation_strategy_name"] is None
@@ -155,7 +163,7 @@ class TestRecoveryStateSerialization:
 class TestRecoveryStateManagerIntegration:
     """Verify RecoveryStateManager CRUD operations work with graduated fields."""
 
-    def test_save_load_delete_cycle(self, tmp_path):
+    def test_save_load_delete_cycle(self, backend):
         """Full create-read-delete cycle with graduated results."""
         state = RecoveryState(
             phase="reprompt",
@@ -163,40 +171,38 @@ class TestRecoveryStateManagerIntegration:
             accumulated_results=[{"custom_id": "a1"}],
             evaluation_strategy_name="critique",
         )
-        tmpdir = str(tmp_path)
-        RecoveryStateManager.save(tmpdir, "cycle_test", state)
-        assert RecoveryStateManager.exists(tmpdir, "cycle_test")
+        RecoveryStateManager.save(backend, "test_action", "cycle_test", state)
+        assert RecoveryStateManager.exists(backend, "test_action", "cycle_test")
 
-        loaded = RecoveryStateManager.load(tmpdir, "cycle_test")
+        loaded = RecoveryStateManager.load(backend, "test_action", "cycle_test")
         assert loaded is not None
         assert loaded.graduated_results == [{"custom_id": "g1"}]
         assert loaded.evaluation_strategy_name == "critique"
 
-        deleted = RecoveryStateManager.delete(tmpdir, "cycle_test")
+        deleted = RecoveryStateManager.delete(backend, "test_action", "cycle_test")
         assert deleted is True
-        assert not RecoveryStateManager.exists(tmpdir, "cycle_test")
+        assert not RecoveryStateManager.exists(backend, "test_action", "cycle_test")
 
-    def test_load_nonexistent_returns_none(self, tmp_path):
+    def test_load_nonexistent_returns_none(self, backend):
         """Loading missing state returns None, not an error."""
-        assert RecoveryStateManager.load(str(tmp_path), "missing") is None
+        assert RecoveryStateManager.load(backend, "test_action", "missing") is None
 
-    def test_overwrite_preserves_graduated(self, tmp_path):
+    def test_overwrite_preserves_graduated(self, backend):
         """Saving updated state overwrites previous graduated results."""
-        tmpdir = str(tmp_path)
         state1 = RecoveryState(
             phase="reprompt",
             graduated_results=[{"custom_id": "g1"}],
         )
-        RecoveryStateManager.save(tmpdir, "overwrite_test", state1)
+        RecoveryStateManager.save(backend, "test_action", "overwrite_test", state1)
 
         state2 = RecoveryState(
             phase="reprompt",
             graduated_results=[{"custom_id": "g1"}, {"custom_id": "g2"}],
             evaluation_strategy_name="validation",
         )
-        RecoveryStateManager.save(tmpdir, "overwrite_test", state2)
+        RecoveryStateManager.save(backend, "test_action", "overwrite_test", state2)
 
-        loaded = RecoveryStateManager.load(tmpdir, "overwrite_test")
+        loaded = RecoveryStateManager.load(backend, "test_action", "overwrite_test")
         assert loaded is not None
         assert len(loaded.graduated_results) == 2
         assert loaded.evaluation_strategy_name == "validation"
@@ -205,21 +211,16 @@ class TestRecoveryStateManagerIntegration:
 class TestRecoveryStateCorruptionHandling:
     """Verify load() logs at error-level on corruption and returns None."""
 
-    def _write_raw(self, tmp_path, content: str) -> Path:
-        """Write raw content to the recovery state file location."""
-        state_path = tmp_path / "batch" / ".recovery_state_test_action.json"
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(content)
-        return state_path
-
     _LOGGER = "agent_actions"
 
-    def test_corrupt_json_logs_error_and_returns_none(self, tmp_path, caplog):
+    def test_corrupt_json_logs_error_and_returns_none(self, backend, caplog):
         """Truncated/invalid JSON logs at error-level, returns None."""
-        self._write_raw(tmp_path, '{"phase": "retry", "retry_at')
+        # Write corrupt JSON directly to the metadata store
+        key = RecoveryStateManager._metadata_key("test_action", "test_file")
+        backend.save_metadata(key, '{"phase": "retry", "retry_at')
 
         with caplog.at_level(logging.ERROR, logger=self._LOGGER):
-            result = RecoveryStateManager.load(str(tmp_path), "test_action")
+            result = RecoveryStateManager.load(backend, "test_action", "test_file")
 
         assert result is None
         assert any(
@@ -227,23 +228,24 @@ class TestRecoveryStateCorruptionHandling:
             for r in caplog.records
         )
 
-    def test_missing_file_returns_none_silently(self, tmp_path, caplog):
-        """Missing file (first run) returns None with no error log."""
+    def test_missing_key_returns_none_silently(self, backend, caplog):
+        """Missing key (first run) returns None with no error log."""
         with caplog.at_level(logging.DEBUG, logger=self._LOGGER):
-            result = RecoveryStateManager.load(str(tmp_path), "nonexistent")
+            result = RecoveryStateManager.load(backend, "test_action", "nonexistent")
 
         assert result is None
         assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
-    def test_invalid_enum_value_logs_error(self, tmp_path, caplog):
+    def test_invalid_enum_value_logs_error(self, backend, caplog):
         """Valid JSON with bad enum value triggers ValueError in __post_init__."""
-        self._write_raw(
-            tmp_path,
+        key = RecoveryStateManager._metadata_key("test_action", "test_file")
+        backend.save_metadata(
+            key,
             json.dumps({"phase": "not_a_real_phase", "retry_attempt": 0, "reprompt_attempt": 0}),
         )
 
         with caplog.at_level(logging.ERROR, logger=self._LOGGER):
-            result = RecoveryStateManager.load(str(tmp_path), "test_action")
+            result = RecoveryStateManager.load(backend, "test_action", "test_file")
 
         assert result is None
         assert any(
@@ -251,144 +253,23 @@ class TestRecoveryStateCorruptionHandling:
             for r in caplog.records
         )
 
-    def test_valid_state_loads_without_error(self, tmp_path, caplog):
+    def test_valid_state_loads_without_error(self, backend, caplog):
         """Valid recovery state loads normally, no error logs."""
         state = RecoveryState(phase="retry", retry_attempt=1)
-        RecoveryStateManager.save(str(tmp_path), "test_action", state)
+        RecoveryStateManager.save(backend, "test_action", "test_file", state)
 
         with caplog.at_level(logging.DEBUG, logger=self._LOGGER):
-            result = RecoveryStateManager.load(str(tmp_path), "test_action")
+            result = RecoveryStateManager.load(backend, "test_action", "test_file")
 
         assert result is not None
         assert result.retry_attempt == 1
         assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
 
-class TestRecoveryStateAtomicWrite:
-    """Verify save() uses atomic writes to prevent crash corruption."""
+class TestRecoveryStateLargeRoundtrip:
+    """Verify large state roundtrips through the backend."""
 
-    def test_save_writes_via_temp_file(self, tmp_path):
-        """save() writes to a temp file first, then renames — observable mid-write."""
-        state = RecoveryState(phase="retry", retry_attempt=1)
-        captured_tmp = {}
-
-        original_replace = Path.replace
-
-        def spy_replace(self_path, target):
-            # Temp file should exist with valid JSON before rename
-            captured_tmp["path"] = self_path
-            captured_tmp["existed"] = self_path.exists()
-            if self_path.exists():
-                captured_tmp["content"] = json.loads(self_path.read_text())
-            return original_replace(self_path, target)
-
-        with patch.object(Path, "replace", spy_replace):
-            path = RecoveryStateManager.save(str(tmp_path), "atomic_test", state)
-
-        # Temp file was observed with valid data before rename
-        assert captured_tmp["existed"] is True
-        assert captured_tmp["content"]["phase"] == "retry"
-        assert str(captured_tmp["path"]).endswith(".tmp")
-
-        # Final file is correct, temp file gone
-        assert path.exists()
-        assert not captured_tmp["path"].exists()
-
-    def test_original_file_survives_write_error(self, tmp_path):
-        """If save() fails mid-write, the previous state file is untouched."""
-        tmpdir = str(tmp_path)
-
-        # Save initial good state
-        state_v1 = RecoveryState(
-            phase="retry",
-            graduated_results=[{"custom_id": "r1"}],
-        )
-        path = RecoveryStateManager.save(tmpdir, "crash_test", state_v1)
-
-        # Record original content
-        original_content = path.read_text()
-
-        # Attempt a second save that fails during json.dump
-        state_v2 = RecoveryState(
-            phase="reprompt",
-            graduated_results=[{"custom_id": "r1"}, {"custom_id": "r2"}],
-        )
-        with (
-            patch(
-                "agent_actions.utils.atomic_write.json.dump",
-                side_effect=OSError("disk full"),
-            ),
-            pytest.raises(OSError),
-        ):
-            RecoveryStateManager.save(tmpdir, "crash_test", state_v2)
-
-        # Original file is still intact
-        assert path.read_text() == original_content
-        loaded = RecoveryStateManager.load(tmpdir, "crash_test")
-        assert loaded is not None
-        assert loaded.phase == "retry"
-        assert len(loaded.graduated_results) == 1
-
-        # No leftover temp file
-        assert list(path.parent.glob("*.tmp")) == []
-
-    def test_save_error_cleans_up_temp_file(self, tmp_path):
-        """On write failure, the temp file is removed — no disk litter."""
-        state = RecoveryState(phase="retry")
-        with patch(
-            "agent_actions.utils.atomic_write.json.dump",
-            side_effect=OSError("disk full"),
-        ):
-            try:
-                RecoveryStateManager.save(str(tmp_path), "cleanup_test", state)
-            except OSError:
-                pass
-
-        # No temp file left behind
-        batch_dir = tmp_path / "batch"
-        assert batch_dir.exists()
-        assert list(batch_dir.glob("*.tmp")) == []
-
-    def test_rename_failure_cleans_up_and_preserves_original(self, tmp_path):
-        """If rename fails after successful write, temp is cleaned up and original survives."""
-        tmpdir = str(tmp_path)
-
-        # Save initial good state
-        state_v1 = RecoveryState(
-            phase="retry",
-            graduated_results=[{"custom_id": "r1"}],
-        )
-        path = RecoveryStateManager.save(tmpdir, "rename_test", state_v1)
-        original_content = path.read_text()
-
-        # Attempt a second save where rename fails
-        state_v2 = RecoveryState(phase="reprompt")
-        with (
-            patch.object(Path, "replace", side_effect=OSError("cross-device link")),
-            pytest.raises(OSError),
-        ):
-            RecoveryStateManager.save(tmpdir, "rename_test", state_v2)
-
-        # Original file is untouched
-        assert path.read_text() == original_content
-        loaded = RecoveryStateManager.load(tmpdir, "rename_test")
-        assert loaded is not None
-        assert loaded.phase == "retry"
-
-        # Temp file cleaned up
-        assert list(path.parent.glob("*.tmp")) == []
-
-    def test_save_error_raises_oserror(self, tmp_path):
-        """save() propagates write failures as OSError."""
-        state = RecoveryState(phase="retry")
-        with patch(
-            "agent_actions.utils.atomic_write.json.dump",
-            side_effect=ValueError("bad data"),
-        ):
-            with pytest.raises(OSError, match="Failed to write"):
-                RecoveryStateManager.save(str(tmp_path), "error_test", state)
-
-    def test_large_state_serialization_roundtrip(self, tmp_path):
+    def test_large_state_serialization_roundtrip(self, backend):
         """200-record graduated state survives save/load roundtrip."""
         state = RecoveryState(
             phase="reprompt",
@@ -399,8 +280,8 @@ class TestRecoveryStateAtomicWrite:
             ],
             evaluation_strategy_name="validation",
         )
-        RecoveryStateManager.save(str(tmp_path), "large_test", state)
-        loaded = RecoveryStateManager.load(str(tmp_path), "large_test")
+        RecoveryStateManager.save(backend, "test_action", "large_test", state)
+        loaded = RecoveryStateManager.load(backend, "test_action", "large_test")
 
         assert loaded is not None
         assert len(loaded.graduated_results) == 200

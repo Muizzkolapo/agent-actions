@@ -412,7 +412,7 @@ class TestCheckAndSubmitRepromptGraduatedPool:
         service = _make_service()
         saved_state = {}
 
-        def capture_save(output_dir, file_name, state):
+        def capture_save(backend, action_name, file_name, state):
             saved_state["graduated_results"] = state.graduated_results
             saved_state["evaluation_strategy_name"] = state.evaluation_strategy_name
 

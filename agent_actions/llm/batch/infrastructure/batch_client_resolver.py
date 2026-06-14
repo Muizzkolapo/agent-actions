@@ -1,9 +1,7 @@
 """Resolves and caches batch clients based on configuration or batch ID."""
 
 import hashlib
-import json
 import logging
-from pathlib import Path
 from typing import Any
 
 from pydantic import SecretStr
@@ -243,27 +241,4 @@ class BatchClientResolver:
             entry = registry_manager.get_batch_job_by_id(batch_id)
             if entry:
                 return entry.provider  # type: ignore[no-any-return]
-
-        if output_directory:
-            client_type = self._lookup_client_from_file(batch_id, output_directory)
-            if client_type:
-                return client_type
-
-        return None
-
-    def _lookup_client_from_file(self, batch_id: str, output_directory: str) -> str | None:
-        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_file.exists():
-            return None
-
-        try:
-            with open(registry_file, encoding="utf-8") as f:
-                registry = json.load(f)
-
-            for entry in registry.values():
-                if entry.get("batch_id") == batch_id:
-                    return entry.get("provider")  # type: ignore[no-any-return]
-        except (json.JSONDecodeError, OSError, KeyError):
-            logger.debug("Failed to read batch registry file %s", registry_file, exc_info=True)
-
         return None

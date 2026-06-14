@@ -139,8 +139,10 @@ class BatchProcessingService:
             ProcessingError: If batch not completed, no registry entry,
                 recovery is pending, or processing fails
         """
+        assert self._action_name is not None, "action_name required for batch processing"
+        assert self._storage_backend is not None, "storage_backend required for batch processing"
         try:
-            manager = self._registry_manager_factory(output_directory)
+            manager = self._registry_manager_factory(self._action_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
             if provider.check_status(batch_id) != BatchStatus.COMPLETED:
@@ -201,14 +203,14 @@ class BatchProcessingService:
         Raises:
             ProcessingError: If no registry found or no files processed (and no recovery pending)
         """
-        manager = self._registry_manager_factory(output_directory)
+        effective_action_name: str = action_name or self._action_name  # type: ignore[assignment]
+        assert effective_action_name is not None, "action_name required"
+        manager = self._registry_manager_factory(effective_action_name)
         all_jobs = manager.get_all_jobs()
         if not all_jobs:
             raise ProcessingError(
                 "No batch registry found", context={"output_directory": output_directory}
             )
-
-        effective_action_name = action_name or self._action_name
 
         processed_files = []
         for file_name, entry in all_jobs.items():
@@ -283,8 +285,9 @@ class BatchProcessingService:
         Returns:
             True if batch status is COMPLETED, False otherwise
         """
+        assert self._action_name is not None, "action_name required for status check"
         try:
-            manager = self._registry_manager_factory(output_directory)
+            manager = self._registry_manager_factory(self._action_name)
             provider = self._client_resolver.get_for_batch_id(
                 batch_id, manager, output_directory, agent_config=agent_config
             )
@@ -320,7 +323,7 @@ class BatchProcessingService:
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
         effective_action = action_name or self._action_name
-        main_output = self._merge_carry_forward(effective_action, main_output, output_directory)
+        main_output = self._merge_carry_forward(effective_action, main_output)
 
         if self._storage_backend is None:
             ensure_directory_exists(output_file, is_file=True)
@@ -335,24 +338,30 @@ class BatchProcessingService:
         self,
         action_name: str | None,
         batch_output: list[dict[str, Any]],
-        output_directory: str,
     ) -> list[dict[str, Any]]:
-        """Merge carry-forward records from prior output into batch results."""
-        from agent_actions.llm.batch.services.submission import (
-            BATCH_CARRY_FORWARD_FILENAME,
-        )
+        """Merge carry-forward records from prior output into batch results.
 
-        carry_path = Path(output_directory) / "batch" / BATCH_CARRY_FORWARD_FILENAME
+        Uses the storage backend's terminal disposition set to identify
+        already-processed GUIDs (replacing the filesystem-based
+        .batch_carry_forward.json approach).
+        """
+        if not self._storage_backend or not action_name:
+            return batch_output
+
         try:
-            carry_data = json.loads(carry_path.read_text())
-            carry_guids = set(carry_data.get("guids", []))
-        except FileNotFoundError:
-            return batch_output
-        except (json.JSONDecodeError, KeyError):
-            logger.warning("Malformed %s — skipping merge", carry_path)
+            terminal_guids = self._storage_backend.get_terminal_record_ids(action_name)
+        except Exception:
+            logger.debug("Could not query terminal record IDs for %s", action_name, exc_info=True)
             return batch_output
 
-        if not carry_guids or not self._storage_backend or not action_name:
+        if not terminal_guids:
+            return batch_output
+
+        # Only carry forward records that are NOT already in the batch output
+        batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
+        carry_guids = terminal_guids - batch_guids
+
+        if not carry_guids:
             return batch_output
 
         from agent_actions.processing.disposition_gate import build_carry_forward
@@ -364,15 +373,6 @@ class BatchProcessingService:
             )
             carry_records.extend(found)
 
-        batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
-        overlap = carry_guids & batch_guids
-        if overlap:
-            logger.warning(
-                "Carry-forward/batch overlap for %d records — deduplicating",
-                len(overlap),
-            )
-            carry_records = [r for r in carry_records if r.get("source_guid") not in overlap]
-
         if carry_records:
             logger.info(
                 "Merging %d carry-forward records into batch output for %s",
@@ -381,11 +381,6 @@ class BatchProcessingService:
             )
             for record in carry_records:
                 record["_delta_mode"] = "full"
-
-        try:
-            carry_path.unlink()
-        except OSError:
-            logger.debug("Failed to clean up %s", carry_path)
 
         return batch_output + carry_records
 
@@ -466,7 +461,9 @@ class BatchProcessingService:
         start_time = time.time()
 
         context_map = self._context_manager.load_batch_context_map(
-            output_directory, file_name or "default"
+            self._storage_backend,  # type: ignore[arg-type]
+            self._action_name,  # type: ignore[arg-type]
+            file_name or "default",
         )
         agent_config = self._apply_workflow_session_id(agent_config, entry)
         provider = self._client_resolver.get_for_batch_id(
@@ -526,7 +523,12 @@ class BatchProcessingService:
                         state.validation_name = reprompt_parsed.validation_name
                         state.on_exhausted = OnExhaustedPolicy(reprompt_parsed.on_exhausted)
 
-                    RecoveryStateManager.save(output_directory, file_name, state)
+                    RecoveryStateManager.save(
+                        self._storage_backend,  # type: ignore[arg-type]
+                        self._action_name,  # type: ignore[arg-type]
+                        file_name,
+                        state,
+                    )
                     logger.info(
                         "Async retry submitted for %s: %d missing records, batch %s",
                         file_name,
@@ -640,7 +642,7 @@ class BatchProcessingService:
         # Clean up stale recovery state (e.g. from a crashed previous run).
         # The recovery path already does this in _finalize_and_cleanup, but the
         # original batch path goes through this method instead and must also clean up.
-        RecoveryStateManager.delete(context.output_directory, identity.file_name)
+        RecoveryStateManager.delete(self._storage_backend, self._action_name, identity.file_name)  # type: ignore[arg-type]
         output_path = _finalize_batch_output_impl(
             context,
             identity,
@@ -784,7 +786,9 @@ class BatchProcessingService:
 
         try:
             context_map = self._context_manager.load_batch_context_map(
-                output_directory, file_name or "default"
+                self._storage_backend,  # type: ignore[arg-type]
+                self._action_name,  # type: ignore[arg-type]
+                file_name or "default",
             )
         except Exception:
             logger.warning(

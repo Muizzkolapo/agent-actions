@@ -63,22 +63,7 @@ class ActionOutputManager:
         self._version_consumption_map: dict | None = None
         self._version_consumption_lock = threading.Lock()
 
-    def _load_json_files(self, json_files: list[Path], agent_output: dict[str, Any]) -> list[Any]:
-        """Load data from JSON files."""
-        outputs = []
-        for json_file in json_files:
-            try:
-                with open(json_file, encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        outputs.extend(data)
-                    else:
-                        outputs.append(data)
-            except (OSError, ValueError, TypeError) as file_error:
-                agent_output["errors"].append(f"Failed to read {json_file.name}: {file_error}")
-        return outputs
-
-    def _process_agent_output(self, output_dir: Path, prev_agent_name: str) -> dict[str, Any]:
+    def _process_agent_output(self, prev_agent_name: str) -> dict[str, Any]:
         """Process output directory for a single action."""
         agent_output = {
             "data": [],
@@ -92,12 +77,6 @@ class ActionOutputManager:
         outputs, backend_files = self._load_outputs_from_backend(prev_agent_name)
         if backend_files:
             agent_output["output_files"] = backend_files
-
-        if not outputs and output_dir.exists():
-            json_files = list(output_dir.glob("*.json"))
-            agent_output["output_files"] = [str(f.name) for f in json_files]
-            if json_files:
-                outputs = self._load_json_files(json_files, agent_output)
 
         agent_output["data"] = outputs
         agent_output["output_count"] = len(outputs)
@@ -129,10 +108,9 @@ class ActionOutputManager:
 
         for i in range(current_idx):
             prev_agent_name = self.execution_order[i]
-            output_dir = self.agent_folder / "target" / prev_agent_name
 
             try:
-                agent_output = self._process_agent_output(output_dir, prev_agent_name)
+                agent_output = self._process_agent_output(prev_agent_name)
                 previous_outputs[prev_agent_name] = agent_output["data"]
                 previous_outputs[f"{prev_agent_name}_meta"] = agent_output
 
@@ -143,7 +121,6 @@ class ActionOutputManager:
                     error_msg,
                     extra={
                         "prev_agent_name": prev_agent_name,
-                        "output_dir": str(output_dir),
                         "operation": "load_previous_outputs",
                     },
                 )

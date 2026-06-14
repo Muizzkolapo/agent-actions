@@ -95,7 +95,7 @@ class TestWorkflowEventHandling:
         assert collector._metadata["status"] == "success"
 
         # Should have written run_results.json
-        assert (temp_output_dir / "target" / "run_results.json").exists()
+        assert (temp_output_dir / "logs" / "run_results.json").exists()
 
     def test_handle_workflow_failed(self, collector, temp_output_dir):
         """Test WorkflowFailedEvent handling."""
@@ -234,11 +234,11 @@ class TestFlushAndOutput:
     """Tests for flush and output generation."""
 
     def test_flush_creates_target_directory(self, collector, temp_output_dir):
-        """Test that flush creates target directory."""
+        """Test that flush creates logs directory."""
         collector.handle(WorkflowStartEvent(workflow_name="test", action_count=0))
         collector.handle(WorkflowCompleteEvent(workflow_name="test"))
 
-        assert (temp_output_dir / "target").exists()
+        assert (temp_output_dir / "logs").exists()
 
     def test_flush_writes_run_results_json(self, collector, temp_output_dir):
         """Test that flush writes run_results.json."""
@@ -252,7 +252,7 @@ class TestFlushAndOutput:
         )
         collector.handle(WorkflowCompleteEvent(workflow_name="test", elapsed_time=10.0))
 
-        output_path = temp_output_dir / "target" / "run_results.json"
+        output_path = temp_output_dir / "logs" / "run_results.json"
         assert output_path.exists()
 
         with open(output_path) as f:
@@ -285,7 +285,7 @@ class TestFlushAndOutput:
             )
         )
 
-        output_path = temp_output_dir / "target" / "run_results.json"
+        output_path = temp_output_dir / "logs" / "run_results.json"
         with open(output_path) as f:
             data = json.load(f)
 
@@ -317,7 +317,7 @@ class TestFlushAndOutput:
 
         collector.handle(WorkflowCompleteEvent(workflow_name="test"))
 
-        output_path = temp_output_dir / "target" / "run_results.json"
+        output_path = temp_output_dir / "logs" / "run_results.json"
         with open(output_path) as f:
             data = json.load(f)
 

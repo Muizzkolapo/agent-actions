@@ -1,6 +1,6 @@
 """Tests for data scanners: scan_logs, extract_action_metrics, extract_runtime_warnings.
 
-Also covers scan_sqlite_readonly prompt trace attachment (spec 015)
+Also covers SQLiteBackend.scan_data() prompt trace attachment (spec 015)
 and namespace unwrapping (spec 092).
 """
 
@@ -10,12 +10,11 @@ import json
 import sqlite3
 from pathlib import Path
 
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.tooling.docs.scanner.data_scanners import (
-    _unwrap_record_content,
     extract_action_metrics,
     extract_runtime_warnings,
     scan_logs,
-    scan_sqlite_readonly,
 )
 
 # ---------------------------------------------------------------------------
@@ -306,7 +305,7 @@ class TestExtractActionMetricsEnrichment:
 
 
 # ---------------------------------------------------------------------------
-# scan_sqlite_readonly — prompt trace attachment
+# SQLiteBackend.scan_data — prompt trace attachment
 # ---------------------------------------------------------------------------
 
 
@@ -374,14 +373,23 @@ def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
     conn.close()
 
 
+def _scan_readonly(db_path: Path) -> dict | None:
+    """Helper: open a readonly backend, scan, and close."""
+    backend = SQLiteBackend.create_readonly(db_path)
+    try:
+        return backend.scan_data()
+    finally:
+        backend.close()
+
+
 class TestScanSqliteReadonlyTraceAttachment:
-    """Verify scan_sqlite_readonly joins prompt_trace to preview records."""
+    """Verify scan_data joins prompt_trace to preview records."""
 
     def test_trace_attached_when_table_exists(self, tmp_path):
         db_path = tmp_path / "test.db"
         _create_test_db(db_path, with_traces=True)
 
-        result = scan_sqlite_readonly(db_path, "test_workflow")
+        result = _scan_readonly(db_path)
         assert result is not None
         records = result["nodes"]["classify"]["preview"]
         assert len(records) == 1
@@ -399,7 +407,7 @@ class TestScanSqliteReadonlyTraceAttachment:
         db_path = tmp_path / "test.db"
         _create_test_db(db_path, with_traces=False)
 
-        result = scan_sqlite_readonly(db_path, "test_workflow")
+        result = _scan_readonly(db_path)
         assert result is not None
         records = result["nodes"]["classify"]["preview"]
         assert len(records) == 1
@@ -433,7 +441,7 @@ class TestScanSqliteReadonlyTraceAttachment:
         conn.commit()
         conn.close()
 
-        result = scan_sqlite_readonly(db_path, "test_wf")
+        result = _scan_readonly(db_path)
         assert result is not None
         records = result["nodes"]["act"]["preview"]
         assert len(records) == 1
@@ -466,71 +474,15 @@ class TestScanSqliteReadonlyTraceAttachment:
         conn.commit()
         conn.close()
 
-        result = scan_sqlite_readonly(db_path, "test_workflow")
+        result = _scan_readonly(db_path)
         records = result["nodes"]["classify"]["preview"]
         trace = records[0]["_trace"]
         assert trace["attempt"] == 1
         assert "retry" in trace["compiled_prompt"]
 
 
-# ---------------------------------------------------------------------------
-# _unwrap_record_content (spec 092)
-# ---------------------------------------------------------------------------
-
-
-class TestUnwrapRecordContent:
-    """Verify _unwrap_record_content extracts action-specific fields."""
-
-    def test_unwraps_namespaced_content(self):
-        record = {
-            "source_guid": "g1",
-            "content": {
-                "classify": {"genre": "fiction", "confidence": 0.9},
-                "summarize": {"summary": "A book"},
-            },
-            "node_id": "n1",
-        }
-        result = _unwrap_record_content(record, "classify")
-        assert result["content"] == {"genre": "fiction", "confidence": 0.9}
-        assert result["source_guid"] == "g1"
-        assert result["node_id"] == "n1"
-
-    def test_leaves_flat_content_unchanged(self):
-        """Pre-namespace records with flat content pass through."""
-        record = {"content": {"genre": "fiction"}, "source_guid": "g1"}
-        result = _unwrap_record_content(record, "classify")
-        assert result is record  # no copy needed
-
-    def test_no_content_key(self):
-        record = {"question": "What?"}
-        result = _unwrap_record_content(record, "classify")
-        assert result is record
-
-    def test_content_not_dict(self):
-        record = {"content": "plain string"}
-        result = _unwrap_record_content(record, "classify")
-        assert result is record
-
-    def test_action_value_not_dict(self):
-        """When content[action_name] is not a dict, wrap as {action_name: value}."""
-        record = {"content": {"classify": "not-a-dict"}}
-        result = _unwrap_record_content(record, "classify")
-        assert result["content"] == {"classify": "not-a-dict"}
-
-    def test_does_not_mutate_original(self):
-        """Unwrapping returns a new dict; the original is untouched."""
-        original_content = {
-            "classify": {"genre": "fiction"},
-            "summarize": {"summary": "..."},
-        }
-        record = {"source_guid": "g1", "content": original_content}
-        result = _unwrap_record_content(record, "classify")
-        assert result["content"] == {"genre": "fiction"}
-        assert record["content"] is original_content  # original unchanged
-
-
 class TestScanSqliteNamespaceUnwrap:
-    """Verify scan_sqlite_readonly unwraps namespaced content per action."""
+    """Verify scan_data unwraps namespaced content per action."""
 
     def test_preview_records_show_action_fields(self, tmp_path):
         """Preview records should have unwrapped content for the action."""
@@ -556,7 +508,7 @@ class TestScanSqliteNamespaceUnwrap:
         conn.commit()
         conn.close()
 
-        result = scan_sqlite_readonly(db_path, "test_wf")
+        result = _scan_readonly(db_path)
         records = result["nodes"]["extract"]["preview"]
         assert len(records) == 1
         # content should be unwrapped to show extract's fields
@@ -584,7 +536,7 @@ class TestScanSqliteNamespaceUnwrap:
         conn.commit()
         conn.close()
 
-        result = scan_sqlite_readonly(db_path, "test_wf")
+        result = _scan_readonly(db_path)
         records = result["nodes"]["classify"]["preview"]
         assert len(records) == 1
         assert records[0]["content"] == {"genre": "fiction", "confidence": 0.9}

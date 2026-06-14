@@ -36,7 +36,6 @@ from .data_scanners import (
     scan_prompts,
     scan_runs,
     scan_schemas,
-    scan_sqlite_readonly,
     scan_workflow_data,
 )
 
@@ -54,7 +53,6 @@ __all__ = [
     "scan_prompts",
     "scan_schemas",
     "scan_workflow_data",
-    "scan_sqlite_readonly",
     "scan_runs",
     "scan_logs",
     "extract_action_metrics",

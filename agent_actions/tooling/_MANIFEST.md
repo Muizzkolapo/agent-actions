@@ -19,21 +19,20 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `scan_workflows()` | `agent_config/{workflow}.yml` | Reads | — |
-| `scan_workflows()` | `agent_io/target/` | Reads | — |
 | `scan_readmes()` | `agent_config/{workflow}.yml` | Reads | — |
 | `scan_prompts()` | `prompt_store/{workflow}.md` | Reads | — |
 | `scan_schemas()` | `schema/{workflow}/{action}.yml` | Reads | — |
 | `scan_tool_functions()` | `tools/{workflow}/*.py` | Reads | `tool_path` |
-| `scan_workflow_data()` | `agent_io/target/{action}/` | Reads | — |
-| `scan_runs()` | `agent_io/target/` | Reads | — |
-| `scan_logs()` | `agent_io/target/` | Reads | — |
+| `scan_workflow_data()` | `agent_io/store/{workflow}.db` | Reads | — |
+| `scan_runs()` | `agent_io/logs/` | Reads | — |
+| `scan_logs()` | `logs/events.json` | Reads | — |
 | `scan_examples()` | `agent_actions.yml` | Reads | `description` |
 | `generate_docs()` | `agent_actions.yml` | Reads | `tool_path` |
 | `CatalogGenerator.generate()` | `agent_config/{workflow}.yml` | Reads | `actions`, `defaults` |
 | `WorkflowParser.parse_workflow()` | `agent_config/{workflow}.yml` | Reads | `actions`, `dependencies`, `context_scope` |
-| `RunTracker.record_run()` | `agent_io/target/` | Writes | — |
-| `RunTracker.start_workflow_run()` | `agent_io/target/` | Writes | — |
-| `serve_docs()` | `agent_io/target/` | Reads | — |
+| `RunTracker.record_run()` | `artefact/runs.json` | Writes | — |
+| `RunTracker.start_workflow_run()` | `artefact/runs.json` | Writes | — |
+| `serve_docs()` | `artefact/`, `docs_site/` | Reads | — |
 | `build_index()` | `agent_config/{workflow}.yml` | Reads | `actions` |
 | `build_index()` | `prompt_store/{workflow}.md` | Reads | — |
 | `build_index()` | `tools/{workflow}/*.py` | Reads | `tool_path` |
@@ -41,7 +40,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | `find_project_root()` | `agent_actions.yml` | Reads | — |
 | `find_all_project_roots()` | `agent_actions.yml` | Reads | — |
 | `resolve_reference()` | `seed_data/*.json` | Reads | `seed_data_path` |
-| `render_card_markdown(*, action_name=)` | `agent_io/target/{action}/` | Transforms | — |
+| `render_card_markdown(*, action_name=)` | `agent_io/store/{workflow}.db` | Transforms | — |
 
 ## Dependencies
 

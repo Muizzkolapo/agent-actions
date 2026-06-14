@@ -624,7 +624,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     )
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
-    registry_manager_factory = create_registry_manager_factory()
+    registry_manager_factory = create_registry_manager_factory(ctx.storage_backend)
 
     disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
     submission_service = BatchSubmissionService(

@@ -59,7 +59,7 @@ This prevents file collisions when multiple files share the same name but live i
 
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
-| `FileWriter.write_target()` | `agent_io/target/{action}/` | Writes | — |
+| `FileWriter.write_target()` | `agent_io/store/{workflow}.db` | Writes | — |
 | `FileWriter.write_staging()` | `agent_io/staging/` | Writes | — |
 | `FileWriter.write_source()` | `agent_io/staging/` | Writes | — |
 | `UnifiedSourceDataSaver.save_source_items()` | `agent_io/target/{action}/` | Writes | — |

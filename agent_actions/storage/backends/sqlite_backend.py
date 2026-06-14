@@ -182,6 +182,7 @@ class SQLiteBackend(StorageBackend):
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
         self._connection: sqlite3.Connection | None = None
+        self._readonly: bool = False
         self._lock = (
             threading.RLock()
         )  # Serialize write operations; RLock allows re-entry from connection property
@@ -202,6 +203,38 @@ class SQLiteBackend(StorageBackend):
                 context={"unknown_kwargs": list(kwargs)},
             )
         return cls(str(db_path), workflow_name)
+
+    @classmethod
+    def create_readonly(cls, db_path: str | Path) -> "SQLiteBackend":
+        """Create a read-only instance for scanning. Do not call initialize()."""
+        import urllib.parse
+
+        instance = cls.__new__(cls)
+        StorageBackend.__init__(instance)
+        instance.db_path = Path(db_path)
+        instance.workflow_name = instance.db_path.stem
+        instance._lock = threading.RLock()
+        instance._readonly = True
+
+        posix_path = instance.db_path.as_posix()
+        if not posix_path.startswith("/"):
+            posix_path = "/" + posix_path
+        encoded_path = urllib.parse.quote(posix_path, safe="/:")
+
+        ro_uri = f"file://{encoded_path}?mode=ro"
+        conn: sqlite3.Connection | None = None
+        try:
+            conn = sqlite3.connect(ro_uri, uri=True)
+            conn.row_factory = sqlite3.Row
+            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+        except sqlite3.OperationalError:
+            if conn is not None:
+                conn.close()
+            conn = sqlite3.connect(f"file://{encoded_path}?immutable=1", uri=True)
+            conn.row_factory = sqlite3.Row
+
+        instance._connection = conn
+        return instance
 
     def _validate_identifier(self, name: str, field: str) -> str:
         """Validate and POSIX-normalize an identifier to prevent injection.
@@ -249,6 +282,8 @@ class SQLiteBackend(StorageBackend):
 
     def initialize(self) -> None:
         """Create connection, enforce schema, create tables and indexes."""
+        if self._readonly:
+            raise RuntimeError("Cannot initialize a read-only backend instance.")
         with self._lock:
             self._open_connection()
             cursor = self.connection.cursor()
@@ -421,13 +456,47 @@ class SQLiteBackend(StorageBackend):
     def load_metadata(self, key: str) -> str | None:
         """Load a metadata value by key. Returns None if not found."""
         with self._lock:
-            cursor = self.connection.cursor()
-            cursor.execute(
-                "SELECT value FROM workflow_metadata WHERE key = ?",
-                (key,),
-            )
-            row = cursor.fetchone()
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(
+                    "SELECT value FROM workflow_metadata WHERE key = ?",
+                    (key,),
+                )
+                row = cursor.fetchone()
+            except sqlite3.OperationalError:
+                return None
         return row["value"] if row else None
+
+    def delete_metadata(self, key: str) -> bool:
+        """Delete a metadata key. Returns True if deleted."""
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute("DELETE FROM workflow_metadata WHERE key = ?", (key,))
+                self.connection.commit()
+                return cursor.rowcount > 0
+            except sqlite3.OperationalError:
+                return False
+
+    def delete_metadata_prefix(self, prefix: str) -> int:
+        """Delete all metadata keys starting with prefix. Returns count deleted."""
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(
+                    "DELETE FROM workflow_metadata WHERE key LIKE ?",
+                    (prefix + "%",),
+                )
+                self.connection.commit()
+                return cursor.rowcount
+            except sqlite3.OperationalError:
+                return 0
+
+    def clear_batch_state(self, action_name: str) -> None:
+        """Delete all batch state for an action."""
+        self.delete_metadata(f"batch_registry:{action_name}")
+        self.delete_metadata_prefix(f"recovery_state:{action_name}:")
+        self.delete_metadata_prefix(f"batch_context:{action_name}:")
 
     def write_source(
         self,
@@ -1567,6 +1636,117 @@ class SQLiteBackend(StorageBackend):
                     e,
                     extra={"workflow_name": self.workflow_name},
                 )
+
+    def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
+        """Return stats and preview records for the docs scanner."""
+        if self._connection is None:
+            return None
+        with self._lock:
+            cursor = self._connection.cursor()
+
+            cursor.execute("SELECT COUNT(*) as count FROM source_data")
+            source_count = cursor.fetchone()["count"]
+
+            cursor.execute(
+                "SELECT action_name, COALESCE(SUM(record_count), 0) as count "
+                "FROM target_data GROUP BY action_name ORDER BY action_name"
+            )
+            node_counts = {row["action_name"]: row["count"] for row in cursor.fetchall()}
+
+            cursor.execute("SELECT SUM(record_count) as count FROM target_data")
+            row = cursor.fetchone()
+            target_count = row["count"] if row["count"] else 0
+
+            db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
+
+            nodes: dict[str, Any] = {}
+            for action_name, record_count in node_counts.items():
+                cursor.execute(
+                    "SELECT DISTINCT relative_path FROM target_data "
+                    "WHERE action_name = ? ORDER BY relative_path",
+                    (action_name,),
+                )
+                files = [r["relative_path"] for r in cursor.fetchall()]
+
+                records: list[dict[str, Any]] = []
+                for rp in files:
+                    if len(records) >= preview_limit:
+                        break
+                    try:
+                        data = self._read_target_raw(action_name, rp)
+                        if not isinstance(data, list):
+                            data = [data] if data else []  # type: ignore[unreachable]
+                        if data and isinstance(data[0], dict) and "_delta_mode" in data[0]:
+                            data = self._reconstruct_from_deltas(action_name, rp, data)
+                        for item in data:
+                            if len(records) >= preview_limit:
+                                break
+                            content = item.get("content")
+                            if isinstance(content, dict) and action_name in content:
+                                ns = content[action_name]
+                                if isinstance(ns, dict):
+                                    item = {**item, "content": ns}
+                                elif ns is None:
+                                    item = {**item, "content": {}}
+                            records.append({**item, "_file": rp})
+                    except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
+                        logger.debug("Skipping %s/%s in scan: %s", action_name, rp, e)
+
+                # Attach prompt traces
+                try:
+                    tid_map: dict[str, list[dict[str, Any]]] = {}
+                    for rec in records:
+                        tid = rec.get("target_id")
+                        if tid:
+                            tid_map.setdefault(tid, []).append(rec)
+                    if tid_map:
+                        placeholders = ",".join("?" for _ in tid_map)
+                        cursor.execute(
+                            f"SELECT record_id, compiled_prompt, llm_context, "
+                            f"response_text, model_name, model_vendor, run_mode, "
+                            f"prompt_length, response_length, attempt "
+                            f"FROM prompt_trace "
+                            f"WHERE action_name = ? AND record_id IN ({placeholders})"
+                            f" ORDER BY attempt DESC",
+                            [action_name, *tid_map.keys()],
+                        )
+                        seen: set[str] = set()
+                        for trace_row in cursor:
+                            rid = trace_row["record_id"]
+                            if rid in seen:
+                                continue
+                            seen.add(rid)
+                            trace_data = {
+                                "compiled_prompt": trace_row["compiled_prompt"],
+                                "llm_context": trace_row["llm_context"],
+                                "response_text": trace_row["response_text"],
+                                "model_name": trace_row["model_name"],
+                                "model_vendor": trace_row["model_vendor"],
+                                "run_mode": trace_row["run_mode"],
+                                "prompt_length": trace_row["prompt_length"],
+                                "response_length": trace_row["response_length"],
+                                "attempt": trace_row["attempt"],
+                            }
+                            for rec in tid_map.get(rid, []):
+                                rec["_trace"] = trace_data
+                except sqlite3.OperationalError:
+                    logger.debug(
+                        "No prompt_trace table for %s — skipping trace attachment", action_name
+                    )
+
+                nodes[action_name] = {
+                    "record_count": record_count,
+                    "files": files,
+                    "preview": records,
+                }
+
+            return {
+                "db_path": str(self.db_path),
+                "db_size": self._format_size(db_size),
+                "source_count": source_count,
+                "target_count": target_count,
+                "nodes": nodes,
+            }
 
     def close(self) -> None:
         """Close the database connection."""

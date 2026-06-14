@@ -219,6 +219,15 @@ class StorageBackend(ABC):
         """Load a metadata value by key. Returns None if not found."""
         ...
 
+    def delete_metadata(self, key: str) -> bool:  # noqa: B027
+        """Delete a metadata key. Returns True if deleted.
+
+        Backends that support metadata deletion should override.
+        SQLiteBackend uses SQL DELETE; other backends may use their
+        native key-removal operation.
+        """
+        return False
+
     def _extract_delta(
         self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
     ) -> dict[str, Any]:
@@ -616,6 +625,19 @@ class StorageBackend(ABC):
     ) -> int:
         """Delete traces for an action, or all if action_name is None."""
         return 0
+
+    def clear_batch_state(self, action_name: str) -> None:  # noqa: B027
+        """Delete all batch state (registry, recovery, context) for an action.
+
+        Default is no-op. Backends override to clean up batch coordination data.
+        """
+
+    def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
+        """Return stats and preview records for the docs scanner.
+
+        Default returns None. Backends override to provide scan capability.
+        """
+        return None
 
     def clear_source_data(self) -> None:
         """Delete all rows from the source_data table."""

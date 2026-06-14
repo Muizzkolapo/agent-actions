@@ -1,112 +1,95 @@
-"""Persistence of batch context maps to/from the batch directory."""
+"""Persistence of batch context maps via StorageBackend metadata store."""
 
 import json
 import logging
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ProcessingError
-from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.utils.path_utils import ensure_directory_exists
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
 
 class BatchContextManager:
-    """Saves and loads batch context maps to/from the batch directory."""
+    """Saves and loads batch context maps via StorageBackend."""
+
+    @staticmethod
+    def _metadata_key(action_name: str, batch_name: str) -> str:
+        if ".." in batch_name:
+            raise ValueError(f"Invalid batch name contains path traversal: {batch_name}")
+        from pathlib import Path
+
+        safe_name = Path(batch_name).name
+        return f"batch_context:{action_name}:{safe_name}"
 
     @staticmethod
     def save_batch_context_map(
-        context_map: dict[str, Any], output_directory: str, batch_name: str
-    ) -> Path:
-        """Save batch processing context map to batch directory.
-
-        Raises:
-            ProcessingError: If save fails
-        """
+        backend: "StorageBackend",
+        action_name: str,
+        context_map: dict[str, Any],
+        batch_name: str,
+    ) -> None:
         try:
-            context_path = BatchContextManager._get_context_path(output_directory, batch_name)
-
-            ensure_directory_exists(context_path, is_file=True)
-
-            atomic_json_write(context_path, context_map, indent=2, ensure_ascii=False)
-
-            logger.debug("Saved context map to %s (%d entries)", context_path, len(context_map))
-
-            return context_path
-
+            key = BatchContextManager._metadata_key(action_name, batch_name)
+            backend.save_metadata(key, json.dumps(context_map, ensure_ascii=False))
+            logger.debug(
+                "Saved context map for %s/%s (%d entries)",
+                action_name,
+                batch_name,
+                len(context_map),
+            )
         except Exception as e:
             raise ProcessingError(
                 f"Failed to save context map: {e}",
                 cause=e,
-                context={"output_directory": output_directory, "batch_name": batch_name},
+                context={"action_name": action_name, "batch_name": batch_name},
             ) from e
 
     @staticmethod
-    def load_batch_context_map(output_directory: str, batch_name: str) -> dict[str, Any]:
-        """Load batch processing context map from batch directory.
-
-        Raises:
-            ProcessingError: If load fails or file not found
-        """
+    def load_batch_context_map(
+        backend: "StorageBackend", action_name: str, batch_name: str
+    ) -> dict[str, Any]:
         try:
-            context_path = BatchContextManager._get_context_path(output_directory, batch_name)
-
-            with open(context_path, encoding="utf-8") as f:
-                context_map = json.load(f)
-
-            logger.debug("Loaded context map from %s (%d entries)", context_path, len(context_map))
-
-            return context_map  # type: ignore[no-any-return]
-
-        except FileNotFoundError as e:
-            raise ProcessingError(
-                f"Context map file not found: {context_path}",
-                context={"output_directory": output_directory, "batch_name": batch_name},
-            ) from e
+            key = BatchContextManager._metadata_key(action_name, batch_name)
+            raw = backend.load_metadata(key)
+            if raw is None:
+                raise ProcessingError(
+                    f"Context map not found for {action_name}/{batch_name}",
+                    context={"action_name": action_name, "batch_name": batch_name},
+                )
+            context_map: dict[str, Any] = json.loads(raw)
+            logger.debug(
+                "Loaded context map for %s/%s (%d entries)",
+                action_name,
+                batch_name,
+                len(context_map),
+            )
+            return context_map
+        except ProcessingError:
+            raise
         except json.JSONDecodeError as e:
             raise ProcessingError(
-                f"Invalid JSON in context map file: {e}",
+                f"Invalid JSON in context map: {e}",
                 cause=e,
-                context={"output_directory": output_directory, "batch_name": batch_name},
+                context={"action_name": action_name, "batch_name": batch_name},
             ) from e
         except Exception as e:
-            if isinstance(e, ProcessingError):
-                raise
             raise ProcessingError(
                 f"Failed to load context map: {e}",
                 cause=e,
-                context={"output_directory": output_directory, "batch_name": batch_name},
+                context={"action_name": action_name, "batch_name": batch_name},
             ) from e
 
     @staticmethod
-    def batch_context_exists(output_directory: str, batch_name: str) -> bool:
-        """Check if batch context map file exists."""
-        context_path = BatchContextManager._get_context_path(output_directory, batch_name)
-        return context_path.exists()
+    def batch_context_exists(backend: "StorageBackend", action_name: str, batch_name: str) -> bool:
+        key = BatchContextManager._metadata_key(action_name, batch_name)
+        return backend.load_metadata(key) is not None
 
     @staticmethod
-    def _get_context_path(output_directory: str, batch_name: str) -> Path:
-        """Get path to context map file."""
-        output_dir = Path(output_directory)
-        batch_dir = output_dir / "batch"
-
-        if ".." in batch_name:
-            raise ValueError(f"Invalid batch name contains path traversal: {batch_name}")
-        safe_name = Path(batch_name).name
-
-        context_file_name = f".context_map_{safe_name}"
-
-        return batch_dir / context_file_name
-
-    @staticmethod
-    def delete_batch_context_map(output_directory: str, batch_name: str) -> bool:
-        """Delete batch context map file if it exists."""
-        context_path = BatchContextManager._get_context_path(output_directory, batch_name)
-
-        try:
-            context_path.unlink()
-        except FileNotFoundError:
-            return False
-        logger.debug("Deleted context map at %s", context_path)
-        return True
+    def delete_batch_context_map(
+        backend: "StorageBackend", action_name: str, batch_name: str
+    ) -> bool:
+        key = BatchContextManager._metadata_key(action_name, batch_name)
+        return backend.delete_metadata(key)

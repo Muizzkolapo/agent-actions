@@ -1,13 +1,15 @@
 """Batch job lifecycle and registry status management."""
 
-import json
 import logging
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -19,39 +21,45 @@ class BatchJobManager:
         self,
         client_resolver: BatchClientResolver,
         registry_manager: BatchRegistryManager | None = None,
+        storage_backend: "StorageBackend | None" = None,
     ):
         """Initialize batch job manager.
 
         Args:
             client_resolver: Resolver for getting batch clients
             registry_manager: Optional registry manager (can be set later)
+            storage_backend: Storage backend for registry persistence
         """
         self._client_resolver = client_resolver
         self._registry_manager = registry_manager
+        self._storage_backend = storage_backend
 
     def set_registry_manager(self, registry_manager: BatchRegistryManager) -> None:
         """Set the registry manager (for lazy initialization)."""
         self._registry_manager = registry_manager
 
     def _check_status(
-        self, batch_id: str, output_directory: str, agent_config: dict | None = None
+        self,
+        batch_id: str,
+        output_directory: str,
+        agent_config: dict | None = None,
+        registry_manager: BatchRegistryManager | None = None,
     ) -> str:
         """Check status of a batch job via client."""
-        manager = self._registry_manager
+        manager = registry_manager or self._registry_manager
         client = self._client_resolver.get_for_batch_id(
             batch_id, manager, output_directory, agent_config=agent_config
         )
         return client.check_status(batch_id)
 
-    def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager | None:
+    def _get_registry_manager(self, action_name: str) -> BatchRegistryManager | None:
         if self._registry_manager is not None:
             return self._registry_manager
 
-        registry_path = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_path.exists():
+        if self._storage_backend is None:
             return None
 
-        return BatchRegistryManager(registry_path)
+        return BatchRegistryManager(self._storage_backend, action_name)
 
     def are_all_jobs_completed(
         self, output_directory: str, agent_config: dict | None = None
@@ -59,7 +67,7 @@ class BatchJobManager:
         """Check if all batch jobs in the registry are completed.
 
         Args:
-            output_directory: Directory containing the batch registry
+            output_directory: Directory containing the batch registry (used as action_name)
             agent_config: Optional agent config for API key resolution
 
         Returns:
@@ -68,23 +76,22 @@ class BatchJobManager:
         if not output_directory:
             return True
 
-        registry_path = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_path.exists():
-            return True
+        # Extract action_name from output_directory path
+        from pathlib import Path
 
-        try:
-            with open(registry_path, encoding="utf-8") as f:
-                json.load(f)
-        except (json.JSONDecodeError, OSError):
-            logger.warning("Registry file is malformed: %s", registry_path, exc_info=True)
-            return False
+        action_name = Path(output_directory).name
 
-        manager = self._get_registry_manager(output_directory)
+        manager = self._get_registry_manager(action_name)
         if manager is None:
             return True
 
+        if not manager.has_jobs():
+            return True
+
         def check_provider(batch_id: str) -> str:
-            return self._check_status(batch_id, output_directory, agent_config)
+            return self._check_status(
+                batch_id, output_directory, agent_config, registry_manager=manager
+            )
 
         return manager.are_all_jobs_completed(check_provider=check_provider)
 
@@ -101,8 +108,15 @@ class BatchJobManager:
         if not output_directory:
             return "no_batches"
 
-        manager = self._get_registry_manager(output_directory)
+        from pathlib import Path
+
+        action_name = Path(output_directory).name
+
+        manager = self._get_registry_manager(action_name)
         if manager is None:
+            return "no_batches"
+
+        if not manager.has_jobs():
             return "no_batches"
 
         return manager.get_overall_status()

@@ -187,9 +187,9 @@ context_map = {
 
 ```
 1. Idempotency check  → already submitted? Return existing batch_id
-2. Save context_map   → written to disk for recovery
+2. Save context_map   → persisted to StorageBackend metadata
 3. Provider submit    → sends JSONL file to provider API
-4. Register batch     → saved to .batch_registry.json
+4. Register batch     → saved to StorageBackend metadata (batch_registry:{action})
 5. Stamp dispositions → records marked DEFERRED in storage
 ```
 
@@ -267,10 +267,10 @@ Reconciliation (reconciler.py):
         │  output  │
         └──────────┘
 
-All state is persisted to disk between runs:
-  .recovery_state_{name}.json
-  .batch_registry.json
-  .context_map_{name}
+All state is persisted to StorageBackend metadata between runs:
+  recovery_state:{action}:{name}
+  batch_registry:{action}
+  batch_context:{action}:{name}
 ```
 
 ---

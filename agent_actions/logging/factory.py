@@ -140,7 +140,7 @@ class LoggerFactory:
 
         if output_dir:
             output_path = Path(output_dir)
-            log_file = output_path / "target" / "events.json"
+            log_file = output_path / "logs" / "events.json"
             json_handler = JSONFileHandler(
                 file_path=log_file,
                 min_level=EventLevel.DEBUG,
@@ -148,7 +148,7 @@ class LoggerFactory:
             )
             manager.register(json_handler)
 
-            errors_file = output_path / "target" / "errors.json"
+            errors_file = output_path / "logs" / "errors.json"
             errors_handler = JSONFileHandler(
                 file_path=errors_file,
                 min_level=EventLevel.ERROR,

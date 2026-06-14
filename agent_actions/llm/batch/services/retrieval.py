@@ -4,6 +4,7 @@ import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_actions.errors import ExternalServiceError
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -19,6 +20,9 @@ from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.utils.path_utils import ensure_directory_exists
 
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +37,8 @@ class BatchRetrievalService:
         client_resolver: BatchClientResolver,
         context_manager: BatchContextManager,
         registry_manager_factory: Callable[[str], BatchRegistryManager],
+        storage_backend: "StorageBackend | None" = None,
+        action_name: str | None = None,
     ):
         """Initialize retrieval service with dependencies.
 
@@ -40,10 +46,14 @@ class BatchRetrievalService:
             client_resolver: Resolver for batch API clients
             context_manager: Manager for batch context persistence
             registry_manager_factory: Factory function to create registry managers
+            storage_backend: Storage backend for metadata persistence
+            action_name: Action name for backend lookups
         """
         self._client_resolver = client_resolver
         self._context_manager = context_manager
         self._registry_manager_factory = registry_manager_factory
+        self._storage_backend = storage_backend
+        self._action_name = action_name
 
     def retrieve_results(
         self,
@@ -66,15 +76,18 @@ class BatchRetrievalService:
         """
         provider = None
         try:
-            manager = self._registry_manager_factory(output_dir)
+            action_name = self._action_name or Path(output_dir).name
+            manager = self._registry_manager_factory(action_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_dir)
 
             entry = manager.get_batch_job_by_id(batch_id)
             file_name = entry.file_name if entry else None
 
             context_map = (
-                self._context_manager.load_batch_context_map(output_dir, file_name)
-                if file_name
+                self._context_manager.load_batch_context_map(
+                    self._storage_backend, action_name, file_name
+                )
+                if file_name and self._storage_backend
                 else {}
             )
             batch_results = retrieve_and_reconcile(

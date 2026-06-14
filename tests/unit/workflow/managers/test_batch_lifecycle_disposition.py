@@ -19,6 +19,7 @@ def mock_storage_backend():
     """Create a mock storage backend with disposition methods."""
     backend = MagicMock()
     backend.has_disposition.return_value = False
+    backend.load_metadata.return_value = None
     return backend
 
 
@@ -134,16 +135,27 @@ class TestCheckBatchSubmissionRunMode:
     def test_batch_mode_respects_registry(
         self, mock_job_manager, mock_processing_service, mock_storage_backend
     ):
-        """Stale .batch_registry.json + run_mode=BATCH → returns 'batch_submitted'."""
+        """Backend has batch jobs + run_mode=BATCH -> returns 'batch_submitted'."""
+        import json
+
+        mock_storage_backend.load_metadata.return_value = json.dumps(
+            {
+                "file.json": {
+                    "batch_id": "b1",
+                    "status": "pending",
+                    "timestamp": "t",
+                    "provider": "p",
+                }
+            }
+        )
         manager = BatchLifecycleManager(
             mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
         )
         agent_io = Path("/tmp/fake_agent_io")
 
-        with patch.object(Path, "exists", return_value=True):
-            result = manager.check_batch_submission(
-                "extract", 0, agent_io, configured_run_mode=RunMode.BATCH
-            )
+        result = manager.check_batch_submission(
+            "extract", 0, agent_io, configured_run_mode=RunMode.BATCH
+        )
 
         assert result == "batch_submitted"
 
@@ -170,13 +182,24 @@ class TestCheckBatchSubmissionRunMode:
     def test_none_run_mode_preserves_existing_behavior(
         self, mock_job_manager, mock_processing_service, mock_storage_backend
     ):
-        """configured_run_mode=None (default) → existing behavior unchanged."""
+        """configured_run_mode=None (default) with jobs in backend -> batch_submitted."""
+        import json
+
+        mock_storage_backend.load_metadata.return_value = json.dumps(
+            {
+                "file.json": {
+                    "batch_id": "b1",
+                    "status": "pending",
+                    "timestamp": "t",
+                    "provider": "p",
+                }
+            }
+        )
         manager = BatchLifecycleManager(
             mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
         )
         agent_io = Path("/tmp/fake_agent_io")
 
-        with patch.object(Path, "exists", return_value=True):
-            result = manager.check_batch_submission("extract", 0, agent_io)
+        result = manager.check_batch_submission("extract", 0, agent_io)
 
         assert result == "batch_submitted"

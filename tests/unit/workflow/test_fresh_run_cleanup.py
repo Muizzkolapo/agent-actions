@@ -87,74 +87,25 @@ class TestFreshRunClearsSourceData:
         stub.services.core.state_manager.reset.assert_called_once()
 
 
-class TestFreshRunClearsBatchFiles:
-    """Batch recovery state, registry, and carry-forward files must be deleted."""
+class TestFreshRunClearsBatchState:
+    """Batch state must be cleared via storage backend."""
 
-    def _create_batch_files(self, tmp_path: Path, action_name: str) -> Path:
-        batch_dir = tmp_path / "agent_io" / "target" / action_name / "batch"
-        batch_dir.mkdir(parents=True)
-
-        (batch_dir / ".recovery_state_abc123.json").write_text(json.dumps({"attempt": 3}))
-        (batch_dir / ".recovery_state_def456.json").write_text(json.dumps({"attempt": 1}))
-        (batch_dir / ".batch_registry.json").write_text(json.dumps({"batch_id": "expired_123"}))
-        (batch_dir / ".batch_carry_forward.json").write_text(json.dumps({}))
-
-        # Also create a normal output file that should NOT be deleted
-        (batch_dir / "output_results.json").write_text(json.dumps([{"data": "keep"}]))
-
-        return batch_dir
-
-    def test_recovery_state_files_deleted(self, tmp_path: Path):
-        batch_dir = self._create_batch_files(tmp_path, "action1")
+    def test_clear_batch_state_called_per_action(self, tmp_path: Path):
         stub = _make_coordinator_stub(tmp_path, ["action1"])
-
         stub._clear_for_fresh_run()
-
-        assert list(batch_dir.glob(".recovery_state_*.json")) == []
-
-    def test_batch_registry_deleted(self, tmp_path: Path):
-        batch_dir = self._create_batch_files(tmp_path, "action1")
-        stub = _make_coordinator_stub(tmp_path, ["action1"])
-
-        stub._clear_for_fresh_run()
-
-        assert not (batch_dir / ".batch_registry.json").exists()
-
-    def test_batch_carry_forward_deleted(self, tmp_path: Path):
-        batch_dir = self._create_batch_files(tmp_path, "action1")
-        stub = _make_coordinator_stub(tmp_path, ["action1"])
-
-        stub._clear_for_fresh_run()
-
-        assert not (batch_dir / ".batch_carry_forward.json").exists()
-
-    def test_normal_output_files_preserved(self, tmp_path: Path):
-        batch_dir = self._create_batch_files(tmp_path, "action1")
-        stub = _make_coordinator_stub(tmp_path, ["action1"])
-
-        stub._clear_for_fresh_run()
-
-        assert (batch_dir / "output_results.json").exists()
+        stub.storage_backend.clear_batch_state.assert_any_call("action1")
 
     def test_no_batch_dir_no_error(self, tmp_path: Path):
-        """If the batch directory doesn't exist, no error is raised."""
         stub = _make_coordinator_stub(tmp_path, ["action_no_batch"])
-
-        # Should not raise
         stub._clear_for_fresh_run()
 
     def test_multiple_actions_batch_cleanup(self, tmp_path: Path):
-        """Batch files cleaned for each action in execution_order."""
-        batch_dir_a = self._create_batch_files(tmp_path, "action_a")
-        batch_dir_b = self._create_batch_files(tmp_path, "action_b")
-
+        """Batch state cleared for each action in execution_order."""
         stub = _make_coordinator_stub(tmp_path, ["action_a", "action_b"])
         stub._clear_for_fresh_run()
 
-        assert list(batch_dir_a.glob(".recovery_state_*.json")) == []
-        assert not (batch_dir_a / ".batch_registry.json").exists()
-        assert list(batch_dir_b.glob(".recovery_state_*.json")) == []
-        assert not (batch_dir_b / ".batch_registry.json").exists()
+        stub.storage_backend.clear_batch_state.assert_any_call("action_a")
+        stub.storage_backend.clear_batch_state.assert_any_call("action_b")
 
 
 class TestFreshRunExistingBehavior:
@@ -187,13 +138,13 @@ class TestFreshRunExistingBehavior:
         stub.services.core.state_manager.reset.assert_called_once()
 
     def test_event_log_files_cleared(self, tmp_path: Path):
-        target_dir = tmp_path / "agent_io" / "target"
-        target_dir.mkdir(parents=True)
-        (target_dir / "events.json").write_text("[]")
-        (target_dir / "errors.json").write_text("[]")
+        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir.mkdir(parents=True)
+        (logs_dir / "events.json").write_text("[]")
+        (logs_dir / "errors.json").write_text("[]")
 
         stub = _make_coordinator_stub(tmp_path, ["a1"])
         stub._clear_for_fresh_run()
 
-        assert not (target_dir / "events.json").exists()
-        assert not (target_dir / "errors.json").exists()
+        assert not (logs_dir / "events.json").exists()
+        assert not (logs_dir / "errors.json").exists()

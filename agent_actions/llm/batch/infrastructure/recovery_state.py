@@ -3,12 +3,12 @@
 import json
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import OnExhaustedPolicy, RecoveryPhase
-from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.utils.path_utils import ensure_directory_exists
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 class RecoveryState:
     """Cross-pass state for batch recovery (retry + reprompt).
 
-    Persisted to disk between workflow re-runs so that the processing
-    service can track progress across multiple async batch submissions.
+    Persisted to StorageBackend metadata between workflow re-runs so that
+    the processing service can track progress across multiple async batch
+    submissions.
     """
 
     phase: RecoveryPhase = RecoveryPhase.RETRY
 
     def __post_init__(self):
-        # Coerce raw strings from JSON deserialization
         if isinstance(self.phase, str):
             self.phase = RecoveryPhase(self.phase)
         if isinstance(self.on_exhausted, str):
@@ -54,16 +54,9 @@ class RecoveryState:
     evaluation_strategy_name: str | None = None
 
     # Per-record failure type counts accumulated across recovery rounds.
-    # Maps custom_id → {"parse_error": N, "udf_fail": M, "schema_fail": K}
     failure_type_counts: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to dict without deep-copying already-serialized lists.
-
-        ``dataclasses.asdict()`` recursively copies every nested dict/list,
-        which is wasteful for ``accumulated_results`` and ``graduated_results``
-        — they are already plain ``list[dict]`` ready for JSON serialization.
-        """
         return {
             "phase": self.phase,
             "retry_attempt": self.retry_attempt,
@@ -84,59 +77,54 @@ class RecoveryState:
 
 
 class RecoveryStateManager:
-    """Persists RecoveryState to JSON files in the batch/ subdirectory."""
+    """Persists RecoveryState via StorageBackend metadata store."""
 
     @staticmethod
-    def save(output_directory: str, file_name: str, state: RecoveryState) -> Path:
-        """Save recovery state to disk."""
-        state_path = RecoveryStateManager._get_path(output_directory, file_name)
-        ensure_directory_exists(state_path, is_file=True)
+    def _metadata_key(action_name: str, file_name: str) -> str:
+        if ".." in file_name:
+            raise ValueError(f"Invalid file name contains path traversal: {file_name}")
+        from pathlib import Path
 
-        atomic_json_write(state_path, state.to_dict(), ensure_ascii=False)
+        safe_name = Path(file_name).name
+        return f"recovery_state:{action_name}:{safe_name}"
 
+    @staticmethod
+    def save(
+        backend: "StorageBackend", action_name: str, file_name: str, state: RecoveryState
+    ) -> None:
+        key = RecoveryStateManager._metadata_key(action_name, file_name)
+        backend.save_metadata(key, json.dumps(state.to_dict(), ensure_ascii=False))
         logger.debug(
-            "Saved recovery state to %s (phase=%s, retry=%d, reprompt=%d)",
-            state_path,
+            "Saved recovery state for %s/%s (phase=%s, retry=%d, reprompt=%d)",
+            action_name,
+            file_name,
             state.phase,
             state.retry_attempt,
             state.reprompt_attempt,
         )
-        return state_path
 
     @staticmethod
-    def load(output_directory: str, file_name: str) -> RecoveryState | None:
-        """Load recovery state from disk, or None if not found."""
-        state_path = RecoveryStateManager._get_path(output_directory, file_name)
+    def load(backend: "StorageBackend", action_name: str, file_name: str) -> RecoveryState | None:
+        key = RecoveryStateManager._metadata_key(action_name, file_name)
+        raw = backend.load_metadata(key)
+        if raw is None:
+            return None
         try:
-            with open(state_path, encoding="utf-8") as f:
-                data = json.load(f)
+            data = json.loads(raw)
             return RecoveryState(**data)
-        except FileNotFoundError:
-            return None
         except (json.JSONDecodeError, TypeError, ValueError) as e:
-            logger.error("Corrupt recovery state at %s: %s", state_path, e)
+            logger.error("Corrupt recovery state for %s/%s: %s", action_name, file_name, e)
             return None
 
     @staticmethod
-    def delete(output_directory: str, file_name: str) -> bool:
-        """Delete recovery state file. Returns True if deleted, False if not found."""
-        state_path = RecoveryStateManager._get_path(output_directory, file_name)
-        try:
-            state_path.unlink()
-        except FileNotFoundError:
-            return False
-        logger.debug("Deleted recovery state at %s", state_path)
-        return True
+    def delete(backend: "StorageBackend", action_name: str, file_name: str) -> bool:
+        key = RecoveryStateManager._metadata_key(action_name, file_name)
+        deleted = backend.delete_metadata(key)
+        if deleted:
+            logger.debug("Deleted recovery state for %s/%s", action_name, file_name)
+        return deleted
 
     @staticmethod
-    def exists(output_directory: str, file_name: str) -> bool:
-        """Check if recovery state exists."""
-        return RecoveryStateManager._get_path(output_directory, file_name).exists()
-
-    @staticmethod
-    def _get_path(output_directory: str, file_name: str) -> Path:
-        """Get path to recovery state file."""
-        if ".." in file_name:
-            raise ValueError(f"Invalid file name contains path traversal: {file_name}")
-        safe_name = Path(file_name).name
-        return Path(output_directory) / "batch" / f".recovery_state_{safe_name}.json"
+    def exists(backend: "StorageBackend", action_name: str, file_name: str) -> bool:
+        key = RecoveryStateManager._metadata_key(action_name, file_name)
+        return backend.load_metadata(key) is not None

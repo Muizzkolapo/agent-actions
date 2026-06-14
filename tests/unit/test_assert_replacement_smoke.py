@@ -36,10 +36,12 @@ class TestBatchRegistryManagerCacheGuard:
     """BatchRegistryManager raises RuntimeError when cache is None after load."""
 
     def test_save_with_poisoned_cache(self, tmp_path):
+        from unittest.mock import MagicMock
+
         from agent_actions.llm.batch.core.batch_models import BatchJobEntry
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
-        mgr = BatchRegistryManager(tmp_path / "registry.json")
+        mgr = BatchRegistryManager(MagicMock(), "test_action")
         # Force _load_registry to return None (simulating a corrupted state)
         mgr._load_registry = lambda: None  # type: ignore[assignment]
 

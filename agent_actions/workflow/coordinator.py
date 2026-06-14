@@ -273,10 +273,7 @@ class AgentWorkflow:
 
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
-        from agent_actions.llm.batch.services.submission import BATCH_CARRY_FORWARD_FILENAME
-
         project_root = self.config.resolve_project_root()
-        target_dir = project_root / "agent_io" / "target"
 
         for action_name in self.execution_order:
             try:
@@ -284,23 +281,9 @@ class AgentWorkflow:
                 self.storage_backend.clear_disposition(action_name)
                 self.storage_backend.clear_prompt_traces(action_name)
                 self.storage_backend.clear_checkpoint_records(action_name)
+                self.storage_backend.clear_batch_state(action_name)
             except Exception as e:
                 logger.warning("Failed to clear stored data for %s: %s", action_name, e)
-
-            # Batch artifacts live on disk, not in the DB
-            batch_dir = target_dir / action_name / "batch"
-            if batch_dir.is_dir():
-                for pattern in [
-                    ".recovery_state_*.json",
-                    ".batch_registry.json",
-                    BATCH_CARRY_FORWARD_FILENAME,
-                ]:
-                    for f in batch_dir.glob(pattern):
-                        try:
-                            f.unlink()
-                            logger.debug("Removed batch artifact: %s", f)
-                        except OSError as e:
-                            logger.warning("Failed to remove %s: %s", f, e)
 
         try:
             self.storage_backend.clear_source_data()
@@ -311,12 +294,14 @@ class AgentWorkflow:
 
         # JSONFileHandler opens lazily, so deleting between handler init
         # and first event write is safe.
+        logs_dir = project_root / "agent_io" / "logs"
+        target_dir = project_root / "agent_io" / "target"
         for events_file in ("events.json", "errors.json"):
-            events_path = target_dir / events_file
-            try:
-                events_path.unlink(missing_ok=True)
-            except OSError as e:
-                logger.warning("Failed to clear %s: %s", events_file, e)
+            for search_dir in (logs_dir, target_dir):
+                try:
+                    (search_dir / events_file).unlink(missing_ok=True)
+                except OSError as e:
+                    logger.warning("Failed to clear %s: %s", events_file, e)
 
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"

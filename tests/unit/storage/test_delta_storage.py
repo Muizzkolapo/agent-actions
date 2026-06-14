@@ -1306,10 +1306,8 @@ class TestIssue7_PartitionedPipeline:
 class TestIssue8_FilesystemLeak:
     """_delta_mode must not appear in filesystem target files."""
 
-    def test_disk_file_has_no_delta_mode(self, tmp_path):
-        """FileWriter strips _delta_mode before writing to disk."""
-        from unittest.mock import MagicMock
-
+    def test_write_target_does_not_create_disk_file(self, tmp_path):
+        """FileWriter writes to backend only — no filesystem file created."""
         from agent_actions.output.writer import FileWriter
 
         backend = _make_backend(tmp_path)
@@ -1317,7 +1315,6 @@ class TestIssue8_FilesystemLeak:
         backend.initialize()
 
         output_dir = tmp_path / "target" / "expand_action"
-        output_dir.mkdir(parents=True, exist_ok=True)
         file_path = output_dir / "out.json"
 
         writer = FileWriter(
@@ -1338,10 +1335,11 @@ class TestIssue8_FilesystemLeak:
         ]
         writer.write_target(data)
 
-        # Read the disk file directly — must NOT have _delta_mode
-        disk_data = json.loads(file_path.read_text())
-        for record in disk_data:
-            assert "_delta_mode" not in record, "_delta_mode leaked to filesystem"
+        assert not file_path.exists(), "Target file should not be written to disk"
+
+        db_data = backend.read_target("expand_action", "out.json")
+        for record in db_data:
+            assert "_delta_mode" not in record, "_delta_mode leaked through read_target"
 
         backend.close()
 

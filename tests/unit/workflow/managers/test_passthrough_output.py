@@ -4,7 +4,6 @@ Verifies that _process_agent_output reads from backend before falling back
 to filesystem.
 """
 
-import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -64,8 +63,8 @@ class TestProcessAgentOutputBackend:
             execution_order=["extract", "transform"],
             action_status={"extract": {"status": "completed"}},
         )
-        output_dir = tmp_path / "target" / "extract"
-        result = mgr._process_agent_output(output_dir, "extract")
+
+        result = mgr._process_agent_output("extract")
 
         assert result["has_data"] is True
         assert result["output_count"] == 1
@@ -88,40 +87,34 @@ class TestProcessAgentOutputBackend:
             execution_order=["extract", "transform"],
             action_status={"extract": {"status": "completed"}},
         )
-        output_dir = tmp_path / "target" / "extract"
-        result = mgr._process_agent_output(output_dir, "extract")
+
+        result = mgr._process_agent_output("extract")
 
         assert result["output_files"] == ["batch_0.json", "batch_1.json"]
         assert result["output_count"] == 2
 
-    def test_falls_back_to_filesystem(self, tmp_path, make_manager, mock_storage_backend):
-        """When backend has no data, falls back to filesystem glob."""
+    def test_empty_backend_returns_empty(self, tmp_path, make_manager, mock_storage_backend):
+        """When backend has no data, returns empty — no filesystem fallback."""
         mock_storage_backend.list_target_files.return_value = []
-
-        output_dir = tmp_path / "target" / "extract"
-        output_dir.mkdir(parents=True)
-        (output_dir / "batch_0.json").write_text(json.dumps([{"id": "1", "val": "from_fs"}]))
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
             action_status={"extract": {"status": "completed"}},
         )
-        result = mgr._process_agent_output(output_dir, "extract")
+        result = mgr._process_agent_output("extract")
 
-        assert result["has_data"] is True
-        assert result["data"][0]["val"] == "from_fs"
-        assert "batch_0.json" in result["output_files"]
+        assert result["has_data"] is False
+        assert result["data"] == []
 
     def test_both_empty_returns_empty(self, tmp_path, make_manager, mock_storage_backend):
         """When both backend and filesystem have no data, returns empty output."""
         mock_storage_backend.list_target_files.return_value = []
 
-        output_dir = tmp_path / "target" / "extract"
         mgr = make_manager(
             execution_order=["extract", "transform"],
             action_status={"extract": {"status": "completed"}},
         )
-        result = mgr._process_agent_output(output_dir, "extract")
+        result = mgr._process_agent_output("extract")
 
         assert result["has_data"] is False
         assert result["output_count"] == 0
@@ -138,8 +131,8 @@ class TestProcessAgentOutputBackend:
             execution_order=["extract", "transform"],
             action_status={"extract": {"status": "completed"}},
         )
-        output_dir = tmp_path / "target" / "extract"
-        mgr._process_agent_output(output_dir, "extract")
+
+        mgr._process_agent_output("extract")
 
         # Both disposition calls must include record_id=NODE_LEVEL_RECORD_ID
         disposition_calls = mock_storage_backend.get_disposition.call_args_list
@@ -147,21 +140,17 @@ class TestProcessAgentOutputBackend:
         for c in disposition_calls:
             assert c.kwargs.get("record_id") == NODE_LEVEL_RECORD_ID
 
-    def test_backend_exception_falls_back(self, tmp_path, make_manager, mock_storage_backend):
-        """When backend raises an exception, falls back to filesystem."""
+    def test_backend_exception_returns_empty(self, tmp_path, make_manager, mock_storage_backend):
+        """When backend raises an exception, returns empty data (no filesystem fallback)."""
         import sqlite3
 
         mock_storage_backend.list_target_files.side_effect = sqlite3.OperationalError("db locked")
-
-        output_dir = tmp_path / "target" / "extract"
-        output_dir.mkdir(parents=True)
-        (output_dir / "batch_0.json").write_text(json.dumps([{"id": "1", "val": "fallback"}]))
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
             action_status={"extract": {"status": "completed"}},
         )
-        result = mgr._process_agent_output(output_dir, "extract")
+        result = mgr._process_agent_output("extract")
 
-        assert result["has_data"] is True
-        assert result["data"][0]["val"] == "fallback"
+        assert result["has_data"] is False
+        assert result["data"] == []

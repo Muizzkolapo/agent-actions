@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
@@ -34,14 +33,11 @@ from agent_actions.logging.events.batch_events import (
 from agent_actions.output.response.config_schema import WhereClauseBehavior
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.storage.backend import DISPOSITION_DEFERRED
-from agent_actions.utils.atomic_write import atomic_json_write
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
 
 logger = logging.getLogger(__name__)
-
-BATCH_CARRY_FORWARD_FILENAME = ".batch_carry_forward.json"
 
 
 class BatchSubmissionService:
@@ -149,7 +145,10 @@ class BatchSubmissionService:
             )
         provider = None
         try:
-            manager = self._registry_manager_factory(output_directory)
+            from pathlib import Path
+
+            action_name = Path(output_directory).name
+            manager = self._registry_manager_factory(action_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
             return provider.check_status(batch_id)  # type: ignore[return-value]
         except ConfigurationError:
@@ -199,7 +198,8 @@ class BatchSubmissionService:
         force_submission = force or self._force_batch
 
         if not force_submission and output_directory:
-            manager = self._registry_manager_factory(output_directory)
+            action_name_for_registry = agent_config.get("action_name", batch_name or "default")
+            manager = self._registry_manager_factory(action_name_for_registry)
             entry = manager.get_batch_job(batch_name or "default")
             if entry and entry.is_in_flight:
                 logger.info(
@@ -230,13 +230,8 @@ class BatchSubmissionService:
                 carry_forward_guids = sorted(carry_ids)
                 data = to_process
 
-        if output_directory:
-            carry_forward_path = Path(output_directory) / "batch" / BATCH_CARRY_FORWARD_FILENAME
-            if carry_forward_guids:
-                carry_forward_path.parent.mkdir(parents=True, exist_ok=True)
-                atomic_json_write(carry_forward_path, {"guids": carry_forward_guids})
-            else:
-                carry_forward_path.unlink(missing_ok=True)
+        # Carry-forward GUIDs are tracked via dispositions in the storage
+        # backend — no filesystem artifact needed.
 
         if not data:
             logger.info(
@@ -252,8 +247,10 @@ class BatchSubmissionService:
         if not tasks:
             return self._handle_empty_tasks(agent_config, context_map, data, output_directory)
 
-        if output_directory:
-            self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
+        if output_directory and self._storage_backend:
+            self._context_manager.save_batch_context_map(
+                self._storage_backend, action_name, context_map, batch_name
+            )
 
         result = self._submit_to_provider(agent_config, batch_name, tasks, output_directory)
 
@@ -382,7 +379,8 @@ class BatchSubmissionService:
             )
 
             if output_directory:
-                manager = self._registry_manager_factory(output_directory)
+                action_name_for_registry = agent_config.get("action_name", batch_name or "default")
+                manager = self._registry_manager_factory(action_name_for_registry)
                 file_key = batch_name or "default"
                 entry = BatchJobEntry(
                     batch_id=batch_id,
