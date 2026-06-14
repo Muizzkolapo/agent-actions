@@ -1,13 +1,13 @@
-"""Simulation: downstream recovery bugs verification.
+"""Simulation: async recovery edge case verification.
 
-Verifies fixes for bugs 5, 8, 10, 11 in the async recovery path:
-- Bug 5: on_exhausted='raise' propagates (not swallowed)
-- Bug 8: retry→reprompt transition does not mutate caller's state
-- Bug 10: None-content records filtered from reprompt
-- Bug 11: cancelled entries produce meaningful status (not 'error')
+Verifies recovery path edge cases:
+- on_exhausted='raise' propagates (not swallowed)
+- retry→reprompt transition does not mutate caller's state
+- None-content records filtered from reprompt
+- cancelled entries produce meaningful status (not 'error')
 
 Run:
-    python tests/simulation/simulate_reprompt_additional_bugs.py
+    python tests/simulation/simulate_reprompt_recovery_edge_cases.py
 """
 
 import sys
