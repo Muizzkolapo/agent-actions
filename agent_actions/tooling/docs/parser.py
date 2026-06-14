@@ -227,8 +227,8 @@ class WorkflowParser:
 
             workflow["actions"][action_name] = action
 
-        # Expand versioned actions: extract_raw_qa with versions.range=[1,2,3]
-        # becomes extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3
+        # Expand versioned actions into concrete instances (e.g., action with
+        # versions.range=[1,2,3] becomes action_1, action_2, action_3)
         version_map: dict[str, list[str]] = {}
         expanded_actions: dict[str, Any] = {}
         for name, action in workflow["actions"].items():
