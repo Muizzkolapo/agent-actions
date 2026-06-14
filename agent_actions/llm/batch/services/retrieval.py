@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_actions.errors import ExternalServiceError
+from agent_actions.errors import ConfigurationError, ExternalServiceError
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
@@ -50,7 +50,7 @@ class BatchRetrievalService:
             action_name: Action name for backend lookups (required)
         """
         if not action_name:
-            raise ExternalServiceError(
+            raise ConfigurationError(
                 "BatchRetrievalService requires action_name",
                 context={},
             )

@@ -388,7 +388,7 @@ class BatchSubmissionService:
             )
 
             if output_directory:
-                registry_name = action_name or batch_name or "default"
+                registry_name = action_name or "default"
                 manager = self._registry_manager_factory(registry_name)
                 file_key = batch_name or "default"
                 entry = BatchJobEntry(

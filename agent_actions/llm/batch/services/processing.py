@@ -119,6 +119,7 @@ class BatchProcessingService:
         batch_id: str,
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
+        action_name: str | None = None,
     ) -> str:
         """Process a single batch by ID with retry/reprompt support.
 
@@ -131,6 +132,7 @@ class BatchProcessingService:
             batch_id: Batch job ID
             output_directory: Output directory path
             agent_config: Agent configuration
+            action_name: Per-action name for registry lookup
 
         Returns:
             Path to output file
@@ -139,10 +141,11 @@ class BatchProcessingService:
             ProcessingError: If batch not completed, no registry entry,
                 recovery is pending, or processing fails
         """
-        assert self._workflow_name is not None, "action_name required for batch processing"
+        effective_name = action_name or self._workflow_name
+        assert effective_name is not None, "workflow_name required for batch processing"
         assert self._storage_backend is not None, "storage_backend required for batch processing"
         try:
-            manager = self._registry_manager_factory(self._workflow_name)
+            manager = self._registry_manager_factory(effective_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
             if provider.check_status(batch_id) != BatchStatus.COMPLETED:
@@ -164,7 +167,7 @@ class BatchProcessingService:
                 output_directory=output_directory,
                 agent_config=agent_config,
                 manager=manager,
-                action_name=self._workflow_name,
+                action_name=effective_name,
             )
 
             if output_file is None:
@@ -204,7 +207,7 @@ class BatchProcessingService:
             ProcessingError: If no registry found or no files processed (and no recovery pending)
         """
         effective_action_name: str = action_name or self._workflow_name  # type: ignore[assignment]
-        assert effective_action_name is not None, "action_name required"
+        assert effective_action_name is not None, "workflow_name or action_name required"
         manager = self._registry_manager_factory(effective_action_name)
         all_jobs = manager.get_all_jobs()
         if not all_jobs:
@@ -290,7 +293,7 @@ class BatchProcessingService:
             True if batch status is COMPLETED, False otherwise
         """
         resolved = action_name or self._workflow_name
-        assert resolved is not None, "action_name required for status check"
+        assert resolved is not None, "workflow_name required for status check"
         try:
             manager = self._registry_manager_factory(resolved)
             provider = self._client_resolver.get_for_batch_id(
