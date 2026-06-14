@@ -95,7 +95,9 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
     workflow_data = {}
     artefact_dir = project_root / "artefact"
 
-    for agent_io_dir in project_root.rglob("agent_io"):
+    for agent_io_dir in sorted(project_root.rglob("agent_io*"), key=lambda p: p.name):
+        if not agent_io_dir.is_dir() or not agent_io_dir.name.startswith("agent_io"):
+            continue
         if artefact_dir in agent_io_dir.parents or agent_io_dir == artefact_dir:
             continue
 
@@ -127,7 +129,9 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
     runs_data = {}
 
     # Find all agent_io directories
-    for agent_io_dir in project_root.rglob("agent_io"):
+    for agent_io_dir in sorted(project_root.rglob("agent_io*"), key=lambda p: p.name):
+        if not agent_io_dir.is_dir() or not agent_io_dir.name.startswith("agent_io"):
+            continue
         # Skip if inside artefact directory
         artefact_dir = project_root / "artefact"
         if artefact_dir in agent_io_dir.parents or agent_io_dir == artefact_dir:

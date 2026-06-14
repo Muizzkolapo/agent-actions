@@ -227,6 +227,34 @@ class WorkflowParser:
 
             workflow["actions"][action_name] = action
 
+        # Expand versioned actions into concrete instances (e.g., action with
+        # versions.range=[1,2,3] becomes action_1, action_2, action_3)
+        version_map: dict[str, list[str]] = {}
+        expanded_actions: dict[str, Any] = {}
+        for name, action in workflow["actions"].items():
+            versions = action.get("versions")
+            if versions and isinstance(versions.get("range"), list):
+                version_range = versions["range"]
+                expanded_names = [f"{name}_{v}" for v in version_range]
+                version_map[name] = expanded_names
+                for v in version_range:
+                    versioned = {**action, "name": f"{name}_{v}"}
+                    versioned.pop("versions", None)
+                    expanded_actions[f"{name}_{v}"] = versioned
+            else:
+                expanded_actions[name] = action
+
+        if version_map:
+            for action in expanded_actions.values():
+                resolved_deps = []
+                for dep in action.get("dependencies", []):
+                    if dep in version_map:
+                        resolved_deps.extend(version_map[dep])
+                    else:
+                        resolved_deps.append(dep)
+                action["dependencies"] = resolved_deps
+            workflow["actions"] = expanded_actions
+
         return workflow
 
     @staticmethod
