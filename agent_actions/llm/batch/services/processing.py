@@ -663,10 +663,10 @@ class BatchProcessingService:
         # The recovery path already does this in _finalize_and_cleanup, but the
         # original batch path goes through this method instead and must also clean up.
         RecoveryStateManager.delete(
-            self._storage_backend,
+            self._storage_backend,  # type: ignore[arg-type]
             self._resolve_action_name(context.action_name),
             identity.file_name,
-        )  # type: ignore[arg-type]
+        )
         output_path = _finalize_batch_output_impl(
             context,
             identity,
