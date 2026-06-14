@@ -85,24 +85,24 @@ class BatchLifecycleManager:
             (output_folder or None, batch_status) where status is
             'completed', 'in_progress', or 'failed'.
         """
-        registry_status = self.job_manager.get_registry_status(output_directory)
+        registry_status = self.job_manager.get_registry_status(agent_name)
 
         if registry_status == "completed":
             fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
             self._process_batch_results(output_directory, agent_config, agent_name)
             # Re-check — processing may have submitted recovery batches
-            new_status = self.job_manager.get_registry_status(output_directory)
+            new_status = self.job_manager.get_registry_status(agent_name)
             if new_status != "completed":
                 return (None, "in_progress")
             fire_event(BatchResultsProcessedEvent(action_name=agent_name))
             return (output_directory, "completed")
 
         if registry_status in ["in_progress", "partial_failed"]:
-            if self.job_manager.are_all_jobs_completed(output_directory, agent_config):
+            if self.job_manager.are_all_jobs_completed(agent_name, output_directory, agent_config):
                 fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
                 self._process_batch_results(output_directory, agent_config, agent_name)
                 # Re-check — processing may have submitted recovery batches
-                new_status = self.job_manager.get_registry_status(output_directory)
+                new_status = self.job_manager.get_registry_status(agent_name)
                 if new_status != "completed":
                     return (None, "in_progress")
                 fire_event(BatchResultsProcessedEvent(action_name=agent_name))

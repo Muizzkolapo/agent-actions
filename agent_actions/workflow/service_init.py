@@ -126,7 +126,7 @@ def initialize_services(
         action_indices=metadata.action_indices,
         dependency_configs=metadata.action_configs,
         storage_backend=storage_backend,
-        action_name=metadata.agent_name,
+        workflow_name=metadata.agent_name,
     )
 
     agent_folder = Path(

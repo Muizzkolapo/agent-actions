@@ -145,11 +145,14 @@ class TestPassthroughBuilderIncludesFailed:
             },
         }
 
-        builder = BatchPassthroughBuilder(output_directory="/tmp/test/my_action")
+        builder = BatchPassthroughBuilder(
+            output_directory="/tmp/test/my_action", action_name="my_action"
+        )
         result = builder.from_context(context_map, reason="prep_failed")
 
         assert len(result["data"]) == 1
         assert result["data"][0]["source_guid"] == "sg_001"
+        assert "my_action" in result["data"][0]["content"]
 
 
 class TestHandleEmptyTasksPrepFailed:
@@ -175,6 +178,7 @@ class TestHandleEmptyTasksPrepFailed:
             context_map=context_map,
             data=[{"id": 1}],
             output_directory="/tmp/out",
+            action_name="test_action",
         )
 
         assert result.passthrough is not None

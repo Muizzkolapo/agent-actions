@@ -124,30 +124,33 @@ class BatchSubmissionService:
             )
         return prepared.tasks, prepared.context_map
 
-    def check_status(self, batch_id: str, output_directory: str | None = None) -> BatchStatus:
+    def check_status(
+        self,
+        batch_id: str,
+        output_directory: str | None = None,
+        action_name: str | None = None,
+    ) -> BatchStatus:
         """Check the status of a batch job.
 
         Args:
             batch_id: ID of the batch job
-            output_directory: Output directory for registry lookup
+            output_directory: Output directory for provider resolution
+            action_name: Action name for registry lookup
 
         Returns:
             Current batch status
 
         Raises:
-            ConfigurationError: If output_directory is None
+            ConfigurationError: If action_name is None
             ExternalServiceError: If status check fails
         """
-        if output_directory is None:
+        if action_name is None:
             raise ConfigurationError(
-                "check_status requires output_directory to resolve the batch provider",
+                "check_status requires action_name for registry lookup",
                 context={"batch_id": batch_id},
             )
         provider = None
         try:
-            from pathlib import Path
-
-            action_name = Path(output_directory).name
             manager = self._registry_manager_factory(action_name)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
             return provider.check_status(batch_id)  # type: ignore[return-value]
@@ -196,10 +199,10 @@ class BatchSubmissionService:
             ExternalServiceError: If submission fails
         """
         force_submission = force or self._force_batch
+        action_name = agent_config.get("action_name", batch_name or "default")
 
         if not force_submission and output_directory:
-            action_name_for_registry = agent_config.get("action_name", batch_name or "default")
-            manager = self._registry_manager_factory(action_name_for_registry)
+            manager = self._registry_manager_factory(action_name)
             entry = manager.get_batch_job(batch_name or "default")
             if entry and entry.is_in_flight:
                 logger.info(
@@ -221,8 +224,6 @@ class BatchSubmissionService:
                     entry.batch_id,
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
-
-        action_name = agent_config.get("action_name", batch_name or "default")
         carry_forward_guids: list[str] = []
         if self._disposition_gate is not None:
             to_process, carry_ids = self._disposition_gate.filter(data, action_name)
@@ -245,14 +246,18 @@ class BatchSubmissionService:
         )
 
         if not tasks:
-            return self._handle_empty_tasks(agent_config, context_map, data, output_directory)
+            return self._handle_empty_tasks(
+                agent_config, context_map, data, output_directory, action_name=action_name
+            )
 
         if output_directory and self._storage_backend:
             self._context_manager.save_batch_context_map(
                 self._storage_backend, action_name, context_map, batch_name
             )
 
-        result = self._submit_to_provider(agent_config, batch_name, tasks, output_directory)
+        result = self._submit_to_provider(
+            agent_config, batch_name, tasks, output_directory, action_name=action_name
+        )
 
         if self._storage_backend and result.is_submitted:
             self._stamp_deferred(context_map, action_name, result.batch_id)
@@ -265,6 +270,7 @@ class BatchSubmissionService:
         context_map: dict[str, Any],
         data: list[dict[str, Any]],
         output_directory: str | None,
+        action_name: str,
     ) -> SubmissionResult:
         """Handle case where no tasks remain after filtering.
 
@@ -273,6 +279,7 @@ class BatchSubmissionService:
             context_map: Context map from preparation
             data: Original input data
             output_directory: Output directory path
+            action_name: Action name for passthrough records
 
         Returns:
             SubmissionResult with passthrough dict
@@ -282,18 +289,18 @@ class BatchSubmissionService:
             for row in context_map.values()
         )
         if has_failed_prep:
-            passthrough = BatchPassthroughBuilder(output_directory).from_context(
-                context_map, reason="guard_skip"
-            )
+            passthrough = BatchPassthroughBuilder(
+                output_directory, action_name=action_name
+            ).from_context(context_map, reason="guard_skip")
             return SubmissionResult(passthrough=passthrough)
 
         has_guard_skipped = any(
             BatchContextMetadata.is_skipped(row) for row in context_map.values()
         )
         if has_guard_skipped:
-            passthrough = BatchPassthroughBuilder(output_directory).from_context(
-                context_map, reason="guard_skip"
-            )
+            passthrough = BatchPassthroughBuilder(
+                output_directory, action_name=action_name
+            ).from_context(context_map, reason="guard_skip")
             return SubmissionResult(passthrough=passthrough)
 
         where_config = agent_config.get("where_clause") or {}
@@ -306,9 +313,9 @@ class BatchSubmissionService:
                 "output_directory": output_directory,
             }
         else:
-            passthrough = BatchPassthroughBuilder(output_directory).from_context(
-                context_map, reason="where_clause_not_matched"
-            )
+            passthrough = BatchPassthroughBuilder(
+                output_directory, action_name=action_name
+            ).from_context(context_map, reason="where_clause_not_matched")
         return SubmissionResult(passthrough=passthrough)
 
     def _stamp_deferred(
@@ -338,6 +345,7 @@ class BatchSubmissionService:
         batch_name: str,
         tasks: list[dict[str, Any]],
         output_directory: str | None,
+        action_name: str | None = None,
     ) -> SubmissionResult:
         """Submit batch to provider and save to registry.
 
@@ -346,6 +354,7 @@ class BatchSubmissionService:
             batch_name: Batch name
             tasks: Prepared tasks
             output_directory: Output directory path
+            action_name: Action name for registry writes
 
         Returns:
             SubmissionResult with batch_id
@@ -379,8 +388,8 @@ class BatchSubmissionService:
             )
 
             if output_directory:
-                action_name_for_registry = agent_config.get("action_name", batch_name or "default")
-                manager = self._registry_manager_factory(action_name_for_registry)
+                registry_name = action_name or "default"
+                manager = self._registry_manager_factory(registry_name)
                 file_key = batch_name or "default"
                 entry = BatchJobEntry(
                     batch_id=batch_id,

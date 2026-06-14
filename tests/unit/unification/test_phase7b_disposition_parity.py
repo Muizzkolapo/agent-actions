@@ -341,7 +341,7 @@ def _build_processing_service(*, storage_backend: Any = None) -> Any:
         action_indices={},
         dependency_configs={},
         storage_backend=storage_backend,
-        action_name="test_action",
+        workflow_name="test_action",
     )
 
 

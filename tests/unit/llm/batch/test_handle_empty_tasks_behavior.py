@@ -30,6 +30,7 @@ class TestHandleEmptyTasksWhereBehavior:
             context_map=context_map,
             data=[{"id": 1}],
             output_directory="/tmp/out",
+            action_name="test_action",
         )
 
         assert result.passthrough["type"] == "tombstone"
@@ -46,6 +47,7 @@ class TestHandleEmptyTasksWhereBehavior:
             context_map=context_map,
             data=[{"id": 1}],
             output_directory="/tmp/out",
+            action_name="test_action",
         )
 
         assert len(result.passthrough["data"]) == 1
@@ -62,6 +64,7 @@ class TestHandleEmptyTasksWhereBehavior:
             context_map=context_map,
             data=[{"id": 1}],
             output_directory="/tmp/out",
+            action_name="test_action",
         )
 
         assert result.passthrough["type"] == "tombstone"
@@ -77,4 +80,5 @@ class TestHandleEmptyTasksWhereBehavior:
                 context_map={},
                 data=[],
                 output_directory="/tmp/out",
+                action_name="test_action",
             )

@@ -34,7 +34,7 @@ def _make_service(**overrides) -> BatchProcessingService:
         "action_indices": {},
         "dependency_configs": {},
         "storage_backend": MagicMock(),
-        "action_name": "test_action",
+        "workflow_name": "test_action",
     }
     defaults.update(overrides)
     return BatchProcessingService(**defaults)

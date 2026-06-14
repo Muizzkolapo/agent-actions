@@ -21,7 +21,7 @@ def processing_service():
         result_processor=MagicMock(),
         registry_manager_factory=MagicMock(),
         storage_backend=MagicMock(),
-        action_name="test_action",
+        workflow_name="test_action",
     )
 
 

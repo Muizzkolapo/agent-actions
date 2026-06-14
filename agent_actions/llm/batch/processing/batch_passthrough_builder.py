@@ -1,6 +1,5 @@
 """Passthrough Data Builder."""
 
-from pathlib import Path
 from typing import Any
 
 from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
@@ -12,15 +11,9 @@ from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
 class BatchPassthroughBuilder:
     """Builder for creating passthrough data structures."""
 
-    def __init__(self, output_directory: str | None = None):
+    def __init__(self, output_directory: str | None = None, action_name: str = "unknown_action"):
         self.output_directory = output_directory
-        self.action_name = self._extract_action_name(output_directory)
-
-    @staticmethod
-    def _extract_action_name(output_directory: str | None) -> str:
-        if not output_directory:
-            return "unknown_action"
-        return Path(output_directory).name
+        self.action_name = action_name
 
     def from_data(self, data: list[dict[str, Any]], reason: str) -> dict[str, Any]:
         processed_data = []

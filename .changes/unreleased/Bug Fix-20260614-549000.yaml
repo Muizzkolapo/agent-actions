@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Unify batch action_name derivation — thread action_name explicitly from orchestrator instead of deriving from Path(output_directory).name"
+time: 2026-06-14T05:49:00.000000Z

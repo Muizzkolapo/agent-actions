@@ -72,9 +72,10 @@ def process_recovery_batch(
         )
         return None
 
+    effective_action_name = service._resolve_action_name(action_name)
     state = RecoveryStateManager.load(
         service._storage_backend,  # type: ignore[arg-type]
-        service._action_name,  # type: ignore[arg-type]
+        effective_action_name,  # type: ignore[arg-type]
         parent_file_name,
     )
     if not state:
@@ -94,7 +95,7 @@ def process_recovery_batch(
         provider=provider,
         agent_config=agent_config or {},
         output_directory=output_directory,
-        action_name=action_name,
+        action_name=effective_action_name,
         start_time=time.time(),
     )
     identity = BatchIdentity(
@@ -105,7 +106,7 @@ def process_recovery_batch(
 
     context_map = service._context_manager.load_batch_context_map(
         service._storage_backend,  # type: ignore[arg-type]
-        service._action_name,  # type: ignore[arg-type]
+        effective_action_name,  # type: ignore[arg-type]
         parent_file_name,
     )
 
@@ -190,7 +191,7 @@ def handle_retry_recovery(
             state.accumulated_results = BatchRetryService.serialize_results(merged)
             RecoveryStateManager.save(
                 context.service._storage_backend,
-                context.service._action_name,
+                context.service._resolve_action_name(context.action_name),
                 identity.file_name,
                 state,
             )
@@ -305,7 +306,7 @@ def handle_reprompt_recovery(
             state.reprompt_attempt = next_attempt
             RecoveryStateManager.save(
                 context.service._storage_backend,
-                context.service._action_name,
+                context.service._resolve_action_name(context.action_name),
                 identity.file_name,
                 state,
             )
@@ -470,7 +471,7 @@ def check_and_submit_reprompt(
 
     RecoveryStateManager.save(
         context.service._storage_backend,
-        context.service._action_name,
+        context.service._resolve_action_name(context.action_name),
         identity.file_name,
         state,  # type: ignore[arg-type]
     )
@@ -514,9 +515,7 @@ def finalize_batch_output(
         exhausted_recovery=exhausted_recovery,
     )
 
-    effective_action_name = (
-        context.action_name if context.action_name is not None else service._action_name
-    )
+    effective_action_name = service._resolve_action_name(context.action_name)
 
     # SUCCESS/FAILED/EXHAUSTED dispositions and state stamping are handled by the
     # shared collector inside _convert_batch_results_to_workflow_format. FILTERED
@@ -583,7 +582,9 @@ def _finalize_and_cleanup(
 ) -> str:
     """Delete recovery state, finalize output, then clean up registry entries."""
     RecoveryStateManager.delete(
-        context.service._storage_backend, context.service._action_name, identity.file_name
+        context.service._storage_backend,
+        context.service._resolve_action_name(context.action_name),
+        identity.file_name,
     )
     output_path = finalize_batch_output(
         context,
