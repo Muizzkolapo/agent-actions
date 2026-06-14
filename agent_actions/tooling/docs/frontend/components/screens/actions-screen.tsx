@@ -24,7 +24,11 @@ export function ActionsScreen() {
   const [selectedAction, setSelectedAction] = useState<string | null>(null)
 
   const allActions = useMemo(
-    () => Object.entries(actions).map(([name, a]) => ({ name, ...a })),
+    () => Object.entries(actions).map(([key, a]) => ({
+      key,
+      name: key.includes("/") ? key.split("/").pop()! : key,
+      ...a,
+    })),
     [actions],
   )
 
@@ -61,7 +65,7 @@ export function ActionsScreen() {
   if (selectedAction && actions[selectedAction]) {
     return (
       <ActionDetail
-        name={selectedAction}
+        name={selectedAction.includes("/") ? selectedAction.split("/").pop()! : selectedAction}
         action={actions[selectedAction]}
         onBack={() => setSelectedAction(null)}
         onSelectAction={(name) => setSelectedAction(name)}
@@ -208,7 +212,7 @@ export function ActionsScreen() {
             <button
               key={action.name}
               className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-3 w-full text-left hover:bg-accent/30 transition-colors"
-              onClick={() => setSelectedAction(action.name)}
+              onClick={() => setSelectedAction(action.key)}
             >
               <TypeBadge type={action.type} />
               <div className="min-w-0">
@@ -242,7 +246,7 @@ export function ActionsScreen() {
             <button
               key={action.name}
               className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left hover:border-[hsl(var(--primary))]/25 transition-all"
-              onClick={() => setSelectedAction(action.name)}
+              onClick={() => setSelectedAction(action.key)}
             >
               <div
                 className="absolute top-0 left-0 right-0 h-px"
@@ -523,7 +527,7 @@ function ActionDetail({
                         action.deps.map((d) => (
                           <button
                             key={d}
-                            onClick={() => onSelectAction(d)}
+                            onClick={() => onSelectAction(`${action.wf}/${d}`)}
                             className="rounded-md bg-secondary px-2 py-0.5 text-xs font-mono text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
                           >
                             {d}

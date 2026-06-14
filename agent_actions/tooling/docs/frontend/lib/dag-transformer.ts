@@ -54,17 +54,20 @@ export function buildDAGNodesAndEdges(actions: Record<string, Action>, workflowI
   const edges: Edge[] = []
   let edgeId = 0
 
-  for (const [name, action] of Object.entries(actions)) {
+  const nodeIds = new Set<string>()
+
+  for (const [key, action] of Object.entries(actions)) {
     if (action.wf !== workflowId) continue
 
     const provider = action.type === "llm" ? getProvider(action.model) : "Tool"
     const { inputFields, outputFields, droppedFields } = extractActionFields(action)
+    const shortName = key.includes("/") ? key.split("/").pop()! : key
 
     nodes.push({
-      id: name,
+      id: key,
       type: action.type === "llm" ? "modelNode" : "toolNode",
       data: {
-        label: name,
+        label: shortName,
         model: action.model || "unknown",
         provider,
         impl: action.impl || "tool",
@@ -75,12 +78,18 @@ export function buildDAGNodesAndEdges(actions: Record<string, Action>, workflowI
       },
       position: { x: 0, y: 0 },
     })
+    nodeIds.add(key)
+  }
 
+  for (const [key, action] of Object.entries(actions)) {
+    if (action.wf !== workflowId) continue
     for (const dep of action.deps) {
+      const depKey = `${workflowId}/${dep}`
+      if (!nodeIds.has(depKey)) continue
       edges.push({
         id: `e${edgeId++}`,
-        source: dep,
-        target: name,
+        source: depKey,
+        target: key,
         type: "default",
         animated: false,
         style: { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1.5, opacity: 0.7 },

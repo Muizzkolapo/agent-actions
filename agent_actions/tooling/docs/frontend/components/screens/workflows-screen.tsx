@@ -300,7 +300,7 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
                     onClick={() => setSelectedAction(selectedAction === name ? null : name)}
                   >
                     <TypeBadge type={a.type} />
-                    <span className="text-sm font-mono font-medium text-foreground flex-1 truncate">{name}</span>
+                    <span className="text-sm font-mono font-medium text-foreground flex-1 truncate">{name.includes("/") ? name.split("/").pop() : name}</span>
                     {a.guard && (
                       <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/20">
                         guard
@@ -320,7 +320,7 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
 
             {actionDetail && selectedAction && (
               <ActionInspector
-                name={selectedAction}
+                name={selectedAction.includes("/") ? selectedAction.split("/").pop()! : selectedAction}
                 action={actionDetail}
                 onClose={() => setSelectedAction(null)}
                 onSelectAction={(n) => setSelectedAction(n)}
@@ -398,7 +398,7 @@ function ActionInspector({
               action.deps.map((d) => (
                 <button
                   key={d}
-                  onClick={() => onSelectAction(d)}
+                  onClick={() => onSelectAction(`${action.wf}/${d}`)}
                   className="rounded-md bg-secondary px-2 py-0.5 text-[10px] font-mono text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
                 >
                   {d}
