@@ -84,7 +84,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Format task as OpenAI-compatible JSONL (for consistency)."""
-        model_name = batch_task.model_config.get("model_name", "llama2")
+        model_name = batch_task.model_config.get("model_name", self._get_default_model())
         envelope = MessageBuilder.build_for_batch(
             self.vendor_slug, batch_task.prompt, batch_task.user_content, schema=schema
         )
@@ -168,7 +168,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         try:
             body = task["body"]
             messages = body["messages"]
-            model = body.get("model", "llama2")
+            model = body.get("model", self._get_default_model())
 
             temperature = body.get("temperature")
             options: dict[str, Any] = {

@@ -47,7 +47,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             }
         }
         """
-        model_name = batch_task.model_config.get("model_name", "gpt-4o-mini")
+        model_name = batch_task.model_config.get("model_name", self._get_default_model())
         envelope = MessageBuilder.build_for_batch(
             "openai", batch_task.prompt, batch_task.user_content, schema=schema
         )
