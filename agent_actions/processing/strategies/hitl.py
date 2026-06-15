@@ -85,7 +85,7 @@ class HITLStrategy:
                     context.agent_name,
                     len(filtered_records),
                 )
-                raw_response = {
+                raw_response: Any = {
                     "hitl_status": "approved",
                     "user_comment": "auto-approved (smoke test)",
                 }
