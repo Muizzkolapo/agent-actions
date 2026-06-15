@@ -171,7 +171,12 @@ class BatchProcessingService:
                     context={"batch_id": batch_id},
                 )
 
-            file_name = entry.file_name or "default"
+            if not entry.file_name:
+                raise ProcessingError(
+                    "Registry entry missing file_name — cannot determine batch context key",
+                    context={"batch_id": batch_id},
+                )
+            file_name = entry.file_name
 
             output_file = self._process_single_batch_file(
                 batch_id=batch_id,
@@ -323,13 +328,13 @@ class BatchProcessingService:
 
         Args:
             output_directory: Base output directory
-            file_name: Original file name (may be None or "default")
+            file_name: Original file name
             batch_id: Batch job ID for fallback naming
 
         Returns:
             Path object for the output file
         """
-        if file_name and file_name != "default":
+        if file_name:
             return Path(output_directory) / f"{Path(file_name).stem}.json"
         return Path(output_directory) / f"{batch_id}_processed_output.json"
 
@@ -483,7 +488,7 @@ class BatchProcessingService:
         context_map = self._context_manager.load_batch_context_map(
             self._storage_backend,  # type: ignore[arg-type]
             effective_name,  # type: ignore[arg-type]
-            file_name or "default",
+            file_name,
         )
         agent_config = self._apply_workflow_session_id(agent_config, entry)
         provider = self._client_resolver.get_for_batch_id(
@@ -812,7 +817,7 @@ class BatchProcessingService:
             context_map = self._context_manager.load_batch_context_map(
                 self._storage_backend,  # type: ignore[arg-type]
                 action_name,  # type: ignore[arg-type]
-                file_name or "default",
+                file_name,
             )
         except Exception:
             logger.warning(

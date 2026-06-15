@@ -199,11 +199,16 @@ class BatchSubmissionService:
             ExternalServiceError: If submission fails
         """
         force_submission = force or self._force_batch
-        action_name = agent_config.get("action_name", batch_name or "default")
+        if not batch_name:
+            raise ConfigurationError(
+                "batch_name is required for batch submission",
+                context={"agent_config_keys": list(agent_config.keys())},
+            )
+        action_name = agent_config.get("action_name", batch_name)
 
         if not force_submission and output_directory:
             manager = self._registry_manager_factory(action_name)
-            entry = manager.get_batch_job(batch_name or "default")
+            entry = manager.get_batch_job(batch_name)
             if entry and entry.is_in_flight:
                 logger.info(
                     "Found existing in-flight batch job for %s: %s",
@@ -381,16 +386,16 @@ class BatchSubmissionService:
             fire_event(
                 BatchSubmittedEvent(
                     batch_id=batch_id,
-                    action_name=batch_name or "default",
+                    action_name=batch_name,
                     request_count=len(tasks),
                     provider=provider_type,
                 )
             )
 
             if output_directory:
-                registry_name = action_name or "default"
+                registry_name = action_name
                 manager = self._registry_manager_factory(registry_name)
-                file_key = batch_name or "default"
+                file_key = batch_name
                 entry = BatchJobEntry(
                     batch_id=batch_id,
                     status=initial_status,

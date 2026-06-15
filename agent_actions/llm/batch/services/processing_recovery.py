@@ -292,7 +292,7 @@ def handle_reprompt_recovery(
             )
             fire_event(
                 RepromptRetryEvent(
-                    action_name=identity.file_name or "batch",
+                    action_name=identity.file_name,
                     attempt=next_attempt,
                     max_attempts=state.reprompt_max_attempts,
                     error=f"{len(still_failing)} records failed validation",
@@ -332,7 +332,7 @@ def handle_reprompt_recovery(
     if state.graduated_results:
         fire_event(
             RepromptRecoveredEvent(
-                action_name=identity.file_name or "batch",
+                action_name=identity.file_name,
                 attempt=state.reprompt_attempt,
                 max_attempts=state.reprompt_max_attempts,
                 validation_name=validation_name,
@@ -477,7 +477,7 @@ def check_and_submit_reprompt(
     )
     fire_event(
         RepromptRetryEvent(
-            action_name=identity.file_name or "batch",
+            action_name=identity.file_name,
             attempt=next_attempt,
             max_attempts=max_attempts,
             error=f"{len(still_failing)} records failed validation",
@@ -548,7 +548,7 @@ def finalize_batch_output(
     fire_event(
         BatchCompleteEvent(
             batch_id=identity.batch_id,
-            action_name=identity.file_name or "default",
+            action_name=identity.file_name,
             total=total_count,
             completed=successful_count,
             failed=total_count - successful_count,
