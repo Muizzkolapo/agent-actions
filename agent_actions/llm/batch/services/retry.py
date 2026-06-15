@@ -167,14 +167,15 @@ class BatchRetryService:
                     )
 
         # PHASE 2: VALIDATE — ensure all records meet validation conditions
-        all_results = self.validate_and_reprompt(
-            results=all_results,
-            provider=provider,
-            context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            agent_config=agent_config,
-        )
+        if file_name:
+            all_results = self.validate_and_reprompt(
+                results=all_results,
+                provider=provider,
+                context_map=context_map,
+                output_directory=output_directory,
+                file_name=file_name,
+                agent_config=agent_config,
+            )
 
         return all_results, exhausted_recovery
 
@@ -258,7 +259,7 @@ class BatchRetryService:
         provider: BaseBatchClient,
         context_map: dict[str, Any],
         output_directory: str,
-        file_name: str | None,
+        file_name: str,
         agent_config: dict[str, Any] | None,
     ) -> list[BatchResult]:
         """Validate results and reprompt failures with feedback."""
@@ -291,7 +292,7 @@ class BatchRetryService:
         failed_results: list[BatchResult],
         context_map: dict[str, Any],
         output_directory: str,
-        file_name: str | None,
+        file_name: str,
         agent_config: dict[str, Any] | None,
         attempt: int,
     ) -> tuple[str, int] | None:

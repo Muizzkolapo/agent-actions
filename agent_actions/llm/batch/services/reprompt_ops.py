@@ -171,7 +171,7 @@ def validate_and_reprompt(
     provider: BaseBatchClient,
     context_map: dict[str, Any],
     output_directory: str,
-    file_name: str | None,
+    file_name: str,
     agent_config: dict[str, Any] | None,
 ) -> list[BatchResult]:
     """Validate results and reprompt failures using graduated pool pattern.
@@ -248,7 +248,7 @@ def validate_and_reprompt(
 
         fire_event(
             RepromptRetryEvent(
-                action_name=file_name or "batch",
+                action_name=file_name,
                 attempt=attempt + 2,
                 max_attempts=max_attempts,
                 error=f"{len(still_failing)} records failed validation",
@@ -326,7 +326,7 @@ def validate_and_reprompt(
         try:
             from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 
-            reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt + 1}"
+            reprompt_batch_name = f"{file_name}_reprompt_{attempt + 1}"
             preparator = BatchTaskPreparator(
                 action_indices=action_indices,
                 dependency_configs=dependency_configs,
@@ -425,7 +425,7 @@ def validate_and_reprompt(
     if recovered_count:
         fire_event(
             RepromptRecoveredEvent(
-                action_name=file_name or "batch",
+                action_name=file_name,
                 attempt=attempt + 1,
                 max_attempts=max_attempts,
                 validation_name=validation_name,
@@ -516,7 +516,7 @@ def submit_reprompt_batch(
     failed_results: list[BatchResult],
     context_map: dict[str, Any],
     output_directory: str,
-    file_name: str | None,
+    file_name: str,
     agent_config: dict[str, Any] | None,
     attempt: int,
 ) -> tuple[str, int] | None:
@@ -589,7 +589,7 @@ def submit_reprompt_batch(
         return None
 
     try:
-        reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
+        reprompt_batch_name = f"{file_name}_reprompt_{attempt}"
         preparator = BatchTaskPreparator(
             action_indices=action_indices,
             dependency_configs=dependency_configs,

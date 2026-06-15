@@ -94,7 +94,7 @@ class AnthropicBatchClient(BaseBatchClient):
         {
             "custom_id": "my-first-request",
             "params": {
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-sonnet-4-6",
                 "max_tokens": 1024,
                 "messages": [
                     {"role": "user", "content": "Hello, world"}
@@ -107,7 +107,7 @@ class AnthropicBatchClient(BaseBatchClient):
         )
         # Anthropic batch: system is a top-level param, user content is the message
         params = {
-            "model": batch_task.model_config.get("model_name", "claude-3-5-sonnet-20241022"),
+            "model": batch_task.model_config.get("model_name", self._get_default_model()),
             "messages": envelope.to_dicts(role="user"),
         }
         system_dicts = envelope.to_dicts(role="system")
@@ -277,7 +277,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
     def _get_default_model(self) -> str:
         """Return Anthropic's default model."""
-        return "claude-3-sonnet-20240229"
+        return "claude-sonnet-4-6"
 
     def _prepare_batch_input_file(
         self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str

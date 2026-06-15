@@ -168,8 +168,8 @@ class BatchRegistryManager:
                 actual_status = check_provider(entry.batch_id)
                 if actual_status != entry.status:
                     updates.append((file_name, actual_status))
-            except Exception as e:
-                logger.warning("Failed to check status for %s: %s", entry.batch_id, e)
+            except (OSError, ConnectionError) as e:
+                logger.warning("Transient error checking status for %s: %s", entry.batch_id, e)
                 return False
 
         with self._lock:

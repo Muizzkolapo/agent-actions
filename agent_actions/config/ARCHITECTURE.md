@@ -143,7 +143,7 @@ Layer 1: Pydantic field defaults
 Layer 2: Project defaults (agent_actions.yml → default_agent_config)
   default_agent_config:
     api_key: OPENAI_API_KEY
-    model_name: gpt-3.5-turbo
+    model_name: gpt-4o-mini
     chunk_config: {chunk_size: 300, overlap: 10}
 
 Layer 3: Workflow defaults (agent_config/{name}.yml → defaults section)
