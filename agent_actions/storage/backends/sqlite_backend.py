@@ -456,41 +456,32 @@ class SQLiteBackend(StorageBackend):
     def load_metadata(self, key: str) -> str | None:
         """Load a metadata value by key. Returns None if not found."""
         with self._lock:
-            try:
-                cursor = self.connection.cursor()
-                cursor.execute(
-                    "SELECT value FROM workflow_metadata WHERE key = ?",
-                    (key,),
-                )
-                row = cursor.fetchone()
-            except sqlite3.OperationalError:
-                return None
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT value FROM workflow_metadata WHERE key = ?",
+                (key,),
+            )
+            row = cursor.fetchone()
         return row["value"] if row else None
 
     def delete_metadata(self, key: str) -> bool:
         """Delete a metadata key. Returns True if deleted."""
         with self._lock:
-            try:
-                cursor = self.connection.cursor()
-                cursor.execute("DELETE FROM workflow_metadata WHERE key = ?", (key,))
-                self.connection.commit()
-                return cursor.rowcount > 0
-            except sqlite3.OperationalError:
-                return False
+            cursor = self.connection.cursor()
+            cursor.execute("DELETE FROM workflow_metadata WHERE key = ?", (key,))
+            self.connection.commit()
+            return cursor.rowcount > 0
 
     def delete_metadata_prefix(self, prefix: str) -> int:
         """Delete all metadata keys starting with prefix. Returns count deleted."""
         with self._lock:
-            try:
-                cursor = self.connection.cursor()
-                cursor.execute(
-                    "DELETE FROM workflow_metadata WHERE key LIKE ?",
-                    (prefix + "%",),
-                )
-                self.connection.commit()
-                return cursor.rowcount
-            except sqlite3.OperationalError:
-                return 0
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "DELETE FROM workflow_metadata WHERE key LIKE ?",
+                (prefix + "%",),
+            )
+            self.connection.commit()
+            return cursor.rowcount
 
     def write_source(
         self,
