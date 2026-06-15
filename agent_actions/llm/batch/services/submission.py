@@ -350,7 +350,7 @@ class BatchSubmissionService:
         batch_name: str,
         tasks: list[dict[str, Any]],
         output_directory: str | None,
-        action_name: str | None = None,
+        action_name: str,
     ) -> SubmissionResult:
         """Submit batch to provider and save to registry.
 

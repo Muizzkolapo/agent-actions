@@ -143,6 +143,7 @@ class TestSubmitToProviderErrorPath:
                     batch_name="test",
                     tasks=[{"id": "1"}],
                     output_directory=None,
+                    action_name="test",
                 )
 
         err = exc_info.value
@@ -178,6 +179,7 @@ class TestSubmitToProviderErrorPath:
                     batch_name="test",
                     tasks=[{"id": "1"}],
                     output_directory=None,
+                    action_name="test",
                 )
 
         from agent_actions.logging.events.batch_events import (

@@ -58,6 +58,7 @@ class TestBatchEntryTimestampIsUTCAware:
                 batch_name="test",
                 tasks=[{"custom_id": "r1"}],
                 output_directory=str(tmp_path),
+                action_name="test",
             )
 
         assert captured_entries, "save_batch_job was not called"
