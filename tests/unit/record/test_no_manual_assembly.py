@@ -69,6 +69,27 @@ class TestNoUnknownFallbacks:
         assert count == 0, f"Found {count} 'or \"unknown\"' pattern(s):\n{lines}"
 
 
+class TestNoPrintInLibraryCode:
+    """Library code must use logging, not print(). Only docstring examples are allowed."""
+
+    def test_no_bare_print_calls(self):
+        cmd = [
+            "grep", "-rn", "-P", r"^\s+print\(", AGENT_ACTIONS, "--include=*.py",
+            "--exclude=safe_format.py",
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            return
+        hits = []
+        for line in result.stdout.strip().splitlines():
+            if ">>>" in line or "docstring" in line or "Example" in line:
+                continue
+            hits.append(line)
+        assert len(hits) == 0, (
+            f"Found {len(hits)} print() call(s) in library code:\n" + "\n".join(hits)
+        )
+
+
 class TestNoDeadMergePassthroughFields:
     """merge_passthrough_fields was removed from scope_application.py."""
 
