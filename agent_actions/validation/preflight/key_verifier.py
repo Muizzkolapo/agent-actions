@@ -21,6 +21,7 @@ class ProbeResult:
     vendor: str
     ok: bool
     error: str | None = None
+    skipped: bool = False
 
 
 # ── Per-vendor probe functions ────────────────────────────────────────
@@ -196,8 +197,7 @@ def verify_keys(
             try:
                 results.append(future.result())
             except Exception as e:
-                # Future-level timeout or unexpected error — treat as non-auth.
-                logger.warning("Could not verify %s key: %s (proceeding)", vendor, e)
-                results.append(ProbeResult(vendor=vendor, ok=True))
+                logger.warning("Could not verify %s key: %s (skipping verification)", vendor, e)
+                results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
 
     return results

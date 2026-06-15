@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -215,7 +216,9 @@ class ContextDebugHandler:
                 self._console.print()
 
     def _display_plain_summary(self, action_filter: str | None = None) -> None:
-        """Display summary using plain text."""
+        """Display summary using plain text to stderr."""
+        _w = sys.stderr.write
+
         actions_to_show = (
             {action_filter: self._actions[action_filter]}
             if action_filter and action_filter in self._actions
@@ -223,49 +226,43 @@ class ContextDebugHandler:
         )
 
         if not actions_to_show:
-            print("No context events collected.")
+            _w("No context events collected.\n")
             return
 
         for action_name, info in actions_to_show.items():
-            print()
-            print(f"=== Context Debug for action '{action_name}' ===")
-            print()
+            _w(f"\n=== Context Debug for action '{action_name}' ===\n\n")
 
-            # Namespaces loaded
             if info.namespaces:
-                print("Namespaces loaded:")
+                _w("Namespaces loaded:\n")
                 for ns, fields in info.namespaces.items():
                     dropped = info.dropped_fields.get(ns, [])
                     dropped_str = f" ({len(dropped)} dropped)" if dropped else ""
-                    print(f"  - {ns}: {len(fields)} fields [{', '.join(fields[:5])}]{dropped_str}")
-                print()
+                    _w(f"  - {ns}: {len(fields)} fields [{', '.join(fields[:5])}]{dropped_str}\n")
+                _w("\n")
 
-            # Context scope applied
             if info.observe_fields or info.passthrough_fields or info.drop_fields:
-                print("Context scope applied:")
+                _w("Context scope applied:\n")
                 if info.observe_fields:
-                    print(f"  - observe: {', '.join(info.observe_fields)}")
+                    _w(f"  - observe: {', '.join(info.observe_fields)}\n")
                 if info.passthrough_fields:
-                    print(f"  - passthrough: {', '.join(info.passthrough_fields)}")
+                    _w(f"  - passthrough: {', '.join(info.passthrough_fields)}\n")
                 if info.drop_fields:
-                    print(f"  - drop: {', '.join(info.drop_fields)}")
-                print()
+                    _w(f"  - drop: {', '.join(info.drop_fields)}\n")
+                _w("\n")
 
-            # Dependencies
             if info.input_sources or info.context_sources:
-                print("Dependencies:")
+                _w("Dependencies:\n")
                 if info.input_sources:
-                    print(f"  - input_sources: {', '.join(info.input_sources)}")
+                    _w(f"  - input_sources: {', '.join(info.input_sources)}\n")
                 if info.context_sources:
-                    print(f"  - context_sources: {', '.join(info.context_sources)}")
-                print()
+                    _w(f"  - context_sources: {', '.join(info.context_sources)}\n")
+                _w("\n")
 
-            # Warnings
             if info.warnings:
-                print("Warnings:")
+                _w("Warnings:\n")
                 for warning in info.warnings:
-                    print(f"  ! {warning}")
-                print()
+                    _w(f"  ! {warning}\n")
+                _w("\n")
 
     def to_dict(self, action_name: str | None = None) -> dict[str, Any]:
         """Convert collected data to a dictionary for JSON output."""

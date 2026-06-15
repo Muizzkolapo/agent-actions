@@ -496,50 +496,50 @@ class TestDisplayPlainSummary:
         h = self._handler()
         h.display_summary()
         captured = capsys.readouterr()
-        assert "No context events collected." in captured.out
+        assert "No context events collected." in captured.err
 
     def test_namespaces_displayed(self, capsys):
         h = self._handler()
         h.handle(_cx001(ns="meta", fields=["a", "b"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "Namespaces loaded:" in captured.out
-        assert "meta" in captured.out
-        assert "2 fields" in captured.out
+        assert "Namespaces loaded:" in captured.err
+        assert "meta" in captured.err
+        assert "2 fields" in captured.err
 
     def test_namespaces_with_dropped(self, capsys):
         h = self._handler()
         h.handle(_cx001(ns="meta", fields=["a"], dropped=["x"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "1 dropped" in captured.out
+        assert "1 dropped" in captured.err
 
     def test_scope_displayed(self, capsys):
         h = self._handler()
         h.handle(_cx003(observe=["o"], passthrough=["p"], drop=["d"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "Context scope applied:" in captured.out
-        assert "observe:" in captured.out
-        assert "passthrough:" in captured.out
-        assert "drop:" in captured.out
+        assert "Context scope applied:" in captured.err
+        assert "observe:" in captured.err
+        assert "passthrough:" in captured.err
+        assert "drop:" in captured.err
 
     def test_dependencies_displayed(self, capsys):
         h = self._handler()
         h.handle(_cx005(inputs=["in1"], contexts=["ctx1"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "Dependencies:" in captured.out
-        assert "input_sources:" in captured.out
-        assert "context_sources:" in captured.out
+        assert "Dependencies:" in captured.err
+        assert "input_sources:" in captured.err
+        assert "context_sources:" in captured.err
 
     def test_warnings_displayed(self, capsys):
         h = self._handler()
         h.handle(_cx002(field_ref="x", reason="big", directive="obs"))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "Warnings:" in captured.out
-        assert "!" in captured.out
+        assert "Warnings:" in captured.err
+        assert "!" in captured.err
 
     def test_filter_by_action(self, capsys):
         h = self._handler()
@@ -547,8 +547,8 @@ class TestDisplayPlainSummary:
         h.handle(_cx001(action="b", ns="ns_b", fields=["g"]))
         h.display_summary(action_name="a")
         captured = capsys.readouterr()
-        assert "ns_a" in captured.out
-        assert "ns_b" not in captured.out
+        assert "ns_a" in captured.err
+        assert "ns_b" not in captured.err
 
     def test_filter_nonexistent_action_falls_through_to_all(self, capsys):
         """When the action filter doesn't match, all actions are shown (fallback)."""
@@ -557,35 +557,35 @@ class TestDisplayPlainSummary:
         h.display_summary(action_name="missing")
         captured = capsys.readouterr()
         # Falls through to showing all actions
-        assert "=== Context Debug for action 'a' ===" in captured.out
+        assert "=== Context Debug for action 'a' ===" in captured.err
 
     def test_action_header_shown(self, capsys):
         h = self._handler()
         h.handle(_cx001(action="my_action", ns="ns", fields=["f"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "=== Context Debug for action 'my_action' ===" in captured.out
+        assert "=== Context Debug for action 'my_action' ===" in captured.err
 
     def test_no_scope_section_when_empty(self, capsys):
         h = self._handler()
         h.handle(_cx001(ns="ns", fields=["f"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "Context scope applied:" not in captured.out
+        assert "Context scope applied:" not in captured.err
 
     def test_no_dependencies_section_when_empty(self, capsys):
         h = self._handler()
         h.handle(_cx001(ns="ns", fields=["f"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "Dependencies:" not in captured.out
+        assert "Dependencies:" not in captured.err
 
     def test_no_warnings_section_when_empty(self, capsys):
         h = self._handler()
         h.handle(_cx001(ns="ns", fields=["f"]))
         h.display_summary()
         captured = capsys.readouterr()
-        assert "Warnings:" not in captured.out
+        assert "Warnings:" not in captured.err
 
 
 # ---------------------------------------------------------------------------
