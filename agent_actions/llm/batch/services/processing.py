@@ -317,8 +317,8 @@ class BatchProcessingService:
             )
             status = provider.check_status(batch_id)
             return status == BatchStatus.COMPLETED
-        except Exception as e:
-            logger.warning("Failed to check batch status for %s: %s", batch_id, e, exc_info=True)
+        except (OSError, ConnectionError) as e:
+            logger.warning("Transient error checking batch status for %s: %s", batch_id, e)
             return False
 
     def _determine_output_path(
