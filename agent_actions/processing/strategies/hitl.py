@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -78,14 +79,26 @@ class HITLStrategy:
                     len(filtered_records),
                 )
 
-            raw_response, executed = run_dynamic_agent(
-                agent_config=hitl_agent_config,
-                agent_name=context.agent_name,
-                context=filtered_records,
-                formatted_prompt="",
-                tools_path=resolve_tools_path(hitl_agent_config),
-                skip_guard_eval=True,
-            )
+            if os.environ.get("AGAC_HITL_AUTO_APPROVE") == "true":
+                logger.info(
+                    "[%s] AGAC_HITL_AUTO_APPROVE=true — auto-approving %d records",
+                    context.agent_name,
+                    len(filtered_records),
+                )
+                raw_response = {
+                    "hitl_status": "approved",
+                    "user_comment": "auto-approved (smoke test)",
+                }
+                executed = True
+            else:
+                raw_response, executed = run_dynamic_agent(
+                    agent_config=hitl_agent_config,
+                    agent_name=context.agent_name,
+                    context=filtered_records,
+                    formatted_prompt="",
+                    tools_path=resolve_tools_path(hitl_agent_config),
+                    skip_guard_eval=True,
+                )
 
             # Unwrap single-item list from invocation service
             if isinstance(raw_response, list) and len(raw_response) == 1:
