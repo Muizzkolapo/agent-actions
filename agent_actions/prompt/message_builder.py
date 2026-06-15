@@ -56,7 +56,9 @@ _MODEL_CONTEXT_LIMITS: dict[str, int] = {
     "claude-3-sonnet-20240229": 200_000,
     "claude-3-opus-20240229": 200_000,
     "claude-3-5-sonnet-20241022": 200_000,
+    "claude-sonnet-4-6": 200_000,
     "claude-sonnet-4-20250514": 200_000,
+    "claude-opus-4-6": 200_000,
     "claude-opus-4-20250514": 200_000,
     # Groq
     "llama-3.3-70b-versatile": 128_000,

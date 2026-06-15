@@ -171,7 +171,7 @@ def validate_and_reprompt(
     provider: BaseBatchClient,
     context_map: dict[str, Any],
     output_directory: str,
-    file_name: str | None,
+    file_name: str,
     agent_config: dict[str, Any] | None,
 ) -> list[BatchResult]:
     """Validate results and reprompt failures using graduated pool pattern.
@@ -516,7 +516,7 @@ def submit_reprompt_batch(
     failed_results: list[BatchResult],
     context_map: dict[str, Any],
     output_directory: str,
-    file_name: str | None,
+    file_name: str,
     agent_config: dict[str, Any] | None,
     attempt: int,
 ) -> tuple[str, int] | None:
