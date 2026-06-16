@@ -74,7 +74,12 @@ class TestNoPrintInLibraryCode:
 
     def test_no_bare_print_calls(self):
         cmd = [
-            "grep", "-rn", "-P", r"^\s+print\(", AGENT_ACTIONS, "--include=*.py",
+            "grep",
+            "-rn",
+            "-P",
+            r"^\s+print\(",
+            AGENT_ACTIONS,
+            "--include=*.py",
             "--exclude=safe_format.py",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -85,8 +90,8 @@ class TestNoPrintInLibraryCode:
             if ">>>" in line or "docstring" in line or "Example" in line:
                 continue
             hits.append(line)
-        assert len(hits) == 0, (
-            f"Found {len(hits)} print() call(s) in library code:\n" + "\n".join(hits)
+        assert len(hits) == 0, f"Found {len(hits)} print() call(s) in library code:\n" + "\n".join(
+            hits
         )
 
 
