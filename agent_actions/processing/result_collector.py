@@ -251,6 +251,10 @@ def write_record_dispositions(
     for item in items:
         source_guid = item.get("source_guid")
         if not source_guid:
+            logger.debug(
+                "[%s] Skipping disposition write for record without source_guid",
+                action_name,
+            )
             continue
         metadata = item.get("metadata", {})
 
@@ -793,15 +797,20 @@ class ResultCollector:
         retry_config = agent_config.get("retry", {})
         on_exhausted = retry_config.get("on_exhausted", "return_last")
 
+        if on_exhausted != "raise":
+            logger.info(
+                "[%s] %d records exhausted retries (on_exhausted=%s)",
+                agent_name,
+                len(exhausted_results),
+                on_exhausted,
+            )
+            return
+
         logger.warning(
-            "[%s] %d records have exhausted retries (on_exhausted=%s)",
+            "[%s] %d records exhausted retries — raising (on_exhausted=raise)",
             agent_name,
             len(exhausted_results),
-            on_exhausted,
         )
-
-        if on_exhausted != "raise":
-            return
 
         if storage_backend:
             for er in exhausted_results:
