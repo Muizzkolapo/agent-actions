@@ -12,6 +12,25 @@ from pathlib import Path
 AGENT_ACTIONS = str(Path(__file__).resolve().parents[3] / "agent_actions")
 
 
+def _is_inside_docstring(file_path: str, line_no: int) -> bool:
+    """Check if a given line is inside a triple-quoted docstring."""
+    try:
+        with open(file_path) as f:
+            lines = f.readlines()
+    except OSError:
+        return False
+    in_docstring = False
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith('"""') or stripped.startswith("'''"):
+            if stripped.count('"""') == 2 or stripped.count("'''") == 2:
+                continue
+            in_docstring = not in_docstring
+        if i == line_no:
+            return in_docstring
+    return False
+
+
 def _grep_count(pattern: str, path: str, *exclude_globs: str) -> tuple[int, str]:
     """Return (match_count, matching_lines) using grep."""
     cmd = ["grep", "-rn", "-P", pattern, path, "--include=*.py"]
@@ -88,6 +107,9 @@ class TestNoPrintInLibraryCode:
         hits = []
         for line in result.stdout.strip().splitlines():
             if ">>>" in line or "docstring" in line or "Example" in line:
+                continue
+            parts = line.split(":", 2)
+            if len(parts) >= 2 and _is_inside_docstring(parts[0], int(parts[1])):
                 continue
             hits.append(line)
         assert len(hits) == 0, f"Found {len(hits)} print() call(s) in library code:\n" + "\n".join(
