@@ -41,7 +41,7 @@ class TestResponseSchemaCompilerWarning:
         agent_config = {"schema": {"name": "test", "fields": []}}
         compiler = ResponseSchemaCompiler()
 
-        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
             compiled, _ = compiler.compile(agent_config, vendor="unknown_vendor")
 
         assert compiled is None
@@ -57,11 +57,11 @@ class TestResponseSchemaCompilerWarning:
         return_value=({"name": "my_schema", "fields": []}, "my_schema"),
     )
     def test_warns_when_named_schema_dropped(self, _load, _compile, caplog):
-        """Warning emitted when named schema compiles to None."""
+        """Info emitted when named schema compiles to None."""
         agent_config = {"schema_name": "my_schema"}
         compiler = ResponseSchemaCompiler()
 
-        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
             compiled, _ = compiler.compile(agent_config, vendor="unknown_vendor")
 
         assert compiled is None
