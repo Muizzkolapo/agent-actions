@@ -13,7 +13,7 @@ from rich.console import Console
 
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging.core.manager import fire_event
-from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent
+from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent, ActionStartEvent
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -177,6 +177,15 @@ class ActionLevelOrchestrator:
         action_config = self.action_configs[action_name]
         is_last = original_idx == len(self.execution_order) - 1
         total_actions = len(self.execution_order)
+
+        fire_event(
+            ActionStartEvent(
+                action_name=action_name,
+                action_index=original_idx,
+                total_actions=total_actions,
+                mode=action_config.get("run_mode", ""),
+            )
+        )
 
         result = await action_executor.execute_action_async(
             action_name,
