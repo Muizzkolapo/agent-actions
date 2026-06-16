@@ -277,14 +277,20 @@ class AgentWorkflow:
 
         target_dir = project_root / "agent_io" / "target"
         for action_name in self.execution_order:
-            try:
-                self.storage_backend.delete_target(action_name)
-                self.storage_backend.clear_disposition(action_name)
-                self.storage_backend.clear_prompt_traces(action_name)
-                self.storage_backend.clear_checkpoint_records(action_name)
-                self.storage_backend.clear_batch_state(action_name)
-            except Exception as e:
-                logger.warning("Failed to clear stored data for %s: %s", action_name, e)
+            ops = [
+                ("target", self.storage_backend.delete_target),
+                ("dispositions", self.storage_backend.clear_disposition),
+                ("prompt_traces", self.storage_backend.clear_prompt_traces),
+                ("checkpoints", self.storage_backend.clear_checkpoint_records),
+                ("batch_state", self.storage_backend.clear_batch_state),
+            ]
+            for op_name, op_fn in ops:
+                try:
+                    op_fn(action_name)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to clear %s for %s: %s", op_name, action_name, e
+                    )
 
             batch_dir = target_dir / action_name / "batch"
             if batch_dir.is_dir():
