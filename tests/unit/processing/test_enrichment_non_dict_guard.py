@@ -89,8 +89,8 @@ class TestNonDictEnrichmentGuard:
 
         mock_logger.warning.assert_called_once()
         args = mock_logger.warning.call_args.args
-        assert args[1] == 2  # invalid_count
-        assert args[2] == "enrich_test"  # action_name
+        assert args[1] == "enrich_test"  # action_name
+        assert args[2] == 2  # invalid_count
 
     def test_empty_data_no_filtering(self):
         pipeline = EnrichmentPipeline(enrichers=[])

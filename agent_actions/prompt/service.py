@@ -358,10 +358,9 @@ class PromptPreparationService:
                     for action in skipped_actions:
                         if action in str(ue):
                             logger.warning(
-                                "Template variable from skipped dependency '%s' "
-                                "— substituting empty namespace: %s",
+                                "Upstream action '%s' was skipped — using empty values "
+                                "for its fields in this action's prompt",
                                 action,
-                                ue,
                             )
                             prompt_context[action] = _PermissiveNamespace()
                             # Re-render with all known skipped deps injected

@@ -90,13 +90,13 @@ class LineageEnricher(Enricher):
                     skipped = len(source_idx) - len(source_items)
                     if skipped:
                         logger.warning(
-                            "source_mapping[%d]: %d of %d indices out of bounds "
-                            "(source_data has %d items, action=%s)",
-                            i,
+                            "Action '%s': %d of %d input records could not be "
+                            "matched to output record %d — input may have fewer "
+                            "records than expected",
+                            context.action_name,
                             skipped,
                             len(source_idx),
-                            source_data_len,
-                            context.action_name,
+                            i,
                         )
                     result.data[i] = LineageBuilder.add_lineage_tracking_from_sources(
                         obj=item,
@@ -113,12 +113,12 @@ class LineageEnricher(Enricher):
                         parent_item = context.source_data[source_idx]
                     else:
                         logger.warning(
-                            "source_mapping[%d] -> %d is out of bounds "
-                            "(source_data has %d items, action=%s)",
+                            "Action '%s': output record %d references input record %d "
+                            "but only %d input records exist",
+                            context.action_name,
                             i,
                             source_idx,
                             source_data_len,
-                            context.action_name,
                         )
                         parent_item = None
             elif use_per_item_parent_lookup:
@@ -315,9 +315,9 @@ class EnrichmentPipeline:
             valid_items = [item for item in result.data if isinstance(item, dict)]
             invalid_count = len(result.data) - len(valid_items)
             logger.warning(
-                "Filtered %d non-dict items from result.data (action=%s)",
-                invalid_count,
+                "Action '%s': dropped %d invalid output items (expected objects, got primitives)",
                 context.action_name,
+                invalid_count,
             )
             result.data = valid_items
             if not valid_items:
