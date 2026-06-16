@@ -209,11 +209,8 @@ class SQLiteBackend(StorageBackend):
         """Create a read-only instance for scanning. Do not call initialize()."""
         import urllib.parse
 
-        instance = cls.__new__(cls)
-        StorageBackend.__init__(instance)
-        instance.db_path = Path(db_path)
-        instance.workflow_name = instance.db_path.stem
-        instance._lock = threading.RLock()
+        db_path = Path(db_path)
+        instance = cls(str(db_path), db_path.stem)
         instance._readonly = True
 
         posix_path = instance.db_path.as_posix()
@@ -761,9 +758,7 @@ class SQLiteBackend(StorageBackend):
             )
         # Cap input_snapshot at 10KB to prevent storage bloat.
         if input_snapshot and len(input_snapshot) > 10240:
-            input_snapshot = (
-                '{"__truncated__": true, "partial": ' + json.dumps(input_snapshot[:8192]) + "}"
-            )
+            input_snapshot = json.dumps({"__truncated__": True, "partial": input_snapshot[:8192]})
         return action_name, record_id, relative_path, input_snapshot
 
     def set_disposition(
@@ -945,10 +940,10 @@ class SQLiteBackend(StorageBackend):
 
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
         """Return record_ids with any gate-terminal disposition for an action."""
-        from agent_actions.processing.disposition_gate import GATE_TERMINAL_DISPOSITIONS
+        from agent_actions.storage.backend import TERMINAL_DISPOSITIONS
 
         action_name = self._validate_identifier(action_name, "action_name")
-        terminal = tuple(GATE_TERMINAL_DISPOSITIONS)
+        terminal = tuple(TERMINAL_DISPOSITIONS)
         placeholders = ",".join("?" * len(terminal))
         sql = (
             f"SELECT DISTINCT record_id FROM record_disposition "
@@ -1734,7 +1729,7 @@ class SQLiteBackend(StorageBackend):
             }
 
     def close(self) -> None:
-        """Close the database connection."""
+        """Close the database connection and clear caches."""
         with self._lock:
             if self._connection is not None:
                 try:
@@ -1752,3 +1747,4 @@ class SQLiteBackend(StorageBackend):
                     )
                 finally:
                     self._connection = None
+        super().close()
