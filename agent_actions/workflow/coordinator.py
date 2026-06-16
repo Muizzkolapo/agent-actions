@@ -288,9 +288,7 @@ class AgentWorkflow:
                 try:
                     op_fn(action_name)
                 except Exception as e:
-                    logger.warning(
-                        "Failed to clear %s for %s: %s", op_name, action_name, e
-                    )
+                    logger.warning("Failed to clear %s for %s: %s", op_name, action_name, e)
 
             batch_dir = target_dir / action_name / "batch"
             if batch_dir.is_dir():
