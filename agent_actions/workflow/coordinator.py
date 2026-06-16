@@ -350,9 +350,12 @@ class AgentWorkflow:
                         self.storage_backend.clear_disposition(action_name, disp)
                 else:
                     self.storage_backend.clear_disposition(action_name)
+            except Exception as e:
+                logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
+            try:
                 self.storage_backend.clear_prompt_traces(action_name)
             except Exception as e:
-                logger.warning("Failed to clear stored data for %s: %s", action_name, e)
+                logger.warning("Failed to clear prompt traces for %s: %s", action_name, e)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
 
     # ── Properties ──────────────────────────────────────────────────────
