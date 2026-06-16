@@ -277,16 +277,21 @@ class AgentWorkflow:
 
         target_dir = project_root / "agent_io" / "target"
         for action_name in self.execution_order:
-            ops = [
-                ("target", self.storage_backend.delete_target),
-                ("dispositions", self.storage_backend.clear_disposition),
-                ("prompt_traces", self.storage_backend.clear_prompt_traces),
-                ("checkpoints", self.storage_backend.clear_checkpoint_records),
-                ("batch_state", self.storage_backend.clear_batch_state),
-            ]
-            for op_name, op_fn in ops:
+            for op_name, op_call in [
+                ("target", lambda a=action_name: self.storage_backend.delete_target(a)),
+                ("dispositions", lambda a=action_name: self.storage_backend.clear_disposition(a)),
+                (
+                    "prompt_traces",
+                    lambda a=action_name: self.storage_backend.clear_prompt_traces(a),
+                ),
+                (
+                    "checkpoints",
+                    lambda a=action_name: self.storage_backend.clear_checkpoint_records(a),
+                ),
+                ("batch_state", lambda a=action_name: self.storage_backend.clear_batch_state(a)),
+            ]:
                 try:
-                    op_fn(action_name)
+                    op_call()
                 except Exception as e:
                     logger.warning("Failed to clear %s for %s: %s", op_name, action_name, e)
 
