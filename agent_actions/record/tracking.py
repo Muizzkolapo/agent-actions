@@ -16,8 +16,6 @@ class TrackedItem(dict):
     Framework detects this and raises ValueError.
     """
 
-    __slots__ = ("_source_index",)
-
     def __init__(self, data: dict[str, Any], source_index: int):
         super().__init__(data)
         self._source_index = source_index

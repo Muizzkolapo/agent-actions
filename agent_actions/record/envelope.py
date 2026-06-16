@@ -8,6 +8,7 @@ version bump rules.
 
 from __future__ import annotations
 
+import copy
 import datetime
 from typing import Any
 
@@ -89,9 +90,8 @@ class RecordEnvelope:
         Preserves upstream namespaces from *input_record* and carries
         ``source_guid``. Collision on *action_name* overwrites.
 
-        The assembled content dict is new, but *action_output* is stored by
-        reference inside it. Callers must not mutate *action_output* after
-        calling ``build()``.
+        The assembled content dict is new; *action_output* is deep-copied
+        so callers may safely mutate it after calling ``build()``.
         """
         if not action_name:
             raise RecordEnvelopeError("action_name is required")
@@ -102,7 +102,9 @@ class RecordEnvelope:
             )
 
         existing = _extract_existing(input_record)
-        result: dict[str, Any] = {"content": {**existing, action_name: action_output}}
+        result: dict[str, Any] = {
+            "content": {**existing, action_name: copy.deepcopy(action_output)}
+        }
         return _carry_persistent_fields(result, input_record)
 
     @staticmethod
@@ -255,8 +257,8 @@ def _carry_persistent_fields(
             # Deep-copy mutable lifecycle fields to prevent aliasing —
             # transition() appends in-place, so shared references between
             # input and output records would corrupt the audit trail.
-            if isinstance(value, list):
-                value = list(value)
+            if isinstance(value, (list, dict)):
+                value = copy.deepcopy(value)
             result[field] = value
     return result
 
