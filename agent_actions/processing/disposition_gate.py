@@ -17,36 +17,13 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.storage.backend import (
-    DISPOSITION_EXHAUSTED,
-    DISPOSITION_FILTERED,
-    DISPOSITION_PASSTHROUGH,
-    DISPOSITION_SKIPPED,
-    DISPOSITION_SUCCESS,
+    TERMINAL_DISPOSITIONS as GATE_TERMINAL_DISPOSITIONS,  # noqa: F401
 )
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
-
-GATE_TERMINAL_DISPOSITIONS = frozenset(
-    {
-        DISPOSITION_SUCCESS,
-        DISPOSITION_FILTERED,
-        DISPOSITION_SKIPPED,
-        DISPOSITION_PASSTHROUGH,
-        DISPOSITION_EXHAUSTED,
-    }
-)
-"""Dispositions that mean 'do not reprocess this record'.
-
-This is NOT the same as ``batch.py:_TERMINAL_DISPOSITIONS`` (used by the
-orphan checker). Notably:
-- FAILED is NOT gate-terminal (failed records must be reprocessed).
-- DEFERRED is NOT gate-terminal (in-flight batch records).
-- EXHAUSTED IS gate-terminal (gave up), but retry clears it, so after
-  retry the record has no disposition and flows through normally.
-"""
 
 CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 
