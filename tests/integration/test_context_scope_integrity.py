@@ -763,7 +763,7 @@ class TestDropSecurity:
         assert passthrough["dep"]["url"] == "https://api.com"
 
     def test_drop_missing_field_warns_not_crashes(self):
-        """Dropping a nonexistent field logs warning, doesn't raise."""
+        """Dropping a nonexistent field logs debug, doesn't raise."""
         field_context = {
             "dep": {"existing": "value", "other": "data", "more": "info"},
         }
@@ -774,12 +774,11 @@ class TestDropSecurity:
                 field_context, context_scope, action_name="test"
             )
 
-        mock_logger.warning.assert_called()
-        warning_args = mock_logger.warning.call_args[0]
-        assert "matched zero fields" in warning_args[0]
+        debug_messages = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
+        assert any("matched zero fields" in m for m in debug_messages)
 
     def test_drop_missing_namespace_warns_not_crashes(self):
-        """Dropping from nonexistent namespace logs warning, doesn't raise."""
+        """Dropping from nonexistent namespace logs debug, doesn't raise."""
         field_context = {
             "dep": {"field": "value", "other": "data", "more": "info"},
         }
@@ -790,9 +789,8 @@ class TestDropSecurity:
                 field_context, context_scope, action_name="test"
             )
 
-        mock_logger.warning.assert_called()
-        warning_args = mock_logger.warning.call_args[0]
-        assert "matched zero fields" in warning_args[0]
+        debug_messages = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
+        assert any("matched zero fields" in m for m in debug_messages)
 
 
 # ---------------------------------------------------------------------------

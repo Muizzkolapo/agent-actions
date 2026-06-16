@@ -126,7 +126,7 @@ class ConfigManager:
             self.tool_path = [raw] if isinstance(raw, str) else list(raw)
         else:
             self.tool_path = ["tools"]
-            logger.warning("No tool_path configured; defaulting to 'tools/'")
+            logger.info("No tool_path configured; defaulting to 'tools/'")
 
     def find_agent_name(self, config: dict[str, Any]) -> str:
         """

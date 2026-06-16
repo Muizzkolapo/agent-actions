@@ -66,7 +66,7 @@ class ConsoleEventHandler:
         if self._use_rich and self._console:
             self._console.print(message, highlight=False)
         else:
-            print(message, file=sys.stderr)
+            sys.stderr.write(str(message) + "\n")
 
     def flush(self) -> None:
         """Flush console output."""

@@ -388,7 +388,7 @@ class PromptPreparationService:
                 cause=e,
             ) from e
         except Exception as e:
-            logger.warning("Error rendering prompt template: %s", e, exc_info=True)
+            logger.exception("Error rendering prompt template: %s", e)
 
             namespace_context: dict[str, list[str]] = {}
             available_refs = []

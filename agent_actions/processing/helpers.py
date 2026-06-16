@@ -76,9 +76,10 @@ def run_dynamic_agent(
         additional_context=None,
     )
 
-    response = _validate_llm_output_schema(
-        response, agent_config, agent_name, skip_schema_validation=skip_schema_validation
-    )
+    if agent_config.get("kind") != "tool":
+        response = _validate_llm_output_schema(
+            response, agent_config, agent_name, skip_schema_validation=skip_schema_validation
+        )
 
     return (response, True)
 

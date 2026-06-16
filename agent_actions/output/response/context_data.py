@@ -153,9 +153,8 @@ def _compile_schema_for_vendor(
     try:
         return compile_unified_schema(base_schema, vendor)
     except ConfigValidationError:
-        logger.warning(
-            "Vendor '%s' does not support schema validation. Schema '%s' will be ignored. "
-            "For schema support, use one of: openai, anthropic, gemini, ollama_local, ollama_cloud, groq, cohere, agac-provider",
+        logger.info(
+            "Vendor '%s' does not support schema validation. Schema '%s' will be ignored.",
             vendor,
             schema_name,
         )
