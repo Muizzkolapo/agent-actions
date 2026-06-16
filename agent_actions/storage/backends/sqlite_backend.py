@@ -209,11 +209,8 @@ class SQLiteBackend(StorageBackend):
         """Create a read-only instance for scanning. Do not call initialize()."""
         import urllib.parse
 
-        instance = cls.__new__(cls)
-        StorageBackend.__init__(instance)
-        instance.db_path = Path(db_path)
-        instance.workflow_name = instance.db_path.stem
-        instance._lock = threading.RLock()
+        db_path = Path(db_path)
+        instance = cls(str(db_path), db_path.stem)
         instance._readonly = True
 
         posix_path = instance.db_path.as_posix()

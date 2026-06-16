@@ -455,7 +455,7 @@ class StorageBackend(ABC):
         """Get storage statistics (record counts, DB size, per-node breakdown)."""
         ...
 
-    def set_disposition(  # noqa: B027
+    def set_disposition(
         self,
         action_name: str,
         record_id: str,
@@ -472,6 +472,7 @@ class StorageBackend(ABC):
                 Implementations SHOULD truncate to a reasonable limit (recommended 10KB).
             detail: Extended error message or context for the disposition.
         """
+        raise NotImplementedError
         # No-op: subclass must override to persist dispositions.
 
     def set_dispositions_batch(
@@ -525,7 +526,7 @@ class StorageBackend(ABC):
         """Delete matching disposition records. Returns count deleted."""
         return 0
 
-    def save_checkpoint_records(  # noqa: B027
+    def save_checkpoint_records(
         self,
         action_name: str,
         relative_path: str,
@@ -536,6 +537,7 @@ class StorageBackend(ABC):
         Used for incremental checkpointing during online processing.
         Uses INSERT OR REPLACE keyed on (action_name, relative_path, source_guid).
         """
+        raise NotImplementedError
 
     def read_checkpoint_records(
         self,
