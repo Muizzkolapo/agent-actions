@@ -179,9 +179,9 @@ class DependencyNamespaceBuilder:
                     # Wrap as SKIPPED_NAMESPACE to prevent RecordContextError.
                     if allowed_fields and not set(dep_data.keys()) & set(allowed_fields):
                         logger.warning(
-                            "[OBSERVE NULL-SAFE] '%s': namespace has zero overlap "
-                            "with declared fields %s (actual keys: %s) — "
-                            "treating as skipped",
+                            "Action '%s' output has none of the expected fields %s "
+                            "(found: %s). This usually means the action returned "
+                            "schema metadata instead of data. Skipping this input.",
                             dep_name,
                             sorted(allowed_fields),
                             sorted(dep_data.keys()),

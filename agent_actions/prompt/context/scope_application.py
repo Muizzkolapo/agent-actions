@@ -69,11 +69,10 @@ def _resolve_missing_field(
                 },
             )
         logger.warning(
-            "[%s NULL-SAFE] '%s' on action '%s': field not found in namespace '%s', "
-            "resolving as None to match guard semantics",
-            directive.upper(),
-            field_ref,
+            "Action '%s': field '%s' not found in upstream '%s' — "
+            "resolving as empty (upstream may have skipped this record)",
             action_name,
+            field_ref,
             ns_name,
         )
         return None

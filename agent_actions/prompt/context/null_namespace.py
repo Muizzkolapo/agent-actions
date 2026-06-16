@@ -29,6 +29,9 @@ class NullNamespace:
         """Falsy — so ``if ns_data:`` still skips null namespaces."""
         return False
 
+    def __str__(self) -> str:
+        return f"None ({self.reason})"
+
     def __repr__(self) -> str:
         return f"NullNamespace(reason={self.reason!r})"
 

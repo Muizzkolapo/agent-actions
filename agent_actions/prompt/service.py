@@ -482,7 +482,7 @@ class PromptPreparationService:
             # a key), and only blames the namespace the template actually
             # tried to access — not every null namespace in scope.
             null_namespace_hints: dict[str, dict[str, Any]] = {}
-            if error_str.startswith("'None' has no attribute"):
+            if "'None' has no attribute" in error_str or "NullNamespace" in error_str or "'None (" in error_str:
                 attribute_name = missing[0] if missing else None
                 if attribute_name:
                     # Find which null namespace the template referenced with
