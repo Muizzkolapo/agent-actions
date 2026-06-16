@@ -3,7 +3,7 @@
 Covers:
 - _serialize_snapshot helper (unit)
 - EXHAUSTED dispositions writing input_snapshot (consumer)
-- _check_exhausted_raise writing input_snapshot (consumer)
+- _handle_exhausted_policy writing input_snapshot (consumer)
 - Batch producer snapshot population (_build_error_result, exhausted, unprocessed)
 - File tool producer snapshot population
 - Regression: non-terminal dispositions do NOT write input_snapshot
@@ -164,12 +164,12 @@ class TestExhaustedMainBranchSnapshot:
 
 
 # ---------------------------------------------------------------------------
-# Consumer: _check_exhausted_raise writes input_snapshot before raising
+# Consumer: _handle_exhausted_policy writes input_snapshot before raising
 # ---------------------------------------------------------------------------
 
 
 class TestExhaustedRaiseBranchSnapshot:
-    def test_check_exhausted_raise_writes_snapshot_before_raising(self):
+    def test_handle_exhausted_policy_writes_snapshot_before_raising(self):
         backend = _make_backend()
         snapshot = {"source_guid": "sg-raise", "content": {"prompt": "too long"}}
         exhausted = ProcessingResult.exhausted(
@@ -195,7 +195,7 @@ class TestExhaustedRaiseBranchSnapshot:
         parsed = json.loads(call_kwargs["input_snapshot"])
         assert parsed["content"]["prompt"] == "too long"
 
-    def test_check_exhausted_raise_no_snapshot_writes_none(self):
+    def test_handle_exhausted_policy_no_snapshot_writes_none(self):
         backend = _make_backend()
         exhausted = ProcessingResult.exhausted(
             error="Retry exhausted",
@@ -290,7 +290,7 @@ class TestExhaustedBothPathsIdentical:
         )
         snap1 = backend1.set_disposition.call_args[1]["input_snapshot"]
 
-        # Path 2: on_exhausted=raise — _check_exhausted_raise branch
+        # Path 2: on_exhausted=raise — _handle_exhausted_policy branch
         backend2 = _make_backend()
         exhausted2 = ProcessingResult.exhausted(
             error="Retry exhausted",

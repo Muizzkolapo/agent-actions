@@ -358,7 +358,7 @@ def collect_results_from_processing_results(
     )
 
     if agent_config is not None:
-        ResultCollector._check_exhausted_raise(
+        ResultCollector._handle_exhausted_policy(
             results, effective_config, action_name, storage_backend
         )
 
@@ -779,13 +779,17 @@ class ResultCollector:
         )
 
     @staticmethod
-    def _check_exhausted_raise(
+    def _handle_exhausted_policy(
         results: list[ProcessingResult],
         agent_config: dict[str, Any],
         agent_name: str,
         storage_backend: Optional["StorageBackend"],
     ) -> None:
-        """Raise if on_exhausted=raise and any results exhausted retries."""
+        """Handle exhausted retries according to on_exhausted policy.
+
+        For return_last (default): logs at INFO and returns.
+        For raise: writes EXHAUSTED dispositions and raises AgentActionsError.
+        """
         exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
         if not exhausted_results:
             return
@@ -793,15 +797,20 @@ class ResultCollector:
         retry_config = agent_config.get("retry", {})
         on_exhausted = retry_config.get("on_exhausted", "return_last")
 
+        if on_exhausted != "raise":
+            logger.info(
+                "[%s] %d records exhausted retries (on_exhausted=%s)",
+                agent_name,
+                len(exhausted_results),
+                on_exhausted,
+            )
+            return
+
         logger.warning(
-            "[%s] %d records have exhausted retries (on_exhausted=%s)",
+            "[%s] %d records exhausted retries — raising (on_exhausted=raise)",
             agent_name,
             len(exhausted_results),
-            on_exhausted,
         )
-
-        if on_exhausted != "raise":
-            return
 
         if storage_backend:
             for er in exhausted_results:
