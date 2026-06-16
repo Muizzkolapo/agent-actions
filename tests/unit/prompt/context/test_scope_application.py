@@ -41,8 +41,8 @@ class TestDropWildcard:
         assert "api_key" not in prompt_context.get("dep", {})
         assert prompt_context["dep"]["name"] == "test"
 
-    def test_wildcard_on_empty_namespace_warns(self):
-        """drop: ['dep.*'] on empty namespace logs a warning, no crash."""
+    def test_wildcard_on_empty_namespace_logs_debug(self):
+        """drop: ['dep.*'] on empty namespace logs debug, no crash."""
         field_context = {"dep": {}}
         with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
             apply_context_scope(
@@ -50,12 +50,11 @@ class TestDropWildcard:
                 context_scope={"drop": ["dep.*"]},
                 action_name="test_action",
             )
-        mock_logger.warning.assert_called()
-        args = mock_logger.warning.call_args[0]
-        assert "matched zero fields" in args[0]
+        debug_msgs = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
+        assert any("matched zero fields" in m for m in debug_msgs)
 
-    def test_missing_field_warns(self):
-        """drop: ['dep.missing'] when field absent logs a warning, no crash."""
+    def test_missing_field_logs_debug(self):
+        """drop: ['dep.missing'] when field absent logs debug, no crash."""
         field_context = {"dep": {"other": "value"}}
         with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
             apply_context_scope(
@@ -63,12 +62,11 @@ class TestDropWildcard:
                 context_scope={"drop": ["dep.missing"]},
                 action_name="test_action",
             )
-        mock_logger.warning.assert_called()
-        args = mock_logger.warning.call_args[0]
-        assert "matched zero fields" in args[0]
+        debug_msgs = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
+        assert any("matched zero fields" in m for m in debug_msgs)
 
-    def test_missing_namespace_warns(self):
-        """drop: ['ghost.*'] when namespace absent logs a warning, no crash."""
+    def test_missing_namespace_logs_debug(self):
+        """drop: ['ghost.*'] when namespace absent logs debug, no crash."""
         field_context = {"dep": {"key": "value"}}
         with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
             apply_context_scope(
@@ -76,12 +74,11 @@ class TestDropWildcard:
                 context_scope={"drop": ["ghost.*"]},
                 action_name="test_action",
             )
-        mock_logger.warning.assert_called()
-        args = mock_logger.warning.call_args[0]
-        assert "matched zero fields" in args[0]
+        debug_msgs = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
+        assert any("matched zero fields" in m for m in debug_msgs)
 
-    def test_non_dict_namespace_warns(self):
-        """Namespace exists but is a non-dict value (e.g. a string) — warns, no crash."""
+    def test_non_dict_namespace_logs_debug(self):
+        """Namespace exists but is a non-dict value (e.g. a string) — logs debug, no crash."""
         field_context = {"dep": "a_string_not_a_dict"}
         with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
             apply_context_scope(
@@ -89,9 +86,8 @@ class TestDropWildcard:
                 context_scope={"drop": ["dep.field"]},
                 action_name="test_action",
             )
-        mock_logger.warning.assert_called()
-        args = mock_logger.warning.call_args[0]
-        assert "not a dict" in args[0]
+        debug_msgs = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
+        assert any("not a dict" in m for m in debug_msgs)
 
     def test_malformed_drop_ref_does_not_crash(self):
         """Malformed drop directive (no dot) is caught, logged, field not removed."""

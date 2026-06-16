@@ -218,7 +218,7 @@ def validate_and_reprompt(
             logger.info("All records passed validation after %d attempts", attempt + 1)
             break
 
-        logger.warning(
+        logger.info(
             "Reprompt attempt %d/%d: %d records failed validation",
             attempt + 1,
             max_attempts,
@@ -267,7 +267,7 @@ def validate_and_reprompt(
             )
 
             if len(still_failing) > 10:
-                logger.warning(
+                logger.info(
                     "Critique enabled for %d failed records — each requires a "
                     "synchronous LLM call, expect increased latency",
                     len(still_failing),
@@ -319,7 +319,7 @@ def validate_and_reprompt(
             reprompt_records.append(original_record)
 
         if not reprompt_records:
-            logger.warning("No records to reprompt")
+            logger.debug("No records to reprompt")
             all_graduated.extend(still_failing)
             break
 
@@ -585,7 +585,7 @@ def submit_reprompt_batch(
         reprompt_records.append(original_record)
 
     if not reprompt_records:
-        logger.warning("No records to reprompt")
+        logger.debug("No records to reprompt")
         return None
 
     try:

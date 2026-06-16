@@ -253,11 +253,11 @@ def discover_and_load_udfs(
     user_code_path = Path(user_code_path).absolute()
 
     if not user_code_path.exists():
-        logger.warning("User code path does not exist: %s", user_code_path)
+        logger.debug("User code path does not exist: %s", user_code_path)
         return {}
 
     if not user_code_path.is_dir():
-        logger.warning("User code path is not a directory: %s", user_code_path)
+        logger.debug("User code path is not a directory: %s", user_code_path)
         return {}
 
     registry: dict[str, dict[str, Any]] = {}

@@ -180,7 +180,7 @@ def warn_no_files_found(params: FileProcessParams) -> None:
         Path(d).exists() and any(Path(d).iterdir()) for d in params.upstream_data_dirs
     )
     if not has_content:
-        logger.warning(
+        logger.debug(
             "No files found in upstream directories: %s. Processing continues.",
             params.upstream_data_dirs,
             extra={

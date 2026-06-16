@@ -71,8 +71,8 @@ class TestPrepFailedLogging:
 class TestPassthroughOnErrorLogging:
     """U-2.H: passthrough_on_error must log WARNING when exception is swallowed."""
 
-    def test_passthrough_on_error_logs_warning_on_exception(self, caplog):
-        """When guard raises and passthrough_on_error=True, WARNING logged with context."""
+    def test_passthrough_on_error_logs_debug_on_exception(self, caplog):
+        """When guard raises and passthrough_on_error=True, DEBUG logged with context."""
         mock_filter = MagicMock(spec=GuardFilter)
         mock_filter.filter_item.side_effect = ValueError("bad expression")
         evaluator = GuardEvaluator(guard_filter=mock_filter)
@@ -84,7 +84,7 @@ class TestPassthroughOnErrorLogging:
         }
 
         with caplog.at_level(
-            logging.WARNING,
+            logging.DEBUG,
             logger=_EVALUATOR_LOGGER,
         ):
             result = evaluator.evaluate(
@@ -92,17 +92,15 @@ class TestPassthroughOnErrorLogging:
                 guard_config=guard_config,
             )
 
-        # Must still pass (passthrough_on_error behavior unchanged)
         assert result.should_execute is True
 
-        # Must log WARNING mentioning passthrough_on_error
-        passthrough_warnings = [
+        passthrough_debugs = [
             r
             for r in caplog.records
-            if r.levelname == "WARNING" and "passthrough_on_error" in r.message
+            if r.levelname == "DEBUG" and "passthrough_on_error" in r.message
         ]
-        assert len(passthrough_warnings) == 1, (
-            "Must log exactly one WARNING mentioning passthrough_on_error when exception is swallowed"
+        assert len(passthrough_debugs) == 1, (
+            "Must log exactly one DEBUG mentioning passthrough_on_error when exception is swallowed"
         )
 
     def test_passthrough_on_error_false_no_passthrough_warning(self, caplog):

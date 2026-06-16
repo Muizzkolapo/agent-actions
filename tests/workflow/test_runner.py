@@ -457,8 +457,8 @@ class TestWarnNoFilesFound:
             idx=0,
         )
         runner._warn_no_files_found(params)
-        mock_logger.warning.assert_called_once()
-        assert "No files found" in mock_logger.warning.call_args[0][0]
+        mock_logger.debug.assert_called_once()
+        assert "No files found" in mock_logger.debug.call_args[0][0]
 
     @patch("agent_actions.workflow.runner_file_processing.logger")
     def test_no_warn_when_content_exists(self, mock_logger, runner, tmp_path):
@@ -914,8 +914,8 @@ class TestProcessFiles:
             idx=0,
         )
         runner.process_files(params)
-        mock_logger.warning.assert_called()
-        assert any("No files found" in str(c) for c in mock_logger.warning.call_args_list)
+        mock_logger.debug.assert_called()
+        assert any("No files found" in str(c) for c in mock_logger.debug.call_args_list)
 
 
 # ---------------------------------------------------------------------------

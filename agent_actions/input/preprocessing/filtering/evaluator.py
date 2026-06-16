@@ -74,7 +74,7 @@ class GuardResult:
 
             # DATA/TIMEOUT errors respect passthrough_on_error (existing behavior)
             if passthrough_on_error:
-                logger.warning(
+                logger.debug(
                     "Guard: condition evaluation failed, proceeding (passthrough_on_error=True): %s",
                     filter_result.error,
                 )
@@ -203,7 +203,7 @@ class GuardEvaluator:
                 logger.debug("Guard: conditional_clause '%s' evaluated to False, skipping", clause)
                 return GuardResult.skipped()
         except (ValueError, TypeError, KeyError, AttributeError) as e:
-            logger.warning("Guard: conditional_clause evaluation failed: %s, proceeding", e)
+            logger.debug("Guard: conditional_clause evaluation failed: %s, proceeding", e)
             # Don't skip on UDF errors - proceed with execution
 
         return None
@@ -244,7 +244,7 @@ class GuardEvaluator:
 
         except (ValueError, TypeError, KeyError, AttributeError) as e:
             if passthrough_on_error:
-                logger.warning(
+                logger.debug(
                     "Guard evaluation raised %s but passthrough_on_error=True — passing record. "
                     "clause=%s, error=%s",
                     type(e).__name__,
