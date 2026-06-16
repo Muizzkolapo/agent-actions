@@ -251,10 +251,6 @@ def write_record_dispositions(
     for item in items:
         source_guid = item.get("source_guid")
         if not source_guid:
-            logger.debug(
-                "[%s] Skipping disposition write for record without source_guid",
-                action_name,
-            )
             continue
         metadata = item.get("metadata", {})
 
@@ -362,7 +358,7 @@ def collect_results_from_processing_results(
     )
 
     if agent_config is not None:
-        ResultCollector._check_exhausted_raise(
+        ResultCollector._handle_exhausted_policy(
             results, effective_config, action_name, storage_backend
         )
 
@@ -783,13 +779,17 @@ class ResultCollector:
         )
 
     @staticmethod
-    def _check_exhausted_raise(
+    def _handle_exhausted_policy(
         results: list[ProcessingResult],
         agent_config: dict[str, Any],
         agent_name: str,
         storage_backend: Optional["StorageBackend"],
     ) -> None:
-        """Raise if on_exhausted=raise and any results exhausted retries."""
+        """Handle exhausted retries according to on_exhausted policy.
+
+        For return_last (default): logs at INFO and returns.
+        For raise: writes EXHAUSTED dispositions and raises AgentActionsError.
+        """
         exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
         if not exhausted_results:
             return
