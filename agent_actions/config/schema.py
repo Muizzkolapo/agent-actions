@@ -9,6 +9,14 @@ from agent_actions.config.types import Granularity, RunMode
 from agent_actions.guards import GuardParser, parse_guard_config
 
 
+def _validate_bool_or_mapping(v: Any, field_name: str, usage_hint: str) -> Any:
+    if v is False or v is None:
+        return None
+    if v is True:
+        raise ValueError(f"{field_name}: true is not valid; {usage_hint}")
+    return v
+
+
 class ActionKind(str, Enum):
     """Types of actions in the workflow."""
 
@@ -286,26 +294,18 @@ class ActionConfig(BaseModel):
     @field_validator("retry", mode="before")
     @classmethod
     def validate_retry(cls, v):
-        """Accept false (disable) but reject true (ambiguous — use mapping)."""
-        if v is False or v is None:
-            return None
-        if v is True:
-            raise ValueError("retry: true is not valid; use retry: {max_attempts: N} or omit")
-        return v
+        return _validate_bool_or_mapping(v, "retry", "use retry: {max_attempts: N} or omit")
 
     @field_validator("reprompt", mode="before")
     @classmethod
     def validate_reprompt(cls, v):
-        """Accept false (disable) but reject true (ambiguous — use mapping)."""
-        if v is False or v is None:
-            return None
-        if v is True:
-            raise ValueError(
-                "reprompt: true is not valid. Use one of:\n"
-                "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
-                "  reprompt: {validation: fn_name}            # custom UDF validates"
-            )
-        return v
+        return _validate_bool_or_mapping(
+            v,
+            "reprompt",
+            "Use one of:\n"
+            "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
+            "  reprompt: {validation: fn_name}            # custom UDF validates",
+        )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
@@ -402,26 +402,18 @@ class DefaultsConfig(BaseModel):
     @field_validator("retry", mode="before")
     @classmethod
     def validate_retry(cls, v):
-        """Accept false (disable) but reject true (ambiguous — use mapping)."""
-        if v is False or v is None:
-            return None
-        if v is True:
-            raise ValueError("retry: true is not valid; use retry: {max_attempts: N} or omit")
-        return v
+        return _validate_bool_or_mapping(v, "retry", "use retry: {max_attempts: N} or omit")
 
     @field_validator("reprompt", mode="before")
     @classmethod
     def validate_reprompt(cls, v):
-        """Accept false (disable) but reject true (ambiguous — use mapping)."""
-        if v is False or v is None:
-            return None
-        if v is True:
-            raise ValueError(
-                "reprompt: true is not valid. Use one of:\n"
-                "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
-                "  reprompt: {validation: fn_name}            # custom UDF validates"
-            )
-        return v
+        return _validate_bool_or_mapping(
+            v,
+            "reprompt",
+            "Use one of:\n"
+            "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
+            "  reprompt: {validation: fn_name}            # custom UDF validates",
+        )
 
 
 class WorkflowConfig(BaseModel):

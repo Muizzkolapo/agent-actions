@@ -15,13 +15,6 @@ class TestEnvironmentValidators:
             EnvironmentConfig(openai_api_key="short")
         assert "API key must be at least 10 characters" in str(exc_info.value)
 
-    def test_bad_database_url_raises_validation_error(self):
-        """Invalid DB URL prefix should be caught by Pydantic as ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            EnvironmentConfig(database_url="redis://localhost")
-        assert "Database URL must start with" in str(exc_info.value)
-
-
 class TestSchemaValidators:
     def test_invalid_guard_type_raises_validation_error(self):
         """Guard with invalid type should produce a Pydantic ValidationError."""

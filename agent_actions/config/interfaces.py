@@ -1,51 +1,22 @@
 """Common interfaces for processors."""
 
 import asyncio
-from abc import ABC, abstractmethod
-from enum import Enum
+from abc import abstractmethod
 from typing import Generic, TypeVar
 
 # Generic type variable for interfaces
 T = TypeVar("T")
 
 
-class ProcessingMode(Enum):
-    """Execution strategy for individual components (loaders, processors, generators).
-
-    This enum controls *how* a single component runs: synchronously, asynchronously,
-    or auto-detected.  Values: SYNC, ASYNC, AUTO.
-
-    Not to be confused with ``config.types.RunMode`` which controls the
-    *pipeline-level* dispatch mode (ONLINE vs BATCH).
-    """
-
-    SYNC = "sync"
-    ASYNC = "async"
-    AUTO = "auto"  # Choose based on system capabilities and data size
-
-
-# Base interfaces
-class IAsyncCapable(ABC):
-    """Interface for components that support async operations."""
-
-    @abstractmethod
-    def supports_async(self) -> bool:
-        """Return True if this component supports async operations."""
-
-    @abstractmethod
-    def get_processing_mode(self) -> ProcessingMode:
-        """Return the preferred processing mode for this component."""
-
-
-class ILoader(IAsyncCapable):
+class ILoader:
     """Base interface for all loaders."""
 
 
-class IProcessor(IAsyncCapable):
+class IProcessor:
     """Base interface for all processors."""
 
 
-class IGenerator(IAsyncCapable):
+class IGenerator:
     """Base interface for all generators."""
 
 
