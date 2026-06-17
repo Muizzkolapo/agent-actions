@@ -244,12 +244,8 @@ class InitCommand:
                     logger.warning("Failed to clean up backup %s: %s", backup_dir, cleanup_err)
         except OSError as e:
             if backup_dir and backup_dir.exists() and not self.project_dir.exists():
-                # Restore: move the project back out of the backup dir.
                 target = backup_dir / self.project_dir.name
-                if target.exists():
-                    target.rename(self.project_dir)
-                else:
-                    backup_dir.rename(self.project_dir)
+                target.rename(self.project_dir)
             raise FileSystemError(
                 "Failed to create project directory",
                 context={
