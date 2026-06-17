@@ -12,6 +12,47 @@ from agent_actions.utils.project_root import find_project_root
 
 logger = logging.getLogger(__name__)
 
+_FORBIDDEN_MODULES = frozenset(
+    {
+        "os",
+        "sys",
+        "subprocess",
+        "shutil",
+        "importlib",
+        "ctypes",
+        "code",
+        "codeop",
+        "compile",
+        "compileall",
+        "socket",
+        "http",
+        "ftplib",
+        "smtplib",
+        "telnetlib",
+        "pickle",
+        "shelve",
+        "marshal",
+        "builtins",
+        "__builtin__",
+        "signal",
+        "multiprocessing",
+        "threading",
+    }
+)
+
+
+def _validate_module_path(module_path: str) -> None:
+    """Reject module paths that contain traversal or resolve to dangerous stdlib modules."""
+    if ".." in module_path or module_path.startswith("/"):
+        raise ConfigValidationError(
+            f"module_path '{module_path}' contains path traversal — must be a dotted Python name"
+        )
+    top_level = module_path.split(".")[0]
+    if top_level in _FORBIDDEN_MODULES:
+        raise ConfigValidationError(
+            f"module_path '{module_path}' resolves to a restricted module '{top_level}'"
+        )
+
 
 def anchor_to_project_root(path: str) -> str:
     """Anchor a relative path to the project root, or return as-is if absolute."""
@@ -66,13 +107,12 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
                         with open(resolved, encoding="utf-8") as f:
                             tool_config = yaml.safe_load(f)
                             if tool_config and "module_path" in tool_config:
-                                module_path = tool_config["module_path"]
+                                module_path = str(tool_config["module_path"])
+                                _validate_module_path(module_path)
                                 logger.debug(
                                     "Resolved tools_path from OpenAI tool config: %s", module_path
                                 )
-                                # module_path is a Python module name (e.g. "my.module"),
-                                # not a filesystem path — skip anchor_to_project_root.
-                                return cast(str, module_path)
+                                return module_path
                     except (
                         yaml.YAMLError,
                         FileNotFoundError,

@@ -37,14 +37,14 @@ class TestSchemaLoaderLoadSchema:
         assert isinstance(result, dict)
         assert result["name"] == "TestSchema"
 
-    def test_empty_yaml_returns_none(self, tmp_path):
-        """An empty YAML file produces yaml.safe_load -> None; loader returns that."""
+    def test_empty_yaml_raises(self, tmp_path):
+        """An empty YAML file raises ValueError."""
         _write_project_config(tmp_path)
         schema_dir = tmp_path / "schema"
         schema_dir.mkdir()
         (schema_dir / "Empty.yml").write_text("")
-        result = SchemaLoader.load_schema("Empty", project_root=tmp_path)
-        assert result is None
+        with pytest.raises(ValueError, match="Empty or null YAML file"):
+            SchemaLoader.load_schema("Empty", project_root=tmp_path)
 
     def test_recursive_search_finds_nested_schema(self, tmp_path):
         _write_project_config(tmp_path)

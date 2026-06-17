@@ -1,5 +1,7 @@
 """Passthrough strategies for pre-computed passthrough_fields."""
 
+import copy
+
 from .base import IPassthroughTransformStrategy, ensure_dict_output
 
 
@@ -33,13 +35,13 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
 
         Returns flat action output dicts — RecordEnvelope handles wrapping.
         """
+        pt = passthrough_fields or {}
         result = []
         for item in data:
             if isinstance(item, dict) and "content" in item and isinstance(item["content"], dict):
-                merged_content = {**item["content"], **(passthrough_fields or {})}
-                result.append(merged_content)
+                result.append({**item["content"], **copy.deepcopy(pt)})
             elif isinstance(item, dict):
-                result.append({**item, **(passthrough_fields or {})})
+                result.append({**item, **copy.deepcopy(pt)})
             else:
                 result.append(ensure_dict_output(item))
         return result
@@ -75,11 +77,11 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
 
         Returns flat action output dicts — RecordEnvelope handles wrapping.
         """
+        pt = passthrough_fields or {}
         merged = []
         for item in data:
             if isinstance(item, dict):
-                merged_item = {**item, **(passthrough_fields or {})}
-                merged.append(merged_item)
+                merged.append({**item, **copy.deepcopy(pt)})
             else:
                 merged.append(ensure_dict_output(item))
         return merged

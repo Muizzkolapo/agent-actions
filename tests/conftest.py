@@ -121,10 +121,13 @@ def wire_batch_disposition_delegate(backend: MagicMock) -> None:
 def _reset_global_singletons():
     """Prevent singleton state from leaking between tests."""
     from agent_actions.logging.factory import LoggerFactory
+    from agent_actions.utils.correlation.version_id import VersionIdGenerator
     from agent_actions.utils.path_utils import reset_path_manager
 
     reset_path_manager()
     LoggerFactory.reset()
+    VersionIdGenerator.clear()
     yield
     reset_path_manager()
     LoggerFactory.reset()  # cascades to EventManager.reset()
+    VersionIdGenerator.clear()

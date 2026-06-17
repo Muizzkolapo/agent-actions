@@ -89,9 +89,12 @@ def load_module_from_path(
                     if spec and spec.loader:
                         module = importlib.util.module_from_spec(spec)
 
-                        # CRITICAL: Register in sys.modules BEFORE execution
-                        # This ensures decorators can find the module
-                        sys.modules[f"agent_actions._udfs.{module_name}"] = module
+                        # Register in sys.modules BEFORE execution so
+                        # decorators can find the module.  Use module_name
+                        # (not cache_key) to stay consistent with udf.py's
+                        # deduplication guard.
+                        sys_modules_key = f"agent_actions._udfs.{module_name}"
+                        sys.modules[sys_modules_key] = module
 
                         if execute:
                             try:
@@ -100,7 +103,7 @@ def load_module_from_path(
                                 # Module file found but its code is broken.
                                 # Clean up and block fallback so a different
                                 # same-named package doesn't silently replace it.
-                                sys.modules.pop(f"agent_actions._udfs.{module_name}", None)
+                                sys.modules.pop(sys_modules_key, None)
                                 logger.warning(
                                     "Failed to execute module %s from %s: %s",
                                     module_name,

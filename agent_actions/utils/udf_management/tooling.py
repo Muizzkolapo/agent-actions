@@ -21,7 +21,7 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
         module_name,
         module_path=None,
         execute=True,
-        fallback_import=True,
+        fallback_import=False,
         cache=True,
     )
     if module is None:
