@@ -44,11 +44,19 @@ class BaseInspectCommand:
         self.paths = paths
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(
-            self.agent_name, paths.agent_config_dir, filename, check_alternatives=True
+            self.agent_name,
+            paths.agent_config_dir,
+            filename,
+            check_alternatives=True,
+            project_root=project_root,
         )
 
         ConfigRenderingService().render_and_load_config(
-            self.agent_name, full_path, paths.template_dir, project_root=project_root
+            self.agent_name,
+            full_path,
+            paths.template_dir,
+            paths.rendered_workflows_dir,
+            project_root=project_root,
         )
 
         workflow = AgentWorkflow(
@@ -111,6 +119,7 @@ class BaseInspectCommand:
                 "context_scope": {
                     "observe": context_scope.get("observe", []),
                     "passthrough": context_scope.get("passthrough", []),
+                    "drop": context_scope.get("drop", []),
                 },
                 "has_primary_dependency": has_primary_dep,
                 "primary_dependency": action_config.get("primary_dependency"),
@@ -157,4 +166,6 @@ class BaseInspectCommand:
             fields.append(f"{field_ref} (observe)")
         for field_ref in ctx.get("passthrough", []):
             fields.append(f"{field_ref} (passthrough)")
+        for field_ref in ctx.get("drop", []):
+            fields.append(f"{field_ref} (drop)")
         return fields

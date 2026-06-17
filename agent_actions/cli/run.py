@@ -117,7 +117,7 @@ class RunCommand:
                 snapshot = build_execution_snapshot(workflow, elapsed)
                 ExecutionRenderer(workflow.console).render(snapshot)
             except Exception as render_err:
-                logger.debug("Execution summary render failed: %s", render_err)
+                logger.warning("Execution summary render failed: %s", render_err, exc_info=True)
 
             state_mgr = workflow.services.core.state_manager
             execution_order = workflow.execution_order

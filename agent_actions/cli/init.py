@@ -93,8 +93,10 @@ def _list_remote_examples() -> list[dict[str, str]]:
             readme_bytes = _github_request(readme_url)
             first_line = readme_bytes.decode("utf-8", errors="replace").strip().splitlines()[0]
             desc = first_line.lstrip("# ").strip()
-        except (click.ClickException, IndexError):
+        except IndexError:
             pass
+        except click.ClickException as exc:
+            logger.warning("Could not fetch README for example '%s': %s", name, exc.message)
         results.append({"name": name, "description": desc})
     return results
 
@@ -228,8 +230,12 @@ class InitCommand:
                         dir=str(self.project_dir.parent),
                     )
                 )
-                shutil.rmtree(backup_dir)
-                self.project_dir.rename(backup_dir)
+                # Move existing project INTO the temp dir (which mkdtemp already
+                # created atomically).  The old code deleted the temp dir first,
+                # opening a TOCTOU race where another process could reclaim the
+                # path between rmtree and rename.
+                target = backup_dir / self.project_dir.name
+                self.project_dir.rename(target)
             self.project_dir.mkdir(exist_ok=self.args.force)
             if backup_dir and backup_dir.exists():
                 try:
@@ -238,7 +244,12 @@ class InitCommand:
                     logger.warning("Failed to clean up backup %s: %s", backup_dir, cleanup_err)
         except OSError as e:
             if backup_dir and backup_dir.exists() and not self.project_dir.exists():
-                backup_dir.rename(self.project_dir)
+                # Restore: move the project back out of the backup dir.
+                target = backup_dir / self.project_dir.name
+                if target.exists():
+                    target.rename(self.project_dir)
+                else:
+                    backup_dir.rename(self.project_dir)
             raise FileSystemError(
                 "Failed to create project directory",
                 context={

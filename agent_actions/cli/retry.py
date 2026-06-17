@@ -8,6 +8,7 @@ the existing workflow execution engine for re-processing.
 import datetime
 import json
 import logging
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from agent_actions.storage.backend import (
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
+from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.validation.retry_validator import RetryCommandArgs
 
@@ -219,7 +221,34 @@ class RetryCommand:
         for action in downstream_actions:
             state_mgr.update_status(action, ActionStatus.PENDING)
 
-        workflow.run()
+        tracker = RunTracker(project_root=project_root)
+        run_id = tracker.start_workflow_run(
+            workflow_id=self.agent_name,
+            workflow_name=self.agent_name,
+            actions_total=len(workflow.execution_order),
+        )
+        workflow.services.core.action_executor.run_tracker = tracker
+        workflow.services.core.action_executor.run_id = run_id
+
+        status = "FAILED"
+        error_message = None
+        try:
+            workflow.run()
+            status = "SUCCESS"
+        except Exception:
+            error_message = traceback.format_exc()
+            raise
+        finally:
+            try:
+                tracker.finalize_workflow_run(
+                    run_id=run_id, status=status, error_message=error_message
+                )
+            except Exception as track_error:
+                logger.warning(
+                    "Could not finalize retry run tracking: %s",
+                    track_error,
+                    exc_info=True,
+                )
 
         # Retry completed successfully — delete the manifest.
         _delete_manifest(manifest_file)
