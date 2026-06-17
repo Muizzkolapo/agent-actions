@@ -69,7 +69,7 @@ class DispositionsCommand:
         table.add_column("Success", justify="right", style="green")
         table.add_column("Failed", justify="right", style="red")
         table.add_column("Exhausted", justify="right", style="red")
-        table.add_column("Quarantined", justify="right", style="yellow")
+        table.add_column("Unprocessed", justify="right", style="yellow")
         table.add_column("Passthrough", justify="right", style="dim")
         table.add_column("Filtered", justify="right", style="dim")
         table.add_column("Total", justify="right", style="bold")

@@ -100,17 +100,21 @@ class ActionCommand(BaseInspectCommand):
         self.console.print(tree)
 
         ctx = info["context_scope"]
-        if ctx["observe"] or ctx["passthrough"]:
+        if ctx.get("observe") or ctx.get("passthrough") or ctx.get("drop"):
             self.console.print()
             scope_tree = Tree("[bold]Input Fields (from context_scope)[/bold]")
-            if ctx["observe"]:
+            if ctx.get("observe"):
                 obs = scope_tree.add("[cyan]observe:[/cyan]")
                 for f in ctx["observe"]:
                     obs.add(f"• {f}")
-            if ctx["passthrough"]:
+            if ctx.get("passthrough"):
                 pas = scope_tree.add("[cyan]passthrough:[/cyan]")
                 for f in ctx["passthrough"]:
                     pas.add(f"• {f}")
+            if ctx.get("drop"):
+                drp = scope_tree.add("[cyan]drop:[/cyan]")
+                for f in ctx["drop"]:
+                    drp.add(f"• {f}")
             self.console.print(scope_tree)
 
         output_fields = self._get_output_fields(

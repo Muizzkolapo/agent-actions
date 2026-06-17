@@ -8,6 +8,7 @@ the existing workflow execution engine for re-processing.
 import datetime
 import json
 import logging
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -18,11 +19,13 @@ from rich.table import Table
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.logging.factory import LoggerFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
+from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.validation.retry_validator import RetryCommandArgs
 
@@ -219,7 +222,53 @@ class RetryCommand:
         for action in downstream_actions:
             state_mgr.update_status(action, ActionStatus.PENDING)
 
-        workflow.run()
+        tracker = RunTracker(project_root=project_root)
+        run_id = tracker.start_workflow_run(
+            workflow_id=self.agent_name,
+            workflow_name=self.agent_name,
+            actions_total=len(workflow.execution_order),
+        )
+        workflow.services.core.action_executor.run_tracker = tracker
+        workflow.services.core.action_executor.run_id = run_id
+
+        agent_folder = workflow.services.core.action_runner.get_action_folder(self.agent_name)
+        LoggerFactory.initialize(
+            output_dir=agent_folder,
+            workflow_name=self.agent_name,
+            invocation_id=run_id,
+            force=True,
+        )
+
+        status = "FAILED"
+        error_message = None
+        try:
+            workflow.run()
+
+            if state_mgr.is_workflow_complete():
+                status = "SUCCESS"
+            elif state_mgr.is_workflow_done() and not state_mgr.has_any_failed():
+                status = "SUCCESS"
+            elif state_mgr.get_batch_submitted_actions(workflow.execution_order):
+                status = "PAUSED"
+        except Exception:
+            error_message = traceback.format_exc()
+            raise
+        finally:
+            try:
+                tracker.finalize_workflow_run(
+                    run_id=run_id, status=status, error_message=error_message
+                )
+            except Exception as track_error:
+                logger.warning(
+                    "Could not finalize retry run tracking: %s",
+                    track_error,
+                    exc_info=True,
+                )
+
+            try:
+                LoggerFactory.flush()
+            except Exception as e:
+                logger.debug("Failed to flush event handlers: %s", e, exc_info=True)
 
         # Retry completed successfully — delete the manifest.
         _delete_manifest(manifest_file)
