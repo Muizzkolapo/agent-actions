@@ -277,14 +277,23 @@ class AgentWorkflow:
 
         target_dir = project_root / "agent_io" / "target"
         for action_name in self.execution_order:
-            try:
-                self.storage_backend.delete_target(action_name)
-                self.storage_backend.clear_disposition(action_name)
-                self.storage_backend.clear_prompt_traces(action_name)
-                self.storage_backend.clear_checkpoint_records(action_name)
-                self.storage_backend.clear_batch_state(action_name)
-            except Exception as e:
-                logger.warning("Failed to clear stored data for %s: %s", action_name, e)
+            for op_name, op_call in [
+                ("target", lambda a=action_name: self.storage_backend.delete_target(a)),
+                ("dispositions", lambda a=action_name: self.storage_backend.clear_disposition(a)),
+                (
+                    "prompt_traces",
+                    lambda a=action_name: self.storage_backend.clear_prompt_traces(a),
+                ),
+                (
+                    "checkpoints",
+                    lambda a=action_name: self.storage_backend.clear_checkpoint_records(a),
+                ),
+                ("batch_state", lambda a=action_name: self.storage_backend.clear_batch_state(a)),
+            ]:
+                try:
+                    op_call()
+                except Exception as e:
+                    logger.warning("Failed to clear %s for %s: %s", op_name, action_name, e)
 
             batch_dir = target_dir / action_name / "batch"
             if batch_dir.is_dir():
@@ -344,9 +353,12 @@ class AgentWorkflow:
                         self.storage_backend.clear_disposition(action_name, disp)
                 else:
                     self.storage_backend.clear_disposition(action_name)
+            except Exception as e:
+                logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
+            try:
                 self.storage_backend.clear_prompt_traces(action_name)
             except Exception as e:
-                logger.warning("Failed to clear stored data for %s: %s", action_name, e)
+                logger.warning("Failed to clear prompt traces for %s: %s", action_name, e)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
 
     # ── Properties ──────────────────────────────────────────────────────
