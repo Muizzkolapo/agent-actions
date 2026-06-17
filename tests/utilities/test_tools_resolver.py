@@ -32,9 +32,8 @@ class TestToolsResolver:
 
     def test_openai_format(self, tmp_path):
         """Test OpenAI tool calling format."""
-        # Create tool config file
         tool_config_path = tmp_path / "tool_config.yaml"
-        tool_config_path.write_text(f"module_path: {tmp_path}")
+        tool_config_path.write_text("module_path: my.tools.module")
 
         agent_config = {
             "tools": [{"type": "function", "function": {"file": str(tool_config_path)}}],
@@ -46,7 +45,7 @@ class TestToolsResolver:
             return_value=tmp_path,
         ):
             resolved = resolve_tools_path(agent_config)
-        assert resolved == str(tmp_path), f"Expected module_path from tool config, got {resolved}"
+        assert resolved == "my.tools.module"
 
     def test_no_tools_configured(self):
         """Test that missing tools returns None."""

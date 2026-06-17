@@ -13,9 +13,13 @@ def load_structured_file(path: Path) -> Any:
     """Load a JSON or YAML file based on its extension.
 
     Returns the parsed content.  Raises ``json.JSONDecodeError`` for
-    malformed JSON and ``yaml.YAMLError`` for malformed YAML.
+    malformed JSON, ``yaml.YAMLError`` for malformed YAML, and
+    ``ValueError`` for empty files.
     """
     with open(path, encoding="utf-8") as f:
         if path.suffix == ".json":
             return json.load(f)
-        return yaml.safe_load(f)
+        result = yaml.safe_load(f)
+        if result is None:
+            raise ValueError(f"Empty or null YAML file: {path}")
+        return result

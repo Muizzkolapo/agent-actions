@@ -177,11 +177,12 @@ class MetadataExtractor:
         elif "prompt_tokens" in result and "completion_tokens" in result:
             result["total_tokens"] = result["prompt_tokens"] + result["completion_tokens"]
 
-        if hasattr(usage, "input_tokens"):
-            result["prompt_tokens"] = usage.input_tokens or 0
-        if hasattr(usage, "output_tokens"):
-            result["completion_tokens"] = usage.output_tokens or 0
-            if "prompt_tokens" in result:
+        if not result:
+            if hasattr(usage, "input_tokens"):
+                result["prompt_tokens"] = usage.input_tokens or 0
+            if hasattr(usage, "output_tokens"):
+                result["completion_tokens"] = usage.output_tokens or 0
+            if "prompt_tokens" in result and "completion_tokens" in result:
                 result["total_tokens"] = result["prompt_tokens"] + result["completion_tokens"]
 
         return result if result else None

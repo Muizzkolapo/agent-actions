@@ -69,11 +69,11 @@ def udf_tool(
 
             if func_name_lower in UDF_REGISTRY:
                 existing = UDF_REGISTRY[func_name_lower]
-                new_file = inspect.getfile(f)
-                # Allow if it's the same file being imported via different module paths
-                # This happens when tools_path subdirectories are added to sys.path
+                try:
+                    new_file = inspect.getfile(f)
+                except TypeError:
+                    new_file = f"<builtin:{f.__module__}>"
                 if existing["file"] == new_file:
-                    # Same file, different import path - return existing function
                     return cast(Callable, existing["function"])
                 raise DuplicateFunctionError(
                     function_name=f.__name__,
@@ -83,11 +83,16 @@ def udf_tool(
                     new_file=new_file,
                 )
 
+            try:
+                source_file = inspect.getfile(f)
+            except TypeError:
+                source_file = f"<builtin:{f.__module__}>"
+
             UDF_REGISTRY[func_name_lower] = {
                 "function": f,
                 "module": f.__module__,
                 "name": f.__name__,
-                "file": inspect.getfile(f),
+                "file": source_file,
                 "docstring": f.__doc__,
                 "signature": inspect.signature(f),
                 "granularity": granularity,

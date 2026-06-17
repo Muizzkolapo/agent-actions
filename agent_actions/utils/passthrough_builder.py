@@ -62,13 +62,13 @@ class PassthroughItemBuilder:
         if "metadata" not in processed_item:
             processed_item["metadata"] = {}
 
+        if mode not in ("online", "batch"):
+            raise ValueError(f"Invalid passthrough mode '{mode}' — must be 'online' or 'batch'")
+
         if mode == "online":
             processed_item["metadata"]["reason"] = reason
-            flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
-            processed_item["metadata"][flag_name] = True
-        else:
-            flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
-            processed_item["metadata"][flag_name] = True
+        flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
+        processed_item["metadata"][flag_name] = True
 
         processed_item["metadata"]["agent_type"] = "tombstone"
         processed_item["_tombstone"] = True
