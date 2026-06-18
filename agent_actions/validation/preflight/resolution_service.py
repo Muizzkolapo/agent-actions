@@ -15,7 +15,6 @@ from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 
-import yaml
 from pydantic import BaseModel
 
 from agent_actions.utils.path_security import resolve_seed_path
@@ -459,7 +458,7 @@ class WorkflowResolutionService:
 
             resolved = PromptFormatter.get_raw_prompt(config)
             return {**config, "prompt": resolved}
-        except (FileNotFoundError, OSError, ValueError, yaml.YAMLError) as exc:
+        except Exception as exc:
             logger.warning(
                 "Cannot resolve prompt for seed field extraction in action '%s': %s",
                 config.get("name", "unknown"),
