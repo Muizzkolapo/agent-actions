@@ -211,6 +211,8 @@ class GuardEvaluator:
                 e,
             )
 
+        return None
+
     def _evaluate_guard(self, context: Any, guard_config: dict[str, Any] | None) -> GuardResult:
         """Evaluate guard condition against context data."""
         if not guard_config:
