@@ -74,6 +74,12 @@ class EventManager:
         with cls._lock:
             if cls._instance is not None:
                 cls._instance.flush()
+                for handler in cls._instance._handlers:
+                    if hasattr(handler, "close"):
+                        try:
+                            handler.close()
+                        except Exception:
+                            pass
                 cls._instance._handlers.clear()
                 cls._instance._filters.clear()
                 cls._instance._context.clear()

@@ -204,7 +204,7 @@ class TestWorkflowCompleteEvent:
         assert "2 [red]ERROR[/red]" in result
 
     @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", True)
-    def test_zero_counters_no_color_on_status(self):
+    def test_zero_counters_suppressed(self):
         fmt = AgentActionsFormatter(show_timestamp=False, use_color=True)
         event = _make_event(
             "WorkflowCompleteEvent",
@@ -216,11 +216,9 @@ class TestWorkflowCompleteEvent:
             },
         )
         result = fmt.format(event)
-        # When count is 0, status is plain text (no color markup)
         assert "0 OK" in result
-        assert "0 SKIP" in result
-        assert "0 ERROR" in result
-        assert "[green]" not in result
+        assert "SKIP" not in result
+        assert "ERROR" not in result
 
 
 class TestWorkflowFailedEvent:

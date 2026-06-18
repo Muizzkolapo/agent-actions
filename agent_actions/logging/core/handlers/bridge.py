@@ -63,8 +63,6 @@ class LoggingBridgeHandler(logging.Handler):
             self._event_manager.fire(event)
 
         except Exception:
-            # Don't let bridge errors break the application
-            # Fall back to default handling
             self.handleError(record)
 
     def _extract_category(self, logger_name: str) -> str:

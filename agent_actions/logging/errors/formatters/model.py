@@ -16,6 +16,12 @@ class ModelErrorFormatter(ErrorFormatter):
             "unsupported model",
             "invalid model",
             "model not found",
+            "model_not_found",
+            "model_not_found_error",
+            "not available in your region",
+            "unknown model",
+            "model unavailable",
+            "model decommissioned",
         ]
         return any(pattern in message_lower for pattern in model_patterns)
 

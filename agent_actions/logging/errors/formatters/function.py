@@ -10,9 +10,17 @@ from .base import ErrorFormatter
 class FunctionNotFoundFormatter(ErrorFormatter):
     """Handles function/UDF not found errors with helpful suggestions."""
 
+    _HANDLED_NAMES = frozenset(
+        {
+            "FunctionNotFoundError",
+            "DuplicateFunctionError",
+            "UDFLoadError",
+        }
+    )
+
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        exc_names = [type(exc).__name__, type(root).__name__]
-        if "FunctionNotFoundError" in exc_names:
+        exc_names = {type(exc).__name__, type(root).__name__}
+        if exc_names & self._HANDLED_NAMES:
             return True
 
         if "function" in message.lower() and "not found" in message.lower():

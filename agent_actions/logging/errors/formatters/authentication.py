@@ -10,6 +10,9 @@ class AuthenticationErrorFormatter(ErrorFormatter):
     """Handles authentication errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
+        if isinstance(exc, PermissionError) or isinstance(root, PermissionError):
+            return False
+
         exc_names = [type(exc).__name__, type(root).__name__]
 
         if any("Auth" in name for name in exc_names):

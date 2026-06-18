@@ -19,7 +19,11 @@ class APIErrorFormatter(ErrorFormatter):
 
         message_lower = message.lower()
         api_patterns = [
-            "api",
+            "api error",
+            "api request",
+            "api call",
+            "api returned",
+            "api rate",
             "connection",
             "network",
             "timeout",
