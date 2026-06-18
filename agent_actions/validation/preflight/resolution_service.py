@@ -15,6 +15,7 @@ from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import BaseModel
 
 from agent_actions.utils.path_security import resolve_seed_path
@@ -171,11 +172,11 @@ class WorkflowResolutionService:
     def _check_api_keys(
         self,
     ) -> tuple[list[StaticTypeError], list[StaticTypeWarning], dict[str, str]]:
-        """Check that all required API key env vars are set and well-formed.
+        """Check that all required API key env vars are set.
 
         Returns (errors, warnings, vendor_keys).  Missing keys are errors.
-        Format mismatches are warnings.  vendor_keys maps each resolved
-        vendor → key value (deduplicated) for optional downstream probing.
+        vendor_keys maps each resolved vendor to its key value (deduplicated)
+        for optional downstream probing.
         """
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
@@ -458,11 +459,11 @@ class WorkflowResolutionService:
 
             resolved = PromptFormatter.get_raw_prompt(config)
             return {**config, "prompt": resolved}
-        except Exception:
-            logger.debug(
-                "Cannot resolve prompt for seed field extraction in action '%s', "
-                "skipping template-level seed validation",
+        except (FileNotFoundError, OSError, ValueError, yaml.YAMLError) as exc:
+            logger.warning(
+                "Cannot resolve prompt for seed field extraction in action '%s': %s",
                 config.get("name", "unknown"),
+                exc,
             )
             return config
 

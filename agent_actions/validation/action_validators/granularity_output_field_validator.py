@@ -53,7 +53,10 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
             json_mode = normalized_entry.get(JSON_MODE_KEY, True)
 
             if json_mode:
-                errors.append(f"{desc} 'output_field' can only be used when 'json_mode' is false.")
+                errors.append(
+                    f"{desc} 'output_field' requires 'json_mode: false'. "
+                    f"Add 'json_mode: false' to this action's config."
+                )
 
         reprompt_raw = normalized_entry.get("reprompt")
         reprompt_cfg = reprompt_raw if isinstance(reprompt_raw, dict) else {}

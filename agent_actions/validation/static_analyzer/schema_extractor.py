@@ -398,17 +398,12 @@ class SchemaExtractor:
 
     def _apply_context_scope(self, config: dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema."""
-        observe = config.get("observe", [])
-        for ref in observe:
-            field_name = self._extract_field_name(ref)
-            if field_name:
-                output.observe_fields.add(field_name)
-
-        drops = config.get("drops", [])
-        for ref in drops:
-            field_name = self._extract_field_name(ref)
-            if field_name:
-                output.dropped_fields.add(field_name)
+        if config.get("observe") or config.get("drop") or config.get("drops"):
+            logger.warning(
+                "Action '%s' has top-level 'observe'/'drop' keys — "
+                "these must be under 'context_scope:' to take effect",
+                config.get("name", "unknown"),
+            )
 
         context_scope = config.get("context_scope", {})
 
