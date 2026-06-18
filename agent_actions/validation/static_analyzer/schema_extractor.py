@@ -398,18 +398,6 @@ class SchemaExtractor:
 
     def _apply_context_scope(self, config: dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema."""
-        observe = config.get("observe", [])
-        for ref in observe:
-            field_name = self._extract_field_name(ref)
-            if field_name:
-                output.observe_fields.add(field_name)
-
-        drops = config.get("drops", [])
-        for ref in drops:
-            field_name = self._extract_field_name(ref)
-            if field_name:
-                output.dropped_fields.add(field_name)
-
         context_scope = config.get("context_scope", {})
 
         passthrough = context_scope.get("passthrough", [])

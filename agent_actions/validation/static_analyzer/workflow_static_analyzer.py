@@ -185,9 +185,10 @@ class WorkflowStaticAnalyzer:
         for warning in filter_fanin_warnings:
             result.add_warning(warning)
 
-        # Step 3: Check for unused dependencies (add as warnings)
-        warnings = checker.check_unused_dependencies()
-        for warning in warnings:
+        # Step 3: Check for unused and missing dependencies (add as warnings)
+        for warning in checker.check_unused_dependencies():
+            result.add_warning(warning)
+        for warning in checker.check_missing_dependencies():
             result.add_warning(warning)
 
         # Step 3b: Check lineage reachability for observe/passthrough references

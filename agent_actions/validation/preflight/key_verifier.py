@@ -192,12 +192,27 @@ def verify_keys(
         futures: dict[Future[ProbeResult], str] = {
             pool.submit(_PROBE_REGISTRY[vendor], key): vendor for vendor, (_, key) in tasks.items()
         }
-        for future in as_completed(futures, timeout=_PROBE_TIMEOUT_SECONDS + 2):
-            vendor = futures[future]
-            try:
-                results.append(future.result())
-            except Exception as e:
-                logger.warning("Could not verify %s key: %s (skipping verification)", vendor, e)
-                results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
+        seen: set[str] = set()
+        try:
+            for future in as_completed(futures, timeout=_PROBE_TIMEOUT_SECONDS + 2):
+                vendor = futures[future]
+                seen.add(vendor)
+                try:
+                    results.append(future.result())
+                except Exception as e:
+                    logger.warning("Could not verify %s key: %s (skipping verification)", vendor, e)
+                    results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
+        except TimeoutError:
+            for future, vendor in futures.items():
+                if vendor in seen:
+                    continue
+                if future.done():
+                    try:
+                        results.append(future.result())
+                    except Exception:
+                        results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
+                else:
+                    logger.warning("Key verification timed out for %s (skipping)", vendor)
+                    results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
 
     return results
