@@ -41,8 +41,6 @@ class ConfigManager:
         self.tool_path: list[str] | None = None
         self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
-        self.workflow_config: Any = None
-        self.pipeline_config: Any = None
 
     def _load_single_config(self, config_path: str, config_type: str) -> dict[str, Any]:
         """Load and parse a single config file with template rendering.
@@ -64,7 +62,18 @@ class ConfigManager:
             config_data = render_pipeline_with_templates(
                 config_path, self.template_dir, project_root=self.project_root
             )
-            loaded: dict[str, Any] = yaml.safe_load(config_data)
+            loaded = yaml.safe_load(config_data)
+            if not isinstance(loaded, dict):
+                config_name = Path(config_path).name
+                raise ConfigurationError(
+                    f"{config_type.capitalize()} config '{config_name}' must be a YAML mapping, "
+                    f"got {type(loaded).__name__}",
+                    context={
+                        "config_path": str(config_path),
+                        "operation": f"load_{config_type}_config",
+                        "parsed_type": type(loaded).__name__,
+                    },
+                )
             fire_event(ConfigLoadEvent(config_file=str(config_path), config_type=config_type))
             return loaded
         except TemplateRenderingError as e:
@@ -129,22 +138,14 @@ class ConfigManager:
             logger.info("No tool_path configured; defaulting to 'tools/'")
 
     def find_agent_name(self, config: dict[str, Any]) -> str:
-        """
-        Find the name of the agent from the configuration.
-
-        Args:
-            config: Agent configuration dictionary
-
-        Returns:
-            str: Name of the agent
-        """
+        """Find the name of the agent from the configuration."""
+        if not isinstance(config, dict) or not config:
+            raise ConfigurationError(
+                "Cannot find agent name: configuration is empty or not a mapping",
+                context={"config_type": type(config).__name__},
+            )
         if "name" in config and "actions" in config:
             return str(config["name"])
-        if not config:
-            raise ConfigurationError(
-                "Cannot find agent name: configuration is empty",
-                context={"config_keys": list(config.keys())},
-            )
         return str(next(iter(config)))
 
     def validate_agent_name(self) -> None:
@@ -363,14 +364,6 @@ class ConfigManager:
         env_path = Path(root) / ".env"
         return env_path if env_path.is_file() else None
 
-    def get_agent_config(self, agent_type: str) -> AgentConfig | None:
-        """Get typed agent configuration by agent type."""
-        return self.agent_configs.get(agent_type)
-
-    def get_all_agent_configs(self) -> dict[str, AgentConfig]:
-        """Get all typed agent configurations."""
-        return self.agent_configs.copy()
-
     def get_all_agent_configs_as_dicts(self) -> dict[str, dict[str, Any]]:
         """Get all agent configurations as dictionaries for backward compatibility."""
         result = {}
@@ -418,72 +411,3 @@ class ConfigManager:
 
             result[agent_type] = config_dict
         return result
-
-    def create_pipeline_config(self, pipeline_data: dict[str, Any]) -> Any:
-        """Create a typed pipeline configuration from dictionary data."""
-        from agent_actions.workflow.pipeline import PipelineConfig as _PipelineConfig
-
-        try:
-            self.pipeline_config = _PipelineConfig.model_validate(pipeline_data)  # type: ignore[attr-defined]
-            return self.pipeline_config
-        except ValidationError as e:
-            raise ConfigurationError(
-                "Invalid pipeline configuration",
-                context={
-                    "pipeline_name": pipeline_data.get("name", "unknown"),
-                    "operation": "create_pipeline_config",
-                },
-                cause=e,
-            ) from e
-
-    def validate_all_configs(self) -> None:
-        """Validate all loaded configurations."""
-        from agent_actions.output.response.config_schema import AgentConfig
-
-        if not self.environment_config:
-            self.load_environment_config()
-        for agent_type, config in self.agent_configs.items():
-            try:
-                AgentConfig.model_validate(config.model_dump())
-            except ValidationError as e:
-                raise ConfigurationError(
-                    "Agent configuration is invalid",
-                    context={"agent_type": agent_type, "operation": "validate_all_configs"},
-                    cause=e,
-                ) from e
-
-    def get_configuration_summary(self) -> dict[str, Any]:
-        """Get a summary of all loaded configurations."""
-        project_name = None
-        if self.project_root is not None:
-            try:
-                from agent_actions.config.path_config import get_project_name
-
-                project_name = get_project_name(self.project_root)
-            except (OSError, ConfigValidationError) as exc:
-                logger.debug("Could not retrieve project_name for summary: %s", exc)
-
-        return {
-            "project": {
-                "name": project_name,
-            },
-            "environment": {
-                "loaded": self.environment_config is not None,
-                "env": (
-                    self.environment_config.agent_actions_env if self.environment_config else None
-                ),
-            },
-            "agents": {
-                "count": len(self.agent_configs),
-                "types": list(self.agent_configs.keys()),
-                "execution_order": self.execution_order,
-            },
-            "workflow": {
-                "loaded": self.workflow_config is not None,
-                "name": getattr(self.workflow_config, "name", None),
-            },
-            "pipeline": {
-                "loaded": self.pipeline_config is not None,
-                "name": getattr(self.pipeline_config, "name", None),
-            },
-        }

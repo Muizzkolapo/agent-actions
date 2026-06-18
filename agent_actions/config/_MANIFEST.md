@@ -108,7 +108,7 @@ Key Functions
 | `ConfigManager.load_configs` | `agent_config/{workflow}.yml` | Reads | `tool_path` |
 | `ConfigManager._resolve_dotenv` | `.env` | Reads | — |
 
-**Internal only**: `ActionKind`, `VersionMode`, `VersionConfig`, `MergePattern`, `VersionConsumptionConfig`, `RetryConfig`, `RepromptConfig`, `HitlConfig`, `PathType`, `PathConfig`, `PathManagerError`, `ProjectRootNotFoundError`, `PathManagerValidationError`, `ProcessingMode`, `IAsyncCapable`, `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader`, `IDataProcessor`, `Granularity`, `RunMode`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`, `ActionConfigDict`, `ActionEntryDict`, `ActionConfigMap`, `ProjectPaths`, `StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults` -- no direct project surface.
+**Internal only**: `ActionKind`, `VersionMode`, `VersionConfig`, `MergePattern`, `VersionConsumptionConfig`, `RetryConfig`, `RepromptConfig`, `HitlConfig`, `PathType`, `PathConfig`, `PathManagerError`, `ProjectRootNotFoundError`, `PathManagerValidationError`, `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader`, `IDataProcessor`, `Granularity`, `RunMode`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`, `ActionConfigDict`, `ActionEntryDict`, `ActionConfigMap`, `ProjectPaths`, `StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults` -- no direct project surface.
 
 ## Dependencies
 

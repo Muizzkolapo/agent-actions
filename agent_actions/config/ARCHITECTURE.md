@@ -231,17 +231,8 @@ EnvironmentConfig
   │   ├── anthropic_api_key
   │   └── gemini_api_key
   │
-  ├── Runtime settings
-  │   ├── agent_actions_env    (development/staging/production)
-  │   ├── default_api_timeout  (1-600 seconds, default 120)
-  │   ├── default_max_retries  (0-10, default 3)
-  │   ├── default_batch_size   (1-10000, default 100)
-  │   └── max_concurrency      (1-100, default 10)
-  │
-  └── Feature flags
-      ├── debug_logging           (default false)
-      ├── enable_parallel_processing (default true)
-      └── cache_ttl              (seconds, default 300)
+  └── Runtime settings
+      └── agent_actions_env    (development/staging/production)
 
 model_config: extra="ignore"
   Unknown env vars are silently ignored — EnvironmentConfig only
@@ -361,7 +352,7 @@ ProcessorFactory uses both:
 | `di/application.py` | `ApplicationContainer` — top-level bootstrap, creates `ActionRunner` with all deps |
 | `di/types.py` | `DIConfig`, `LoggingConfig`, `ProcessorsConfig`, `ServicesConfig` typed dicts |
 | `factory.py` | `application_container_context()` context manager, `create_action_runner()` convenience function |
-| `interfaces.py` | `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader`, `IDataProcessor` ABCs with async mixins; `ProcessingMode` enum |
+| `interfaces.py` | `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader`, `IDataProcessor` interface ABCs |
 
 ### Project Lifecycle
 | File | Role |

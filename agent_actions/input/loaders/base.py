@@ -9,7 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
 
-from agent_actions.config.interfaces import IDataLoader, ProcessingMode
+from agent_actions.config.interfaces import IDataLoader
 from agent_actions.config.types import ActionEntryDict
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 
@@ -66,14 +66,6 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.logger = logging.getLogger(__name__)
-
-    def supports_async(self) -> bool:
-        """Return True if this loader supports async operations."""
-        return True
-
-    def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode."""
-        return ProcessingMode.AUTO
 
     def load_file(self, file_path: str) -> str:
         """Safely load a file's content with retry logic."""

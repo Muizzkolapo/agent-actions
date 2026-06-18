@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agent_actions.config.interfaces import IDataLoader, ProcessingMode
+from agent_actions.config.interfaces import IDataLoader
 from agent_actions.input.loaders.base import read_file_with_retry
 from agent_actions.utils.path_safety import assert_path_contained
 
@@ -18,14 +18,6 @@ class BatchDataLoader(IDataLoader):
     centralised loader infrastructure, gaining automatic retry on
     transient I/O errors.
     """
-
-    def supports_async(self) -> bool:
-        """Return True as this loader supports async operations."""
-        return True
-
-    def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode to let system choose."""
-        return ProcessingMode.AUTO
 
     async def load_data_async(
         self, file_path: str, *, allowed_root: Path | None = None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from agent_actions.config.interfaces import ISourceDataLoader, ProcessingMode
+from agent_actions.config.interfaces import ISourceDataLoader
 from agent_actions.errors import DependencyError
 
 if TYPE_CHECKING:
@@ -26,14 +26,6 @@ class SourceDataLoader(ISourceDataLoader):
         if storage_backend is None:
             raise DependencyError("SourceDataLoader", "storage_backend")
         self.storage_backend = storage_backend
-
-    def supports_async(self) -> bool:
-        """Return True as this loader supports async operations."""
-        return True
-
-    def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode."""
-        return ProcessingMode.AUTO
 
     def load_source_data(self, source_relative_path: str) -> list[dict]:
         """Load source data from the storage backend."""

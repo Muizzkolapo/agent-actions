@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from agent_actions.config.di.container import registry
-from agent_actions.config.interfaces import IDataProcessor, ProcessingMode
+from agent_actions.config.interfaces import IDataProcessor
 from agent_actions.errors import TransformationError
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.processing.helpers import transform_with_passthrough
@@ -26,14 +26,6 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
     def __init__(self, agent_config: dict):
         super().__init__()
         self.agent_config = agent_config
-
-    def supports_async(self) -> bool:
-        """Return whether this processor supports async operations."""
-        return True
-
-    def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode."""
-        return ProcessingMode.AUTO
 
     def process_item(
         self,

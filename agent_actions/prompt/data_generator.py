@@ -10,7 +10,7 @@ from agent_actions.config.types import ActionConfigDict, ActionEntryDict
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.di.container import registry
-from agent_actions.config.interfaces import IGenerator, ProcessingMode
+from agent_actions.config.interfaces import IGenerator
 from agent_actions.config.types import RunMode
 from agent_actions.errors import GenerationError
 from agent_actions.processing.enrichment import EnrichmentPipeline
@@ -47,14 +47,6 @@ class DataGenerator(IGenerator):
             agent_name=self.agent_name,
         )
         self._enrichment_pipeline = EnrichmentPipeline()
-
-    def supports_async(self) -> bool:
-        """Return True as this generator supports async operations."""
-        return True
-
-    def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode to let system choose."""
-        return ProcessingMode.AUTO
 
     def create_agent_with_data(
         self,
