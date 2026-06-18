@@ -96,12 +96,16 @@ class JSONFileHandler:
             self._file = open(self.file_path, "a", encoding="utf-8")
             self._current_size = self.file_path.stat().st_size if self.file_path.exists() else 0
 
-        for event_dict in self._buffer:
-            line = json.dumps(event_dict, default=str) + "\n"
-            self._file.write(line)
-            self._current_size += len(line.encode("utf-8"))
-
-        self._buffer.clear()
+        written = 0
+        try:
+            for event_dict in self._buffer:
+                line = json.dumps(event_dict, default=str) + "\n"
+                self._file.write(line)
+                self._current_size += len(line.encode("utf-8"))
+                written += 1
+        finally:
+            if written > 0:
+                del self._buffer[:written]
 
     def _rotate(self) -> None:
         """Rotate the log file (must hold lock)."""

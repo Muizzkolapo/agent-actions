@@ -120,6 +120,7 @@ class LoggerFactory:
             "WARN": EventLevel.WARN,
             "WARNING": EventLevel.WARN,
             "ERROR": EventLevel.ERROR,
+            "CRITICAL": EventLevel.ERROR,
         }
         console_level = level_map.get(console_level_str.upper(), EventLevel.INFO)
 
@@ -184,8 +185,11 @@ class LoggerFactory:
         # Event handlers will filter by level
         root_logger.setLevel(logging.DEBUG)
 
+        from agent_actions.logging.filters import RedactingFilter
+
         bridge = LoggingBridgeHandler(level=logging.DEBUG)
         root_logger.addHandler(bridge)
+        root_logger.addFilter(RedactingFilter())
 
         root_logger.propagate = False
 
