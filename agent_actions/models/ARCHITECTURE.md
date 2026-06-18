@@ -18,7 +18,7 @@ Four symbols, three roles:
 | Symbol | Type | Defined in | Role |
 |--------|------|-----------|------|
 | `ActionKind` | `str, Enum` | `config/schema.py` | Action type discriminator (llm, tool, hitl, source, seed) |
-| `FieldSource` | `Enum` | `models/action_schema.py` | How a field is produced (schema, observe, passthrough, tool_output) |
+| `FieldSource` | `Enum` | `models/action_schema.py` | Where a field comes from (schema, observe, passthrough, tool_output, input) |
 | `FieldInfo` | `@dataclass` | `models/action_schema.py` | Metadata for a single field (name, source, type, required, dropped) |
 | `ActionSchema` | `@dataclass` | `models/action_schema.py` | Full schema for one action: inputs, outputs, dependencies, flags |
 
@@ -50,6 +50,8 @@ class FieldSource(Enum):
     OBSERVE = "observe"        # read-only context injected into the prompt
     PASSTHROUGH = "passthrough" # copied from input to output unchanged
     TOOL_OUTPUT = "tool_output" # produced by a tool/UDF function
+    INPUT = "input"            # consumed by the action as an input field;
+                               # the upstream production source is unknown here
 ```
 
 This is a plain `Enum`, not `str, Enum`. Comparisons like `source == "schema"` will fail -- use `source == FieldSource.SCHEMA` or compare against `.value`.
@@ -67,13 +69,10 @@ class FieldInfo:
     description: str = ""
 ```
 
-`to_dict()` serializes the field for JSON output. The key mapping is:
-
-```
-field_type  (attribute name)  -->  "type"  (dict key in to_dict output)
-```
-
-This is deliberate: the attribute is named `field_type` to avoid shadowing Python's `type` builtin, but the serialized form uses `"type"` because that is what consumers (CLI, docs) expect.
+`to_dict()` serializes the field for JSON output. Keys mirror the dataclass
+attribute names, so `FieldInfo.from_dict(f.to_dict()) == f` round-trips
+losslessly. The serialized type key is `"field_type"` (matching the
+attribute), not `"type"`, to keep the contract symmetric.
 
 ### ActionSchema
 
@@ -162,7 +161,9 @@ Test files that exercise the models directly:
 
 ## Caveats
 
-**ActionKind lives in `config/`, not `models/`.** It is defined in `config/schema.py` and re-exported here for convenience. The canonical definition is in `config/` because it is used in Pydantic config validation before `models/` is involved. Do not duplicate it.
+**ActionKind lives in `config/`, not `models/`.** It is defined in `config/schema.py` and re-exported here for convenience (see `__all__` in `action_schema.py`). The canonical definition is in `config/` because it is used in Pydantic config validation before `models/` is involved. Do not duplicate it.
+
+**`ActionKind.SEED` is config-only.** `kind: seed` is accepted in user YAML and validated by `ActionConfig`, but the runtime data-flow graph never assigns `DataFlowNode.agent_kind = ActionKind.SEED`. Seed data is wired through the prompt-context namespace `"seed"` (see `prompt/context/scope_application.py`) rather than through the action-kind discriminator. Treat `SEED` as a config-time label only.
 
 **FieldSource is NOT a `str` enum.** Unlike `ActionKind(str, Enum)`, `FieldSource` is a plain `Enum`. String comparisons like `field.source == "schema"` will silently evaluate to `False`. Always compare against the enum member or use `.value`.
 

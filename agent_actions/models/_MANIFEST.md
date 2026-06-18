@@ -11,6 +11,7 @@
 | `FieldSource` | Class | How a field is produced. | - |
 | `FieldInfo` | Class | Information about a single field. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert to dictionary for JSON serialization. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `from_dict` | Method | Reconstruct from a dict produced by `to_dict` (round-trip). | - |
 | `ActionSchema` | Class | Unified schema for any action type. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_outputs` | Method | Fields available to downstream agents (excludes dropped). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `dropped_outputs` | Method | Fields explicitly dropped from output. | - |

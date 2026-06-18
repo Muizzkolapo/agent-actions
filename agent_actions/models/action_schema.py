@@ -6,16 +6,24 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from agent_actions.config.schema import ActionKind  # noqa: F401 — canonical enum, re-exported
+from agent_actions.config.schema import ActionKind
+
+__all__ = ["ActionKind", "ActionSchema", "FieldInfo", "FieldSource"]
 
 
 class FieldSource(Enum):
-    """How a field is produced."""
+    """Where a field comes from in the action's schema.
+
+    Output-side values describe how the field is produced; ``INPUT`` marks
+    fields consumed by the action (e.g. tool input schema entries) where the
+    upstream production source is not known here.
+    """
 
     SCHEMA = "schema"
     OBSERVE = "observe"
     PASSTHROUGH = "passthrough"
     TOOL_OUTPUT = "tool_output"
+    INPUT = "input"
 
 
 @dataclass
@@ -35,9 +43,20 @@ class FieldInfo:
             "source": self.source.value,
             "is_required": self.is_required,
             "is_dropped": self.is_dropped,
-            "type": self.field_type,
+            "field_type": self.field_type,
             "description": self.description,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FieldInfo:
+        return cls(
+            name=data["name"],
+            source=FieldSource(data["source"]),
+            is_required=data.get("is_required", True),
+            is_dropped=data.get("is_dropped", False),
+            field_type=data.get("field_type", "unknown"),
+            description=data.get("description", ""),
+        )
 
 
 @dataclass
