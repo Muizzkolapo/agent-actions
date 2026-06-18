@@ -202,11 +202,14 @@ class GuardEvaluator:
             if not execute_user_defined_function(clause, context):
                 logger.debug("Guard: conditional_clause '%s' evaluated to False, skipping", clause)
                 return GuardResult.skipped()
-        except (ValueError, TypeError, KeyError, AttributeError) as e:
-            logger.debug("Guard: conditional_clause evaluation failed: %s, proceeding", e)
-            # Don't skip on UDF errors - proceed with execution
-
-        return None
+        except Exception as e:
+            logger.warning(
+                "Guard: conditional_clause '%s' raised %s: %s — passing record "
+                "(legacy conditional_clause uses passthrough-on-error semantics)",
+                clause,
+                type(e).__name__,
+                e,
+            )
 
     def _evaluate_guard(self, context: Any, guard_config: dict[str, Any] | None) -> GuardResult:
         """Evaluate guard condition against context data."""
