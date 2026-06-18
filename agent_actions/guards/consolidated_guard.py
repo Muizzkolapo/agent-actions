@@ -5,7 +5,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigValidationError
 
-from .guard_parser import GuardParser, GuardType
+from .guard_parser import GuardExpression, GuardParser, GuardType
 
 
 class GuardBehavior(StrEnum):
@@ -23,7 +23,12 @@ _UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess
 class GuardConfig:
     """Consolidated guard configuration with condition and behavior control."""
 
-    def __init__(self, condition: str, on_false: GuardBehavior | str):
+    def __init__(
+        self,
+        condition: str,
+        on_false: GuardBehavior | str,
+        _parsed: "GuardExpression | None" = None,
+    ):
         """Initialize guard configuration."""
         self.condition = condition
         if isinstance(on_false, GuardBehavior):
@@ -50,7 +55,7 @@ class GuardConfig:
                 f"on_false must be a GuardBehavior or string, got {type(on_false).__name__}",
                 context={"on_false_type": str(type(on_false)), "on_false_value": repr(on_false)},
             )
-        self._parsed_condition = GuardParser.parse(condition)
+        self._parsed_condition = _parsed or GuardParser.parse(condition)
 
     def is_udf_condition(self) -> bool:
         """Check if condition is a UDF expression."""
@@ -87,18 +92,20 @@ class GuardConfig:
                 },
             )
         condition = config_dict["condition"]
-        on_false = config_dict.get("on_false", "filter")
-        return cls(condition=condition, on_false=on_false)
+        on_false = config_dict.get("on_false")
+        parsed = GuardParser.parse(condition)
+        if on_false is None:
+            on_false = GuardBehavior.SKIP if parsed.type == GuardType.UDF else GuardBehavior.FILTER
+        return cls(condition=condition, on_false=on_false, _parsed=parsed)
 
     @classmethod
     def from_string(cls, guard_string: str) -> "GuardConfig":
         """Create GuardConfig from a legacy guard expression string."""
         parsed = GuardParser.parse(guard_string)
-        if parsed.type == GuardType.UDF:
-            default_behavior = GuardBehavior.SKIP
-        else:
-            default_behavior = GuardBehavior.FILTER
-        return cls(condition=guard_string, on_false=default_behavior)
+        default_behavior = (
+            GuardBehavior.SKIP if parsed.type == GuardType.UDF else GuardBehavior.FILTER
+        )
+        return cls(condition=guard_string, on_false=default_behavior, _parsed=parsed)
 
     def __repr__(self):
         return f"GuardConfig(condition='{self.condition}', on_false={self.on_false})"

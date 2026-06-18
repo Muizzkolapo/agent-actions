@@ -39,10 +39,8 @@ class GuardParser:
     def parse(cls, guard: str | None) -> GuardExpression:
         """Parse a guard expression string into a typed GuardExpression (SQL or UDF).
 
-        Note: SQL guard expressions operate on column values only. Built-in
-        Python names such as ``file``, ``input``, ``vars``, and ``dir`` are
-        treated as column references, not as Python builtins, so they will not
-        trigger the dangerous-pattern validator.
+        SQL guard expressions are validated against a dangerous-pattern
+        blocklist (e.g. ``exec``, ``eval``, ``__import__``).
         """
         if not guard or not isinstance(guard, str):
             raise ValidationError(
