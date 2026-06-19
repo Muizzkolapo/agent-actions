@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-
 
 class ReferenceType(Enum):
     """Types of references that can be resolved."""
@@ -51,19 +49,6 @@ class Reference:
     value: str  # The reference value (e.g., "workflow.PromptName")
     location: Location  # Where the reference appears
     raw_text: str  # The original text (e.g., "$workflow.PromptName")
-
-
-@dataclass
-class ActionDefinition:
-    """An action defined in a workflow YAML."""
-
-    name: str
-    location: Location
-    prompt_ref: str | None = None
-    impl_ref: str | None = None
-    schema_ref: str | None = None
-    dependencies: list[str] = field(default_factory=list)
-    kind: str = DEFAULT_ACTION_KIND  # "llm" or "tool"
 
 
 @dataclass

@@ -72,8 +72,8 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                 diagnostics.append(
                     _build_diagnostic(
                         reference.location,
-                        f"context_scope reference `{reference.value}` cannot be resolved because "
-                        f"action `{action_name}` is missing.",
+                        f"Cannot resolve `{reference.value}` — action "
+                        f"`{action_name}` is not defined in this workflow.",
                         lsp.DiagnosticSeverity.Error,
                     )
                 )
@@ -87,8 +87,8 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                     diagnostics.append(
                         _build_diagnostic(
                             reference.location,
-                            f"context_scope reference `{reference.value}` cannot be resolved because "
-                            f"`{action_name}` output schema does not declare `{field}`.",
+                            f"Cannot resolve `{reference.value}` — action "
+                            f"`{action_name}` has no output field `{field}`.",
                             lsp.DiagnosticSeverity.Error,
                         )
                     )
@@ -113,8 +113,8 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
             for variable in action.guard_variables:
                 if variable not in available:
                     message = (
-                        f"Guard condition references `{variable}` which is not observed "
-                        "in context_scope."
+                        f"Guard condition references `{variable}` which is not listed "
+                        "in this action's `context_scope.observe`."
                     )
                     # Suggest dotted paths if the bare field matches a namespace suffix
                     if "." not in variable:

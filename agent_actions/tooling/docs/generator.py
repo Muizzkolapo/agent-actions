@@ -29,24 +29,37 @@ def _copy_readme_images(
     workflow_id: str,
     artefact_dir: Path,
 ) -> str:
-    """Copy images referenced in README to artefact/images/ and rewrite paths."""
+    """Copy images referenced in README to artefact/images/ and rewrite paths.
+
+    Substitutions are applied at exact regex-match spans (not via
+    ``str.replace``) so that a short relative path like ``logo.png`` is not
+    rewritten inside an unrelated longer path like ``dark/logo.png``.
+
+    A copy failure for one image (disk full, permission error, etc.) is
+    logged and skipped — the catalog generation continues for the remaining
+    images.
+    """
     content = readme_data.content
     images_dir = artefact_dir / "images" / workflow_id
 
-    # Match both <img src="..."> and ![alt](...)
-    img_patterns = [
-        (r'<img\s+[^>]*src="([^"]+)"', "html"),
-        (r"!\[([^\]]*)\]\(([^)]+)\)", "markdown"),
+    # Match both <img src="..."> and ![alt](...) and capture the URL group
+    # so the replacement span is limited to the path itself.
+    img_patterns: list[tuple[re.Pattern[str], int]] = [
+        (re.compile(r'<img\s+[^>]*src="([^"]+)"'), 1),
+        (re.compile(r"!\[([^\]]*)\]\(([^)]+)\)"), 2),
     ]
 
-    replacements: list[tuple[str, str]] = []
+    # (start, end, replacement) for each URL-group span we want to rewrite.
+    # No dedup set is needed: html and markdown URL spans live in disjoint
+    # surrounding chars (`src="..."` vs `](...)`) so their (start, end) tuples
+    # can never coincide, and `finditer` already yields non-overlapping
+    # matches within a single pattern.
+    spans: list[tuple[int, int, str]] = []
+    images_dir_ready = False
 
-    for pattern, kind in img_patterns:
-        for match in re.finditer(pattern, content):
-            if kind == "html":
-                rel_path = match.group(1)
-            else:
-                rel_path = match.group(2)
+    for pattern, group_idx in img_patterns:
+        for match in pattern.finditer(content):
+            rel_path = match.group(group_idx)
 
             # Skip URLs (http://, https://, data:)
             if rel_path.startswith(("http://", "https://", "data:")):
@@ -57,17 +70,48 @@ def _copy_readme_images(
             if not source.exists() or not source.is_file():
                 continue
 
-            # Copy to artefact/images/{workflow_id}/{filename}
-            images_dir.mkdir(parents=True, exist_ok=True)
+            # Lazy-create the images directory the first time we have a
+            # genuine image to stage. A failure here is systemic (parent
+            # unwritable) so we abandon the rewrite entirely instead of
+            # logging the same diagnostic per image.
+            if not images_dir_ready:
+                try:
+                    images_dir.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    logger.warning(
+                        "Cannot create images directory %s for workflow %s: %s",
+                        images_dir,
+                        workflow_id,
+                        e,
+                    )
+                    return content
+                images_dir_ready = True
+
+            # Copy to artefact/images/{workflow_id}/{filename}. A single
+            # copy failure must not abort the rest of the catalog.
             dest = images_dir / source.name
-            shutil.copy2(source, dest)
+            try:
+                shutil.copy2(source, dest)
+            except OSError as e:
+                logger.warning(
+                    "Failed to copy README image %s for workflow %s: %s",
+                    source,
+                    workflow_id,
+                    e,
+                )
+                continue
 
-            # Rewrite path to /artefact/images/{workflow_id}/{filename}
             new_path = f"/artefact/images/{workflow_id}/{source.name}"
-            replacements.append((rel_path, new_path))
+            spans.append(match.span(group_idx) + (new_path,))
 
-    for old_path, new_path in replacements:
-        content = content.replace(old_path, new_path)
+    if not spans:
+        return content
+
+    # Apply substitutions right-to-left so earlier offsets remain valid as
+    # we splice into the string.
+    spans.sort(key=lambda s: s[0], reverse=True)
+    for start, end, new_text in spans:
+        content = content[:start] + new_text + content[end:]
 
     return content
 
