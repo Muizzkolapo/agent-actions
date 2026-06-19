@@ -7,9 +7,6 @@ from agent_actions.errors.base import (
     get_error_detail,
 )
 
-# Common errors
-from agent_actions.errors.common import InvalidParameterError
-
 # Configuration errors
 from agent_actions.errors.configuration import (
     AgentNotFoundError,
@@ -62,7 +59,6 @@ from agent_actions.errors.processing import (
     EmptyOutputError,
     GenerationError,
     ProcessingError,
-    SerializationError,
     TransformationError,
     WorkflowError,
 )
@@ -86,8 +82,6 @@ __all__ = [
     "AgentActionsError",
     "enrich_exception_context",
     "get_error_detail",
-    # Common
-    "InvalidParameterError",
     # Configuration
     "ConfigurationError",
     "ConfigValidationError",
@@ -107,7 +101,6 @@ __all__ = [
     "TransformationError",
     "GenerationError",
     "WorkflowError",
-    "SerializationError",
     "EmptyOutputError",
     # External Services
     "ExternalServiceError",
