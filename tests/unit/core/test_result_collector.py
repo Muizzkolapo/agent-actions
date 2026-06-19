@@ -269,6 +269,79 @@ def test_result_collector_on_exhausted_raise_writes_disposition_before_raising()
     )
 
 
+def test_result_collector_on_exhausted_raise_file_mode_per_item():
+    """on_exhausted=raise writes per-item dispositions when source_guid is None."""
+    agent_config = {
+        "agent_type": "test_action",
+        "retry": {"on_exhausted": "raise"},
+    }
+    exhausted = ProcessingResult.exhausted(
+        error="Retry exhausted",
+        source_guid=None,
+        recovery_metadata=_retry_metadata(),
+        input_record={"target_id": "t-1"},
+    )
+    exhausted.data = [
+        {"source_guid": "item_1", "content": {}},
+        {"source_guid": "item_2", "content": {}},
+    ]
+
+    mock_backend = MagicMock()
+    mock_backend.set_disposition = MagicMock()
+    wire_batch_disposition_delegate(mock_backend)
+
+    with pytest.raises(AgentActionsError):
+        ResultCollector.collect_results(
+            [exhausted],
+            agent_config,
+            "test_agent",
+            is_first_stage=True,
+            storage_backend=mock_backend,
+        )
+
+    assert mock_backend.set_disposition.call_count == 2
+    guids = {c[0][1] for c in mock_backend.set_disposition.call_args_list}
+    assert guids == {"item_1", "item_2"}
+
+
+def test_result_collector_on_exhausted_raise_no_guid_warns(caplog):
+    """on_exhausted=raise warns when exhausted items have no source_guid."""
+    import logging
+
+    aa_logger = logging.getLogger("agent_actions")
+    orig = aa_logger.propagate
+    aa_logger.propagate = True
+
+    agent_config = {
+        "agent_type": "test_action",
+        "retry": {"on_exhausted": "raise"},
+    }
+    exhausted = ProcessingResult.exhausted(
+        error="Retry exhausted",
+        source_guid=None,
+        recovery_metadata=_retry_metadata(),
+    )
+    exhausted.data = [{"content": {}}]
+
+    mock_backend = MagicMock()
+    mock_backend.set_disposition = MagicMock()
+    wire_batch_disposition_delegate(mock_backend)
+
+    try:
+        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.result_collector"):
+            with pytest.raises(AgentActionsError):
+                ResultCollector.collect_results(
+                    [exhausted],
+                    agent_config,
+                    "test_agent",
+                    is_first_stage=True,
+                    storage_backend=mock_backend,
+                )
+        assert any("none carry source_guid" in r.message for r in caplog.records)
+    finally:
+        aa_logger.propagate = orig
+
+
 def test_result_collector_on_exhausted_return_last_does_not_raise():
     """Test that on_exhausted=return_last (default) does not raise."""
     agent_config = {

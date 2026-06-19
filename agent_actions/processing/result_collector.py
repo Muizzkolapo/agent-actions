@@ -940,6 +940,7 @@ class ResultCollector:
                         input_snapshot_str = _serialize_snapshot(
                             er.source_snapshot or er.input_record
                         )
+                        written = 0
                         for item in er_data:
                             item_guid = item.get("source_guid")
                             if item_guid:
@@ -952,6 +953,15 @@ class ResultCollector:
                                     input_snapshot=input_snapshot_str,
                                     detail=er.error,
                                 )
+                                written += 1
+                        if not written:
+                            logger.warning(
+                                "[%s] %d exhausted data item(s) but none carry "
+                                "source_guid — dispositions not written "
+                                "(on_exhausted=raise)",
+                                agent_name,
+                                len(er_data),
+                            )
                     else:
                         logger.warning(
                             "[%s] Exhausted result has no source_guid and no data — "
