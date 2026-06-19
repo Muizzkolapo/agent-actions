@@ -337,7 +337,11 @@ class MessageBuilder:
         # Token overflow pre-flight guard — always runs.
         # When model_name is unknown, falls back to _DEFAULT_CONTEXT_LIMIT.
         estimated_tokens = sum(len(m.content) for m in messages) // 4
-        model_limit = _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
+        model_limit = (
+            _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
+            if model_name is not None
+            else _DEFAULT_CONTEXT_LIMIT
+        )
         if estimated_tokens > model_limit:
             raise PromptTooLargeError(
                 f"Estimated prompt size ({estimated_tokens} tokens) exceeds "
