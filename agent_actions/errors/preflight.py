@@ -14,7 +14,11 @@ def _render_sections(
     """Render a multi-section error message from (label, value) pairs.
 
     Sections: None=group separator, str=raw line, (label, value)=formatted pair.
-    List values are comma-joined and truncated at truncate_lists_at.
+    Value semantics:
+    - None      → omitted (caller signalling "unknown / not tracked")
+    - []        → rendered as "<label>: (none)" (caller signalling "checked, empty")
+    - non-empty → comma-joined and truncated at truncate_lists_at
+    - scalar    → "<label>: <value>"
     """
     lines = [header]
 
