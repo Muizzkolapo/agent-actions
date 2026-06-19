@@ -6,11 +6,12 @@ Covers two hardening findings:
 - Path rewriting must replace exact regex spans, not via str.replace, so
   a short filename like ``logo.png`` is not corrupted inside a longer
   path like ``dark/logo.png``.
+
+Logger-propagation handling lives in ``tests/unit/tooling/conftest.py``.
 """
 
 from __future__ import annotations
 
-import logging
 import shutil
 from pathlib import Path
 from unittest.mock import patch
@@ -19,24 +20,6 @@ import pytest
 
 from agent_actions.tooling.docs.generator import _copy_readme_images
 from agent_actions.tooling.docs.scanner import ReadmeData
-
-
-@pytest.fixture
-def _allow_log_propagation():
-    """Re-enable propagation on the ``agent_actions`` logger so caplog
-    (which captures at the root logger) sees module log records.
-
-    LoggerFactory sets ``propagate = False`` when initialized; tests that
-    assert on log content need the chain restored for the duration of the
-    test only.
-    """
-    aa_logger = logging.getLogger("agent_actions")
-    original = aa_logger.propagate
-    aa_logger.propagate = True
-    try:
-        yield
-    finally:
-        aa_logger.propagate = original
 
 
 def _make_readme(tmp_path: Path, content: str) -> ReadmeData:
@@ -91,9 +74,7 @@ class TestCopyFailureDoesNotAbort:
     """A shutil.copy2 OSError on one image must not abort the rewrite of
     other images, and must not propagate to the caller."""
 
-    def test_copy2_oserror_skips_image_and_continues(
-        self, tmp_path, caplog, _allow_log_propagation
-    ):
+    def test_copy2_oserror_skips_image_and_continues(self, tmp_path, caplog):
         good = tmp_path / "good.png"
         bad = tmp_path / "bad.png"
         _make_image(good)
@@ -120,11 +101,30 @@ class TestCopyFailureDoesNotAbort:
         # Good image rewritten; bad image left as-is.
         assert '<img src="/artefact/images/wf1/good.png">' in result
         assert '<img src="bad.png">' in result
-        # A warning was logged for the failed copy. The message intentionally
-        # uses "stage" rather than "copy" because the same except block also
-        # covers a mkdir failure on the destination directory.
-        assert any("bad.png" in rec.getMessage() for rec in caplog.records)
-        assert any("stage" in rec.getMessage() for rec in caplog.records)
+        # A warning was logged for the failed copy.
+        assert any(
+            "bad.png" in rec.getMessage() and "copy" in rec.getMessage().lower()
+            for rec in caplog.records
+        )
+
+    def test_mkdir_failure_aborts_cleanly_with_one_warning(self, tmp_path, caplog):
+        """A systemic mkdir failure on the images directory should log a
+        single 'cannot create images directory' warning and return the
+        original content — not log a per-image error N times."""
+        _make_image(tmp_path / "a.png")
+        _make_image(tmp_path / "b.png")
+        content = '<img src="a.png">\n<img src="b.png">\n'
+        readme = _make_readme(tmp_path, content)
+
+        with patch.object(Path, "mkdir", side_effect=OSError("read-only")):
+            with caplog.at_level("WARNING", logger="agent_actions.tooling.docs.generator"):
+                result = _copy_readme_images(readme, "wf1", tmp_path / "artefact")
+
+        # Original content unchanged.
+        assert result == content
+        # Exactly one warning, naming the images directory (not the image).
+        mkdir_warnings = [r for r in caplog.records if "create images directory" in r.getMessage()]
+        assert len(mkdir_warnings) == 1
 
     def test_copy2_failure_does_not_raise(self, tmp_path):
         img = tmp_path / "only.png"

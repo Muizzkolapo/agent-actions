@@ -1,7 +1,9 @@
-"""Tests for agent_actions.tooling.docs.run_tracker module."""
+"""Tests for agent_actions.tooling.docs.run_tracker module.
+
+Logger-propagation handling lives in ``tests/unit/tooling/conftest.py``.
+"""
 
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -17,25 +19,6 @@ from agent_actions.tooling.docs.run_tracker import (
     retry,
     track_workflow_run,
 )
-
-
-@pytest.fixture
-def _allow_log_propagation():
-    """Re-enable propagation on the ``agent_actions`` logger so caplog
-    (which captures at the root logger) sees module log records.
-
-    LoggerFactory sets ``propagate = False`` when initialized; tests that
-    assert on log content need the chain restored for the duration of the
-    test only.
-    """
-    aa_logger = logging.getLogger("agent_actions")
-    original = aa_logger.propagate
-    aa_logger.propagate = True
-    try:
-        yield
-    finally:
-        aa_logger.propagate = original
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -856,27 +839,39 @@ class TestTrackWorkflowRun:
 
 
 # ---------------------------------------------------------------------------
-# Corrupted runs.json — record_action_start / record_action_complete /
-# finalize_workflow_run must not crash the running workflow.
+# Corrupted / missing runs.json — record_action_start /
+# record_action_complete / finalize_workflow_run must keep the workflow
+# alive AND self-heal the file so subsequent calls succeed (sibling
+# pattern: start_workflow_run already does this).
 # ---------------------------------------------------------------------------
 
 
-class TestCorruptedRunsFileNoCrash:
+class TestCorruptedRunsFileRecovers:
     """If runs.json is corrupted (e.g. previous run interrupted mid-write),
-    the live workflow must keep running. The action/finalize call should
-    log a warning and return cleanly instead of raising JSONDecodeError."""
+    the tracker must:
+    1. log a warning that names the operation,
+    2. reset the file to ``_empty_runs_data(extended=True)`` so subsequent
+       calls see a valid structure,
+    3. return cleanly instead of raising.
+    """
 
     def _corrupt_runs_file(self, tracker: RunTracker) -> None:
         tracker.artefact_dir.mkdir(parents=True, exist_ok=True)
         tracker.runs_file.write_text("{not valid json")
 
-    def test_record_action_start_on_corrupted_file_does_not_raise(
-        self, tmp_path, caplog, _allow_log_propagation
-    ):
+    def _assert_file_healed(self, tracker: RunTracker) -> None:
+        """After the call returns, the file must be parseable and have the
+        extended schema (matches what start_workflow_run would have written)."""
+        with open(tracker.runs_file) as f:
+            data = json.load(f)
+        assert data["metadata"]["schema_version"] == "1.0"
+        assert data["workflow_metrics"] == {}
+        assert data["executions"] == []
+
+    def test_record_action_start_heals_corrupted_file(self, tmp_path, caplog):
         tracker = RunTracker(artefact_dir=tmp_path)
         self._corrupt_runs_file(tracker)
 
-        # Must not raise JSONDecodeError; must log a warning.
         with caplog.at_level("WARNING", logger="agent_actions.tooling.docs.run_tracker"):
             tracker.record_action_start(
                 run_id="run_any_xyz",
@@ -885,11 +880,14 @@ class TestCorruptedRunsFileNoCrash:
                 action_config={},
             )
 
-        assert any("corrupted" in rec.getMessage().lower() for rec in caplog.records)
+        assert any(
+            "resetting" in rec.getMessage().lower()
+            and "record action start for my_action" in rec.getMessage()
+            for rec in caplog.records
+        )
+        self._assert_file_healed(tracker)
 
-    def test_record_action_complete_on_corrupted_file_does_not_raise(
-        self, tmp_path, caplog, _allow_log_propagation
-    ):
+    def test_record_action_complete_heals_corrupted_file(self, tmp_path, caplog):
         tracker = RunTracker(artefact_dir=tmp_path)
         self._corrupt_runs_file(tracker)
 
@@ -903,22 +901,47 @@ class TestCorruptedRunsFileNoCrash:
                 )
             )
 
-        assert any("corrupted" in rec.getMessage().lower() for rec in caplog.records)
+        assert any(
+            "record action complete for my_action" in rec.getMessage() for rec in caplog.records
+        )
+        self._assert_file_healed(tracker)
 
-    def test_finalize_workflow_run_on_corrupted_file_does_not_raise(
-        self, tmp_path, caplog, _allow_log_propagation
-    ):
+    def test_finalize_workflow_run_heals_corrupted_file(self, tmp_path, caplog):
         tracker = RunTracker(artefact_dir=tmp_path)
         self._corrupt_runs_file(tracker)
 
         with caplog.at_level("WARNING", logger="agent_actions.tooling.docs.run_tracker"):
             tracker.finalize_workflow_run(run_id="run_any_xyz", status="success")
 
-        assert any("corrupted" in rec.getMessage().lower() for rec in caplog.records)
+        assert any("finalize run run_any_xyz" in rec.getMessage() for rec in caplog.records)
+        self._assert_file_healed(tracker)
 
-    def test_record_action_start_on_empty_file_does_not_raise(self, tmp_path):
-        """An empty file (zero bytes) must also be handled — JSONDecodeError
-        is raised by json.load on an empty stream."""
+    def test_second_call_after_heal_succeeds(self, tmp_path):
+        """After heal, a real start_workflow_run + record_action_start sequence
+        works normally — proves the file was actually restored to a usable shape."""
+        tracker = RunTracker(artefact_dir=tmp_path)
+        self._corrupt_runs_file(tracker)
+
+        # First call heals the file. The recorded action goes nowhere because
+        # no matching run exists yet, but the file is now usable.
+        tracker.record_action_start(
+            run_id="run_lost_xyz",
+            action_name="ignored",
+            action_type="llm",
+            action_config={},
+        )
+
+        run_id = tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
+        tracker.record_action_start(
+            run_id=run_id, action_name="real", action_type="llm", action_config={}
+        )
+
+        with open(tracker.runs_file) as f:
+            data = json.load(f)
+        assert any("real" in run.get("actions", {}) for run in data["executions"])
+
+    def test_record_action_start_on_empty_file_heals(self, tmp_path):
+        """An empty file (zero bytes) also triggers JSONDecodeError; heal it."""
         tracker = RunTracker(artefact_dir=tmp_path)
         tracker.artefact_dir.mkdir(parents=True, exist_ok=True)
         tracker.runs_file.write_text("")
@@ -930,3 +953,43 @@ class TestCorruptedRunsFileNoCrash:
             action_type="llm",
             action_config={},
         )
+        self._assert_file_healed(tracker)
+
+
+class TestMissingRunsFileNoCrash:
+    """If runs.json was removed entirely (external cleanup, manual rm),
+    record_action_start / complete / finalize must not raise
+    FileNotFoundError. The @retry decorator only catches LockException,
+    so FNFE would propagate to the workflow thread."""
+
+    def test_record_action_start_with_missing_file(self, tmp_path):
+        tracker = RunTracker(artefact_dir=tmp_path / "nonexistent")
+        # Directory itself does not exist yet.
+        assert not tracker.artefact_dir.exists()
+
+        # Must not raise FileNotFoundError.
+        tracker.record_action_start(
+            run_id="run_any_xyz",
+            action_name="my_action",
+            action_type="llm",
+            action_config={},
+        )
+        # The file should now exist with a valid structure.
+        assert tracker.runs_file.exists()
+
+    def test_record_action_complete_with_missing_file(self, tmp_path):
+        tracker = RunTracker(artefact_dir=tmp_path / "nonexistent")
+        tracker.record_action_complete(
+            config=ActionCompleteConfig(
+                run_id="run_any_xyz",
+                action_name="my_action",
+                status="success",
+                duration_seconds=1.0,
+            )
+        )
+        assert tracker.runs_file.exists()
+
+    def test_finalize_workflow_run_with_missing_file(self, tmp_path):
+        tracker = RunTracker(artefact_dir=tmp_path / "nonexistent")
+        tracker.finalize_workflow_run(run_id="run_any_xyz", status="success")
+        assert tracker.runs_file.exists()

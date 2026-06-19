@@ -171,6 +171,31 @@ class RunTracker:
         f.truncate()
         json.dump(runs_data, f, indent=2)
 
+    def _load_or_repair(self, f, *, context: str) -> dict[str, Any]:
+        """Load runs data from a locked file handle, repairing on corruption.
+
+        On empty or corrupted file: log a warning naming ``context``, reset the
+        file to ``_empty_runs_data(extended=True)`` so subsequent calls see a
+        valid structure, and return that structure. Returning a usable dict
+        (rather than ``None`` + early-exit) lets callers continue with the
+        normal "search for run_id" loop, which becomes a no-op against an
+        empty ``executions`` list. Matches the recovery semantics already
+        used by ``_load_runs_data_from_file`` and ``start_workflow_run``.
+        """
+        try:
+            f.seek(0)
+            return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            logger.warning(
+                "runs.json is empty or corrupted; resetting (%s)",
+                context,
+            )
+            runs_data = _empty_runs_data(extended=True)
+            f.seek(0)
+            f.truncate()
+            json.dump(runs_data, f, indent=2)
+            return runs_data
+
     def _calculate_duration(self, started_at: str, ended_at: str) -> float:
         """Calculate duration between timestamps."""
         try:
@@ -291,23 +316,20 @@ class RunTracker:
         self, *, run_id: str, action_name: str, action_type: str, action_config: dict[str, Any]
     ) -> None:
         """Record when an action starts executing."""
+        # Touch first so portalocker.Lock("r+") does not raise FileNotFoundError
+        # if runs.json was removed mid-workflow — that error is NOT in the
+        # retry decorator's exception list and would crash the workflow thread.
+        self.artefact_dir.mkdir(parents=True, exist_ok=True)
+        self.runs_file.touch(exist_ok=True)
         with portalocker.Lock(
             self.runs_file,
             "r+",
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
-            try:
-                f.seek(0)
-                runs_data = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                # File is empty or corrupted; there is no run_id to update.
-                # Log and exit cleanly so the workflow thread does not crash.
-                logger.warning(
-                    "runs.json is empty or corrupted; cannot record action start for %s",
-                    action_name,
-                )
-                return
+            runs_data = self._load_or_repair(
+                f, context=f"cannot record action start for {action_name}"
+            )
 
             for run in runs_data["executions"]:
                 if run["id"] == run_id:
@@ -339,23 +361,17 @@ class RunTracker:
     @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
     def record_action_complete(self, *, config: ActionCompleteConfig) -> None:
         """Record when an action completes."""
+        self.artefact_dir.mkdir(parents=True, exist_ok=True)
+        self.runs_file.touch(exist_ok=True)
         with portalocker.Lock(
             self.runs_file,
             "r+",
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
-            try:
-                f.seek(0)
-                runs_data = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                # File is empty or corrupted; there is no run_id to update.
-                # Log and exit cleanly so the workflow thread does not crash.
-                logger.warning(
-                    "runs.json is empty or corrupted; cannot record action complete for %s",
-                    config.action_name,
-                )
-                return
+            runs_data = self._load_or_repair(
+                f, context=f"cannot record action complete for {config.action_name}"
+            )
 
             for run in runs_data["executions"]:
                 if run["id"] == config.run_id:
@@ -408,24 +424,15 @@ class RunTracker:
         self, *, run_id: str, status: str, error_message: str | None = None
     ) -> None:
         """Finalize workflow run when it completes or fails."""
+        self.artefact_dir.mkdir(parents=True, exist_ok=True)
+        self.runs_file.touch(exist_ok=True)
         with portalocker.Lock(
             self.runs_file,
             "r+",
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
-            try:
-                f.seek(0)
-                runs_data = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                # File is empty or corrupted; the run record this is trying
-                # to finalize is unrecoverable. Log and exit cleanly so the
-                # workflow thread does not crash on shutdown.
-                logger.warning(
-                    "runs.json is empty or corrupted; cannot finalize run %s",
-                    run_id,
-                )
-                return
+            runs_data = self._load_or_repair(f, context=f"cannot finalize run {run_id}")
 
             for run in runs_data["executions"]:
                 if run["id"] == run_id:

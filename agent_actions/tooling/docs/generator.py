@@ -50,15 +50,15 @@ def _copy_readme_images(
     ]
 
     # (start, end, replacement) for each URL-group span we want to rewrite.
+    # No dedup set is needed: html and markdown URL spans live in disjoint
+    # surrounding chars (`src="..."` vs `](...)`) so their (start, end) tuples
+    # can never coincide, and `finditer` already yields non-overlapping
+    # matches within a single pattern.
     spans: list[tuple[int, int, str]] = []
-    seen_spans: set[tuple[int, int]] = set()
+    images_dir_ready = False
 
     for pattern, group_idx in img_patterns:
         for match in pattern.finditer(content):
-            start, end = match.span(group_idx)
-            if (start, end) in seen_spans:
-                continue
-
             rel_path = match.group(group_idx)
 
             # Skip URLs (http://, https://, data:)
@@ -70,17 +70,31 @@ def _copy_readme_images(
             if not source.exists() or not source.is_file():
                 continue
 
-            # Copy to artefact/images/{workflow_id}/{filename}.
-            # A single failure must not abort the entire catalog generation.
+            # Lazy-create the images directory the first time we have a
+            # genuine image to stage. A failure here is systemic (parent
+            # unwritable) so we abandon the rewrite entirely instead of
+            # logging the same diagnostic per image.
+            if not images_dir_ready:
+                try:
+                    images_dir.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    logger.warning(
+                        "Cannot create images directory %s for workflow %s: %s",
+                        images_dir,
+                        workflow_id,
+                        e,
+                    )
+                    return content
+                images_dir_ready = True
+
+            # Copy to artefact/images/{workflow_id}/{filename}. A single
+            # copy failure must not abort the rest of the catalog.
             dest = images_dir / source.name
             try:
-                images_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, dest)
             except OSError as e:
-                # Covers both mkdir failures (parent permission denied) and
-                # copy failures (disk full, dest unwritable, broken symlink).
                 logger.warning(
-                    "Failed to stage README image %s for workflow %s: %s",
+                    "Failed to copy README image %s for workflow %s: %s",
                     source,
                     workflow_id,
                     e,
@@ -88,8 +102,7 @@ def _copy_readme_images(
                 continue
 
             new_path = f"/artefact/images/{workflow_id}/{source.name}"
-            spans.append((start, end, new_path))
-            seen_spans.add((start, end))
+            spans.append(match.span(group_idx) + (new_path,))
 
     if not spans:
         return content

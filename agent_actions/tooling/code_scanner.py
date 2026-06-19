@@ -34,8 +34,16 @@ def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None)
         if not user_code_dir.exists():
             continue
 
-        # Scan all Python files
-        for py_file in user_code_dir.rglob("*.py"):
+        # rglob itself raises OSError (e.g. PermissionError) during iteration
+        # when it descends into a subtree the process cannot read. Catch it
+        # here so one unreadable subdirectory cannot abort the whole scan.
+        try:
+            py_files = list(user_code_dir.rglob("*.py"))
+        except OSError as e:
+            logger.debug("Failed to enumerate Python files under %s: %s", user_code_dir, e)
+            continue
+
+        for py_file in py_files:
             try:
                 source = py_file.read_text()
                 tree = ast.parse(source)
