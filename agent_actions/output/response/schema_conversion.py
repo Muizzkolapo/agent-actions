@@ -60,8 +60,40 @@ def _convert_json_schema_to_unified(json_schema: dict[str, Any]) -> dict[str, An
             ),
         )
 
-    # Check if array is required (default to True for backward compatibility)
-    is_required = json_schema.get("required", True)
+    # Determine whether this array field is required by its parent. The codebase
+    # convention is a boolean `required: true|false` at the top level — distinct
+    # from JSON Schema's standard `required: [...]` list (which belongs on the
+    # OBJECT containing this array, not on the array itself, and never reaches
+    # this function because top-level callers strip it).
+    #
+    # Reject misplaced lists explicitly: previously `required: ['fact', 'paraphrase']`
+    # was treated as a truthy boolean and the array was unconditionally required,
+    # hiding a config bug. Surface the mistake so the user moves it under `items`.
+    required_value = json_schema.get("required", True)
+    if isinstance(required_value, bool):
+        is_required = required_value
+    elif isinstance(required_value, list):
+        raise SchemaValidationError(
+            f"Array schema '{schema_name}' has a list at top-level 'required'. "
+            "A boolean is expected here (whether the array itself is required in "
+            "its parent). To declare which item properties are required, move the "
+            "list under 'items.required'.",
+            schema_name=schema_name,
+            validation_type="structure",
+            hint=(
+                "Replace `required: [field1, field2]` at the array level with "
+                "`required: true|false` (this array's requiredness), and put the "
+                "property-name list under `items: {required: [field1, field2]}`."
+            ),
+        )
+    else:
+        raise SchemaValidationError(
+            f"Array schema '{schema_name}' has invalid 'required' value of type "
+            f"{type(required_value).__name__}; expected a boolean.",
+            schema_name=schema_name,
+            validation_type="structure",
+            hint="Use `required: true` or `required: false` at the array level.",
+        )
 
     # Determine if items are objects or primitives
     item_type = items.get("type", "object")

@@ -400,15 +400,9 @@ class ActionExpander:
                     agent["version_mode"] = action.get("version_mode", "parallel")
                     agent["_version_context"] = version_ctx
 
-                # Check for explicit dependencies in action, defaulting to empty list
-                # This is handled inside _create_agent_from_action via inheritance,
-                # but we ensure it persists
                 created_agent = ActionExpander._create_agent_from_action(
                     action, defaults, agent, lambda x: x
                 )
-                if "dependencies" not in created_agent and "dependencies" in action:
-                    created_agent["dependencies"] = action["dependencies"]
-
                 agents.append(created_agent)
 
         return {workflow_name: agents}
