@@ -200,6 +200,74 @@ class TestDiscoverUDFs:
         assert len(registry) == 0
 
 
+class TestDiscoverUDFsProjectScoping:
+    """UDFs from two projects with the same module name must load independently."""
+
+    def test_two_projects_same_module_name_each_loads_own_udf(self, tmp_path):
+        """Project A and Project B both have tools/query.py — both load.
+
+        Bug pattern: when ``sys.modules`` is keyed by relative module name,
+        the second project's discover_udfs sees the first project's entry,
+        skips loading, and silently inherits its UDF.
+        """
+        project_a = tmp_path / "project_a"
+        project_b = tmp_path / "project_b"
+        (project_a / "tools").mkdir(parents=True)
+        (project_b / "tools").mkdir(parents=True)
+
+        # Same relative path, different return values — a contamination would
+        # cause project_b's discovery to silently reuse project_a's function.
+        (project_a / "tools" / "query.py").write_text(
+            UDF_TEMPLATE.format(func_name="lookup_a", return_value="from_a")
+        )
+        (project_b / "tools" / "query.py").write_text(
+            UDF_TEMPLATE.format(func_name="lookup_b", return_value="from_b")
+        )
+
+        registry_a = discover_udfs(project_a)
+        assert "lookup_a" in registry_a
+        assert "lookup_b" not in registry_a
+
+        # Without project-scoped sys.modules keys, this second discover_udfs
+        # would skip project_b's tools/query.py and never register lookup_b.
+        registry_b = discover_udfs(project_b)
+        assert "lookup_b" in registry_b, "project_b's UDF must be registered, not skipped"
+        assert registry_b["lookup_b"]["function"]({}) == "from_b"
+
+    def test_same_project_loaded_twice_is_idempotent(self, tmp_path):
+        """Re-running discover_udfs on the same project does not error or duplicate."""
+        project = tmp_path / "project"
+        (project / "tools").mkdir(parents=True)
+        (project / "tools" / "x.py").write_text(
+            UDF_TEMPLATE.format(func_name="my_func", return_value="v")
+        )
+
+        first = discover_udfs(project)
+        assert "my_func" in first
+
+        # Second call must not raise; sys.modules entry is reused.
+        second = discover_udfs(project)
+        assert "my_func" in second
+
+    def test_project_scope_prefix_is_deterministic_per_path(self, tmp_path):
+        """The scoping helper is a pure function of the resolved path."""
+        from agent_actions.input.loaders.udf import _project_scope_prefix
+
+        p = tmp_path / "x"
+        p.mkdir()
+        assert _project_scope_prefix(p) == _project_scope_prefix(p)
+
+    def test_project_scope_prefix_differs_across_paths(self, tmp_path):
+        """Different paths must produce different prefixes (no collision)."""
+        from agent_actions.input.loaders.udf import _project_scope_prefix
+
+        a = tmp_path / "a"
+        b = tmp_path / "b"
+        a.mkdir()
+        b.mkdir()
+        assert _project_scope_prefix(a) != _project_scope_prefix(b)
+
+
 class TestValidateUDFReferences:
     """Tests for validate_udf_references() function."""
 

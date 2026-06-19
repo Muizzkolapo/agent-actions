@@ -196,7 +196,7 @@ class FieldChunker:
         if strategy_name == "preserve_original":
             return PreserveOriginalStrategy()
         if strategy_name == "truncate":
-            return TruncateStrategy()
+            return TruncateStrategy(truncate_at=self.config.truncate_at)
         if strategy_name == "skip":
             return SkipStrategy()
         if strategy_name == "error":
