@@ -6,16 +6,24 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from agent_actions.config.schema import ActionKind  # noqa: F401 — canonical enum, re-exported
+from agent_actions.config.schema import ActionKind
+
+__all__ = ["ActionKind", "ActionSchema", "FieldInfo", "FieldSource"]
 
 
 class FieldSource(Enum):
-    """How a field is produced."""
+    """Where a field comes from in the action's schema.
+
+    Output-side values describe how the field is produced; ``INPUT`` marks
+    fields consumed by the action (e.g. tool input schema entries) where the
+    upstream production source is not known here.
+    """
 
     SCHEMA = "schema"
     OBSERVE = "observe"
     PASSTHROUGH = "passthrough"
     TOOL_OUTPUT = "tool_output"
+    INPUT = "input"
 
 
 @dataclass
@@ -30,6 +38,11 @@ class FieldInfo:
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        # Wire key is "type" (not "field_type") because the docs frontend
+        # (tooling/docs/frontend/lib/transformers.ts, catalog-client.ts) and
+        # the shipped catalog.json contract read this key. The dataclass
+        # attribute is named field_type to avoid shadowing Python's builtin;
+        # from_dict translates the wire key back.
         return {
             "name": self.name,
             "source": self.source.value,
@@ -38,6 +51,17 @@ class FieldInfo:
             "type": self.field_type,
             "description": self.description,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FieldInfo:
+        return cls(
+            name=data["name"],
+            source=FieldSource(data["source"]),
+            is_required=data.get("is_required", True),
+            is_dropped=data.get("is_dropped", False),
+            field_type=data.get("type", "unknown"),
+            description=data.get("description", ""),
+        )
 
 
 @dataclass

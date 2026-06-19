@@ -251,7 +251,7 @@ class WorkflowSchemaService:
                 input_fields.append(
                     FieldInfo(
                         name=field_name,
-                        source=FieldSource.TOOL_OUTPUT,
+                        source=FieldSource.INPUT,
                         is_required=True,
                     )
                 )
@@ -259,7 +259,7 @@ class WorkflowSchemaService:
                 input_fields.append(
                     FieldInfo(
                         name=field_name,
-                        source=FieldSource.TOOL_OUTPUT,
+                        source=FieldSource.INPUT,
                         is_required=False,
                     )
                 )

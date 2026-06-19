@@ -31,8 +31,8 @@ class TestSchemaRenderer:
             name="tool_action",
             kind=ActionKind.TOOL,
             input_fields=[
-                FieldInfo(name="text", source=FieldSource.TOOL_OUTPUT, is_required=True),
-                FieldInfo(name="options", source=FieldSource.TOOL_OUTPUT, is_required=False),
+                FieldInfo(name="text", source=FieldSource.INPUT, is_required=True),
+                FieldInfo(name="options", source=FieldSource.INPUT, is_required=False),
             ],
         )
 

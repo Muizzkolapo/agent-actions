@@ -13,7 +13,7 @@ from agent_actions.models.action_schema import (
 
 
 class TestActionKind:
-    """ActionKind enum has exactly 4 members with expected string values."""
+    """ActionKind enum has exactly 5 members with expected string values."""
 
     def test_llm_value(self):
         assert ActionKind.LLM.value == "llm"
@@ -55,7 +55,7 @@ class TestActionKind:
 
 
 class TestFieldSource:
-    """FieldSource enum has exactly 4 members with expected string values."""
+    """FieldSource enum has exactly 5 members with expected string values."""
 
     def test_schema_value(self):
         assert FieldSource.SCHEMA.value == "schema"
@@ -69,8 +69,11 @@ class TestFieldSource:
     def test_tool_output_value(self):
         assert FieldSource.TOOL_OUTPUT.value == "tool_output"
 
+    def test_input_value(self):
+        assert FieldSource.INPUT.value == "input"
+
     def test_member_count(self):
-        assert len(FieldSource) == 4
+        assert len(FieldSource) == 5
 
     def test_construct_from_value(self):
         assert FieldSource("observe") is FieldSource.OBSERVE
@@ -143,6 +146,35 @@ class TestFieldInfo:
             f = FieldInfo(name="test", source=src)
             d = f.to_dict()
             assert d["source"] == src.value
+
+    def test_to_dict_wire_key_is_type_not_field_type(self):
+        """Wire key MUST be 'type' (the docs frontend reads f.type from catalog.json)."""
+        f = FieldInfo(name="x", source=FieldSource.SCHEMA, field_type="integer")
+        d = f.to_dict()
+        assert "type" in d and d["type"] == "integer"
+        assert "field_type" not in d
+
+    def test_to_dict_round_trip_via_from_dict(self):
+        """to_dict output round-trips through from_dict."""
+        original = FieldInfo(
+            name="age",
+            source=FieldSource.SCHEMA,
+            is_required=False,
+            is_dropped=True,
+            field_type="integer",
+            description="User age",
+        )
+        restored = FieldInfo.from_dict(original.to_dict())
+        assert restored == original
+
+    def test_from_dict_uses_defaults_for_missing_optional_keys(self):
+        restored = FieldInfo.from_dict({"name": "x", "source": "schema"})
+        assert restored.name == "x"
+        assert restored.source is FieldSource.SCHEMA
+        assert restored.is_required is True
+        assert restored.is_dropped is False
+        assert restored.field_type == "unknown"
+        assert restored.description == ""
 
     def test_equality(self):
         a = FieldInfo(name="x", source=FieldSource.SCHEMA)
