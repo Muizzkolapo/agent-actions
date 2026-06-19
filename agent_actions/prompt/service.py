@@ -364,7 +364,6 @@ class PromptPreparationService:
                                 ue,
                             )
                             prompt_context[action] = _PermissiveNamespace()
-                            # Re-render with all known skipped deps injected
                             for other in skipped_actions:
                                 if other not in prompt_context:
                                     prompt_context[other] = _PermissiveNamespace()

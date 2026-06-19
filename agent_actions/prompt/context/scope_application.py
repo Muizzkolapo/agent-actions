@@ -6,7 +6,7 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
-from agent_actions.errors import RecordContextError
+from agent_actions.errors import ConfigurationError, RecordContextError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
@@ -144,12 +144,15 @@ def apply_context_scope(
         logger.debug("[STATIC_DATA] Merging %s static data fields into context", len(static_data))
         logger.debug("[STATIC_DATA] Fields: %s", list(static_data.keys()))
 
-        # Add under 'seed' namespace in prompt_context (for field reference replacement)
-        # This allows references like {{seed.exam_syllabus}} in prompts
+        # 'seed' is reserved for static data injection (SPECIAL_NAMESPACES blocks it upstream too).
         if "seed" in prompt_context:
-            logger.warning(
-                "Seed data namespace 'seed' conflicts with existing action. "
-                "Seed data will overwrite it."
+            raise ConfigurationError(
+                "Namespace collision: action named 'seed' conflicts with the seed data namespace. "
+                "Rename the action to avoid overwriting its output with static seed data.",
+                context={
+                    "action_name": action_name,
+                    "conflicting_namespace": "seed",
+                },
             )
         prompt_context["seed"] = static_data
         logger.debug("[SEED_DATA] Added to prompt_context under 'seed' namespace")

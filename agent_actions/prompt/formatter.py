@@ -21,18 +21,21 @@ class PromptFormatter:
             Raw prompt string
 
         Raises:
-            ConfigValidationError: If prompt is an empty/whitespace string for non-tool/hitl/seed actions
+            ConfigValidationError: If prompt is empty/whitespace or null for non-tool/hitl/seed/source actions
             PromptValidationError: If prompt retrieval or loading fails
         """
         raw_prompt = agent_config.get(PROMPT_KEY)
-        if (
-            agent_config.get("kind") not in ("tool", "hitl", "seed", "source")
-            and isinstance(raw_prompt, str)
-            and not raw_prompt.strip()
-        ):
-            raise ConfigValidationError(
-                f"prompt cannot be an empty string for action '{agent_config.get('agent_type', 'unknown')}'"
-            )
+        if agent_config.get("kind") not in ("tool", "hitl", "seed", "source"):
+            if isinstance(raw_prompt, str) and not raw_prompt.strip():
+                raise ConfigValidationError(
+                    f"prompt cannot be an empty string for action "
+                    f"'{agent_config.get('agent_type', 'unknown')}'"
+                )
+            if PROMPT_KEY in agent_config and raw_prompt is None:
+                raise ConfigValidationError(
+                    f"prompt is null for action '{agent_config.get('agent_type', 'unknown')}'. "
+                    f"Remove the prompt key or provide a valid prompt string."
+                )
         try:
             if PROMPT_KEY not in agent_config:
                 return "Process the following content: {content}"

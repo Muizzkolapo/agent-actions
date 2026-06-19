@@ -53,28 +53,6 @@ def _extract_content_data(source_content: Any) -> dict:
     return {k: v for k, v in source_content.items() if k not in _RECORD_METADATA_KEYS}
 
 
-def _enrich_source_namespace(
-    base_namespace: dict[str, Any], current_item: dict[str, Any] | None
-) -> dict[str, Any]:
-    """
-    Merge fallback fields into the source namespace from the current item.
-
-    This helps downstream actions get at least one source-like namespace even if the
-    stored source file was sparse (e.g., only identifiers).
-    """
-    merged = dict(base_namespace or {})
-
-    if not current_item or not isinstance(current_item, dict):
-        return merged
-
-    fallback = _extract_content_data(current_item)
-    for key, value in fallback.items():
-        if key not in merged:
-            merged[key] = value
-
-    return merged
-
-
 def _filter_and_store_fields(
     field_context: dict,
     name: str,

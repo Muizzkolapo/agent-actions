@@ -40,17 +40,27 @@ class TestTokenOverflowGuard:
         )
         assert len(envelope.messages) > 0
 
-    def test_no_model_name_skips_guard(self):
-        """When model_name is None (default), no token check runs."""
-        giant_prompt = "x" * 500_000
-        # Should not raise — guard is skipped when model_name is None
+    def test_no_model_name_uses_default_limit(self):
+        """When model_name is None, guard runs with default 128K limit."""
+        prompt = "x" * 500_000  # ~125K tokens, under 128K default
         envelope = MessageBuilder.build(
             "openai",
-            giant_prompt,
+            prompt,
             "context",
             json_mode=True,
         )
         assert len(envelope.messages) > 0
+
+    def test_no_model_name_rejects_massive_prompt(self):
+        """When model_name is None, prompts exceeding 128K default are rejected."""
+        prompt = "x" * 600_000  # ~150K tokens, over 128K default
+        with pytest.raises(PromptTooLargeError):
+            MessageBuilder.build(
+                "openai",
+                prompt,
+                "context",
+                json_mode=True,
+            )
 
     def test_unknown_model_uses_default_limit(self):
         """Unknown model names use _DEFAULT_CONTEXT_LIMIT (128K)."""
