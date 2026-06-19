@@ -554,7 +554,10 @@ def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
 
     signature = lsp.SignatureInformation(
         label="Available variables: " + ", ".join(sorted(variables)),
-        documentation="Variables derived from context_scope.observe and action schemas.",
+        documentation=(
+            "Variables available from this action's `context_scope.observe` "
+            "and from referenced actions' output schemas."
+        ),
     )
     return lsp.SignatureHelp(signatures=[signature], active_signature=0, active_parameter=0)
 

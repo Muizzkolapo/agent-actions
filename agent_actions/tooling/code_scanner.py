@@ -58,7 +58,10 @@ def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None)
                         if func_data:
                             tool_functions[func_name] = func_data
 
-            except (SyntaxError, UnicodeDecodeError) as e:
+            except (OSError, SyntaxError, UnicodeDecodeError) as e:
+                # OSError covers broken symlinks, file deleted between rglob
+                # and read_text, permission errors. One bad file must not
+                # abort the whole catalog generation.
                 logger.debug("Failed to parse tool file %s: %s", py_file, e)
                 continue
 

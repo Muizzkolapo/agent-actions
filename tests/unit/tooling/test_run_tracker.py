@@ -1,6 +1,7 @@
 """Tests for agent_actions.tooling.docs.run_tracker module."""
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,25 @@ from agent_actions.tooling.docs.run_tracker import (
     retry,
     track_workflow_run,
 )
+
+
+@pytest.fixture
+def _allow_log_propagation():
+    """Re-enable propagation on the ``agent_actions`` logger so caplog
+    (which captures at the root logger) sees module log records.
+
+    LoggerFactory sets ``propagate = False`` when initialized; tests that
+    assert on log content need the chain restored for the duration of the
+    test only.
+    """
+    aa_logger = logging.getLogger("agent_actions")
+    original = aa_logger.propagate
+    aa_logger.propagate = True
+    try:
+        yield
+    finally:
+        aa_logger.propagate = original
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -833,3 +853,80 @@ class TestTrackWorkflowRun:
 
         assert result == "run_mock_abc"
         mock_record.assert_called_once_with(config=config)
+
+
+# ---------------------------------------------------------------------------
+# Corrupted runs.json — record_action_start / record_action_complete /
+# finalize_workflow_run must not crash the running workflow.
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptedRunsFileNoCrash:
+    """If runs.json is corrupted (e.g. previous run interrupted mid-write),
+    the live workflow must keep running. The action/finalize call should
+    log a warning and return cleanly instead of raising JSONDecodeError."""
+
+    def _corrupt_runs_file(self, tracker: RunTracker) -> None:
+        tracker.artefact_dir.mkdir(parents=True, exist_ok=True)
+        tracker.runs_file.write_text("{not valid json")
+
+    def test_record_action_start_on_corrupted_file_does_not_raise(
+        self, tmp_path, caplog, _allow_log_propagation
+    ):
+        tracker = RunTracker(artefact_dir=tmp_path)
+        self._corrupt_runs_file(tracker)
+
+        # Must not raise JSONDecodeError; must log a warning.
+        with caplog.at_level("WARNING", logger="agent_actions.tooling.docs.run_tracker"):
+            tracker.record_action_start(
+                run_id="run_any_xyz",
+                action_name="my_action",
+                action_type="llm",
+                action_config={},
+            )
+
+        assert any("corrupted" in rec.getMessage().lower() for rec in caplog.records)
+
+    def test_record_action_complete_on_corrupted_file_does_not_raise(
+        self, tmp_path, caplog, _allow_log_propagation
+    ):
+        tracker = RunTracker(artefact_dir=tmp_path)
+        self._corrupt_runs_file(tracker)
+
+        with caplog.at_level("WARNING", logger="agent_actions.tooling.docs.run_tracker"):
+            tracker.record_action_complete(
+                config=ActionCompleteConfig(
+                    run_id="run_any_xyz",
+                    action_name="my_action",
+                    status="success",
+                    duration_seconds=1.0,
+                )
+            )
+
+        assert any("corrupted" in rec.getMessage().lower() for rec in caplog.records)
+
+    def test_finalize_workflow_run_on_corrupted_file_does_not_raise(
+        self, tmp_path, caplog, _allow_log_propagation
+    ):
+        tracker = RunTracker(artefact_dir=tmp_path)
+        self._corrupt_runs_file(tracker)
+
+        with caplog.at_level("WARNING", logger="agent_actions.tooling.docs.run_tracker"):
+            tracker.finalize_workflow_run(run_id="run_any_xyz", status="success")
+
+        assert any("corrupted" in rec.getMessage().lower() for rec in caplog.records)
+
+    def test_record_action_start_on_empty_file_does_not_raise(self, tmp_path):
+        """An empty file (zero bytes) must also be handled — JSONDecodeError
+        is raised by json.load on an empty stream."""
+        tracker = RunTracker(artefact_dir=tmp_path)
+        tracker.artefact_dir.mkdir(parents=True, exist_ok=True)
+        tracker.runs_file.write_text("")
+
+        # Must not raise.
+        tracker.record_action_start(
+            run_id="run_any_xyz",
+            action_name="my_action",
+            action_type="llm",
+            action_config={},
+        )

@@ -297,8 +297,17 @@ class RunTracker:
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
-            f.seek(0)
-            runs_data = json.load(f)
+            try:
+                f.seek(0)
+                runs_data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                # File is empty or corrupted; there is no run_id to update.
+                # Log and exit cleanly so the workflow thread does not crash.
+                logger.warning(
+                    "runs.json is empty or corrupted; cannot record action start for %s",
+                    action_name,
+                )
+                return
 
             for run in runs_data["executions"]:
                 if run["id"] == run_id:
@@ -336,8 +345,17 @@ class RunTracker:
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
-            f.seek(0)
-            runs_data = json.load(f)
+            try:
+                f.seek(0)
+                runs_data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                # File is empty or corrupted; there is no run_id to update.
+                # Log and exit cleanly so the workflow thread does not crash.
+                logger.warning(
+                    "runs.json is empty or corrupted; cannot record action complete for %s",
+                    config.action_name,
+                )
+                return
 
             for run in runs_data["executions"]:
                 if run["id"] == config.run_id:
@@ -396,8 +414,18 @@ class RunTracker:
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
-            f.seek(0)
-            runs_data = json.load(f)
+            try:
+                f.seek(0)
+                runs_data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                # File is empty or corrupted; the run record this is trying
+                # to finalize is unrecoverable. Log and exit cleanly so the
+                # workflow thread does not crash on shutdown.
+                logger.warning(
+                    "runs.json is empty or corrupted; cannot finalize run %s",
+                    run_id,
+                )
+                return
 
             for run in runs_data["executions"]:
                 if run["id"] == run_id:
