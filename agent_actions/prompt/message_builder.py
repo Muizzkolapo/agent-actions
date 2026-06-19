@@ -334,21 +334,21 @@ class MessageBuilder:
                 for m in messages
             ]
 
-        # Token overflow pre-flight guard
-        if model_name is not None:
-            estimated_tokens = sum(len(m.content) for m in messages) // 4
-            model_limit = _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
-            if estimated_tokens > model_limit:
-                raise PromptTooLargeError(
-                    f"Estimated prompt size ({estimated_tokens} tokens) exceeds "
-                    f"model context window ({model_limit} tokens)",
-                    context={
-                        "estimated_tokens": estimated_tokens,
-                        "model_limit": model_limit,
-                        "provider": provider,
-                        "model_name": model_name,
-                    },
-                )
+        # Token overflow pre-flight guard — always runs.
+        # When model_name is unknown, falls back to _DEFAULT_CONTEXT_LIMIT.
+        estimated_tokens = sum(len(m.content) for m in messages) // 4
+        model_limit = _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
+        if estimated_tokens > model_limit:
+            raise PromptTooLargeError(
+                f"Estimated prompt size ({estimated_tokens} tokens) exceeds "
+                f"model context window ({model_limit} tokens)",
+                context={
+                    "estimated_tokens": estimated_tokens,
+                    "model_limit": model_limit,
+                    "provider": provider,
+                    "model_name": model_name,
+                },
+            )
 
         return LLMMessageEnvelope(
             messages=messages,

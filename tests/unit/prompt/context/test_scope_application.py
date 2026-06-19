@@ -647,3 +647,34 @@ class TestAllDirectivesCombined:
     def test_empty_field_context(self):
         pc, lc, pt = apply_context_scope({}, {})
         assert pc == {} and lc == {} and pt == {}
+
+
+class TestSeedNamespaceCollision:
+    def test_seed_collision_raises_configuration_error(self):
+        field_context = {"seed": {"user_data": "value"}, "dep": {"x": 1}}
+        static_data = {"reference": "data"}
+        with pytest.raises(ConfigurationError, match="Namespace collision"):
+            apply_context_scope(
+                field_context,
+                {"observe": ["dep.x"]},
+                static_data=static_data,
+                action_name="test_action",
+            )
+
+    def test_seed_no_collision_when_no_static_data(self):
+        field_context = {"seed": {"user_data": "value"}, "dep": {"x": 1}}
+        pc, _, _ = apply_context_scope(
+            field_context, {"observe": ["dep.x"]}, action_name="test_action"
+        )
+        assert "dep" in pc
+
+    def test_seed_injected_when_no_collision(self):
+        field_context = {"dep": {"x": 1}}
+        static_data = {"reference": "data"}
+        pc, _, _ = apply_context_scope(
+            field_context,
+            {"observe": ["dep.x"]},
+            static_data=static_data,
+            action_name="test_action",
+        )
+        assert pc["seed"] == {"reference": "data"}

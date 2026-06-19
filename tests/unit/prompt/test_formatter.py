@@ -27,8 +27,16 @@ class TestGetRawPromptEmptyString:
         with pytest.raises(ConfigValidationError, match="empty string"):
             PromptFormatter.get_raw_prompt({"prompt": "\n"})
 
-    def test_none_prompt_returns_default(self):
-        result = PromptFormatter.get_raw_prompt({"prompt": None})
+    def test_none_prompt_raises_config_validation_error(self):
+        with pytest.raises(ConfigValidationError, match="prompt is null"):
+            PromptFormatter.get_raw_prompt({"prompt": None})
+
+    def test_tool_kind_none_prompt_returns_default(self):
+        result = PromptFormatter.get_raw_prompt({"kind": "tool", "prompt": None})
+        assert result == "Process the following content: {content}"
+
+    def test_seed_kind_none_prompt_returns_default(self):
+        result = PromptFormatter.get_raw_prompt({"kind": "seed", "prompt": None})
         assert result == "Process the following content: {content}"
 
     def test_missing_prompt_key_returns_default(self):

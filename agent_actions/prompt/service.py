@@ -364,11 +364,19 @@ class PromptPreparationService:
                                 ue,
                             )
                             prompt_context[action] = _PermissiveNamespace()
-                            # Re-render with all known skipped deps injected
                             for other in skipped_actions:
                                 if other not in prompt_context:
                                     prompt_context[other] = _PermissiveNamespace()
-                            formatted_prompt = template.render(**prompt_context)
+                            try:
+                                formatted_prompt = template.render(**prompt_context)
+                            except UndefinedError as ue2:
+                                raise TemplateVariableError(
+                                    missing_variables=[str(ue2)],
+                                    available_variables=list(prompt_context.keys()),
+                                    agent_name=agent_name or "",
+                                    mode=mode or "",
+                                    cause=ue2,
+                                ) from ue2
                             break
                     else:
                         raise
