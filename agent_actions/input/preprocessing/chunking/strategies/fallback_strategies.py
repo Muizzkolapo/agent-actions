@@ -63,6 +63,14 @@ class PreserveOriginalStrategy(FallbackStrategy):
 class TruncateStrategy(FallbackStrategy):
     """Fallback strategy that truncates content to fit within specified limits."""
 
+    def __init__(self, truncate_at: int = 50000):
+        """Configure the per-field truncation cap used on chunking failure.
+
+        ``truncate_at`` mirrors ``ChunkerConfig.truncate_at`` so the error-path
+        fallback uses the same size budget as the rest of the chunker.
+        """
+        self.truncate_at = truncate_at
+
     def handle_oversized_field(
         self, field_value: str, field_name: str, maximum_field_size: int
     ) -> tuple[str, str]:
@@ -82,8 +90,20 @@ class TruncateStrategy(FallbackStrategy):
     def handle_chunking_error(
         self, record: dict[str, Any], field_name: str, error_message: str
     ) -> list[dict[str, Any]]:
-        """Skip the record entirely when chunking error occurs."""
-        return []
+        """Truncate the failing field and emit the record as a single chunk."""
+        truncated_record = dict(record)
+        original_value = record.get(field_name, "")
+        if isinstance(original_value, str):
+            truncated_record[field_name] = original_value[: self.truncate_at]
+        truncated_record["chunk_info"] = {
+            "source_field": field_name,
+            "chunk_index": 1,
+            "total_chunks": 1,
+            "chunking_error": error_message,
+            "fallback_applied": "truncate_on_error",
+            "truncated_at": self.truncate_at,
+        }
+        return [truncated_record]
 
 
 class SkipStrategy(FallbackStrategy):

@@ -53,6 +53,8 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
                 passthrough_fields=passthrough_fields,
             )
         except (ValueError, TypeError, KeyError) as e:
+            # handle_processing_error always re-raises (reraise=True default) as
+            # TransformationError with enriched context. No silent fallback.
             self.handle_processing_error(
                 e,
                 "Processing generated data item",
@@ -60,4 +62,4 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
                 source_guid=source_guid,
                 item_count=len(generated_data) if isinstance(generated_data, list) else 1,
             )
-            return []
+            raise

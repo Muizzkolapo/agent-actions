@@ -1,5 +1,6 @@
 """UDF discovery and validation."""
 
+import hashlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -7,6 +8,19 @@ from typing import Any
 
 from agent_actions.errors import DuplicateFunctionError, UDFLoadError
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
+
+
+def _project_scope_prefix(user_code_path: Path) -> str:
+    """Build a project-scoped sys.modules prefix from the user code path.
+
+    Two projects with the same module-relative path (e.g. ``tools/query.py``)
+    must produce distinct ``sys.modules`` keys; otherwise the second project's
+    discover_udfs silently inherits the first project's already-loaded module.
+    A short hash of the resolved absolute path provides that scoping.
+    """
+    resolved = str(user_code_path.resolve())
+    project_hash = hashlib.blake2b(resolved.encode("utf-8"), digest_size=6).hexdigest()
+    return f"agent_actions._udfs.{project_hash}"
 
 
 def discover_tool_files(tool_dir: Path) -> list[Path]:
@@ -51,21 +65,23 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
         )
 
     python_files = discover_tool_files(user_code_path)
+    scoped_prefix = _project_scope_prefix(user_code_path)
 
     for py_file in python_files:
         try:
             relative_path = py_file.relative_to(user_code_path)
             module_name = str(relative_path.with_suffix("")).replace("/", ".").replace("\\", ".")
+            scoped_module_name = f"{scoped_prefix}.{module_name}"
 
-            if f"agent_actions._udfs.{module_name}" in sys.modules:
+            if scoped_module_name in sys.modules:
                 continue
 
             # Keep original module loading logic to preserve exception behavior
             # (DuplicateFunctionError must bubble up directly)
-            spec = importlib.util.spec_from_file_location(module_name, py_file)
+            spec = importlib.util.spec_from_file_location(scoped_module_name, py_file)
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
-                sys.modules[f"agent_actions._udfs.{module_name}"] = module
+                sys.modules[scoped_module_name] = module
                 spec.loader.exec_module(module)
 
         except DuplicateFunctionError:

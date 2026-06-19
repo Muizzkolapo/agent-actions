@@ -201,5 +201,80 @@ class TestShouldSaveSourceItems:
             assert result is False
 
 
+class TestFieldUnionAcrossAllRecords:
+    """Heterogeneous data: first record alone is not representative."""
+
+    def test_richer_new_data_detected_via_later_records(self):
+        """If new_items[0] is sparse but later records add fields, still richer."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workflow_root = Path(tmpdir) / "workflow"
+            source_dir = workflow_root / "agent_io" / "source" / "input"
+            source_dir.mkdir(parents=True)
+            source_file = source_dir / "test.json"
+            existing_data = [{"source_guid": "g1", "id": "1"}]  # 2 fields
+            source_file.write_text(json.dumps(existing_data))
+
+            base_dir = workflow_root / "agent_io" / "staging" / "input"
+            base_dir.mkdir(parents=True)
+            file_path = base_dir / "test.json"
+
+            # First record sparse, later records bring extra fields.
+            new_items = [
+                {"source_guid": "g1", "id": "1"},  # 2 fields (atypical)
+                {"source_guid": "g2", "id": "2", "url": "u", "title": "t", "body": "b"},
+            ]
+
+            result = _should_save_source_items(new_items, str(file_path), str(base_dir), None)
+
+            assert result is True
+
+    def test_stale_data_detected_when_first_record_appears_rich(self):
+        """If new[0] is rich but existing has more fields across all records, block save."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workflow_root = Path(tmpdir) / "workflow"
+            source_file = workflow_root / "agent_io" / "source" / "test.json"
+            source_file.parent.mkdir(parents=True)
+            # Existing has 5 unique fields across 2 records.
+            existing_data = [
+                {"source_guid": "g1", "id": "1", "url": "u", "title": "t"},
+                {"source_guid": "g2", "id": "2", "page_content": "p"},
+            ]  # union = 5 fields
+            source_file.write_text(json.dumps(existing_data))
+
+            base_dir = workflow_root / "agent_io" / "staging"
+            base_dir.mkdir(parents=True, exist_ok=True)
+            file_path = base_dir / "test.json"
+
+            # First record has 4 fields but later records add nothing.
+            new_items = [
+                {"source_guid": "g1", "id": "1", "a": "x", "b": "y"},  # 4 fields
+                {"source_guid": "g2", "id": "2"},  # 2 fields, no new keys
+            ]  # union = 4 fields
+
+            result = _should_save_source_items(new_items, str(file_path), str(base_dir), None)
+
+            assert result is False, "Existing union is richer; sparse new data must not overwrite"
+
+    def test_skips_non_dict_records_during_union(self):
+        """Non-dict entries are tolerated and ignored when building the field set."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workflow_root = Path(tmpdir) / "workflow"
+            source_file = workflow_root / "agent_io" / "source" / "test.json"
+            source_file.parent.mkdir(parents=True)
+            existing_data = [{"source_guid": "g1", "id": "1"}]
+            source_file.write_text(json.dumps(existing_data))
+
+            base_dir = workflow_root / "agent_io" / "staging"
+            base_dir.mkdir(parents=True, exist_ok=True)
+            file_path = base_dir / "test.json"
+
+            # Mixed types in new_items — dicts contribute, others are skipped.
+            new_items = [{"source_guid": "g1", "id": "1", "url": "u", "title": "t"}]
+
+            result = _should_save_source_items(new_items, str(file_path), str(base_dir), None)
+
+            assert result is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

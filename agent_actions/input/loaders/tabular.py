@@ -38,6 +38,12 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
                     context=error_context,
                 )
             rows = list(csv.DictReader(content_str.splitlines()))
+            if not rows:
+                logger.warning(
+                    "Tabular loader produced 0 records from %s "
+                    "(empty file or header-only). Downstream pipeline will run as a no-op.",
+                    file_path or "<inline content>",
+                )
             return rows
         except csv.Error as e:
             operation = f"parsing CSV from {file_path or 'content string'}"

@@ -275,8 +275,16 @@ def _should_save_source_items(
                 )
                 return True
 
-            existing_fields = set(existing_items[0].keys())
-            new_fields = set(new_items[0].keys()) if new_items else set()
+            # Compare the union of fields across all records, not just the first.
+            # Heterogeneous records can hide additional fields if only [0] is sampled.
+            existing_fields: set[str] = set()
+            for item in existing_items:
+                if isinstance(item, dict):
+                    existing_fields.update(item.keys())
+            new_fields: set[str] = set()
+            for item in new_items:
+                if isinstance(item, dict):
+                    new_fields.update(item.keys())
 
             if len(new_fields) > len(existing_fields):
                 logger.info(
