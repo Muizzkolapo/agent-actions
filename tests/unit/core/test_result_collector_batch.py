@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
+
+import pytest
 
 from agent_actions.processing.result_collector import (
     collect_results_from_processing_results,
@@ -17,6 +20,16 @@ from agent_actions.storage.backend import (
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
 )
+
+
+@pytest.fixture(autouse=True)
+def _enable_log_propagation():
+    """Enable propagation so caplog captures agent_actions log records."""
+    aa_logger = logging.getLogger("agent_actions")
+    orig = aa_logger.propagate
+    aa_logger.propagate = True
+    yield
+    aa_logger.propagate = orig
 
 
 def _mock_backend() -> MagicMock:
@@ -164,3 +177,165 @@ class TestBatchDispositionFlush:
         collect_results_from_processing_results(results, "action_A", storage_backend=backend)
         # set_disposition (single-record) should NOT be called — only set_dispositions_batch.
         backend.set_disposition.assert_not_called()
+
+
+class TestWriteRecordDispositionsWarning:
+    """write_record_dispositions logs a warning when batch items lack source_guid."""
+
+    def test_missing_source_guid_logs_warning(self, caplog):
+        """Batch items without source_guid log a warning instead of silent skip."""
+        from agent_actions.processing.result_collector import write_record_dispositions
+
+        backend = _mock_backend()
+        items = [
+            {"metadata": {}, "content": {"v": 1}},
+        ]
+        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.result_collector"):
+            write_record_dispositions(backend, items, "action_A")
+        assert any("missing source_guid" in r.message for r in caplog.records)
+        backend.set_disposition.assert_not_called()
+
+    def test_items_with_source_guid_still_work(self):
+        """Batch items with source_guid are processed normally."""
+        from agent_actions.processing.result_collector import write_record_dispositions
+
+        backend = _mock_backend()
+        items = [
+            {"source_guid": "sg-1", "metadata": {}, "_state": "processed"},
+        ]
+        write_record_dispositions(backend, items, "action_A")
+        backend.set_disposition.assert_called_once()
+
+
+class TestPerItemDispositionFallback:
+    """When result.source_guid is None but data items carry their own source_guid,
+    dispositions must be written per-item to prevent infinite reprocessing."""
+
+    def test_skipped_per_item_dispositions(self):
+        """SKIPPED results with source_guid=None write per-item PASSTHROUGH dispositions."""
+        backend = _mock_backend()
+        result = ProcessingResult.skipped(
+            passthrough_data=None,
+            reason="guard_skip",
+            source_guid=None,
+        )
+        result.data = [
+            {"source_guid": "item_1", "content": {}},
+            {"source_guid": "item_2", "content": {}},
+        ]
+        collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        backend.set_dispositions_batch.assert_called_once()
+        batch_arg = backend.set_dispositions_batch.call_args[0][0]
+        assert len(batch_arg) == 2
+        assert all(t[2] == DISPOSITION_PASSTHROUGH for t in batch_arg)
+        assert {t[1] for t in batch_arg} == {"item_1", "item_2"}
+
+    def test_failed_per_item_dispositions(self):
+        """FAILED results with source_guid=None write per-item FAILED dispositions."""
+        backend = _mock_backend()
+        result = ProcessingResult.failed(error="timeout", source_guid=None)
+        result.data = [
+            {"source_guid": "item_1", "error": "timeout"},
+            {"source_guid": "item_2", "error": "timeout"},
+        ]
+        collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        backend.set_dispositions_batch.assert_called_once()
+        batch_arg = backend.set_dispositions_batch.call_args[0][0]
+        assert len(batch_arg) == 2
+        assert all(t[2] == DISPOSITION_FAILED for t in batch_arg)
+        assert {t[1] for t in batch_arg} == {"item_1", "item_2"}
+
+    def test_exhausted_per_item_dispositions(self):
+        """EXHAUSTED results with source_guid=None write per-item EXHAUSTED dispositions."""
+        backend = _mock_backend()
+        from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
+
+        result = ProcessingResult.exhausted(
+            error="max_retries",
+            source_guid=None,
+            recovery_metadata=RecoveryMetadata(
+                retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="max_retries")
+            ),
+        )
+        result.data = [
+            {"source_guid": "item_1", "content": {}},
+        ]
+        collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        backend.set_dispositions_batch.assert_called_once()
+        batch_arg = backend.set_dispositions_batch.call_args[0][0]
+        assert len(batch_arg) == 1
+        assert batch_arg[0][1] == "item_1"
+        assert batch_arg[0][2] == DISPOSITION_EXHAUSTED
+
+    def test_unprocessed_per_item_dispositions(self):
+        """UNPROCESSED results with source_guid=None write per-item UNPROCESSED dispositions."""
+        backend = _mock_backend()
+        result = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            data=[
+                {"source_guid": "item_1"},
+                {"source_guid": "item_2"},
+            ],
+            source_guid=None,
+            skip_reason="cascade_blocked",
+        )
+        collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        backend.set_dispositions_batch.assert_called_once()
+        batch_arg = backend.set_dispositions_batch.call_args[0][0]
+        assert len(batch_arg) == 2
+        assert all(t[2] == DISPOSITION_UNPROCESSED for t in batch_arg)
+        assert {t[1] for t in batch_arg} == {"item_1", "item_2"}
+
+    def test_parse_error_per_item_dispositions(self):
+        """Parse-error SUCCESS→FAILED with source_guid=None writes per-item FAILED dispositions."""
+        backend = _mock_backend()
+        result = ProcessingResult.success(
+            data=[
+                {"source_guid": "item_1", "content": {"ns": {"_parse_error": "bad"}}},
+            ],
+            source_guid=None,
+        )
+        collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        backend.set_dispositions_batch.assert_called_once()
+        batch_arg = backend.set_dispositions_batch.call_args[0][0]
+        assert len(batch_arg) == 1
+        assert batch_arg[0][1] == "item_1"
+        assert batch_arg[0][2] == DISPOSITION_FAILED
+
+    def test_filtered_no_source_guid_logs_warning(self, caplog):
+        """FILTERED result with no source_guid logs a warning."""
+        backend = _mock_backend()
+        result = ProcessingResult(
+            status=ProcessingStatus.FILTERED,
+            data=[],
+            source_guid=None,
+        )
+        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.result_collector"):
+            collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        assert any("FILTERED result has no source_guid" in r.message for r in caplog.records)
+        backend.set_dispositions_batch.assert_not_called()
+
+    def test_deferred_no_source_guid_logs_warning(self, caplog):
+        """DEFERRED result with no source_guid logs a warning."""
+        backend = _mock_backend()
+        result = ProcessingResult.deferred(task_id="task-1", source_guid=None)
+        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.result_collector"):
+            collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        assert any("DEFERRED result has no source_guid" in r.message for r in caplog.records)
+        backend.set_dispositions_batch.assert_not_called()
+
+    def test_mixed_items_with_and_without_guid(self):
+        """Only items with source_guid get dispositions; those without are warned about."""
+        backend = _mock_backend()
+        result = ProcessingResult.success(
+            data=[
+                {"source_guid": "item_1", "content": {"v": 1}},
+                {"content": {"v": 2}},
+            ],
+            source_guid=None,
+        )
+        collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        backend.set_dispositions_batch.assert_called_once()
+        batch_arg = backend.set_dispositions_batch.call_args[0][0]
+        assert len(batch_arg) == 1
+        assert batch_arg[0][1] == "item_1"
