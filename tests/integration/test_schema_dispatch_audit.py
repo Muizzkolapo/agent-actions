@@ -518,20 +518,19 @@ class TestDispatchInSchema:
         result = _resolve_dispatch_in_schema(schema_dict, None, "{}", {}, {})
         assert result == schema_dict
 
-    @patch("agent_actions.output.response.dispatch_injection.logger")
-    def test_dispatch_resolution_failure_warns(self, mock_logger):
-        """Failed dispatch_task() resolution logs WARNING (not silent DEBUG).
+    def test_dispatch_resolution_failure_raises(self):
+        """Failed dispatch_task() resolution must raise ConfigValidationError.
 
-        ConfigurationError (e.g., missing UDF module) is caught and logged.
+        Letting the unresolved string flow to the LLM vendor produces opaque
+        API errors at request time; failing here surfaces the misconfig at
+        schema-compile time with a clear, actionable message.
         """
         schema_str = 'dispatch_task("nonexistent_function")'
-        result = _resolve_dispatch_in_schema(schema_str, None, "{}", {}, {})
-        # Should return original string (unresolved)
-        assert result == schema_str
-        # Should log at WARNING level (not DEBUG)
-        mock_logger.warning.assert_called_once()
-        warning_msg = str(mock_logger.warning.call_args)
-        assert "dispatch_task resolution failed" in warning_msg
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _resolve_dispatch_in_schema(schema_str, None, "{}", {}, {})
+        assert "dispatch_task() resolution failed" in str(exc_info.value)
+        # Context retains the offending fragment for downstream diagnostics.
+        assert exc_info.value.context.get("schema_fragment") == schema_str
 
     def test_recursive_injection_in_dict(self):
         """_inject_functions_into_schema recursively processes dict values."""
@@ -553,13 +552,12 @@ class TestDispatchInSchema:
         assert result["type"] == "string"
         assert result["description"] == "A text field"
 
-    @patch("agent_actions.output.response.dispatch_injection.logger")
-    def test_unresolved_dispatch_passes_through_to_vendor(self, mock_logger):
-        """Unresolved dispatch_task string flows through compilation without crash.
+    def test_unresolved_dispatch_raises_during_injection(self):
+        """Unresolved dispatch_task must raise at injection — never reach the vendor.
 
-        This is the critical unhappy path: dispatch_task fails → string passes
-        through → vendor compiler receives it. The compiled output should contain
-        the literal string, not crash.
+        Previously this silently passed an unresolved 'dispatch_task(...)' string
+        into the compiled schema, producing opaque LLM API errors. The contract
+        is now to fail fast at compile time.
         """
         schema_with_dispatch = {
             "name": "test",
@@ -568,51 +566,38 @@ class TestDispatchInSchema:
                 {"id": "dynamic_field", "type": 'dispatch_task("missing_fn")', "required": True},
             ],
         }
-        # _inject_functions_into_schema processes the dispatch_task string
-        # and returns it as-is when resolution fails
-        processed = _inject_functions_into_schema(schema_with_dispatch, None, None, None, {})
-        # The literal string survives into the schema
-        assert processed["fields"][1]["type"] == 'dispatch_task("missing_fn")'
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _inject_functions_into_schema(schema_with_dispatch, None, None, None, {})
+        assert "dispatch_task() resolution failed" in str(exc_info.value)
 
-        # Vendor compilation still succeeds — it doesn't validate type values
-        compiled = compile_unified_schema(processed, "openai")
-        assert compiled is not None
-        props = compiled["schema"]["properties"]
-        assert props["dynamic_field"]["type"] == 'dispatch_task("missing_fn")'
-
-    @patch("agent_actions.output.response.dispatch_injection.logger")
-    def test_multiple_dispatch_failures_all_warned(self, mock_logger):
-        """Multiple failing dispatch_task calls each log a WARNING."""
+    def test_first_dispatch_failure_short_circuits(self):
+        """First failing dispatch_task() aborts the traversal with a raise."""
         schema = {
             "field_a": 'dispatch_task("missing_a")',
             "field_b": 'dispatch_task("missing_b")',
             "field_c": "regular_string",
         }
-        result = _inject_functions_into_schema(schema, None, None, None, {})
-        # Both dispatch strings survive (unresolved)
-        assert 'dispatch_task("missing_a")' in result["field_a"]
-        assert 'dispatch_task("missing_b")' in result["field_b"]
-        # Regular strings untouched
-        assert result["field_c"] == "regular_string"
+        with pytest.raises(ConfigValidationError):
+            _inject_functions_into_schema(schema, None, None, None, {})
 
-    @patch("agent_actions.output.response.dispatch_injection.logger")
-    def test_dispatch_task_in_nested_positions(self, mock_logger):
-        """dispatch_task in nested dict/list positions is recursively processed."""
+    def test_dispatch_task_in_nested_positions_raises(self):
+        """dispatch_task failures inside nested dict/list positions still raise."""
         schema = {
             "outer": {
                 "inner": 'dispatch_task("nested_fn")',
                 "list_field": ['dispatch_task("list_fn")', "normal"],
             }
         }
-        result = _inject_functions_into_schema(schema, None, None, None, {})
-        # Nested dispatch_task strings survive (unresolved but caught)
-        assert 'dispatch_task("nested_fn")' in result["outer"]["inner"]
-        assert 'dispatch_task("list_fn")' in result["outer"]["list_field"][0]
-        assert result["outer"]["list_field"][1] == "normal"
+        with pytest.raises(ConfigValidationError):
+            _inject_functions_into_schema(schema, None, None, None, {})
 
-    @patch("agent_actions.output.response.dispatch_injection.logger")
-    def test_dispatch_failure_full_pipeline(self, mock_logger):
-        """Full path: dispatch fails → WARNING → compiler produces output → all vendors handle it."""
+    def test_dispatch_failure_full_pipeline_raises(self):
+        """Full pipeline path: dispatch fails → ResponseSchemaCompiler.compile raises.
+
+        Replaces the prior 'compile silently produces an unresolved schema for
+        every vendor' contract. Vendors must never receive an unresolved
+        dispatch_task() string in a compiled schema.
+        """
         schema = {
             "name": "with_dispatch",
             "fields": [
@@ -620,7 +605,7 @@ class TestDispatchInSchema:
                 {"id": "broken", "type": 'dispatch_task("no_such_fn")', "required": False},
             ],
         }
-        compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
+        compiler = ResponseSchemaCompiler(project_root=None, tools_path="/tmp/_missing_tools")
         config = {"schema": schema, "name": "test_action"}
 
         for vendor in [
@@ -632,10 +617,8 @@ class TestDispatchInSchema:
             "groq",
             "cohere",
         ]:
-            compiled, _ = compiler.compile(config, vendor)
-            assert compiled is not None, (
-                f"{vendor} failed to compile schema with unresolved dispatch_task"
-            )
+            with pytest.raises(ConfigValidationError):
+                compiler.compile(config, vendor)
 
 
 # ===================================================================
@@ -643,23 +626,24 @@ class TestDispatchInSchema:
 # ===================================================================
 
 
-class TestDispatchWarningContent:
-    """Verify WARNING messages contain actionable information."""
+class TestDispatchErrorContent:
+    """Verify the raised ConfigValidationError carries actionable information."""
 
-    @patch("agent_actions.output.response.dispatch_injection.logger")
-    def test_warning_contains_function_name(self, mock_logger):
-        """WARNING message includes the failed function name for debugging."""
-        _resolve_dispatch_in_schema('dispatch_task("calculate_score")', None, "{}", {}, {})
-        mock_logger.warning.assert_called_once()
-        msg = str(mock_logger.warning.call_args)
-        assert "calculate_score" in msg or "dispatch_task" in msg
+    def test_error_contains_function_fragment(self):
+        """Raised error includes the offending dispatch_task() fragment."""
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _resolve_dispatch_in_schema('dispatch_task("calculate_score")', None, "{}", {}, {})
+        assert (
+            "calculate_score" in str(exc_info.value)
+            or exc_info.value.context.get("schema_fragment", "").find("calculate_score") != -1
+        )
 
-    @patch("agent_actions.output.response.dispatch_injection.logger")
-    def test_warning_mentions_vendor_consequence(self, mock_logger):
-        """WARNING message explains the consequence (passed to vendor as-is)."""
-        _resolve_dispatch_in_schema('dispatch_task("missing")', None, "{}", {}, {})
-        msg = str(mock_logger.warning.call_args)
-        assert "vendor" in msg.lower() or "as-is" in msg.lower()
+    def test_error_message_explains_remediation(self):
+        """Error message points the user at the UDF directory and signature."""
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _resolve_dispatch_in_schema('dispatch_task("missing")', None, "{}", {}, {})
+        msg = str(exc_info.value).lower()
+        assert "udf" in msg or "tools/" in msg
 
 
 # ===================================================================

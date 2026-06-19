@@ -115,17 +115,19 @@ class TestAtomicWriteCleanup:
     """Verify tempfile is cleaned up on write failure."""
 
     def test_tempfile_cleaned_on_serialization_error(self, tmp_path):
-        from agent_actions.errors import ProcessingError
+        from agent_actions.errors import FileWriteError
         from agent_actions.output.writer import FileWriter
 
         output_file = tmp_path / "output.json"
         writer = FileWriter(str(output_file))
 
-        # Object that can't be serialized
+        # Object that can't be serialized — atomic_json_write wraps the
+        # JSON TypeError as OSError, which FileWriter must surface as
+        # FileWriteError (the canonical write-failure type).
         class Unserializable:
             pass
 
-        with pytest.raises(ProcessingError):
+        with pytest.raises(FileWriteError):
             writer.write_staging(Unserializable())
 
         # No leftover .tmp files (cleaned up in except block)

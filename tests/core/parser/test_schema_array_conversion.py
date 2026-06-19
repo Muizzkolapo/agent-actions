@@ -5,6 +5,9 @@ These tests verify that array schemas (JSON Schema format with type='array')
 are properly converted to the unified format and compile correctly for all vendors.
 """
 
+import pytest
+
+from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.schema import (
     _convert_json_schema_to_unified,
     compile_unified_schema,
@@ -308,3 +311,57 @@ class TestEdgeCases:
         props = result[0]["input_schema"]["properties"]
         assert "test" in props
         assert props["test"]["type"] == "array"
+
+
+class TestRequiredFieldTypeHandling:
+    """Top-level `required` on an array schema is a boolean flag; reject lists."""
+
+    def test_top_level_required_list_rejected(self):
+        """A list at top-level 'required' is misplaced (should live under 'items')."""
+        schema = {
+            "name": "candidate_facts_list",
+            "type": "array",
+            "required": ["fact", "paraphrase"],
+            "items": {
+                "type": "object",
+                "properties": {"fact": {"type": "string"}, "paraphrase": {"type": "string"}},
+            },
+        }
+        with pytest.raises(SchemaValidationError) as exc_info:
+            _convert_json_schema_to_unified(schema)
+        # The remediation hint must specifically name `items.required` — the
+        # whole point of the error is to redirect the misplaced list there.
+        assert "items.required" in str(exc_info.value)
+
+    def test_top_level_required_true_keeps_array_required(self):
+        """`required: true` at array top-level marks the array required in its parent."""
+        schema = {
+            "name": "required_array",
+            "type": "array",
+            "required": True,
+            "items": {"type": "string"},
+        }
+        result = compile_unified_schema(schema, "openai")
+        assert "required_array" in result["schema"].get("required", [])
+
+    def test_top_level_required_false_keeps_array_optional(self):
+        """`required: false` keeps the array out of the parent's required list."""
+        schema = {
+            "name": "optional_array",
+            "type": "array",
+            "required": False,
+            "items": {"type": "string"},
+        }
+        result = compile_unified_schema(schema, "openai")
+        assert "optional_array" not in result["schema"].get("required", [])
+
+    def test_top_level_required_invalid_type_rejected(self):
+        """A non-bool, non-list (e.g. dict/str) at top-level 'required' is rejected."""
+        schema = {
+            "name": "weird",
+            "type": "array",
+            "required": "yes",
+            "items": {"type": "string"},
+        }
+        with pytest.raises(SchemaValidationError):
+            _convert_json_schema_to_unified(schema)

@@ -15,6 +15,23 @@ from .schema_conversion import _convert_json_schema_to_unified, compile_field
 
 logger = logging.getLogger(__name__)
 
+# Vendors with schema/tool-calling support. Caller `_compile_schema_for_vendor`
+# pre-checks this set so unknown vendors short-circuit to None without going
+# through `compile_unified_schema` — keeping the ConfigValidationError catch
+# surface narrow to genuine validation errors.
+SUPPORTED_VENDORS: frozenset[str] = frozenset(
+    {
+        "openai",
+        "anthropic",
+        "gemini",
+        "ollama_local",
+        "ollama_cloud",
+        "agac-provider",
+        "groq",
+        "cohere",
+    }
+)
+
 
 def compile_unified_schema(
     unified: dict[str, Any], target_system: str
@@ -105,16 +122,7 @@ def compile_unified_schema(
             f"Unknown target system: {target}",
             context={
                 "target_system": target,
-                "valid_systems": [
-                    "openai",
-                    "anthropic",
-                    "gemini",
-                    "ollama_local",
-                    "ollama_cloud",
-                    "agac-provider",
-                    "groq",
-                    "cohere",
-                ],
+                "valid_systems": sorted(SUPPORTED_VENDORS),
                 "operation": "compile_unified_schema",
             },
         )

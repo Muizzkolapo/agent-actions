@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -44,8 +45,14 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self.action_name = action_name
         self.output_directory = output_directory
 
-    def _execute_write(self, operation_name: str, write_fn: Callable[[], int]) -> None:
-        """Execute a write operation with event firing and error handling."""
+    def _execute_write(self, write_kind: str, write_fn: Callable[[], int]) -> None:
+        """Execute a write operation with event firing and error handling.
+
+        Args:
+            write_kind: Canonical kind ('staging', 'target', or 'source') used both for
+                logging context and so handle_file_error maps OSError → FileWriteError
+                (handle_file_error matches the literal 'write' against an allow-list).
+        """
         try:
             fire_event(
                 FileWriteStartedEvent(
@@ -64,13 +71,20 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 )
             )
         except OSError as e:
-            self.handle_file_error(e, operation_name, self.file_path, file_type=self.file_type)
+            self.handle_file_error(
+                e,
+                "write",
+                self.file_path,
+                file_type=self.file_type,
+                write_kind=write_kind,
+            )
         except Exception as e:
             self.handle_processing_error(
                 e,
-                f"{operation_name} {self.file_path}",
+                f"Write {write_kind} file {self.file_path}",
                 file_path=self.file_path,
                 file_type=self.file_type,
+                write_kind=write_kind,
             )
 
     def write_staging(self, data: Any) -> None:
@@ -105,7 +119,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 )
             return Path(self.file_path).stat().st_size
 
-        self._execute_write("Write staging file", do_write)
+        self._execute_write("staging", do_write)
 
     def write_target(self, data: list[dict[str, Any]]) -> None:
         """Write data to storage backend (DB is the single source of truth)."""
@@ -131,9 +145,13 @@ class FileWriter(ProcessorErrorHandlerMixin):
 
             self.storage_backend.write_target(self.action_name, relative_path, data)
 
-            return 0
+            # Approximate payload size as JSON byte length so FileWriteCompleteEvent
+            # carries a meaningful metric. The backend may store data in a different
+            # on-disk shape (e.g. SQLite rows), so this measures payload, not
+            # storage footprint — but it's accurate enough to spot empty writes.
+            return len(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
-        self._execute_write("Write target file", do_write)
+        self._execute_write("target", do_write)
 
     def write_source(self, data: Any) -> None:
         """Write data to source file in JSON format."""
@@ -143,4 +161,4 @@ class FileWriter(ProcessorErrorHandlerMixin):
             atomic_json_write(Path(self.file_path), data, indent=4)
             return Path(self.file_path).stat().st_size
 
-        self._execute_write("Write source file", do_write)
+        self._execute_write("source", do_write)

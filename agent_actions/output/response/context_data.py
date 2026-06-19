@@ -10,12 +10,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 
 from .dispatch_injection import _resolve_dispatch_in_schema
-from .vendor_compilation import compile_unified_schema
+from .vendor_compilation import SUPPORTED_VENDORS, compile_unified_schema
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +139,12 @@ def _compile_schema_for_vendor(
     schema_name: str,
 ) -> dict[str, Any] | list[dict[str, Any]] | None:
     """
-    Compile schema for specific vendor with error handling.
+    Compile schema for specific vendor.
+
+    Pre-validates the vendor against the known-supported set so unknown vendors
+    return None (schema dropped) without invoking compile_unified_schema. This
+    keeps the catch surface narrow: any ConfigValidationError raised inside
+    compile_unified_schema is a real validation failure and propagates.
 
     Args:
         base_schema: Unified schema dict
@@ -150,12 +154,11 @@ def _compile_schema_for_vendor(
     Returns:
         Compiled schema or None if vendor doesn't support schemas
     """
-    try:
-        return compile_unified_schema(base_schema, vendor)
-    except ConfigValidationError:
+    if vendor.lower() not in SUPPORTED_VENDORS:
         logger.info(
             "Vendor '%s' does not support schema validation. Schema '%s' will be ignored.",
             vendor,
             schema_name,
         )
         return None
+    return compile_unified_schema(base_schema, vendor)
