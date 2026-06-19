@@ -184,7 +184,8 @@ class RunTracker:
         """
         try:
             f.seek(0)
-            return json.load(f)
+            data: dict[str, Any] = json.load(f)
+            return data
         except (OSError, json.JSONDecodeError):
             logger.warning(
                 "runs.json is empty or corrupted; resetting (%s)",
