@@ -4,6 +4,10 @@ Verifies that batch mode resolves the generic ``api_key`` field from agent
 config using the same ``BaseClient.get_api_key()`` path that online mode uses,
 eliminating the dual-path divergence where batch mode only checked
 vendor-specific fields (``gemini_api_key``, ``openai_api_key``).
+
+Also verifies that narrowed exception handling in _resolve_api_key_config
+and get_for_config propagates real errors (ImportError, KeyError, OSError)
+instead of silently falling back.
 """
 
 from unittest.mock import MagicMock, patch
@@ -14,6 +18,8 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
+
+_GET_API_KEY = "agent_actions.llm.batch.infrastructure.batch_client_resolver.BaseClient.get_api_key"
 
 
 def _make_agent_config(
@@ -177,3 +183,140 @@ class TestBatchCacheKeyUsesGenericApiKey:
         config = {"openai_api_key": "SOME_KEY"}
         key = BatchClientResolver._build_cache_key("openai", config)
         assert key == "openai"
+
+
+class TestResolveApiKeyConfigNarrowedExceptions:
+    """_resolve_api_key_config propagates non-config errors instead of falling back."""
+
+    def test_configuration_error_falls_back_to_vendor_default(self, monkeypatch):
+        """ConfigurationError from get_api_key triggers vendor default fallback."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-from-env")
+
+        config = _make_agent_config("openai")
+        with patch(_GET_API_KEY, side_effect=ConfigurationError("env var not set")):
+            result = BatchClientResolver._resolve_api_key_config("openai", config)
+
+        assert result == {"api_key": "sk-from-env"}
+
+    def test_import_error_propagates_as_configuration_error(self):
+        """ImportError during key resolution raises ConfigurationError with install hint."""
+        config = _make_agent_config("openai")
+        with patch(_GET_API_KEY, side_effect=ImportError("No module named 'openai'")):
+            with pytest.raises(ConfigurationError, match="Provider SDK not installed"):
+                BatchClientResolver._resolve_api_key_config("openai", config)
+
+    def test_key_error_propagates_as_configuration_error(self):
+        """KeyError during key resolution raises ConfigurationError with key name."""
+        config = _make_agent_config("openai")
+        with patch(_GET_API_KEY, side_effect=KeyError("agent_type")):
+            with pytest.raises(ConfigurationError, match="Missing required config key"):
+                BatchClientResolver._resolve_api_key_config("openai", config)
+
+    def test_os_error_propagates_as_configuration_error(self):
+        """OSError during key resolution raises ConfigurationError as infrastructure error."""
+        config = _make_agent_config("openai")
+        with patch(_GET_API_KEY, side_effect=OSError("SSL: CERTIFICATE_VERIFY_FAILED")):
+            with pytest.raises(ConfigurationError, match="Infrastructure error"):
+                BatchClientResolver._resolve_api_key_config("openai", config)
+
+    def test_no_agent_config_skips_to_vendor_default(self, monkeypatch):
+        """None agent_config skips step 1 entirely, falls through to vendor default."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-vendor-default")
+
+        result = BatchClientResolver._resolve_api_key_config("openai", None)
+        assert result == {"api_key": "sk-vendor-default"}
+
+    def test_no_api_key_anywhere_returns_empty_dict(self, monkeypatch):
+        """No key in agent_config or env returns empty dict (factory will raise)."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        result = BatchClientResolver._resolve_api_key_config("openai", None)
+        assert result == {}
+
+
+class TestGetForConfigNarrowedExceptions:
+    """get_for_config narrows broad except for specific error types."""
+
+    def test_import_error_from_factory_gives_install_hint(self, resolver):
+        config = _make_agent_config("openai", api_key_env_name="")
+        config.pop("api_key")
+        with patch(_PATCH_TARGET, side_effect=ImportError("No module named 'openai'")):
+            with pytest.raises(ConfigurationError, match="Provider SDK not installed"):
+                resolver.get_for_config(config)
+
+    def test_key_error_from_factory_gives_key_name(self, resolver):
+        config = _make_agent_config("openai", api_key_env_name="")
+        config.pop("api_key")
+        with patch(_PATCH_TARGET, side_effect=KeyError("missing_field")):
+            with pytest.raises(ConfigurationError, match="Missing required configuration key"):
+                resolver.get_for_config(config)
+
+    def test_os_error_from_factory_gives_infra_context(self, resolver):
+        config = _make_agent_config("openai", api_key_env_name="")
+        config.pop("api_key")
+        with patch(_PATCH_TARGET, side_effect=OSError("Connection refused")):
+            with pytest.raises(ConfigurationError, match="Infrastructure error"):
+                resolver.get_for_config(config)
+
+    def test_type_error_from_factory_gives_config_context(self, resolver):
+        config = _make_agent_config("openai", api_key_env_name="")
+        config.pop("api_key")
+        with patch(_PATCH_TARGET, side_effect=TypeError("unexpected keyword argument")):
+            with pytest.raises(ConfigurationError, match="Invalid configuration"):
+                resolver.get_for_config(config)
+
+    def test_configuration_error_from_factory_propagates_directly(self, resolver):
+        config = _make_agent_config("openai", api_key_env_name="")
+        config.pop("api_key")
+        with patch(
+            _PATCH_TARGET,
+            side_effect=ConfigurationError("Unknown client type"),
+        ):
+            with pytest.raises(ConfigurationError, match="Unknown client type"):
+                resolver.get_for_config(config)
+
+
+class TestGetForBatchIdNarrowedExceptions:
+    """get_for_batch_id wraps factory errors in ConfigurationError (sibling parity)."""
+
+    def _make_resolver_with_registry(self, client_type="openai"):
+        """Build a resolver + mock registry that returns client_type for any batch_id."""
+        resolver = BatchClientResolver()
+        registry = MagicMock()
+        entry = MagicMock()
+        entry.provider = client_type
+        registry.get_batch_job_by_id.return_value = entry
+        return resolver, registry
+
+    def test_import_error_from_factory_gives_install_hint(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=ImportError("No module named 'openai'")):
+            with pytest.raises(ConfigurationError, match="Provider SDK not installed"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_key_error_from_factory_gives_key_name(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=KeyError("missing_field")):
+            with pytest.raises(ConfigurationError, match="Missing required configuration key"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_os_error_from_factory_gives_infra_context(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=OSError("Connection refused")):
+            with pytest.raises(ConfigurationError, match="Infrastructure error"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_runtime_error_from_factory_still_wrapped(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=RuntimeError("unexpected")):
+            with pytest.raises(ConfigurationError, match="Failed to create client"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_configuration_error_from_factory_propagates_directly(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(
+            _PATCH_TARGET,
+            side_effect=ConfigurationError("Unknown client type"),
+        ):
+            with pytest.raises(ConfigurationError, match="Unknown client type"):
+                resolver.get_for_batch_id("batch_123", registry)

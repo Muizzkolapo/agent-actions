@@ -111,10 +111,37 @@ class BatchClientResolver:
 
         except ConfigurationError:
             raise
+        except ImportError as e:
+            raise ConfigurationError(
+                f"Provider SDK not installed for '{client_type}'",
+                context={
+                    "client_type": client_type,
+                    "hint": f"Install the provider package: pip install agent-actions[{client_type}]",
+                },
+                cause=e,
+            ) from e
+        except KeyError as e:
+            raise ConfigurationError(
+                f"Missing required configuration key: {e}",
+                context={"client_type": client_type},
+                cause=e,
+            ) from e
+        except OSError as e:
+            raise ConfigurationError(
+                f"Infrastructure error creating client for '{client_type}': {e}",
+                context={"client_type": client_type, "error_type": type(e).__name__},
+                cause=e,
+            ) from e
+        except (TypeError, ValueError) as e:
+            raise ConfigurationError(
+                f"Invalid configuration for '{client_type}': {e}",
+                context={"client_type": client_type},
+                cause=e,
+            ) from e
         except Exception as e:
             raise ConfigurationError(
-                f"Failed to create client for batch_client_{client_type}: {e}",
-                context={"client_type": client_type},
+                f"Failed to create client for '{client_type}': {type(e).__name__}: {e}",
+                context={"client_type": client_type, "error_type": type(e).__name__},
                 cause=e,
             ) from e
 
@@ -161,7 +188,43 @@ class BatchClientResolver:
                 )
             )
             config = self._resolve_api_key_config(client_type, agent_config)
-            return BatchClientFactory.create_client(client_type, config)
+            try:
+                return BatchClientFactory.create_client(client_type, config)
+            except ConfigurationError:
+                raise
+            except ImportError as e:
+                raise ConfigurationError(
+                    f"Provider SDK not installed for '{client_type}'",
+                    context={
+                        "client_type": client_type,
+                        "hint": f"Install the provider package: pip install agent-actions[{client_type}]",
+                    },
+                    cause=e,
+                ) from e
+            except KeyError as e:
+                raise ConfigurationError(
+                    f"Missing required configuration key: {e}",
+                    context={"client_type": client_type, "batch_id": batch_id},
+                    cause=e,
+                ) from e
+            except OSError as e:
+                raise ConfigurationError(
+                    f"Infrastructure error creating client for '{client_type}': {e}",
+                    context={"client_type": client_type, "error_type": type(e).__name__},
+                    cause=e,
+                ) from e
+            except (TypeError, ValueError) as e:
+                raise ConfigurationError(
+                    f"Invalid configuration for '{client_type}': {e}",
+                    context={"client_type": client_type},
+                    cause=e,
+                ) from e
+            except Exception as e:
+                raise ConfigurationError(
+                    f"Failed to create client for '{client_type}': {type(e).__name__}: {e}",
+                    context={"client_type": client_type, "error_type": type(e).__name__},
+                    cause=e,
+                ) from e
 
         if self._default_client:
             return self._default_client
@@ -179,6 +242,12 @@ class BatchClientResolver:
         1. agent_config["api_key"] → resolve env var (same path online mode uses)
         2. Vendor config class default env var name (e.g. ANTHROPIC_API_KEY)
         3. Empty dict → factory raises ConfigurationError (no silent fallback)
+
+        Raises:
+            ConfigurationError: If key resolution fails for non-config reasons
+                (ImportError, KeyError, OSError, TypeError, ValueError). Only
+                ConfigurationError from get_api_key (env var not set) triggers
+                fallback to step 2.
         """
         import os
 
@@ -188,13 +257,40 @@ class BatchClientResolver:
                 key = BaseClient.get_api_key(agent_config)
                 if key:
                     return {"api_key": key}
-            except Exception:
+            except ConfigurationError:
                 logger.debug(
-                    "Failed to resolve API key from agent_config for vendor '%s', "
+                    "API key from agent_config not resolvable for vendor '%s', "
                     "falling back to vendor default env var",
                     vendor,
                     exc_info=True,
                 )
+            except ImportError as e:
+                raise ConfigurationError(
+                    f"Provider SDK not installed for vendor '{vendor}'",
+                    context={
+                        "vendor": vendor,
+                        "hint": f"Install the provider package: pip install agent-actions[{vendor}]",
+                    },
+                    cause=e,
+                ) from e
+            except KeyError as e:
+                raise ConfigurationError(
+                    f"Missing required config key during API key resolution: {e}",
+                    context={"vendor": vendor, "missing_key": str(e)},
+                    cause=e,
+                ) from e
+            except OSError as e:
+                raise ConfigurationError(
+                    f"Infrastructure error during API key resolution for vendor '{vendor}': {e}",
+                    context={"vendor": vendor, "error_type": type(e).__name__},
+                    cause=e,
+                ) from e
+            except (TypeError, ValueError) as e:
+                raise ConfigurationError(
+                    f"Invalid config during API key resolution for vendor '{vendor}': {e}",
+                    context={"vendor": vendor},
+                    cause=e,
+                ) from e
 
         # 2. Try vendor config class default
         from agent_actions.validation.preflight.resolution_service import (
