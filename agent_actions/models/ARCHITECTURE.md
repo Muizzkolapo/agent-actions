@@ -69,10 +69,12 @@ class FieldInfo:
     description: str = ""
 ```
 
-`to_dict()` serializes the field for JSON output. Keys mirror the dataclass
-attribute names, so `FieldInfo.from_dict(f.to_dict()) == f` round-trips
-losslessly. The serialized type key is `"field_type"` (matching the
-attribute), not `"type"`, to keep the contract symmetric.
+`to_dict()` serializes the field for JSON output. The serialized key for the
+type is `"type"` (not `"field_type"`) because that is the wire contract the
+docs frontend reads (`tooling/docs/frontend/lib/transformers.ts`,
+`catalog-client.ts`). The dataclass attribute is named `field_type` to avoid
+shadowing Python's `type` builtin; `from_dict()` translates the wire key
+back, so `FieldInfo.from_dict(f.to_dict()) == f` round-trips losslessly.
 
 ### ActionSchema
 

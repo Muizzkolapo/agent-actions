@@ -136,6 +136,38 @@ class TestWorkflowSchemaService:
         for f in schema.output_fields:
             assert f.source == FieldSource.SCHEMA
 
+    def test_tool_action_input_fields_use_input_source(self):
+        """Tool input_fields must carry FieldSource.INPUT, not TOOL_OUTPUT.
+
+        Regression for the hardening review: TOOL_OUTPUT semantically describes
+        output provenance only. Inputs use INPUT to honestly mark them as
+        consumed, not produced.
+        """
+        tool_schemas = {
+            "my_tool": {
+                "name": "my_tool",
+                "input_schema": {
+                    "fields": [
+                        {"name": "text", "type": "string", "required": True},
+                        {"name": "options", "type": "string", "required": False},
+                    ],
+                },
+            },
+        }
+        service = WorkflowSchemaService.from_action_configs(
+            "wf",
+            {"act1": {"kind": "tool", "impl": "my_tool", "intent": "process text"}},
+            tool_schemas=tool_schemas,
+        )
+
+        schema = service.get_action_schema("act1")
+        assert schema is not None
+        assert schema.input_fields, "tool action should have input_fields"
+        for f in schema.input_fields:
+            assert f.source is FieldSource.INPUT, (
+                f"input field {f.name!r} should have source=INPUT, got {f.source}"
+            )
+
     def test_hitl_action_schema_preserves_hitl_kind(self):
         """Test HITL action is classified as HITL kind with canonical output fields."""
         service = self._create_service(

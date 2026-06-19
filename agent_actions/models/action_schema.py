@@ -38,12 +38,17 @@ class FieldInfo:
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        # Wire key is "type" (not "field_type") because the docs frontend
+        # (tooling/docs/frontend/lib/transformers.ts, catalog-client.ts) and
+        # the shipped catalog.json contract read this key. The dataclass
+        # attribute is named field_type to avoid shadowing Python's builtin;
+        # from_dict translates the wire key back.
         return {
             "name": self.name,
             "source": self.source.value,
             "is_required": self.is_required,
             "is_dropped": self.is_dropped,
-            "field_type": self.field_type,
+            "type": self.field_type,
             "description": self.description,
         }
 
@@ -54,7 +59,7 @@ class FieldInfo:
             source=FieldSource(data["source"]),
             is_required=data.get("is_required", True),
             is_dropped=data.get("is_dropped", False),
-            field_type=data.get("field_type", "unknown"),
+            field_type=data.get("type", "unknown"),
             description=data.get("description", ""),
         )
 
