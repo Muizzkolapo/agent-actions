@@ -144,10 +144,7 @@ def apply_context_scope(
         logger.debug("[STATIC_DATA] Merging %s static data fields into context", len(static_data))
         logger.debug("[STATIC_DATA] Fields: %s", list(static_data.keys()))
 
-        # Defense-in-depth: DependencyNamespaceBuilder already skips SPECIAL_NAMESPACES,
-        # but seed is the only framework namespace injected from an external source
-        # (static files via seed_path), so guard against edge cases where "seed" leaks
-        # into prompt_context through a non-standard path.
+        # 'seed' is reserved for static data injection (SPECIAL_NAMESPACES blocks it upstream too).
         if "seed" in prompt_context:
             raise ConfigurationError(
                 "Namespace collision: action named 'seed' conflicts with the seed data namespace. "
