@@ -9,8 +9,6 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `detailed_str` | Method | Return message with full context dict — use at debug/event boundaries. | - |
 | `enrich_exception_context` | Function | Attach key-value context to any exception. For `AgentActionsError`, updates `.context` directly. For other exceptions, creates `.context` if missing or non-dict. | - |
 | `get_error_detail` | Function | Return `detailed_str()` for `AgentActionsError`, else `str()`. Use instead of `str(error)` at structured-logging boundaries. | - |
-| `common.py` | Module | Common errors used across multiple domains. | `errors` |
-| `InvalidParameterError` | Class | Raised when invalid or missing parameters are provided. | - |
 | `configuration.py` | Module | Configuration-related errors. `ConfigurationError.__init__` guards `config_key` with `config_key or message or "<no key>"` to ensure the interpolated key is never `None`. | `errors` |
 | `ConfigurationError` | Class | Base exception for configuration-related errors. | - |
 | `ConfigValidationError` | Class | Raised when configuration validation fails. | - |
@@ -51,7 +49,6 @@
 | `TransformationError` | Class | Raised when data transformation fails. | - |
 | `GenerationError` | Class | Raised when data generation fails. | - |
 | `WorkflowError` | Class | Raised when an error occurs in workflow processing. | - |
-| `SerializationError` | Class | Raised when serialization/deserialization fails. | - |
 | `EmptyOutputError` | Class | Raised when an action produces empty output and on_empty=error. | - |
 | `resources.py` | Module | Resource-related errors (memory, dependencies, etc). | `errors` |
 | `ResourceError` | Class | Base exception for resource-related errors. | - |
@@ -76,7 +73,7 @@ No direct project surface. Consumed internally by config, validation, workflow, 
 | `agent_actions/llm` | inbound | LLM providers raise `VendorAPIError`, `AnthropicError`, `RateLimitError`, `NetworkError`. |
 | `agent_actions/prompt` | inbound | Prompt rendering raises `TemplateRenderingError`, `TemplateVariableError`. |
 | `agent_actions/input` | inbound | Loaders raise `FileLoadError`, `UDFLoadError`, `DuplicateFunctionError`. |
-| `agent_actions/output` | inbound | Output processing raises `SerializationError`, `TransformationError`, `EmptyOutputError`. |
+| `agent_actions/output` | inbound | Output processing raises `TransformationError`, `EmptyOutputError`. |
 | `agent_actions/cli` | inbound | CLI catches and formats all error types. |
 | `agent_actions/logging` | inbound | Error translator and formatters consume error hierarchy. |
 | `agent_actions/storage` | inbound | Storage backends raise `FileSystemError` subclasses. |

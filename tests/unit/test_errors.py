@@ -1,4 +1,4 @@
-"""H-5: Parametrized coverage of all 38 exception classes in agent_actions.errors."""
+"""H-5: Parametrized coverage of all exception classes in agent_actions.errors."""
 
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from agent_actions.errors import (
     FileWriteError,
     FunctionNotFoundError,
     GenerationError,
-    InvalidParameterError,
     NetworkError,
     OperationalError,
     PathValidationError,
@@ -33,7 +32,6 @@ from agent_actions.errors import (
     RateLimitError,
     ResourceError,
     SchemaValidationError,
-    SerializationError,
     TemplateRenderingError,
     TransformationError,
     UDFLoadError,
@@ -86,10 +84,9 @@ def _make(cls):
     return cls("test message", context={"k": "v"})
 
 
-# All 38 exception classes
+# All exception classes exported from agent_actions.errors
 ALL_CLASSES = [
     AgentActionsError,
-    InvalidParameterError,
     ConfigurationError,
     ConfigValidationError,
     DuplicateFunctionError,
@@ -105,7 +102,6 @@ ALL_CLASSES = [
     TransformationError,
     GenerationError,
     WorkflowError,
-    SerializationError,
     EmptyOutputError,
     ExternalServiceError,
     VendorAPIError,
@@ -131,7 +127,7 @@ ALL_CLASSES = [
 
 def test_all_classes_count():
     """Catch accidental addition/removal of exception classes."""
-    assert len(ALL_CLASSES) == 38, f"Expected 38 classes, found {len(ALL_CLASSES)}"
+    assert len(ALL_CLASSES) == 36, f"Expected 36 classes, found {len(ALL_CLASSES)}"
 
 
 @pytest.mark.parametrize("cls", ALL_CLASSES, ids=[c.__name__ for c in ALL_CLASSES])

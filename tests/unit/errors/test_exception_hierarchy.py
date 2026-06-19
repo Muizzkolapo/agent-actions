@@ -125,3 +125,30 @@ class TestConstructorCompatibility:
 
         e = FieldResolutionError("test message")
         assert str(e) == "test message"
+
+
+class TestRemovedDeadExceptions:
+    """Two exception classes were exported but never raised — removed for hygiene.
+
+    Re-adding either of these without an actual raise site is a regression: it
+    re-creates a false API surface that callers may guard for but that never fires.
+
+    Note: LLMResponseParseError remains exported — the OpenAI client raises it
+    when JSON parsing fails and reprompt is configured (see openai/client.py).
+    """
+
+    def test_serialization_error_removed(self):
+        import agent_actions.errors as errors_pkg
+
+        assert not hasattr(errors_pkg, "SerializationError"), (
+            "SerializationError was removed: never raised in production. "
+            "Re-add only with a real raise site."
+        )
+
+    def test_invalid_parameter_error_removed(self):
+        import agent_actions.errors as errors_pkg
+
+        assert not hasattr(errors_pkg, "InvalidParameterError"), (
+            "InvalidParameterError was removed: never raised in production. "
+            "Re-add only with a real raise site."
+        )

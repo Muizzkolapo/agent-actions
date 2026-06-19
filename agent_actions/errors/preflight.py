@@ -37,6 +37,7 @@ def _render_sections(
                     continue
                 if isinstance(value, list):
                     if not value:
+                        group_lines.append(f"  {label}: (none)")
                         continue
                     display = list(value)
                     if len(display) > truncate_lists_at:
@@ -81,8 +82,9 @@ class PreFlightValidationError(AgentActionsError):
             ctx["agent_name"] = agent_name
 
         super().__init__(message, context=ctx, cause=cause)
-        self.available_references = available_references or []
-        self.missing_references = missing_references or []
+        # Preserve None vs [] distinction: None = "unknown", [] = "known empty".
+        self.available_references = available_references
+        self.missing_references = missing_references
         self.hint = hint
         self.mode = mode
         self.agent_name = agent_name
@@ -95,8 +97,8 @@ class PreFlightValidationError(AgentActionsError):
             self.args[0],
             [
                 None,
-                ("Missing", self.missing_references or None),
-                ("Available", self.available_references or None),
+                ("Missing", self.missing_references),
+                ("Available", self.available_references),
                 None,
                 ("Hint", self.hint),
                 None,
@@ -184,7 +186,7 @@ class ContextStructureError(PreFlightValidationError):
         super().__init__(
             message,
             missing_references=missing_list,
-            available_references=actual_fields if actual_fields else None,
+            available_references=actual_fields,
             hint=hint,
             mode=mode,
             agent_name=agent_name,
@@ -193,7 +195,8 @@ class ContextStructureError(PreFlightValidationError):
         )
 
         self.expected_fields = expected_fields or []
-        self.actual_fields = actual_fields or []
+        # Preserve None vs [] for actual_fields: None = "unknown", [] = "known empty".
+        self.actual_fields = actual_fields
 
 
 class PathValidationError(PreFlightValidationError):

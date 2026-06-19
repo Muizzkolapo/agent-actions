@@ -1,6 +1,9 @@
 """Snapshot-style tests for format_user_message output."""
 
-from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.errors.preflight import (
+    ContextStructureError,
+    PreFlightValidationError,
+)
 from agent_actions.errors.validation import SchemaValidationError
 
 
@@ -58,6 +61,62 @@ class TestPreFlightValidationErrorFormat:
     def test_str_delegates_to_format(self):
         err = PreFlightValidationError("msg", hint="h")
         assert str(err) == err.format_user_message()
+
+
+class TestContextStructureErrorEmptyContext:
+    """Regression: known-empty actual_fields must be distinguishable from unknown.
+
+    Bug: `actual_fields if actual_fields else None` collapsed `[]` (known empty) to
+    None (unknown), losing diagnostic information. The user could not tell whether
+    the context loaded but was empty, or whether the context loader had no data
+    to inspect.
+    """
+
+    def test_known_empty_actual_fields_renders_explicitly(self):
+        err = ContextStructureError(
+            "Context fields don't match",
+            expected_fields=["a", "b"],
+            actual_fields=[],
+        )
+        msg = err.format_user_message()
+        assert "Available: (none)" in msg, (
+            f"Empty actual_fields must render as '(none)', not be silently dropped. Got:\n{msg}"
+        )
+        assert "Missing: a, b" in msg
+
+    def test_unknown_actual_fields_omits_available_section(self):
+        err = ContextStructureError(
+            "Context unknown",
+            expected_fields=["a", "b"],
+            actual_fields=None,
+        )
+        msg = err.format_user_message()
+        assert "Available" not in msg, (
+            f"None actual_fields means 'unknown' — Available section must be omitted. Got:\n{msg}"
+        )
+        assert "Missing: a, b" in msg
+
+    def test_known_empty_preserved_in_context_dict(self):
+        err = ContextStructureError(
+            "Context empty",
+            expected_fields=["a"],
+            actual_fields=[],
+        )
+        assert err.context.get("actual_fields") == []
+        assert err.context.get("available_references") == []
+        assert err.actual_fields == []
+        assert err.available_references == []
+
+    def test_unknown_omitted_from_context_dict(self):
+        err = ContextStructureError(
+            "Context unknown",
+            expected_fields=["a"],
+            actual_fields=None,
+        )
+        assert "actual_fields" not in err.context
+        assert "available_references" not in err.context
+        assert err.actual_fields is None
+        assert err.available_references is None
 
 
 class TestSchemaValidationErrorFormat:
