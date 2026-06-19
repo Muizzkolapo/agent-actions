@@ -274,3 +274,49 @@ class TestGetForConfigNarrowedExceptions:
         ):
             with pytest.raises(ConfigurationError, match="Unknown client type"):
                 resolver.get_for_config(config)
+
+
+class TestGetForBatchIdNarrowedExceptions:
+    """get_for_batch_id wraps factory errors in ConfigurationError (sibling parity)."""
+
+    def _make_resolver_with_registry(self, client_type="openai"):
+        """Build a resolver + mock registry that returns client_type for any batch_id."""
+        resolver = BatchClientResolver()
+        registry = MagicMock()
+        entry = MagicMock()
+        entry.provider = client_type
+        registry.get_batch_job_by_id.return_value = entry
+        return resolver, registry
+
+    def test_import_error_from_factory_gives_install_hint(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=ImportError("No module named 'openai'")):
+            with pytest.raises(ConfigurationError, match="Provider SDK not installed"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_key_error_from_factory_gives_key_name(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=KeyError("missing_field")):
+            with pytest.raises(ConfigurationError, match="Missing required configuration key"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_os_error_from_factory_gives_infra_context(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=OSError("Connection refused")):
+            with pytest.raises(ConfigurationError, match="Infrastructure error"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_runtime_error_from_factory_still_wrapped(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(_PATCH_TARGET, side_effect=RuntimeError("unexpected")):
+            with pytest.raises(ConfigurationError, match="Failed to create client"):
+                resolver.get_for_batch_id("batch_123", registry)
+
+    def test_configuration_error_from_factory_propagates_directly(self):
+        resolver, registry = self._make_resolver_with_registry()
+        with patch(
+            _PATCH_TARGET,
+            side_effect=ConfigurationError("Unknown client type"),
+        ):
+            with pytest.raises(ConfigurationError, match="Unknown client type"):
+                resolver.get_for_batch_id("batch_123", registry)
