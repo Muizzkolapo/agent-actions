@@ -329,8 +329,9 @@ class TestRequiredFieldTypeHandling:
         }
         with pytest.raises(SchemaValidationError) as exc_info:
             _convert_json_schema_to_unified(schema)
-        msg = str(exc_info.value)
-        assert "items.required" in msg or "items" in msg.lower()
+        # The remediation hint must specifically name `items.required` — the
+        # whole point of the error is to redirect the misplaced list there.
+        assert "items.required" in str(exc_info.value)
 
     def test_top_level_required_true_keeps_array_required(self):
         """`required: true` at array top-level marks the array required in its parent."""

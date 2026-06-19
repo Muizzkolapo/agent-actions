@@ -4,12 +4,9 @@ Dispatch and injection logic for schema processing.
 Handles recursive dispatch_task() resolution and injection into schema structures.
 """
 
-import logging
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
-
-logger = logging.getLogger(__name__)
 
 
 def _inject_functions_into_schema(
