@@ -138,6 +138,12 @@ class BatchClientResolver:
                 context={"client_type": client_type},
                 cause=e,
             ) from e
+        except Exception as e:
+            raise ConfigurationError(
+                f"Failed to create client for '{client_type}': {type(e).__name__}: {e}",
+                context={"client_type": client_type, "error_type": type(e).__name__},
+                cause=e,
+            ) from e
 
     def get_for_batch_id(
         self,
