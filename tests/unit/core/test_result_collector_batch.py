@@ -302,8 +302,27 @@ class TestPerItemDispositionFallback:
         assert batch_arg[0][1] == "item_1"
         assert batch_arg[0][2] == DISPOSITION_FAILED
 
-    def test_filtered_no_source_guid_logs_warning(self, caplog):
-        """FILTERED result with no source_guid logs a warning."""
+    def test_filtered_per_item_dispositions(self):
+        """FILTERED results with source_guid=None write per-item FILTERED dispositions."""
+        backend = _mock_backend()
+        result = ProcessingResult(
+            status=ProcessingStatus.FILTERED,
+            data=[
+                {"source_guid": "item_1"},
+                {"source_guid": "item_2"},
+            ],
+            source_guid=None,
+            skip_reason="guard_filter",
+        )
+        collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        backend.set_dispositions_batch.assert_called_once()
+        batch_arg = backend.set_dispositions_batch.call_args[0][0]
+        assert len(batch_arg) == 2
+        assert all(t[2] == DISPOSITION_FILTERED for t in batch_arg)
+        assert {t[1] for t in batch_arg} == {"item_1", "item_2"}
+
+    def test_filtered_no_data_no_source_guid_logs_warning(self, caplog):
+        """FILTERED result with no source_guid and no data logs a warning."""
         backend = _mock_backend()
         result = ProcessingResult(
             status=ProcessingStatus.FILTERED,
@@ -323,6 +342,15 @@ class TestPerItemDispositionFallback:
             collect_results_from_processing_results([result], "action_A", storage_backend=backend)
         assert any("DEFERRED result has no source_guid" in r.message for r in caplog.records)
         backend.set_dispositions_batch.assert_not_called()
+
+    def test_failed_no_data_no_source_guid_logs_warning(self, caplog):
+        """FAILED result with no source_guid and no data logs a warning."""
+        backend = _mock_backend()
+        result = ProcessingResult.failed(error="timeout", source_guid=None)
+        result.data = []
+        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.result_collector"):
+            collect_results_from_processing_results([result], "action_A", storage_backend=backend)
+        assert any("FAILED result has no source_guid" in r.message for r in caplog.records)
 
     def test_mixed_items_with_and_without_guid(self):
         """Only items with source_guid get dispositions; those without are warned about."""
