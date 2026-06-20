@@ -1,207 +1,225 @@
-# Workflow Patterns
+# Workflow Design Patterns
 
-Common patterns for multi-action workflows.
+These are the building blocks of high-quality workflows. Compose them in phases — each phase narrows, enriches, or validates the record set before the next.
 
----
+## Diversity Extraction
 
-## 1. Sequential Pipeline
+Run the same extraction action N times with different iteration parameters so each pass surfaces what others missed. Merge into a single canonical set.
 
-```yaml
-actions:
-  - name: extract_claims
-    prompt: $workflow.Extract_Claims
-
-  - name: score_quality
-    dependencies: [extract_claims]
-    context_scope:
-      observe: [extract_claims.*]
-```
-
-Each action adds its namespace. Next action observes previous.
-
----
-
-## 2. Diamond / Fan-In
-
-```
-          +-> assess_customer_impact --+
-source -->|                            |--> assign_response_team
-          +-> assess_system_impact ----+
+```mermaid
+flowchart LR
+    S[source] --> E1[extract v1]
+    S --> E2[extract v2]
+    S --> E3[extract v3]
+    E1 & E2 & E3 --> C[canonicalize\nversion merge]
+    C --> N[next phase]
 ```
 
 ```yaml
-- name: assess_customer_impact
-  dependencies: [classify_severity]
+- name: extract_raw
+  versions: { param: iteration, range: [1, 2, 3], mode: parallel }
+  schema: { items: array }
 
-- name: assess_system_impact
-  dependencies: [classify_severity]
+- name: canonicalize
+  version_consumption: { source: extract_raw, pattern: merge }
+  intent: "Deduplicate and canonicalize across extraction versions"
+  context_scope:
+    observe: [extract_raw.*]
+```
 
-- name: assign_response_team
-  dependencies: [assess_customer_impact, assess_system_impact]
+## 1→N Expand
+
+When an LLM returns a list, flatten it into individual records. Each item becomes its own record carrying the full upstream bus.
+
+```mermaid
+flowchart LR
+    S[source] --> L[extract_items\nreturns list]
+    L --> F[flatten\nFile tool]
+    F --> R1[record 1]
+    F --> R2[record 2]
+    F --> RN[record N]
+```
+
+```yaml
+- name: extract_items      # LLM returns: { items: [...] }
+
+- name: flatten_items
+  kind: tool
+  impl: flatten_items
+  granularity: File         # receives all records; returns one record per item
+```
+
+## Semantic Dedup
+
+After expansion, remove near-duplicates before expensive downstream generation. Tag each record with a concept label, then keep the best per concept using a file-mode tool.
+
+```mermaid
+flowchart LR
+    subgraph in[N records]
+        A[record] & B[record] & C[record]
+    end
+    in --> TC[tag_concept\nLLM]
+    TC --> DC[dedup_by_concept\nFile tool]
+    subgraph out[M records M≤N]
+        X[best per concept]
+        Y[best per concept]
+    end
+    DC --> out
+```
+
+```yaml
+- name: tag_concept         # LLM: assigns a coarse concept_label
+  schema: { concept_label: string }
+
+- name: dedup_by_concept    # File tool: FileUDFResult, keeps best-scoring per concept
+  kind: tool
+  granularity: File
+```
+
+The `dedup_by_concept` tool must return `FileUDFResult` (not `list[dict]`) so its output namespace carries the fields downstream actions need to observe.
+
+## Quality Voting
+
+Run N independent voters. Aggregate by majority. Guard the next phase on the aggregate verdict.
+
+```mermaid
+flowchart LR
+    R[record] --> V1[vote v1]
+    R --> V2[vote v2]
+    R --> V3[vote v3]
+    V1 & V2 & V3 --> A[aggregate\ntool merge]
+    A --> G{decision\n== keep?}
+    G -->|pass| N[next phase]
+    G -->|filter| X([dropped])
+```
+
+```yaml
+- name: vote
+  versions: { param: voter_id, range: [1, 2, 3], mode: parallel }
+  schema: { vote: string, reasoning: string }
+
+- name: aggregate_votes
+  kind: tool
+  version_consumption: { source: vote, pattern: merge }
+  schema: { decision: string, vote_summary: string }
+
+- name: next_phase
+  guard: { condition: 'aggregate_votes.decision == "keep"', on_false: "filter" }
   context_scope:
     observe:
-      - assess_customer_impact.*
-      - assess_system_impact.*
+      - aggregate_votes.decision   # dependency anchor
 ```
 
-No merge operator needed. The bus has both namespaces. `dependencies` controls when (and provides input records to iterate), `observe` controls what data the LLM sees. If a dependency is guard-skipped, your action gets zero records — list a guaranteed-output dependency if you need the action to always run.
+## Parallel Generate → Consolidate
 
----
+Generate N independent outputs, then consolidate — pick the best or synthesise across them. Reduces the risk of a single-model pass hallucinating.
 
-## 3. Parallel Voting / Consensus
+```mermaid
+flowchart LR
+    R[record] --> G1[generate v1]
+    R --> G2[generate v2]
+    G1 & G2 --> C[consolidate\nversion merge]
+    C --> N[next action]
+```
 
 ```yaml
-- name: score_quality
-  versions: { param: scorer_id, range: [1, 2, 3], mode: parallel }
-  context_scope:
-    observe: [extract_claims.*, source.review_text, seed.rubric]
-    drop: [source.star_rating]  # bias prevention
+- name: generate_output
+  versions: { param: variant_id, range: [1, 2], mode: parallel }
 
-- name: aggregate_scores
-  dependencies: [score_quality]
+- name: consolidate_outputs
+  version_consumption: { source: generate_output, pattern: merge }
+  intent: "Select and ground the best result across independent generations"
+  context_scope:
+    observe: [generate_output.*]
+```
+
+## Distil Before Generating
+
+Extract a tight context window before any generation action observes it. Never pass the full source page to a downstream action — always observe the distilled version.
+
+```mermaid
+flowchart LR
+    RAW["source.raw_content\n(full page)"]:::danger --> EC[extract_context\ntool]
+    REF[upstream_result.source_ref] --> EC
+    EC --> CP["context_passage\n(distilled)"]:::good
+    CP --> GO[generate_output]
+    classDef danger fill:#c44,color:#fff
+    classDef good fill:#4a4,color:#fff
+```
+
+```yaml
+- name: extract_context     # tool: extracts the relevant passage from the source
+  context_scope:
+    observe:
+      - upstream_result.source_ref
+      - source.raw_content
+
+- name: generate_output
+  context_scope:
+    observe:
+      - extract_context.context_passage   # distilled passage, not source.raw_content
+      - upstream_result.output_text
+```
+
+## Verify → Rewrite-if-Failed
+
+Run N verifiers in parallel. Aggregate their verdicts. The rewrite action only fires when failures are confirmed — clean records skip it entirely with `on_false: skip`.
+
+```mermaid
+flowchart LR
+    O[output] --> V1[verify v1]
+    O --> V2[verify v2]
+    O --> V3[verify v3]
+    V1 & V2 & V3 --> AV[aggregate\nverification]
+    AV --> G{has_failures?}
+    G -->|true| RW[rewrite\non_false:skip]
+    G -->|"false → skip"| NEXT[next action]
+    RW --> NEXT
+```
+
+```yaml
+- name: verify
+  versions: { param: verifier_id, range: [1, 2, 3], mode: parallel }
+  schema: { passed: boolean, failure_reasons: string }
+
+- name: aggregate_verification
   kind: tool
-  impl: aggregate_quality_scores
-  version_consumption: { source: score_quality, pattern: merge }
+  version_consumption: { source: verify, pattern: merge }
+  schema: { has_failures: boolean, combined_issues: string }
+
+- name: rewrite
+  guard: { condition: 'aggregate_verification.has_failures == true', on_false: "skip" }
   context_scope:
-    observe: [score_quality.*]  # resolver expands to _1, _2, _3
+    observe:
+      - aggregate_verification.combined_issues
+      - original_output.*
 ```
 
-Aggregate tool receives double-nested data:
-```python
-@udf_tool()
-def aggregate_quality_scores(data: dict[str, Any]) -> dict:
-    scores = []
-    for i in range(1, 4):
-        key = f"score_quality_{i}"
-        scorer_ns = data.get(key, {})
-        scorer = scorer_ns.get(key, scorer_ns) if isinstance(scorer_ns, dict) else {}
-        scores.append(scorer.get("overall_score", 0))
-    return {"consensus_score": round(sum(scores) / len(scores), 1)}
-```
+## HITL as Conditional Gate
 
----
+Route only uncertain records to human review — clear passes skip it. Use `on_false: skip` (not filter) before the HITL action, then a normalize tool merges auto-pass and human-approve into a single boolean.
 
-## 4. Map-Reduce
-
-```
-source (1 doc) --> split (N records) --> process each --> aggregate (1 summary)
+```mermaid
+flowchart LR
+    QS[quality_screen] --> G{needs_review?}
+    G -->|"true"| HR[human_review\nHITL]
+    G -->|"false → skip"| MD
+    HR --> MD[merge_decisions\ntool]
+    MD --> G2{approved?}
+    G2 -->|true| N[next action]
+    G2 -->|filter| X([dropped])
 ```
 
 ```yaml
-- name: split_into_clauses
-  kind: tool
-  impl: split_contract
-  # Record tool returning list[dict] = 1->N flatten
+- name: quality_screen
+  schema: { passed: boolean, needs_review: boolean, reason: string }
 
-- name: analyze_clause
-  dependencies: [split_into_clauses]
-  # Runs once per clause (Record granularity)
+- name: human_review
+  kind: hitl
+  granularity: file
+  guard: { condition: 'quality_screen.needs_review == true', on_false: "skip" }
 
-- name: aggregate_risk
-  dependencies: [analyze_clause]
-  kind: tool
-  impl: aggregate_risk_summary
-  granularity: File  # Sees ALL clause records
+- name: merge_decisions      # tool: merges auto-pass + human-approve → approved: boolean
+  dependencies: [human_review, quality_screen]
+  guard: { condition: 'merge_decisions.approved == true', on_false: "filter" }
 ```
-
-Split tool (Record mode, 1->N):
-```python
-@udf_tool()
-def split_contract(data: dict) -> list[dict]:
-    text = data["source"]["full_text"]
-    return [{"clause_text": c, "clause_num": i} for i, c in enumerate(split(text))]
-```
-
-Aggregate tool (FILE mode, N->1):
-```python
-@udf_tool(granularity=Granularity.FILE)
-def aggregate_risk_summary(data: list[dict]) -> FileUDFResult:
-    risks = [item.get("risk_level", "low") for item in data]
-    return FileUDFResult(outputs=[
-        {"source_index": 0, "data": {
-            "overall_risk": max(risks),
-            "clause_count": len(data),
-        }}
-    ])
-```
-
----
-
-## 5. Guard Decision Flow
-
-```yaml
-- name: generate_response
-  dependencies: [aggregate_scores]
-  guard:
-    condition: 'aggregate_scores.consensus_score >= 6'
-    on_false: filter   # low-quality records removed
-```
-
-`filter`: record gone. `skip`: record survives with null namespace.
-
----
-
-## 6. LLM + Tool Alternation
-
-```yaml
-- name: generate_description   # LLM
-- name: fetch_prices           # Tool (grounding)
-  dependencies: [generate_description]
-  kind: tool
-  impl: fetch_competitor_prices
-- name: write_marketing        # LLM (grounded by tool data)
-  dependencies: [fetch_prices]
-  context_scope:
-    observe: [generate_description.*, fetch_prices.*]
-```
-
-Tool results ground the next LLM call. Same namespace rules for both.
-
----
-
-## 7. Context Isolation (Bias Prevention)
-
-```yaml
-- name: score_quality
-  versions: { range: [1, 2, 3] }
-  context_scope:
-    observe: [extract_claims.*, source.review_text]
-    drop: [source.star_rating]  # scorers never see user's rating
-```
-
-DROP excludes from prompt only. Data stays on bus for downstream.
-
----
-
-## 9. Non-JSON Field-by-Field
-
-For models that can't produce JSON (e.g., Ollama 3B):
-
-```yaml
-- name: classify_issue
-  json_mode: false
-  output_field: issue_type
-
-- name: assess_severity
-  dependencies: [classify_issue]
-  json_mode: false
-  output_field: severity
-  context_scope:
-    observe: [classify_issue.*]
-```
-
-Each action stores: `content["action_name"]["output_field"] = "plain text"`.
-
----
-
-## 10. Passthrough Routing
-
-```yaml
-context_scope:
-  observe: [pick_pattern.*]
-  passthrough:
-    - consolidate_answer_from_source.final_source_quote
-    - source.review_id
-```
-
-Passthrough fields flow to output (zero tokens). The LLM never sees them.

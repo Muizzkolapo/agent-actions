@@ -362,8 +362,8 @@ with open('target/format_triage_output/result.json') as f:
 
 - [Agent Actions Docs](https://github.com/yourusername/agent-actions)
 - [Workflow Patterns Reference](../../.claude/skills/agac-agent-skills/references/workflow-patterns.md)
-- [UDF Patterns Reference](../../.claude/skills/agac-agent-skills/references/udf-patterns.md)
-- [Dynamic Content Injection](../../.claude/skills/agac-agent-skills/references/dynamic-content-injection.md)
+- [Context Scoping Reference](../../.claude/skills/agac-agent-skills/references/context-scoping.md)
+- [Prompt Engineering Reference](../../.claude/skills/agac-agent-skills/references/prompt-engineering.md)
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 # Skills Module Architecture
 
-This document maps the moving parts of `agent_actions/skills/` — the module that ships bundled documentation, reference material, and templates for AI coding assistants. It contains no runtime Python code.
+This document maps the moving parts of `agent_actions/skills/` — the module that ships bundled documentation, reference material, and helper scripts for AI coding assistants. It contains no runtime Python code.
 
 ---
 
@@ -13,33 +13,22 @@ This document maps the moving parts of `agent_actions/skills/` — the module th
                             │
               ┌─────────────┼─────────────┐
               │             │             │
-          SKILL.md     references/    assets/
-        (descriptor)   (14 guides)   templates/
+          SKILL.md     references/    scripts/
+        (descriptor)   (5 guides)    (2 helpers)
               │             │             │
-              │             │         workflow.yml.template
-              │             │         udf_tool.py.template
+              │             │       inspect_action.py
+              │             │       reset_workflow.py
               │             │
-              │        yaml-schema.md
-              │        prompt-patterns.md
-              │        udf-reference.md
-              │        debugging-guide.md
-              │        context-scope-guide.md
               │        workflow-patterns.md
-              │        framework-contracts.md
-              │        guards.md
-              │        hitl-patterns.md
-              │        reprompt-patterns.md
-              │        schema-design-guide.md
-              │        aggregation-patterns.md
-              │        cli-reference.md
-              │        data-flow-patterns.md
-              │        action-anatomy.md
-              │        dynamic-content-injection.md
+              │        context-scoping.md
+              │        loop-patterns.md
+              │        pooling-approach.md
+              │        prompt-engineering.md
               │
           (installed into user project via `agac skills install`)
 ```
 
-This is a **docs/template payload**, not a Python package. There is no `__init__.py`, no imports, no runtime behavior. The CLI reads this directory tree with `pathlib` and copies it wholesale into the user's project.
+This is a **docs/scripts payload**, not a Python package. There is no `__init__.py`, no imports, no runtime behavior. The CLI reads this directory tree with `pathlib` and copies it wholesale into the user's project.
 
 ---
 
@@ -105,63 +94,51 @@ Each skill has a `SKILL.md` at its root. This file serves two purposes:
 1. **YAML frontmatter** — machine-readable metadata:
    ```yaml
    ---
-   name: agac
-   description: Build, configure, and debug agent-actions agentic workflows.
-                Trigger on workflow YAML, UDFs, context_scope, guards, versions,
-                schemas, seed data, prompts, reprompt, HITL, or debugging
-                empty/filtered/mismatched output.
+   name: agac-agent-skills
+   description: Build, run, inspect, and debug agent-actions workflows.
+                Triggers on workflow YAML, UDFs, observe/passthrough/drop,
+                guards, versions, schemas, seed data, prompts, HITL, running
+                or resetting a pipeline, or debugging empty/filtered output.
    ---
    ```
    The `description` field lists trigger keywords. AI coding assistants (Claude Code, Codex) match user queries against these keywords to decide when to load the skill.
 
-2. **Markdown body** — the skill's primary knowledge payload. For `agac-agent-skills`, this is a comprehensive guide covering:
+2. **Markdown body** — the skill's primary knowledge payload. For `agac-agent-skills`, this is a condensed guide covering:
    - The additive bus data model
-   - Record mode and FILE mode tool patterns
+   - Record-mode and File-mode tool patterns
    - Context scope (observe / passthrough / drop)
    - Guards, versions, fan-in, seed data, schemas
-   - Action templates (LLM, Record tool, FILE tool)
-   - Debugging checklists
-   - 15 agentic patterns with YAML examples
+   - Action templates (LLM, Record tool, File tool, HITL)
+   - Running and debugging via the `agac` CLI and bundled scripts
 
-When an AI assistant triggers on the skill, it reads `SKILL.md` as its primary context, then follows links into `references/` for deeper detail.
+When an AI assistant triggers on the skill, it reads `SKILL.md` as its primary context, then follows links into `references/` for deeper detail and invokes `scripts/` for inspection or reset.
 
 ---
 
 ## What the Skill Contains
 
-### references/ (14 guides)
+### references/ (5 guides)
 
 Deep-dive documentation that `SKILL.md` links to. Each file covers one topic in detail:
 
 | File | Topic |
 |------|-------|
-| `yaml-schema.md` | Complete `agent_config/*.yml` schema reference |
-| `prompt-patterns.md` | Template syntax, Jinja2, seed access, `dispatch_task()` |
-| `udf-reference.md` | Record mode, FILE mode, `@udf_tool`, `TrackedItem`, `FileUDFResult` |
-| `context-scope-guide.md` | observe / drop / passthrough resolution and semantics |
-| `workflow-patterns.md` | Fan-in, diamond, ensemble, map-reduce topologies |
-| `framework-contracts.md` | The 20 rules that govern framework behavior |
-| `guards.md` | Guard conditions, `skip` vs `filter`, namespace effects |
-| `debugging-guide.md` | Triage checklist for silent failures |
-| `hitl-patterns.md` | Human-in-the-loop configuration and flow |
-| `reprompt-patterns.md` | Validation retry with corrective feedback |
-| `schema-design-guide.md` | Output schema authoring (inline and file-based) |
-| `aggregation-patterns.md` | Version merge, `reduce_key`, consensus |
-| `cli-reference.md` | `agac` CLI commands and flags |
-| `data-flow-patterns.md` | Record lifecycle through the pipeline |
-| `action-anatomy.md` | Anatomy of a single action configuration |
-| `dynamic-content-injection.md` | `dispatch_task()` and dynamic prompt content |
+| `workflow-patterns.md` | Composable harness patterns (diversity extraction, expand, fan-in, pooling, loops) |
+| `context-scoping.md` | observe / passthrough / drop, dependency anchor rule, wildcards vs explicit fields, common mistakes |
+| `loop-patterns.md` | Verify→rewrite, aggregate threshold patterns, sequential enrichment, contract check loops |
+| `pooling-approach.md` | Sequential vs parallel pooling, selection action design, pooling vs versioning |
+| `prompt-engineering.md` | One unit of outcome, distil before generating, seed data, output contracts, version diversity |
 
-### assets/templates/ (2 templates)
+### scripts/ (2 helpers)
 
-Starter files for scaffolding new workflows:
+Executable helpers an AI assistant can run on the user's behalf:
 
-| File | Generates |
-|------|-----------|
-| `workflow.yml.template` | `agent_config/{workflow}.yml` — 3-step workflow skeleton with defaults, LLM action, tool action, and context scope action |
-| `udf_tool.py.template` | `tools/{workflow}/*.py` — Record-mode `@udf_tool` with namespaced data access |
+| File | Purpose |
+|------|---------|
+| `inspect_action.py` | Runs `agac inspect action` and `agac inspect context` for one action — shows config, dependencies, observe fields, schema, and template variable resolution side-by-side |
+| `reset_workflow.py` | Soft reset (clear `.agent_status.json`) or `--full` reset (wipe `source/`, `store/`, `target/`, status) for one workflow |
 
-Templates use `{{PLACEHOLDER}}` syntax (not Jinja2). They are reference examples, not used by any automated scaffolding command — the AI assistant fills in placeholders when helping users create workflows.
+Both scripts self-locate the project root by walking up for `agent_actions.yml`, so they work from any subdirectory of a user project.
 
 ---
 
@@ -172,9 +149,8 @@ Templates use `{{PLACEHOLDER}}` syntax (not Jinja2). They are reference examples
 | `_MANIFEST.md` | Module manifest (AMP protocol) |
 | `ARCHITECTURE.md` | This file |
 | `agac-agent-skills/SKILL.md` | Skill descriptor + primary knowledge payload |
-| `agac-agent-skills/references/*.md` | 16 deep-dive reference guides |
-| `agac-agent-skills/assets/templates/workflow.yml.template` | Workflow YAML starter template |
-| `agac-agent-skills/assets/templates/udf_tool.py.template` | UDF tool starter template |
+| `agac-agent-skills/references/*.md` | 5 deep-dive reference guides |
+| `agac-agent-skills/scripts/*.py` | 2 helper scripts (inspect, reset) |
 
 CLI entry point (outside this module):
 
@@ -186,7 +162,7 @@ CLI entry point (outside this module):
 
 ## Caveats
 
-1. **No runtime code.** This module has no Python files, no `__init__.py`, no imports. It is invisible to the Python import system. The only code that touches it is `cli/skills.py`, which uses `pathlib` and `shutil`.
+1. **No runtime code.** This module has no Python files in the package root, no `__init__.py`, no imports. It is invisible to the Python import system. The only framework code that touches it is `cli/skills.py`, which uses `pathlib` and `shutil`. The two files under `scripts/` run standalone — they shell out to the `agac` CLI rather than importing it.
 
 2. **`--force` is destructive.** `shutil.rmtree` deletes the entire target skill directory before copying. If users have edited installed skill files (customized reference docs, added notes), those edits are lost without confirmation.
 
@@ -196,4 +172,4 @@ CLI entry point (outside this module):
 
 5. **Skill naming convention.** Skill directories must start with `agac-` by convention (the current skill is `agac-agent-skills`). Discovery does not enforce this — any subdirectory is treated as a skill — but the convention exists for namespace clarity.
 
-6. **No selective update.** Installation is all-or-nothing per skill. You cannot install only `references/` or only `assets/`. The entire skill directory tree is copied.
+6. **No selective update.** Installation is all-or-nothing per skill. You cannot install only `references/` or only `scripts/`. The entire skill directory tree is copied.
