@@ -170,15 +170,31 @@ class WorkflowSchemaService:
         return sorted(node.name for node in downstream_nodes)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert full analysis to dictionary for JSON serialization."""
+        """Convert full analysis to dictionary for JSON serialization.
+
+        On a cyclic workflow get_execution_order() raises ValueError (the cycle
+        is recorded as a StaticTypeError on the validation result). The
+        serialized output reports is_valid=False with an empty execution_order
+        and a "cycle_error" key, so consumers can render the cycle without
+        crashing.
+        """
         validation = self.validate()
-        return {
+        cycle_error: str | None = None
+        try:
+            execution_order = self.get_execution_order()
+        except ValueError as exc:
+            execution_order = []
+            cycle_error = str(exc)
+        out: dict[str, Any] = {
             "workflow_name": self.workflow_name,
             "is_valid": validation.is_valid,
-            "execution_order": self.get_execution_order(),
+            "execution_order": execution_order,
             "actions": {name: schema.to_dict() for name, schema in self.get_all_schemas().items()},
             "validation": validation.to_dict(),
         }
+        if cycle_error is not None:
+            out["cycle_error"] = cycle_error
+        return out
 
     @staticmethod
     def _lookup_in_properties(

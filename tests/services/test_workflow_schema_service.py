@@ -544,3 +544,31 @@ class TestFromActionConfigs:
         )
         extractor = service._analyzer.schema_extractor
         assert extractor._get_tool_schemas() == {}
+
+
+class TestWorkflowSchemaServiceCycleHandling:
+    """Cyclic workflows must surface the cycle, not silently sort in dict-key order."""
+
+    CYCLIC_ACTIONS = {
+        "action_a": {"context_scope": {"observe": ["action_b.out_b"]}},
+        "action_b": {"context_scope": {"observe": ["action_a.out_a"]}},
+    }
+
+    def test_get_execution_order_raises_value_error_on_cycle(self):
+        """Silent fallback to dict-key order is gone — cycles must raise."""
+        import pytest
+
+        service = WorkflowSchemaService.from_action_configs("cyclic_wf", self.CYCLIC_ACTIONS)
+        with pytest.raises(ValueError, match="Circular dependency"):
+            service.get_execution_order()
+
+    def test_to_dict_degrades_gracefully_on_cycle(self):
+        """to_dict must not crash — returns degraded result with cycle_error."""
+        service = WorkflowSchemaService.from_action_configs("cyclic_wf", self.CYCLIC_ACTIONS)
+        out = service.to_dict()
+
+        assert out["is_valid"] is False
+        assert out["execution_order"] == []
+        assert "cycle_error" in out
+        assert "Circular dependency" in out["cycle_error"]
+        assert "validation" in out
