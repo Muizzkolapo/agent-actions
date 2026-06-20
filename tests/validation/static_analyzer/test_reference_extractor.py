@@ -2,6 +2,8 @@
 
 import logging
 
+import pytest
+
 from agent_actions.validation.static_analyzer import ReferenceExtractor
 
 _LOGGER_NAME = "agent_actions.validation.static_analyzer.reference_extractor"
@@ -432,7 +434,7 @@ class TestReferenceExtractor:
 
 
 class TestReferenceExtractorTemplateSyntaxError:
-    """TemplateSyntaxError must log a warning, not fail silently."""
+    """TemplateSyntaxError must raise, not return empty refs."""
 
     def setup_method(self):
         self.extractor = ReferenceExtractor()
@@ -443,8 +445,10 @@ class TestReferenceExtractorTemplateSyntaxError:
         aa_logger.propagate = True
         return original
 
-    def test_syntax_error_logs_warning_and_returns_empty(self, caplog):
-        """Broken template logs warning and returns empty refs, not silent."""
+    def test_syntax_error_raises_and_logs_warning(self, caplog):
+        """Broken template raises TemplateSyntaxError and logs a warning."""
+        from jinja2.exceptions import TemplateSyntaxError
+
         original = self._enable_propagate()
         try:
             config = {
@@ -452,9 +456,9 @@ class TestReferenceExtractorTemplateSyntaxError:
                 "prompt": "{% if broken %} {{ action.extractor.data }}",
             }
             with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-                refs = self.extractor.extract_from_agent(config)
+                with pytest.raises(TemplateSyntaxError):
+                    self.extractor.extract_from_agent(config)
 
-            assert refs == [] or all(r.location != "prompt" for r in refs)
             warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
             assert len(warning_records) >= 1
             assert "syntax error" in warning_records[0].message.lower()
@@ -463,6 +467,8 @@ class TestReferenceExtractorTemplateSyntaxError:
 
     def test_syntax_error_warning_includes_template_snippet(self, caplog):
         """Warning includes the template text for diagnostics."""
+        from jinja2.exceptions import TemplateSyntaxError
+
         original = self._enable_propagate()
         try:
             config = {
@@ -470,7 +476,8 @@ class TestReferenceExtractorTemplateSyntaxError:
                 "prompt": "{{ unclosed_var",
             }
             with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-                self.extractor.extract_from_agent(config)
+                with pytest.raises(TemplateSyntaxError):
+                    self.extractor.extract_from_agent(config)
 
             warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
             assert len(warning_records) >= 1

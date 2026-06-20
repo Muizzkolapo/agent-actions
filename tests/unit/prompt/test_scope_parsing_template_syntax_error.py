@@ -1,15 +1,15 @@
-"""Regression: extract_action_names_from_template logs warning on Jinja2 syntax errors.
+"""Regression: extract_action_names_from_template raises on Jinja2 syntax errors.
 
-Finding #8: scope_parsing.py:157 — TemplateSyntaxError was caught and returned
-as empty set with no logging. Callers received an empty set
-indistinguishable from "template has no action references", causing
-wrong context to be built silently. The fix logs a warning with
-diagnostics so the failure is visible in logs.
+Finding #8 (updated): scope_parsing.py:157 — TemplateSyntaxError was caught and
+returned as empty set. The fix re-raises the exception so callers are forced to
+handle it explicitly rather than silently receiving an empty set indistinguishable
+from "template has no action references".
 """
 
 import logging
 
 import pytest
+from jinja2.exceptions import TemplateSyntaxError
 
 from agent_actions.prompt.context.scope_parsing import extract_action_names_from_template
 
@@ -26,31 +26,32 @@ def _enable_propagate():
     aa_logger.propagate = original
 
 
-class TestTemplateSyntaxErrorLogsWarning:
-    """TemplateSyntaxError must log a warning, not fail silently."""
+class TestTemplateSyntaxErrorRaisesAndLogs:
+    """TemplateSyntaxError must raise and log a warning, not return empty set."""
 
-    def test_unclosed_block_logs_warning(self, caplog):
-        """Unclosed Jinja2 block tag logs a warning and returns empty set."""
+    def test_unclosed_block_raises_and_logs_warning(self, caplog):
+        """Unclosed Jinja2 block tag raises TemplateSyntaxError and logs a warning."""
         with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-            result = extract_action_names_from_template("{% if foo %} no endif")
+            with pytest.raises(TemplateSyntaxError):
+                extract_action_names_from_template("{% if foo %} no endif")
 
-        assert result == set()
         assert len(caplog.records) == 1
         assert "syntax error" in caplog.records[0].message.lower()
 
-    def test_unclosed_variable_logs_warning(self, caplog):
-        """Unclosed variable expression logs a warning and returns empty set."""
+    def test_unclosed_variable_raises_and_logs_warning(self, caplog):
+        """Unclosed variable expression raises TemplateSyntaxError and logs a warning."""
         with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-            result = extract_action_names_from_template("{{ unclosed_var")
+            with pytest.raises(TemplateSyntaxError):
+                extract_action_names_from_template("{{ unclosed_var")
 
-        assert result == set()
         assert len(caplog.records) == 1
 
     def test_warning_includes_template_snippet(self, caplog):
         """Warning message includes the template content for diagnostics."""
         template = "{% if broken %} {{ action.field }}"
         with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-            extract_action_names_from_template(template)
+            with pytest.raises(TemplateSyntaxError):
+                extract_action_names_from_template(template)
 
         assert len(caplog.records) == 1
         assert template[:50] in caplog.records[0].message
@@ -58,7 +59,8 @@ class TestTemplateSyntaxErrorLogsWarning:
     def test_warning_includes_line_number(self, caplog):
         """Warning message includes the line number of the syntax error."""
         with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
-            extract_action_names_from_template("{% if broken %}")
+            with pytest.raises(TemplateSyntaxError):
+                extract_action_names_from_template("{% if broken %}")
 
         assert len(caplog.records) == 1
         assert "line" in caplog.records[0].message.lower()

@@ -163,13 +163,12 @@ def extract_action_names_from_template(template: str | None) -> set:
     except TemplateSyntaxError as e:
         logger.warning(
             "Jinja2 syntax error in template scope extraction (line %s): %s — "
-            "scope dependencies may be incomplete; the syntax error will surface at render time. "
             "Template snippet: %.200s",
             e.lineno,
             e.message,
             template,
         )
-        return set()
+        raise
 
     referenced_actions: set[str] = set()
 

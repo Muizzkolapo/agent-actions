@@ -228,6 +228,59 @@ class TestSeedFileChecks:
         seed_errors = [e for e in result.errors if "seed" in e.message.lower()]
         assert len(seed_errors) == 0
 
+    def test_malformed_template_records_error_not_crash(self, tmp_path, monkeypatch):
+        """Malformed template in a seed-path action produces a StaticTypeError, not a crash."""
+        monkeypatch.setenv("AA_SKIP_ENV_VALIDATION", "1")
+        # _resolve_seed_data_dir returns non-None only when seed_data/ exists on disk
+        agent_config = tmp_path / "agent_config"
+        agent_config.mkdir()
+        (tmp_path / "seed_data").mkdir()
+        workflow_path = str(agent_config / "workflow.yml")
+
+        svc = WorkflowResolutionService(
+            action_configs={
+                "broken_action": {
+                    "prompt": "{{ unclosed_var",
+                    "context_scope": {"seed_path": {"data": "some_value"}},
+                },
+            },
+            workflow_config_path=workflow_path,
+        )
+        result = svc.resolve_all()
+
+        syntax_errors = [
+            e
+            for e in result.errors
+            if "broken_action" in e.message and "syntax" in e.message.lower()
+        ]
+        assert len(syntax_errors) == 1
+        assert syntax_errors[0].location.agent_name == "broken_action"
+
+    def test_good_action_not_affected_by_sibling_malformed_template(self, tmp_path, monkeypatch):
+        """A syntax error in one action's template does not block seed-ref checks for others."""
+        monkeypatch.setenv("AA_SKIP_ENV_VALIDATION", "1")
+        agent_config = tmp_path / "agent_config"
+        agent_config.mkdir()
+        (tmp_path / "seed_data").mkdir()
+        workflow_path = str(agent_config / "workflow.yml")
+
+        svc = WorkflowResolutionService(
+            action_configs={
+                "broken_action": {
+                    "prompt": "{{ unclosed_var",
+                    "context_scope": {"seed_path": {"data": "v"}},
+                },
+                "good_action": {
+                    "prompt": "{{ source.field }}",
+                },
+            },
+            workflow_config_path=workflow_path,
+        )
+        result = svc.resolve_all()
+
+        good_action_errors = [e for e in result.errors if e.location.agent_name == "good_action"]
+        assert len(good_action_errors) == 0
+
     def test_seed_data_dir_missing_graceful_skip(self, tmp_path):
         """When seed_data directory doesn't exist, gracefully skip (no errors)."""
         project = tmp_path / "project"

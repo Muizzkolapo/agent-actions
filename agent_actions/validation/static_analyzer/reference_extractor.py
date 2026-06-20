@@ -151,14 +151,12 @@ class ReferenceExtractor:
             ast = self._parse(template)
         except TemplateSyntaxError as e:
             logger.warning(
-                "Jinja2 syntax error in template reference extraction (line %s): %s — "
-                "references may be incomplete; the syntax error will surface at render time. "
-                "Template snippet: %.200s",
+                "Jinja2 syntax error in template (line %s): %s — Template snippet: %.200s",
                 e.lineno,
                 e.message,
                 template,
             )
-            return references
+            raise
 
         self._walk_ast(ast, references, local_vars=set())
         return references
