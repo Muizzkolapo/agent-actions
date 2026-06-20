@@ -112,10 +112,6 @@ class WorkflowStaticAnalyzer:
         Returns:
             StaticValidationResult with errors and warnings
         """
-        # Reset per-run state so reusing an analyzer instance does not
-        # accumulate errors from previous analyze() calls.
-        self._build_errors = []
-
         # Step 0: Validate context_scope BEFORE normalization so diagnostic
         # hints can inspect the raw YAML values (null, wrong type, orphaned
         # directives). Normalization in Step 0b converts null → {} which would
@@ -220,6 +216,10 @@ class WorkflowStaticAnalyzer:
         """Build the data flow graph from workflow config."""
         if self._built:
             return
+
+        # Reset error buffer so a rebuild produces a fresh list rather than
+        # appending to errors from a prior partial state.
+        self._build_errors = []
 
         actions = self.workflow_config.get("actions", [])
 
@@ -484,8 +484,35 @@ class WorkflowStaticAnalyzer:
             # (source, version, seed, workflow, loop are already filtered)
             try:
                 template_namespaces = extract_action_names_from_template(template)
-            except TemplateSyntaxError:
-                continue  # syntax error already recorded in _build_graph via _build_errors
+            except TemplateSyntaxError as exc:
+                # Record the syntax error here too. _build_graph also catches it
+                # during _add_agent_node, but that path can be bypassed when the
+                # template is added after build or read from a different field;
+                # recording defensively guarantees the failure reaches the
+                # validation result instead of being silently dropped. Dedupe
+                # so the normal path (already recorded by _build_graph) is not
+                # double-reported.
+                already_recorded = any(
+                    err.location.agent_name == name and err.location.config_field == "prompt"
+                    for err in self._build_errors
+                )
+                if not already_recorded:
+                    self._build_errors.append(
+                        StaticTypeError(
+                            message=(
+                                f"Template syntax error in '{name}': {exc.message} "
+                                f"(line {exc.lineno})"
+                            ),
+                            location=FieldLocation(
+                                agent_name=name,
+                                config_field="prompt",
+                                line_number=exc.lineno,
+                            ),
+                            referenced_agent=name,
+                            referenced_field="",
+                        )
+                    )
+                continue
 
             # Also filter FRAMEWORK_NAMESPACES for safety
             template_namespaces -= FRAMEWORK_NAMESPACES
