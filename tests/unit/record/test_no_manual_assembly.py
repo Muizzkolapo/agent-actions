@@ -108,6 +108,11 @@ class TestNoPrintInLibraryCode:
         for line in result.stdout.strip().splitlines():
             if ">>>" in line or "docstring" in line or "Example" in line:
                 continue
+            # Bundled skill payload — standalone helpers shipped via
+            # `agac skills install`, not framework library code. They need to
+            # print to the user's terminal.
+            if "/skills/agac-agent-skills/scripts/" in line:
+                continue
             parts = line.split(":", 2)
             if len(parts) >= 2 and _is_inside_docstring(parts[0], int(parts[1])):
                 continue

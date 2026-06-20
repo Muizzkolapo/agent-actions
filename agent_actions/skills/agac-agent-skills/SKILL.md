@@ -1,578 +1,396 @@
 ---
-name: agac
-description: Build, configure, and debug agent-actions agentic workflows. Trigger on workflow YAML, UDFs, context_scope, guards, versions, schemas, seed data, prompts, reprompt, HITL, or debugging empty/filtered/mismatched output.
+name: agac-agent-skills
+description: Build, run, inspect, and debug agent-actions workflows. Triggers on workflow YAML, UDFs, observe/passthrough/drop, guards, versions, schemas, seed data, prompts, HITL, running or resetting a pipeline, or debugging empty/filtered output.
 ---
 
 # Agent Actions Workflow Builder
 
-## How It Works
+**Paths in this skill:** `references/*.md` and `scripts/*.py` are relative to this skill's directory. The scripts self-locate the project root by walking up for `agent_actions.yml`, so they work regardless of where invoked from.
 
-1. **Dependencies + observe go together.** When you add a dependency, add its fields to `context_scope.observe`. Fan-in actions observe from ALL branch dependencies.
-2. **Prompt references = observe entries.** Every `{{ namespace.field }}` in a prompt needs a matching observe. Every observe feeds the prompt.
-3. **Observe = what the LLM sees = tokens you pay for.** Only observe what the prompt uses. Wildcards (`.*`) are expensive — prefer specific fields.
-4. **Seed data is auto-available in prompts** via `{{ seed.key }}`. No observe entry needed for LLM actions. Tool UDFs receive seed via kwargs.
-5. **All field references use namespace.field format.** In observe, passthrough, drop, and guard conditions: `aggregate_votes.filter`, not `filter`. Preflight validates this.
-6. **Guard conditions use the same namespace.field paths.** `aggregate_votes.filter == "keep"`, not `filter == "keep"`.
-7. **Fan-in: list all converging branches in dependencies AND observe.** The bus carries everything — you just tell the action what to look at.
+## Rules
 
-## Data Model (Additive Bus)
+1. **Every dependency needs at least one field in observe.** Preflight errors otherwise. Even guard-only dependencies need an anchor field.
+2. **Every `{{ namespace.field }}` in a prompt needs a matching observe.** Every observe entry feeds the prompt. If the prompt doesn't use it, remove it — you're paying tokens for nothing.
+3. **Only observe what the action needs.** Never pass large upstream fields to downstream actions when a distilled version already exists. Context bloat causes LLMs to drift off-topic.
+4. **Guard fields must be in observe.** Write `upstream.field == value`, not `field == value`.
+5. **Tools receive namespaced data.** Access as `data["action_name"]["field"]`, never `data["field"]`.
+6. **Seed data needs no observe.** Use `{{ seed.key }}` directly in prompts.
 
-Every record carries a `content` dict that **only grows**. Each action adds its output under a namespace key. Nothing is ever removed.
+## Workflow Structure
 
 ```
-After action A: content = { "source": {...}, "A": {...} }
-After action B: content = { "source": {...}, "A": {...}, "B": {...} }
-After action C: content = { "source": {...}, "A": {...}, "B": {...}, "C": {...} }
+agent_workflow/{name}/
+  agent_config/{name}.yml    # workflow config
+  agent_io/
+    staging/                 # input data (JSON files)
+    source/                  # framework-processed input
+    store/                   # SQLite DB (state, traces)
+    target/                  # per-action output
+  seed_data/                 # reference data for grounded prompts
+prompt_store/{name}.md       # all prompts for this workflow
+schema/{name}/               # output schemas (when complex)
+tools/{tool-group}/          # UDF implementations
 ```
 
-The record is a **bus** — it carries all namespaces so any downstream action can reach back to any upstream. `context_scope.observe` is the **selector** — it picks exactly which fields this action needs. The bus is storage; observe is access control.
+## Config
 
-## Record Mode Tools
+```yaml
+name: my_workflow
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: ollama_cloud
+  model_name: gemma4:31b-cloud
+  batch_max_workers: 12
+  api_key: OLLAMA_API_KEY
+  is_operational: true
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+  context_scope:
+    seed_path:
+      domain_rules: $file:domain_rules.json
+      reference_data: $file:reference_data.json
+```
 
-Tools receive **observe-filtered namespaced data** — fields nested under the producing action's name. The framework handles all provenance, wrapping, and upstream preservation.
+## Data Model
+
+Every record carries a `content` dict that only grows. Each action adds its output under a namespace key:
+
+```
+After extract:  content = { "source": {...}, "extract": {...} }
+After analyze:  content = { "source": {...}, "extract": {...}, "analyze": {...} }
+```
+
+The record is a bus. `context_scope.observe` selects which fields from the bus this action sees.
+
+## References
+
+Detailed guidance — loaded on demand:
+
+- [references/workflow-patterns.md](references/workflow-patterns.md) — 8 harness patterns with YAML
+- [references/context-scoping.md](references/context-scoping.md) — observe / passthrough / drop, dependency anchor rule, wildcard vs explicit fields, common mistakes
+- [references/loop-patterns.md](references/loop-patterns.md) — verify→rewrite, aggregate threshold patterns, sequential enrichment, contract check loops
+- [references/pooling-approach.md](references/pooling-approach.md) — sequential vs parallel pooling, selection action design, pooling vs versioning
+- [references/prompt-engineering.md](references/prompt-engineering.md) — one unit of outcome, distil before generating, seed data, output contracts, version diversity
+
+## Action Types
+
+### LLM Action
+
+```yaml
+- name: analyze_content
+  dependencies: [extract_data]
+  guard:
+    condition: 'extract_data.is_valid == true'
+    on_false: "filter"
+  intent: "Analyze extracted data for patterns and insights"
+  schema:
+    key_findings: string
+    confidence_score: integer
+    summary: string
+  prompt: $my_workflow.Analyze_Content
+  context_scope:
+    observe:
+      - extract_data.structured_output
+      - extract_data.metadata
+      - source.raw_content
+```
+
+The guard depends on `extract_data`, and `extract_data.structured_output` is in observe — that satisfies the dependency anchor rule.
+
+### Tool Action (record mode)
+
+Fan-in tool combining multiple upstream signals:
+
+```yaml
+- name: combine_results
+  dependencies: [check_quality, verify_accuracy, validate_format]
+  kind: tool
+  impl: combine_results
+  intent: "Combine all checks into a single pass/fail verdict"
+  schema: combine_results
+  context_scope:
+    observe:
+      - check_quality.*
+      - verify_accuracy.*
+      - validate_format.*
+```
 
 ```python
 @udf_tool()
-def my_tool(data: dict[str, Any]) -> dict:
-    # Access fields by namespace
-    claims = data["extract_claims"]["factual_claims"]
-    score = data["aggregate_scores"]["consensus_score"]
-
-    return {"summary": f"Score {score}, {len(claims)} claims"}
+def combine_results(data: dict[str, Any]) -> dict[str, Any]:
+    quality = data.get("check_quality", {}) or {}
+    accuracy = data.get("verify_accuracy", {}) or {}
+    issues = []
+    if not quality.get("passed"):
+        issues.append(quality.get("reason", "quality check failed"))
+    return {"has_failures": len(issues) > 0, "combined_issues": "\n".join(issues)}
 ```
 
-**Version merge tools** receive version-namespaced data. Each version's output is under its versioned name:
-```python
-# Access each voter's score
-score_1 = data["score_quality_1"]["score_quality_1"]["helpfulness_score"]
-score_2 = data["score_quality_2"]["score_quality_2"]["helpfulness_score"]
-score_3 = data["score_quality_3"]["score_quality_3"]["helpfulness_score"]
-avg = (score_1 + score_2 + score_3) / 3
+### Tool Action (file mode)
+
+File-mode tools receive all records as a list. Use for dedup, batching, aggregation:
+
+```yaml
+- name: deduplicate
+  dependencies: [enrich_records]
+  kind: tool
+  impl: deduplicate_records
+  schema: deduplicate_records
+  granularity: File
+  context_scope:
+    observe: [enrich_records.*]
 ```
 
-**Data access pattern — fields are always namespaced:**
 ```python
-# Access fields by the action that produced them
-question = data["write_scenario_question"]["question_text"]
-answer = data["consolidate_answer_from_source"]["final_answer_text"]
-score = data["aggregate_scores"]["consensus_score"]
-```
-
-## FILE Mode Tools
-
-FILE mode tools receive **clean business dicts** — no framework fields. Each item is a `TrackedItem` (dict subclass with hidden provenance). Treat as normal dicts.
-
-```python
-from agent_actions import udf_tool
-from agent_actions.config.schema import Granularity
-from agent_actions.utils.udf_management.registry import FileUDFResult
-
 @udf_tool(granularity=Granularity.FILE)
-def assign_batch(data: list[dict], batch_size: int = 50) -> FileUDFResult:
-    """N→N: add a field to every record."""
-    return FileUDFResult(outputs=[
-        {"source_index": i, "data": {**item, "batch": f"b_{i // batch_size}"}}
-        for i, item in enumerate(data)
-    ])
-
-@udf_tool(granularity=Granularity.FILE)
-def deduplicate(data: list[dict]) -> list[dict]:
-    """N→M filter: return subset. TrackedItem provenance automatic."""
-    seen, deduped = set(), []
+def deduplicate_records(data: list[dict]) -> list[dict]:
+    seen, result = set(), []
     for item in data:
-        key = item["question_text"]
+        key = item["enrich_records"]["canonical_id"]
         if key not in seen:
             seen.add(key)
-            deduped.append(item)  # returning TrackedItem — provenance preserved
-    return deduped
+            result.append(item)
+    return result
 ```
 
-**Return rules:**
-- **Passthrough/filter/enrich** (return input items): return `list[dict]` — TrackedItem provenance automatic
-- **Merge/expand** (construct NEW dicts): return `FileUDFResult` with `source_index` per output
-- **Plain dict in list return → `ValueError`** — framework can't trace provenance
+Return rules:
+- Returning input items (filter/enrich): `list[dict]` — TrackedItem provenance automatic
+- Constructing new dicts (merge/expand): `FileUDFResult(outputs=[{"source_index": i, "data": {...}}])`
 
-## Context Scope
+### Versioned Action + Merge
 
-| Directive | LLM sees? | In output? | Use for |
-|-----------|:---------:|:----------:|---------|
-| `observe` | Yes | Yes (processed) | Data the action transforms |
-| `passthrough` | No | Yes (forwarded) | Fields downstream needs (zero tokens) |
-| `drop` | No | No | Noise reduction (data stays on bus) |
-
-**What ends up in the output record:**
-- Action's own output → `content[action_name] = {schema fields}`
-- All upstream namespaces → carried forward on the bus
-- Passthrough fields → forwarded without LLM processing
-- Dropped fields → excluded from this action's context, but still on the bus for downstream
-- Seed data → not in output (prompt-only)
-- Guard-skipped → `content[action_name] = null`
-
-**Wildcard vs specific fields:**
-- `upstream.*` — use when aggregating branches or during early development
-- `upstream.field1, upstream.field2` — use for cost optimization (fewer tokens) and clarity
-- Nested array access (`upstream.array.*`) is not supported — observe the whole field
-
-**Drop + passthrough on the same field:** Drop excludes from LLM context. Passthrough forwards to output. Both can coexist — field is hidden from the LLM but available downstream.
-
-## Guards
-
-Guards use **dotted namespace paths**:
+3 independent evaluators, then a tool checks consensus:
 
 ```yaml
-guard:
-  condition: 'aggregate_scores.consensus_score >= 6'
-  on_false: "filter"    # filter = remove record | skip = null namespace
-```
-
-| `on_false` | Record | Namespace | Downstream |
-|-----------|--------|-----------|------------|
-| `filter` | Removed from pipeline | None created | No processing |
-| `skip` | Survives | `action_name: null` | Runs, must handle null |
-
-## Versions (Parallel Voting)
-
-Run the same action N times independently, then merge results.
-
-```yaml
-- name: score_quality
-  versions: { param: scorer_id, range: [1, 2, 3], mode: parallel }
-
-- name: aggregate
-  dependencies: [score_quality]
-  kind: tool
-  impl: aggregate_tool
-  version_consumption: { source: score_quality, pattern: merge }
-  context_scope:
-    observe: [score_quality.*]   # resolver expands to _1, _2, _3
-```
-
-**How cardinality works:**
-```
-Input:           1 record
-After versions:  3 actions created (score_quality_1, score_quality_2, score_quality_3)
-                 Each processes the same record independently
-After merge:     1 record with version namespaces combined:
-                   content["score_quality_1"] = {voter 1 output}
-                   content["score_quality_2"] = {voter 2 output}
-                   content["score_quality_3"] = {voter 3 output}
-```
-
-The merge tool receives all version namespaces. Access each voter's data:
-```python
-score_1 = data["score_quality_1"]["score_quality_1"]["helpfulness_score"]
-score_2 = data["score_quality_2"]["score_quality_2"]["helpfulness_score"]
-```
-
-In versioned action prompts: `{{ version.i }}` (current index), `{{ version.length }}` (total), `{{ version.first }}` / `{{ version.last }}` (booleans).
-
-## Fan-In Pattern
-
-When parallel branches rejoin — just observe from both. The bus has everything:
-
-```yaml
-- name: merge_point
-  dependencies: [branch_a_end, branch_b_end]
+- name: evaluate
+  dependencies: [prepare_input]
+  versions: { param: evaluator_id, range: [1, 2, 3], mode: parallel }
+  intent: "Independently evaluate the input"
+  schema:
+    verdict: string
+    reasoning: string
+  prompt: $my_workflow.Evaluate
   context_scope:
     observe:
-      - branch_a_end.*
-      - branch_b_end.*
+      - prepare_input.question
+      - prepare_input.options
+
+- name: aggregate_evaluations
+  dependencies: [evaluate]
+  kind: tool
+  impl: aggregate_evaluations
+  version_consumption: { source: evaluate, pattern: merge }
+  intent: "Check if evaluators agree"
+  schema:
+    consensus: boolean
+    agreement_count: integer
+    final_verdict: string
+  context_scope:
+    observe:
+      - evaluate.*
+      - prepare_input.expected_answer
 ```
 
-No merge operator needed. `dependencies` controls when, `observe` controls what.
+Version merge tools receive double-nested data:
+```python
+v1 = data["evaluate_1"]["evaluate_1"]["verdict"]
+v2 = data["evaluate_2"]["evaluate_2"]["verdict"]
+v3 = data["evaluate_3"]["evaluate_3"]["verdict"]
+```
 
-## Seed & Prompts
+In prompts, use `{{ version.i }}`, `{{ version.length }}`, `{{ version.first }}`, `{{ version.last }}` — bare `{{ i }}` crashes with `'i' is undefined`.
+
+### Guard + Conditional Rewrite
+
+Only rewrite if checks failed:
 
 ```yaml
-defaults:
+- name: rewrite_output
+  dependencies: [combine_results, original_output]
+  guard:
+    condition: 'combine_results.has_failures == true'
+    on_false: "skip"
+  intent: "Rewrite output fixing all issues"
   context_scope:
-    seed_path:
-      rules: $file:rules.json
+    observe:
+      - original_output.*
+      - combine_results.combined_issues
 ```
 
-Prompts: `{{ seed.rules.field }}`. Config key is `seed_path:`, reference prefix is `seed.`.
+`filter` removes the record entirely. `skip` sets `content["action_name"] = null` and the record continues — downstream must handle null with `{% if %}` in prompts.
+
+### HITL (Human-in-the-Loop)
+
+```yaml
+- name: human_review
+  dependencies: [generate_output]
+  kind: hitl
+  granularity: file
+  intent: "Human reviews output before final processing"
+  hitl:
+    port: 3001
+    timeout: 3600
+  context_scope:
+    observe:
+      - generate_output.*
+
+- name: next_step
+  dependencies: [human_review]
+  guard:
+    condition: 'human_review.hitl_status == "approved"'
+    on_false: "filter"
+  context_scope:
+    observe:
+      - human_review.*
+```
+
+## Prompts
+
+Stored in `prompt_store/{workflow}.md`. Referenced as `$workflow_name.Prompt_Name`.
 
 ```markdown
-{prompt My_Prompt}
-Content: {{ source.page_content }}
-Rules: {{ seed.rules.key }}
-Prior analysis: {{ summarize_page_content.summary }}
+{prompt Analyze_Content}
+You are a domain expert. Analyze the following data.
+
+## INPUT DATA
+
+{{ extract_data.structured_output }}
+
+{% if previous_analysis.summary %}
+## PRIOR ANALYSIS
+{{ previous_analysis.summary }}
+{% endif %}
+
+## REFERENCE
+{{ seed.domain_rules.key_principle }}
+
+## OUTPUT
+```json
+{
+  "key_findings": "...",
+  "confidence_score": 8,
+  "summary": "..."
+}
+```
 {end_prompt}
 ```
 
+Every `{{ namespace.field }}` must have a matching observe entry. Use `{% if %}` for fields that may be null (from skipped guards).
+
+## Context Scope
+
+| Directive | LLM sees? | On bus? | Use for |
+|-----------|:---------:|:-------:|---------|
+| `observe` | Yes | Yes | Data the action needs |
+| `passthrough` | No | Yes | Forward to downstream without tokens |
+| `drop` | No | Yes (hidden) | Hide from this action's LLM context without removing from the bus |
+
+See [references/context-scoping.md](references/context-scoping.md) for the dependency anchor rule, wildcard vs explicit, and the common mistakes.
+
 ## Schemas
 
-Always define properties. `type: object` without properties = `additionalProperties: false`.
-
 ```yaml
-# Inline (simple)
-schema: { vote: string, score: integer, reasoning: string }
+# Inline — for simple output
+schema:
+  verdict: string
+  score: integer
+  reasoning: string
 
-# File (complex) — schema/{workflow}/{action}.yml
-type: object
-properties:
-  vote: { type: string, enum: ["keep", "filter"] }
-  score: { type: integer, minimum: 1, maximum: 10 }
-additionalProperties: false
+# File reference — for complex schemas at schema/{workflow}/{action}.yml
+schema: action_name
 ```
 
-## Non-JSON Mode
+## Running Workflows
 
-For models that can't produce JSON. Each action outputs one plain-text field:
+All commands run from the **project root** (where `agent_actions.yml` lives). `-u tools` is required whenever the workflow has UDFs.
 
+```bash
+# Setup
+uv sync
+
+# Validate all impl: references resolve to real @udf_tool functions before running
+agac validate-udfs -a {workflow} -u tools
+
+# Run (resumes from last completed action)
+agac run -a {workflow} -u tools
+
+# Fresh run (clears all state first)
+agac run -a {workflow} -u tools --fresh
+
+# See the full resolved YAML (versions expanded, schema inlined)
+agac render -a {workflow} -u tools
+
+# Per-record status across all actions
+agac dispositions -a {workflow} -u tools
+```
+
+Use `record_limit: N` on the first action in the YAML to test cheaply on a subset of source records.
+
+`retry` and `reprompt` are separate concerns — keep them distinct:
 ```yaml
-- name: classify_issue
-  json_mode: false
-  output_field: issue_type
-```
+retry:
+  enabled: true
+  max_attempts: 3        # retries on transient errors: network, rate limits, timeouts
 
-Result: `content["classify_issue"]["issue_type"] = "plain text value"`
-
-## Adding a New Action
-
-When asked to add an action, use these templates. All fields with comments need to be filled in.
-
-**LLM action:**
-```yaml
-  - name: my_action                         # ← rename
-    dependencies: [previous_action]          # ← runs after this action
-    intent: "What this action does"          # ← one sentence
-
-    # Schema: output fields (namespaced under action name automatically)
-    schema:
-      field_name: string                     # ← define output fields
-      # other_field: { type: array, items: { type: string } }
-
-    # Prompt: must match a heading in prompt_store/{workflow}.md
-    prompt: $workflow_name.My_Action_Prompt   # ← create matching prompt
-
-    # Context Scope: what this action sees from upstream
-    context_scope:
-      observe:
-        - previous_action.field_name         # ← namespace.field for each prompt reference
-        # - source.raw_input_field           # ← original input data
-      # passthrough:                         # ← carry forward without using tokens
-      #   - previous_action.some_field
-      # drop:                               # ← exclude from prompt context
-      #   - previous_action.verbose_field
-
-    # Optional:
-    # guard: { condition: "field == 'value'", on_false: skip }
-    # retry: { enabled: true, max_attempts: 3 }
-    # record_limit: 5                       # ← limit for testing
-```
-
-**Record tool action:**
-```yaml
-  - name: my_tool
-    dependencies: [previous_action]
-    kind: tool
-    impl: my_tool_name                       # ← tools/{workflow}/my_tool_name.py
-    intent: "What this tool does"
-    schema:
-      output_field: string                   # ← define output fields
-    context_scope:
-      observe:
-        - previous_action.*                  # ← tool receives these fields
-```
-
-With matching tool file at `tools/{workflow}/my_tool_name.py`:
-```python
-from typing import Any
-from agent_actions import udf_tool
-
-@udf_tool()
-def my_tool_name(data: dict[str, Any]) -> dict[str, Any]:
-    """What this tool does."""
-    # Data arrives namespaced: data["previous_action"]["field_name"]
-    value = data["previous_action"]["field_name"]
-    return {"output_field": value}
-```
-
-**FILE tool action** (processes entire array at once):
-```yaml
-  - name: my_file_tool
-    dependencies: [previous_action]
-    kind: tool
-    impl: my_file_tool_name                  # ← tools/{workflow}/my_file_tool_name.py
-    granularity: File
-    intent: "What this tool does with the full array"
-    schema:
-      output_field: string
-    context_scope:
-      observe:
-        - previous_action.*
-```
-
-With matching tool file:
-```python
-from typing import Any
-from agent_actions import udf_tool
-from agent_actions.config.schema import Granularity
-
-@udf_tool(granularity=Granularity.FILE)
-def my_file_tool_name(data: list[dict[str, Any]]) -> list[dict]:
-    """Processes entire array. Return input items for automatic provenance."""
-    result = []
-    for item in data:
-        # Filter, enrich, or transform items
-        result.append(item)  # returning TrackedItem preserves provenance
-    return result
+reprompt:                # in defaults — applies to LLM actions only
+  on_schema_mismatch: reprompt
+  max_attempts: 3        # retries when LLM output fails schema validation
+  use_self_reflection: true
+  on_exhausted: return_last
 ```
 
 ## Debugging
 
+**Quick prompt inspection without querying the DB:** set `prompt_debug: true` on the action in the YAML — the framework logs the full rendered prompt with resolved context to stdout during the run. Set it back to `false` after.
+
+**When output is wrong but pipeline didn't crash:**
+1. Namespace names match exactly? Typos cause empty data, not errors.
+2. Guard references an existing field? Missing field evaluates to None — may silently filter all records.
+3. Tool accessing `data["namespace"]["field"]` not `data["field"]`?
+4. Version merge tool unwrapping double nesting? `data["action_1"]["action_1"]["field"]`
+5. Schema fields match what the LLM/tool returns? Extra fields are silently dropped.
+6. Is a large upstream field (e.g. full page content) polluting a downstream action? Check if a distilled field already carries what you need.
+
+**Tracing records across actions:**
+Records carry `version_correlation_id` — same ID across all actions for the same source record. Use `prompt_trace` table for rendered prompts and `target_data` for outputs. Correlate by `target_id` or `version_correlation_id`, not by array index.
+
+**Inspecting an action's config, context, and schema:**
+
 ```bash
-agac run -a workflow          # Run
-agac run -a workflow --fresh  # Clear state and re-run
-agac render -a workflow       # Compiled YAML (resolve Jinja/schemas/versions)
+# Action config, dependencies, observe fields, output schema + template variable resolution
+python3 scripts/inspect_action.py {workflow} {action_name}
+
+# All action schemas (input → output) in one table
+agac schema -a {workflow} -u tools
+
+# Full pipeline graph
+agac inspect graph -a {workflow} -u tools
 ```
 
-Check errors: `events.json`. Use `record_limit: 2` to test cheaply (processes first 2 records only).
+**Inspecting live output data and rendered prompts:**
 
-Full reset:
+Use `agac preview` — backend-agnostic, works regardless of store type:
+
 ```bash
-rm -rf agent_io/target agent_io/.agent_status.json agent_io/source agent_io/store
-mkdir -p agent_io/target
+agac preview -w {workflow}                          # list actions with data
+agac preview -w {workflow} -a {action_name}         # records for one action
+agac preview -w {workflow} -a {action_name} -f json # JSON format
+agac preview -w {workflow} --stats                  # storage stats
 ```
 
-**Silent data issues checklist** (output looks wrong but didn't crash):
-1. All namespace names match exactly? (typos in observe/guard cause empty data, not errors)
-2. Guard condition references existing field? (missing field evaluates to None — may silently filter)
-3. Tool accessing `data["namespace"]["field"]` not `data["field"]`? (flat access gets wrong data)
-4. Version merge tool unwrapping double nesting? (`data["action_1"]["action_1"]["field"]`)
-5. `agac render` shows expected expanded config? (wildcards, versions resolved correctly)
-6. Schema fields match what the LLM/tool actually returns? (extra fields silently dropped)
+> `agac preview` is currently broken ("Backend not initialized"). See `spec/cli_issues_agac.md`. Do not work around it with backend-specific raw queries — fix the CLI instead.
 
-## Agentic Patterns
+**Resetting state:**
 
-All driven by the same data model: `RecordEnvelope` builds the bus, `context_scope` controls access. Here's how to configure each pattern.
+```bash
+# Soft reset: clears agent_status so next run starts from scratch (keeps DB)
+python3 scripts/reset_workflow.py {workflow}
 
-### Linear Chain
-
-Each action observes the previous. Content accumulates on the bus.
-
-```yaml
-  - name: extract
-    prompt: $workflow.Extract
-
-  - name: analyze
-    dependencies: [extract]
-    context_scope:
-      observe: [extract.key_facts]
-    prompt: $workflow.Analyze
-
-  - name: summarize
-    dependencies: [analyze]
-    context_scope:
-      observe: [extract.key_facts, analyze.analysis]
-    prompt: $workflow.Summarize
+# Full reset: wipes source, store, target, and status
+python3 scripts/reset_workflow.py {workflow} --full
 ```
 
-### Map-Reduce
-
-1→N split (Record tool) then N→1 aggregate (FILE tool).
-
-```yaml
-  - name: split_into_chunks          # 1 record → N records
-    kind: tool
-    impl: split_document
-    granularity: Record
-
-  - name: analyze_chunk              # process each independently
-    dependencies: [split_into_chunks]
-    context_scope:
-      observe: [split_into_chunks.*]
-    prompt: $workflow.Analyze_Chunk
-
-  - name: aggregate_results          # see ALL chunks at once
-    dependencies: [analyze_chunk]
-    kind: tool
-    impl: aggregate_analyses
-    granularity: File                 # ← FILE mode: receives entire array
-    context_scope:
-      observe: [analyze_chunk.*]
-```
-
-### Parallel Voting (Consensus)
-
-Multiple LLM evaluations merged into one. Each voter gets the same input but responds independently.
-
-```yaml
-  - name: score_quality
-    dependencies: [previous_action]
-    versions: { param: voter_id, range: [1, 2, 3], mode: parallel }
-    prompt: $workflow.Score_Quality
-    context_scope:
-      observe: [previous_action.*]
-
-  - name: aggregate_scores
-    dependencies: [score_quality]
-    kind: tool
-    impl: aggregate_votes
-    version_consumption: { source: score_quality, pattern: merge }
-    context_scope:
-      observe: [score_quality.*]      # resolver expands to _1, _2, _3
-```
-
-### Fan-Out / Fan-In
-
-Parallel branches that rejoin. The bus carries everything — the converging action just observes both.
-
-```yaml
-  # Two branches from same parent
-  - name: branch_a
-    dependencies: [shared_parent]
-    context_scope:
-      observe: [shared_parent.*]
-
-  - name: branch_b
-    dependencies: [shared_parent]
-    context_scope:
-      observe: [shared_parent.*]
-
-  # Convergence point — observes from both branches
-  - name: combine
-    dependencies: [branch_a, branch_b]
-    context_scope:
-      observe:
-        - branch_a.result
-        - branch_b.result
-```
-
-### Grounded Retrieval (LLM → Tool → LLM)
-
-LLM generates search criteria, tool retrieves candidates, LLM ranks results.
-
-```yaml
-  - name: generate_search
-    prompt: $workflow.Generate_Search
-    schema: { search_query: string, filters: array }
-
-  - name: retrieve_candidates
-    dependencies: [generate_search]
-    kind: tool
-    impl: search_database
-    context_scope:
-      observe: [generate_search.*]
-
-  - name: rank_results
-    dependencies: [retrieve_candidates]
-    context_scope:
-      observe:
-        - generate_search.search_query
-        - retrieve_candidates.candidates
-    prompt: $workflow.Rank_Results
-```
-
-### Guard Gates (Conditional Execution)
-
-```yaml
-  - name: generate_response
-    dependencies: [score_quality]
-    guard:
-      condition: 'aggregate_scores.consensus_score >= 6'
-      on_false: filter              # filter = remove record entirely
-    context_scope:
-      observe: [aggregate_scores.*]
-    prompt: $workflow.Generate_Response
-
-  - name: rewrite_if_needed
-    dependencies: [validate]
-    guard:
-      condition: 'validate.pass == false'
-      on_false: skip                # skip = null namespace, record continues
-    context_scope:
-      observe: [validate.violations, original_draft.*]
-    prompt: $workflow.Rewrite
-```
-
-### HITL (Human-in-the-Loop)
-
-Human reviews AI output. Decision stored under the HITL action's namespace.
-
-```yaml
-  - name: ai_assessment
-    prompt: $workflow.AI_Assessment
-
-  - name: human_review
-    dependencies: [ai_assessment]
-    kind: hitl
-    granularity: file
-    hitl:
-      port: 3001
-      timeout: 3600
-    context_scope:
-      observe: [ai_assessment.*]
-
-  - name: next_step
-    dependencies: [human_review]
-    context_scope:
-      observe: [human_review.decision]
-```
-
-### Reprompt Validation
-
-LLM output checked by a UDF. If validation fails, LLM is re-prompted with the error.
-
-```yaml
-  - name: write_description
-    dependencies: [previous_action]
-    reprompt:
-      validation: check_word_count   # tools/{workflow}/check_word_count.py
-      max_attempts: 3
-      on_exhausted: return_last      # return_last | raise
-    prompt: $workflow.Write_Description
-```
-
-The validation UDF returns `{"valid": true}` or `{"valid": false, "feedback": "Too short"}`.
-
-### Passthrough Routing (Zero-Token Forwarding)
-
-Carry fields downstream without putting them in the prompt (saves tokens).
-
-```yaml
-  context_scope:
-    observe:
-      - extract.key_facts             # LLM sees this (costs tokens)
-    passthrough:
-      - extract.raw_source            # forwarded but NOT in prompt (free)
-    drop:
-      - extract.debug_info            # excluded from everything
-```
-
-### Summary Table
-
-| # | Pattern | Key Config |
-|---|---------|------------|
-| 1 | Linear chain | `dependencies` + `observe` previous |
-| 2 | Map-Reduce | Record tool (1→N) + `granularity: File` tool (N→1) |
-| 3 | Parallel voting | `versions` + `version_consumption: merge` |
-| 4 | Parallel generation | Same as voting, pick best in consumer |
-| 5 | Fan-out / Fan-in | Multiple `dependencies`, observe from all branches |
-| 6 | LLM/Tool alternation | Alternate `kind: tool` and LLM actions |
-| 7 | Grounded retrieval | LLM → tool search → LLM rank |
-| 8 | Guard gates | `guard.on_false: filter` or `skip` |
-| 9 | HITL | `kind: hitl`, `granularity: file` |
-| 10 | Context isolation | `drop` directive in context_scope |
-| 12 | Reprompt validation | `reprompt.validation` UDF |
-| 13 | Non-JSON field-by-field | `json_mode: false`, `output_field` |
-| 14 | 1→N flatten | Record tool returns `list[dict]` |
-| 15 | Passthrough routing | `passthrough` in context_scope |
-
-## References
-
-- **[UDF Reference](references/udf-reference.md)** — Record mode, FILE mode, TrackedItem, FileUDFResult
-- **[Context Scope](references/context-scope-guide.md)** — observe/drop/passthrough, resolution
-- **[Workflow Patterns](references/workflow-patterns.md)** — fan-in, diamond, ensemble, map-reduce
-- **[Framework Contracts](references/framework-contracts.md)** — the 20 rules
-- **[Guards](references/guards.md)** — skip vs filter, conditions, namespace effects
-- **[Debugging Guide](references/debugging-guide.md)** — triage checklist
-- **[YAML Schema](references/yaml-schema.md)** — complete config reference
-- **[Prompt Patterns](references/prompt-patterns.md)** — template syntax, seed access
-- **[Schema Design](references/schema-design-guide.md)** — output schemas
-- **[Reprompt Patterns](references/reprompt-patterns.md)** — validation retry
-- **[Aggregation Patterns](references/aggregation-patterns.md)** — version merge, reduce_key
-- **[HITL Patterns](references/hitl-patterns.md)** — human-in-the-loop
-- **[CLI Reference](references/cli-reference.md)** — agac commands
-- **[Data Flow Patterns](references/data-flow-patterns.md)** — record lifecycle

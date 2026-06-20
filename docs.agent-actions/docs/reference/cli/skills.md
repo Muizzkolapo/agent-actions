@@ -68,9 +68,8 @@ Each skill includes:
 ```
 .claude/skills/agac-agent-skills/
 ├── SKILL.md           # Main skill documentation
-├── references/        # Syntax reference, examples
-├── scripts/           # Helper scripts for common tasks
-└── assets/            # Diagrams, cheat sheets
+├── references/        # Pattern guides, context scoping, prompt engineering
+└── scripts/           # Helper scripts (inspect_action, reset_workflow)
 ```
 
 Skills are project-scoped - each agent-actions project can have skills installed, and the AI assistant picks them up when you open that project.
