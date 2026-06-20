@@ -1,6 +1,10 @@
 """Tests for the reference extractor."""
 
+import logging
+
 from agent_actions.validation.static_analyzer import ReferenceExtractor
+
+_LOGGER_NAME = "agent_actions.validation.static_analyzer.reference_extractor"
 
 
 class TestReferenceExtractor:
@@ -425,3 +429,67 @@ class TestReferenceExtractor:
         assert "key" not in agent_names
         assert "value" not in agent_names
         assert "extractor" in agent_names
+
+
+class TestReferenceExtractorTemplateSyntaxError:
+    """TemplateSyntaxError must log a warning, not fail silently."""
+
+    def setup_method(self):
+        self.extractor = ReferenceExtractor()
+
+    def _enable_propagate(self):
+        aa_logger = logging.getLogger("agent_actions")
+        original = aa_logger.propagate
+        aa_logger.propagate = True
+        return original
+
+    def test_syntax_error_logs_warning_and_returns_empty(self, caplog):
+        """Broken template logs warning and returns empty refs, not silent."""
+        original = self._enable_propagate()
+        try:
+            config = {
+                "name": "agent",
+                "prompt": "{% if broken %} {{ action.extractor.data }}",
+            }
+            with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
+                refs = self.extractor.extract_from_agent(config)
+
+            assert refs == [] or all(r.location != "prompt" for r in refs)
+            warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+            assert len(warning_records) >= 1
+            assert "syntax error" in warning_records[0].message.lower()
+        finally:
+            logging.getLogger("agent_actions").propagate = original
+
+    def test_syntax_error_warning_includes_template_snippet(self, caplog):
+        """Warning includes the template text for diagnostics."""
+        original = self._enable_propagate()
+        try:
+            config = {
+                "name": "agent",
+                "prompt": "{{ unclosed_var",
+            }
+            with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
+                self.extractor.extract_from_agent(config)
+
+            warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+            assert len(warning_records) >= 1
+            assert "unclosed_var" in warning_records[0].message
+        finally:
+            logging.getLogger("agent_actions").propagate = original
+
+    def test_valid_template_no_warning(self, caplog):
+        """Valid templates produce no warnings."""
+        original = self._enable_propagate()
+        try:
+            config = {
+                "name": "agent",
+                "prompt": "{{ action.extractor.data }}",
+            }
+            with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
+                self.extractor.extract_from_agent(config)
+
+            warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+            assert len(warning_records) == 0
+        finally:
+            logging.getLogger("agent_actions").propagate = original

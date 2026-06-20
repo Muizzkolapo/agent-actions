@@ -75,22 +75,21 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
         project_root: Optional project root directory
 
     Returns:
-        Error message string or empty string if save fails
+        Error message string with path to saved file
+
+    Raises:
+        OSError: If the file cannot be written (disk full, permissions, etc.)
     """
     cache_dir = (
         resolve_project_root(project_root) / ".agent-actions" / "cache" / "rendered_workflows"
     )
     cache_dir.mkdir(parents=True, exist_ok=True)
     failed_render_path = cache_dir / f"{workflow_name}_failed.yml"
-    try:
-        with open(failed_render_path, "w", encoding="utf-8") as f:
-            f.write(rendered_yaml_content)
-        return (
-            f"\nRendered output saved to: {failed_render_path}\n"
-            f"Debug with: agac render {workflow_name}"
-        )
-    except OSError:
-        return ""
+    with open(failed_render_path, "w", encoding="utf-8") as f:
+        f.write(rendered_yaml_content)
+    return (
+        f"\nRendered output saved to: {failed_render_path}\nDebug with: agac render {workflow_name}"
+    )
 
 
 def _resolve_prompt_fields(item, project_root: Path | None = None):
@@ -575,9 +574,13 @@ def render_pipeline_with_templates(
         data = yaml.safe_load(rendered_yaml_content)
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
-        saved_file_msg = _save_failed_render(
-            rendered_yaml_content, Path(yaml_path).stem, project_root=project_root
-        )
+        try:
+            saved_file_msg = _save_failed_render(
+                rendered_yaml_content, Path(yaml_path).stem, project_root=project_root
+            )
+        except OSError as save_err:
+            logger.warning("Could not save failed render output for debugging: %s", save_err)
+            saved_file_msg = ""
         raise ConfigurationError(
             f"Error parsing YAML after template rendering{saved_file_msg}",
             context={
