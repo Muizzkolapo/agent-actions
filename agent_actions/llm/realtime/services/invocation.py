@@ -66,8 +66,11 @@ def _resolve_client(model_vendor: str) -> Any:
                     "install_command": f"uv pip install {package}",
                 },
             ) from err
-        CLIENT_REGISTRY.setdefault(model_vendor, cls)  # atomic under CPython GIL
-        return CLIENT_REGISTRY[model_vendor]  # return whatever won the race
+        # Replace lazy "module:Class" string with the resolved class so
+        # subsequent lookups skip the import. Plain assignment, not setdefault:
+        # the key already exists (with a string), so setdefault would no-op.
+        CLIENT_REGISTRY[model_vendor] = cls
+        return cls
     return entry
 
 
