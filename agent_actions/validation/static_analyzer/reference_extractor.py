@@ -1,10 +1,13 @@
 """Extract field references from action configurations."""
 
+import logging
 import re
 from typing import Any
 
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
+
+logger = logging.getLogger(__name__)
 
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
@@ -146,8 +149,15 @@ class ReferenceExtractor:
 
         try:
             ast = self._parse(template)
-        except TemplateSyntaxError:
-            # If template has syntax errors, fall back to empty (simple patterns will catch it)
+        except TemplateSyntaxError as e:
+            logger.warning(
+                "Jinja2 syntax error in template reference extraction (line %s): %s — "
+                "references may be incomplete; the syntax error will surface at render time. "
+                "Template snippet: %.200s",
+                e.lineno,
+                e.message,
+                template,
+            )
             return references
 
         self._walk_ast(ast, references, local_vars=set())
