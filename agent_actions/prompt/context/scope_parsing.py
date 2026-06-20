@@ -1,9 +1,13 @@
 """Field reference parsing and action name extraction utilities."""
 
+import logging
+
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "parse_field_reference",
@@ -130,14 +134,16 @@ def extract_action_names_from_template(template: str | None) -> set:
     Extract unique action names referenced in a Jinja2 template.
 
     Parses template AST to extract namespace names, excluding variables scoped
-    by {% for %}, {% set %}, and {% macro %} constructs. Returns empty set
-    if the template has syntax errors (broken templates fail at render time).
+    by {% for %}, {% set %}, and {% macro %} constructs. Logs a warning and
+    returns empty set on Jinja2 syntax errors (syntax errors are caught at
+    render time; this function is a best-effort dependency extractor).
 
     Args:
         template: Jinja2 template string
 
     Returns:
-        Set of action names (potential upstream dependencies) referenced in template
+        Set of action names (potential upstream dependencies) referenced in template.
+        Empty set if the template has syntax errors (a warning is logged).
 
     Example:
         template = "{{ summarize_page_content.summary }} and {{ source.text }}"
@@ -154,7 +160,15 @@ def extract_action_names_from_template(template: str | None) -> set:
     try:
         env = Environment()
         ast = env.parse(escape_jinja_in_inline_code(template))
-    except TemplateSyntaxError:
+    except TemplateSyntaxError as e:
+        logger.warning(
+            "Jinja2 syntax error in template scope extraction (line %s): %s — "
+            "scope dependencies may be incomplete; the syntax error will surface at render time. "
+            "Template snippet: %.200s",
+            e.lineno,
+            e.message,
+            template,
+        )
         return set()
 
     referenced_actions: set[str] = set()
