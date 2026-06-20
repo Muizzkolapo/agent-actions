@@ -1295,3 +1295,81 @@ class TestPreflightFieldValidation:
             and ("Cannot validate" in issue.message or "Cannot verify" in issue.message)
         ]
         assert len(schema_issues) >= 1
+
+
+class TestCycleDetection:
+    """Circular dependencies must fail preflight, not silently use arbitrary order."""
+
+    def _cyclic_workflow(self):
+        return {
+            "name": "cyclic_wf",
+            "actions": [
+                {
+                    "name": "action_a",
+                    "context_scope": {"observe": ["action_b.out_b"]},
+                },
+                {
+                    "name": "action_b",
+                    "context_scope": {"observe": ["action_a.out_a"]},
+                },
+            ],
+        }
+
+    def test_circular_dependency_fails_validation(self):
+        """analyze() returns is_valid=False when a circular dependency exists."""
+        result = WorkflowStaticAnalyzer(self._cyclic_workflow()).analyze()
+        assert not result.is_valid
+
+    def test_circular_dependency_error_message(self):
+        """The validation error names the cycle so the user can identify it."""
+        result = WorkflowStaticAnalyzer(self._cyclic_workflow()).analyze()
+        cycle_errors = [e for e in result.errors if "Circular dependency" in e.message]
+        assert len(cycle_errors) >= 1
+
+    def test_circular_dependency_error_location(self):
+        """The cycle error is located in the workflow's dependencies config field."""
+        result = WorkflowStaticAnalyzer(self._cyclic_workflow()).analyze()
+        cycle_errors = [e for e in result.errors if "Circular dependency" in e.message]
+        assert cycle_errors[0].location.config_field == "dependencies"
+
+
+class TestTemplateSyntaxErrorSurfaces:
+    """Template syntax errors must appear in the validation result, not be swallowed."""
+
+    def _workflow_with_bad_template(self):
+        return {
+            "name": "bad_template_wf",
+            "actions": [
+                {
+                    "name": "broken_action",
+                    "prompt": "{{ unclosed_var",
+                },
+                {
+                    "name": "good_action",
+                    "prompt": "{{ source.field }}",
+                    "context_scope": {"observe": ["source.*"]},
+                },
+            ],
+        }
+
+    def test_template_syntax_error_fails_validation(self):
+        """analyze() returns is_valid=False when a template has a syntax error."""
+        result = WorkflowStaticAnalyzer(self._workflow_with_bad_template()).analyze()
+        assert not result.is_valid
+
+    def test_template_syntax_error_names_action(self):
+        """The validation error names the action with the bad template."""
+        result = WorkflowStaticAnalyzer(self._workflow_with_bad_template()).analyze()
+        syntax_errors = [e for e in result.errors if "broken_action" in e.message]
+        assert len(syntax_errors) >= 1
+        assert syntax_errors[0].location.agent_name == "broken_action"
+
+    def test_good_action_not_affected_by_sibling_syntax_error(self):
+        """A syntax error in one action does not prevent other actions from being analyzed."""
+        result = WorkflowStaticAnalyzer(self._workflow_with_bad_template()).analyze()
+        # The broken action error is present
+        syntax_errors = [e for e in result.errors if "broken_action" in e.message]
+        assert len(syntax_errors) >= 1
+        # But good_action is not blamed for it
+        good_action_errors = [e for e in result.errors if e.location.agent_name == "good_action"]
+        assert len(good_action_errors) == 0

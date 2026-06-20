@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .data_flow_graph import DataFlowGraph, DataFlowNode
-from .errors import StaticValidationResult
+from .errors import FieldLocation, StaticTypeError, StaticValidationResult
 
 
 @dataclass
@@ -168,9 +168,19 @@ class FieldFlowAnalyzer:
         """Get complete field flow for the entire workflow."""
         try:
             execution_order = self.graph.topological_sort()
-        except ValueError:
-            # Circular dependency - use whatever order we have
-            execution_order = list(self.graph.nodes.keys())
+        except ValueError as exc:
+            self.validation_result.add_error(
+                StaticTypeError(
+                    message=str(exc),
+                    location=FieldLocation(
+                        agent_name=self.workflow_name,
+                        config_field="dependencies",
+                    ),
+                    referenced_agent="",
+                    referenced_field="",
+                )
+            )
+            raise
 
         actions = []
         for action_name in execution_order:

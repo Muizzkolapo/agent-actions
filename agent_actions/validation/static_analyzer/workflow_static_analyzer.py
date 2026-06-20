@@ -7,6 +7,8 @@ similar to TypeScript's compile-time type checking.
 import logging
 from typing import Any
 
+from jinja2.exceptions import TemplateSyntaxError
+
 from agent_actions.errors import ConfigurationError
 from agent_actions.guards.consolidated_guard import GuardBehavior
 from agent_actions.input.context.normalizer import (
@@ -100,6 +102,7 @@ class WorkflowStaticAnalyzer:
 
         self.graph = DataFlowGraph()
         self._built = False
+        self._build_errors: list[StaticTypeError] = []
 
     def analyze(self) -> StaticValidationResult:
         """Perform static analysis of the workflow.
@@ -131,6 +134,24 @@ class WorkflowStaticAnalyzer:
         # Step 1: Build data flow graph
         self._build_graph()
 
+        # Step 1b: Check for circular dependencies
+        cycle_errors: list[StaticTypeError] = []
+        try:
+            self.graph.topological_sort()
+        except ValueError as exc:
+            workflow_name = self.workflow_config.get("name", "workflow")
+            cycle_errors.append(
+                StaticTypeError(
+                    message=str(exc),
+                    location=FieldLocation(
+                        agent_name=workflow_name,
+                        config_field="dependencies",
+                    ),
+                    referenced_agent="",
+                    referenced_field="",
+                )
+            )
+
         # Step 2: Expand wildcard field references (namespace.* → concrete fields)
         expansion_errors = self._expand_wildcards()
 
@@ -138,6 +159,10 @@ class WorkflowStaticAnalyzer:
         checker = StaticTypeChecker(self.graph)
         result = checker.check_all()
 
+        for error in cycle_errors:
+            result.add_error(error)
+        for error in self._build_errors:
+            result.add_error(error)
         for error in expansion_errors:
             result.add_error(error)
 
@@ -217,7 +242,22 @@ class WorkflowStaticAnalyzer:
 
         # Add action nodes from actions
         for action_config in actions:
-            self._add_agent_node(action_config)
+            try:
+                self._add_agent_node(action_config)
+            except TemplateSyntaxError as exc:
+                action_name = action_config.get("name", "unknown")
+                self._build_errors.append(
+                    StaticTypeError(
+                        message=f"Template syntax error in '{action_name}': {exc.message} (line {exc.lineno})",
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="prompt",
+                            line_number=exc.lineno,
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="",
+                    )
+                )
 
         # Build edges from input requirements
         self.graph.build_edges_from_requirements()
@@ -1842,11 +1882,8 @@ class WorkflowStaticAnalyzer:
         return "\n".join(lines)
 
     def _get_execution_order(self) -> list[str]:
-        """Get execution order, falling back to node keys if cycle detected."""
-        try:
-            return self.graph.topological_sort()
-        except ValueError:
-            return list(self.graph.nodes.keys())
+        """Get execution order; raises ValueError if a cycle is detected."""
+        return self.graph.topological_sort()
 
     def _build_agent_references(self, node: DataFlowNode) -> list[dict[str, str]]:
         """Build references list for an action node."""

@@ -213,3 +213,61 @@ class TestFieldFlowAnalyzer:
         assert lineage is not None
         assert lineage.producer == "extractor"
         assert lineage.field_name == "summary"
+
+
+class TestFieldFlowAnalyzerCycleDetection:
+    """Circular dependency must raise ValueError and record a validation error."""
+
+    def _make_cyclic_graph(self):
+        graph = DataFlowGraph()
+        graph.add_node(
+            DataFlowNode(
+                name="action_a",
+                agent_kind=ActionKind.LLM,
+                output_schema=OutputSchema(schema_fields={"out_a"}),
+                dependencies={"action_b"},
+            )
+        )
+        graph.add_node(
+            DataFlowNode(
+                name="action_b",
+                agent_kind=ActionKind.LLM,
+                output_schema=OutputSchema(schema_fields={"out_b"}),
+                dependencies={"action_a"},
+            )
+        )
+        return graph
+
+    def test_get_full_flow_raises_on_cycle(self):
+        """get_full_flow raises ValueError when a circular dependency is present."""
+        graph = self._make_cyclic_graph()
+        result = StaticValidationResult()
+        analyzer = FieldFlowAnalyzer(graph, result, "cyclic_workflow")
+
+        with pytest.raises(ValueError, match="Circular dependency"):
+            analyzer.get_full_flow()
+
+    def test_cycle_recorded_in_validation_result(self):
+        """get_full_flow adds a StaticTypeError to the validation result on cycle."""
+        graph = self._make_cyclic_graph()
+        result = StaticValidationResult()
+        analyzer = FieldFlowAnalyzer(graph, result, "cyclic_workflow")
+
+        with pytest.raises(ValueError):
+            analyzer.get_full_flow()
+
+        assert not result.is_valid
+        assert len(result.errors) == 1
+        assert "Circular dependency" in result.errors[0].message
+        assert result.errors[0].location.config_field == "dependencies"
+
+    def test_cycle_error_names_the_workflow(self):
+        """The validation error names the workflow so the user knows where to look."""
+        graph = self._make_cyclic_graph()
+        result = StaticValidationResult()
+        analyzer = FieldFlowAnalyzer(graph, result, "my_workflow")
+
+        with pytest.raises(ValueError):
+            analyzer.get_full_flow()
+
+        assert result.errors[0].location.agent_name == "my_workflow"
