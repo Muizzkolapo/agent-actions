@@ -492,7 +492,10 @@ class WorkflowStaticAnalyzer:
 
             # Extract non-special namespace references from template
             # (source, version, seed, workflow, loop are already filtered)
-            template_namespaces = extract_action_names_from_template(template)
+            try:
+                template_namespaces = extract_action_names_from_template(template)
+            except TemplateSyntaxError:
+                continue  # syntax error already recorded in _build_graph via _build_errors
 
             # Also filter FRAMEWORK_NAMESPACES for safety
             template_namespaces -= FRAMEWORK_NAMESPACES
