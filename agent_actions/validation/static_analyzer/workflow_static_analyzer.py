@@ -226,24 +226,12 @@ class WorkflowStaticAnalyzer:
         # Add special source node (always available)
         self._add_source_node()
 
-        # Add action nodes from actions
+        # Add action nodes from actions. _add_agent_node handles its own
+        # TemplateSyntaxError so a stub node is still added to the graph
+        # (downstream references then resolve, instead of cascading "missing
+        # node" errors that hide the real syntax-error root cause).
         for action_config in actions:
-            try:
-                self._add_agent_node(action_config)
-            except TemplateSyntaxError as exc:
-                action_name = action_config.get("name", "unknown")
-                self._build_errors.append(
-                    StaticTypeError(
-                        message=f"Template syntax error in '{action_name}': {exc.message} (line {exc.lineno})",
-                        location=FieldLocation(
-                            agent_name=action_name,
-                            config_field="prompt",
-                            line_number=exc.lineno,
-                        ),
-                        referenced_agent=action_name,
-                        referenced_field="",
-                    )
-                )
+            self._add_agent_node(action_config)
 
         # Build edges from input requirements
         self.graph.build_edges_from_requirements()
@@ -1714,13 +1702,28 @@ class WorkflowStaticAnalyzer:
         # Extract output schema
         output_schema = self.schema_extractor.extract_schema(action_config, self.schema_loader)
 
-        # Extract input schema (pass reference_extractor for LLM template analysis)
-        input_schema = self.schema_extractor.extract_input_schema(
-            action_config, self.reference_extractor
-        )
+        # Catch template syntax errors from BOTH the input-schema and the
+        # input-requirements extraction paths. Both walk the prompt via
+        # ReferenceExtractor and raise the same exception; catching once at
+        # this layer keeps the partial-requirements fallback in one place.
+        syntax_error: TemplateSyntaxError | None = None
 
-        # Extract input requirements (field references)
-        input_requirements = self.reference_extractor.extract_from_agent(action_config)
+        try:
+            input_schema = self.schema_extractor.extract_input_schema(
+                action_config, self.reference_extractor
+            )
+        except TemplateSyntaxError as exc:
+            syntax_error = exc
+            input_schema = InputSchema()
+
+        try:
+            input_requirements = self.reference_extractor.extract_from_agent(action_config)
+        except TemplateSyntaxError as exc:
+            # Prefer the earlier syntax_error (from input_schema) so we record
+            # only one error per action. Use partial regex results if any.
+            if syntax_error is None:
+                syntax_error = exc
+            input_requirements = list(getattr(exc, "partial_requirements", []))
 
         # Use auto-inferred dependency model
         from agent_actions.prompt.context.scope_inference import infer_dependencies
@@ -1756,6 +1759,26 @@ class WorkflowStaticAnalyzer:
         )
 
         self.graph.add_node(node)
+
+        # Record the syntax error AFTER the node is added so downstream
+        # references resolve to a real (if partial) node, avoiding spurious
+        # "missing node" errors that would mask the root cause.
+        if syntax_error is not None:
+            self._build_errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Template syntax error in '{name}': {syntax_error.message} "
+                        f"(line {syntax_error.lineno})"
+                    ),
+                    location=FieldLocation(
+                        agent_name=name,
+                        config_field="prompt",
+                        line_number=syntax_error.lineno,
+                    ),
+                    referenced_agent=name,
+                    referenced_field="",
+                )
+            )
 
     def get_graph(self) -> DataFlowGraph:
         """Return the data flow graph for inspection.

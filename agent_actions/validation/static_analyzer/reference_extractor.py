@@ -93,24 +93,19 @@ class ReferenceExtractor:
         _agent_name: str,
         location: str,
     ) -> list[InputRequirement]:
-        """Extract references from Jinja2 template using AST parsing."""
+        """Extract references from Jinja2 template using AST parsing.
+
+        Regex-based simple-brace patterns ({action.name.field}, {name.field}) are
+        collected first so they survive a Jinja2 TemplateSyntaxError. The Jinja2
+        AST pass runs last; if it raises, the requirements collected by the
+        regex pass are returned (a warning is logged at the parse site) so the
+        downstream graph still sees the simple-brace references.
+        """
         requirements: list[InputRequirement] = []
         seen: set[str] = set()
 
-        jinja_refs = self._extract_jinja_references(template)
-        for source, field, raw_ref in jinja_refs:
-            ref_key = f"{source}.{field}"
-            if ref_key not in seen:
-                seen.add(ref_key)
-                requirements.append(
-                    InputRequirement(
-                        source_agent=source,
-                        field_path=field,
-                        raw_reference=raw_ref,
-                        location=location,
-                    )
-                )
-
+        # Regex passes first — independent of Jinja2 parsing, so they survive
+        # a syntax error in the template.
         for match in self.SIMPLE_ACTION_PATTERN.finditer(template):
             source = match.group(1)
             field = match.group(2)
@@ -137,6 +132,29 @@ class ReferenceExtractor:
                         source_agent=source,
                         field_path=field,
                         raw_reference=match.group(0),
+                        location=location,
+                    )
+                )
+
+        # Jinja2 AST pass last — re-raises TemplateSyntaxError so callers that
+        # want to surface the error (e.g. WorkflowStaticAnalyzer) can record it.
+        # Regex requirements collected above are attached to the exception so
+        # callers that want best-effort extraction can use them.
+        try:
+            jinja_refs = self._extract_jinja_references(template)
+        except TemplateSyntaxError as exc:
+            exc.partial_requirements = requirements  # type: ignore[attr-defined]
+            raise
+
+        for source, field, raw_ref in jinja_refs:
+            ref_key = f"{source}.{field}"
+            if ref_key not in seen:
+                seen.add(ref_key)
+                requirements.append(
+                    InputRequirement(
+                        source_agent=source,
+                        field_path=field,
+                        raw_reference=raw_ref,
                         location=location,
                     )
                 )
