@@ -134,16 +134,20 @@ def extract_action_names_from_template(template: str | None) -> set:
     Extract unique action names referenced in a Jinja2 template.
 
     Parses template AST to extract namespace names, excluding variables scoped
-    by {% for %}, {% set %}, and {% macro %} constructs. Logs a warning and
-    returns empty set on Jinja2 syntax errors (syntax errors are caught at
-    render time; this function is a best-effort dependency extractor).
+    by {% for %}, {% set %}, and {% macro %} constructs.
 
     Args:
         template: Jinja2 template string
 
     Returns:
         Set of action names (potential upstream dependencies) referenced in template.
-        Empty set if the template has syntax errors (a warning is logged).
+        Empty set when template is None, empty, or not a string.
+
+    Raises:
+        TemplateSyntaxError: If the template has a Jinja2 syntax error. A warning
+            is logged before the exception propagates so the caller has diagnostic
+            context (line number, message, template snippet). Callers that want
+            best-effort extraction must catch this explicitly.
 
     Example:
         template = "{{ summarize_page_content.summary }} and {{ source.text }}"

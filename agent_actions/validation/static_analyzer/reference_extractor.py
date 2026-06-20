@@ -344,12 +344,23 @@ class ReferenceExtractor:
         self,
         workflow_config: dict[str, Any],
     ) -> dict[str, list[InputRequirement]]:
-        """Extract references from all actions in a workflow."""
+        """Extract references from all actions in a workflow.
+
+        A TemplateSyntaxError in one action's template does not abort the whole
+        workflow extraction: the failing action gets an empty requirements list
+        and a warning is logged by _extract_jinja_references. Static-analysis
+        callers that need to surface the syntax error explicitly should iterate
+        actions themselves and catch TemplateSyntaxError per-action.
+        """
         requirements: dict[str, list[InputRequirement]] = {}
 
         actions = workflow_config.get("actions", [])
         for action in actions:
             name = action.get("name", "unknown")
-            requirements[name] = self.extract_from_agent(action)
+            try:
+                requirements[name] = self.extract_from_agent(action)
+            except TemplateSyntaxError:
+                # Per-action failure isolated; warning already logged at parse site.
+                requirements[name] = []
 
         return requirements

@@ -249,8 +249,29 @@ def infer_dependencies(
 
     try:
         raw_prompt = PromptFormatter.get_raw_prompt(action_config)
-        if raw_prompt:
+    except Exception as e:
+        logger.debug(
+            "Prompt retrieval failed for template inference on '%s': %s",
+            action_name,
+            e,
+            exc_info=True,
+        )
+        raw_prompt = None
+
+    if raw_prompt:
+        from jinja2.exceptions import TemplateSyntaxError
+
+        try:
             template_actions = extract_action_names_from_template(raw_prompt)
+        except TemplateSyntaxError as e:
+            logger.warning(
+                "Template syntax error during scope inference for '%s' (line %s): %s — "
+                "context_scope inference skipped; the syntax error will surface at render time.",
+                action_name,
+                e.lineno,
+                e.message,
+            )
+        else:
             # Only add template-referenced actions that are valid workflow actions
             valid_template_actions = template_actions & set(workflow_actions)
             if valid_template_actions - referenced_actions:
@@ -259,13 +280,6 @@ def infer_dependencies(
                     f"from template: {valid_template_actions - referenced_actions}"
                 )
             referenced_actions = referenced_actions | valid_template_actions
-    except Exception as e:
-        logger.debug(
-            "Prompt retrieval failed for template inference on '%s': %s",
-            action_name,
-            e,
-            exc_info=True,
-        )
 
     # 2b. Identify wildcard actions from context_scope
     wildcard_actions = set()

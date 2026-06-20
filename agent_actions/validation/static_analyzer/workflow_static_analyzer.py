@@ -112,6 +112,10 @@ class WorkflowStaticAnalyzer:
         Returns:
             StaticValidationResult with errors and warnings
         """
+        # Reset per-run state so reusing an analyzer instance does not
+        # accumulate errors from previous analyze() calls.
+        self._build_errors = []
+
         # Step 0: Validate context_scope BEFORE normalization so diagnostic
         # hints can inspect the raw YAML values (null, wrong type, orphaned
         # directives). Normalization in Step 0b converts null → {} which would
