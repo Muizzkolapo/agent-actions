@@ -473,19 +473,20 @@ class WorkflowStaticAnalyzer:
             try:
                 template_namespaces = extract_action_names_from_template(template)
             except TemplateSyntaxError as exc:
-                # Record the syntax error here too. _build_graph also catches it
-                # during _add_agent_node, but that path can be bypassed when the
-                # template is added after build or read from a different field;
-                # recording defensively guarantees the failure reaches the
-                # validation result instead of being silently dropped. Dedupe
-                # so the normal path (already recorded by _build_graph) is not
-                # double-reported.
+                # Record the syntax error here too. _add_agent_node also catches
+                # it during graph build, but that path can be bypassed when the
+                # template is read from a different field; recording defensively
+                # guarantees the failure reaches the validation result. Append
+                # to the local `errors` list (returned from this method) — NOT
+                # self._build_errors, which analyze() has already consumed by
+                # this step. Dedupe against errors already on self._build_errors
+                # so the normal path is not double-reported.
                 already_recorded = any(
                     err.location.agent_name == name and err.location.config_field == "prompt"
                     for err in self._build_errors
                 )
                 if not already_recorded:
-                    self._build_errors.append(
+                    errors.append(
                         StaticTypeError(
                             message=(
                                 f"Template syntax error in '{name}': {exc.message} "

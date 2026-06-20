@@ -1392,3 +1392,53 @@ class TestTemplateSyntaxErrorSurfaces:
         # But good_action is not blamed for it
         good_action_errors = [e for e in result.errors if e.location.agent_name == "good_action"]
         assert len(good_action_errors) == 0
+
+    def test_scope_coverage_only_syntax_error_reaches_result(self):
+        """Syntax error only triggered in _check_template_scope_coverage still reaches result.
+
+        Regression: _check_template_scope_coverage was appending to
+        self._build_errors, but analyze() consumes _build_errors BEFORE the
+        coverage check runs. The append went nowhere — the error was silently
+        dropped. The fix appends to the method's local `errors` list (returned
+        and added to result by the caller).
+        """
+        from unittest.mock import patch
+
+        from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
+            WorkflowStaticAnalyzer,
+        )
+
+        wf = {
+            "name": "wf",
+            "actions": [
+                {
+                    "name": "a",
+                    "prompt": "Hello",
+                    "context_scope": {"observe": ["source.*"]},
+                },
+            ],
+        }
+        analyzer = WorkflowStaticAnalyzer(wf)
+
+        # Build the graph normally (no syntax error during _add_agent_node)
+        analyzer._build_graph()
+        prev_build_errors = list(analyzer._build_errors)
+
+        # Then force the coverage check to see a TemplateSyntaxError, simulating
+        # the "different field" path the defensive recording is meant to catch.
+        from jinja2.exceptions import TemplateSyntaxError as _TSE
+
+        def _raise(template, *args, **kwargs):
+            raise _TSE("simulated", lineno=1)
+
+        with patch(
+            "agent_actions.prompt.context.scope_parsing.extract_action_names_from_template",
+            side_effect=_raise,
+        ):
+            coverage_errors = analyzer._check_template_scope_coverage()
+
+        assert any("Template syntax error in 'a'" in e.message for e in coverage_errors), (
+            "expected coverage check to return the syntax error in its local errors list"
+        )
+        # And _build_errors was not mutated (analyze() already consumed it)
+        assert analyzer._build_errors == prev_build_errors

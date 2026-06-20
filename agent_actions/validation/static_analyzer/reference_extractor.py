@@ -365,10 +365,13 @@ class ReferenceExtractor:
         """Extract references from all actions in a workflow.
 
         A TemplateSyntaxError in one action's template does not abort the whole
-        workflow extraction: the failing action gets an empty requirements list
-        and a warning is logged by _extract_jinja_references. Static-analysis
-        callers that need to surface the syntax error explicitly should iterate
-        actions themselves and catch TemplateSyntaxError per-action.
+        workflow extraction: the failing action gets its partial regex-only
+        requirements (the ones _extract_from_template collected before the Jinja
+        parse failed, attached to the exception as .partial_requirements). A
+        warning is logged at the parse site so the failure is operator-visible.
+        Static-analysis callers that need to surface the syntax error
+        explicitly should iterate actions themselves and catch TemplateSyntaxError
+        per-action.
         """
         requirements: dict[str, list[InputRequirement]] = {}
 
@@ -377,8 +380,9 @@ class ReferenceExtractor:
             name = action.get("name", "unknown")
             try:
                 requirements[name] = self.extract_from_agent(action)
-            except TemplateSyntaxError:
-                # Per-action failure isolated; warning already logged at parse site.
-                requirements[name] = []
+            except TemplateSyntaxError as exc:
+                # Preserve partial regex-extracted requirements; the warning
+                # is already logged at the parse site.
+                requirements[name] = list(getattr(exc, "partial_requirements", []))
 
         return requirements
