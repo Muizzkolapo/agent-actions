@@ -352,6 +352,8 @@ class WorkflowResolutionService:
         warnings: list[StaticTypeWarning],
     ) -> None:
         """Validate that seed field references in templates match loaded seed data."""
+        from jinja2.exceptions import TemplateSyntaxError
+
         from agent_actions.validation.static_analyzer.reference_extractor import (
             ReferenceExtractor,
         )
@@ -360,7 +362,22 @@ class WorkflowResolutionService:
 
         for action_name, config in self.action_configs.items():
             effective_config = self._resolve_prompt_for_extraction(config)
-            requirements = ref_extractor.extract_from_agent(effective_config)
+            try:
+                requirements = ref_extractor.extract_from_agent(effective_config)
+            except TemplateSyntaxError as exc:
+                errors.append(
+                    StaticTypeError(
+                        message=f"Template syntax error in '{action_name}': {exc.message} (line {exc.lineno})",
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="prompt",
+                            line_number=exc.lineno,
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="",
+                    )
+                )
+                continue
             seed_refs = [r for r in requirements if r.source_agent == "seed"]
             if not seed_refs:
                 continue
