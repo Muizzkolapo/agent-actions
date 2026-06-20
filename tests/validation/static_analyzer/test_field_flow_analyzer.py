@@ -271,3 +271,17 @@ class TestFieldFlowAnalyzerCycleDetection:
             analyzer.get_full_flow()
 
         assert result.errors[0].location.agent_name == "my_workflow"
+
+    def test_to_dict_returns_degraded_result_on_cycle(self):
+        """to_dict must not crash on a cyclic workflow — serializes the error instead."""
+        graph = self._make_cyclic_graph()
+        result = StaticValidationResult()
+        analyzer = FieldFlowAnalyzer(graph, result, "my_workflow")
+
+        out = analyzer.to_dict()
+
+        assert out["workflow"] == "my_workflow"
+        assert out["is_valid"] is False
+        assert out["flow"]["actions"] == []
+        assert out["flow"]["execution_order"] == []
+        assert any("Circular dependency" in e["message"] for e in out["validation"]["errors"])

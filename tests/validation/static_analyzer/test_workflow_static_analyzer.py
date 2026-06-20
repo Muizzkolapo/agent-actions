@@ -1332,6 +1332,25 @@ class TestCycleDetection:
         cycle_errors = [e for e in result.errors if "Circular dependency" in e.message]
         assert cycle_errors[0].location.config_field == "dependencies"
 
+    def test_circular_dependency_error_is_not_duplicated(self):
+        """Only one Circular dependency error is recorded — no duplicate from a removed pre-check."""
+        result = WorkflowStaticAnalyzer(self._cyclic_workflow()).analyze()
+        cycle_errors = [e for e in result.errors if "Circular dependency" in e.message]
+        assert len(cycle_errors) == 1, (
+            f"expected exactly one cycle error, got {len(cycle_errors)}: "
+            f"{[e.message for e in cycle_errors]}"
+        )
+
+    def test_get_data_flow_summary_returns_degraded_on_cycle(self):
+        """get_data_flow_summary surfaces the cycle without crashing."""
+        analyzer = WorkflowStaticAnalyzer(self._cyclic_workflow())
+        summary = analyzer.get_data_flow_summary()
+
+        assert summary["execution_order"] == []
+        assert "cycle_error" in summary
+        assert "Circular dependency" in summary["cycle_error"]
+        assert {a["name"] for a in summary["agents"]} == {"action_a", "action_b"}
+
 
 class TestTemplateSyntaxErrorSurfaces:
     """Template syntax errors must appear in the validation result, not be swallowed."""

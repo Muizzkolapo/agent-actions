@@ -152,12 +152,16 @@ class WorkflowSchemaService:
             return self._validation_result
 
     def get_execution_order(self) -> list[str]:
-        """Return topological execution order of actions, excluding special namespaces."""
-        try:
-            order = self.graph.topological_sort()
-        except ValueError:
-            order = list(self.graph.nodes.keys())
+        """Return topological execution order of actions, excluding special namespaces.
 
+        Raises:
+            ValueError: If the workflow contains a circular dependency. Callers
+                should call validate() first — preflight surfaces the cycle as a
+                StaticTypeError. The previous silent fallback to dict-key order
+                was removed because it let cyclic workflows run in arbitrary
+                order, masking the real configuration bug.
+        """
+        order = self.graph.topological_sort()
         return [name for name in order if not self.graph.is_special_namespace(name)]
 
     def get_downstream_actions(self, action_name: str) -> list[str]:

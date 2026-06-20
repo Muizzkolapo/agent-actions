@@ -229,12 +229,26 @@ class FieldFlowAnalyzer:
         return self._build_action_flow_info(node)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert full analysis to dictionary for JSON serialization."""
-        flow = self.get_full_flow()
+        """Convert full analysis to dictionary for JSON serialization.
+
+        On a cyclic workflow get_full_flow() raises ValueError (the cycle is
+        recorded as a StaticTypeError on validation_result). The serialized
+        output reports is_valid=False with an empty flow plus the validation
+        errors so consumers can render the cycle without crashing.
+        """
+        try:
+            flow_dict = self.get_full_flow().to_dict()
+        except ValueError:
+            flow_dict = {
+                "workflow_name": self.workflow_name,
+                "actions": [],
+                "execution_order": [],
+                "field_lineages": {},
+            }
         return {
             "workflow": self.workflow_name,
             "is_valid": self.validation_result.is_valid,
-            "flow": flow.to_dict(),
+            "flow": flow_dict,
             "validation": self.validation_result.to_dict(),
         }
 

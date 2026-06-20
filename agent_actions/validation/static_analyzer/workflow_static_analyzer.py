@@ -140,33 +140,14 @@ class WorkflowStaticAnalyzer:
         # Step 1: Build data flow graph
         self._build_graph()
 
-        # Step 1b: Check for circular dependencies
-        cycle_errors: list[StaticTypeError] = []
-        try:
-            self.graph.topological_sort()
-        except ValueError as exc:
-            workflow_name = self.workflow_config.get("name", "workflow")
-            cycle_errors.append(
-                StaticTypeError(
-                    message=str(exc),
-                    location=FieldLocation(
-                        agent_name=workflow_name,
-                        config_field="dependencies",
-                    ),
-                    referenced_agent="",
-                    referenced_field="",
-                )
-            )
-
         # Step 2: Expand wildcard field references (namespace.* → concrete fields)
         expansion_errors = self._expand_wildcards()
 
-        # Step 3: Run type checker
+        # Step 3: Run type checker. Cycle detection happens inside check_all()
+        # via graph.topological_sort() — no need to duplicate the check here.
         checker = StaticTypeChecker(self.graph, self.external_action_names)
         result = checker.check_all()
 
-        for error in cycle_errors:
-            result.add_error(error)
         for error in self._build_errors:
             result.add_error(error)
         for error in expansion_errors:
@@ -1923,14 +1904,22 @@ class WorkflowStaticAnalyzer:
         """Get a summary of data flow in the workflow.
 
         Returns:
-            Dict with nodes, edges, and execution order
+            Dict with nodes, edges, and execution order. On a cyclic workflow,
+            execution_order is empty and the dict carries a "cycle_error" entry
+            with the topological-sort message so consumers can render the cycle
+            instead of crashing.
         """
         if not self._built:
             self._build_graph()
 
-        execution_order = self._get_execution_order()
+        cycle_error: str | None = None
+        try:
+            execution_order = self._get_execution_order()
+        except ValueError as exc:
+            execution_order = []
+            cycle_error = str(exc)
 
-        return {
+        summary: dict[str, Any] = {
             "agents": [
                 self._build_agent_info(node)
                 for name, node in self.graph.nodes.items()
@@ -1944,6 +1933,9 @@ class WorkflowStaticAnalyzer:
                 for edge in self.graph.edges
             ],
         }
+        if cycle_error is not None:
+            summary["cycle_error"] = cycle_error
+        return summary
 
     @classmethod
     def from_workflow_file(
