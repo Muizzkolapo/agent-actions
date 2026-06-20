@@ -1220,13 +1220,13 @@ class TestIssue7_PartitionedPipeline:
                     "source_guid": "g1",
                     "_state": "processed",
                     "_state_schema_version": 1,
-                    "content": {"source": {"x": 1}, "source": {"data": "raw"}},
+                    "content": {"source": {"x": 1, "data": "raw"}},
                 },
                 {
                     "source_guid": "g2",
                     "_state": "processed",
                     "_state_schema_version": 1,
-                    "content": {"source": {"x": 2}, "source": {"data": "raw2"}},
+                    "content": {"source": {"x": 2, "data": "raw2"}},
                 },
             ],
             is_first_action=True,
@@ -1241,8 +1241,7 @@ class TestIssue7_PartitionedPipeline:
                     "_state": "processed",
                     "_state_schema_version": 1,
                     "content": {
-                        "source": {"x": 1},
-                        "source": {"data": "raw"},
+                        "source": {"x": 1, "data": "raw"},
                         "branch_a": {"score": 5},
                     },
                 }
@@ -1258,8 +1257,7 @@ class TestIssue7_PartitionedPipeline:
                     "_state": "processed",
                     "_state_schema_version": 1,
                     "content": {
-                        "source": {"x": 2},
-                        "source": {"data": "raw2"},
+                        "source": {"x": 2, "data": "raw2"},
                         "branch_b": {"score": 8},
                     },
                 }
@@ -1275,8 +1273,7 @@ class TestIssue7_PartitionedPipeline:
                     "_state": "processed",
                     "_state_schema_version": 1,
                     "content": {
-                        "source": {"x": 1},
-                        "source": {"data": "raw"},
+                        "source": {"x": 1, "data": "raw"},
                         "branch_a": {"score": 5},
                         "merge": {"combined": "g1_result"},
                     },
@@ -1286,8 +1283,7 @@ class TestIssue7_PartitionedPipeline:
                     "_state": "processed",
                     "_state_schema_version": 1,
                     "content": {
-                        "source": {"x": 2},
-                        "source": {"data": "raw2"},
+                        "source": {"x": 2, "data": "raw2"},
                         "branch_b": {"score": 8},
                         "merge": {"combined": "g2_result"},
                     },

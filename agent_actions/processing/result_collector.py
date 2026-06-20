@@ -190,6 +190,40 @@ def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
         return None
 
 
+def _per_item_dispositions(
+    pending: list[DispositionRow],
+    action_name: str,
+    data: list[dict[str, Any]],
+    disposition: str,
+    reason: str | None = None,
+    input_snapshot: str | None = None,
+    detail: str | None = None,
+) -> int:
+    """Write per-item dispositions when the result-level source_guid is None.
+
+    FILE-mode results bundle multiple records into one ProcessingResult with
+    source_guid=None.  Individual data items carry their own source_guid.
+
+    Returns the count of items that had a usable source_guid.
+    """
+    written = 0
+    for item in data:
+        item_guid = item.get("source_guid")
+        if item_guid:
+            pending.append(
+                (action_name, item_guid, disposition, reason, None, input_snapshot, detail)
+            )
+            written += 1
+    if not written and data:
+        logger.warning(
+            "[%s] %d data item(s) but none carry source_guid — "
+            "dispositions not written (risk of reprocessing on next run)",
+            action_name,
+            len(data),
+        )
+    return written
+
+
 def _safe_set_disposition(
     backend: "StorageBackend",
     action_name: str,
@@ -251,6 +285,13 @@ def write_record_dispositions(
     for item in items:
         source_guid = item.get("source_guid")
         if not source_guid:
+            logger.warning(
+                "[%s] Batch output item missing source_guid — "
+                "disposition not written (risk of reprocessing on next run). "
+                "Item keys: %s",
+                action_name,
+                sorted(item.keys())[:10],
+            )
             continue
         metadata = item.get("metadata", {})
 
@@ -418,6 +459,14 @@ def collect_results_from_processing_results(
                             None,
                         )
                     )
+                elif storage_backend and result.source_guid is None and data:
+                    _per_item_dispositions(
+                        pending_dispositions,
+                        action_name,
+                        data,
+                        DISPOSITION_FAILED,
+                        reason=PARSE_ERROR,
+                    )
                 continue
 
             if data:
@@ -449,24 +498,12 @@ def collect_results_from_processing_results(
                     )
                 )
             elif storage_backend and result.source_guid is None and data:
-                # FILE-mode results have source_guid=None on the result level
-                # but individual items carry their own source_guid.  Write
-                # per-item dispositions so DispositionGate can carry them
-                # forward on retry.
-                for item in data:
-                    item_guid = item.get("source_guid")
-                    if item_guid:
-                        pending_dispositions.append(
-                            (
-                                action_name,
-                                item_guid,
-                                DISPOSITION_SUCCESS,
-                                None,
-                                None,
-                                None,
-                                None,
-                            )
-                        )
+                _per_item_dispositions(
+                    pending_dispositions,
+                    action_name,
+                    data,
+                    DISPOSITION_SUCCESS,
+                )
 
         elif status == ProcessingStatus.SKIPPED:
             data = result.data or []
@@ -503,6 +540,14 @@ def collect_results_from_processing_results(
                         None,
                     )
                 )
+            elif storage_backend and result.source_guid is None and data:
+                _per_item_dispositions(
+                    pending_dispositions,
+                    action_name,
+                    data,
+                    DISPOSITION_PASSTHROUGH,
+                    reason=result.skip_reason or GUARD_SKIP,
+                )
 
         elif status == ProcessingStatus.EXHAUSTED:
             data = result.data or []
@@ -538,6 +583,19 @@ def collect_results_from_processing_results(
                         input_snapshot_str,
                         result.error,
                     )
+                )
+            elif storage_backend and result.source_guid is None and data:
+                input_snapshot_str = _serialize_snapshot(
+                    result.source_snapshot or result.input_record
+                )
+                _per_item_dispositions(
+                    pending_dispositions,
+                    action_name,
+                    data,
+                    DISPOSITION_EXHAUSTED,
+                    reason=f"exhausted_after_{attempts}_attempts",
+                    input_snapshot=input_snapshot_str,
+                    detail=result.error,
                 )
 
         elif status == ProcessingStatus.FAILED:
@@ -586,6 +644,27 @@ def collect_results_from_processing_results(
                         result.error,
                     )
                 )
+            elif storage_backend and result.source_guid is None:
+                failed_items = result.data or []
+                if failed_items:
+                    input_snapshot_str = _serialize_snapshot(
+                        result.source_snapshot or result.input_record
+                    )
+                    _per_item_dispositions(
+                        pending_dispositions,
+                        action_name,
+                        failed_items,
+                        DISPOSITION_FAILED,
+                        reason=result.error or "processing_error",
+                        input_snapshot=input_snapshot_str,
+                        detail=result.error,
+                    )
+                else:
+                    logger.warning(
+                        "[%s] FAILED result has no source_guid and no data — "
+                        "disposition not written (risk of reprocessing on next run)",
+                        action_name,
+                    )
 
         elif status == ProcessingStatus.FILTERED:
             logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
@@ -608,6 +687,22 @@ def collect_results_from_processing_results(
                         None,
                     )
                 )
+            elif storage_backend and result.source_guid is None:
+                filtered_data = result.data or []
+                if filtered_data:
+                    _per_item_dispositions(
+                        pending_dispositions,
+                        action_name,
+                        filtered_data,
+                        DISPOSITION_FILTERED,
+                        reason=result.skip_reason or GUARD_FILTER,
+                    )
+                else:
+                    logger.warning(
+                        "[%s] FILTERED result has no source_guid and no data — "
+                        "disposition not written (risk of reprocessing on next run)",
+                        action_name,
+                    )
 
         elif status == ProcessingStatus.UNPROCESSED:
             data = result.data or []
@@ -654,6 +749,14 @@ def collect_results_from_processing_results(
                         None,
                     )
                 )
+            elif storage_backend and result.source_guid is None and data:
+                _per_item_dispositions(
+                    pending_dispositions,
+                    action_name,
+                    data,
+                    DISPOSITION_UNPROCESSED,
+                    reason=result.skip_reason or UNPROCESSED,
+                )
 
         elif status == ProcessingStatus.DEFERRED:
             task_id = result.task_id or ""
@@ -680,6 +783,12 @@ def collect_results_from_processing_results(
                         None,
                         None,
                     )
+                )
+            elif storage_backend and result.source_guid is None:
+                logger.warning(
+                    "[%s] DEFERRED result has no source_guid — "
+                    "disposition not written (risk of reprocessing on next run)",
+                    action_name,
                 )
 
         else:
@@ -825,6 +934,40 @@ class ResultCollector:
                         input_snapshot=input_snapshot_str,
                         detail=er.error,
                     )
+                else:
+                    er_data = er.data or []
+                    if er_data:
+                        input_snapshot_str = _serialize_snapshot(
+                            er.source_snapshot or er.input_record
+                        )
+                        written = 0
+                        for item in er_data:
+                            item_guid = item.get("source_guid")
+                            if item_guid:
+                                _safe_set_disposition(
+                                    storage_backend,
+                                    agent_name,
+                                    item_guid,
+                                    DISPOSITION_EXHAUSTED,
+                                    reason=f"exhausted_after_{_get_retry_attempts(er)}_attempts",
+                                    input_snapshot=input_snapshot_str,
+                                    detail=er.error,
+                                )
+                                written += 1
+                        if not written:
+                            logger.warning(
+                                "[%s] %d exhausted data item(s) but none carry "
+                                "source_guid — dispositions not written "
+                                "(on_exhausted=raise)",
+                                agent_name,
+                                len(er_data),
+                            )
+                    else:
+                        logger.warning(
+                            "[%s] Exhausted result has no source_guid and no data — "
+                            "disposition not written (on_exhausted=raise)",
+                            agent_name,
+                        )
 
         first = exhausted_results[0]
         raise AgentActionsError(
