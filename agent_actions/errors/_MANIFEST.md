@@ -18,7 +18,7 @@
 | `ConfigValidationError` | Class | Raised when configuration validation fails. | - |
 | `DuplicateFunctionError` | Class | Raised when duplicate @udf_tool function names are detected. | - |
 | `FunctionNotFoundError` | Class | Raised when a UDF is not found in the registry. | - |
-| `UDFLoadError` | Class | Raised when a UDF module fails to load. | - |
+| `UDFLoadError` | Class | Raised when a UDF module fails to load. `DISCOVERY_SENTINEL` class attribute marks failures of the user-code directory itself (vs. a specific module import), so formatters can render directory-appropriate messages. | - |
 | `AgentNotFoundError` | Class | Raised when a specified agent cannot be found. | - |
 | `ProjectNotFoundError` | Class | Raised when a command requires being in a project but agent_actions.yml is not found. | - |
 | `external_services.py` | Module | External service and vendor API errors. `ExternalServiceError.__init__` guards `endpoint` with `endpoint or "<unknown>"` before interpolation. | `errors` |

@@ -79,6 +79,36 @@ class TestInspectActionCommand:
         assert "Missing argument" in result.output or "required" in result.output.lower()
 
 
+class TestPositionalActionNameHelp:
+    """Both `inspect action` and `inspect context` take ACTION_NAME as a positional
+    argument. The help must say so explicitly (users were mistaking it for a flag)
+    and must render each example on its own line (Click \\b preserves breaks)."""
+
+    @pytest.mark.parametrize("subcommand", ["action", "context"])
+    def test_help_calls_out_positional_action_name(self, cli_runner, subcommand):
+        result = cli_runner.invoke(cli, ["inspect", subcommand, "--help"])
+
+        assert result.exit_code == 0
+        # Usage line must show ACTION_NAME as positional. Don't pin Click's
+        # exact format (e.g. `[OPTIONS] ACTION_NAME`) — just that the metavar
+        # appears in the Usage: line.
+        usage_lines = [ln for ln in result.output.splitlines() if ln.startswith("Usage:")]
+        assert usage_lines, "Help output missing Usage: line"
+        assert "ACTION_NAME" in usage_lines[0]
+        assert "positional" in result.output.lower()
+        assert "(not a flag)" in result.output
+
+    @pytest.mark.parametrize("subcommand", ["action", "context"])
+    def test_help_renders_examples_on_separate_lines(self, cli_runner, subcommand):
+        result = cli_runner.invoke(cli, ["inspect", subcommand, "--help"])
+
+        assert result.exit_code == 0
+        example_lines = [
+            ln for ln in result.output.splitlines() if f"agac inspect {subcommand} -a" in ln
+        ]
+        assert len(example_lines) >= 2, "Expected two example lines; got:\n" + result.output
+
+
 class TestInspectCommandGroup:
     """Tests for the inspect command group structure."""
 

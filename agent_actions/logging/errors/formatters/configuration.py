@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from agent_actions.errors import UDFLoadError
+
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -10,6 +12,10 @@ class ConfigurationErrorFormatter(ErrorFormatter):
     """Handles configuration-related errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
+        # UDFLoadError is a ConfigurationError subclass — defer to UDFLoadErrorFormatter.
+        if isinstance(exc, UDFLoadError) or isinstance(root, UDFLoadError):
+            return False
+
         exc_names = [type(exc).__name__, type(root).__name__]
 
         if any("Config" in name for name in exc_names):

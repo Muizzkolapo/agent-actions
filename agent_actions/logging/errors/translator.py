@@ -15,6 +15,7 @@ from .formatters import (
     GenericErrorFormatter,
     ModelErrorFormatter,
     TemplateErrorFormatter,
+    UDFLoadErrorFormatter,
     YAMLSyntaxErrorFormatter,
 )
 from .services import ErrorContextService
@@ -28,10 +29,14 @@ class ErrorTranslator:
 
     def __init__(self):
         """Initialize formatter chain."""
+        # UDFLoadErrorFormatter is first so a UDF wrapping yaml.YAMLError /
+        # ConfigurationError / "function not found" still renders the UDF UX.
+        # Sibling formatters also defer via isinstance(exc, UDFLoadError).
         self.formatters: list[ErrorFormatter] = [
-            YAMLSyntaxErrorFormatter(),  # Check YAML first (most specific)
-            FunctionNotFoundFormatter(),  # Check function errors
-            TemplateErrorFormatter(),  # Template variable errors
+            UDFLoadErrorFormatter(),
+            YAMLSyntaxErrorFormatter(),
+            FunctionNotFoundFormatter(),
+            TemplateErrorFormatter(),
             ConfigurationErrorFormatter(),
             ModelErrorFormatter(),
             AuthenticationErrorFormatter(),

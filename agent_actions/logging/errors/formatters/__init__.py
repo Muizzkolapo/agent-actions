@@ -9,6 +9,7 @@ from .function import FunctionNotFoundFormatter
 from .generic import GenericErrorFormatter
 from .model import ModelErrorFormatter
 from .template import TemplateErrorFormatter
+from .udf_load import UDFLoadErrorFormatter
 from .yaml import YAMLSyntaxErrorFormatter
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "YAMLSyntaxErrorFormatter",
     "FunctionNotFoundFormatter",
     "TemplateErrorFormatter",
+    "UDFLoadErrorFormatter",
     "GenericErrorFormatter",
 ]

@@ -33,7 +33,7 @@ The module has **three packages** and **four top-level files**:
 |----------------|-------------|
 | `core/` | Singleton EventManager, handler protocols, and the four built-in handler implementations (Console, JSONFile, LoggingBridge, ContextDebug) |
 | `events/` | 106 concrete event dataclasses organized by domain (workflow, batch, LLM, validation, etc.) plus the AgentActionsFormatter for console display |
-| `errors/` | ErrorTranslator with a chain of 9 formatter strategies that convert any Python exception into a structured UserError for CLI display |
+| `errors/` | ErrorTranslator with a chain of 10 formatter strategies that convert any Python exception into a structured UserError for CLI display |
 | `factory.py` | LoggerFactory -- the single entry point that initializes EventManager, registers handlers, and wires the stdlib logging bridge |
 | `config.py` | LoggingConfig and FileHandlerSettings dataclasses, built from `agent_actions.yml` or `AGENT_ACTIONS_*` env vars |
 | `filters.py` | RedactingFilter for the stdlib logging layer -- regex-based scrubbing of API keys, tokens, secrets |
@@ -335,14 +335,15 @@ ErrorTranslator.translate(exc, context)  -- errors/translator.py
      |
      +-- Formatter chain (first match wins):
      |     1. YAMLSyntaxErrorFormatter    -- YAML parse errors
-     |     2. FunctionNotFoundFormatter   -- missing UDF functions
-     |     3. TemplateErrorFormatter      -- Jinja2 template errors
-     |     4. ConfigurationErrorFormatter -- config validation
-     |     5. ModelErrorFormatter         -- LLM model errors
-     |     6. AuthenticationErrorFormatter -- API key issues
-     |     7. FileErrorFormatter          -- file not found, permissions
-     |     8. APIErrorFormatter           -- vendor API errors
-     |     9. GenericErrorFormatter       -- fallback (always matches)
+     |     2. UDFLoadErrorFormatter       -- UDF discovery/import failures
+     |     3. FunctionNotFoundFormatter   -- missing UDF functions
+     |     4. TemplateErrorFormatter      -- Jinja2 template errors
+     |     5. ConfigurationErrorFormatter -- config validation
+     |     6. ModelErrorFormatter         -- LLM model errors
+     |     7. AuthenticationErrorFormatter -- API key issues
+     |     8. FileErrorFormatter          -- file not found, permissions
+     |     9. APIErrorFormatter           -- vendor API errors
+     |    10. GenericErrorFormatter       -- fallback (always matches)
      |
      v
 UserError(category, title, details, fix, context, docs_url)
@@ -405,7 +406,7 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 | `errors/translator.py` | ErrorTranslator -- formatter chain dispatch |
 | `errors/user_error.py` | UserError dataclass + `format_for_cli()` |
 | `errors/services/` | ErrorContextService -- extracts context from exceptions |
-| `errors/formatters/` | 9 formatter strategies (YAML, config, model, auth, file, API, template, function, generic) |
+| `errors/formatters/` | 10 formatter strategies (YAML, UDF load, config, model, auth, file, API, template, function, generic) |
 
 ---
 

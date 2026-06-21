@@ -16,6 +16,9 @@ _PRIORITY_FIELDS = [
 # Internal technical fields and CLI flags to never show
 _SKIP_FIELDS = {
     "function",
+    # Two layers keep 'module' out of the rendered output:
+    #   1. UDFLoadErrorFormatter omits 'module' from the UserError.context dict.
+    #   2. This skip list catches it if any other formatter ever puts it back.
     "module",
     "resource_type",  # Internal technical
     "command",
@@ -41,6 +44,8 @@ _USEFUL_DEBUG_FIELDS = {
     "template_line",
     "staged_fields",
     "validation_phase",  # Staging validation context
+    "search_path",  # UDF discovery: resolved absolute path searched
+    "requested_path",  # UDF discovery: path as configured by the user
 }
 
 

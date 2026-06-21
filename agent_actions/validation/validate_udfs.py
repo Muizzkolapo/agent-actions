@@ -12,6 +12,7 @@ from agent_actions.errors import (
     DuplicateFunctionError,
     FunctionNotFoundError,
     UDFLoadError,
+    enrich_exception_context,
 )
 from agent_actions.input.loaders.udf import (
     discover_udfs,
@@ -53,6 +54,13 @@ class ValidateUDFsCommand:
                 "error_type": "duplicate",
             }
         except UDFLoadError as e:
+            # Enrich for UX parity with config_pipeline / list_udfs.
+            enrich_exception_context(
+                e,
+                pipeline_stage="validate_udfs",
+                search_path=str(self.user_code.resolve()),
+                requested_path=str(self.user_code),
+            )
             return {
                 "valid": False,
                 "error": e,
@@ -157,13 +165,12 @@ class ValidateUDFsCommand:
         self.console.print("  Function names must be unique. Rename one of these functions.\n")
 
     def _handle_load_error(self, error: UDFLoadError) -> None:
-        """Handle UDF load error with formatted output."""
-        self.console.print("[red]❌ Error loading UDF module[/red]\n")
-        self.console.print(f"  Module: {error.context.get('module', 'unknown')}")
-        self.console.print(f"  File: [cyan]{error.context.get('file', 'unknown')}[/cyan]")
-        self.console.print(f"  Error: {error.context.get('error', 'unknown')}\n")
-        self.console.print("[yellow]Fix:[/yellow]")
-        self.console.print("  Check the Python file for syntax errors or import issues.\n")
+        """Render via the shared translator chain so UX stays in sync with the CLI."""
+        # markup=False: format_user_error returns plain text that can contain
+        # brackets (e.g. [WinError 126]) which Rich would otherwise consume.
+        self.console.print("[red]❌ UDF load failed[/red]\n")
+        self.console.print(format_user_error(error), markup=False, highlight=False)
+        self.console.print()
 
     def _handle_not_found_error(self, error: FunctionNotFoundError) -> None:
         """Handle function not found error with formatted output."""

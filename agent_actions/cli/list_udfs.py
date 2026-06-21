@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from agent_actions.cli.cli_decorators import handles_user_errors
+from agent_actions.errors import UDFLoadError, enrich_exception_context
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.utils.udf_management.registry import clear_registry, list_udfs
 
@@ -24,7 +25,17 @@ class ListUDFsCommand:
         clear_registry()
         if not self.json_output:
             self.console.print("[cyan]🔍 Discovering Tools...[/cyan]")
-        registry = discover_udfs(self.user_code)
+        # Enrich for UX parity with config_pipeline / validate_udfs.
+        try:
+            registry = discover_udfs(self.user_code)
+        except UDFLoadError as e:
+            enrich_exception_context(
+                e,
+                pipeline_stage="list_udfs",
+                search_path=str(self.user_code.resolve()),
+                requested_path=str(self.user_code),
+            )
+            raise
         if not self.json_output:
             self.console.print(f"[green]✅ Discovered {len(registry)} Tools[/green]\n")
         udfs = list_udfs()

@@ -29,14 +29,18 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     """Discover and register all UDFs in the user code directory.
 
     Raises:
-        UDFLoadError: If a Python file fails to import.
+        UDFLoadError: If the user-code directory is missing or invalid
+            (``module == UDFLoadError.DISCOVERY_SENTINEL``), if path-to-module
+            derivation fails for a discovered file (also routed through the
+            sentinel), or if a Python file fails to import (module set to the
+            failing dotted import name).
         DuplicateFunctionError: If duplicate function names are detected.
     """
     user_code_path = Path(user_code_path)
     if not user_code_path.exists():
         error_context = {"user_code_path": str(user_code_path), "operation": "discover_udfs"}
         raise UDFLoadError(
-            module="<discovery>",
+            module=UDFLoadError.DISCOVERY_SENTINEL,
             file=str(user_code_path),
             error="User code directory not found",
             context=error_context,
@@ -44,7 +48,7 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     if not user_code_path.is_dir():
         error_context = {"user_code_path": str(user_code_path), "operation": "discover_udfs"}
         raise UDFLoadError(
-            module="<discovery>",
+            module=UDFLoadError.DISCOVERY_SENTINEL,
             file=str(user_code_path),
             error="User code path is not a directory",
             context=error_context,
@@ -53,13 +57,25 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     python_files = discover_tool_files(user_code_path)
 
     for py_file in python_files:
+        # Own try so relative_to() ValueError doesn't leave module_name
+        # unbound for the import-time except block below.
         try:
             relative_path = py_file.relative_to(user_code_path)
             module_name = str(relative_path.with_suffix("")).replace("/", ".").replace("\\", ".")
+        except ValueError as e:
+            # Discovery-level failure — sentinel, not a per-module import.
+            raise UDFLoadError(
+                module=UDFLoadError.DISCOVERY_SENTINEL,
+                file=str(py_file),
+                error=f"Could not derive module name from path: {e}",
+                context={"error_type": type(e).__name__},
+                cause=e,
+            ) from e
 
-            if f"agent_actions._udfs.{module_name}" in sys.modules:
-                continue
+        if f"agent_actions._udfs.{module_name}" in sys.modules:
+            continue
 
+        try:
             # Keep original module loading logic to preserve exception behavior
             # (DuplicateFunctionError must bubble up directly)
             spec = importlib.util.spec_from_file_location(module_name, py_file)

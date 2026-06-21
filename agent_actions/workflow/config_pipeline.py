@@ -7,7 +7,7 @@ from typing import Any
 from rich.console import Console
 
 from agent_actions.config.manager import ConfigManager
-from agent_actions.errors import enrich_exception_context
+from agent_actions.errors import UDFLoadError, enrich_exception_context
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -122,10 +122,29 @@ def _discover_udfs_from_path(path: str, project_root: Path | None, console: Cons
     else:
         abs_path = p.absolute()
 
-    if abs_path.exists() and abs_path.is_dir():
-        fire_event(UDFDiscoveryStartEvent(search_path=str(abs_path)))
-        console.print(f"[cyan]\U0001f50d Discovering Tools in {abs_path}...[/cyan]")
-        registry = discover_udfs(abs_path)
-        return len(registry)
+    if not (abs_path.exists() and abs_path.is_dir()):
+        # WARN (not raise) so optional tool_paths still skip cleanly, but a
+        # typo'd path is visible at default log level instead of silently
+        # loading zero UDFs and failing later with "function not found".
+        logger.warning(
+            "Skipping UDF discovery: configured tool path does not exist or is not a directory: %s",
+            abs_path,
+        )
+        return 0
 
-    return 0
+    fire_event(UDFDiscoveryStartEvent(search_path=str(abs_path)))
+    console.print(f"[cyan]\U0001f50d Discovering Tools in {abs_path}...[/cyan]")
+    try:
+        registry = discover_udfs(abs_path)
+    except UDFLoadError as e:
+        # Add the configured search path so the formatter can surface it
+        # alongside the per-file path UDFLoadError already carries.
+        logger.warning("UDF discovery failed in %s: %s", abs_path, e.context.get("error", e))
+        enrich_exception_context(
+            e,
+            pipeline_stage="discover_udfs",
+            search_path=str(abs_path),
+            requested_path=path,
+        )
+        raise
+    return len(registry)

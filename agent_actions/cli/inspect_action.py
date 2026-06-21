@@ -133,7 +133,7 @@ class ActionCommand(BaseInspectCommand):
 @click.option("-a", "--agent", required=True, help="Workflow name")
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-@click.argument("action_name")
+@click.argument("action_name", metavar="ACTION_NAME")
 @handles_user_errors("inspect action")
 @requires_project
 def action(
@@ -148,9 +148,13 @@ def action(
 
     Displays configuration, dependencies, and context scope.
 
+    ACTION_NAME is a positional argument (not a flag). Pass it as a positional
+    argument alongside the options.
+
+    \b
     Examples:
-        agac inspect action -a my_workflow extract_facts
-        agac inspect action -a my_workflow generate_question --json
+      agac inspect action -a my_workflow extract_facts
+      agac inspect action -a my_workflow generate_question --json
     """
     ActionCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_name=action_name
@@ -302,7 +306,7 @@ class ContextCommand(BaseInspectCommand):
 @click.option("-a", "--agent", required=True, help="Workflow name")
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-@click.argument("action_name")
+@click.argument("action_name", metavar="ACTION_NAME")
 @handles_user_errors("inspect context")
 @requires_project
 def context(
@@ -318,9 +322,13 @@ def context(
     Displays available namespaces, context scope rules, and template variables
     that would be available during template rendering.
 
+    ACTION_NAME is a positional argument (not a flag). Pass it as a positional
+    argument alongside the options.
+
+    \b
     Examples:
-        agac inspect context -a my_workflow extract_facts
-        agac inspect context -a my_workflow generate_question --json
+      agac inspect context -a my_workflow extract_facts
+      agac inspect context -a my_workflow generate_question --json
     """
     ContextCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_name=action_name

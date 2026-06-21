@@ -164,6 +164,13 @@ class TestValidate:
 
         assert result["valid"] is False
         assert result["error_type"] == "load_error"
+        # Pipeline enrichment is in-place on the returned exception object —
+        # assert it directly so the formatter contract stays observable from
+        # tests, not just from rendered CLI output.
+        err = result["error"]
+        assert err.context["pipeline_stage"] == "validate_udfs"
+        assert err.context["search_path"] == str(Path(str(tmp_path)).resolve())
+        assert err.context["requested_path"] == str(tmp_path)
 
     @patch(_CLEAR_REGISTRY)
     @patch(_VALIDATE_REFS)
@@ -258,7 +265,9 @@ class TestExecute:
         assert any("Duplicate function name" in c for c in calls)
 
     @patch("agent_actions.validation.validate_udfs.fire_event")
-    def test_load_error_calls_handler(self, mock_fire, tmp_path):
+    def test_load_error_routes_through_shared_formatter(self, mock_fire, tmp_path):
+        """Delegates to format_user_error → UDFLoadErrorFormatter so the
+        validate-udfs UX stays in sync with the rest of the CLI."""
         cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
         cmd.console = MagicMock()
         load_err = UDFLoadError(module="bad", file="bad.py", error="SyntaxError")
@@ -268,8 +277,39 @@ class TestExecute:
 
         cmd.execute()
 
+        joined = "\n".join(str(c) for c in cmd.console.print.call_args_list)
+        # Marker line + canonical formatter output.
+        assert "UDF load failed" in joined
+        assert "Failed to load UDF module 'bad'" in joined
+        assert "Python could not import the UDF module: SyntaxError" in joined
+        assert "File: bad.py" in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_discovery_sentinel_renders_directory_error_not_module_error(self, mock_fire, tmp_path):
+        """When discover_udfs signals the user-code dir is missing/invalid via
+        UDFLoadError.DISCOVERY_SENTINEL, the handler must render a directory-
+        appropriate message and never leak the sentinel string to the user."""
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        load_err = UDFLoadError(
+            module=UDFLoadError.DISCOVERY_SENTINEL,
+            file="/no/such/dir",
+            error="User code directory not found",
+        )
+        cmd.validate = MagicMock(
+            return_value={"valid": False, "error": load_err, "error_type": "load_error"}
+        )
+
+        cmd.execute()
+
         calls = [str(c) for c in cmd.console.print.call_args_list]
-        assert any("Error loading UDF" in c for c in calls)
+        joined = "\n".join(calls)
+        assert "UDF discovery failed" in joined
+        assert "/no/such/dir" in joined
+        assert "User code directory not found" in joined
+        assert UDFLoadError.DISCOVERY_SENTINEL not in joined
+        # Directory-fix wording, not import-error wording.
+        assert "user-code directory" in joined or "tool_path" in joined
 
     @patch("agent_actions.validation.validate_udfs.fire_event")
     def test_not_found_error_calls_handler(self, mock_fire, tmp_path):
