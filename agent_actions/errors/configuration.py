@@ -1,5 +1,7 @@
 """Configuration-related errors."""
 
+from typing import Final
+
 from agent_actions.errors.base import AgentActionsError
 
 
@@ -82,7 +84,16 @@ class FunctionNotFoundError(ConfigurationError):
 
 
 class UDFLoadError(ConfigurationError):
-    """Raised when a UDF module fails to load."""
+    """Raised when a UDF module fails to load.
+
+    The ``DISCOVERY_SENTINEL`` value is used as the ``module`` argument when
+    the failure is not a Python import — the user-code directory itself is
+    missing or invalid. Consumers (e.g. error formatters) check for this
+    sentinel to render a directory-appropriate message instead of import
+    error wording.
+    """
+
+    DISCOVERY_SENTINEL: Final[str] = "<discovery>"
 
     def __init__(
         self,
@@ -95,7 +106,12 @@ class UDFLoadError(ConfigurationError):
         cause: Exception | None = None,
     ):
         if module and error:
-            msg = f"Failed to load UDF module '{module}': {error}"
+            # Sentinel module → directory message so str(exc) (logs, debug
+            # dumps) doesn't leak the token or imply an import failure.
+            if module == self.DISCOVERY_SENTINEL:
+                msg = f"UDF discovery failed: {error}"
+            else:
+                msg = f"Failed to load UDF module '{module}': {error}"
             if file:
                 msg += f" (file: {file})"
             ctx = dict(context) if context else {}

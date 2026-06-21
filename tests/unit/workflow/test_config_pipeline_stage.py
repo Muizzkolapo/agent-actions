@@ -6,14 +6,19 @@ Covers:
 - agent name propagation
 - Exception without .context attribute
 - Exception with existing .context dict
+- UDFLoadError raised from _discover_udfs_from_path is enriched with the
+  searched and requested paths and re-raised typed.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.errors import ConfigurationError
-from agent_actions.workflow.config_pipeline import _run_config_stage
+from agent_actions.errors import ConfigurationError, UDFLoadError
+from agent_actions.workflow.config_pipeline import (
+    _discover_udfs_from_path,
+    _run_config_stage,
+)
 
 
 def _make_manager(agent_name: str = "test_agent") -> MagicMock:
@@ -122,3 +127,44 @@ class TestRunConfigStage:
             _run_config_stage(fail, "load_configs", manager)
 
         assert exc_info.value.context["agent"] == "unknown"
+
+
+class TestDiscoverUDFsFromPathTypedHandling:
+    """_discover_udfs_from_path must wrap discover_udfs in a typed try/except
+    so UDFLoadError carries the configured path context — not just the
+    per-file path UDFLoadError already records — when bubbled up."""
+
+    def test_udf_load_error_is_enriched_with_search_path(self, tmp_path):
+        path_dir = tmp_path / "tools"
+        path_dir.mkdir()
+        console = MagicMock()
+        raised = UDFLoadError(module="proj.bad", file="bad.py", error="boom")
+
+        with patch("agent_actions.workflow.config_pipeline.discover_udfs", side_effect=raised):
+            with pytest.raises(UDFLoadError) as exc_info:
+                _discover_udfs_from_path(str(path_dir), None, console)
+
+        # Original identity preserved.
+        assert exc_info.value.context["module"] == "proj.bad"
+        # Pipeline context added so the formatter / logs can name the
+        # workflow-level search location.
+        assert exc_info.value.context["pipeline_stage"] == "discover_udfs"
+        assert exc_info.value.context["search_path"] == str(path_dir.resolve())
+        assert exc_info.value.context["requested_path"] == str(path_dir)
+
+    def test_discovery_sentinel_error_propagates_with_enrichment(self, tmp_path):
+        path_dir = tmp_path / "tools"
+        path_dir.mkdir()
+        console = MagicMock()
+        raised = UDFLoadError(
+            module=UDFLoadError.DISCOVERY_SENTINEL,
+            file=str(path_dir),
+            error="User code directory not found",
+        )
+
+        with patch("agent_actions.workflow.config_pipeline.discover_udfs", side_effect=raised):
+            with pytest.raises(UDFLoadError) as exc_info:
+                _discover_udfs_from_path(str(path_dir), None, console)
+
+        assert exc_info.value.context["module"] == UDFLoadError.DISCOVERY_SENTINEL
+        assert exc_info.value.context["search_path"] == str(path_dir.resolve())

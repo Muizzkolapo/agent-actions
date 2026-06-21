@@ -144,6 +144,33 @@ class TestDiscoverUDFs:
         assert "bad.py" in error.context["file"]
         assert "error" in error.context
 
+    def test_discover_udfs_wraps_relative_to_failure(self, tmp_path, monkeypatch):
+        """If Path.relative_to fails (symlink/Windows path quirks), the function
+        must not raise UnboundLocalError on `module_name`. It must surface a
+        typed UDFLoadError routed via the DISCOVERY_SENTINEL so the formatter
+        renders a directory-appropriate message instead of `pip install` hints."""
+        from pathlib import Path
+
+        user_code = tmp_path / "tools"
+        user_code.mkdir()
+        (user_code / "ok.py").write_text("x = 1\n")
+
+        original_relative_to = Path.relative_to
+
+        def fake_relative_to(self, *args, **kwargs):
+            if self.name == "ok.py":
+                raise ValueError("simulated relative_to failure")
+            return original_relative_to(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "relative_to", fake_relative_to)
+
+        with pytest.raises(UDFLoadError) as exc_info:
+            discover_udfs(user_code)
+        # Must surface as a typed UDFLoadError tagged as a discovery failure.
+        assert exc_info.value.context["module"] == UDFLoadError.DISCOVERY_SENTINEL
+        assert "ok.py" in exc_info.value.context["file"]
+        assert "module name" in exc_info.value.context["error"]
+
     def test_discover_udfs_does_not_mutate_sys_path(self, temp_user_code_dir):
         """Verify discover_udfs does not add user_code_path to sys.path."""
         import sys

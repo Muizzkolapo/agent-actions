@@ -5,6 +5,8 @@ from typing import Any
 
 import yaml
 
+from agent_actions.errors import UDFLoadError
+
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -13,6 +15,9 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
     """Handles YAML syntax errors with industry-standard formatting."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
+        # UDFLoadErrorFormatter owns these even when the inner cause is YAML.
+        if isinstance(exc, UDFLoadError) or isinstance(root, UDFLoadError):
+            return False
         if isinstance(root, yaml.YAMLError):
             return True
 

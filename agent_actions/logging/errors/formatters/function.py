@@ -3,6 +3,12 @@
 from difflib import SequenceMatcher
 from typing import Any
 
+from agent_actions.errors import (
+    DuplicateFunctionError,
+    FunctionNotFoundError,
+    UDFLoadError,
+)
+
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -10,19 +16,17 @@ from .base import ErrorFormatter
 class FunctionNotFoundFormatter(ErrorFormatter):
     """Handles function/UDF not found errors with helpful suggestions."""
 
-    _HANDLED_NAMES = frozenset(
-        {
-            "FunctionNotFoundError",
-            "DuplicateFunctionError",
-            "UDFLoadError",
-        }
+    _HANDLED_TYPES: tuple[type[Exception], ...] = (
+        FunctionNotFoundError,
+        DuplicateFunctionError,
     )
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        exc_names = {type(exc).__name__, type(root).__name__}
-        if exc_names & self._HANDLED_NAMES:
+        # UDFLoadErrorFormatter owns these even if the message text would match below.
+        if isinstance(exc, UDFLoadError) or isinstance(root, UDFLoadError):
+            return False
+        if isinstance(exc, self._HANDLED_TYPES) or isinstance(root, self._HANDLED_TYPES):
             return True
-
         if "function" in message.lower() and "not found" in message.lower():
             return True
 

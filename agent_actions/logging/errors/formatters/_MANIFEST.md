@@ -18,4 +18,5 @@ configuration errors with consistent context for CLI output.
 | `generic.py` | Module | Generic formatter used as the default when no specific formatter is configured. | `logging` |
 | `model.py` | Module | Formats model-specific error details (token usage, rate limits). | `llm.providers`, `logging` |
 | `template.py` | Module | Formats template rendering issues with namespace diagnostics, fuzzy field suggestions, and actionable hints. | `prompt_generation`, `logging` |
+| `udf_load.py` | Module | Formats UDF discovery import failures with module, file, and dependency install hint. | `utils.udf_management`, `logging` |
 | `yaml.py` | Module | Formats YAML parsing errors with line/column details. | `yaml`, `logging` |

@@ -56,3 +56,7 @@ MagicMock/
 # Example runtime artifacts
 examples/*/artefact/
 examples/*/logs/
+
+# Local harness gate markers and smoke-test output
+.harness/
+artefact/
