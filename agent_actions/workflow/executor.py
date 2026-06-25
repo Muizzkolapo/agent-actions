@@ -97,6 +97,12 @@ class ExecutionMetrics:
     model_vendor: str | None = None
     model_name: str | None = None
     files_processed: int = 0
+    # record_count: number of output records the action wrote to storage.
+    # Invariant: populated via _count_output_records on successful completion
+    # paths — _handle_run_success (online/passthrough), _resolve_batch_outcome
+    # (batch completion), and _check_prior_output (cached completed). Remains
+    # at the default 0 for non-completion paths: skipped (guard-filtered),
+    # failed, and batch_submitted (no output yet).
     record_count: int = 0
 
 
@@ -271,7 +277,10 @@ class ActionExecutor:
             ActionExecutionResult(
                 success=True,
                 status=ActionStatus.COMPLETED,
-                metrics=ExecutionMetrics(duration=0.0),
+                metrics=ExecutionMetrics(
+                    duration=0.0,
+                    record_count=self._count_output_records(action_name),
+                ),
             ),
         )
 
@@ -459,7 +468,10 @@ class ActionExecutor:
             logger.warning("Could not read record_count for %s: %s", action_name, e, exc_info=True)
             return 0
         nodes = stats.get("nodes", {}) if isinstance(stats, dict) else {}
-        return int(nodes.get(action_name, 0))
+        # Defensive: a backend returning explicit None for a node would crash
+        # int(None). Coerce None -> 0 so a missing/unknown count does not break
+        # the action complete path.
+        return int(nodes.get(action_name, 0) or 0)
 
     def _handle_guard_all_filtered(
         self,
@@ -1033,7 +1045,10 @@ class ActionExecutor:
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
-                metrics=ExecutionMetrics(duration=wall_clock),
+                metrics=ExecutionMetrics(
+                    duration=wall_clock,
+                    record_count=self._count_output_records(action_name),
+                ),
             )
 
         if batch_status == "in_progress":

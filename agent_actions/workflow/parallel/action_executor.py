@@ -265,10 +265,11 @@ class ActionLevelOrchestrator:
         """Fire action complete or failed event for an execution result."""
         if result.success and result.status in COMPLETED_STATUSES:
             tokens = result.metrics.tokens if result.metrics and result.metrics.tokens else {}
-            # Explicit 0 (not the dataclass default) when the metrics object is
-            # missing or lacks record_count — avoids silently shipping 0 for
-            # actions that genuinely produced output but lost the field.
-            record_count = getattr(result.metrics, "record_count", 0) or 0 if result.metrics else 0
+            # Defensive None coercion: if result.metrics is None, ship 0. The
+            # producer (_handle_run_success / _resolve_batch_outcome /
+            # _check_prior_output in workflow/executor.py) is responsible for
+            # populating a real count via _count_output_records on success paths.
+            record_count = result.metrics.record_count if result.metrics is not None else 0
             fire_event(
                 ActionCompleteEvent(
                     action_name=action_name,

@@ -95,11 +95,12 @@ class WorkflowEventLogger:
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
                 tokens = params.result.tokens
-            # Explicit 0 (not the dataclass default) when the metrics object is
-            # missing or lacks record_count — avoids silently shipping 0 for
-            # actions that genuinely produced output but lost the field.
+            # Defensive None coercion: if result.metrics is None, ship 0. The
+            # producer (_handle_run_success / _resolve_batch_outcome /
+            # _check_prior_output in workflow/executor.py) is responsible for
+            # populating a real count via _count_output_records on success paths.
             metrics = getattr(params.result, "metrics", None)
-            record_count = getattr(metrics, "record_count", 0) or 0 if metrics else 0
+            record_count = metrics.record_count if metrics is not None else 0
             fire_event(
                 ActionCompleteEvent(
                     action_name=params.action_name,
