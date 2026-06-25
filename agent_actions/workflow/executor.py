@@ -247,7 +247,7 @@ class ActionExecutor:
                 ActionExecutionResult(
                     success=True,
                     status=ActionStatus.COMPLETED,
-                    metrics=ExecutionMetrics(duration=0.0),
+                    metrics=ExecutionMetrics(duration=0.0, record_count=0),
                 ),
             )
 
