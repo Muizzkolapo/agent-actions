@@ -129,6 +129,9 @@ class TestLogAgentResult:
         r.error = error
         r.tokens = tokens
         r.output_folder = "/output"
+        # MagicMock would auto-create `.metrics` as a Mock and the None-guard would
+        # ship a Mock through record_count. Pin to None so the guard actually runs.
+        r.metrics = None
         return r
 
     def test_completed_fires_agent_complete(self, event_logger):
@@ -153,6 +156,7 @@ class TestLogAgentResult:
         assert event.execution_time == 1.5
         assert event.output_path == "/output"
         assert event.tokens == {"total_tokens": 100}
+        assert event.record_count == 0
 
     def test_failed_fires_agent_failed(self, event_logger):
         error = RuntimeError("agent crashed")

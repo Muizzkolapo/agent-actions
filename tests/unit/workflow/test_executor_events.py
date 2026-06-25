@@ -24,6 +24,8 @@ class TestHandleBatchCheckEventFiring:
         deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
         deps.action_runner.storage_backend.get_failed_items.return_value = []
         deps.action_runner.storage_backend.has_disposition.return_value = False
+        # Pre/post snapshots needed by _count_records_for_action.
+        deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
         return deps
 
     @pytest.fixture

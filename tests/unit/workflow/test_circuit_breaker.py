@@ -705,7 +705,7 @@ class TestTotalFailureEscalation:
             is_last_action=False,
             start_time=datetime.now(),
         )
-        result = executor._handle_run_success(params, "/output", 1.0, None)
+        result = executor._handle_run_success(params, "/output", 1.0, None, pre_run_count=0)
         assert result.success is False
         assert result.status == ActionStatus.FAILED
         assert result.error is not None
@@ -727,7 +727,7 @@ class TestTotalFailureEscalation:
             is_last_action=False,
             start_time=datetime.now(),
         )
-        executor._handle_run_success(params, "/output", 1.0, None)
+        executor._handle_run_success(params, "/output", 1.0, None, pre_run_count=0)
         mock_deps.action_runner.storage_backend.set_disposition.assert_called_once_with(
             action_name="agent_a",
             record_id=NODE_LEVEL_RECORD_ID,
@@ -756,7 +756,7 @@ class TestTotalFailureEscalation:
             is_last_action=False,
             start_time=datetime.now(),
         )
-        executor._handle_run_success(params, "/output", 1.0, None)
+        executor._handle_run_success(params, "/output", 1.0, None, pre_run_count=0)
         call_args = run_tracker.record_action_complete.call_args
         assert call_args is not None
         assert call_args.kwargs["config"].status == "failed"
@@ -786,7 +786,7 @@ class TestTotalFailureDownstreamSkip:
             is_last_action=False,
             start_time=datetime.now(),
         )
-        result = executor._handle_run_success(params, "/output", 1.0, None)
+        result = executor._handle_run_success(params, "/output", 1.0, None, pre_run_count=0)
         assert result.success is False
         assert result.status == ActionStatus.FAILED
 

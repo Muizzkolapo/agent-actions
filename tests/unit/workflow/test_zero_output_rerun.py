@@ -125,3 +125,67 @@ class TestCheckPriorOutputIntentionalNoOutput:
         backend.clear_disposition.assert_called_once_with(
             "my_action", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         )
+
+
+class TestCheckPriorOutputDoesNotRunStatsQuery:
+    """The cached-completion branch is THIS execution didn't produce records.
+
+    Regression for the spec 554 review finding: the previous implementation
+    called _count_output_records eagerly while building the `completed`
+    tuple — even on the cold-start path that returned (False, None).  For a
+    50-action workflow with all-pending status, that was ~50 wasted
+    whole-DB stats queries per scheduling pass.
+    """
+
+    def test_cold_start_does_not_query_storage_stats(self):
+        # No prior output, no dispositions — the executor will reset to
+        # PENDING and return (False, None).  It must NOT call
+        # get_storage_stats on the way (the prior eager-builder did).
+        executor = _make_executor()
+        backend = MagicMock()
+        backend.list_target_files.return_value = []
+        backend.has_disposition.return_value = False
+
+        has_output, result = executor._check_prior_output(backend, "my_action")
+
+        assert has_output is False
+        assert result is None
+        backend.get_storage_stats.assert_not_called()
+
+    def test_cached_completion_ships_record_count_zero(self):
+        # Cached completion (target files exist) — record_count is 0 because
+        # this execution did not run the action.  The pre/post snapshot in
+        # _execute_action_run is what produces the per-execution count.
+        executor = _make_executor()
+        backend = MagicMock()
+        backend.list_target_files.return_value = ["output.json"]
+        backend.has_disposition.return_value = False
+
+        has_output, result = executor._check_prior_output(backend, "my_action")
+
+        assert has_output is True
+        assert result is not None
+        assert result.metrics.record_count == 0, (
+            f"cached-completion path must ship record_count=0 (this execution "
+            f"did not run the action), got {result.metrics.record_count}"
+        )
+        backend.get_storage_stats.assert_not_called()
+
+    def test_node_level_filtered_disposition_ships_record_count_zero(self):
+        # Intentional no-output path (guard-filtered all, etc.) — also 0.
+        executor = _make_executor()
+        backend = MagicMock()
+        backend.list_target_files.return_value = []
+
+        def has_disp(action, disp, record_id=None):
+            if disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
+                return False
+            return disp == DISPOSITION_FILTERED and record_id == NODE_LEVEL_RECORD_ID
+
+        backend.has_disposition.side_effect = has_disp
+
+        has_output, result = executor._check_prior_output(backend, "my_action")
+
+        assert has_output is True
+        assert result.metrics.record_count == 0
+        backend.get_storage_stats.assert_not_called()

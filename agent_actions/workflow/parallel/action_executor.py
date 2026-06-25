@@ -14,6 +14,7 @@ from rich.console import Console
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent, ActionStartEvent
+from agent_actions.workflow.executor import ExecutionMetrics
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -263,15 +264,20 @@ class ActionLevelOrchestrator:
         self, action_name: str, idx: int, total: int, result, run_mode: str = ""
     ):
         """Fire action complete or failed event for an execution result."""
+        # Consolidate the metrics-None guard once at the top so downstream
+        # references read uniformly.  Older paths used three different
+        # idioms for the same check on consecutive lines.
+        metrics = result.metrics if result.metrics is not None else ExecutionMetrics()
         if result.success and result.status in COMPLETED_STATUSES:
-            tokens = result.metrics.tokens if result.metrics and result.metrics.tokens else {}
+            tokens = metrics.tokens if metrics.tokens else {}
             fire_event(
                 ActionCompleteEvent(
                     action_name=action_name,
                     action_index=idx,
                     total_actions=total,
-                    execution_time=result.metrics.duration if result.metrics else 0.0,
+                    execution_time=metrics.duration,
                     output_path=result.output_folder or "",
+                    record_count=metrics.record_count,
                     tokens=tokens,
                     mode=run_mode,
                 )
@@ -285,7 +291,7 @@ class ActionLevelOrchestrator:
                     error_message=str(result.error) if result.error else "",
                     error_detail=get_error_detail(result.error) if result.error else "",
                     error_type=type(result.error).__name__ if result.error else "",
-                    execution_time=result.metrics.duration if result.metrics else 0.0,
+                    execution_time=metrics.duration,
                     mode=run_mode,
                 )
             )

@@ -95,6 +95,8 @@ class WorkflowEventLogger:
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
                 tokens = params.result.tokens
+            metrics = getattr(params.result, "metrics", None)
+            record_count = metrics.record_count if metrics is not None else 0
             fire_event(
                 ActionCompleteEvent(
                     action_name=params.action_name,
@@ -102,6 +104,7 @@ class WorkflowEventLogger:
                     total_actions=params.total_actions,
                     execution_time=params.duration,
                     output_path=params.result.output_folder or "",
+                    record_count=record_count,
                     tokens=tokens,
                     mode=params.run_mode,
                 )

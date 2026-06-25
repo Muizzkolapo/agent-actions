@@ -35,6 +35,8 @@ def mock_deps():
     deps.action_runner.storage_backend.get_failed_items.return_value = []
     # Default: no guard-all-skipped disposition
     deps.action_runner.storage_backend.has_disposition.return_value = False
+    # Default: empty before/after snapshot for _count_records_for_action
+    deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
     # Default status details for limit-change detection (no limits stored)
     deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     return deps
@@ -271,7 +273,9 @@ class TestHandleRunSuccess:
         """batch_submitted batch_status should return batch_submitted result with timestamp."""
         params = self._make_params()
         with patch("agent_actions.workflow.executor.fire_event"):
-            result = executor._handle_run_success(params, "/out", 1.0, "batch_submitted")
+            result = executor._handle_run_success(
+                params, "/out", 1.0, "batch_submitted", pre_run_count=0
+            )
 
         assert result.status == ActionStatus.BATCH_SUBMITTED
         call_args = mock_deps.state_manager.update_status.call_args
@@ -281,7 +285,8 @@ class TestHandleRunSuccess:
     def test_passthrough_status(self, executor, mock_deps):
         """passthrough batch_status should mark completed."""
         params = self._make_params()
-        result = executor._handle_run_success(params, "/out", 1.0, "passthrough")
+        mock_deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
+        result = executor._handle_run_success(params, "/out", 1.0, "passthrough", pre_run_count=0)
 
         assert result.status == ActionStatus.COMPLETED
         assert result.output_folder == "/out"
@@ -292,11 +297,12 @@ class TestHandleRunSuccess:
     def test_normal_completion_with_tokens(self, executor, mock_deps):
         """Normal completion should capture tokens and model info."""
         params = self._make_params(action_config={"model_vendor": "openai", "model_name": "gpt-4"})
+        mock_deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
         with patch(
             "agent_actions.workflow.executor.get_last_usage",
             return_value={"total_tokens": 100},
         ):
-            result = executor._handle_run_success(params, "/out", 2.5, None)
+            result = executor._handle_run_success(params, "/out", 2.5, None, pre_run_count=0)
 
         assert result.status == ActionStatus.COMPLETED
         assert result.metrics.tokens == {"total_tokens": 100}
@@ -308,8 +314,9 @@ class TestHandleRunSuccess:
         params = self._make_params(
             action_config={"model_vendor": "anthropic", "model_name": "claude"}
         )
+        mock_deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
         with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor._handle_run_success(params, "/out", 1.0, None)
+            result = executor._handle_run_success(params, "/out", 1.0, None, pre_run_count=0)
 
         assert result.metrics.model_vendor == "anthropic"
         assert result.metrics.model_name == "claude"
@@ -321,7 +328,7 @@ class TestHandleRunSuccess:
         params = self._make_params()
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
-            result = executor._handle_run_success(params, "/out", 1.0, None)
+            result = executor._handle_run_success(params, "/out", 1.0, None, pre_run_count=0)
 
         assert result.success is True
         assert result.status == ActionStatus.SKIPPED
@@ -349,7 +356,7 @@ class TestHandleRunSuccess:
         params = self._make_params()
 
         with patch("agent_actions.workflow.executor.fire_event"):
-            result = executor._handle_run_success(params, "/out", 1.0, None)
+            result = executor._handle_run_success(params, "/out", 1.0, None, pre_run_count=0)
 
         assert result.status == ActionStatus.SKIPPED
         executor.run_tracker.record_action_complete.assert_called_once()
