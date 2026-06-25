@@ -472,10 +472,16 @@ class ActionExecutor:
             logger.warning("Could not read record_count for %s: %s", action_name, e, exc_info=True)
             return 0
         nodes = stats.get("nodes", {}) if isinstance(stats, dict) else {}
-        # Defensive: a backend returning explicit None for a node would crash
-        # int(None). Coerce None -> 0 so a missing/unknown count does not break
-        # the action complete path.
-        return int(nodes.get(action_name, 0) or 0)
+        # Defensive: a backend returning explicit None — or a non-numeric value
+        # like a string — for a node would crash int(). Coerce None -> 0 via
+        # `or 0`, and catch the parse errors so a misbehaving backend does not
+        # break the action complete path.
+        raw = nodes.get(action_name, 0) or 0
+        try:
+            return int(raw)
+        except (TypeError, ValueError) as e:
+            logger.warning("Could not parse record_count for %s (got %r): %s", action_name, raw, e)
+            return 0
 
     def _handle_guard_all_filtered(
         self,
