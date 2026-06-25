@@ -35,6 +35,8 @@ def mock_deps():
     deps.action_runner.execution_order = ["agent_a", "agent_b"]
     deps.action_runner.storage_backend.get_failed_items.return_value = []
     deps.action_runner.storage_backend.has_disposition.return_value = False
+    # Pre/post snapshots needed by _count_records_for_action.
+    deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
     deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     return deps
 

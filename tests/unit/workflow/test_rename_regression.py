@@ -140,6 +140,13 @@ class TestExecutorCallsRunAction:
         deps.action_runner.workflow_name = "test_workflow"
         deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
         deps.action_runner.execution_order = ["agent_a"]
+        # Pre/post snapshots needed by _count_records_for_action — without a
+        # storage_backend the snapshot call raises (no silent 0 fallback).
+        storage = MagicMock()
+        storage.get_storage_stats.return_value = {"nodes": {}}
+        storage.get_failed_items.return_value = []
+        storage.has_disposition.return_value = False
+        deps.action_runner.storage_backend = storage
         return deps
 
     @pytest.fixture

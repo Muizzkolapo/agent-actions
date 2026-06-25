@@ -218,6 +218,8 @@ def test_count_output_records_none_value_for_action_returns_zero():
 
 
 def test_resolve_batch_outcome_completed_populates_record_count():
+    # After-run snapshot is 12, before-run snapshot was 0, so this execution
+    # produced 12 records.  Passing pre_run_count=0 mirrors a fresh run.
     executor = _make_executor_with_backend(stats_return={"nodes": {"batch_action": 12}})
     executor._compute_batch_wall_clock = MagicMock(return_value=3.0)
     executor._resolve_completion_status = MagicMock(return_value=ActionStatus.COMPLETED)
@@ -231,6 +233,7 @@ def test_resolve_batch_outcome_completed_populates_record_count():
             output_folder="/tmp/batch_action",
             batch_status="completed",
             duration=3.0,
+            pre_run_count=0,
         )
 
     assert isinstance(result, ActionExecutionResult)

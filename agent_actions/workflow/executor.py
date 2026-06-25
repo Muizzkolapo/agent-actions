@@ -97,8 +97,11 @@ class ExecutionMetrics:
     model_vendor: str | None = None
     model_name: str | None = None
     files_processed: int = 0
-    # Populated by _count_output_records on COMPLETED paths; stays 0 for
-    # skipped / failed / batch_submitted (no ActionCompleteEvent fires there).
+    # Number of target records this specific execution wrote (after - before
+    # snapshot). Stays at the default 0 for paths that don't write target
+    # rows: batch_submitted (job still pending), WHERE-skip (no data written),
+    # guard-all-filtered SKIPPED, FAILED, and cached completions discovered
+    # by _check_prior_output (this execution didn't run the action).
     record_count: int = 0
 
 
@@ -390,8 +393,16 @@ class ActionExecutor:
         output_folder: str,
         duration: float,
         batch_status: str | None,
+        pre_run_count: int,
     ) -> ActionExecutionResult:
-        """Handle successful action run result."""
+        """Handle successful action run result.
+
+        ``pre_run_count`` is the storage-backend record count for this action
+        captured BEFORE the runner executed.  The delta against the post-run
+        snapshot is what this execution actually wrote — using
+        ``get_storage_stats`` directly would inflate on resume / re-run when
+        prior runs left rows on different paths.
+        """
         if batch_status == "batch_submitted":
             self.deps.state_manager.update_status(
                 params.action_name,
@@ -421,7 +432,7 @@ class ActionExecutor:
                 status=ActionStatus.COMPLETED,
                 metrics=ExecutionMetrics(
                     duration=duration,
-                    record_count=self._count_output_records(params.action_name),
+                    record_count=self._records_written_this_run(params.action_name, pre_run_count),
                 ),
             )
 
@@ -452,9 +463,54 @@ class ActionExecutor:
                 model_vendor=params.action_config.get("model_vendor"),
                 model_name=params.action_config.get("model_name"),
                 files_processed=0,
-                record_count=self._count_output_records(params.action_name),
+                record_count=self._records_written_this_run(params.action_name, pre_run_count),
             ),
         )
+
+    def _count_records_for_action(self, action_name: str) -> int:
+        """Return the storage-backend record count for ``action_name``.
+
+        Raises ``RuntimeError`` if the storage backend is unavailable or the
+        underlying query / value parse fails.  This is called immediately
+        before and after running an action so the delta yields the
+        per-execution record count.  A silent fallback to 0 here would let a
+        broken telemetry path masquerade as "action wrote nothing," exactly
+        the failure mode spec 554 is eliminating.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            raise RuntimeError(
+                f"Cannot count records for {action_name!r}: no storage backend on action_runner"
+            )
+        try:
+            stats = storage_backend.get_storage_stats()
+        except Exception as e:
+            raise RuntimeError(
+                f"Storage backend get_storage_stats() failed while counting "
+                f"records for {action_name!r}: {e}"
+            ) from e
+        nodes = stats.get("nodes", {}) if isinstance(stats, dict) else {}
+        raw = nodes.get(action_name, 0)
+        if raw is None:
+            return 0
+        try:
+            return int(raw)
+        except (TypeError, ValueError) as e:
+            raise RuntimeError(
+                f"Storage backend returned non-integer record_count {raw!r} "
+                f"for {action_name!r}: {e}"
+            ) from e
+
+    def _records_written_this_run(self, action_name: str, pre_run_count: int) -> int:
+        """Compute records written this execution as (after - before).
+
+        Clamped at 0 — a negative delta would mean rows were deleted during
+        the run, which is not a meaningful "records produced by this
+        execution" signal.
+        """
+        after = self._count_records_for_action(action_name)
+        delta = after - pre_run_count
+        return delta if delta > 0 else 0
 
     def _count_output_records(self, action_name: str) -> int:
         """Return the total number of target records the action wrote to storage.
@@ -965,13 +1021,14 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
+        pre_run_count = self._count_records_for_action(action_name)
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
             action_name, output_directory, action_config
         )
 
         duration = (datetime.now() - start_time).total_seconds()
         return self._resolve_batch_outcome(
-            action_name, action_config, output_folder, batch_status, duration
+            action_name, action_config, output_folder, batch_status, duration, pre_run_count
         )
 
     async def _handle_batch_check_async(
@@ -985,6 +1042,7 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
+        pre_run_count = self._count_records_for_action(action_name)
         output_folder, batch_status = await asyncio.to_thread(
             self.deps.batch_manager.handle_batch_agent,
             action_name,
@@ -994,7 +1052,7 @@ class ActionExecutor:
 
         duration = (datetime.now() - start_time).total_seconds()
         return self._resolve_batch_outcome(
-            action_name, action_config, output_folder, batch_status, duration
+            action_name, action_config, output_folder, batch_status, duration, pre_run_count
         )
 
     def _batch_output_directory(self, action_name: str) -> str:
@@ -1010,8 +1068,14 @@ class ActionExecutor:
         output_folder: str | None,
         batch_status: str,
         duration: float,
+        pre_run_count: int,
     ) -> ActionExecutionResult:
-        """Map batch_manager result to status, events, and ActionExecutionResult."""
+        """Map batch_manager result to status, events, and ActionExecutionResult.
+
+        ``pre_run_count`` is the storage-backend record count captured BEFORE
+        the batch result was processed.  Used for the per-execution delta —
+        see ``_handle_run_success`` for the rationale.
+        """
         if batch_status == "completed":
             wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
@@ -1054,7 +1118,7 @@ class ActionExecutor:
                 status=final_status,
                 metrics=ExecutionMetrics(
                     duration=wall_clock,
-                    record_count=self._count_output_records(action_name),
+                    record_count=self._records_written_this_run(action_name, pre_run_count),
                 ),
             )
 
@@ -1100,6 +1164,11 @@ class ActionExecutor:
         self._track_action_start(params)
         correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
 
+        # Snapshot must surface storage errors loudly (no silent 0 fallback).
+        # Both pre-run and post-run snapshots are intentionally OUTSIDE the
+        # except clause below: only failures from the user-supplied action
+        # runner should be funneled through _handle_run_failure.
+        pre_run_count = self._count_records_for_action(params.action_name)
         try:
             output_folder = self.deps.action_runner.run_action(
                 params.action_config,
@@ -1108,16 +1177,18 @@ class ActionExecutor:
                 params.action_idx,
                 input_directories_override=correlated_input,
             )
-            duration = (datetime.now() - params.start_time).total_seconds()
-            batch_status = self._check_batch_submission(
-                params.action_name,
-                params.action_idx,
-                configured_run_mode=params.action_config.get("run_mode"),
-            )
-            return self._handle_run_success(params, output_folder, duration, batch_status)
-
         except Exception as e:
             return self._handle_run_failure(params, e)
+
+        duration = (datetime.now() - params.start_time).total_seconds()
+        batch_status = self._check_batch_submission(
+            params.action_name,
+            params.action_idx,
+            configured_run_mode=params.action_config.get("run_mode"),
+        )
+        return self._handle_run_success(
+            params, output_folder, duration, batch_status, pre_run_count
+        )
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
@@ -1125,6 +1196,8 @@ class ActionExecutor:
         self._track_action_start(params)
         correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
 
+        # See sync counterpart for the rationale on snapshot placement.
+        pre_run_count = self._count_records_for_action(params.action_name)
         try:
             output_folder = await asyncio.to_thread(
                 self.deps.action_runner.run_action,
@@ -1134,16 +1207,18 @@ class ActionExecutor:
                 params.action_idx,
                 input_directories_override=correlated_input,
             )
-            duration = (datetime.now() - params.start_time).total_seconds()
-            batch_status = self._check_batch_submission(
-                params.action_name,
-                params.action_idx,
-                configured_run_mode=params.action_config.get("run_mode"),
-            )
-            return self._handle_run_success(params, output_folder, duration, batch_status)
-
         except Exception as e:
             return self._handle_run_failure(params, e)
+
+        duration = (datetime.now() - params.start_time).total_seconds()
+        batch_status = self._check_batch_submission(
+            params.action_name,
+            params.action_idx,
+            configured_run_mode=params.action_config.get("run_mode"),
+        )
+        return self._handle_run_success(
+            params, output_folder, duration, batch_status, pre_run_count
+        )
 
     def __repr__(self):
         return f"ActionExecutor(deps={self.deps})"
