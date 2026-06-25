@@ -238,6 +238,10 @@ class ActionExecutor:
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
+            logger.warning(
+                "No storage backend available verifying %s — returning record_count=0",
+                action_name,
+            )
             return (
                 True,
                 ActionExecutionResult(

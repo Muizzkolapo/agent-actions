@@ -129,6 +129,11 @@ class TestLogAgentResult:
         r.error = error
         r.tokens = tokens
         r.output_folder = "/output"
+        # MagicMock auto-creates `.metrics` as a Mock on attribute access, which
+        # makes the call-site `metrics is not None` guard evaluate truthy and
+        # ships a Mock through to ActionCompleteEvent.record_count. Pin to None
+        # explicitly so the defensive coercion path actually runs.
+        r.metrics = None
         return r
 
     def test_completed_fires_agent_complete(self, event_logger):
