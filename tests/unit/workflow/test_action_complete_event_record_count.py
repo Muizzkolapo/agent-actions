@@ -178,43 +178,25 @@ def test_serial_mode_missing_metrics_defaults_to_zero_explicitly():
     assert complete[0].record_count == 0
 
 
-def test_count_output_records_happy_path_returns_node_count():
+# Migration note: the silent-fallback `_count_output_records` helper was
+# removed.  Its happy-path / missing-nodes-key behavior is now covered by
+# `_count_records_for_action` (which raises on storage failure) in
+# tests/unit/workflow/test_record_count_per_execution.py.  The synthetic
+# "None value for action returns 0" test was deleted: get_storage_stats
+# uses COALESCE(SUM(record_count), 0) and cannot produce None for an
+# existing action, so the test exercised an unreachable code path.
+
+
+def test_count_records_for_action_happy_path_returns_node_count():
     executor = _make_executor_with_backend(stats_return={"nodes": {"agent_a": 5}})
-    assert executor._count_output_records("agent_a") == 5
+    assert executor._count_records_for_action("agent_a") == 5
 
 
-def test_count_output_records_no_storage_backend_returns_zero():
-    executor = _make_executor_with_backend(has_backend=False)
-    assert executor._count_output_records("agent_a") == 0
-
-
-def test_count_output_records_backend_raises_logs_and_returns_zero(caplog):
-    import logging
-
-    executor = _make_executor_with_backend(stats_side_effect=RuntimeError("backend down"))
-    target_logger = logging.getLogger("agent_actions.workflow.executor")
-    # Project logging config disables propagation here, so caplog won't see
-    # the warning unless its handler is attached to this logger directly.
-    target_logger.addHandler(caplog.handler)
-    target_logger.setLevel(logging.WARNING)
-    try:
-        result = executor._count_output_records("agent_a")
-    finally:
-        target_logger.removeHandler(caplog.handler)
-    assert result == 0
-    assert any("Could not read record_count for agent_a" in r.message for r in caplog.records), (
-        f"expected warning log, got: {[r.message for r in caplog.records]}"
-    )
-
-
-def test_count_output_records_missing_nodes_key_returns_zero():
+def test_count_records_for_action_missing_nodes_key_returns_zero():
+    # Empty stats payload means the action has no rows yet — that's a legitimate
+    # 0, not a "we don't know" — so it does NOT raise.
     executor = _make_executor_with_backend(stats_return={})
-    assert executor._count_output_records("agent_a") == 0
-
-
-def test_count_output_records_none_value_for_action_returns_zero():
-    executor = _make_executor_with_backend(stats_return={"nodes": {"agent_a": None}})
-    assert executor._count_output_records("agent_a") == 0
+    assert executor._count_records_for_action("agent_a") == 0
 
 
 def test_resolve_batch_outcome_completed_populates_record_count():

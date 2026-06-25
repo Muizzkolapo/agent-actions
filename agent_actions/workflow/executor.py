@@ -157,10 +157,9 @@ class ActionExecutionResult:
         """Return files_processed from metrics."""
         return self.metrics.files_processed
 
-    @property
-    def record_count(self) -> int:
-        """Return record_count from metrics."""
-        return self.metrics.record_count
+    # NOTE: no record_count property.  Callers must use result.metrics.record_count
+    # directly — a property here added a second access path with no production
+    # caller and obscured the source of truth.
 
     def __repr__(self):
         return (
@@ -280,20 +279,25 @@ class ActionExecutor:
                 self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                 return (False, None)
 
-        completed = (
-            True,
-            ActionExecutionResult(
-                success=True,
-                status=ActionStatus.COMPLETED,
-                metrics=ExecutionMetrics(
-                    duration=0.0,
-                    record_count=self._count_output_records(action_name),
+        # The cached-completion path discovered an action that already
+        # finished in a prior run.  This execution did NOT run the action,
+        # so the per-execution record_count is 0 by definition — the
+        # ExecutionMetrics default is correct.  (Previously this called
+        # _count_output_records on every pending action's cold-start path,
+        # which both ran a whole-DB stats query per discarded result AND
+        # reported the cumulative SUM instead of the per-execution delta.)
+        def _completed_result() -> tuple[bool, ActionExecutionResult]:
+            return (
+                True,
+                ActionExecutionResult(
+                    success=True,
+                    status=ActionStatus.COMPLETED,
+                    metrics=ExecutionMetrics(duration=0.0, record_count=0),
                 ),
-            ),
-        )
+            )
 
         if storage_backend.list_target_files(action_name):
-            return completed
+            return _completed_result()
 
         # No target files. Check if the action intentionally produced no
         # output (guard-filtered all records, WHERE-skipped, etc.) by
@@ -311,7 +315,7 @@ class ActionExecutor:
                     action_name,
                     disp,
                 )
-                return completed
+                return _completed_result()
 
         logger.info("Action %s completed but no output in storage — re-running", action_name)
         self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
@@ -511,30 +515,6 @@ class ActionExecutor:
         after = self._count_records_for_action(action_name)
         delta = after - pre_run_count
         return delta if delta > 0 else 0
-
-    def _count_output_records(self, action_name: str) -> int:
-        """Return the total number of target records the action wrote to storage.
-
-        Used to populate ``ExecutionMetrics.record_count`` so ``ActionCompleteEvent``
-        ships a real count instead of the dataclass default 0. If the storage
-        backend is unreachable or the query fails, return 0 explicitly and log —
-        do not silently swallow the error.
-        """
-        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        if storage_backend is None:
-            return 0
-        try:
-            stats = storage_backend.get_storage_stats()
-        except Exception as e:
-            logger.warning("Could not read record_count for %s: %s", action_name, e, exc_info=True)
-            return 0
-        nodes = stats.get("nodes", {}) if isinstance(stats, dict) else {}
-        raw = nodes.get(action_name, 0) or 0
-        try:
-            return int(raw)
-        except (TypeError, ValueError) as e:
-            logger.warning("Could not parse record_count for %s (got %r): %s", action_name, raw, e)
-            return 0
 
     def _handle_guard_all_filtered(
         self,
