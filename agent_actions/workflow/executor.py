@@ -97,6 +97,7 @@ class ExecutionMetrics:
     model_vendor: str | None = None
     model_name: str | None = None
     files_processed: int = 0
+    record_count: int = 0
 
 
 @dataclass
@@ -404,7 +405,10 @@ class ActionExecutor:
                 success=True,
                 output_folder=output_folder,
                 status=ActionStatus.COMPLETED,
-                metrics=ExecutionMetrics(duration=duration),
+                metrics=ExecutionMetrics(
+                    duration=duration,
+                    record_count=self._count_output_records(params.action_name),
+                ),
             )
 
         final_status = self._resolve_completion_status(params.action_name)
@@ -434,8 +438,28 @@ class ActionExecutor:
                 model_vendor=params.action_config.get("model_vendor"),
                 model_name=params.action_config.get("model_name"),
                 files_processed=0,
+                record_count=self._count_output_records(params.action_name),
             ),
         )
+
+    def _count_output_records(self, action_name: str) -> int:
+        """Return the total number of target records the action wrote to storage.
+
+        Used to populate ``ExecutionMetrics.record_count`` so ``ActionCompleteEvent``
+        ships a real count instead of the dataclass default 0. If the storage
+        backend is unreachable or the query fails, return 0 explicitly and log —
+        do not silently swallow the error.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return 0
+        try:
+            stats = storage_backend.get_storage_stats()
+        except Exception as e:
+            logger.warning("Could not read record_count for %s: %s", action_name, e, exc_info=True)
+            return 0
+        nodes = stats.get("nodes", {}) if isinstance(stats, dict) else {}
+        return int(nodes.get(action_name, 0))
 
     def _handle_guard_all_filtered(
         self,

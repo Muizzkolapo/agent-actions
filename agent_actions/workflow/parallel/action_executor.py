@@ -265,6 +265,10 @@ class ActionLevelOrchestrator:
         """Fire action complete or failed event for an execution result."""
         if result.success and result.status in COMPLETED_STATUSES:
             tokens = result.metrics.tokens if result.metrics and result.metrics.tokens else {}
+            # Explicit 0 (not the dataclass default) when the metrics object is
+            # missing or lacks record_count — avoids silently shipping 0 for
+            # actions that genuinely produced output but lost the field.
+            record_count = getattr(result.metrics, "record_count", 0) or 0 if result.metrics else 0
             fire_event(
                 ActionCompleteEvent(
                     action_name=action_name,
@@ -272,6 +276,7 @@ class ActionLevelOrchestrator:
                     total_actions=total,
                     execution_time=result.metrics.duration if result.metrics else 0.0,
                     output_path=result.output_folder or "",
+                    record_count=record_count,
                     tokens=tokens,
                     mode=run_mode,
                 )

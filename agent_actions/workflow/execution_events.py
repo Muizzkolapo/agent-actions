@@ -95,6 +95,11 @@ class WorkflowEventLogger:
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
                 tokens = params.result.tokens
+            # Explicit 0 (not the dataclass default) when the metrics object is
+            # missing or lacks record_count — avoids silently shipping 0 for
+            # actions that genuinely produced output but lost the field.
+            metrics = getattr(params.result, "metrics", None)
+            record_count = getattr(metrics, "record_count", 0) or 0 if metrics else 0
             fire_event(
                 ActionCompleteEvent(
                     action_name=params.action_name,
@@ -102,6 +107,7 @@ class WorkflowEventLogger:
                     total_actions=params.total_actions,
                     execution_time=params.duration,
                     output_path=params.result.output_folder or "",
+                    record_count=record_count,
                     tokens=tokens,
                     mode=params.run_mode,
                 )
