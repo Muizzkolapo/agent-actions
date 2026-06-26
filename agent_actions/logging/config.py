@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+
+VALID_LOG_LEVELS: frozenset[str] = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
 @dataclass
@@ -27,7 +30,9 @@ class LoggingConfig:
     """Central logging configuration."""
 
     default_level: LogLevel = "INFO"
-    module_levels: dict[str, LogLevel] = field(default_factory=dict)
+    # Keys and values both validated at apply time by ``_apply_logger_levels``
+    # — YAML can hand back non-string keys (numeric ids) and values.
+    module_levels: dict[Any, Any] = field(default_factory=dict)
     include_timestamps: bool = True
     include_source_location: bool = False
     file_handler: FileHandlerSettings = field(default_factory=FileHandlerSettings)
@@ -47,9 +52,18 @@ class LoggingConfig:
             format=file_config.get("format", "human"),
         )
 
+        raw_module_levels = logging_config.get("module_levels", {})
+        if not isinstance(raw_module_levels, dict):
+            sys.stderr.write(
+                "agent_actions: ignoring logging.module_levels "
+                f"(expected dict, got {type(raw_module_levels).__name__}: "
+                f"{raw_module_levels!r})\n"
+            )
+            raw_module_levels = {}
+
         return cls(
             default_level=cls._validate_log_level(logging_config.get("level", "INFO"), "INFO"),
-            module_levels=logging_config.get("module_levels", {}),
+            module_levels=raw_module_levels,
             include_timestamps=logging_config.get("include_timestamps", True),
             include_source_location=logging_config.get("include_source_location", False),
             file_handler=file_settings,
@@ -57,23 +71,24 @@ class LoggingConfig:
 
     @staticmethod
     def _validate_log_level(value: str, default: str) -> LogLevel:
-        """Validate and return a LogLevel, falling back to default."""
-        valid = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        """Validate and return a LogLevel; ``WARN`` is normalized to ``WARNING``."""
         upper = value.upper() if isinstance(value, str) else default
-        return cast(LogLevel, upper if upper in valid else default)
+        if upper == "WARN":
+            upper = "WARNING"
+        return cast(LogLevel, upper if upper in VALID_LOG_LEVELS else default)
 
     @classmethod
     def from_environment(cls) -> LoggingConfig:
-        """Create LoggingConfig from AGENT_ACTIONS_* environment variables."""
+        """Build LoggingConfig from AGENT_ACTIONS_* env vars; module_levels env wiring not supported."""
         debug_mode = os.environ.get("AGENT_ACTIONS_DEBUG", "0") == "1"
 
         if debug_mode:
-            level = "DEBUG"
+            level: LogLevel = "DEBUG"
             include_source = True
         else:
-            level = os.environ.get("AGENT_ACTIONS_LOG_LEVEL", "INFO").upper()
-            if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
-                level = "INFO"
+            level = cls._validate_log_level(
+                os.environ.get("AGENT_ACTIONS_LOG_LEVEL", "INFO"), "INFO"
+            )
             include_source = False
 
         log_format = os.environ.get("AGENT_ACTIONS_LOG_FORMAT", "human").lower()
@@ -88,19 +103,19 @@ class LoggingConfig:
             if log_dir:
                 file_path = str(Path(log_dir) / "agent_actions.log")
 
-        file_level = os.environ.get("AGENT_ACTIONS_FILE_LOG_LEVEL", "DEBUG").upper()
-        if file_level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
-            file_level = "DEBUG"
+        file_level = cls._validate_log_level(
+            os.environ.get("AGENT_ACTIONS_FILE_LOG_LEVEL", "DEBUG"), "DEBUG"
+        )
 
         file_settings = FileHandlerSettings(
             enabled=file_enabled,
             path=file_path,
-            level=cast(LogLevel, file_level),
+            level=file_level,
             format=cast(Literal["human", "json"], log_format),
         )
 
         return cls(
-            default_level=cast(LogLevel, level),
+            default_level=level,
             include_source_location=include_source,
             file_handler=file_settings,
         )

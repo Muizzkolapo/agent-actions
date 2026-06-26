@@ -3,16 +3,35 @@
 from __future__ import annotations
 
 import logging
+import sys
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_actions.logging.config import LoggingConfig
+from agent_actions.logging.config import VALID_LOG_LEVELS, LoggingConfig
 
 if TYPE_CHECKING:
     from agent_actions.logging.core.handlers import ContextDebugHandler
     from agent_actions.logging.core.manager import EventManager
     from agent_actions.logging.events.handlers import RunResultsCollector
+
+
+# Clamped to WARNING on init so SDK/HTTP chatter never reaches the CLI (spec 555).
+_THIRD_PARTY_NOISY_LOGGERS: tuple[str, ...] = (
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "openai",
+    "anthropic",
+    "ollama",
+    "groq",
+    "cohere",
+    "google.genai",
+    "googleapiclient",
+    "sentence_transformers",
+    "transformers",
+    "pypdf",
+)
 
 
 class LoggerFactory:
@@ -47,7 +66,7 @@ class LoggerFactory:
         if verbose or cls._config.default_level == "DEBUG":
             console_level_str = "DEBUG"
         elif quiet:
-            console_level_str = "WARN"
+            console_level_str = "WARNING"
         else:
             console_level_str = cls._config.default_level
 
@@ -81,6 +100,7 @@ class LoggerFactory:
                     manager.register(handler)
             raise
 
+        cls._apply_logger_levels(cls._config)
         cls._setup_logging_bridge()
 
         manager.initialize()
@@ -120,6 +140,7 @@ class LoggerFactory:
             "WARN": EventLevel.WARN,
             "WARNING": EventLevel.WARN,
             "ERROR": EventLevel.ERROR,
+            # EventLevel has no CRITICAL tier; fold into ERROR.
             "CRITICAL": EventLevel.ERROR,
         }
         console_level = level_map.get(console_level_str.upper(), EventLevel.INFO)
@@ -172,6 +193,39 @@ class LoggerFactory:
         )
         manager.register(run_results)
         cls._run_results_collector = run_results
+
+    @classmethod
+    def _apply_logger_levels(cls, config: LoggingConfig) -> None:
+        """Clamp third-party loggers to WARNING; apply user module_levels overrides."""
+        for name in _THIRD_PARTY_NOISY_LOGGERS:
+            logging.getLogger(name).setLevel(logging.WARNING)
+
+        for name, level in config.module_levels.items():
+            if not isinstance(name, str):
+                sys.stderr.write(
+                    f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
+                    f"keys must be str, got {type(name).__name__}\n"
+                )
+                continue
+
+            if name == cls._root_logger_name or name.startswith(cls._root_logger_name + "."):
+                sys.stderr.write(
+                    f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
+                    f"overrides on {cls._root_logger_name!r} or its children would "
+                    "break events.json; use logging.level for CLI-visible levels.\n"
+                )
+                continue
+
+            normalized = str(level).upper()
+            if normalized == "WARN":  # Python alias for WARNING.
+                normalized = "WARNING"
+            if normalized not in VALID_LOG_LEVELS:
+                sys.stderr.write(
+                    f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
+                    f"not one of {sorted(VALID_LOG_LEVELS)}\n"
+                )
+                continue
+            logging.getLogger(name).setLevel(normalized)
 
     @classmethod
     def _setup_logging_bridge(cls) -> None:
@@ -233,27 +287,6 @@ class LoggerFactory:
         return logging.getLogger(name)
 
     @classmethod
-    def set_level(cls, level: str, logger_name: str | None = None) -> None:
-        """Set log level for a logger."""
-        if not cls._initialized:
-            cls.initialize()
-
-        if logger_name:
-            if not logger_name.startswith(cls._root_logger_name):
-                logger_name = f"{cls._root_logger_name}.{logger_name}"
-            logger = logging.getLogger(logger_name)
-        else:
-            logger = logging.getLogger(cls._root_logger_name)
-
-        logger.setLevel(getattr(logging, level.upper()))
-
-    @classmethod
-    def set_debug(cls, debug: bool = True) -> None:
-        """Enable or disable debug logging globally."""
-        level = "DEBUG" if debug else "INFO"
-        cls.set_level(level)
-
-    @classmethod
     def get_config(cls) -> LoggingConfig | None:
         """Get the current logging configuration."""
         return cls._config
@@ -265,7 +298,7 @@ class LoggerFactory:
 
     @classmethod
     def reset(cls) -> None:
-        """Reset the factory state (for testing)."""
+        """Reset factory state and unset third-party logger levels (for testing)."""
         cls._initialized = False
         cls._config = None
         cls._event_manager = None
@@ -275,6 +308,9 @@ class LoggerFactory:
         root_logger.handlers.clear()
         for f in root_logger.filters[:]:
             root_logger.removeFilter(f)
+
+        for name in _THIRD_PARTY_NOISY_LOGGERS:
+            logging.getLogger(name).setLevel(logging.NOTSET)
 
         from agent_actions.logging.core.manager import EventManager
 

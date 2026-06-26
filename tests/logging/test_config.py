@@ -136,6 +136,32 @@ class TestLoggingConfigFromProjectConfig:
         assert config.file_handler.backup_count == 5
         assert config.file_handler.format == "human"
 
+    def test_module_levels_parsed_from_yaml(self):
+        """``module_levels`` mapping is parsed and preserved verbatim."""
+        project_config = {
+            "logging": {
+                "module_levels": {"httpx": "INFO", "transformers": "ERROR"},
+            }
+        }
+        config = LoggingConfig.from_project_config(project_config)
+        assert config.module_levels == {"httpx": "INFO", "transformers": "ERROR"}
+
+    def test_module_levels_non_dict_falls_back_with_stderr_warning(self, capsys):
+        """A non-dict ``module_levels`` value must not crash init AND must warn."""
+        project_config = {"logging": {"module_levels": "WARNING"}}
+        config = LoggingConfig.from_project_config(project_config)
+        assert config.module_levels == {}
+
+        err = capsys.readouterr().err
+        assert "module_levels" in err
+        assert "dict" in err
+
+    def test_module_levels_preserves_non_string_values_for_runtime_validation(self):
+        """Non-string YAML values are preserved verbatim for apply-time validation."""
+        project_config = {"logging": {"module_levels": {"httpx": True, "transformers": 20}}}
+        config = LoggingConfig.from_project_config(project_config)
+        assert config.module_levels == {"httpx": True, "transformers": 20}
+
 
 class TestLoggingConfigEdgeCases:
     """Tests for edge cases in LoggingConfig."""

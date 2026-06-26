@@ -848,8 +848,49 @@ LoggerFactory.initialize(config=config)
 ```
 
 **Fields:**
-- `default_level` (str): Default log level ("DEBUG", "INFO", "WARN", "ERROR")
+- `default_level` (str): Default log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+- `module_levels` (dict): Per-logger level overrides applied at init. Keys are
+  Python logger names (e.g. `"httpx"`, `"my_module"`), values are level
+  strings. Use this to re-enable a logger the framework clamps by default,
+  or to silence one that's still too chatty.
 - `file_handler` (FileHandlerConfig): File handler configuration
+
+#### Third-party logger suppression
+
+To keep the CLI focused on framework output, `LoggerFactory.initialize()`
+clamps a curated set of SDK / HTTP loggers to `WARNING` on every init:
+
+```
+httpx, httpcore, urllib3, openai, anthropic, ollama, groq,
+cohere, google.genai, googleapiclient, sentence_transformers,
+transformers, pypdf
+```
+
+To opt back in to verbose output from one of these — or to silence a logger
+not in the curated list — pass `module_levels` when constructing the config:
+
+```python
+from agent_actions.logging.config import LoggingConfig
+from agent_actions.logging.factory import LoggerFactory
+
+config = LoggingConfig(
+    default_level="INFO",
+    module_levels={
+        "httpx": "INFO",         # see HTTP request lines from httpx again
+        "transformers": "ERROR", # silence model-loading chatter further
+    },
+)
+LoggerFactory.initialize(config=config)
+```
+
+Overrides on `agent_actions` and any of its children are refused with a
+stderr warning — the framework root must stay at DEBUG so every event reaches
+`events.json`. Use `default_level` to set the CLI-visible level instead.
+
+> **Note:** `LoggingConfig.from_project_config()` parses `module_levels` from
+> a YAML mapping, but the CLI does not yet route project YAML through it —
+> see the manifest for the wiring status. For now, supply `module_levels`
+> programmatically.
 
 #### FileHandlerConfig
 
