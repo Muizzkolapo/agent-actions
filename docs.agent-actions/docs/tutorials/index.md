@@ -57,10 +57,12 @@ For this tutorial, you'll create a workflow under `agent_workflow/`:
 agent_workflow/
 └── product_pipeline/
     ├── agent_config/
-    │   └── product_pipeline.yml    # Workflow definition
+    │   └── product_pipeline.yml       # Workflow definition
     └── agent_io/
-        └── staging/
-            └── products.json       # Input data
+        ├── staging/
+        │   └── products.json          # Input data (the only on-disk data you write)
+        └── store/
+            └── product_pipeline.db    # SQLite database — created on first run
 ```
 
 ## 2. Define Your Schemas
@@ -177,11 +179,9 @@ default_agent_config:
 schema_path: schema
 tool_path: ["tools"]
 seed_data_path: seed_data
-
-output_storage:
-  backend: sqlite
-  db_path: ./agent_io/outputs.db
 ```
+
+Agent Actions stores all workflow outputs in `agent_io/store/<workflow>.db` automatically — no storage config is required.
 
 Use whichever provider you have an API key for. For example, with Anthropic:
 
@@ -205,10 +205,18 @@ Running workflow: product_pipeline
 ├── extract_data ✓
 └── generate_content ✓
 
-Results written to: agent_io/target/
+Results written to: agent_io/store/product_pipeline.db
 ```
 
-Check `agent_io/target/` for your results:
+Check the `target_data` table for your results:
+
+```bash
+sqlite3 agent_io/store/product_pipeline.db "
+  SELECT json_extract(r.value, '\$.content')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name = 'generate_content'
+"
+```
 
 ```json
 {
@@ -227,7 +235,7 @@ Let's walk through what Agent Actions did behind the scenes:
 
 1. **extract_data** read from `staging/`, called the LLM, and validated the output against the `product_data` schema
 2. **generate_content** received extract_data's output via `{{ extract_data.field }}` references, generated marketing content, and validated against the `marketing_content` schema
-3. Results were written to `target/`
+3. Both actions wrote their records as rows in the `target_data` table of `agent_io/store/product_pipeline.db`
 
 **What if the LLM returns invalid JSON?** If you configure reprompting on an action, Agent Actions automatically retries until the output conforms to your schema. See [Reprompting](../reference/validation/reprompting.md) to enable this.
 

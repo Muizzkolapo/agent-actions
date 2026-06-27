@@ -5,63 +5,89 @@ sidebar_position: 3
 
 # Output Format
 
-Where does your data end up after an agentic workflow runs? Action outputs are written to `agent_io/target/` as JSON files, organized by action. This structure makes it easy to inspect what each action produced and trace results back to their sources.
+> **Storage backend:** SQLite as of v0.2.6. File paths under `agent_io/target/.../data.json` in older snippets are stale; this page describes the current SQLite layout.
 
-## Directory Structure
+Where does your data end up after an agentic workflow runs? Action outputs are written to a single SQLite database per workflow at `agent_io/store/<workflow>.db`. Every action's output rows live in the `target_data` table, keyed by `action_name`. This layout makes outputs easy to query, durable across reruns, and trivially deduplicable.
+
+## Storage Layout
 
 ```
-agent_io/target/
-├── extract_facts/
-│   └── source_file.json
-├── validate_facts/
-│   └── source_file.json
-└── generate_summary/
-    └── source_file.json
+<project_dir>/
+└── agent_io/
+    ├── staging/             # Raw input files (unchanged)
+    └── store/
+        └── <workflow>.db    # SQLite database — all source, target, disposition, and trace data
 ```
 
-- Each action creates a subdirectory named after the action
-- Source filenames are preserved through the pipeline
-- All outputs are JSON arrays
+There is exactly one `.db` file per workflow. The framework creates and migrates it automatically on `agac run`.
 
-## Output Structure
+## Tables
 
-Each output file contains an array of records:
+The SQLite database carries five framework-owned tables:
+
+| Table                 | Purpose                                                                                  |
+|-----------------------|------------------------------------------------------------------------------------------|
+| `source_data`         | Staged input records, deduplicated by `(relative_path, source_guid)`                     |
+| `target_data`         | Per-action output records — one row per `(action_name, relative_path)`                   |
+| `record_disposition`  | Per-record dispositions (success/failed/exhausted/skipped) emitted by each action        |
+| `prompt_trace`        | Compiled prompt + LLM response per record per attempt (online and batch)                 |
+| `checkpoint_output`   | Mid-action checkpoint records (used for resumable batch retrieval and reprompt recovery) |
+
+Plus one bookkeeping table `workflow_metadata` for run-level key/value state.
+
+## `target_data` Schema
+
+```sql
+CREATE TABLE target_data (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_name   TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    data          TEXT NOT NULL,          -- JSON array of records
+    record_count  INTEGER,
+    created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(action_name, relative_path)
+)
+```
+
+Each row stores **all records produced by `action_name` for a given input file** (`relative_path`) as a single JSON array in the `data` column. Use `json_each(data)` to fan rows out into individual records, and `json_extract` to pull fields.
+
+## Record Structure
+
+Each element of the JSON array in `data` is a record with this shape:
 
 ```json
-[
-  {
-    "source_guid": "cbbd09ca-2503-591c-b712-4c378c101b9d",
-    "node_id": "extract_facts_354c6e1e-4925-403b-9748-52f9386bc154",
-    "target_id": "6059b048-9adc-4497-be79-fe6dd04544eb",
-    "parent_target_id": "64058522-1cc5-4fea-9372-ade1ecc64fc1",
-    "root_target_id": "e1bec28c-c709-4646-845a-2be2bbc8eab1",
-    "content": {
-      "facts": [...],
-      "count": 5
-    },
-    "lineage": [
-      "extract_facts_354c6e1e-4925-403b-9748-52f9386bc154"
-    ],
-    "metadata": {
-      "model": "gpt-4o-mini",
-      "provider": "openai"
-    }
+{
+  "source_guid": "cbbd09ca-2503-591c-b712-4c378c101b9d",
+  "node_id": "extract_facts_354c6e1e-4925-403b-9748-52f9386bc154",
+  "target_id": "6059b048-9adc-4497-be79-fe6dd04544eb",
+  "parent_target_id": "64058522-1cc5-4fea-9372-ade1ecc64fc1",
+  "root_target_id": "e1bec28c-c709-4646-845a-2be2bbc8eab1",
+  "content": {
+    "facts": [...],
+    "count": 5
+  },
+  "lineage": [
+    "extract_facts_354c6e1e-4925-403b-9748-52f9386bc154"
+  ],
+  "metadata": {
+    "model": "gpt-4o-mini",
+    "provider": "openai"
   }
-]
+}
 ```
 
 ### Fields
 
-| Field | Description |
-|-------|-------------|
-| `source_guid` | Links back to original source file |
-| `node_id` | Action that produced this output (includes run UUID) |
-| `target_id` | Unique identifier for this output record |
-| `parent_target_id` | ID of the upstream record that produced this output |
-| `root_target_id` | ID of the original source record |
-| `content` | LLM/tool output (schema-validated) |
-| `lineage` | Array tracking the processing chain |
-| `metadata` | Execution metadata (model, provider) |
+| Field                | Description                                                       |
+|----------------------|-------------------------------------------------------------------|
+| `source_guid`        | Links back to the original source row in `source_data`            |
+| `node_id`            | Action that produced this output (includes run UUID)              |
+| `target_id`          | Unique identifier for this output record                          |
+| `parent_target_id`   | ID of the upstream record that produced this output               |
+| `root_target_id`     | ID of the original source record                                  |
+| `content`            | LLM/tool output (schema-validated)                                |
+| `lineage`            | Array tracking the processing chain                               |
+| `metadata`           | Execution metadata (model, provider)                              |
 
 ### Metadata Fields
 
@@ -119,7 +145,7 @@ For tool actions, `content` contains the tool return value.
 
 ## Passthrough Fields
 
-Fields from `context_scope.passthrough` are preserved at the root level of the output:
+Fields from `context_scope.passthrough` are preserved at the root level of each record:
 
 ```yaml
 # Workflow config
@@ -140,22 +166,44 @@ context_scope:
 
 ## Reading Outputs
 
-### Single File
+### What actions ran, and how many records did each produce
 
 ```bash
-cat agent_io/target/extract_facts/document_1.json | jq .
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT action_name, relative_path, record_count
+  FROM target_data
+  ORDER BY action_name, relative_path
+"
 ```
 
-### All Outputs from Action
+### Dump every record for one action
 
 ```bash
-cat agent_io/target/extract_facts/*.json | jq -s 'add'
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT json_extract(r.value, '\$')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name = 'extract_facts'
+"
 ```
 
-### Extract Content Only
+### Extract one field across all records for an action
 
 ```bash
-jq '.[].content' agent_io/target/extract_facts/document_1.json
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT json_extract(r.value, '\$.content.headline')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name = 'extract_facts'
+"
+```
+
+### Locate the row for one source record
+
+```bash
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT t.action_name, json_extract(r.value, '\$.target_id')
+  FROM target_data t, json_each(t.data) r
+  WHERE json_extract(r.value, '\$.source_guid') = '<source_guid>'
+"
 ```
 
 ## Clean Outputs
@@ -163,10 +211,10 @@ jq '.[].content' agent_io/target/extract_facts/document_1.json
 Remove previous outputs before a fresh run:
 
 ```bash
-agac clean -a my_workflow
+agac run -a my_workflow --fresh
 ```
 
-This removes `source/` and `target/` directories. Use `--all` to also remove `staging/`.
+`--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`) without deleting the database file. Use `agac clean --all` to drop the database file entirely.
 
 ## See Also
 
@@ -174,3 +222,4 @@ This removes `source/` and `target/` directories. Use `--all` to also remove `st
 - [Data Lineage](./data-lineage.md) — Ancestry tracking for parallel branches and merges
 - [Artifacts](../execution/artifacts.md) — Run tracking and detailed output structure
 - [Context Scope](../context/context-scope.md) — Passthrough configuration
+- [Prompt Traces](./prompt-traces.md) — Compiled prompts and LLM responses per record

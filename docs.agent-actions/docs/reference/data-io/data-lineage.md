@@ -5,6 +5,8 @@ sidebar_position: 4
 
 # Data Lineage
 
+> **Storage backend:** SQLite as of v0.2.6. File paths under `agent_io/target/.../data.json` in older snippets are stale; this page uses the current SQLite layout (`agent_io/store/<workflow>.db`, table `target_data`, where each row's `data` column is a JSON array of records).
+
 How does Agent Actions track data as it flows through parallel branches, merges, and splits? The **Ancestry Chain** provides complete lineage tracking that enables complex workflow patterns like Diamond, Map-Reduce, and Ensemble voting.
 
 ## Overview
@@ -223,8 +225,16 @@ When loading historical data, Agent Actions uses this priority:
 ### Inspect Record Ancestry
 
 ```bash
-jq '.[0] | {source_guid, target_id, parent_target_id, root_target_id, lineage}' \
-  agent_io/target/merge/data.json
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT json_extract(r.value, '\$.source_guid'),
+         json_extract(r.value, '\$.target_id'),
+         json_extract(r.value, '\$.parent_target_id'),
+         json_extract(r.value, '\$.root_target_id'),
+         json_extract(r.value, '\$.lineage')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name = 'merge'
+  LIMIT 1
+"
 ```
 
 ### Verify Sibling Relationships
@@ -232,10 +242,12 @@ jq '.[0] | {source_guid, target_id, parent_target_id, root_target_id, lineage}' 
 Check that parallel branches share the same parent:
 
 ```bash
-# All three should have the same parent_target_id
-jq '.[].parent_target_id' agent_io/target/branch_a/*.json
-jq '.[].parent_target_id' agent_io/target/branch_b/*.json
-jq '.[].parent_target_id' agent_io/target/branch_c/*.json
+# All three should return the same parent_target_id
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT t.action_name, json_extract(r.value, '\$.parent_target_id')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name IN ('branch_a', 'branch_b', 'branch_c')
+"
 ```
 
 ### Trace Root Ancestry
@@ -243,7 +255,11 @@ jq '.[].parent_target_id' agent_io/target/branch_c/*.json
 For Map-Reduce, verify all chunks trace back to the same root:
 
 ```bash
-jq '.[].root_target_id' agent_io/target/process_chunk/*.json | sort -u
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT DISTINCT json_extract(r.value, '\$.root_target_id')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name = 'process_chunk'
+"
 # Should output exactly one UUID
 ```
 

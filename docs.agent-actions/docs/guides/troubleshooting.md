@@ -5,6 +5,8 @@ sidebar_position: 10
 
 # Troubleshooting
 
+> **Storage backend:** SQLite as of v0.2.6. File paths under `agent_io/target/.../data.json` in older snippets are stale; this page uses the current SQLite layout (`agent_io/store/<workflow>.db`, table `target_data`).
+
 What happens when something goes wrong in your agentic workflow? This guide helps you debug and fix common errors. Let's explore the error types, their causes, and how to resolve them.
 
 ## Error Types
@@ -347,23 +349,37 @@ Extract key information from the error message. Agent Actions provides structure
 
 ### Step 2: Find the Source Record
 
-Use `source_guid` to trace the record:
+Use `source_guid` to trace the record. Each action's output is a JSON array stored in the `data` column of the `target_data` table, keyed by `action_name`. Use `json_each(data)` to scan records and `json_extract` to filter by `source_guid`:
 
 ```bash
-# Find record in node outputs
-grep -r "37812c37-80a2-596b-8747-8f93e7a34e7f" agent_io/target/
+# Find every action that produced a record with this source_guid
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT DISTINCT t.action_name
+  FROM target_data t, json_each(t.data) r
+  WHERE json_extract(r.value, '\$.source_guid') = '37812c37-80a2-596b-8747-8f93e7a34e7f'
+"
 ```
 
 ### Step 3: Check Node Outputs
 
-Compare data at each stage:
+Compare data at each stage. Filter the JSON blob in the `data` column by `source_guid` to inspect the same record at each step:
 
 ```bash
-# Input to failing node
-cat agent_io/target/node_6_*/data.json | head -100
+# Input to failing action — fetch the matching record
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT json_extract(r.value, '\$')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name = '<failing_action>'
+    AND json_extract(r.value, '\$.source_guid') = '37812c37-80a2-596b-8747-8f93e7a34e7f'
+"
 
-# Previous node output
-cat agent_io/target/node_5_*/data.json | head -100
+# Previous action's output for the same record
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT json_extract(r.value, '\$')
+  FROM target_data t, json_each(t.data) r
+  WHERE t.action_name = '<previous_action>'
+    AND json_extract(r.value, '\$.source_guid') = '37812c37-80a2-596b-8747-8f93e7a34e7f'
+"
 ```
 
 ### Step 4: Enable Debug Mode
@@ -422,18 +438,26 @@ node_1_361c54c6-..._0        # Flattened, index 0
 node_1_361c54c6-..._1        # Flattened, index 1
 ```
 
-### Node Output Structure
+### Action Output Storage
+
+Action outputs are stored as JSON arrays in the `target_data` table of `agent_io/store/<workflow>.db`, keyed by `(action_name, relative_path)`. List what each action produced:
+
+```bash
+sqlite3 agent_io/store/<workflow>.db "
+  SELECT action_name, relative_path, record_count
+  FROM target_data
+  ORDER BY action_name, relative_path
+"
+```
+
+Typical layout for a multi-action workflow:
 
 ```
-agent_io/target/
-├── node_0_extract_raw_qa/
-│   └── data.json
-├── node_1_flatten_questions/
-│   └── data.json
-├── node_2_classify_type/
-│   └── data.json
-└── final_workflow_output/
-    └── data.json
+target_data
+├── action_name='node_0_extract_raw_qa'      relative_path='input.json'  record_count=42
+├── action_name='node_1_flatten_questions'   relative_path='input.json'  record_count=128
+├── action_name='node_2_classify_type'       relative_path='input.json'  record_count=128
+└── action_name='final_workflow_output'      relative_path='input.json'  record_count=128
 ```
 
 ## TypedDict Best Practices

@@ -5,6 +5,8 @@ sidebar_position: 6
 
 # Prompt Traces
 
+> **Storage backend:** SQLite as of v0.2.6. Traces are stored in `agent_io/store/<workflow>.db`, table `prompt_trace`.
+
 Every time an LLM action processes a record, Agent Actions captures a **prompt trace** — the compiled prompt sent to the model and the raw response received. Traces are stored in the `prompt_trace` table of your workflow's SQLite database and surfaced automatically in the Data Explorer.
 
 ## What Gets Captured
@@ -21,7 +23,12 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `response_length` | Character count of the LLM response |
 | `attempt` | Attempt number (0 = initial, 1+ = reprompt retries) |
 
-Traces are linked to records by `action_name` and `record_id` (matching `source_guid`).
+Traces are linked to records by `action_name` and `record_id`. The value used for `record_id` depends on the run path:
+
+- **Online actions** write `record_id = target_id` (the per-record identifier assigned during processing).
+- **Batch actions** write `record_id = source_guid` (the stable identifier of the originating source row).
+
+Join `prompt_trace.record_id` against `target_id` for online actions and against `source_guid` for batch actions.
 
 ## Viewing Traces in the Data Explorer
 
@@ -70,7 +77,7 @@ Traces are excluded from Table view by design — prompt text is unreadable in t
 You can query the `prompt_trace` table using SQLite:
 
 ```bash
-sqlite3 my_workflow/agent_io/outputs.db
+sqlite3 agent_io/store/<workflow>.db
 ```
 
 ```sql
@@ -80,11 +87,19 @@ SELECT DISTINCT action_name FROM prompt_trace;
 -- Count traces per action
 SELECT action_name, COUNT(*) FROM prompt_trace GROUP BY action_name;
 
--- View a specific record's trace
+-- View a specific record's trace (online action — record_id is target_id)
 SELECT compiled_prompt, response_text, model_name
 FROM prompt_trace
 WHERE action_name = 'classify_issue'
-  AND record_id = '2362b687-87c7-5534-83a1...'
+  AND record_id = '<target_id>'
+ORDER BY attempt DESC
+LIMIT 1;
+
+-- View a specific record's trace (batch action — record_id is source_guid)
+SELECT compiled_prompt, response_text, model_name
+FROM prompt_trace
+WHERE action_name = 'classify_issue'
+  AND record_id = '<source_guid>'
 ORDER BY attempt DESC
 LIMIT 1;
 
