@@ -1,6 +1,4 @@
-"""Regression assertions for VIOL-0099.
-
-The HITL approval page must:
+"""The HITL approval page must:
 
 1. Show a session-expiry countdown banner so the user can see how much
    time the workflow-thread-side timer has left.

@@ -497,9 +497,7 @@ h4.md-heading { font-size: 13.5px; }
     .app .queue, .app .inspector { display: none; }
 }
 
-/* ==========================================================================
-   VIOL-0099: session countdown banner + stale-session error
-   ========================================================================== */
+/* Session countdown banner + stale-session error banner */
 .hitl-session-banner {
     background: var(--bg-sunken, #f5f5f4);
     color: var(--fg-2, #57534e);
@@ -530,9 +528,8 @@ h4.md-heading { font-size: 13.5px; }
     </style>
 </head>
 <body>
-    <!-- VIOL-0099: session countdown — wall-clock hint, not a polling
-         primitive. The JS reads `<meta name="hitl-timeout">` at page
-         load and decrements from there. See `tests/unit/test_hitl_stale_page.py`. -->
+    <!-- Wall-clock countdown — not a polling primitive. Polling would
+         itself reset the server's idle timer, defeating the purpose. -->
     <div id="hitl-session-countdown" class="hitl-session-banner" aria-live="polite">
         Session expires in <span id="hitl-session-countdown-time">--:--</span>
     </div>
@@ -711,7 +708,6 @@ h4.md-heading { font-size: 13.5px; }
     (function() {
         'use strict';
 
-        /* ── VIOL-0099: session countdown + stale-session error helpers ── */
         function _hitlShowStaleSessionError() {
             if (document.getElementById('hitl-stale-session-error')) return;
             var el = document.createElement('div');
