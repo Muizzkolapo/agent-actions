@@ -107,6 +107,10 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
                 server.project_indexes[fallback_root] = server.index
                 logger.info("Indexed project at %s", fallback_root)
 
+    # pygls discards the return value of user-supplied initialize handlers and
+    # rebuilds capabilities from `fm.feature_options`. Trigger characters live on
+    # the `@server.feature(...)` decorators below — completion + signature help.
+    # The remaining fields here are advisory and dropped on the wire.
     return lsp.InitializeResult(
         capabilities=lsp.ServerCapabilities(
             text_document_sync=lsp.TextDocumentSyncOptions(
@@ -116,13 +120,6 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
             ),
             definition_provider=True,
             hover_provider=True,
-            completion_provider=lsp.CompletionOptions(
-                trigger_characters=["$", ":", ".", "-"],
-                resolve_provider=False,
-            ),
-            signature_help_provider=lsp.SignatureHelpOptions(
-                trigger_characters=[":"],
-            ),
             document_symbol_provider=True,
             document_highlight_provider=True,
             code_lens_provider=lsp.CodeLensOptions(resolve_provider=False),
@@ -216,7 +213,13 @@ def hover(params: lsp.HoverParams) -> lsp.Hover | None:
     )
 
 
-@server.feature(lsp.TEXT_DOCUMENT_COMPLETION)
+@server.feature(
+    lsp.TEXT_DOCUMENT_COMPLETION,
+    lsp.CompletionOptions(
+        trigger_characters=["$", ":", ".", "-"],
+        resolve_provider=False,
+    ),
+)
 def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
     """Handle completion request."""
     current_file = uri_to_path(params.text_document.uri)
@@ -528,7 +531,10 @@ def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
     return lenses
 
 
-@server.feature(lsp.TEXT_DOCUMENT_SIGNATURE_HELP)
+@server.feature(
+    lsp.TEXT_DOCUMENT_SIGNATURE_HELP,
+    lsp.SignatureHelpOptions(trigger_characters=[":"]),
+)
 def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
     """Provide signature help for guard/reprompt conditions."""
     current_file = uri_to_path(params.text_document.uri)
