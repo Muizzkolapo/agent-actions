@@ -69,9 +69,7 @@ class DataGenerator(IGenerator):
         try:
             source_content_list = source_content if isinstance(source_content, list) else []
             parent_records = [
-                r
-                for r in source_content_list
-                if isinstance(r, dict) and (r.get("lineage") or r.get("node_id"))
+                r for r in source_content_list if isinstance(r, dict) and r.get("lineage")
             ]
             context = ProcessingContext(
                 agent_config=cast(ActionConfigDict, self.agent_config),

@@ -217,6 +217,18 @@ class TestBatchContextAdapterParentRecords:
         )
         assert ctx.parent_records == []
 
+    def test_batch_adapter_rejects_record_with_node_id_but_no_lineage(self):
+        """A node_id without lineage cannot extend the chain — must not become parent_records."""
+        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
+
+        record = {"source_guid": "g", "node_id": "n_only"}  # node_id present, lineage missing
+        ctx = BatchContextAdapter.to_processing_context(
+            agent_config={"agent_type": "stage_two", "dependencies": ["stage_one"]},
+            original_row=record,
+            record_index=0,
+        )
+        assert ctx.parent_records == []
+
     def test_batch_adapter_rejects_seed_record_without_lineage(self):
         """First-stage batch: original_row is raw seed (no lineage) → parent_records empty."""
         from agent_actions.processing.batch_context_adapter import BatchContextAdapter

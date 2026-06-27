@@ -153,7 +153,7 @@ class LineageEnricher(Enricher):
     @staticmethod
     def _with_parent_fallback(item: dict, parent_index: dict[str, dict] | None) -> dict:
         """If *item* lacks lineage, look up a richer match in parent_index by source_guid."""
-        if item.get("lineage") or item.get("node_id"):
+        if item.get("lineage"):
             return item
         if parent_index is None:
             return item

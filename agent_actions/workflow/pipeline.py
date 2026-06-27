@@ -478,7 +478,7 @@ class ProcessingPipeline:
         source_data = data
 
         parent_records = (
-            [r for r in data if isinstance(r, dict) and (r.get("lineage") or r.get("node_id"))]
+            [r for r in data if isinstance(r, dict) and r.get("lineage")]
             if isinstance(data, list)
             else []
         )

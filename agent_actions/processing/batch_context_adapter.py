@@ -23,9 +23,7 @@ class BatchContextAdapter:
     ) -> ProcessingContext:
         """Build a ProcessingContext from batch-side state."""
         if parent_records is None:
-            if isinstance(original_row, dict) and (
-                original_row.get("lineage") or original_row.get("node_id")
-            ):
+            if isinstance(original_row, dict) and original_row.get("lineage"):
                 parent_records = [original_row]
             else:
                 parent_records = []
