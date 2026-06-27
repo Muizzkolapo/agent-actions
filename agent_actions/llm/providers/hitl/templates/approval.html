@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="hitl-timeout" content="{{ hitl_timeout }}">
     <title>HITL Review</title>
     <script nonce="{{ csp_nonce }}">
         (function(){
@@ -495,9 +496,43 @@ h4.md-heading { font-size: 13.5px; }
     .app { grid-template-columns: 0 1fr 0; }
     .app .queue, .app .inspector { display: none; }
 }
+
+/* Session countdown banner + stale-session error banner */
+.hitl-session-banner {
+    background: var(--bg-sunken, #f5f5f4);
+    color: var(--fg-2, #57534e);
+    border-bottom: 1px solid var(--border, #e7e5e4);
+    padding: 6px 12px;
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.4;
+}
+.hitl-session-banner.warning {
+    background: #fef2f2;
+    color: #991b1b;
+    border-bottom-color: #fecaca;
+    font-weight: 600;
+}
+#hitl-stale-session-error {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 9999;
+    background: #991b1b; color: #ffffff;
+    padding: 14px 16px;
+    text-align: center;
+    font-family: var(--font-sans, sans-serif);
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
     </style>
 </head>
 <body>
+    <!-- Wall-clock countdown — not a polling primitive. Polling would
+         itself reset the server's idle timer, defeating the purpose. -->
+    <div id="hitl-session-countdown" class="hitl-session-banner" aria-live="polite">
+        Session expires in <span id="hitl-session-countdown-time">--:--</span>
+    </div>
     <div class="app" id="app">
 
     <!-- TOP BAR -->
@@ -672,6 +707,52 @@ h4.md-heading { font-size: 13.5px; }
        ========================================================================= */
     (function() {
         'use strict';
+
+        function _hitlShowStaleSessionError() {
+            if (document.getElementById('hitl-stale-session-error')) return;
+            var el = document.createElement('div');
+            el.id = 'hitl-stale-session-error';
+            el.textContent =
+                'The HITL session has expired or the server is unreachable. ' +
+                'Re-launch with `agac run --resume` to continue.';
+            document.body.appendChild(el);
+        }
+
+        function _hitlIsConnectionRefused(err) {
+            /* Browsers reject `fetch` with TypeError('Failed to fetch') when
+               the server socket is gone. response.status === 0 covers the
+               opaque-failure path some browsers take. */
+            return !!(err && err.message && err.message.indexOf('Failed to fetch') !== -1);
+        }
+
+        (function _hitlStartCountdown() {
+            var meta = document.querySelector('meta[name="hitl-timeout"]');
+            var total = meta ? parseInt(meta.content, 10) : 0;
+            if (!total || isNaN(total)) return;
+            var banner = document.getElementById('hitl-session-countdown');
+            var span = document.getElementById('hitl-session-countdown-time');
+            if (!banner || !span) return;
+            var startedAt = Date.now();
+            var timer;
+            function tick() {
+                var elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                var remaining = total - elapsed;
+                var safe = Math.max(0, remaining);
+                var mm = String(Math.floor(safe / 60)).padStart(2, '0');
+                var ss = String(safe % 60).padStart(2, '0');
+                span.textContent = mm + ':' + ss;
+                /* Warning band when under 30s OR under 1/3 of the configured
+                   timeout (whichever is larger — protects very short timeouts). */
+                var warningAt = Math.max(30, Math.floor(total / 3));
+                if (remaining <= warningAt) banner.classList.add('warning');
+                if (remaining <= 0) {
+                    span.textContent = 'expired';
+                    clearInterval(timer);
+                }
+            }
+            tick();
+            timer = setInterval(tick, 1000);
+        })();
 
         var requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
 
@@ -1611,6 +1692,10 @@ h4.md-heading { font-size: 13.5px; }
             } catch(error) {
                 recordDecisions[currentIndex] = prev;
                 renderAll();
+                if (_hitlIsConnectionRefused(error)) {
+                    _hitlShowStaleSessionError();
+                    return;
+                }
                 alert('Error: ' + error.message);
                 return;
             } finally {
@@ -1653,6 +1738,10 @@ h4.md-heading { font-size: 13.5px; }
                     setTimeout(function() { showToast('Complete! You can close this tab.', 'g'); }, 500);
                 }, 1500);
             } catch(error) {
+                if (_hitlIsConnectionRefused(error)) {
+                    _hitlShowStaleSessionError();
+                    return;
+                }
                 alert('Error: ' + error.message);
                 btnSubmit.disabled = false;
                 btnApprove.disabled = false;
@@ -1698,6 +1787,10 @@ h4.md-heading { font-size: 13.5px; }
                 loadFieldVisPrefs();
                 renderAll();
             } catch(error) {
+                if (_hitlIsConnectionRefused(error)) {
+                    _hitlShowStaleSessionError();
+                    return;
+                }
                 recordView.innerHTML = '<div class="fields-empty">Error loading data: ' + esc(error.message) + '</div>';
             }
         }
