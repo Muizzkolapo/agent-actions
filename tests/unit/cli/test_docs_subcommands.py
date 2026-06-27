@@ -105,14 +105,10 @@ def test_bare_docs_forwards_group_options_to_serve(runner, fake_project, tmp_pat
         result = runner.invoke(docs_group, ["-o", str(output_dir), "-p", "9999"])
 
     assert result.exit_code == 0, (result.stdout, result.stderr)
-    # Build received the same -o value passed at the group level.
-    _, build_kwargs = mocked_build.call_args
-    assert build_kwargs.get(
-        "output", mocked_build.call_args.args[0] if mocked_build.call_args.args else None
-    ) == str(output_dir) or mocked_build.call_args.args[0] == str(output_dir)
-    # Serve received the same -p value.
-    _, serve_kwargs = mocked_serve.call_args
-    assert serve_kwargs.get("port") == 9999
+    # _build_catalog(output, project_root=...) — first positional is the -o value.
+    assert mocked_build.call_args.args[0] == str(output_dir)
+    # _serve_catalog(output_dir, port=..., project_root=...) — port is a kwarg.
+    assert mocked_serve.call_args.kwargs["port"] == 9999
 
 
 def test_build_help_mentions_exit_or_ci(runner):
@@ -125,13 +121,14 @@ def test_build_help_mentions_exit_or_ci(runner):
     )
 
 
-def test_serve_help_mentions_blocking(runner):
-    """`agac docs serve --help` must signal that it blocks (so users learn it)."""
+def test_serve_help_signals_blocking_and_default_port(runner):
+    """`agac docs serve --help` must surface blocking semantics + default port."""
     result = runner.invoke(docs_group, ["serve", "--help"])
     assert result.exit_code == 0
-    assert "block" in result.output.lower(), (
-        f"serve --help must mention blocking; got: {result.output!r}"
-    )
+    text = result.output.lower()
+    assert "block" in text, f"serve --help must mention blocking; got: {result.output!r}"
+    # Default port (8000) must remain visible so muscle memory survives the split.
+    assert "8000" in result.output, f"Default port (8000) missing from --help: {result.output!r}"
 
 
 def test_group_help_lists_both_subcommands(runner):
@@ -144,18 +141,44 @@ def test_group_help_lists_both_subcommands(runner):
 
 def test_build_aborts_on_no_workflows(runner, fake_project, tmp_path):
     """When the underlying generator finds nothing, build exits non-zero (Abort)."""
+    # generate_docs is the underlying scanner; resolve_project_root with a
+    # non-None Path is an idempotent pass-through, so _build_catalog reaches
+    # the generate_docs mock without needing additional patches.
     with patch.object(docs_mod, "generate_docs", return_value=False):
         result = runner.invoke(docs_group, ["build", "-o", str(tmp_path / "out")])
 
-    # click.Abort produces a non-zero exit; the user sees the "no workflows" message.
     assert result.exit_code != 0
-    assert "no workflows" in (result.stdout + result.stderr).lower()
-
-
-def test_serve_help_mentions_port_default(runner):
-    """`agac docs serve --help` shows the historical port default so users keep muscle memory."""
-    result = runner.invoke(docs_group, ["serve", "--help"])
-    assert result.exit_code == 0
-    assert "8000" in result.output, (
-        f"Default port (8000) must remain visible in --help; got: {result.output!r}"
+    # Message must land on stderr (CI stdout pipelines must not see error chatter).
+    assert "no workflows" in result.stderr.lower(), (
+        f"expected 'no workflows' on stderr; got stdout={result.stdout!r} stderr={result.stderr!r}"
     )
+
+
+def test_group_options_before_subcommand_are_rejected(runner, fake_project, tmp_path):
+    """`agac docs -o X build` must error — Click would otherwise silently drop -o."""
+    output_dir = tmp_path / "custom"
+    with (
+        patch.object(docs_mod, "_build_catalog", return_value=output_dir) as mocked_build,
+        patch.object(docs_mod, "_serve_catalog") as mocked_serve,
+    ):
+        result = runner.invoke(docs_group, ["-o", str(output_dir), "build"])
+
+    assert result.exit_code != 0, (result.stdout, result.stderr)
+    assert "must follow the subcommand" in result.stderr.lower()
+    # Neither helper should have been reached — the error is raised in the group.
+    mocked_build.assert_not_called()
+    mocked_serve.assert_not_called()
+
+
+def test_group_port_before_subcommand_is_rejected(runner, fake_project, tmp_path):
+    """Same as above for `-p`; pins the second option independently."""
+    with (
+        patch.object(docs_mod, "_build_catalog", return_value=tmp_path) as mocked_build,
+        patch.object(docs_mod, "_serve_catalog") as mocked_serve,
+    ):
+        result = runner.invoke(docs_group, ["-p", "9999", "serve"])
+
+    assert result.exit_code != 0, (result.stdout, result.stderr)
+    assert "must follow the subcommand" in result.stderr.lower()
+    mocked_build.assert_not_called()
+    mocked_serve.assert_not_called()
