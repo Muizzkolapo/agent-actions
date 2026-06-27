@@ -14,32 +14,73 @@ The screenshot below shows the documentation site homepage. You can explore your
 ## Quick Start
 
 ```bash
-# Build and serve the documentation site
-agac docs
+# Generate the catalog and serve it locally (blocks until Ctrl+C)
+agac docs serve
 
 # Open http://localhost:8000
 ```
 
+For CI, generate the catalog without binding a port:
+
+```bash
+agac docs build
+```
+
 ## CLI Commands
 
-### `agac docs`
+`agac docs` is a Click group with two subcommands. Each subcommand scans your
+project and writes the same documentation data files; they differ only in
+whether they then start an HTTP server.
 
-Scans your project, generates documentation data, and serves an interactive documentation site. Think of this as taking a snapshot of your entire project—every agentic workflow, prompt, and schema gets cataloged—then immediately launching a browsable interface.
-
-**What it scans:**
+**What gets scanned (by both `build` and `serve`):**
 - Agentic workflows in `artefact/rendered_workflows/` and `*/agent_config/`
 - Prompts in `prompt_store/*.md` files
 - Schemas in `schema/` files (`.yml`, `.yaml`, `.json`)
 
-**Output:**
-- `artefact/catalog.json` — Agentic workflow catalog
-- `artefact/runs.json` — Execution history
+**Output files (written into `--output`, default `artefact/`):**
+- `catalog.json` — Agentic workflow catalog
+- `runs.json` — Execution history (initialized empty if missing; populated by workflow runs)
+
+### `agac docs build`
+
+Generates `catalog.json` (and initializes `runs.json` if it does not exist) and
+**exits**. Suitable for CI — does not bind a port and does not block.
 
 ```bash
-agac docs
-agac docs --port 3000
-agac docs --output ./custom-artefact
+agac docs build
+agac docs build --output ./custom-artefact
 ```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output` | `artefact` | Directory to write the catalog into. |
+
+### `agac docs serve`
+
+Runs `build`, then starts a **blocking** HTTP server on `--port` so the
+generated site can be browsed locally. This command does not return until
+interrupted with Ctrl+C; do not call it from CI.
+
+```bash
+agac docs serve
+agac docs serve --port 3000
+agac docs serve --output ./custom-artefact
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output` | `artefact` | Directory to write the catalog into before serving. |
+| `-p, --port` | `8000` | HTTP port to bind. |
+
+### `agac docs` (deprecated alias)
+
+Calling `agac docs` with no subcommand prints a deprecation notice on stderr
+and delegates to `agac docs serve`. The alias will be removed in **v0.3.0**;
+migrate to the explicit subcommands at your convenience.
 
 ### `agac docs test`
 
@@ -94,11 +135,11 @@ Find resources quickly with full-text search across agentic workflows, actions, 
 
 ## Deployment
 
-The documentation site is a static HTML/CSS/JS application. After running `agac docs`, you can deploy it anywhere static files are served:
+The documentation site is a static HTML/CSS/JS application. After running `agac docs build`, you can deploy it anywhere static files are served:
 
-- **Local development** — `agac docs`
+- **Local development** — `agac docs serve`
 - **Static hosting** — Copy the docs site to any web server (S3, Netlify, etc.)
-- **CI/CD** — Generate docs as part of your pipeline
+- **CI/CD** — `agac docs build` generates the catalog without binding a port
 
 :::info
 The documentation site generates static files only. It does not require a backend server, but it also cannot show real-time execution data—you need to regenerate after runs complete.

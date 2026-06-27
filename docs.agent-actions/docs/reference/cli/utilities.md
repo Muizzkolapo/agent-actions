@@ -158,30 +158,58 @@ This removes cached batch results. If you haven't retrieved batch results yet, d
 
 ## docs
 
-Build and serve interactive documentation for your agentic workflows. The `docs` command scans your project, generates documentation data, and starts an HTTP server in one step.
+`agac docs` is a Click group that builds and (optionally) serves interactive
+documentation for your agentic workflows. Use **`build`** in CI to generate the
+catalog and exit; use **`serve`** locally to generate the catalog and then run a
+blocking HTTP server.
+
+### docs build
+
+Generate `catalog.json` (and initialize `runs.json` if missing) and exit. CI-friendly — does not bind a port.
 
 ```bash
-agac docs [options]
+agac docs build [options]
 ```
 
 **Options:**
+
 | Option | Description |
 |--------|-------------|
 | `-o, --output` | Output directory for generated files (default: `artefact`) |
-| `-p, --port` | Port to run server on (default: `8000`) |
-| `-a, --artefact` | Path to artefact directory (default: `./artefact`) |
+
+**Example:**
+```bash
+agac docs build --output ./custom-artefact
+```
+
+### docs serve
+
+Run `build`, then start a blocking HTTP server. Blocks until interrupted with Ctrl+C; not suitable for CI.
+
+```bash
+agac docs serve [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output` | Output directory for generated files (default: `artefact`) |
+| `-p, --port` | Port to bind the HTTP server on (default: `8000`) |
 
 **Examples:**
 ```bash
-# Build and serve documentation on default port
-agac docs
+# Serve on the default port
+agac docs serve
 
 # Serve on a custom port
-agac docs --port 3000
-
-# Generate to a custom directory
-agac docs --output ./custom-artefact
+agac docs serve --port 3000
 ```
+
+### docs (deprecated alias)
+
+Calling `agac docs` with no subcommand prints a deprecation notice on stderr
+and delegates to `agac docs serve`. The alias will be removed in **v0.3.0**.
 
 ### docs test
 
