@@ -323,8 +323,13 @@ class ActionExpander:
                 context_scope_defaults, context_scope_action
             )
 
-        # Initialize dependencies from action if present, else empty list
-        agent["dependencies"] = action.get("dependencies", [])
+        # Initialize dependencies from action if present, else empty list.
+        # Run them through the version template_replacer so per-iteration
+        # references like "refine_${i-1}" resolve at expansion time. Strings
+        # whose substitution yields an empty stub (e.g. ${i-1} on iteration 1)
+        # produce a value that compute_execution_levels filters out because
+        # it is not in the workflow's execution_set.
+        agent["dependencies"] = template_replacer(action.get("dependencies", []))
 
         # Process chunk configuration
         process_chunk_config(agent, action, defaults)

@@ -177,13 +177,18 @@ When observe uses wildcards (`score_quality.*`), fields are also expanded as qua
 
 ### Sequential Refinement
 
+Dependency strings use **dollar-brace substitution** (`${i}`, `${i-1}`, etc.) — Jinja2 templating is **not** evaluated against dependency strings. Earlier revisions of this page showed `{% if %}` / `{% else %}` forms; those were read as literal text and never resolved. Inside the prompt body Jinja2 *is* evaluated normally.
+
 ```yaml
 - name: refine_iteration
   versions:
     range: [1, 3]
     mode: sequential
   dependencies:
-    - "{% if i == 1 %}draft_content{% else %}refine_iteration_{{ i-1 }}{% endif %}"
+    # version 1 expands to "refine_iteration_" which is filtered out (no such
+    # action exists); versions 2 and 3 depend on refine_iteration_1 and
+    # refine_iteration_2 respectively.
+    - "refine_iteration_${i-1}"
 ```
 
 ### Parallel Model Comparison
@@ -227,10 +232,10 @@ context_scope:
 
 ## Debugging
 
-Inspect expanded version actions:
+Inspect expanded version actions. `agac inspect` requires a subcommand — `graph` prints the dependency graph with each version's expanded node IDs:
 
 ```bash
-agac inspect -a workflow_name
+agac inspect graph -a workflow_name
 ```
 
 Enable prompt debug to see rendered prompts per iteration:

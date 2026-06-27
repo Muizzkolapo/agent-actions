@@ -164,6 +164,42 @@ class TestTemplateVariableReplacement:
         assert agents[0]["prompt"] == "Iteration 1 only"
         assert agents[1]["prompt"] == "Iteration 2 only"
 
+    def test_template_var_in_dependency_string(self):
+        """Sequential refinement: ${param-1} resolves inside the dependencies list.
+
+        Regression test for VIOL-0075 — the docs example for sequential refinement
+        used Jinja2 conditional syntax inside dependency strings, which the expander
+        does not evaluate. The fix wires deps through the same template_replacer
+        already applied to prompts and schemas. Per-iteration values like
+        ``refine_iteration_${i-1}`` must now expand:
+
+        * iteration 1: empty stub (``refine_iteration_``), filtered downstream
+          because it is not an action in the workflow.
+        * iteration 2+: the previous version's expanded name.
+        """
+        config = {
+            "name": "test_workflow",
+            "description": "Test workflow",
+            "version": "1.0.0",
+            "defaults": {"model_vendor": "openai", "model_name": "gpt-4o-mini"},
+            "actions": [
+                {
+                    "name": "refine",
+                    "intent": "Sequential refinement",
+                    "api_key": "OPENAI_API_KEY",
+                    "prompt": "Refine v${i}",
+                    "dependencies": ["refine_${i-1}"],
+                    "versions": {"param": "i", "range": [1, 3], "mode": "sequential"},
+                }
+            ],
+            "plan": ["refine"],
+        }
+        result = ActionExpander.expand_actions_to_agents(config)
+        agents = result["test_workflow"]
+        assert agents[0]["dependencies"] == ["refine_"]
+        assert agents[1]["dependencies"] == ["refine_1"]
+        assert agents[2]["dependencies"] == ["refine_2"]
+
     def test_multiple_previous_refs_in_string(self):
         """Test multiple ${param-1} occurrences in the same string."""
         config = {
