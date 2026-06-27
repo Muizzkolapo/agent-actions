@@ -169,7 +169,6 @@ agac docs [options]
 |--------|-------------|
 | `-o, --output` | Output directory for generated files (default: `artefact`) |
 | `-p, --port` | Port to run server on (default: `8000`) |
-| `-a, --artefact` | Path to artefact directory (default: `./artefact`) |
 
 **Examples:**
 ```bash
