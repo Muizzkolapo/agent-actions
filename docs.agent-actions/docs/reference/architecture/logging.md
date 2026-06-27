@@ -149,7 +149,7 @@ Writes events to a JSON file in NDJSON format (one JSON object per line).
 - NDJSON format for easy streaming and parsing
 - Full event payload with metadata
 
-**Output Location:** `{workflow}/agent_io/target/events.json`
+**Output Location:** `{workflow}/agent_io/logs/events.json`
 
 **Example Entry:**
 ```json
@@ -183,7 +183,7 @@ Collects workflow execution data and outputs a `run_results.json` artifact.
 - Records output folders for each action
 - Captures error messages and skip reasons
 
-**Output Location:** `{workflow}/agent_io/target/run_results.json`
+**Output Location:** `{workflow}/agent_io/logs/run_results.json`
 
 **Output Schema:**
 ```json
@@ -392,7 +392,7 @@ def test_console_handler():
 Console verbosity can be controlled:
 
 ```bash
-# Default: INFO level, workflow/agent/batch categories
+# Default: INFO level, workflow/action/batch categories
 agac run
 
 # Verbose: DEBUG level, all categories
@@ -405,7 +405,7 @@ agac run --quiet
 ### File Handler
 
 File handler writes to:
-- `{workflow}/agent_io/target/events.json` (when output_dir is set)
+- `{workflow}/agent_io/logs/events.json` (when output_dir is set)
 - `logs/agent_actions.log` (fallback, if configured)
 
 Configure via environment or `LoggingConfig`:

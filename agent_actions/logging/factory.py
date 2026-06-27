@@ -153,7 +153,7 @@ class LoggerFactory:
         if verbose:
             categories = None
         else:
-            categories = {"workflow", "agent", "batch"}
+            categories = {"workflow", "action", "batch"}
 
         console_handler = ConsoleEventHandler(
             min_level=console_level,
