@@ -28,12 +28,16 @@ dispatch_task('handle_quiz_type')
 ## Creating a Dispatch Tool
 
 ```python
+import json
+
 from agent_actions import udf_tool
 
+
 @udf_tool
-def handle_quiz_type(input_data: dict) -> dict:
+def handle_quiz_type(input_data: str) -> dict:
     """Return appropriate authoring prompt based on quiz type."""
-    quiz_type = input_data["source"]["quiz_type"].upper()
+    context = json.loads(input_data)
+    quiz_type = context["source"]["quiz_type"].upper()
 
     prompts = {
         "UNDERSTANDING": "Generate a conceptual question...",
@@ -42,11 +46,11 @@ def handle_quiz_type(input_data: dict) -> dict:
 
     return {
         "authoring_prompt": prompts.get(quiz_type, prompts["APPLICATION"]),
-        "quiz_type_used": quiz_type
+        "quiz_type_used": quiz_type,
     }
 ```
 
-The tool receives context (source fields, seed data, upstream outputs) and the return value replaces the `dispatch_task()` call.
+The tool receives a JSON-encoded context string (source fields, seed data, upstream outputs); decode it with `json.loads()` and read fields from the resulting dict. The return value replaces the `dispatch_task()` call.
 
 ## Capturing Dispatch Results
 
