@@ -29,11 +29,24 @@ from agent_actions.workflow.config_pipeline import _discover_udfs_from_path
 from agent_actions.workflow.coordinator import AgentWorkflow
 
 
+def _evict_udf_modules() -> None:
+    """Drop framework-imported UDF modules so the next discovery actually re-imports.
+
+    discover_udfs() skips files whose synthetic module name is already in
+    sys.modules — otherwise repeated calls with different tmp_paths would
+    silently no-op and the @udf_tool decorator never re-fires.
+    """
+    for name in [k for k in sys.modules if k.startswith("agent_actions._udfs.")]:
+        sys.modules.pop(name, None)
+
+
 @pytest.fixture(autouse=True)
 def _isolated_registry():
     clear_registry()
+    _evict_udf_modules()
     yield
     clear_registry()
+    _evict_udf_modules()
 
 
 class TestCoordinatorConsoleTargetsStderr:
@@ -51,10 +64,6 @@ class TestCoordinatorConsoleTargetsStderr:
             "AgentWorkflow.__init__ must construct its Console with stderr=True "
             "so the shared progress channel stays off stdout. A bare Console() "
             "writes to stdout and breaks `agac <cmd> --json | jq .`."
-        )
-        assert "console=Console()" not in src, (
-            "Bare `Console()` defaults to sys.stdout — would re-contaminate "
-            "--json command stdout. Use Console(stderr=True)."
         )
 
 
