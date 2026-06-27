@@ -22,8 +22,6 @@ def _build_catalog(output: str, project_root: Path | None = None) -> Path:
     output directory. Raises ``click.Abort`` if no workflows are discovered.
     """
     project_path = resolve_project_root(project_root)
-    # Path joining with an absolute right-hand side returns the right-hand
-    # side, so this one expression covers both relative and absolute -o.
     output_dir = (project_path / Path(output)).resolve()
 
     success = generate_docs(str(project_path), output_dir)
@@ -86,12 +84,9 @@ def docs(ctx: click.Context, output: str, port: int) -> None:
         agac docs serve --port 3000
     """
     if ctx.invoked_subcommand is not None:
-        # The group declares --output/--port only so the deprecated bare
-        # `agac docs` invocation can keep accepting the legacy flag positions.
-        # Click consumes them silently before the subcommand runs, so
-        # `agac docs -o X build` would otherwise write to build's default
-        # `artefact/` and drop X without warning. Refuse the ambiguous form
-        # and point the user at the correct subcommand-level invocation.
+        # Group --output/--port exist only for the deprecated bare alias;
+        # Click consumes them before the subcommand runs, so they would
+        # silently override nothing. Reject the ambiguous form.
         for name in ("output", "port"):
             if ctx.get_parameter_source(name) != click.core.ParameterSource.DEFAULT:
                 raise click.UsageError(
