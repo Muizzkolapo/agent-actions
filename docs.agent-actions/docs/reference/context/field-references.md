@@ -46,11 +46,11 @@ Action names cannot use reserved namespaces. The following names are disallowed:
 
 - `action`
 - `context_scope`
-- `versions`
 - `prompt`
 - `schema`
 - `seed`
 - `source`
+- `version`
 - `workflow`
 
 ### Nested Field Access
