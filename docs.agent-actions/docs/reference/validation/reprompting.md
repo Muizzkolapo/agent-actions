@@ -49,6 +49,8 @@ defaults:
 | `max_attempts` | integer | 2 | Maximum retry attempts |
 | `on_exhausted` | string | `return_last` | Behavior when attempts exhausted |
 | `use_self_reflection` | boolean | `false` | Include self-reflection instruction in retry prompts |
+| `use_llm_critique` | boolean | `false` | Enable LLM critique for stubborn validation failures. When `true`, after a failed attempt the previous response is fed to a critique LLM, whose feedback is injected into the next reprompt. |
+| `critique_after_attempt` | integer | 2 | Attempt at which critique starts firing (1-10). Default `2` means critique runs after the second failed attempt onward. Has no effect unless `use_llm_critique: true`. |
 
 ### Custom Validation Functions
 
