@@ -419,8 +419,9 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         )
         src_text = []
 
-    elif ctx.file_type == ".csv":
-        # CSV: let TabularLoader read the file itself (FileReader returns list[list], not str)
+    elif ctx.file_type in (".csv", ".tsv"):
+        # Tabular: let TabularLoader read the file itself (FileReader returns list[list], not str).
+        # TabularLoader handles both comma- and tab-separated by routing on extension.
         rows = tabular_loader.process(content=None, file_path=ctx.file_path)
         data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
         src_text = []
@@ -448,7 +449,18 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         src_text = []
 
     else:
-        supported = [".txt", ".md", ".pdf", ".docx", ".html", ".json", ".csv", ".xlsx", ".xml"]
+        supported = [
+            ".txt",
+            ".md",
+            ".pdf",
+            ".docx",
+            ".html",
+            ".json",
+            ".csv",
+            ".tsv",
+            ".xlsx",
+            ".xml",
+        ]
         raise AgentActionsError(
             "Unsupported file type in staging loader",
             context={
@@ -522,7 +534,9 @@ def _prepare_online_data(ctx: DataPreparationContext):
             else:
                 src_text.append(item)
 
-    elif ctx.file_type == ".csv":
+    elif ctx.file_type in (".csv", ".tsv"):
+        # TabularLoader routes on extension and handles tab-separated files
+        # via csv.reader(..., delimiter="\t").
         data_chunk = tabular_loader.process(content=None, file_path=ctx.file_path)
         src_text = data_chunk
 
@@ -535,7 +549,18 @@ def _prepare_online_data(ctx: DataPreparationContext):
         src_text = data_chunk
 
     else:
-        supported = [".txt", ".md", ".pdf", ".docx", ".html", ".json", ".csv", ".xlsx", ".xml"]
+        supported = [
+            ".txt",
+            ".md",
+            ".pdf",
+            ".docx",
+            ".html",
+            ".json",
+            ".csv",
+            ".tsv",
+            ".xlsx",
+            ".xml",
+        ]
         raise AgentActionsError(
             "Unsupported file type in staging loader",
             context={
