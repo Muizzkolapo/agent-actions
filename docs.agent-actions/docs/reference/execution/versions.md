@@ -177,7 +177,7 @@ When observe uses wildcards (`score_quality.*`), fields are also expanded as qua
 
 ### Sequential Refinement
 
-Dependency strings use **dollar-brace substitution** (`${i}`, `${i-1}`, etc.) — Jinja2 templating is **not** evaluated against dependency strings. Earlier revisions of this page showed `{% if %}` / `{% else %}` forms; those were read as literal text and never resolved. Inside the prompt body Jinja2 *is* evaluated normally.
+Dependency strings support **dollar-brace substitution** (`${i}`, `${i-1}`, etc.). Inside the prompt body, Jinja2 is also evaluated as usual — but dependency strings themselves are dollar-brace only.
 
 ```yaml
 - name: refine_iteration
@@ -185,9 +185,8 @@ Dependency strings use **dollar-brace substitution** (`${i}`, `${i-1}`, etc.) �
     range: [1, 3]
     mode: sequential
   dependencies:
-    # version 1 expands to "refine_iteration_" which is filtered out (no such
-    # action exists); versions 2 and 3 depend on refine_iteration_1 and
-    # refine_iteration_2 respectively.
+    # Version 1 has no predecessor; the framework drops the empty stub.
+    # Versions 2 and 3 depend on refine_iteration_1 and refine_iteration_2.
     - "refine_iteration_${i-1}"
 ```
 
@@ -232,7 +231,7 @@ context_scope:
 
 ## Debugging
 
-Inspect expanded version actions. `agac inspect` requires a subcommand — `graph` prints the dependency graph with each version's expanded node IDs:
+Inspect expanded version actions. `agac inspect graph` prints the dependency graph with each version's expanded node IDs:
 
 ```bash
 agac inspect graph -a workflow_name
