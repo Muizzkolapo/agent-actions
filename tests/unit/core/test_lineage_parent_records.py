@@ -172,8 +172,8 @@ class TestParentRecordsLineagePropagation:
 class TestBatchContextAdapterParentRecords:
     """Batch path populates parent_records symmetrically with the online path."""
 
-    def test_batch_adapter_defaults_parent_records_to_original_row(self):
-        """When no parent_records passed, adapter defaults to [original_row]."""
+    def test_batch_adapter_defaults_parent_records_to_empty(self):
+        """No explicit parent_records → empty; batch relies on current_item for parent lookup."""
         from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 
         original_row = {
@@ -186,7 +186,7 @@ class TestBatchContextAdapterParentRecords:
             original_row=original_row,
             record_index=0,
         )
-        assert ctx.parent_records == [original_row]
+        assert ctx.parent_records == []
         assert ctx.current_item is original_row
 
     def test_batch_adapter_accepts_explicit_parent_records(self):
@@ -217,30 +217,17 @@ class TestBatchContextAdapterParentRecords:
         )
         assert ctx.parent_records == []
 
-    def test_batch_adapter_rejects_record_with_node_id_but_no_lineage(self):
-        """A node_id without lineage cannot extend the chain — must not become parent_records."""
+    def test_batch_adapter_seed_record_keeps_current_item_but_no_parents(self):
+        """Raw seed input still flows through as current_item; parent_records stays empty."""
         from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 
-        record = {"source_guid": "g", "node_id": "n_only"}  # node_id present, lineage missing
-        ctx = BatchContextAdapter.to_processing_context(
-            agent_config={"agent_type": "stage_two", "dependencies": ["stage_one"]},
-            original_row=record,
-            record_index=0,
-        )
-        assert ctx.parent_records == []
-
-    def test_batch_adapter_rejects_seed_record_without_lineage(self):
-        """First-stage batch: original_row is raw seed (no lineage) → parent_records empty."""
-        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
-
-        seed = {"source_guid": "seed_1", "page_content": "raw text"}  # no lineage / node_id
+        seed = {"source_guid": "seed_1", "page_content": "raw text"}
         ctx = BatchContextAdapter.to_processing_context(
             agent_config={"agent_type": "stage_one"},
             original_row=seed,
             record_index=0,
         )
         assert ctx.parent_records == []
-        # current_item is still set so the enricher can use it if appropriate
         assert ctx.current_item is seed
 
 

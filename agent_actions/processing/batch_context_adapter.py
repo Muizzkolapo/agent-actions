@@ -21,12 +21,13 @@ class BatchContextAdapter:
         output_directory: str | None = None,
         parent_records: list[dict[str, Any]] | None = None,
     ) -> ProcessingContext:
-        """Build a ProcessingContext from batch-side state."""
+        """Build a ProcessingContext from batch-side state.
+
+        ``current_item=original_row`` already serves as the parent for batch
+        lookups, so ``parent_records`` defaults to ``[]`` here.
+        """
         if parent_records is None:
-            if isinstance(original_row, dict) and original_row.get("lineage"):
-                parent_records = [original_row]
-            else:
-                parent_records = []
+            parent_records = []
         return ProcessingContext(
             agent_config=cast(ActionConfigDict, agent_config),
             agent_name=agent_config.get("agent_type", "unknown_action"),

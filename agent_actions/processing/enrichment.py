@@ -41,21 +41,8 @@ class LineageEnricher(Enricher):
 
         use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
 
-        source_index: dict[str, dict] | None = None
-        if context.source_data:
-            source_index = {
-                sg: item
-                for item in context.source_data
-                if (sg := item.get("source_guid")) is not None
-            }
-
-        parent_index: dict[str, dict] | None = None
-        if context.parent_records:
-            parent_index = {
-                sg: item
-                for item in context.parent_records
-                if (sg := item.get("source_guid")) is not None
-            }
+        source_index = self._index_by_source_guid(context.source_data)
+        parent_index = self._index_by_source_guid(context.parent_records)
 
         parent_item = None
         if not use_per_item_parent_lookup:
@@ -151,9 +138,20 @@ class LineageEnricher(Enricher):
         return result
 
     @staticmethod
+    def _index_by_source_guid(
+        records: list[dict[str, Any]] | None,
+    ) -> dict[str, dict] | None:
+        """Build a {source_guid: record} dict, or None when *records* is empty."""
+        if not records:
+            return None
+        return {sg: r for r in records if (sg := r.get("source_guid")) is not None}
+
+    @staticmethod
     def _with_parent_fallback(item: dict, parent_index: dict[str, dict] | None) -> dict:
         """If *item* lacks lineage, look up a richer match in parent_index by source_guid."""
-        if item.get("lineage"):
+        from agent_actions.utils.lineage import LineageBuilder
+
+        if LineageBuilder.is_lineage_bearing(item):
             return item
         if parent_index is None:
             return item
@@ -187,26 +185,19 @@ class LineageEnricher(Enricher):
             if current_guid is None or current_guid == source_guid:
                 return context.current_item
 
+        if parent_index is None:
+            parent_index = self._index_by_source_guid(context.parent_records)
         if parent_index is not None:
             hit = parent_index.get(source_guid)
             if hit is not None:
                 return hit
-        elif context.parent_records:
-            for parent in context.parent_records:
-                if parent.get("source_guid") == source_guid:
-                    return parent
 
         if not context.source_data:
             return None
 
-        if source_index is not None:
-            return source_index.get(source_guid)
-
-        for source_item in context.source_data:
-            if source_item.get("source_guid") == source_guid:
-                return source_item
-
-        return None
+        if source_index is None:
+            source_index = self._index_by_source_guid(context.source_data)
+        return source_index.get(source_guid) if source_index else None
 
 
 class MetadataEnricher(Enricher):

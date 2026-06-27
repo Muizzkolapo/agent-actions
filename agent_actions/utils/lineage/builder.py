@@ -19,6 +19,17 @@ class LineageBuilder:
     """Builds and tracks lineage chains for data processing."""
 
     @staticmethod
+    def is_lineage_bearing(record: Any) -> bool:
+        """True when *record* carries a lineage chain that can extend a child's ancestry.
+
+        Matches the contract that ``add_unified_lineage`` and ``build_lineage``
+        enforce: a parent must have a ``lineage`` key to be useful. A record
+        with only ``node_id`` will fall through to self-only lineage in the
+        builder and so must not be treated as a parent_records candidate.
+        """
+        return isinstance(record, dict) and bool(record.get("lineage"))
+
+    @staticmethod
     def _propagate_ancestry_chain(obj: dict, parent_item: dict) -> None:
         """Propagate parent_target_id, root_target_id, and source_guid from parent to *obj* in place."""
         if "target_id" in parent_item:

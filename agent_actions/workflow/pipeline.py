@@ -477,8 +477,10 @@ class ProcessingPipeline:
         # data IS the source — there's no staging data in this workflow for them.
         source_data = data
 
+        from agent_actions.utils.lineage import LineageBuilder
+
         parent_records = (
-            [r for r in data if isinstance(r, dict) and r.get("lineage")]
+            [r for r in data if LineageBuilder.is_lineage_bearing(r)]
             if isinstance(data, list)
             else []
         )

@@ -67,9 +67,11 @@ class DataGenerator(IGenerator):
             GenerationError: If agent creation or data generation fails.
         """
         try:
+            from agent_actions.utils.lineage import LineageBuilder
+
             source_content_list = source_content if isinstance(source_content, list) else []
             parent_records = [
-                r for r in source_content_list if isinstance(r, dict) and r.get("lineage")
+                r for r in source_content_list if LineageBuilder.is_lineage_bearing(r)
             ]
             context = ProcessingContext(
                 agent_config=cast(ActionConfigDict, self.agent_config),
