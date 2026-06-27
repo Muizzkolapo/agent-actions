@@ -27,23 +27,23 @@ def client(server):
 
 
 class TestCSRFToken:
-    def test_post_without_token_returns_403(self, client):
+    def test_post_without_token_returns_401(self, client):
         resp = client.post(
             "/api/approve",
             data=json.dumps({}),
             content_type="application/json",
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 401
         assert b"session token" in resp.data.lower()
 
-    def test_post_with_wrong_token_returns_403(self, client):
+    def test_post_with_wrong_token_returns_401(self, client):
         resp = client.post(
             "/api/approve",
             data=json.dumps({}),
             content_type="application/json",
             headers={"X-HITL-Token": "wrong-token-value"},
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
     def test_post_with_correct_token_succeeds(self, client, server):
         resp = client.post(
@@ -74,9 +74,10 @@ class TestCSRFToken:
         )
         assert resp.status_code == 200
 
-    def test_get_endpoints_do_not_require_token(self, client):
+    def test_get_endpoints_require_token(self, client):
+        """GET endpoints reject anonymous requests."""
         resp = client.get("/api/review-state")
-        assert resp.status_code == 200
+        assert resp.status_code == 401
 
 
 # ── Context Redaction (SEC-05) ──────────────────────────────────────────
@@ -141,7 +142,7 @@ class TestContextRedaction:
         assert _sanitize_context(None) is None
 
     def test_context_endpoint_redacts_sensitive_data(self, client, server):
-        resp = client.get("/api/context")
+        resp = client.get("/api/context", headers={"X-HITL-Token": server._session_token})
         assert resp.status_code == 200
         body = resp.get_json()
         data = body["data"]
@@ -153,19 +154,26 @@ class TestContextRedaction:
 
 
 class TestCSPNonce:
-    def test_index_page_has_csp_nonce_header(self, client):
-        resp = client.get("/")
+    def test_index_page_has_csp_nonce_header(self, client, server):
+        resp = client.get(f"/?bootstrap={server._session_token}")
         assert resp.status_code == 200
         csp = resp.headers.get("Content-Security-Policy", "")
         assert "nonce-" in csp
         assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
 
-    def test_index_page_contains_nonce_attribute(self, client):
-        resp = client.get("/")
+    def test_index_page_contains_nonce_attribute(self, client, server):
+        resp = client.get(f"/?bootstrap={server._session_token}")
         html = resp.data.decode()
         assert 'nonce="' in html
 
-    def test_index_page_contains_hitl_token(self, client, server):
-        resp = client.get("/")
+    def test_index_page_does_not_embed_hitl_token(self, client, server):
+        """The session token MUST NOT appear in the rendered HTML.
+
+        The browser reads it from the bootstrap query parameter and strips it
+        from the address bar via ``history.replaceState`` before any further
+        request runs. Server-rendered HTML would re-leak the token via
+        view-source / screen-share / browser history.
+        """
+        resp = client.get(f"/?bootstrap={server._session_token}")
         html = resp.data.decode()
-        assert server._session_token in html
+        assert server._session_token not in html
