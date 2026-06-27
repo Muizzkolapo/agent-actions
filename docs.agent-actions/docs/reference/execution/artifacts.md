@@ -13,6 +13,7 @@ Agent Actions generates artifacts for debugging, auditing, and resuming interrup
 project/
 ├── artefact/
 │   ├── catalog.json                    # Project catalog (agac docs)
+│   ├── runs.json                       # Workflow execution history (agac run + agac docs)
 │   └── rendered_workflows/             # Compiled workflow configs (agac render)
 ├── logs/
 │   └── agent_actions.log              # Application logs
@@ -22,12 +23,14 @@ project/
             ├── .agent_status.json      # Per-action execution state
             ├── staging/                # Input data
             ├── source/                 # Source metadata tracking
+            ├── store/
+            │   └── {workflow_name}.db  # SQLite storage backend
+            ├── logs/
+            │   ├── .manifest.json      # Workflow execution manifest
+            │   ├── run_results.json    # Summary metrics and timing
+            │   ├── events.json         # Full event telemetry (JSON Lines)
+            │   └── errors.json         # Error-level events only (JSON Lines)
             └── target/
-                ├── .manifest.json      # Workflow execution manifest
-                ├── run_results.json    # Summary metrics and timing
-                ├── events.json         # Full event telemetry (JSON Lines)
-                ├── errors.json         # Error-level events only (JSON Lines)
-                ├── outputs.db          # SQLite storage backend
                 └── {action_name}/      # Per-action output directories
 ```
 
@@ -35,7 +38,7 @@ project/
 
 ### Workflow Manifest (`.manifest.json`)
 
-**Path:** `agent_io/target/.manifest.json`
+**Path:** `agent_io/logs/.manifest.json`
 
 The manifest tracks the execution plan and status for the entire workflow run. Created when the workflow starts, updated as actions complete.
 
@@ -91,7 +94,7 @@ Re-running a workflow skips completed actions and resumes from the failure point
 
 ### Run Results (`run_results.json`)
 
-**Path:** `agent_io/target/run_results.json`
+**Path:** `agent_io/logs/run_results.json`
 
 Summary of the workflow execution with per-action metrics:
 
@@ -118,9 +121,50 @@ Summary of the workflow execution with per-action metrics:
 }
 ```
 
+### Run History (`runs.json`)
+
+**Path:** `artefact/runs.json`
+
+`runs.json` is the cumulative catalog of past workflow executions surfaced by the documentation site. Every `agac run` writes to it twice via `RunTracker`:
+
+- At start — a new execution entry is appended with `status: "running"`, `started_at`, and the action plan.
+- At end — the entry is updated with the final `status` (`success` / `failed` / `paused`), `ended_at`, `duration_seconds`, and any `error_message`. Aggregate workflow metrics (`success_rate`, `avg_duration_seconds`) are recomputed in the same write.
+
+`agac docs` reads `runs.json` to render the Run History view in the documentation site; if the file is missing when `agac docs` runs, an empty catalog is initialized so the page renders even before the first run completes.
+
+```json
+{
+  "metadata": {"generated_at": "2026-03-24T10:00:00Z", "total_runs": 12},
+  "executions": [
+    {
+      "id": "run_product_pipeline_a1b2c3d4",
+      "workflow_id": "product_pipeline",
+      "workflow_name": "product_pipeline",
+      "status": "success",
+      "started_at": "2026-03-24T10:00:00Z",
+      "ended_at": "2026-03-24T10:02:30Z",
+      "duration_seconds": 150.0,
+      "actions_completed": 5,
+      "actions_total": 5
+    }
+  ],
+  "workflow_metrics": {
+    "product_pipeline": {
+      "total_runs": 8,
+      "successful_runs": 7,
+      "failed_runs": 1,
+      "success_rate": 0.875,
+      "avg_duration_seconds": 142.3
+    }
+  }
+}
+```
+
+The most recent 100 executions are kept; older entries roll off as new runs land. The authoritative per-run summary is still `agent_io/logs/run_results.json` — that file captures the full per-action breakdown for the single run that produced it.
+
 ### Events Log (`events.json`)
 
-**Path:** `agent_io/target/events.json`
+**Path:** `agent_io/logs/events.json`
 
 Complete telemetry of all system events in JSON Lines format (one event per line):
 
@@ -161,7 +205,7 @@ Both `events.json` and `errors.json` accumulate across runs by default. When `--
 
 ### Errors Log (`errors.json`)
 
-**Path:** `agent_io/target/errors.json`
+**Path:** `agent_io/logs/errors.json`
 
 ERROR-level events only — a filtered subset of `events.json` for quick error diagnosis:
 
@@ -180,7 +224,7 @@ When debugging, check `errors.json` first for a quick overview, then dive into `
 
 ## Storage Backend (SQLite)
 
-**Path:** Configured via `output_storage.db_path` in `agent_actions.yml` (default: `./agent_io/outputs.db`)
+**Path:** `agent_io/store/{workflow_name}.db` (one database per workflow)
 
 The SQLite database stores structured workflow data:
 
@@ -206,7 +250,7 @@ The `failed` and `exhausted` dispositions also store an `input_snapshot` column 
 ### Querying the Database
 
 ```bash
-sqlite3 agent_io/outputs.db
+sqlite3 agent_io/store/my_workflow.db
 
 -- List all actions with output
 SELECT DISTINCT action_name FROM target_data;
@@ -283,13 +327,13 @@ Log file location: `{project_root}/logs/agent_actions.log`
 
 ```bash
 # Inspect run results
-cat agent_io/target/run_results.json | python3 -m json.tool
+cat agent_io/logs/run_results.json | python3 -m json.tool
 
 # Check for errors
-cat agent_io/target/errors.json
+cat agent_io/logs/errors.json
 
 # Count events by type
-cat agent_io/target/events.json | python3 -c "
+cat agent_io/logs/events.json | python3 -c "
 import sys, json, collections
 counts = collections.Counter()
 for line in sys.stdin:
