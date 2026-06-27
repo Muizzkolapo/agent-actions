@@ -7,12 +7,14 @@ sidebar_position: 6
 
 Retry handles transient errors (rate limits, network issues, server errors) automatically with exponential backoff.
 
+Retry is **enabled by default** (`enabled: true`). The `retry:` block is optional — omitting it leaves retry on with the framework's default attempt count (`3`) and `return_last` exhaustion behavior. To opt out, set `enabled: false` explicitly.
+
 ## Configuration
 
 ```yaml
 defaults:
   retry:
-    enabled: true
+    enabled: true        # default — shown for clarity, can be omitted
     max_attempts: 3
     on_exhausted: return_last
 
@@ -21,13 +23,17 @@ actions:
     retry:
       max_attempts: 5
       on_exhausted: raise
+
+  - name: noisy_endpoint
+    retry:
+      enabled: false     # explicit opt-out; default is true
 ```
 
 ### Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enabled` | bool | `true` | Enable/disable retry |
+| `enabled` | bool | `true` | Retry is on by default. Set `enabled: false` to opt out. Other fields below take effect only when `enabled` is `true`. |
 | `max_attempts` | int | `3` | Maximum attempts (1-10) |
 | `on_exhausted` | string | `return_last` | Behavior when retries exhausted |
 
