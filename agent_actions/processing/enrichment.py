@@ -49,9 +49,19 @@ class LineageEnricher(Enricher):
                 if (sg := item.get("source_guid")) is not None
             }
 
+        parent_index: dict[str, dict] | None = None
+        if context.parent_records:
+            parent_index = {
+                sg: item
+                for item in context.parent_records
+                if (sg := item.get("source_guid")) is not None
+            }
+
         parent_item = None
         if not use_per_item_parent_lookup:
-            parent_item = self._get_parent_item(result.source_guid, context, source_index)
+            parent_item = self._get_parent_item(
+                result.source_guid, context, source_index, parent_index
+            )
 
         source_data_len = len(context.source_data) if context.source_data else 0
 
@@ -80,7 +90,6 @@ class LineageEnricher(Enricher):
                 and context.source_data is not None
                 and i in result.source_mapping
             ):
-                # Index-based lookup — resolve parent by source_mapping
                 source_idx = result.source_mapping[i]
                 if isinstance(source_idx, list):
                     # Many-to-one: multiple input records merged into one output
@@ -123,7 +132,9 @@ class LineageEnricher(Enricher):
                         parent_item = None
             elif use_per_item_parent_lookup:
                 item_source_guid = item.get("source_guid")
-                parent_item = self._get_parent_item(item_source_guid, context, source_index)
+                parent_item = self._get_parent_item(
+                    item_source_guid, context, source_index, parent_index
+                )
 
             result.data[i] = LineageBuilder.add_unified_lineage(
                 obj=item,
@@ -139,14 +150,16 @@ class LineageEnricher(Enricher):
         source_guid: str | None,
         context: ProcessingContext,
         source_index: dict[str, dict] | None = None,
+        parent_index: dict[str, dict] | None = None,
     ) -> dict | None:
         """Look up parent item for lineage chaining; returns None for first-stage.
 
-        Prefers ``context.parent_records`` (previous-stage output, carries
-        lineage) over ``context.source_data`` (raw seed records, no lineage).
-        VIOL-0016: source_data lookup returned raw seed records, causing
-        ``add_unified_lineage`` to fall through to ``[node_id]`` because
-        ``"lineage" not in parent_item``.
+        Precedence (highest first):
+        1. ``context.current_item`` — explicit parent set by the strategy.
+        2. ``context.parent_records`` (or ``parent_index`` for O(1) lookup) —
+           previous-stage output that carries lineage.
+        3. ``context.source_data`` (or ``source_index`` for O(1) lookup) —
+           fallback when source_data is itself lineage-bearing.
         """
         if context.is_first_stage or not source_guid:
             return None
@@ -154,7 +167,11 @@ class LineageEnricher(Enricher):
         if context.current_item:
             return context.current_item
 
-        if context.parent_records:
+        if parent_index is not None:
+            hit = parent_index.get(source_guid)
+            if hit is not None:
+                return hit
+        elif context.parent_records:
             for parent in context.parent_records:
                 if parent.get("source_guid") == source_guid:
                     return parent

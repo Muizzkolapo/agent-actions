@@ -1,14 +1,4 @@
-"""Regression test for VIOL-0016: downstream lineage must extend the chain.
-
-The bug: `pipeline.py` overwrote `context.source_data` with raw seed records
-from storage (no `lineage`/`node_id`), then `LineageEnricher` used those as
-parent_item. `LineageBuilder.add_unified_lineage` fell through to
-``obj["lineage"] = [node_id]`` because ``"lineage" not in parent_item``.
-
-The fix: ``ProcessingContext.parent_records`` carries the previous-stage
-output (with lineage). ``LineageEnricher._get_parent_item`` prefers it over
-``source_data``.
-"""
+"""LineageEnricher must extend downstream chains via parent_records."""
 
 from __future__ import annotations
 
@@ -106,25 +96,24 @@ class TestParentRecordsLineagePropagation:
         assert enriched_item["lineage"][0] == parent_node_id
 
     def test_falls_back_to_source_data_when_parent_records_empty(self):
-        """No parent_records → fall back to source_data behavior (legacy path)."""
-        # Source data with full lineage (simulating FILE-mode unified.py:113 path).
-        legacy_parent_node_id = "stage_one_legacy"
+        """No parent_records → look up parent in source_data (FILE-mode path)."""
+        parent_node_id = "stage_one_file_mode"
         source_data_with_lineage = [
             {
-                "source_guid": "guid_legacy",
-                "node_id": legacy_parent_node_id,
-                "lineage": [legacy_parent_node_id],
+                "source_guid": "guid_fm",
+                "node_id": parent_node_id,
+                "lineage": [parent_node_id],
             }
         ]
-        item = {"source_guid": "guid_legacy", "content": {"stage_two": {"y": 2}}}
-        result = ProcessingResult.success(data=[item], source_guid="guid_legacy")
+        item = {"source_guid": "guid_fm", "content": {"stage_two": {"y": 2}}}
+        result = ProcessingResult.success(data=[item], source_guid="guid_fm")
 
         context = _make_context(parent_records=[], source_data=source_data_with_lineage)
         enriched = LineageEnricher().enrich(result, context)
 
         enriched_item = enriched.data[0]
         assert len(enriched_item["lineage"]) == 2
-        assert enriched_item["lineage"][0] == legacy_parent_node_id
+        assert enriched_item["lineage"][0] == parent_node_id
 
     def test_raw_seed_only_produces_self_lineage(self):
         """Sanity: with neither parent_records nor lineage-bearing source_data, lineage is self-only.
@@ -163,3 +152,87 @@ class TestParentRecordsLineagePropagation:
 
         enriched_item = enriched.data[0]
         assert enriched_item["lineage"] == [enriched_item["node_id"]]
+
+    def test_parent_index_o1_lookup(self):
+        """Per-item lookup uses an O(1) parent_index, not a linear scan.
+
+        With 1000 parents, repeated lookups must complete in well under
+        a second. A linear scan would be O(N*M) and become observable.
+        """
+        import time
+
+        N = 1000
+        parents = [
+            {
+                "source_guid": f"guid_{i}",
+                "node_id": f"stage_one_{i}",
+                "lineage": [f"stage_one_{i}"],
+            }
+            for i in range(N)
+        ]
+        # 100 outputs, each mapped to a different parent via per-item source_guid
+        items = [{"source_guid": f"guid_{i}", "content": {"stage_two": {}}} for i in range(100)]
+        result = ProcessingResult.success(
+            data=items,
+            source_guid=None,  # forces per-item parent lookup
+        )
+
+        context = _make_context(parent_records=parents)
+        start = time.perf_counter()
+        enriched = LineageEnricher().enrich(result, context)
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 0.5, f"Parent lookup took {elapsed:.3f}s — index may not be in use"
+        for i, item in enumerate(enriched.data):
+            assert item["lineage"][0] == f"stage_one_{i}", (
+                f"Item {i} lineage didn't extend correct parent: {item['lineage']}"
+            )
+
+
+class TestBatchContextAdapterParentRecords:
+    """Batch path populates parent_records symmetrically with the online path."""
+
+    def test_batch_adapter_defaults_parent_records_to_original_row(self):
+        """When no parent_records passed, adapter defaults to [original_row]."""
+        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
+
+        original_row = {
+            "source_guid": "guid_b",
+            "node_id": "stage_one_b",
+            "lineage": ["stage_one_b"],
+        }
+        ctx = BatchContextAdapter.to_processing_context(
+            agent_config={"agent_type": "stage_two", "dependencies": ["stage_one"]},
+            original_row=original_row,
+            record_index=0,
+        )
+        assert ctx.parent_records == [original_row]
+        assert ctx.current_item is original_row
+
+    def test_batch_adapter_accepts_explicit_parent_records(self):
+        """Caller can pass an explicit list (overrides default)."""
+        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
+
+        original_row = {"source_guid": "guid_b1"}
+        explicit_parents = [
+            {"source_guid": "guid_b1", "node_id": "p1", "lineage": ["p1"]},
+            {"source_guid": "guid_b2", "node_id": "p2", "lineage": ["p2"]},
+        ]
+        ctx = BatchContextAdapter.to_processing_context(
+            agent_config={"agent_type": "stage_two", "dependencies": ["stage_one"]},
+            original_row=original_row,
+            record_index=0,
+            parent_records=explicit_parents,
+        )
+        assert ctx.parent_records == explicit_parents
+
+    def test_batch_adapter_empty_when_no_original_row(self):
+        """No original_row → empty parent_records, not [None]."""
+        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
+
+        ctx = BatchContextAdapter.to_processing_context(
+            agent_config={"agent_type": "stage_one"},
+            original_row={},  # falsy
+            record_index=0,
+        )
+        assert ctx.parent_records == []

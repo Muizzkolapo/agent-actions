@@ -345,12 +345,8 @@ class ProcessingContext:
     dependency_configs: dict[str, Any] | None = None
     current_item: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = None
-    # Previous-stage output records (carry lineage/node_id). Distinct from
-    # source_data, which holds raw seed records loaded from storage for
-    # prompt context and context-scope inference. The LineageEnricher reads
-    # parent_records to find the ancestry-bearing parent for each item; the
-    # raw seed records do not carry lineage and would force a self-only
-    # fallback (VIOL-0016).
+    # Previous-stage output records (carry lineage). Distinct from source_data,
+    # which holds records used for prompt context and scope inference.
     parent_records: list[dict[str, Any]] = field(default_factory=list)
 
     @property

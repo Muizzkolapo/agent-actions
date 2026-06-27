@@ -67,12 +67,14 @@ class DataGenerator(IGenerator):
             GenerationError: If agent creation or data generation fails.
         """
         try:
+            source_content_list = source_content if isinstance(source_content, list) else []
             context = ProcessingContext(
                 agent_config=cast(ActionConfigDict, self.agent_config),
                 agent_name=self.agent_name,
                 mode=RunMode.ONLINE,
                 is_first_stage=False,  # This is subsequent-stage processing
-                source_data=source_content if isinstance(source_content, list) else [],
+                source_data=source_content_list,
+                parent_records=source_content_list,
                 file_path=file_path,
                 version_context=version_context,
                 workflow_metadata=workflow_metadata,
