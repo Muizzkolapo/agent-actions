@@ -295,8 +295,8 @@ def write_record_dispositions(
             continue
         metadata = item.get("metadata", {})
 
-        recovery = item.get("_recovery", {})
-        reprompt_recovery = recovery.get("reprompt", {})
+        recovery = item.get("_recovery") or {}
+        reprompt_recovery = recovery.get("reprompt") or {}
         if reprompt_recovery.get("passed") is False:
             validation = reprompt_recovery.get("validation", "unknown")
             _safe_set_disposition(

@@ -102,10 +102,12 @@ def parse_reprompt_config(reprompt_config: dict | None) -> ParsedRepromptConfig 
     validation_name = reprompt_config.get("validation")
     if not validation_name:
         return None
+    max_attempts = reprompt_config.get("max_attempts")
+    on_exhausted = reprompt_config.get("on_exhausted")
     return ParsedRepromptConfig(
         validation_name=validation_name,
-        max_attempts=reprompt_config.get("max_attempts") or 2,
-        on_exhausted=reprompt_config.get("on_exhausted") or "return_last",
+        max_attempts=2 if max_attempts is None else max_attempts,
+        on_exhausted="return_last" if on_exhausted is None else on_exhausted,
     )
 
 
@@ -396,13 +398,16 @@ def create_reprompt_service_from_config(
             # External validator provided but no validation key -- still respect
             # other config settings (max_attempts, on_exhausted) if present.
             cfg = reprompt_config or {}
+            max_attempts = cfg.get("max_attempts")
+            on_exhausted = cfg.get("on_exhausted")
+            critique_after = cfg.get("critique_after_attempt")
             return RepromptService(
-                max_attempts=cfg.get("max_attempts") or 2,
-                on_exhausted=cfg.get("on_exhausted") or "return_last",
+                max_attempts=2 if max_attempts is None else max_attempts,
+                on_exhausted="return_last" if on_exhausted is None else on_exhausted,
                 validator=validator,
                 strategies=strategies,
                 critique_fn=critique_fn,
-                critique_after_attempt=cfg.get("critique_after_attempt") or 2,
+                critique_after_attempt=2 if critique_after is None else critique_after,
             )
         if reprompt_config:
             raise ValueError(
@@ -419,5 +424,7 @@ def create_reprompt_service_from_config(
         validator=validator,
         strategies=strategies,
         critique_fn=critique_fn,
-        critique_after_attempt=(reprompt_config or {}).get("critique_after_attempt") or 2,
+        critique_after_attempt=(
+            2 if (raw := (reprompt_config or {}).get("critique_after_attempt")) is None else raw
+        ),
     )

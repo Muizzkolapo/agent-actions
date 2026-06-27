@@ -109,3 +109,25 @@ def test_create_reprompt_service_validation_branch_coalesces_critique_null():
     )
     assert service is not None
     assert service._critique_after_attempt == 2
+
+
+def test_parse_reprompt_config_rejects_explicit_zero_max_attempts():
+    """Explicit ``max_attempts: 0`` is invalid configuration and must be
+    surfaced — the null-coalesce in the fix must distinguish ``None``
+    (bare YAML, apply default) from ``0`` (explicit invalid value,
+    propagate so ``RepromptService.__init__`` can raise)."""
+    parsed = parse_reprompt_config({"validation": "check_fn", "max_attempts": 0})
+    assert parsed is not None
+    # The explicit 0 must NOT be silently rewritten to the default;
+    # downstream RepromptService.__init__ enforces max_attempts >= 1.
+    assert parsed.max_attempts == 0
+
+
+def test_create_reprompt_service_surfaces_explicit_zero_max_attempts():
+    """Constructing the service with explicit ``max_attempts: 0`` must
+    raise ``ValueError`` — the coalesce fix must not mask the invariant."""
+    with pytest.raises(ValueError, match="max_attempts must be >= 1"):
+        create_reprompt_service_from_config(
+            {"max_attempts": 0},
+            validator=_AcceptAllValidator(),
+        )
