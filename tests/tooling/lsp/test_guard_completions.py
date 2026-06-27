@@ -288,6 +288,29 @@ class TestGuardDiagnostics:
         assert "`wrong_action.field`" in diag.message
         assert "Did you mean" not in diag.message
 
+    def test_guard_with_quoted_string_literal_no_diagnostic(self, tmp_path: Path):
+        """VIOL-0036: identifiers inside quoted literals must not produce a
+        guard diagnostic. The integration test mirrors how the indexer feeds
+        diagnostics — `guard_variables` is the extractor's output, so an
+        empty-modulo-observe list here proves the extractor + diagnostics
+        path agrees with `agac validate-udfs`.
+        """
+        from agent_actions.tooling.lsp.indexer import _extract_condition_variables
+
+        condition = 'x.hitl_status == "approved"'
+        action = ActionMetadata(
+            name="gated",
+            location=Location(file_path=tmp_path / "w.yml", line=0),
+            context_observe=["x.hitl_status"],
+            guard_condition=condition,
+            guard_line=5,
+            guard_variables=_extract_condition_variables(condition),
+        )
+        idx, wf = _make_index(tmp_path, {"gated": action})
+        diagnostics = collect_diagnostics(wf, idx)
+
+        assert diagnostics == []
+
     def test_guard_scoped_to_own_action(self, tmp_path: Path):
         """Action A's guard cannot reference action B's observe entries."""
         action_a = ActionMetadata(
