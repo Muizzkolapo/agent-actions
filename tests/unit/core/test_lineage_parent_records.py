@@ -269,6 +269,20 @@ class TestGetParentItemDirect:
         ctx = self._ctx(current_item=current, parent_records=parents)
         assert LineageEnricher()._get_parent_item("g", ctx)["node_id"] == "from_current"
 
+    def test_current_item_skipped_when_source_guid_mismatches(self):
+        """Misconfigured strategy: current_item.source_guid != requested → fall through."""
+        current = {"source_guid": "wrong_guid", "node_id": "stale"}
+        parents = [{"source_guid": "g", "node_id": "correct_parent", "lineage": ["correct_parent"]}]
+        ctx = self._ctx(current_item=current, parent_records=parents)
+        assert LineageEnricher()._get_parent_item("g", ctx)["node_id"] == "correct_parent"
+
+    def test_current_item_used_when_source_guid_is_none(self):
+        """A current_item without source_guid is treated as the explicit parent for any lookup."""
+        current = {"node_id": "from_current"}  # no source_guid
+        parents = [{"source_guid": "g", "node_id": "from_parents"}]
+        ctx = self._ctx(current_item=current, parent_records=parents)
+        assert LineageEnricher()._get_parent_item("g", ctx)["node_id"] == "from_current"
+
     def test_parent_index_hit_returned(self):
         target = {"source_guid": "g", "node_id": "n"}
         parents = [target, {"source_guid": "other", "node_id": "o"}]
@@ -299,3 +313,59 @@ class TestGetParentItemDirect:
         ctx = self._ctx(parent_records=[], source_data=seed)
         result = LineageEnricher()._get_parent_item("g", ctx, source_index=source_index)
         assert result is seed[0]
+
+
+class TestSourceMappingParentFallback:
+    """When source_mapping pins a lineage-less record, parent_index recovers the real parent."""
+
+    def test_one_to_one_source_mapping_recovers_lineage_from_parent_records(self):
+        # source_data has the raw seed (no lineage) at index 0
+        seed = {"source_guid": "g", "page_content": "raw"}
+        # parent_records has the lineage-bearing record for the same guid
+        lineage_parent = {
+            "source_guid": "g",
+            "node_id": "stage_one",
+            "lineage": ["stage_one"],
+        }
+
+        item = {"source_guid": "g", "content": {"x": {}}}
+        result = ProcessingResult.success(data=[item], source_guid=None)
+        result.source_mapping = {0: 0}
+
+        context = ProcessingContext(
+            agent_config={"agent_type": "stage_two"},
+            agent_name="stage_two",
+            mode=RunMode.ONLINE,
+            is_first_stage=False,
+            source_data=[seed],
+            parent_records=[lineage_parent],
+        )
+        enriched = LineageEnricher().enrich(result, context)
+        enriched_item = enriched.data[0]
+
+        assert enriched_item["lineage"][0] == "stage_one"
+        assert enriched_item["lineage"][-1] == enriched_item["node_id"]
+
+    def test_many_to_one_source_mapping_recovers_lineage_for_each_source(self):
+        seed_a = {"source_guid": "g_a", "page_content": "raw a"}
+        seed_b = {"source_guid": "g_b", "page_content": "raw b"}
+        parent_a = {"source_guid": "g_a", "node_id": "p_a", "lineage": ["p_a"]}
+        parent_b = {"source_guid": "g_b", "node_id": "p_b", "lineage": ["p_b"]}
+
+        item = {"source_guid": "g_a", "content": {"x": {}}}
+        result = ProcessingResult.success(data=[item], source_guid=None)
+        result.source_mapping = {0: [0, 1]}
+
+        context = ProcessingContext(
+            agent_config={"agent_type": "stage_two"},
+            agent_name="stage_two",
+            mode=RunMode.ONLINE,
+            is_first_stage=False,
+            source_data=[seed_a, seed_b],
+            parent_records=[parent_a, parent_b],
+        )
+        enriched = LineageEnricher().enrich(result, context)
+        enriched_item = enriched.data[0]
+
+        assert "p_a" in enriched_item["lineage"]
+        assert enriched_item["lineage"][-1] == enriched_item["node_id"]
