@@ -217,6 +217,20 @@ class TestBatchContextAdapterParentRecords:
         )
         assert ctx.parent_records == []
 
+    def test_batch_adapter_rejects_seed_record_without_lineage(self):
+        """First-stage batch: original_row is raw seed (no lineage) → parent_records empty."""
+        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
+
+        seed = {"source_guid": "seed_1", "page_content": "raw text"}  # no lineage / node_id
+        ctx = BatchContextAdapter.to_processing_context(
+            agent_config={"agent_type": "stage_one"},
+            original_row=seed,
+            record_index=0,
+        )
+        assert ctx.parent_records == []
+        # current_item is still set so the enricher can use it if appropriate
+        assert ctx.current_item is seed
+
 
 class TestGetParentItemDirect:
     """Direct unit tests for LineageEnricher._get_parent_item lookup precedence."""
