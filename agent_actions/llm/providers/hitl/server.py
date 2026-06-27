@@ -237,6 +237,7 @@ class HitlServer:
             csp_nonce=nonce,
             metadata_keys=json.dumps(sorted(METADATA_KEYS)),
             rejection_reasons=json.dumps(self.rejection_reasons),
+            hitl_timeout=self.timeout,
         )
 
     def _handle_get_context(self):
