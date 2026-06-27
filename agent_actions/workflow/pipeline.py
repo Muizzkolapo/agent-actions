@@ -477,6 +477,14 @@ class ProcessingPipeline:
         # data IS the source — there's no staging data in this workflow for them.
         source_data = data
 
+        from agent_actions.utils.lineage import LineageBuilder
+
+        parent_records = (
+            [r for r in data if LineageBuilder.is_lineage_bearing(r)]
+            if isinstance(data, list)
+            else []
+        )
+
         if self.config.source_relative_path and self.config.storage_backend is not None:
             try:
                 from agent_actions.input.loaders.source_data import SourceDataLoader
@@ -549,6 +557,7 @@ class ProcessingPipeline:
             mode=RunMode.ONLINE,
             is_first_stage=False,
             source_data=source_data,  # Pass the loaded source data
+            parent_records=parent_records,  # Previous-stage output (lineage source)
             file_path=file_path,
             output_directory=output_directory,
             agent_indices=agent_indices,

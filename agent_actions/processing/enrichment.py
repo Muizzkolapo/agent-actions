@@ -41,17 +41,14 @@ class LineageEnricher(Enricher):
 
         use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
 
-        source_index: dict[str, dict] | None = None
-        if context.source_data:
-            source_index = {
-                sg: item
-                for item in context.source_data
-                if (sg := item.get("source_guid")) is not None
-            }
+        source_index = self._index_by_source_guid(context.source_data)
+        parent_index = self._index_by_source_guid(context.parent_records)
 
         parent_item = None
         if not use_per_item_parent_lookup:
-            parent_item = self._get_parent_item(result.source_guid, context, source_index)
+            parent_item = self._get_parent_item(
+                result.source_guid, context, source_index, parent_index
+            )
 
         source_data_len = len(context.source_data) if context.source_data else 0
 
@@ -80,12 +77,14 @@ class LineageEnricher(Enricher):
                 and context.source_data is not None
                 and i in result.source_mapping
             ):
-                # Index-based lookup — resolve parent by source_mapping
                 source_idx = result.source_mapping[i]
                 if isinstance(source_idx, list):
                     # Many-to-one: multiple input records merged into one output
                     source_items = [
                         context.source_data[idx] for idx in source_idx if idx < source_data_len
+                    ]
+                    source_items = [
+                        self._with_parent_fallback(s, parent_index) for s in source_items
                     ]
                     skipped = len(source_idx) - len(source_items)
                     if skipped:
@@ -110,7 +109,9 @@ class LineageEnricher(Enricher):
                 else:
                     # One-to-one: single input record
                     if source_idx < source_data_len:
-                        parent_item = context.source_data[source_idx]
+                        parent_item = self._with_parent_fallback(
+                            context.source_data[source_idx], parent_index
+                        )
                     else:
                         logger.warning(
                             "source_mapping[%d] -> %d is out of bounds "
@@ -123,7 +124,9 @@ class LineageEnricher(Enricher):
                         parent_item = None
             elif use_per_item_parent_lookup:
                 item_source_guid = item.get("source_guid")
-                parent_item = self._get_parent_item(item_source_guid, context, source_index)
+                parent_item = self._get_parent_item(
+                    item_source_guid, context, source_index, parent_index
+                )
 
             result.data[i] = LineageBuilder.add_unified_lineage(
                 obj=item,
@@ -134,30 +137,67 @@ class LineageEnricher(Enricher):
         result.node_id = base_node_id
         return result
 
+    @staticmethod
+    def _index_by_source_guid(
+        records: list[dict[str, Any]] | None,
+    ) -> dict[str, dict] | None:
+        """Build a {source_guid: record} dict, or None when *records* is empty."""
+        if not records:
+            return None
+        return {sg: r for r in records if (sg := r.get("source_guid")) is not None}
+
+    @staticmethod
+    def _with_parent_fallback(item: dict, parent_index: dict[str, dict] | None) -> dict:
+        """If *item* lacks lineage, look up a richer match in parent_index by source_guid."""
+        from agent_actions.utils.lineage import LineageBuilder
+
+        if LineageBuilder.is_lineage_bearing(item):
+            return item
+        if parent_index is None:
+            return item
+        sg = item.get("source_guid")
+        if sg is None:
+            return item
+        richer = parent_index.get(sg)
+        return richer if richer is not None else item
+
     def _get_parent_item(
         self,
         source_guid: str | None,
         context: ProcessingContext,
         source_index: dict[str, dict] | None = None,
+        parent_index: dict[str, dict] | None = None,
     ) -> dict | None:
-        """Look up parent item for lineage chaining; returns None for first-stage."""
+        """Look up parent item for lineage chaining; returns None for first-stage.
+
+        Precedence (highest first):
+        1. ``context.current_item`` — explicit parent set by the strategy.
+        2. ``context.parent_records`` (or ``parent_index`` for O(1) lookup) —
+           previous-stage output that carries lineage.
+        3. ``context.source_data`` (or ``source_index`` for O(1) lookup) —
+           fallback when source_data is itself lineage-bearing.
+        """
         if context.is_first_stage or not source_guid:
             return None
 
         if context.current_item:
-            return context.current_item
+            current_guid = context.current_item.get("source_guid")
+            if current_guid is None or current_guid == source_guid:
+                return context.current_item
+
+        if parent_index is None:
+            parent_index = self._index_by_source_guid(context.parent_records)
+        if parent_index is not None:
+            hit = parent_index.get(source_guid)
+            if hit is not None:
+                return hit
 
         if not context.source_data:
             return None
 
-        if source_index is not None:
-            return source_index.get(source_guid)
-
-        for source_item in context.source_data:
-            if source_item.get("source_guid") == source_guid:
-                return source_item
-
-        return None
+        if source_index is None:
+            source_index = self._index_by_source_guid(context.source_data)
+        return source_index.get(source_guid) if source_index else None
 
 
 class MetadataEnricher(Enricher):

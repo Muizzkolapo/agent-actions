@@ -13,6 +13,7 @@ def _make_context(action_name: str = "test_action") -> ProcessingContext:
     ctx.agent_name = action_name
     ctx.is_first_stage = True
     ctx.source_data = None
+    ctx.parent_records = []
     ctx.record_index = 0
     ctx.agent_config = {}
     return ctx

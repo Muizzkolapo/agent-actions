@@ -345,6 +345,9 @@ class ProcessingContext:
     dependency_configs: dict[str, Any] | None = None
     current_item: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = None
+    # Previous-stage output records (carry lineage). Distinct from source_data,
+    # which holds records used for prompt context and scope inference.
+    parent_records: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def action_name(self) -> str:
