@@ -23,9 +23,11 @@ default_agent_config:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `chunk_size` | 1000 | Maximum size per chunk (tokens or characters) |
-| `overlap` | 200 | Overlap between consecutive chunks |
+| `chunk_size` | 300 | Maximum size per chunk (tokens or characters) |
+| `overlap` | 10 | Overlap between consecutive chunks |
 | `split_method` | `tiktoken` | Chunking strategy: `tiktoken`, `chars`, or `spacy` |
+
+The defaults are tuned for the framework's own short-document benchmarks. The examples below show larger values (4000 / 8000) tuned for OpenAI-class context windows — start there for production workloads on long documents.
 
 ### Per-Action Override
 
