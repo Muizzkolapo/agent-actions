@@ -675,9 +675,8 @@ h4.md-heading { font-size: 13.5px; }
 
         var requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
 
-        // VIOL-0038: read the session token from the bootstrap query
-        // parameter, then strip it from the URL so it never lands in
-        // browser history, referrer headers, or screen-shared screenshots.
+        // Stripping the bootstrap query from the URL keeps the token out
+        // of browser history, referrer headers, and screen-share recordings.
         var HITL_TOKEN = (function () {
             var params = new URLSearchParams(window.location.search);
             var bootstrap = params.get('bootstrap');

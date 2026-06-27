@@ -75,7 +75,7 @@ class TestCSRFToken:
         assert resp.status_code == 200
 
     def test_get_endpoints_require_token(self, client):
-        """VIOL-0038: GET endpoints reject anonymous requests."""
+        """GET endpoints reject anonymous requests."""
         resp = client.get("/api/review-state")
         assert resp.status_code == 401
 
@@ -167,7 +167,7 @@ class TestCSPNonce:
         assert 'nonce="' in html
 
     def test_index_page_does_not_embed_hitl_token(self, client, server):
-        """VIOL-0038: the session token MUST NOT appear in the rendered HTML.
+        """The session token MUST NOT appear in the rendered HTML.
 
         The browser reads it from the bootstrap query parameter and strips it
         from the address bar via ``history.replaceState`` before any further

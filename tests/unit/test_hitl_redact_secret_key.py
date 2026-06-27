@@ -1,8 +1,8 @@
-"""Regression test for VIOL-0038 sub-finding: bare `secret` key is redacted.
+"""The bare `"secret"` key is redacted from /api/context responses.
 
-The existing redaction regex catches `_secret` (suffix), `auth_secret`, and
-the related credential patterns, but misses the bare key `"secret"` which is
-common in OAuth-style payloads (`{"client_id": ..., "secret": ...}`).
+The original redaction regex caught `_secret` (suffix), `auth_secret`, and
+related credential patterns, but missed the bare key `"secret"` — common
+in OAuth-style payloads (`{"client_id": ..., "secret": ...}`).
 """
 
 from __future__ import annotations

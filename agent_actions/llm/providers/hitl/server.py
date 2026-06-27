@@ -20,9 +20,8 @@ from werkzeug.serving import make_server
 from agent_actions.errors import NetworkError
 from agent_actions.tooling.rendering.data_card import METADATA_KEYS
 
-# Keys whose values should be redacted from /api/context responses.
-# `^secret$` covers the bare `secret` key (common in OAuth-style payloads);
-# the other alternates remain suffix matches via the trailing `$`.
+# `^secret$` matches the bare key only; the remaining alternates are
+# suffix matches via the trailing `$`.
 _SENSITIVE_KEY_PATTERN = re.compile(
     r"(?:^secret$|password|credential|api_key|auth_token|auth_secret|_secret|_token)$",
     re.IGNORECASE,
@@ -167,27 +166,23 @@ class HitlServer:
 
         @app.before_request
         def _enforce_auth():
-            """Gate every request on `X-HITL-Token` (or the one-shot
-            `?bootstrap=<token>` query on `GET /`).
+            """Gate every request on `X-HITL-Token`.
 
-            The bootstrap query is the launcher's hand-off mechanism: the
-            URL printed to the user contains the token, the page's JS
-            reads it on first load, then calls ``history.replaceState`` to
-            strip it from the address bar before any further request runs.
-            See ``approval.html``.
+            `GET /` additionally accepts a one-shot `?bootstrap=<token>`
+            query — the launcher's hand-off mechanism. The page's JS reads
+            it on first load and calls ``history.replaceState`` to strip
+            it from the address bar before any further request runs, so
+            the token never lands in browser history or referrer headers.
             """
-            # 1. Header is always honoured.
             token = request.headers.get("X-HITL-Token", "")
             if token and secrets.compare_digest(token, self._session_token):
                 return self._enforce_post_extras() if request.method == "POST" else None
 
-            # 2. `GET /` accepts the one-shot bootstrap query as a fallback.
             if request.method == "GET" and request.path == "/":
                 bootstrap = request.args.get("bootstrap", "")
                 if bootstrap and secrets.compare_digest(bootstrap, self._session_token):
                     return None
 
-            # 3. Anything else without a valid token is rejected.
             return jsonify({"success": False, "error": "Invalid or missing session token"}), 401
 
         @app.after_request
@@ -218,17 +213,12 @@ class HitlServer:
         return app
 
     def _enforce_post_extras(self):
-        """Apply the POST-only CSRF defenses on top of the token check.
+        """POST-only CSRF defenses: JSON content-type and an
+        ``Origin``/``Referer`` allow-list when either header is present.
 
-        Returns a Flask response tuple to short-circuit the request, or
-        ``None`` to continue. The token has already been validated by the
-        before_request gate; this layer enforces:
-
-        - ``application/json`` content-type (blocks form-encoded CSRF), and
-        - ``Origin``/``Referer`` allow-list when either header is present.
-          Missing headers are tolerated because some CLI tools and browser
-          flows legitimately omit both; the bound-to-localhost token gate
-          already covers the CSRF risk.
+        Missing Origin/Referer is tolerated because some CLI tools and
+        browser flows legitimately omit both; the token gate already
+        covers the CSRF risk for bound-to-localhost.
         """
         content_type = request.content_type or ""
         if "application/json" not in content_type:
@@ -253,9 +243,8 @@ class HitlServer:
     def _handle_index(self):
         nonce = secrets.token_urlsafe(16)
         request.csp_nonce = nonce  # type: ignore[attr-defined]
-        # VIOL-0038: the session token is delivered via the bootstrap query
-        # parameter, not via the rendered HTML. The page-side JS reads it
-        # from `window.location.search` and strips it from the address bar.
+        # Token is delivered to the page via the bootstrap query param, not
+        # embedded in the rendered HTML — avoids leaking it via view-source.
         return render_template(
             "approval.html",
             instructions=self.instructions,
@@ -569,9 +558,7 @@ class HitlServer:
         actual_port = self._find_available_port()
         self._active_port = actual_port
 
-        # Display the bootstrap URL for the user. The query parameter is the
-        # one-shot auth token; the page's JS strips it from the address bar
-        # on first load. The bare URL (without the query) returns 401.
+        # The bare URL (without the bootstrap query) returns 401.
         bootstrap_url = f"http://localhost:{actual_port}/?bootstrap={self._session_token}"
         click.echo(f"\n  HITL approval UI ready at: {bootstrap_url}\n")
         click.echo(f"  Session token: {self._session_token} (embedded in the URL above)\n")

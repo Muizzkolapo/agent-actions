@@ -18,7 +18,7 @@ def _post(client, url, server, **kwargs):
 def _get(client, url, server, **kwargs):
     """GET helper that automatically injects the HITL session token.
 
-    GET endpoints require ``X-HITL-Token`` (VIOL-0038). ``GET /`` also
+    GET endpoints require ``X-HITL-Token``. ``GET /`` also
     accepts a one-shot ``?bootstrap=<token>`` query, but tests use the
     header path to stay symmetric with the POST helper.
     """

@@ -1,9 +1,8 @@
-"""Regression tests for VIOL-0038.
+"""HITL GET endpoints must require `X-HITL-Token` to match the POSTs.
 
-The HITL server's GET endpoints must require `X-HITL-Token` to match the
-POST endpoints. `GET /` additionally accepts a one-shot `?bootstrap=<token>`
-query parameter that the launcher hands the user; the browser's JS strips
-it from the address bar before any further request runs.
+`GET /` additionally accepts a one-shot `?bootstrap=<token>` query that
+the launcher hands the user; the browser's JS strips it from the address
+bar before any further request runs.
 """
 
 from __future__ import annotations
