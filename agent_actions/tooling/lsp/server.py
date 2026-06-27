@@ -107,10 +107,9 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
                 server.project_indexes[fallback_root] = server.index
                 logger.info("Indexed project at %s", fallback_root)
 
-    # pygls discards the return value of user-supplied initialize handlers and
-    # rebuilds capabilities from `fm.feature_options`. Trigger characters live on
-    # the `@server.feature(...)` decorators below — completion + signature help.
-    # The remaining fields here are advisory and dropped on the wire.
+    # pygls discards this return value and rebuilds capabilities from
+    # `fm.feature_options`; the trigger-bearing options live on the
+    # `@server.feature(...)` decorators below.
     return lsp.InitializeResult(
         capabilities=lsp.ServerCapabilities(
             text_document_sync=lsp.TextDocumentSyncOptions(

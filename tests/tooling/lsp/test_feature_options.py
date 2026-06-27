@@ -1,13 +1,5 @@
-"""Regression tests for VIOL-0035.
-
-The LSP must advertise non-empty ``trigger_characters`` on both
-``completionProvider`` and ``signatureHelpProvider`` in the
-``InitializeResult.capabilities`` returned to the client. Today the
-``@server.feature(...)`` decorators are called without ``options=``, so
-pygls registers default ``CompletionOptions()`` / ``SignatureHelpOptions()``
-with empty trigger lists and the ``InitializeResult.capabilities`` that
-reaches the IDE has no triggers — auto-completion never fires on member
-access in guard conditions.
+"""The LSP must advertise non-empty ``trigger_characters`` on both
+``completionProvider`` and ``signatureHelpProvider``.
 
 pygls discards the return value of any user-supplied ``initialize``
 handler and rebuilds capabilities from ``fm.feature_options`` (see
