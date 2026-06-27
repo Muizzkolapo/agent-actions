@@ -15,6 +15,18 @@ def _post(client, url, server, **kwargs):
     return client.post(url, headers=headers, **kwargs)
 
 
+def _get(client, url, server, **kwargs):
+    """GET helper that automatically injects the HITL session token.
+
+    GET endpoints require ``X-HITL-Token`` (VIOL-0038). ``GET /`` also
+    accepts a one-shot ``?bootstrap=<token>`` query, but tests use the
+    header path to stay symmetric with the POST helper.
+    """
+    headers = kwargs.pop("headers", {})
+    headers["X-HITL-Token"] = server._session_token
+    return client.get(url, headers=headers, **kwargs)
+
+
 def test_reject_requires_comment_when_enabled():
     """Reject endpoint should enforce comment when requirement is enabled."""
     server = HitlServer(
@@ -71,7 +83,7 @@ def test_context_endpoint_returns_full_file_payload():
     )
     client = server.app.test_client()
 
-    response = client.get("/api/context")
+    response = _get(client, "/api/context", server)
 
     assert response.status_code == 200
     body = response.get_json()
@@ -90,7 +102,7 @@ def test_context_endpoint_includes_field_order():
     )
     client = server.app.test_client()
 
-    response = client.get("/api/context")
+    response = _get(client, "/api/context", server)
 
     assert response.status_code == 200
     body = response.get_json()
@@ -108,7 +120,7 @@ def test_context_endpoint_omits_field_order_when_empty():
     )
     client = server.app.test_client()
 
-    response = client.get("/api/context")
+    response = _get(client, "/api/context", server)
 
     assert response.status_code == 200
     body = response.get_json()
@@ -127,7 +139,7 @@ def test_context_envelope_distinguishable_from_raw_data_key():
     )
     client = server.app.test_client()
 
-    response = client.get("/api/context")
+    response = _get(client, "/api/context", server)
 
     assert response.status_code == 200
     body = response.get_json()
@@ -149,7 +161,7 @@ def test_index_includes_fields_json_view_toggle():
     )
     client = server.app.test_client()
 
-    response = client.get("/")
+    response = _get(client, "/", server)
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
@@ -171,7 +183,7 @@ def test_index_renders_rejection_reasons_when_provided():
     )
     client = server.app.test_client()
 
-    response = client.get("/")
+    response = _get(client, "/", server)
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
@@ -190,7 +202,7 @@ def test_index_hides_reasons_when_empty():
     )
     client = server.app.test_client()
 
-    response = client.get("/")
+    response = _get(client, "/", server)
 
     html = response.get_data(as_text=True)
     # The reason-section element must exist AND be hidden when no reasons are provided.
@@ -226,7 +238,7 @@ def test_review_record_persists_state_for_refresh():
     )
     assert response.status_code == 200
 
-    response = client.get("/api/review-state")
+    response = _get(client, "/api/review-state", server)
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["record_count"] == 2

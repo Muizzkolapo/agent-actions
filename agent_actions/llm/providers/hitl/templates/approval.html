@@ -674,7 +674,22 @@ h4.md-heading { font-size: 13.5px; }
         'use strict';
 
         var requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
-        var HITL_TOKEN = {{ hitl_token | tojson }};
+
+        // VIOL-0038: read the session token from the bootstrap query
+        // parameter, then strip it from the URL so it never lands in
+        // browser history, referrer headers, or screen-shared screenshots.
+        var HITL_TOKEN = (function () {
+            var params = new URLSearchParams(window.location.search);
+            var bootstrap = params.get('bootstrap');
+            if (!bootstrap) {
+                document.body.innerHTML = '<p style="font:14px/1.5 system-ui;padding:24px;">' +
+                    'Missing bootstrap token. Re-launch with the URL printed by ' +
+                    '<code>agac run --resume</code>.</p>';
+                return '';
+            }
+            history.replaceState(null, '', window.location.pathname);
+            return bootstrap;
+        })();
         var METADATA_KEYS = {{ metadata_keys | tojson }};
 
         var RAW_REASONS = {{ rejection_reasons | tojson }};
