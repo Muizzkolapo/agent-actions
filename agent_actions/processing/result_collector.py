@@ -904,7 +904,7 @@ class ResultCollector:
             return
 
         retry_config = agent_config.get("retry") or {}
-        on_exhausted = retry_config.get("on_exhausted", "return_last")
+        on_exhausted = retry_config.get("on_exhausted") or "return_last"
 
         if on_exhausted != "raise":
             logger.info(
