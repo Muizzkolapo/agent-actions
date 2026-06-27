@@ -115,7 +115,7 @@ class AgentWorkflow:
     def __init__(self, config: WorkflowRuntimeConfig):
         """Initialize workflow with configuration and dependencies."""
         self.config = config
-        self.runtime = RuntimeContext(state=WorkflowState(), console=Console())
+        self.runtime = RuntimeContext(state=WorkflowState(), console=Console(stderr=True))
 
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
