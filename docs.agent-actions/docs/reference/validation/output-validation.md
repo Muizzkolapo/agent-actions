@@ -587,8 +587,10 @@ Record filtered by guard on action 'generate_output'
 
 ### Validate Schema Syntax
 
+Schemas are validated as part of workflow compilation — there is no standalone `agac schema --validate` flag. Compile the workflow that uses the schema; any malformed schema surfaces with a path-attributed error before any LLM call is made:
+
 ```bash
-agac schema --validate schema/my_schema.yml
+agac compile -a workflow_name
 ```
 
 ### Analyze Schema Structure
