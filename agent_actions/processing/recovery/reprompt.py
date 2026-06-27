@@ -104,8 +104,8 @@ def parse_reprompt_config(reprompt_config: dict | None) -> ParsedRepromptConfig 
         return None
     return ParsedRepromptConfig(
         validation_name=validation_name,
-        max_attempts=reprompt_config.get("max_attempts", 2),
-        on_exhausted=reprompt_config.get("on_exhausted", "return_last"),
+        max_attempts=reprompt_config.get("max_attempts") or 2,
+        on_exhausted=reprompt_config.get("on_exhausted") or "return_last",
     )
 
 
@@ -397,12 +397,12 @@ def create_reprompt_service_from_config(
             # other config settings (max_attempts, on_exhausted) if present.
             cfg = reprompt_config or {}
             return RepromptService(
-                max_attempts=cfg.get("max_attempts", 2),
-                on_exhausted=cfg.get("on_exhausted", "return_last"),
+                max_attempts=cfg.get("max_attempts") or 2,
+                on_exhausted=cfg.get("on_exhausted") or "return_last",
                 validator=validator,
                 strategies=strategies,
                 critique_fn=critique_fn,
-                critique_after_attempt=cfg.get("critique_after_attempt", 2),
+                critique_after_attempt=cfg.get("critique_after_attempt") or 2,
             )
         if reprompt_config:
             raise ValueError(
@@ -419,5 +419,5 @@ def create_reprompt_service_from_config(
         validator=validator,
         strategies=strategies,
         critique_fn=critique_fn,
-        critique_after_attempt=(reprompt_config or {}).get("critique_after_attempt", 2),
+        critique_after_attempt=(reprompt_config or {}).get("critique_after_attempt") or 2,
     )

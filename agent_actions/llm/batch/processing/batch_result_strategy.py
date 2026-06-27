@@ -329,7 +329,7 @@ class BatchResultStrategy:
         if ctx.agent_config:
             if custom_id in ctx.context_map:
                 generated_list = self._apply_context_passthrough(ctx, custom_id, generated_list)
-            elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
+            elif (ctx.agent_config.get("context_scope") or {}).get("passthrough"):
                 logger.warning(
                     "custom_id '%s' not found in context_map, skipping passthrough",
                     custom_id,
