@@ -22,8 +22,8 @@ factories, filters, formatters, and the event-driven error/reporting plumbing.
 | `config.py` | Module | Dataclasses that capture project logging, handler, and formatting defaults. | `logging` |
 | `FileHandlerSettings` | Class | File handler configuration used by the factory. | `logging` |
 | `LoggingConfig` | Class | Central logging configuration builder with `from_project_config`/`from_environment`. | `logging` |
-| `factory.py` | Module | `LoggerFactory` that wires together configuration, filters, and handlers. Registers four handler types: Console, `events.json` (all levels), `errors.json` (ERROR-only, output_dir runs only), and `run_results.json`. | `logging` |
-| `LoggerFactory` | Class | Manage logger creation, level setting, and debug state. | `logging` |
+| `factory.py` | Module | `LoggerFactory` that wires together configuration, filters, and handlers. Registers four handler types: Console, `events.json` (all levels), `errors.json` (ERROR-only, output_dir runs only), and `run_results.json`. On init, clamps noisy third-party SDK/HTTP loggers (httpx, urllib3, openai, anthropic, ollama, groq, cohere, google_genai, googleapiclient, etc.) to WARNING and applies user-supplied `logging.module_levels` overrides; pre-init levels are snapshotted and restored by `reset()`. | `logging` |
+| `LoggerFactory` | Class | Manages logger creation, third-party suppression, and the `events.json` bridge. | `logging` |
 | `filters.py` | Module | Custom filters (e.g., `RedactingFilter`) to sanitize sensitive payloads. | `logging` |
 | `formatters.py` | Module | Formatter helpers such as `JSONFormatter` used across services. | `logging` |
 
@@ -31,7 +31,7 @@ factories, filters, formatters, and the event-driven error/reporting plumbing.
 
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
-| `LoggingConfig.from_project_config()` | `agent_actions.yml` | Reads | `logging`, `logging.level`, `logging.file` |
+| `LoggingConfig.from_project_config()` | `agent_actions.yml` | Reads (not wired into CLI yet — programmatic only) | `logging`, `logging.level`, `logging.file`, `logging.module_levels` |
 | `LoggingConfig.from_environment()` | `.env` | Reads | `AGENT_ACTIONS_DEBUG`, `AGENT_ACTIONS_LOG_LEVEL`, `AGENT_ACTIONS_LOG_FORMAT`, `AGENT_ACTIONS_LOG_DIR` |
 | `LoggerFactory.initialize()` | `agent_io/target/events.json` | Writes | — |
 | `LoggerFactory.initialize()` | `agent_io/target/errors.json` | Writes | — |
