@@ -139,6 +139,21 @@ class TestModuleLevelOverrides:
         assert "httpx" in err
         assert logging.getLogger("httpx").level == logging.WARNING
 
+    def test_value_that_stringifies_to_valid_level_still_rejected(self, capsys):
+        """Type-guard (not str-coercion) — a non-string whose __str__ returns 'INFO' must NOT override."""
+
+        class StringifiesToInfo:
+            def __str__(self):
+                return "INFO"
+
+        config = LoggingConfig(module_levels={"httpx": StringifiesToInfo()})
+        LoggerFactory.initialize(config=config)
+
+        err = capsys.readouterr().err
+        assert "httpx" in err
+        # If the helper coerced via str(), httpx would be INFO; type-guard keeps it at WARNING (clamp).
+        assert logging.getLogger("httpx").level == logging.WARNING
+
     def test_non_string_key_rejected_without_crash(self, capsys):
         """A non-string key (e.g. int from YAML) is skipped, not propagated to getLogger."""
         config = LoggingConfig(module_levels={42: "INFO"})
@@ -174,13 +189,24 @@ class TestModuleLevelOverrides:
 
 
 class TestResetIsolatesThirdPartyLoggers:
-    """``LoggerFactory.reset()`` must clear levels it set on global loggers."""
+    """``LoggerFactory.reset()`` must restore loggers to their pre-init state."""
 
-    def test_reset_restores_third_party_loggers_to_notset(self):
-        """After reset, third-party loggers no longer carry framework-set levels."""
+    def test_reset_restores_pre_init_level_not_notset(self):
+        """Host app set httpx=ERROR before our init; reset() must restore ERROR, not blow it away to NOTSET."""
+        logging.getLogger("httpx").setLevel(logging.ERROR)
+
         LoggerFactory.initialize()
         assert logging.getLogger("httpx").level == logging.WARNING
 
+        LoggerFactory.reset()
+
+        assert logging.getLogger("httpx").level == logging.ERROR
+
+    def test_reset_restores_notset_when_logger_was_untouched(self):
+        """If a logger was at NOTSET before init, reset() returns it to NOTSET."""
+        logging.getLogger("httpx").setLevel(logging.NOTSET)
+
+        LoggerFactory.initialize()
         LoggerFactory.reset()
 
         assert logging.getLogger("httpx").level == logging.NOTSET
@@ -198,3 +224,18 @@ class TestSuppressionIdempotency:
         LoggerFactory.initialize(force=True)
 
         assert logging.getLogger("httpx").level == logging.WARNING
+
+    def test_force_reinit_drops_module_level_no_longer_in_config(self):
+        """A logger set via module_levels in the FIRST config must be restored when the SECOND config omits it."""
+        # Pre-existing host-app level we must respect.
+        logging.getLogger("my_custom_lib").setLevel(logging.NOTSET)
+
+        first = LoggingConfig(module_levels={"my_custom_lib": "ERROR"})
+        LoggerFactory.initialize(config=first)
+        assert logging.getLogger("my_custom_lib").level == logging.ERROR
+
+        second = LoggingConfig()  # module_levels = {}
+        LoggerFactory.initialize(config=second, force=True)
+
+        # Without restore, my_custom_lib would still be ERROR from the prior config.
+        assert logging.getLogger("my_custom_lib").level == logging.NOTSET

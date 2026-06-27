@@ -26,7 +26,7 @@ _THIRD_PARTY_NOISY_LOGGERS: tuple[str, ...] = (
     "ollama",
     "groq",
     "cohere",
-    "google.genai",
+    "google_genai",
     "googleapiclient",
     "sentence_transformers",
     "transformers",
@@ -42,6 +42,9 @@ class LoggerFactory:
     _root_logger_name: str = "agent_actions"
     _event_manager: EventManager | None = None
     _run_results_collector: RunResultsCollector | None = None
+    # logger name → its level before the framework first touched it; used by reset()
+    # to restore pre-init state and by force-reinit to drop loggers no longer managed.
+    _original_logger_levels: dict[str, int] = {}
 
     @classmethod
     def initialize(
@@ -196,9 +199,8 @@ class LoggerFactory:
 
     @classmethod
     def _apply_logger_levels(cls, config: LoggingConfig) -> None:
-        """Clamp third-party loggers to WARNING; apply user module_levels overrides."""
-        for name in _THIRD_PARTY_NOISY_LOGGERS:
-            logging.getLogger(name).setLevel(logging.WARNING)
+        """Clamp noisy loggers + apply module_levels; restore prior level for loggers no longer managed."""
+        new_managed: dict[str, str] = {name: "WARNING" for name in _THIRD_PARTY_NOISY_LOGGERS}
 
         for name, level in config.module_levels.items():
             if not isinstance(name, str):
@@ -207,7 +209,6 @@ class LoggerFactory:
                     f"keys must be str, got {type(name).__name__}\n"
                 )
                 continue
-
             if name == cls._root_logger_name or name.startswith(cls._root_logger_name + "."):
                 sys.stderr.write(
                     f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
@@ -215,17 +216,26 @@ class LoggerFactory:
                     "break events.json; use logging.level for CLI-visible levels.\n"
                 )
                 continue
-
-            normalized = str(level).upper()
-            if normalized == "WARN":  # Python alias for WARNING.
-                normalized = "WARNING"
-            if normalized not in VALID_LOG_LEVELS:
+            normalized = LoggingConfig.normalize_log_level(level)
+            if normalized is None:
                 sys.stderr.write(
                     f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
-                    f"not one of {sorted(VALID_LOG_LEVELS)}\n"
+                    f"value must be one of {sorted(VALID_LOG_LEVELS)} "
+                    f"(got {type(level).__name__})\n"
                 )
                 continue
-            logging.getLogger(name).setLevel(normalized)
+            new_managed[name] = normalized
+
+        for name in list(cls._original_logger_levels):
+            if name not in new_managed:
+                logging.getLogger(name).setLevel(cls._original_logger_levels.pop(name))
+
+        for name in new_managed:
+            if name not in cls._original_logger_levels:
+                cls._original_logger_levels[name] = logging.getLogger(name).level
+
+        for name, level_str in new_managed.items():
+            logging.getLogger(name).setLevel(level_str)
 
     @classmethod
     def _setup_logging_bridge(cls) -> None:
@@ -298,7 +308,7 @@ class LoggerFactory:
 
     @classmethod
     def reset(cls) -> None:
-        """Reset factory state and unset third-party logger levels (for testing)."""
+        """Reset factory state and restore loggers we touched to their pre-init levels."""
         cls._initialized = False
         cls._config = None
         cls._event_manager = None
@@ -309,8 +319,9 @@ class LoggerFactory:
         for f in root_logger.filters[:]:
             root_logger.removeFilter(f)
 
-        for name in _THIRD_PARTY_NOISY_LOGGERS:
-            logging.getLogger(name).setLevel(logging.NOTSET)
+        for name, level in cls._original_logger_levels.items():
+            logging.getLogger(name).setLevel(level)
+        cls._original_logger_levels = {}
 
         from agent_actions.logging.core.manager import EventManager
 

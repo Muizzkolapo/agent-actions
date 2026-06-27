@@ -70,12 +70,22 @@ class LoggingConfig:
         )
 
     @staticmethod
-    def _validate_log_level(value: str, default: str) -> LogLevel:
-        """Validate and return a LogLevel; ``WARN`` is normalized to ``WARNING``."""
-        upper = value.upper() if isinstance(value, str) else default
+    def normalize_log_level(value: object) -> LogLevel | None:
+        """Return canonical LogLevel; None for non-string or unrecognized."""
+        if not isinstance(value, str):
+            return None
+        upper = value.upper()
         if upper == "WARN":
             upper = "WARNING"
-        return cast(LogLevel, upper if upper in VALID_LOG_LEVELS else default)
+        if upper not in VALID_LOG_LEVELS:
+            return None
+        return cast(LogLevel, upper)
+
+    @classmethod
+    def _validate_log_level(cls, value: object, default: str) -> LogLevel:
+        """Validate and return a LogLevel; fall back to default if invalid."""
+        normalized = cls.normalize_log_level(value)
+        return normalized if normalized is not None else cast(LogLevel, default)
 
     @classmethod
     def from_environment(cls) -> LoggingConfig:

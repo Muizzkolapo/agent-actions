@@ -862,7 +862,7 @@ clamps a curated set of SDK / HTTP loggers to `WARNING` on every init:
 
 ```
 httpx, httpcore, urllib3, openai, anthropic, ollama, groq,
-cohere, google.genai, googleapiclient, sentence_transformers,
+cohere, google_genai, googleapiclient, sentence_transformers,
 transformers, pypdf
 ```
 
