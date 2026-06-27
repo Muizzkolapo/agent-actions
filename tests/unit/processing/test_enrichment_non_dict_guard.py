@@ -11,6 +11,7 @@ def _make_context(**kwargs: object) -> ProcessingContext:
     ctx.action_name = kwargs.get("action_name", "test_action")
     ctx.action_config = kwargs.get("action_config", MagicMock())
     ctx.source_data = kwargs.get("source_data", [])
+    ctx.parent_records = kwargs.get("parent_records", [])
     return ctx
 
 

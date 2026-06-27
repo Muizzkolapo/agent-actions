@@ -116,10 +116,7 @@ class TestParentRecordsLineagePropagation:
         assert enriched_item["lineage"][0] == parent_node_id
 
     def test_raw_seed_only_produces_self_lineage(self):
-        """Sanity: with neither parent_records nor lineage-bearing source_data, lineage is self-only.
-
-        This pins the pre-fix behavior so it's clear when the new code is doing the work.
-        """
+        """With neither parent_records nor lineage-bearing source_data, lineage is self-only."""
         raw_seed = [{"source_guid": "guid_solo", "page_content": "raw"}]
         item = {"source_guid": "guid_solo", "content": {"stage_two": {"z": 3}}}
         result = ProcessingResult.success(data=[item], source_guid="guid_solo")
