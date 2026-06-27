@@ -140,12 +140,24 @@ class LineageEnricher(Enricher):
         context: ProcessingContext,
         source_index: dict[str, dict] | None = None,
     ) -> dict | None:
-        """Look up parent item for lineage chaining; returns None for first-stage."""
+        """Look up parent item for lineage chaining; returns None for first-stage.
+
+        Prefers ``context.parent_records`` (previous-stage output, carries
+        lineage) over ``context.source_data`` (raw seed records, no lineage).
+        VIOL-0016: source_data lookup returned raw seed records, causing
+        ``add_unified_lineage`` to fall through to ``[node_id]`` because
+        ``"lineage" not in parent_item``.
+        """
         if context.is_first_stage or not source_guid:
             return None
 
         if context.current_item:
             return context.current_item
+
+        if context.parent_records:
+            for parent in context.parent_records:
+                if parent.get("source_guid") == source_guid:
+                    return parent
 
         if not context.source_data:
             return None
