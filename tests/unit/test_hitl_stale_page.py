@@ -8,8 +8,7 @@
 
 The full failure mode (real browser hitting a dead TCP port) cannot be
 reproduced in pytest. These assertions pin the markup and helper
-functions that drive the behaviour; the manual checklist at
-``tests/manual/hitl/STALE_PAGE_VERIFY.md`` covers the live flow.
+functions that drive the behaviour.
 """
 
 from __future__ import annotations
