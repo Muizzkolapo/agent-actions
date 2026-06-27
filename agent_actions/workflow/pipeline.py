@@ -477,9 +477,11 @@ class ProcessingPipeline:
         # data IS the source — there's no staging data in this workflow for them.
         source_data = data
 
-        # Preserve previous-stage records before source_data is overwritten below
-        # so the LineageEnricher can extend the ancestry chain.
-        parent_records = list(data) if isinstance(data, list) else []
+        parent_records = (
+            [r for r in data if isinstance(r, dict) and (r.get("lineage") or r.get("node_id"))]
+            if isinstance(data, list)
+            else []
+        )
 
         if self.config.source_relative_path and self.config.storage_backend is not None:
             try:

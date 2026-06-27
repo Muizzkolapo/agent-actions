@@ -23,7 +23,12 @@ class BatchContextAdapter:
     ) -> ProcessingContext:
         """Build a ProcessingContext from batch-side state."""
         if parent_records is None:
-            parent_records = [original_row] if original_row else []
+            if isinstance(original_row, dict) and (
+                original_row.get("lineage") or original_row.get("node_id")
+            ):
+                parent_records = [original_row]
+            else:
+                parent_records = []
         return ProcessingContext(
             agent_config=cast(ActionConfigDict, agent_config),
             agent_name=agent_config.get("agent_type", "unknown_action"),

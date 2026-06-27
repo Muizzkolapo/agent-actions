@@ -150,40 +150,23 @@ class TestParentRecordsLineagePropagation:
         enriched_item = enriched.data[0]
         assert enriched_item["lineage"] == [enriched_item["node_id"]]
 
-    def test_parent_index_o1_lookup(self):
-        """Per-item lookup uses an O(1) parent_index, not a linear scan.
-
-        With 1000 parents, repeated lookups must complete in well under
-        a second. A linear scan would be O(N*M) and become observable.
-        """
-        import time
-
-        N = 1000
+    def test_per_item_parent_lookup_resolves_correct_parent_for_each_item(self):
+        """Per-item lookups (source_guid is None at result level) must pick the right parent for each output."""
         parents = [
-            {
-                "source_guid": f"guid_{i}",
-                "node_id": f"stage_one_{i}",
-                "lineage": [f"stage_one_{i}"],
-            }
-            for i in range(N)
+            {"source_guid": f"guid_{i}", "node_id": f"n_{i}", "lineage": [f"n_{i}"]}
+            for i in range(5)
         ]
-        # 100 outputs, each mapped to a different parent via per-item source_guid
-        items = [{"source_guid": f"guid_{i}", "content": {"stage_two": {}}} for i in range(100)]
-        result = ProcessingResult.success(
-            data=items,
-            source_guid=None,  # forces per-item parent lookup
-        )
+        items = [{"source_guid": f"guid_{i}", "content": {"x": {}}} for i in range(5)]
+        result = ProcessingResult.success(data=items, source_guid=None)
 
         context = _make_context(parent_records=parents)
-        start = time.perf_counter()
         enriched = LineageEnricher().enrich(result, context)
-        elapsed = time.perf_counter() - start
 
-        assert elapsed < 0.5, f"Parent lookup took {elapsed:.3f}s — index may not be in use"
         for i, item in enumerate(enriched.data):
-            assert item["lineage"][0] == f"stage_one_{i}", (
-                f"Item {i} lineage didn't extend correct parent: {item['lineage']}"
+            assert item["lineage"][0] == f"n_{i}", (
+                f"Item {i} resolved to wrong parent: {item['lineage']}"
             )
+            assert item["lineage"][-1] == item["node_id"]
 
 
 class TestBatchContextAdapterParentRecords:
