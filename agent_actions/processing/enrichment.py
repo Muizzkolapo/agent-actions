@@ -96,6 +96,9 @@ class LineageEnricher(Enricher):
                     source_items = [
                         context.source_data[idx] for idx in source_idx if idx < source_data_len
                     ]
+                    source_items = [
+                        self._with_parent_fallback(s, parent_index) for s in source_items
+                    ]
                     skipped = len(source_idx) - len(source_items)
                     if skipped:
                         logger.warning(
@@ -119,7 +122,9 @@ class LineageEnricher(Enricher):
                 else:
                     # One-to-one: single input record
                     if source_idx < source_data_len:
-                        parent_item = context.source_data[source_idx]
+                        parent_item = self._with_parent_fallback(
+                            context.source_data[source_idx], parent_index
+                        )
                     else:
                         logger.warning(
                             "source_mapping[%d] -> %d is out of bounds "
@@ -145,6 +150,21 @@ class LineageEnricher(Enricher):
         result.node_id = base_node_id
         return result
 
+    @staticmethod
+    def _with_parent_fallback(item: dict, parent_index: dict[str, dict] | None) -> dict:
+        """If *item* lacks lineage, look up a richer match in parent_index by source_guid."""
+        if not isinstance(item, dict):
+            return item
+        if item.get("lineage") or item.get("node_id"):
+            return item
+        if parent_index is None:
+            return item
+        sg = item.get("source_guid")
+        if sg is None:
+            return item
+        richer = parent_index.get(sg)
+        return richer if richer is not None else item
+
     def _get_parent_item(
         self,
         source_guid: str | None,
@@ -165,7 +185,9 @@ class LineageEnricher(Enricher):
             return None
 
         if context.current_item:
-            return context.current_item
+            current_guid = context.current_item.get("source_guid")
+            if current_guid is None or current_guid == source_guid:
+                return context.current_item
 
         if parent_index is not None:
             hit = parent_index.get(source_guid)
