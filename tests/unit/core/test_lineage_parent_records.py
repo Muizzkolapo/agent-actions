@@ -233,3 +233,72 @@ class TestBatchContextAdapterParentRecords:
             record_index=0,
         )
         assert ctx.parent_records == []
+
+
+class TestGetParentItemDirect:
+    """Direct unit tests for LineageEnricher._get_parent_item lookup precedence."""
+
+    def _ctx(
+        self,
+        is_first_stage: bool = False,
+        current_item: dict | None = None,
+        parent_records: list[dict] | None = None,
+        source_data: list[dict] | None = None,
+    ) -> ProcessingContext:
+        return ProcessingContext(
+            agent_config={"agent_type": "x"},
+            agent_name="x",
+            mode=RunMode.ONLINE,
+            is_first_stage=is_first_stage,
+            current_item=current_item,
+            parent_records=parent_records or [],
+            source_data=source_data or [],
+        )
+
+    def test_returns_none_when_first_stage(self):
+        ctx = self._ctx(
+            is_first_stage=True,
+            parent_records=[{"source_guid": "g", "node_id": "n"}],
+        )
+        assert LineageEnricher()._get_parent_item("g", ctx) is None
+
+    def test_returns_none_when_source_guid_missing(self):
+        ctx = self._ctx(parent_records=[{"source_guid": "g", "node_id": "n"}])
+        assert LineageEnricher()._get_parent_item(None, ctx) is None
+
+    def test_current_item_wins_over_parent_records(self):
+        current = {"source_guid": "g", "node_id": "from_current"}
+        parents = [{"source_guid": "g", "node_id": "from_parents"}]
+        ctx = self._ctx(current_item=current, parent_records=parents)
+        assert LineageEnricher()._get_parent_item("g", ctx)["node_id"] == "from_current"
+
+    def test_parent_index_hit_returned(self):
+        target = {"source_guid": "g", "node_id": "n"}
+        parents = [target, {"source_guid": "other", "node_id": "o"}]
+        index = {p["source_guid"]: p for p in parents}
+        ctx = self._ctx(parent_records=parents)
+        assert LineageEnricher()._get_parent_item("g", ctx, parent_index=index) is target
+
+    def test_parent_index_miss_falls_through_to_source_data(self):
+        """Miss in parent_records falls through to source_data so FILE-mode lookups still resolve."""
+        parents = [{"source_guid": "other", "node_id": "o"}]
+        index = {p["source_guid"]: p for p in parents}
+        source_match = {"source_guid": "g", "node_id": "from_source"}
+        ctx = self._ctx(parent_records=parents, source_data=[source_match])
+        source_index = {source_match["source_guid"]: source_match}
+        result = LineageEnricher()._get_parent_item(
+            "g", ctx, source_index=source_index, parent_index=index
+        )
+        assert result is source_match
+
+    def test_linear_scan_when_parent_index_omitted(self):
+        target = {"source_guid": "g", "node_id": "n"}
+        ctx = self._ctx(parent_records=[target])
+        assert LineageEnricher()._get_parent_item("g", ctx) is target
+
+    def test_falls_through_to_source_index_when_parents_empty(self):
+        seed = [{"source_guid": "g", "node_id": "from_seed"}]
+        source_index = {p["source_guid"]: p for p in seed}
+        ctx = self._ctx(parent_records=[], source_data=seed)
+        result = LineageEnricher()._get_parent_item("g", ctx, source_index=source_index)
+        assert result is seed[0]
