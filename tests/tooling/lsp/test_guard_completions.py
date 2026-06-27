@@ -289,11 +289,10 @@ class TestGuardDiagnostics:
         assert "Did you mean" not in diag.message
 
     def test_guard_with_quoted_string_literal_no_diagnostic(self, tmp_path: Path):
-        """VIOL-0036: identifiers inside quoted literals must not produce a
-        guard diagnostic. The integration test mirrors how the indexer feeds
-        diagnostics — `guard_variables` is the extractor's output, so an
-        empty-modulo-observe list here proves the extractor + diagnostics
-        path agrees with `agac validate-udfs`.
+        """Identifiers inside quoted literals must not produce a guard
+        diagnostic — the integration test mirrors how the indexer feeds
+        diagnostics, so an empty-modulo-observe list here proves the
+        extractor + diagnostics path agrees with `agac validate-udfs`.
         """
         from agent_actions.tooling.lsp.indexer import _extract_condition_variables
 

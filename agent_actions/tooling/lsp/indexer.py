@@ -431,9 +431,8 @@ def _add_reference(
     )
 
 
-# Single- or double-quoted string literal, allowing escaped quotes
-# (`"can\"t"`). Match length is preserved by the substitution below so
-# downstream offset-based mappings stay valid. See VIOL-0036.
+# Match length is preserved by the substitution below so any downstream
+# offset-based mapping over the sanitised string stays valid.
 _QUOTED_LITERAL_RE = re.compile(
     r'"(?:\\.|[^"\\])*"'
     r"|'(?:\\.|[^'\\])*'"
@@ -441,11 +440,6 @@ _QUOTED_LITERAL_RE = re.compile(
 
 
 def _blank_out_quoted_literals(condition: str) -> str:
-    """Replace each quoted-string span with spaces of equal length.
-
-    VIOL-0036: identifiers inside quoted string literals are values, not
-    variable references; the LSP must not flag them.
-    """
     return _QUOTED_LITERAL_RE.sub(lambda m: " " * (m.end() - m.start()), condition)
 
 
@@ -453,7 +447,7 @@ def _extract_condition_variables(condition: str) -> list[str]:
     """Extract variable-like tokens from a guard/validation condition.
 
     Identifiers inside single- or double-quoted string literals are
-    ignored (VIOL-0036).
+    ignored — they are values, not variable references.
     """
     sanitised = _blank_out_quoted_literals(condition)
     tokens = re.findall(r"\b[a-zA-Z_][\w\.]*\b", sanitised)

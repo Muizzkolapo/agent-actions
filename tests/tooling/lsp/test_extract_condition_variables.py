@@ -1,6 +1,4 @@
-"""Regression tests for VIOL-0036.
-
-The LSP variable extractor must ignore identifiers that appear inside
+"""The LSP variable extractor must ignore identifiers that appear inside
 single- or double-quoted string literals — they are guard literals, not
 variable references, and `agac validate-udfs` already treats them as
 such. The LSP must agree.
@@ -16,7 +14,7 @@ from agent_actions.tooling.lsp.indexer import _extract_condition_variables
 @pytest.mark.parametrize(
     "condition,expected_vars",
     [
-        # The original VIOL-0036 case — `approved` is a string literal.
+        # `approved` is a string literal, not a variable.
         ('x.hitl_status == "approved"', {"x.hitl_status"}),
         # Single quotes — same rule.
         ("x.hitl_status == 'approved'", {"x.hitl_status"}),
