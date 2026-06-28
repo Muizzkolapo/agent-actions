@@ -13,7 +13,6 @@ from rich.console import Console
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
-from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 
 if TYPE_CHECKING:
@@ -32,7 +31,6 @@ from agent_actions.workflow.models import (
     WorkflowRuntimeConfig,
     WorkflowState,
 )
-from agent_actions.workflow.schema_service import WorkflowSchemaService
 from agent_actions.workflow.service_init import initialize_services, initialize_storage_backend
 
 logger = logging.getLogger(__name__)
@@ -155,56 +153,23 @@ class AgentWorkflow:
 
         Validates context_scope field references, schema structures, and
         data flow — like dbt compile before dbt run. Raises on errors.
+
+        Delegates to PreflightService so both runtime and CLI introspection
+        (via WorkflowInspector) share a single validation implementation.
         """
-        self.schema_service = WorkflowSchemaService.from_action_configs(
-            self.agent_name,
-            self.action_configs,
-            project_root=self.config.resolve_project_root(),
-            with_udf_registry=True,
-        )
+        from agent_actions.services.preflight_service import PreflightService
 
-        result = self.schema_service.validate()
-        if result.errors:
-            raise PreFlightValidationError(
-                result.format_report(),
-                hint="Fix the static type errors above before running the workflow.",
-            )
-
-        # Auto-fix schemas for fields that may be None due to guard filtering.
-        from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
-            apply_guard_nullable_schema_fixes,
-        )
-
-        guard_fixes = apply_guard_nullable_schema_fixes(self.action_configs)
-        if guard_fixes:
-            logger.info(
-                "Auto-fixed %d guard-nullable schema field(s): %s",
-                len(guard_fixes),
-                ", ".join(guard_fixes),
-            )
-
-        guard_errors = self._validate_guard_conditions()
-        if guard_errors:
-            raise PreFlightValidationError(
-                "\n".join(guard_errors),
-                hint="Fix the guard condition errors above before running the workflow.",
-            )
-
-        # Resolution checks: API keys, seed files, vendor batch compatibility
-        from agent_actions.validation.preflight.resolution_service import (
-            WorkflowResolutionService,
-        )
-
-        resolution_result = WorkflowResolutionService(
+        service = PreflightService(
+            agent_name=self.agent_name,
             action_configs=self.action_configs,
+            project_root=self.config.resolve_project_root(),
             workflow_config_path=self.config.paths.constructor_path,
-            project_root=self.config.project_root,
             verify_keys=self.config.verify_keys,
-        ).resolve_all()
-        resolution_result.raise_if_invalid()
-
-        for warning in resolution_result.warnings:
-            logger.warning("Pre-flight: %s", warning.message)
+        )
+        service.validate()
+        # Reuse schema service so downstream code (and inspect subcommands)
+        # don't have to rebuild it.
+        self.schema_service = service.schema_service
 
     def _strip_unreachable_drops(self) -> None:
         """Remove drop directives targeting unreachable namespaces from action configs.
