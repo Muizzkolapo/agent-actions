@@ -1,4 +1,4 @@
-"""Tests for VIOL-0008: unified `agac inspect` command.
+"""Tests for the unified `agac inspect` command.
 
 Covers the four flag modes (--yaml, --validate, --dry-run, --json) plus
 mutual-exclusion and the absent-flag default. Uses MagicMock to fake the

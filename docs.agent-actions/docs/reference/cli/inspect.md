@@ -105,11 +105,15 @@ Output JSON instead of rich text. Combines with the other modes.
 $ agac inspect -a my_workflow --json
 {
   "workflow": "my_workflow",
-  "validation_ok": true,
+  "status": "ok",
   "execution_levels": [["fetch_reviews"], ["analyze_sentiment", "extract_topics"]],
   "context_scope": { "fetch_reviews": { "scope": "observe" }, ... }
 }
 ```
+
+`status` is `"ok"` on success and `"failed"` on validation error
+(consistent across `--validate`, `--dry-run`, and the default mode), so
+CI scripts can branch on a single key.
 
 :::tip Validation never hits the network
 The bare `agac inspect` (and `--validate`, `--dry-run`) runs preflight

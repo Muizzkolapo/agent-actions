@@ -1,16 +1,12 @@
 """Lightweight workflow inspector for read-only introspection.
 
-Renders, validates, and resolves a workflow WITHOUT initializing
-storage backend or creating execution services. Used by all
+Renders, validates, and resolves a workflow without initializing the
+storage backend or runtime execution services. Used by the
 ``agac inspect`` subcommands.
 
-Replaces ``BaseInspectCommand._load_workflow()`` which unnecessarily
-instantiated ``AgentWorkflow`` (and therefore SQLite + runtime services).
-
-The inspector exposes the same duck-typed attributes the inspect
-subcommands previously read off ``AgentWorkflow`` — ``action_configs``,
-``execution_order``, and ``schema_service`` — so existing call sites
-continue to work.
+Exposes ``action_configs``, ``execution_order``, and ``schema_service``
+(populated after ``validate()``) so call sites can treat it as a
+read-only view of the workflow.
 """
 
 from __future__ import annotations
@@ -40,15 +36,12 @@ logger = logging.getLogger(__name__)
 class WorkflowInspector:
     """Lightweight workflow introspection.
 
-    No storage. No execution services. No LLM calls. Does NOT fire the
-    runtime ``WorkflowInitializationStartEvent``. (UDF discovery still
-    fires ``UDFDiscoveryStartEvent``/``UDFDiscoveryCompleteEvent`` since
-    it shares the runtime's UDF-loading helper; suppress them via the
-    event manager if you need a silent inspect.)
+    No storage backend, no execution services, no LLM calls.
 
-    Pulls action_configs and execution_order through the same
-    ``ConfigManager`` pipeline the runtime uses, so introspection
-    reflects what ``agac run`` would actually execute.
+    Drives the same ``ConfigManager`` pipeline the runtime uses, so
+    ``action_configs`` and ``execution_order`` reflect what the runtime
+    would actually execute. UDF discovery fires its normal start/complete
+    events; the runtime initialization event is intentionally skipped.
     """
 
     def __init__(
@@ -85,10 +78,9 @@ class WorkflowInspector:
     def render(self) -> str:
         """Return the fully rendered workflow YAML.
 
-        Replaces ``agac compile``/``agac render`` output. Goes through
-        ``ConfigRenderingService`` (which uses ``ConfigManager``-merged
-        defaults) so the result is what ``agac run`` would see, not a
-        raw template dump.
+        Uses ``ConfigManager``-merged defaults so the output matches
+        what the runtime would consume — including expanded versions,
+        inlined schemas, and resolved prompt references.
         """
         action_config_map = ConfigRenderingService().render_and_load_config(
             self.agent_name,
@@ -107,10 +99,8 @@ class WorkflowInspector:
         """Run the config pipeline and populate ``action_configs`` +
         ``execution_order``. Idempotent.
 
-        Mirrors ``load_workflow_configs()`` without firing the
-        ``WorkflowInitializationStartEvent`` (reserved for runtime
-        execution). UDF-discovery events still fire because the helper
-        is shared with the runtime path.
+        Skips the runtime initialization event but UDF-discovery events
+        still fire (shared helper).
         """
         if self._loaded:
             return self.action_configs

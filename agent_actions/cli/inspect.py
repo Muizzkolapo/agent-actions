@@ -1,8 +1,6 @@
 """Inspect commands for the Agent Actions CLI.
 
-Unified preflight + introspection. Replaces ``agac compile`` and
-``agac render`` — the rendered-YAML output now lives behind
-``agac inspect --yaml`` (VIOL-0008).
+Unified preflight and introspection surface.
 
 Surface:
 

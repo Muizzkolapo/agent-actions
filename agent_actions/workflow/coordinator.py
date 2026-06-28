@@ -153,9 +153,6 @@ class AgentWorkflow:
 
         Validates context_scope field references, schema structures, and
         data flow — like dbt compile before dbt run. Raises on errors.
-
-        Delegates to PreflightService so both runtime and CLI introspection
-        (via WorkflowInspector) share a single validation implementation.
         """
         from agent_actions.services.preflight_service import PreflightService
 
@@ -167,8 +164,7 @@ class AgentWorkflow:
             verify_keys=self.config.verify_keys,
         )
         service.validate()
-        # Reuse schema service so downstream code (and inspect subcommands)
-        # don't have to rebuild it.
+        # Reuse the rebuilt schema service to avoid a second pass.
         self.schema_service = service.schema_service
 
     def _strip_unreachable_drops(self) -> None:

@@ -1,8 +1,9 @@
-"""Standalone preflight validation service.
+"""Standalone preflight validation for workflow configs.
 
-Extracted from AgentWorkflow._run_static_validation() so that both
-runtime (via coordinator) and inspection (via WorkflowInspector) can
-validate workflows without duplicating logic.
+Runs the four static checks (schema validation, guard-nullable schema
+fixes, guard syntax validation, resolution) without instantiating any
+runtime storage or execution services, so it can be used from both
+the runtime path and read-only CLI introspection.
 """
 
 from __future__ import annotations
@@ -28,8 +29,7 @@ class PreflightService:
 
     Runs schema validation, guard syntax validation, and resolution
     checks (API keys, seed files, vendor batch compatibility). Mutates
-    ``action_configs`` to apply guard-nullable schema fixes — same
-    behavior as the previous coordinator._run_static_validation().
+    ``action_configs`` to apply guard-nullable schema fixes.
 
     Pass-or-raise contract: ``validate()`` returns nothing on success and
     raises ``PreFlightValidationError`` on the first failed check.
@@ -84,9 +84,8 @@ class PreflightService:
             )
 
         # --- 3. Guard syntax validation ---
-        # Lazy-import so this module stays lightweight when imported by
-        # the CLI inspect path — agent_actions.workflow.coordinator
-        # transitively pulls storage, services, and event plumbing.
+        # Lazy import — pulling this at module top would drag the
+        # runtime stack into the read-only CLI inspect path.
         from agent_actions.workflow.coordinator import validate_guard_conditions
 
         guard_errors = validate_guard_conditions(self.action_configs)
