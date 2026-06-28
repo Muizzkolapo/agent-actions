@@ -65,9 +65,7 @@ def _resolve_action(
         if len(actions) == 1:
             return actions[0]
         if not actions:
-            raise click.UsageError(
-                f"No batch jobs found for workflow '{agent_name}'."
-            )
+            raise click.UsageError(f"No batch jobs found for workflow '{agent_name}'.")
         raise click.UsageError(
             f"Multiple batch actions in workflow '{agent_name}'; "
             f"pass --action <action_name>. Available: {', '.join(actions)}"

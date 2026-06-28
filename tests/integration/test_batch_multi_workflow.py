@@ -142,9 +142,7 @@ class TestWorkflowScopedResolution:
         assert Path(call["output_directory"]).name == "beta"
 
     def test_ambiguous_workflow_raises_usage_error(self, multi_workflow_project):
-        result = CliRunner().invoke(
-            cli, ["batch", "status", "--batch-id", "irrelevant"]
-        )
+        result = CliRunner().invoke(cli, ["batch", "status", "--batch-id", "irrelevant"])
         assert result.exit_code != 0
         assert "alpha" in result.output and "beta" in result.output, (
             "error must list available workflows"
