@@ -58,11 +58,12 @@ When a record first enters the pipeline:
 {
   "target_id": "ROOT-UUID",
   "root_target_id": "ROOT-UUID"
-  // Note: parent_target_id is absent on root records — not null.
-  // Use `"parent_target_id" in record` (presence check), not `record["parent_target_id"] is None`.
+}
 ```
 
-The first record is its own root—`root_target_id` equals `target_id`.
+The first record is its own root—`root_target_id` equals `target_id`. Note that
+`parent_target_id` is **absent** on root records (not `null`): use a presence check
+(`"parent_target_id" in record`), not `record["parent_target_id"] is None`.
 
 ## Parallel Branch Merge (Diamond Pattern)
 

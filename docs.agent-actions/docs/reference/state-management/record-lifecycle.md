@@ -51,17 +51,38 @@ For most workflows (under ~16 actions with standard retries), this cap will neve
 
 ## Dispositions
 
-Each record also has a `reason_class` in the disposition table that explains *why* it reached its current state:
+The `record_disposition` table records, per action and record, **what happened** (the
+`disposition` column) and **why** (the `reason` column). There is no `reason_class`
+column.
 
-| Reason class | Meaning |
+### `disposition` column
+
+A fixed enum derived from the record's final `_state` (see `Disposition` in
+`agent_actions/storage/backend.py`):
+
+| Disposition | Meaning |
 |-------------|---------|
 | `success` | Action completed successfully |
+| `passthrough` | Record passed through unprocessed (e.g. guard skip, still active) |
+| `skipped` | WHERE clause excluded the record from this action |
 | `filtered` | Guard condition was false; record excluded from output |
-| `skipped` | WHERE clause or guard skip; record preserved but not processed |
-| `upstream_unprocessed` | A dependency didn't produce output for this record |
-| `tool_missing_record` | A tool action didn't emit output for this record |
+| `unprocessed` | A dependency didn't produce output (cascade casualty) |
+| `deferred` | In-flight HITL/batch awaiting resolution |
 | `exhausted` | All reprompt attempts failed |
 | `failed` | Unrecoverable error |
+
+### `reason` column
+
+A free-form canonical reason string giving the specific cause (see
+`agent_actions/record/reasons.py`). Common values include `success`, `guard_filter`,
+`guard_skip`, `guard_prefilter_skip`, `upstream_unprocessed`, `tool_missing_record`,
+`prep_failed`, `empty_output`, `parse_error`, `retry_exhausted`, and
+`reprompt_exhausted`.
+
+> **Note:** `upstream_unprocessed` and `tool_missing_record` are `reason` strings, not
+> `disposition` values — the matching disposition for both is `unprocessed`. Query the
+> `disposition` column for the outcome category and the `reason` column for the specific
+> cause.
 
 ## Version Correlation
 
