@@ -19,6 +19,11 @@ class GuardBehavior(StrEnum):
 # Values recognized during config loading but rejected as unsupported.
 _UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess"})
 
+# User-facing keys allowed in a dict-form guard config. Runtime keys
+# (clause, scope, behavior, passthrough_on_error) are synthesized by
+# the expander after parsing and must never appear in user YAML.
+_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset({"condition", "on_false"})
+
 
 class GuardConfig:
     """Consolidated guard configuration with condition and behavior control."""
@@ -88,6 +93,18 @@ class GuardConfig:
                 "Guard dict must have 'condition' key",
                 context={
                     "config_keys": list(config_dict.keys()),
+                    "operation": "parse_guard_config",
+                },
+            )
+        unknown = sorted(set(config_dict) - _ALLOWED_GUARD_KEYS)
+        if unknown:
+            raise ConfigValidationError(
+                "guard_config_unknown_keys",
+                f"Unknown guard config key(s): {unknown}. "
+                f"Valid keys: {sorted(_ALLOWED_GUARD_KEYS)}.",
+                context={
+                    "unknown_keys": unknown,
+                    "allowed_keys": sorted(_ALLOWED_GUARD_KEYS),
                     "operation": "parse_guard_config",
                 },
             )
