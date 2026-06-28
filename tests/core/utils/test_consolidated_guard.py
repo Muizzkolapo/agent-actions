@@ -124,6 +124,35 @@ class TestConsolidatedGuardParser:
         with pytest.raises(ConfigValidationError, match="Guard dict must have 'condition' key"):
             parse_guard_config({"on_false": "skip"})
 
+    def test_parse_rejects_unknown_key(self):
+        with pytest.raises(ConfigValidationError) as exc:
+            parse_guard_config({"condition": "true", "on_falsee": "skip"})
+        assert "on_falsee" in str(exc.value)
+
+    def test_parse_rejects_multiple_unknown_keys_naming_all(self):
+        with pytest.raises(ConfigValidationError) as exc:
+            parse_guard_config({"condition": "true", "foo": 1, "bar": 2})
+        msg = str(exc.value)
+        assert "foo" in msg
+        assert "bar" in msg
+
+    def test_parse_rejects_passthrough_keys_until_wire_through_lands(self):
+        with pytest.raises(ConfigValidationError) as exc:
+            parse_guard_config(
+                {
+                    "condition": "score >= 80",
+                    "on_false": "filter",
+                    "passthrough_on_error": False,
+                }
+            )
+        assert "passthrough_on_error" in str(exc.value)
+
+    def test_parse_rejects_non_string_keys_as_config_error(self):
+        with pytest.raises(ConfigValidationError) as exc:
+            parse_guard_config({"condition": "true", 1: "x", "also_bad": "y"})
+        assert "1" in str(exc.value)
+        assert "also_bad" in str(exc.value)
+
 
 class TestFormatConverterIntegration:
     """Test integration with format converter for routing behavior."""

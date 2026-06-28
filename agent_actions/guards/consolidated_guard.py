@@ -19,6 +19,9 @@ class GuardBehavior(StrEnum):
 # Values recognized during config loading but rejected as unsupported.
 _UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess"})
 
+# Only keys whose values reach the runtime; expander synthesizes the rest.
+_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset({"condition", "on_false"})
+
 
 class GuardConfig:
     """Consolidated guard configuration with condition and behavior control."""
@@ -71,11 +74,7 @@ class GuardConfig:
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> "GuardConfig":
-        """Create GuardConfig from a dictionary with 'condition' and 'on_false' keys.
-
-        Raises:
-            ConfigValidationError: If required keys are missing or type is wrong
-        """
+        """Build a GuardConfig from a user-facing dict, rejecting unknown keys."""
         if not isinstance(config_dict, dict):
             raise ConfigValidationError(
                 "guard_config_type",
@@ -88,6 +87,19 @@ class GuardConfig:
                 "Guard dict must have 'condition' key",
                 context={
                     "config_keys": list(config_dict.keys()),
+                    "operation": "parse_guard_config",
+                },
+            )
+        unknown = sorted(str(k) for k in set(config_dict) - _ALLOWED_GUARD_KEYS)
+        if unknown:
+            allowed = sorted(_ALLOWED_GUARD_KEYS)
+            raise ConfigValidationError(
+                "guard_config_unknown_keys",
+                f"Unknown guard config key(s): {', '.join(unknown)}. "
+                f"Valid keys: {', '.join(allowed)}.",
+                context={
+                    "unknown_keys": unknown,
+                    "allowed_keys": allowed,
                     "operation": "parse_guard_config",
                 },
             )
