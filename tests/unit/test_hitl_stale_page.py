@@ -104,9 +104,5 @@ def test_rendered_html_embeds_configured_timeout(client, server):
     that.
     """
     resp = client.get("/")
-    # Note: this fixture predates the VIOL-0038 GET-auth change. If the
-    # auth fix has landed in this branch, swap to a bootstrap-query GET.
-    if resp.status_code == 401:
-        resp = client.get(f"/?bootstrap={server._session_token}")
     assert resp.status_code == 200
     assert b'name="hitl-timeout" content="42"' in resp.data
