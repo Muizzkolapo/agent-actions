@@ -963,7 +963,7 @@ def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
     """Majority vote across 3 parallel voters."""
     keep_count = sum(
         1 for i in range(1, 4)
-        if data.get(f"vote_quality_{i}", {}).get("verdict") == "keep"
+        if data.get(f"vote_quality_{i}", {}).get("data", {}).get("verdict") == "keep"
     )
     return {
         "filter": "keep" if keep_count >= 2 else "filter",

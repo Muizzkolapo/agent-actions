@@ -41,7 +41,7 @@ agac --version
 
 You should see output like:
 ```
-agent-actions 2.0.0
+Agent Actions CLI v0.2.6
 ```
 
 ## Provider Configuration
@@ -97,7 +97,7 @@ curl -fsSL https://ollama.ai/install.sh | sh
 ollama pull llama3.1
 
 # Use in your agentic workflow
-# vendor: ollama
+# vendor: ollama_local
 # model: llama3.1
 ```
 

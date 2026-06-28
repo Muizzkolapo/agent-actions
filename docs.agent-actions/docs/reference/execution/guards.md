@@ -19,15 +19,16 @@ Guards evaluate conditions and decide whether an action should run for each reco
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `condition` | string | Required | Expression evaluated against upstream data |
-| `on_false` | string | `filter` | Action when condition is false |
+| `on_false` | string | `filter` (SQL) / `skip` (UDF) | Action when condition is false. **Default depends on guard type**: SQL-style guards default to `filter`; UDF guards default to `skip`. |
 | `passthrough_on_error` | boolean | `true` | Pass record through if evaluation fails |
 
 ## on_false Options
 
 | Value | Description |
 |----------|-------------|
-| `skip` | Action skipped, record continues to downstream actions |
-| `filter` | Record removed from workflow entirely |
+| `skip` | Action skipped, record continues to downstream actions with original content preserved |
+| `filter` | Record excluded from action output entirely — downstream actions never see it |
+| `warn` | Record proceeds to LLM processing normally; a warning is logged |
 
 ## Condition Expressions
 

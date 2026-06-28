@@ -80,7 +80,17 @@ defaults:
   context_scope:
     seed_path:
       exam_syllabus: $file:syllabus.json
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+  reprompt:
+    on_schema_mismatch: reprompt
+    max_attempts: 3
+  batch_max_workers: 6
 ```
+
+> **Note:** `data_source`, `reprompt`, and `batch_max_workers` are workflow-level defaults that can also appear in the `defaults:` block. They are documented in [Defaults](../configuration/defaults.md) and [Run Modes](../execution/run-modes.md).
 
 ## Version Field Patterns
 
