@@ -8,16 +8,10 @@ from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
-from agent_actions.config.project_paths import (
-    ProjectPaths,
-    ProjectPathsFactory,
-    find_config_file,
-)
+from agent_actions.config.project_paths import ProjectPaths
 from agent_actions.errors import ConfigurationError
 from agent_actions.models.action_schema import ActionSchema
-from agent_actions.prompt.renderer import ConfigRenderingService
-from agent_actions.workflow.coordinator import AgentWorkflow
-from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
+from agent_actions.services.workflow_inspector import WorkflowInspector
 
 if TYPE_CHECKING:
     from agent_actions.workflow.schema_service import WorkflowSchemaService
@@ -34,47 +28,28 @@ class BaseInspectCommand:
         self.user_code = user_code
         self.json_output = json_output
         self.console = Console()
-        self.paths: ProjectPaths | None = None  # Will be set by _load_workflow
+        self.paths: ProjectPaths | None = None
         self.schema_service: WorkflowSchemaService | None = None
 
-    def _load_workflow(self, project_root: Path | None = None) -> AgentWorkflow:
-        paths = ProjectPathsFactory.create_project_paths(
-            self.agent_name, self.agent, auto_create=False, project_root=project_root
-        )
-        self.paths = paths
-        filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(
-            self.agent_name,
-            paths.agent_config_dir,
-            filename,
-            check_alternatives=True,
-            project_root=project_root,
-        )
+    def _load_inspector(self, project_root: Path | None = None) -> WorkflowInspector:
+        """Load a workflow inspector for read-only introspection.
 
-        ConfigRenderingService().render_and_load_config(
-            self.agent_name,
-            full_path,
-            paths.template_dir,
-            paths.rendered_workflows_dir,
-            project_root=project_root,
-        )
-
-        workflow = AgentWorkflow(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    user_code_path=str(self.user_code) if self.user_code else None,
-                    default_path=str(paths.default_config_path),
-                ),
-                use_tools=False,
-                project_root=project_root,
-            )
-        )
-
-        # Reuse schema service built during static validation
-        self.schema_service = workflow.schema_service
-
-        return workflow
+        Does NOT initialize the storage backend or runtime execution
+        services — that overhead is wasted on read-only commands.
+        Validation still runs so the inspect commands surface the same
+        errors ``agac run`` would surface, but bypasses key probing
+        (``verify_keys=False``) since introspection shouldn't make
+        network calls.
+        """
+        inspector = WorkflowInspector(agent_name=self.agent_name, project_root=project_root)
+        inspector.load()
+        # Mirror the pre-VIOL-0008 behavior of _load_workflow(): the
+        # inspect subcommands need schema_service for output-field
+        # resolution. validate() populates it as a side effect.
+        inspector.validate(verify_keys=False)
+        self.paths = inspector.paths
+        self.schema_service = inspector.schema_service
+        return inspector
 
     def _get_action_schema(self, action_name: str) -> ActionSchema | None:
         """Get ActionSchema for an action via the schema service."""
@@ -82,13 +57,13 @@ class BaseInspectCommand:
             return None
         return self.schema_service.get_action_schema(action_name)
 
-    def _analyze_dependencies(self, workflow: AgentWorkflow) -> dict[str, Any]:
+    def _analyze_dependencies(self, inspector: WorkflowInspector) -> dict[str, Any]:
         from agent_actions.prompt.context.scope_inference import infer_dependencies
 
-        workflow_actions = list(workflow.action_configs.keys())
+        workflow_actions = list(inspector.action_configs.keys())
         result = {}
 
-        for action_name, action_config in workflow.action_configs.items():
+        for action_name, action_config in inspector.action_configs.items():
             deps_raw = action_config.get("dependencies", [])
             if isinstance(deps_raw, str):
                 explicit_deps = [deps_raw]

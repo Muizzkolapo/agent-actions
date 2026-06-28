@@ -166,10 +166,10 @@ class TestInspectNotFoundExitCode:
         cmd.json_output = False
         cmd.console = MagicMock()
 
-        # Mock _load_workflow and _analyze_dependencies
-        mock_workflow = MagicMock()
-        mock_workflow.execution_order = []
-        cmd._load_workflow = MagicMock(return_value=mock_workflow)
+        # Mock _load_inspector and _analyze_dependencies
+        mock_inspector = MagicMock()
+        mock_inspector.execution_order = []
+        cmd._load_inspector = MagicMock(return_value=mock_inspector)
         cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
 
         import click
@@ -187,8 +187,8 @@ class TestInspectNotFoundExitCode:
         cmd.json_output = True
         cmd.console = MagicMock()
 
-        mock_workflow = MagicMock()
-        cmd._load_workflow = MagicMock(return_value=mock_workflow)
+        mock_inspector = MagicMock()
+        cmd._load_inspector = MagicMock(return_value=mock_inspector)
         cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
 
         import click

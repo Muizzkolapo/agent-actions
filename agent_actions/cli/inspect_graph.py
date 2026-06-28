@@ -9,8 +9,8 @@ import click
 from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.workflow.coordinator import AgentWorkflow
 
 from .inspect_base import BaseInspectCommand
 
@@ -21,18 +21,18 @@ class GraphCommand(BaseInspectCommand):
     """Show workflow structure as a visual dependency graph."""
 
     def execute(self, project_root: Path | None = None) -> None:
-        workflow = self._load_workflow(project_root=project_root)
-        dependency_info = self._analyze_dependencies(workflow)
-        execution_order = workflow.execution_order or list(workflow.action_configs.keys())
+        inspector = self._load_inspector(project_root=project_root)
+        dependency_info = self._analyze_dependencies(inspector)
+        execution_order = inspector.execution_order or list(inspector.action_configs.keys())
 
         if self.json_output:
-            self._output_json(workflow, dependency_info, execution_order)
+            self._output_json(inspector, dependency_info, execution_order)
         else:
-            self._output_rich(workflow, dependency_info, execution_order)
+            self._output_rich(inspector, dependency_info, execution_order)
 
     def _output_json(
         self,
-        workflow: AgentWorkflow,
+        inspector: WorkflowInspector,
         dependency_info: dict[str, Any],
         execution_order: list[str],
     ) -> None:
@@ -45,7 +45,7 @@ class GraphCommand(BaseInspectCommand):
                     "input_sources": info["input_sources"],
                     "context_sources": info["context_sources"],
                     "output_fields": self._get_output_fields(
-                        workflow.action_configs.get(name, {}),
+                        inspector.action_configs.get(name, {}),
                         action_schema=self._get_action_schema(name),
                     ),
                 }
@@ -56,7 +56,7 @@ class GraphCommand(BaseInspectCommand):
 
     def _output_rich(
         self,
-        workflow: AgentWorkflow,
+        inspector: WorkflowInspector,
         dependency_info: dict[str, Any],
         execution_order: list[str],
     ) -> None:
@@ -71,7 +71,7 @@ class GraphCommand(BaseInspectCommand):
                 continue
 
             info = dependency_info[action_name]
-            action_config = workflow.action_configs.get(action_name, {})
+            action_config = inspector.action_configs.get(action_name, {})
             action_type = self._get_action_type(info["input_sources"], info["context_sources"])
 
             node = tree.add(f"[bold]{action_name}[/bold] [dim]({action_type})[/dim]")

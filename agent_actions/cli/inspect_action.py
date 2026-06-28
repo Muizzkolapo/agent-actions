@@ -12,6 +12,7 @@ from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 from .inspect_base import BaseInspectCommand
@@ -34,11 +35,11 @@ class ActionCommand(BaseInspectCommand):
         self.action_name = action_name
 
     def execute(self, project_root: Path | None = None) -> None:
-        workflow = self._load_workflow(project_root=project_root)
-        validate_action_exists(self.action_name, workflow.action_configs)
+        inspector = self._load_inspector(project_root=project_root)
+        validate_action_exists(self.action_name, inspector.action_configs)
 
-        action_config = workflow.action_configs[self.action_name]
-        dependency_info = self._analyze_dependencies(workflow)
+        action_config = inspector.action_configs[self.action_name]
+        dependency_info = self._analyze_dependencies(inspector)
         info = dependency_info[self.action_name]
 
         if self.json_output:
@@ -175,14 +176,14 @@ class ContextCommand(BaseInspectCommand):
         self.target_action_name = action_name
 
     def execute(self, project_root: Path | None = None) -> None:
-        workflow = self._load_workflow(project_root=project_root)
-        validate_action_exists(self.target_action_name, workflow.action_configs)
+        inspector = self._load_inspector(project_root=project_root)
+        validate_action_exists(self.target_action_name, inspector.action_configs)
 
-        action_config = workflow.action_configs[self.target_action_name]
-        dependency_info = self._analyze_dependencies(workflow)
+        action_config = inspector.action_configs[self.target_action_name]
+        dependency_info = self._analyze_dependencies(inspector)
         info = dependency_info[self.target_action_name]
 
-        context_data = self._build_context_data(workflow, action_config, info)
+        context_data = self._build_context_data(inspector, action_config, info)
 
         if self.json_output:
             self._output_json(context_data)
@@ -191,7 +192,7 @@ class ContextCommand(BaseInspectCommand):
 
     def _build_context_data(
         self,
-        workflow,
+        inspector: WorkflowInspector,
         action_config: dict[str, Any],
         info: dict[str, Any],
     ) -> dict[str, Any]:
@@ -199,14 +200,14 @@ class ContextCommand(BaseInspectCommand):
         namespaces["source"] = ["[from source data]"]
 
         for dep in info["input_sources"]:
-            dep_config = workflow.action_configs.get(dep, {})
+            dep_config = inspector.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(
                 dep_config, action_schema=self._get_action_schema(dep)
             )
             namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
 
         for dep in info["context_sources"]:
-            dep_config = workflow.action_configs.get(dep, {})
+            dep_config = inspector.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(
                 dep_config, action_schema=self._get_action_schema(dep)
             )

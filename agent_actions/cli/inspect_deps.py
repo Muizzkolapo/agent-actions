@@ -32,8 +32,8 @@ class DependenciesCommand(BaseInspectCommand):
         if not self.json_output:
             self.console.print(f"[cyan]Dependency Analysis: {self.agent_name}[/cyan]\n")
 
-        workflow = self._load_workflow(project_root=project_root)
-        dependency_info = self._analyze_dependencies(workflow)
+        inspector = self._load_inspector(project_root=project_root)
+        dependency_info = self._analyze_dependencies(inspector)
 
         if self.action_filter:
             if self.action_filter not in dependency_info:
@@ -46,7 +46,7 @@ class DependenciesCommand(BaseInspectCommand):
         if self.json_output:
             self._output_json(dependency_info)
         else:
-            self._output_rich(dependency_info, workflow.execution_order)
+            self._output_rich(dependency_info, inspector.execution_order)
 
     def _output_json(self, dependency_info: dict[str, Any]) -> None:
         output = {"workflow": self.agent_name, "actions": dependency_info}
