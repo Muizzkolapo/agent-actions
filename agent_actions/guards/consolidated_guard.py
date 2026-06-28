@@ -19,11 +19,7 @@ class GuardBehavior(StrEnum):
 # Values recognized during config loading but rejected as unsupported.
 _UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess"})
 
-# User-facing keys allowed in a dict-form guard config. The set
-# mirrors the GuardConfigDict TypedDict in agent_actions/config/types.py,
-# which is the canonical declaration of valid user YAML guard keys.
-# Runtime keys (clause, scope, behavior) are synthesized by the expander
-# after parsing and never appear in user YAML.
+# User-facing keys only; runtime keys are synthesized later, not parsed.
 _ALLOWED_GUARD_KEYS: frozenset[str] = frozenset(
     {"condition", "on_false", "passthrough_on_error", "passthrough_on_empty"}
 )
@@ -80,11 +76,7 @@ class GuardConfig:
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> "GuardConfig":
-        """Create GuardConfig from a dictionary with 'condition' and 'on_false' keys.
-
-        Raises:
-            ConfigValidationError: If required keys are missing or type is wrong
-        """
+        """Build a GuardConfig from a user-facing dict, rejecting unknown keys."""
         if not isinstance(config_dict, dict):
             raise ConfigValidationError(
                 "guard_config_type",
