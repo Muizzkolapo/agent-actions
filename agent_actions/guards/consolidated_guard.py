@@ -19,10 +19,8 @@ class GuardBehavior(StrEnum):
 # Values recognized during config loading but rejected as unsupported.
 _UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess"})
 
-# User-facing keys only; runtime keys are synthesized later, not parsed.
-_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset(
-    {"condition", "on_false", "passthrough_on_error", "passthrough_on_empty"}
-)
+# Only keys whose values reach the runtime; expander synthesizes the rest.
+_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset({"condition", "on_false"})
 
 
 class GuardConfig:
