@@ -481,16 +481,16 @@ The workflow continues as soon as you submit, even if the browser tab stays open
 ### Security Notes
 
 - ✅ Server binds to `127.0.0.1` (localhost only, no network exposure)
-- ✅ Every request requires `X-HITL-Token`. The launcher prints a bootstrap URL `http://localhost:{port}/?bootstrap=<token>`; the page's JS reads the token, strips it from the address bar via `history.replaceState`, and attaches it to every subsequent XHR.
 - ✅ HTML escaping prevents XSS
+- ✅ CSP headers with per-request nonce; `Cache-Control: no-store` on every response
 - ⚠️ Not suitable for remote or multi-user reviews (use webhooks instead)
 
-> **Localhost is not a trust boundary.** Any process running as your user on
-> the same machine can reach `http://localhost:{port}/`. The `X-HITL-Token`
-> header is the only thing that gates access. Treat the token printed by the
-> launcher as a single-session secret: do not paste it into chat, do not
-> screen-share before the bootstrap query is stripped from the address bar,
-> and do not run HITL on shared multi-user hosts.
+> **Trust boundary is loopback.** Any process running as your user on the
+> same machine can reach `http://localhost:{port}/`. The HITL UI is designed
+> as a single-user local tool — if you run it on a shared multi-user host,
+> any other user with shell access can read the record under review and
+> approve/reject it. Use a different review mechanism (webhooks, ticketing)
+> in that case.
 
 ### Testing HITL Actions
 
