@@ -136,6 +136,24 @@ class TestConsolidatedGuardParser:
         assert "foo" in msg
         assert "bar" in msg
 
+    def test_parse_accepts_documented_passthrough_keys(self):
+        cfg = parse_guard_config(
+            {
+                "condition": "score >= 80",
+                "on_false": "filter",
+                "passthrough_on_error": False,
+                "passthrough_on_empty": True,
+            }
+        )
+        assert cfg.condition == "score >= 80"
+        assert cfg.on_false == GuardBehavior.FILTER
+
+    def test_parse_rejects_non_string_keys_as_config_error(self):
+        with pytest.raises(ConfigValidationError) as exc:
+            parse_guard_config({"condition": "true", 1: "x", "also_bad": "y"})
+        assert "1" in str(exc.value)
+        assert "also_bad" in str(exc.value)
+
 
 class TestFormatConverterIntegration:
     """Test integration with format converter for routing behavior."""
