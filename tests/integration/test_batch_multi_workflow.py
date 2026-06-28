@@ -76,8 +76,31 @@ class TestFlagSurface:
         assert "--action" in result.output, "batch retrieve must accept --action"
 
 
+@pytest.fixture
+def captured_check_status(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    """Capture (action_name, output_directory) the CLI passes to the service."""
+    calls: list[dict] = []
+
+    def fake_check_status(self, batch_id, output_directory, action_name):
+        calls.append(
+            {
+                "batch_id": batch_id,
+                "output_directory": output_directory,
+                "action_name": action_name,
+            }
+        )
+        return "COMPLETED"
+
+    from agent_actions.llm.batch.services.submission import BatchSubmissionService
+
+    monkeypatch.setattr(BatchSubmissionService, "check_status", fake_check_status)
+    return calls
+
+
 class TestWorkflowScopedResolution:
-    def test_status_reads_workflow_scoped_registry(self, multi_workflow_project):
+    def test_status_routes_to_alpha_workflow_and_action(
+        self, multi_workflow_project, captured_check_status
+    ):
         result = CliRunner().invoke(
             cli,
             [
@@ -91,10 +114,15 @@ class TestWorkflowScopedResolution:
                 "fake_alpha_batch",
             ],
         )
-        assert "fake_beta_batch" not in result.output
         assert result.exit_code == 0, f"non-zero exit; output: {result.output}"
+        assert len(captured_check_status) == 1
+        call = captured_check_status[0]
+        assert call["action_name"] == "alpha_action"
+        assert Path(call["output_directory"]).name == "alpha"
 
-    def test_status_isolates_workflows(self, multi_workflow_project):
+    def test_status_routes_to_beta_workflow_and_action(
+        self, multi_workflow_project, captured_check_status
+    ):
         result = CliRunner().invoke(
             cli,
             [
@@ -108,8 +136,10 @@ class TestWorkflowScopedResolution:
                 "fake_beta_batch",
             ],
         )
-        assert "fake_alpha_batch" not in result.output
         assert result.exit_code == 0, f"non-zero exit; output: {result.output}"
+        call = captured_check_status[0]
+        assert call["action_name"] == "beta_action"
+        assert Path(call["output_directory"]).name == "beta"
 
     def test_ambiguous_workflow_raises_usage_error(self, multi_workflow_project):
         result = CliRunner().invoke(
@@ -123,10 +153,13 @@ class TestWorkflowScopedResolution:
 
 class TestActionNameRouting:
     def test_single_workflow_resolves_action_distinct_from_workflow_name(
-        self, single_workflow_project
+        self, single_workflow_project, captured_check_status
     ):
         result = CliRunner().invoke(
             cli,
             ["batch", "status", "--action", "solo_action", "--batch-id", "fake_solo_batch"],
         )
         assert result.exit_code == 0, f"non-zero exit; output: {result.output}"
+        assert captured_check_status[0]["action_name"] == "solo_action", (
+            "CLI must pass --action verbatim, NOT workflow_name"
+        )

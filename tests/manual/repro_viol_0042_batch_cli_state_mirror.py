@@ -41,7 +41,6 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
-from agent_actions.llm.batch.batch_cli import _discover_workflow_name
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -59,6 +58,8 @@ def _make_multi_workflow_project(root: Path) -> None:
     for wf, action in (("alpha", "alpha_action"), ("beta", "beta_action")):
         wf_root = root / "agent_workflow" / wf
         (wf_root / "agent_io" / "store").mkdir(parents=True)
+        (wf_root / "agent_config").mkdir(parents=True)
+        (wf_root / "agent_config" / f"{wf}.yml").write_text(f"name: {wf}\n")
         (wf_root / f"{wf}.yml").write_text(f"name: {wf}\n")
 
         backend = get_storage_backend(workflow_path=str(wf_root), workflow_name=wf)
@@ -97,16 +98,23 @@ def scenario_1_workflow_path_discovery(project_root: Path) -> ScenarioResult:
              keyed off `agent_workflow/<wf>` (probed via the existence of
              a `_resolve_workflow` symbol).
     """
-    # Current-state check: legacy helper fails to discover.
+    # Current-state check: legacy helper exists AND blows up on a
+    # multi-workflow project. Future state: the helper has been deleted.
     import click as _click
 
-    current_passes = False
-    try:
-        _discover_workflow_name(project_root)
-    except _click.UsageError:
-        current_passes = True  # Bug confirmed — discovery blows up.
-    except Exception:  # noqa: BLE001
-        current_passes = False
+    from agent_actions.llm.batch import batch_cli as _bc
+
+    legacy = getattr(_bc, "_discover_workflow_name", None)
+    if legacy is None:
+        current_passes = False  # Legacy helper deleted → future state.
+    else:
+        try:
+            legacy(project_root)
+            current_passes = False  # Discovery somehow succeeded — neither state.
+        except _click.UsageError:
+            current_passes = True
+        except Exception:  # noqa: BLE001
+            current_passes = False
 
     # Future-state check: replacement helper exists and resolves "alpha".
     future_passes = False
