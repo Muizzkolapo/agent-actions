@@ -480,6 +480,16 @@ class SQLiteBackend(StorageBackend):
             self.connection.commit()
             return cursor.rowcount
 
+    def list_metadata_prefix(self, prefix: str) -> list[str]:
+        """Return all metadata keys starting with `prefix`, sorted lexically."""
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT key FROM workflow_metadata WHERE key LIKE ? ORDER BY key",
+                (prefix + "%",),
+            )
+            return [row["key"] for row in cursor.fetchall()]
+
     def write_source(
         self,
         relative_path: str,

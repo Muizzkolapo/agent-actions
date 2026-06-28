@@ -237,6 +237,10 @@ class StorageBackend(ABC):
         """Delete all metadata keys starting with prefix. Returns count deleted."""
         raise NotImplementedError(f"{type(self).__name__} must implement delete_metadata_prefix()")
 
+    def list_metadata_prefix(self, prefix: str) -> list[str]:
+        """Return all metadata keys starting with `prefix`, sorted lexically."""
+        raise NotImplementedError(f"{type(self).__name__} must implement list_metadata_prefix()")
+
     def _extract_delta(
         self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
     ) -> dict[str, Any]:
