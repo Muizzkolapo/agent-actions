@@ -163,21 +163,18 @@ class InspectCommand(BaseInspectCommand):
             return
 
         action_count = sum(len(lvl) for lvl in levels)
-        parallel_count = sum(1 for lvl in levels if len(lvl) > 1)
         estimate = inspector.estimate()
 
-        # Two-tier header — title row + grouped stats row.
-        #   title  = workflow name + status pill on ONE line
-        #   stats  = structure facts (parens for parallel substat)
-        #            · cost facts (parens for guarded substat)
-        # No "Pipeline" header below — the numbered indented list IS
-        # self-evidently the pipeline, no need to label it.
+        # Two-line header: title row, then a flat stats row.
+        # `7 parallel` is intentionally NOT in stats — the user can
+        # count `⫻` rows in the body if they care, and dropping it
+        # keeps the stats line short enough to fit on a 60-col
+        # terminal without orphaning the last fact.
         self.console.print(
             f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [bold green]✅ validated[/bold green]"
         )
         self.console.print(
-            f"  [dim]{action_count} actions in {len(levels)} levels "
-            f"({parallel_count} parallel)  ·  "
+            f"  [dim]{action_count} actions in {len(levels)} levels  ·  "
             f"{estimate['llm_calls']} LLM calls, {estimate['guarded_actions']} guarded[/dim]\n"
         )
 
@@ -222,10 +219,20 @@ class InspectCommand(BaseInspectCommand):
         return steps
 
     def _print_chain(self, label: str, actions: list[str], action_col: int) -> None:
-        """Render a serial chain, wrapping with consistent continuation
-        indent so long chains don't run off screen as one wall of text.
+        """Render a serial chain.
+
+        No leading row marker — serial is the default flow and doesn't
+        need to announce itself. The `→` only appears where it carries
+        meaning: between two action names, including at the start of
+        wrap-continuation lines so the reader knows the chain hasn't
+        ended.
+
+        Two spaces of phantom padding after the step label keep the
+        first action visually aligned with the parallel marker column
+        AND with wrap-continuation actions — so action names stack in
+        the same column across mixed serial/parallel rows.
         """
-        prefix = f"  {label}  [green]→[/green] "
+        prefix = f"  {label}    "
         cont = " " * action_col + "[dim]→[/dim] "
         self._print_wrapped(prefix, cont, " [dim]→[/dim] ", actions)
 
@@ -240,10 +247,9 @@ class InspectCommand(BaseInspectCommand):
         """
         display = self._collapse_version_groups(actions)
         prefix = f"  {label}  [bold yellow]⫻[/bold yellow] "
-        # Continuation lands under the first member name (one column
-        # right of the action column, since the parallel marker is
-        # rendered + one space, same as the chain `→`).
-        cont = " " * action_col
+        # Wrap continuation lands directly under the first member name
+        # (action_col + 2 for the rendered `⫻ ` width).
+        cont = " " * (action_col + 2)
         self._print_wrapped(prefix, cont, ", ", display)
 
     @staticmethod
