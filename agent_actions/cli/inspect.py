@@ -22,7 +22,6 @@ import json as json_lib
 from pathlib import Path
 
 import click
-from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import _format_project_root_display, handles_user_errors
 from agent_actions.errors.base import AgentActionsError
@@ -108,18 +107,40 @@ class InspectCommand(BaseInspectCommand):
             return
 
         self.console.print(f"[bold cyan]Preflight: {self.agent_name}[/bold cyan]\n")
-        self.console.print("[bold]Execution levels:[/bold]")
+        self.console.print("[bold]Execution levels[/bold]")
+        level_width = len(str(len(levels)))
         for i, level in enumerate(levels, 1):
-            self.console.print(f"  Level {i}: {', '.join(level)}")
+            self.console.print(
+                f"  [dim]L{i:>{level_width}}[/dim]  {', '.join(level)}", soft_wrap=True
+            )
         if scope:
-            self.console.print("\n[bold]Context scope:[/bold]")
+            self.console.print("\n[bold]Context scope[/bold] [dim](empty fields omitted)[/dim]")
             for name, info in scope.items():
-                self.console.print(f"  {name} → {info['scope']}")
+                line = self._format_scope_line(name, info.get("scope"))
+                if line is not None:
+                    self.console.print(f"  {line}", soft_wrap=True)
         self.console.print(
-            f"\n[bold]Estimate:[/bold] {estimate['action_count']} actions, "
+            f"\n[bold]Estimate[/bold]  {estimate['action_count']} actions, "
             f"{estimate['llm_calls']} LLM calls, "
             f"{estimate['guarded_actions']} guarded"
         )
+
+    @staticmethod
+    def _format_scope_line(action_name: str, action_scope: object) -> str | None:
+        """Render an action's context_scope on one line, skipping empty kinds."""
+        if isinstance(action_scope, str):
+            return f"[bold]{action_name}[/bold] [dim]→[/dim] {action_scope}"
+        if not isinstance(action_scope, dict):
+            return None
+        parts: list[str] = []
+        for kind in ("observe", "passthrough", "drop"):
+            items = action_scope.get(kind) or []
+            if not items:
+                continue
+            parts.append(f"[cyan]{kind}[/cyan]={', '.join(items)}")
+        if not parts:
+            return None
+        return f"[bold]{action_name}[/bold] [dim]→[/dim] {'; '.join(parts)}"
 
     # ── default (no flags) ───────────────────────────────────────────
 
@@ -141,23 +162,59 @@ class InspectCommand(BaseInspectCommand):
             )
             return
 
-        self.console.print(f"\n[bold cyan]✅ Workflow: {self.agent_name}[/bold cyan]\n")
-        tree = Tree("[bold]Actions[/bold]")
-        for i, level in enumerate(levels, 1):
-            level_node = tree.add(f"[dim]Level {i}[/dim]")
-            for action_name in level:
-                action_scope = scope.get(action_name, {}).get("scope", "observe")
-                if isinstance(action_scope, dict):
-                    parts = []
-                    for kind in ("observe", "passthrough", "drop"):
-                        items = action_scope.get(kind) or []
-                        if items:
-                            parts.append(f"{kind}={len(items)}")
-                    scope_str = ", ".join(parts) if parts else "observe"
-                else:
-                    scope_str = str(action_scope)
-                level_node.add(f"{action_name} [dim]({scope_str})[/dim]")
-        self.console.print(tree)
+        action_count = sum(len(lvl) for lvl in levels)
+        parallel_count = sum(1 for lvl in levels if len(lvl) > 1)
+        # Default view answers "show me the workflow's shape so I can
+        # reason about it." Per-action context_scope counts belong to
+        # `inspect action` — leaving them out here keeps the visual
+        # signal focused on fan-out points and serial chains.
+        self.console.print(f"\n[bold cyan]✅ {self.agent_name}[/bold cyan]")
+        self.console.print(
+            f"[dim]{action_count} actions · {len(levels)} levels · "
+            f"{parallel_count} parallel groups[/dim]\n"
+        )
+
+        # Label column width: longest possible is `LXX-LYY` so chains and
+        # singletons share one left-aligned column for the action names.
+        level_width = len(str(len(levels)))
+        label_col = 2 * level_width + 3  # "L" + N + "-" + "L" + N
+
+        idx = 0
+        while idx < len(levels):
+            level = levels[idx]
+            if len(level) > 1:
+                label = f"L{idx + 1:>{level_width}}".ljust(label_col)
+                self.console.print(
+                    f"  [dim]{label}[/dim]  [bold yellow]⫻[/bold yellow] "
+                    f"{', '.join(level)} [dim]({len(level)} parallel)[/dim]",
+                    soft_wrap=True,
+                )
+                idx += 1
+                continue
+
+            # Collapse runs of single-action levels into chains —
+            # the structural signal is "these run in series", not "this
+            # is level 24, this is level 25".
+            chain_start = idx
+            chain_actions = [level[0]]
+            while idx + 1 < len(levels) and len(levels[idx + 1]) == 1:
+                idx += 1
+                chain_actions.append(levels[idx][0])
+            chain_end = idx
+            if chain_start == chain_end:
+                label = f"L{chain_start + 1:>{level_width}}".ljust(label_col)
+            else:
+                label = f"L{chain_start + 1:>{level_width}}-L{chain_end + 1:>{level_width}}"
+            arrow = " [dim]→[/dim] "
+            self.console.print(
+                f"  [dim]{label}[/dim]  [green]→[/green] {arrow.join(chain_actions)}",
+                soft_wrap=True,
+            )
+            idx += 1
+
+        self.console.print(
+            "\n[dim]Hint: `agac inspect action -a <wf> <action>` for per-action detail.[/dim]"
+        )
 
 
 @click.group(name="inspect", invoke_without_command=True)

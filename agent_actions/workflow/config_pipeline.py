@@ -152,7 +152,15 @@ def _discover_udfs_from_path(
 
     if fire_events:
         fire_event(UDFDiscoveryStartEvent(search_path=str(abs_path)))
-    console.print(f"[cyan]\U0001f50d Discovering Tools in {abs_path}...[/cyan]")
+    # Project-relative when possible — absolute paths in the banner wrap
+    # onto multiple lines on narrow terminals.
+    display_path = str(abs_path)
+    if project_root is not None:
+        try:
+            display_path = f"./{abs_path.relative_to(project_root)}"
+        except ValueError:
+            pass
+    console.print(f"[cyan]\U0001f50d Discovering tools in {display_path}...[/cyan]", soft_wrap=True)
     try:
         registry = discover_udfs(abs_path)
     except UDFLoadError as e:

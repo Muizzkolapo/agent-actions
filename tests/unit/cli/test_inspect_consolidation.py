@@ -166,8 +166,9 @@ class TestInspectDryRun:
             result = _invoke("-a", "test", "--dry-run")
 
         assert result.exit_code == 0, result.output
-        assert "Level 1" in result.output
-        assert "Level 2" in result.output
+        # Each level renders on its own line as `L1  ...` / `L2  ...`.
+        assert "L1  a" in result.output
+        assert "L2  b" in result.output
 
     def test_dry_run_json(self):
         with patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls:

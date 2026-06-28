@@ -17,11 +17,13 @@ from agent_actions.config.project_paths import (
     ProjectPathsFactory,
     find_config_file,
 )
+from agent_actions.errors import WorkflowError
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.services.preflight_service import PreflightService
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
+from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
@@ -120,41 +122,48 @@ class WorkflowInspector:
         strip_unreachable_drops(self.action_configs)
 
     def get_levels(self) -> list[list[str]]:
-        """Topological levels of parallelizable actions."""
+        """Topological levels of parallelizable actions.
+
+        Delegates to the runtime's ``ActionLevelOrchestrator`` so version
+        base names (``extract_raw_qa`` → ``extract_raw_qa_1/2/3``) expand
+        the same way ``agac run`` would resolve them. On cycles, the
+        orchestrator raises ``WorkflowError`` — we surface the assigned
+        prefix plus the unresolved tail so the user still sees something.
+        """
         self.load()
         if not self.action_configs:
             return []
 
-        def _deps_of(config: dict[str, Any]) -> list[str]:
-            # `or` (not `is None`) so depends_on:[] defers to dependencies —
-            # matches scope_inference / workflow_static_analyzer.
-            deps = config.get("depends_on") or config.get("dependencies") or []
-            if isinstance(deps, str):
-                return [deps]
-            return list(deps)
+        # execution_order skips non-operational actions; include them so
+        # inspect shows the full DAG instead of silently dropping them.
+        # `dict.fromkeys` preserves the original execution_order while
+        # appending any missing names.
+        operational_order = [n for n in self.execution_order if n in self.action_configs]
+        full_order = list(dict.fromkeys(operational_order + list(self.action_configs.keys())))
 
-        # execution_order skips non-operational agents — append them at
-        # the tail so they still get bucketed instead of looking like a cycle.
-        operational = [name for name in self.execution_order if name in self.action_configs]
-        remaining = operational + [name for name in self.action_configs if name not in operational]
-        completed: set[str] = set()
-        levels: list[list[str]] = []
+        # Normalize so the orchestrator's `dependencies` lookup also sees
+        # actions declared with `depends_on` (codebase carries both
+        # conventions — see scope_inference / workflow_static_analyzer).
+        normalized = {
+            name: {**cfg, "dependencies": cfg.get("dependencies") or cfg.get("depends_on") or []}
+            for name, cfg in self.action_configs.items()
+        }
 
-        while remaining:
-            level = [
-                name
-                for name in remaining
-                if all(d in completed for d in _deps_of(self.action_configs[name]))
-            ]
-            if not level:
-                # Cycle / unresolved dep — dump the rest so callers still see something.
+        orchestrator = ActionLevelOrchestrator(
+            execution_order=full_order,
+            action_configs=normalized,
+        )
+        try:
+            return orchestrator.compute_execution_levels()
+        except WorkflowError as exc:
+            assigned = exc.context.get("assigned") or []
+            remaining = exc.context.get("remaining") or []
+            levels: list[list[str]] = []
+            if assigned:
+                levels.append(list(assigned))
+            if remaining:
                 levels.append(list(remaining))
-                break
-            levels.append(level)
-            completed.update(level)
-            remaining = [name for name in remaining if name not in completed]
-
-        return levels
+            return levels
 
     def get_context_scope(self) -> dict[str, dict[str, Any]]:
         """Return per-action context_scope summary for ``--dry-run``."""
