@@ -755,21 +755,6 @@ h4.md-heading { font-size: 13.5px; }
         })();
 
         var requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
-
-        // Stripping the bootstrap query from the URL keeps the token out
-        // of browser history, referrer headers, and screen-share recordings.
-        var HITL_TOKEN = (function () {
-            var params = new URLSearchParams(window.location.search);
-            var bootstrap = params.get('bootstrap');
-            if (!bootstrap) {
-                document.body.innerHTML = '<p style="font:14px/1.5 system-ui;padding:24px;">' +
-                    'Missing bootstrap token. Re-launch with the URL printed by ' +
-                    '<code>agac run --resume</code>.</p>';
-                return '';
-            }
-            history.replaceState(null, '', window.location.pathname);
-            return bootstrap;
-        })();
         var METADATA_KEYS = {{ metadata_keys | tojson }};
 
         var RAW_REASONS = {{ rejection_reasons | tojson }};
@@ -821,7 +806,7 @@ h4.md-heading { font-size: 13.5px; }
         var showInspector = true;
 
         /* ── Field visibility preferences (persisted in localStorage) ── */
-        var FIELD_VIS_KEY = 'hitl-field-vis:' + HITL_TOKEN;
+        var FIELD_VIS_KEY = 'hitl-field-vis';
         var fieldVisPrefs = {};
         var fieldSettingsOpen = false;
         var outsideClickRegistered = false;
@@ -1651,7 +1636,7 @@ h4.md-heading { font-size: 13.5px; }
         function apiPost(url, data) {
             return fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
         }
