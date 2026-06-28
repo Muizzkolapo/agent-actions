@@ -29,7 +29,7 @@ from agent_actions.config.project_paths import (
     find_config_file,
 )
 from agent_actions.prompt.renderer import ConfigRenderingService
-from agent_actions.services.preflight_service import PreflightReport, PreflightService
+from agent_actions.services.preflight_service import PreflightService
 from agent_actions.workflow.config_pipeline import discover_workflow_udfs
 from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 from agent_actions.workflow.schema_service import WorkflowSchemaService
@@ -40,7 +40,11 @@ logger = logging.getLogger(__name__)
 class WorkflowInspector:
     """Lightweight workflow introspection.
 
-    No storage. No execution services. No LLM calls. No fan-out events.
+    No storage. No execution services. No LLM calls. Does NOT fire the
+    runtime ``WorkflowInitializationStartEvent``. (UDF discovery still
+    fires ``UDFDiscoveryStartEvent``/``UDFDiscoveryCompleteEvent`` since
+    it shares the runtime's UDF-loading helper; suppress them via the
+    event manager if you need a silent inspect.)
 
     Pulls action_configs and execution_order through the same
     ``ConfigManager`` pipeline the runtime uses, so introspection
@@ -98,8 +102,9 @@ class WorkflowInspector:
         ``execution_order``. Idempotent.
 
         Mirrors ``load_workflow_configs()`` without firing the
-        ``WorkflowInitializationStartEvent`` (which is reserved for
-        runtime execution).
+        ``WorkflowInitializationStartEvent`` (reserved for runtime
+        execution). UDF-discovery events still fire because the helper
+        is shared with the runtime path.
         """
         if self._loaded:
             return self.action_configs
@@ -137,7 +142,7 @@ class WorkflowInspector:
         self._loaded = True
         return self.action_configs
 
-    def validate(self, verify_keys: bool = False) -> PreflightReport:
+    def validate(self, verify_keys: bool = False) -> None:
         """Run preflight validation. Raises ``PreFlightValidationError``
         on failure. Side-effect: populates ``self.schema_service``.
         """
@@ -149,9 +154,8 @@ class WorkflowInspector:
             workflow_config_path=str(self._config_path),
             verify_keys=verify_keys,
         )
-        report = service.validate()
+        service.validate()
         self.schema_service = service.schema_service
-        return report
 
     def get_levels(self) -> list[list[str]]:
         """Group actions into execution levels (parallelizable groups)
@@ -172,8 +176,9 @@ class WorkflowInspector:
                 return [deps]
             return list(deps or [])
 
-        order = self.execution_order or list(self.action_configs.keys())
-        remaining = [name for name in order if name in self.action_configs]
+        # execution_order is the topological order ConfigManager derived
+        # from action_configs — they always agree on the action set.
+        remaining = list(self.execution_order or self.action_configs.keys())
         completed: set[str] = set()
         levels: list[list[str]] = []
 

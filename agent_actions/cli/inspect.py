@@ -121,7 +121,6 @@ class InspectCommand(BaseInspectCommand):
             f"{estimate['llm_calls']} LLM calls, "
             f"{estimate['guarded_actions']} guarded"
         )
-        self.console.print("\n[green]✅ Validation passed[/green]")
 
     # ── default (no flags) ───────────────────────────────────────────
 

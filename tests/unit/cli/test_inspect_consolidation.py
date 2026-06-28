@@ -274,10 +274,16 @@ class TestCompileRemoved:
         with pytest.raises(ImportError):
             __import__("agent_actions.cli.compile")
 
-    def test_no_compile_subcommand(self):
-        """`agac compile` is no longer registered."""
-        from agent_actions.cli.main import CLI
+    def test_no_compile_subcommand_registered(self):
+        """main.py no longer imports or registers compile/render.
 
-        cli = CLI()
-        assert "compile" not in cli.click_group.commands
-        assert "render" not in cli.click_group.commands
+        Reads main.py source text instead of instantiating CLI(), which
+        would fire CLI init events and register signal handlers — too
+        much side effect for a simple registration check.
+        """
+        from agent_actions.cli import main as main_module
+
+        source = Path(main_module.__file__).read_text()
+        assert "cli.compile" not in source, "compile import re-introduced"
+        assert "add_command(compile)" not in source, "compile command re-registered"
+        assert "add_command(render)" not in source, "render command re-registered"

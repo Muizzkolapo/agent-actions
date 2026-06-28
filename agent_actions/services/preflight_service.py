@@ -8,7 +8,6 @@ validate workflows without duplicating logic.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -24,32 +23,18 @@ from agent_actions.workflow.schema_service import WorkflowSchemaService
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class PreflightCheck:
-    """Result of a single preflight check."""
-
-    name: str
-    ok: bool
-    detail: str = ""
-
-
-@dataclass
-class PreflightReport:
-    """Aggregated preflight validation result."""
-
-    workflow: str
-    status: str  # "ok" or "failed"
-    checks: list[PreflightCheck] = field(default_factory=list)
-    guard_fixes: list[str] = field(default_factory=list)
-
-
 class PreflightService:
     """Validates a workflow configuration without executing it.
 
     Runs schema validation, guard syntax validation, and resolution
-    checks (API keys, seed files, vendor batch compatibility).  Mutates
+    checks (API keys, seed files, vendor batch compatibility). Mutates
     ``action_configs`` to apply guard-nullable schema fixes — same
     behavior as the previous coordinator._run_static_validation().
+
+    Pass-or-raise contract: ``validate()`` returns nothing on success and
+    raises ``PreFlightValidationError`` on the first failed check.
+    Callers that want the rebuilt ``WorkflowSchemaService`` for downstream
+    use can read ``self.schema_service`` after a successful validate().
     """
 
     def __init__(
@@ -69,15 +54,12 @@ class PreflightService:
         # (the coordinator stores it on self for inspect subcommands).
         self.schema_service: WorkflowSchemaService | None = None
 
-    def validate(self) -> PreflightReport:
+    def validate(self) -> None:
         """Run preflight validation.
 
         Raises:
-            PreFlightValidationError: When any check fails. Callers that
-                want a non-raising report should catch and inspect.
+            PreFlightValidationError: When any check fails.
         """
-        report = PreflightReport(workflow=self.workflow_config_path, status="ok")
-
         # --- 1. Schema validation ---
         self.schema_service = WorkflowSchemaService.from_action_configs(
             self.agent_name,
@@ -91,11 +73,9 @@ class PreflightService:
                 schema_result.format_report(),
                 hint="Fix the static type errors above before running the workflow.",
             )
-        report.checks.append(PreflightCheck("schema", True))
 
         # --- 2. Guard-nullable schema fixes (MUTATES action_configs) ---
         guard_fixes = apply_guard_nullable_schema_fixes(self.action_configs)
-        report.guard_fixes = guard_fixes
         if guard_fixes:
             logger.info(
                 "Auto-fixed %d guard-nullable schema field(s): %s",
@@ -104,6 +84,9 @@ class PreflightService:
             )
 
         # --- 3. Guard syntax validation ---
+        # Lazy-import so this module stays lightweight when imported by
+        # the CLI inspect path — agent_actions.workflow.coordinator
+        # transitively pulls storage, services, and event plumbing.
         from agent_actions.workflow.coordinator import validate_guard_conditions
 
         guard_errors = validate_guard_conditions(self.action_configs)
@@ -112,7 +95,6 @@ class PreflightService:
                 "\n".join(guard_errors),
                 hint="Fix the guard condition errors above before running the workflow.",
             )
-        report.checks.append(PreflightCheck("guard", True))
 
         # --- 4. Resolution checks (API keys, seed files, vendor batch) ---
         resolution_result = WorkflowResolutionService(
@@ -125,6 +107,3 @@ class PreflightService:
 
         for warning in resolution_result.warnings:
             logger.warning("Pre-flight: %s", warning.message)
-        report.checks.append(PreflightCheck("resolution", True))
-
-        return report

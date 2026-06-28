@@ -42,10 +42,9 @@ class BaseInspectCommand:
         network calls.
         """
         inspector = WorkflowInspector(agent_name=self.agent_name, project_root=project_root)
-        inspector.load()
-        # Mirror the pre-VIOL-0008 behavior of _load_workflow(): the
-        # inspect subcommands need schema_service for output-field
-        # resolution. validate() populates it as a side effect.
+        # validate() runs load() internally and populates schema_service.
+        # The inspect subcommands need schema_service for output-field
+        # resolution, so we always validate here.
         inspector.validate(verify_keys=False)
         self.paths = inspector.paths
         self.schema_service = inspector.schema_service
