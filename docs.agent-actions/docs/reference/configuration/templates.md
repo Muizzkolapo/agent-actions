@@ -191,24 +191,17 @@ Generate multiple actions with loops:
 \{% endfor \%\}
 ```
 
-## Debug Mode
+## Debugging Templates
 
-When templates don't expand as expected, enable template debugging to see expansion details:
+To see the rendered output, use `agac run` which writes compiled prompts into the `prompt_trace` table. For a quick check of the rendered workflow config without executing actions:
 
 ```bash
-# Render template without executing
-agac render -a my_workflow
-
-# Enable debug output
-agac render -a my_workflow --debug
+agac compile -a my_workflow
 ```
 
-Log output shows template processing:
+The compiled workflow YAML is saved to `artefact/rendered_workflows/my_workflow.yml`. You can inspect this file to verify that template variables expanded correctly and that context scope produced the expected fields.
 
-```
-19:56:59.641 INFO     Starting render template
-19:56:59.657 INFO     Rendered template saved to: artefact/rendered_workflows/my_workflow.yml
-```
+For deeper debugging, use `agac inspect context -a my_workflow <action_name>` to see what data namespaces and variables are available for a specific action's template.
 
 ## Best Practices
 

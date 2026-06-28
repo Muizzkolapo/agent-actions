@@ -24,6 +24,8 @@ base_url = os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
 | Constant | Type | Value | Description |
 |----------|------|-------|-------------|
 | `SQLITE_LOCK_TIMEOUT_SECONDS` | float | `30.0` | Wait time for SQLite database locks |
+| `PROMPT_TRACE_RETENTION_RUNS` | int | `10` | Number of workflow runs to retain prompt traces before cleanup |
+| `SOURCE_DATA_TTL_DAYS` | int\|None | `None` | Days to retain source data; `None` means keep forever |
 
 ### LockDefaults
 
@@ -39,8 +41,16 @@ File-lock timeouts are split intentionally: simple (shared/read) locks use a sho
 | Constant | Type | Value | Description |
 |----------|------|-------|-------------|
 | `BASE_URL` | str | `http://localhost:11434` | Default Ollama server URL |
+| `BATCH_MAX_WORKERS` | int | `1` | Maximum concurrent workers for Ollama batch processing |
 
 This value was previously duplicated in three files. It can be overridden at runtime via the `OLLAMA_HOST` environment variable.
+
+### OllamaCloudDefaults
+
+| Constant | Type | Value | Description |
+|----------|------|-------|-------------|
+| `BASE_URL` | str | `https://ollama.com` | Default Ollama Cloud API URL |
+| `BATCH_MAX_WORKERS` | int | `1` | Maximum concurrent workers for Ollama Cloud batch processing |
 
 ### ApiDefaults
 

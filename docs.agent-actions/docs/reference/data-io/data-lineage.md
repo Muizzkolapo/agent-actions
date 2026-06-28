@@ -57,12 +57,13 @@ When a record first enters the pipeline:
 ```json
 {
   "target_id": "ROOT-UUID",
-  "parent_target_id": null,
   "root_target_id": "ROOT-UUID"
 }
 ```
 
-The first record is its own root—`root_target_id` equals `target_id`.
+The first record is its own root—`root_target_id` equals `target_id`. Note that
+`parent_target_id` is **absent** on root records (not `null`): use a presence check
+(`"parent_target_id" in record`), not `record["parent_target_id"] is None`.
 
 ## Parallel Branch Merge (Diamond Pattern)
 
@@ -173,6 +174,8 @@ actions:
 ```
 
 **Handling missing branches:** The merge action receives `null` for skipped branches. Your template should handle this gracefully:
+
+> **Important:** On root records (records with no parent), `parent_target_id` is **absent** from the JSON object — not `null`. Always use a presence check (`"parent_target_id" in record`) rather than a null check (`record["parent_target_id"] is None`). A null check will raise `KeyError` on root records.
 
 ```yaml
 - name: combine

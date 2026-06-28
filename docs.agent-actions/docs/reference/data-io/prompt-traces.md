@@ -20,6 +20,7 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `model_vendor` | Provider name (e.g., `ollama_local`, `openai`) |
 | `run_mode` | `online` (real-time) or `batch` |
 | `prompt_length` | Character count of the compiled prompt |
+| `context_length` | Character count of the LLM context sent to the model |
 | `response_length` | Character count of the LLM response |
 | `attempt` | Attempt number (0 = initial, 1+ = reprompt retries) |
 

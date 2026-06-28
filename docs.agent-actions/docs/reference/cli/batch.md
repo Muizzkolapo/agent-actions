@@ -54,7 +54,7 @@ agac batch status --batch-id <id>
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--batch-id` | The ID of the batch job to check. If not provided, uses the last submitted job ID. |
+| `--batch-id` | **Required.** The ID of the batch job. Omitting this raises `UsageError: --batch-id is required.` Capture the batch ID from the `agac run --mode batch` output (line: `Submitted batch <id>`) or from `agent_io/target/<action>/batch/.batch_registry.json`. |
 
 **Example:**
 ```bash
@@ -62,7 +62,7 @@ $ agac batch status --batch-id batch_abc123
 Batch job status: completed
 ```
 
-If you don't provide a batch ID, Agent Actions uses the last submitted job - convenient when you're iterating on a single batch.
+> **Note:** `--batch-id` is required. There is no last-job fallback. You must provide the batch ID from the submission output or the registry file.
 
 ## batch retrieve
 
@@ -75,7 +75,7 @@ agac batch retrieve --batch-id <id>
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--batch-id` | The ID of the batch job to retrieve. If not provided, uses the last submitted job ID. |
+| `--batch-id` | **Required.** The ID of the batch job to retrieve. Omitting this raises `UsageError: --batch-id is required.` |
 
 **Example:**
 ```bash
