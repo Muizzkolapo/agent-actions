@@ -166,25 +166,20 @@ class InspectCommand(BaseInspectCommand):
         parallel_count = sum(1 for lvl in levels if len(lvl) > 1)
         estimate = inspector.estimate()
 
-        # Three-tier visual hierarchy:
-        #   h1 = workflow name (the subject)
-        #   meta row = ✅ status · scale · cost (everything at-a-glance)
-        #   h2 = "Pipeline" with structural subtitle (36 levels · 7 parallel)
-        # Each tier separated by a blank line so the eye registers them
-        # as distinct regions, not one block.
-        self.console.print(f"\n  [bold cyan]{self.agent_name}[/bold cyan]")
+        # Two-tier header — title row + grouped stats row.
+        #   title  = workflow name + status pill on ONE line
+        #   stats  = structure facts (parens for parallel substat)
+        #            · cost facts (parens for guarded substat)
+        # No "Pipeline" header below — the numbered indented list IS
+        # self-evidently the pipeline, no need to label it.
         self.console.print(
-            f"  [bold green]✅ validated[/bold green]"
-            f"  [dim]·[/dim]  [dim]{action_count} actions[/dim]"
-            f"  [dim]·[/dim]  [dim]{estimate['llm_calls']} LLM calls[/dim]"
-            f"  [dim]·[/dim]  [dim]{estimate['guarded_actions']} guarded[/dim]"
+            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [bold green]✅ validated[/bold green]"
         )
-        self.console.print()
         self.console.print(
-            f"  [bold]Pipeline[/bold]  "
-            f"[dim]({len(levels)} levels · {parallel_count} parallel groups)[/dim]"
+            f"  [dim]{action_count} actions in {len(levels)} levels "
+            f"({parallel_count} parallel)  ·  "
+            f"{estimate['llm_calls']} LLM calls, {estimate['guarded_actions']} guarded[/dim]\n"
         )
-        self.console.print()
 
         # Chunk levels into "steps" — one conceptual unit each: a fan-out
         # (parallel level) or a run of serial actions. Step numbering
@@ -244,10 +239,11 @@ class InspectCommand(BaseInspectCommand):
         that use the version-action pattern.
         """
         display = self._collapse_version_groups(actions)
-        prefix = f"  {label}  [bold yellow]⫻[/bold yellow]  "
-        # Continuation lands one column right of the action column so
-        # the wrapped names sit under the first member (not under `⫻`).
-        cont = " " * (action_col + 2)
+        prefix = f"  {label}  [bold yellow]⫻[/bold yellow] "
+        # Continuation lands under the first member name (one column
+        # right of the action column, since the parallel marker is
+        # rendered + one space, same as the chain `→`).
+        cont = " " * action_col
         self._print_wrapped(prefix, cont, ", ", display)
 
     @staticmethod
