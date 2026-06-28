@@ -963,10 +963,15 @@ flowchart LR
 @udf_tool()
 def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
     """Majority vote across 3 parallel voters."""
-    keep_count = sum(
-        1 for i in range(1, 4)
-        if data.get(f"vote_quality_{i}", {}).get("data", {}).get("verdict") == "keep"
-    )
+    def verdict(i: int) -> str | None:
+        # Version-merged outputs are namespaced by action name: data["vote_quality_1"].
+        # Tolerate version-merge double-nesting ({key: {key: {...}}}); there is no
+        # intermediate "data" wrapper.
+        voter = data.get(f"vote_quality_{i}", {})
+        voter = voter.get(f"vote_quality_{i}", voter)
+        return voter.get("verdict")
+
+    keep_count = sum(1 for i in range(1, 4) if verdict(i) == "keep")
     return {
         "filter": "keep" if keep_count >= 2 else "filter",
         "vote_summary": {"keep": keep_count, "filter": 3 - keep_count},

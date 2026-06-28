@@ -45,7 +45,7 @@ Each state transition appends to `_state_history`:
 
 ### History Capping
 
-The `_state_history` array is capped at **64 entries**. In workflows with many actions (16+), histories near this limit will have their oldest entries silently truncated. A single `INFO` log message is emitted the first time truncation occurs per run.
+The `_state_history` array is capped at **64 entries**. In workflows with many actions (16+), histories near this limit will have their oldest entries silently truncated. The truncation is silent — no log message is emitted, so do not rely on `_state_history` containing the full transition record for very long workflows.
 
 For most workflows (under ~16 actions with standard retries), this cap will never be reached.
 

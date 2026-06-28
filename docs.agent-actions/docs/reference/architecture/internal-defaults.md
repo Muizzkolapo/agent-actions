@@ -49,7 +49,7 @@ This value was previously duplicated in three files. It can be overridden at run
 
 | Constant | Type | Value | Description |
 |----------|------|-------|-------------|
-| `BASE_URL` | str | `https://api.olama.ai/v1` | Default Ollama Cloud API URL |
+| `BASE_URL` | str | `https://ollama.com` | Default Ollama Cloud API URL |
 | `BATCH_MAX_WORKERS` | int | `1` | Maximum concurrent workers for Ollama Cloud batch processing |
 
 ### ApiDefaults

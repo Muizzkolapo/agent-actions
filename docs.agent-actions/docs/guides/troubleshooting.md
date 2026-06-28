@@ -539,15 +539,18 @@ agent_io/logs/events.json
 
 ### Search Patterns
 
+Events are JSON Lines. Structured fields live under the `.data` object
+(e.g. `.data.action_name`); `message` and `level` are top-level.
+
 ```bash
 # Find all schema validation errors
 jq -c 'select(.message | test("SchemaValidationError"))' agent_io/logs/events.json
 
-# Find errors for specific action
-jq -c 'select(.action_name == "add_answer_text")' agent_io/logs/events.json
+# Find events for a specific action
+jq -c 'select(.data.action_name == "add_answer_text")' agent_io/logs/events.json
 
-# Find errors for specific field
-jq -c 'select(.error_path == "answer_text")' agent_io/logs/events.json
+# Find events that mention a specific field
+jq -c 'select(.message | test("answer_text"))' agent_io/logs/events.json
 ```
 
 ### Execution History
