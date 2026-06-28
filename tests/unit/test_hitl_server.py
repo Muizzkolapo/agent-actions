@@ -9,22 +9,11 @@ from agent_actions.llm.providers.hitl.server import HitlServer
 
 
 def _post(client, url, server, **kwargs):
-    """POST helper that automatically injects the HITL session token."""
-    headers = kwargs.pop("headers", {})
-    headers["X-HITL-Token"] = server._session_token
-    return client.post(url, headers=headers, **kwargs)
+    return client.post(url, **kwargs)
 
 
 def _get(client, url, server, **kwargs):
-    """GET helper that automatically injects the HITL session token.
-
-    GET endpoints require ``X-HITL-Token``. ``GET /`` also
-    accepts a one-shot ``?bootstrap=<token>`` query, but tests use the
-    header path to stay symmetric with the POST helper.
-    """
-    headers = kwargs.pop("headers", {})
-    headers["X-HITL-Token"] = server._session_token
-    return client.get(url, headers=headers, **kwargs)
+    return client.get(url, **kwargs)
 
 
 def test_reject_requires_comment_when_enabled():

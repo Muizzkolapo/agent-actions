@@ -11,10 +11,7 @@ def _fingerprint(context_data):
 
 
 def _post(client, url, server, **kwargs):
-    """POST helper that automatically injects the HITL session token."""
-    headers = kwargs.pop("headers", {})
-    headers["X-HITL-Token"] = server._session_token
-    return client.post(url, headers=headers, **kwargs)
+    return client.post(url, **kwargs)
 
 
 def _make_server(tmp_path, context_data=None, record_count=4):

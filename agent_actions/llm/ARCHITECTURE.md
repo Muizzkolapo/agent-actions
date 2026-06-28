@@ -952,11 +952,11 @@ HitlClient.invoke()
      │  POST /api/shutdown  → manual shutdown      │
      └──────────────────────────────────────────┘
 
-Security (3 layers):
-  1. Content-Type: application/json required (blocks form CSRF)
-  2. X-HITL-Token header (32-byte random, constant-time compare)
-  3. Origin/Referer validation (localhost only)
-  + CSP headers with per-request nonce
+Security:
+  - Loopback-only bind (127.0.0.1) — no remote access
+  - CSP headers with per-request nonce
+  - Cache-Control: no-store on every response
+  Note: the UI is a single-user local tool; loopback is the trust boundary.
 
 State persistence:
   Reviews saved to .hitl_reviews_{hash}.json after each decision
