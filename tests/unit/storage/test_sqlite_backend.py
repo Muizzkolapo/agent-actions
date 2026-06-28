@@ -718,6 +718,35 @@ class TestMetadataDeletion:
         assert count == 0
         assert backend.load_metadata("some_key") == "value"
 
+    def test_list_metadata_prefix_returns_matching_keys_sorted(self, backend):
+        """list_metadata_prefix returns matching keys lexically sorted."""
+        backend._save_metadata_raw("batch_registry:beta", "{}")
+        backend._save_metadata_raw("batch_registry:alpha", "{}")
+        backend._save_metadata_raw("recovery_state:alpha", "{}")
+
+        assert backend.list_metadata_prefix("batch_registry:") == [
+            "batch_registry:alpha",
+            "batch_registry:beta",
+        ]
+
+    def test_list_metadata_prefix_returns_empty_when_no_match(self, backend):
+        """list_metadata_prefix returns [] when nothing matches."""
+        backend._save_metadata_raw("some_key", "value")
+        assert backend.list_metadata_prefix("nomatch:") == []
+
+    def test_prefix_helpers_escape_like_wildcards(self, backend):
+        """`_` and `%` in the prefix must NOT act as LIKE wildcards."""
+        backend._save_metadata_raw("batch_registry:alpha", "ok")
+        backend._save_metadata_raw("batchXregistry:beta", "trap")
+        backend._save_metadata_raw("batch%registry:gamma", "trap")
+
+        assert backend.list_metadata_prefix("batch_registry:") == ["batch_registry:alpha"]
+
+        deleted = backend.delete_metadata_prefix("batch_registry:")
+        assert deleted == 1
+        assert backend.load_metadata("batchXregistry:beta") == "trap"
+        assert backend.load_metadata("batch%registry:gamma") == "trap"
+
     def test_clear_batch_state_removes_all_batch_keys(self, backend):
         """clear_batch_state wipes registry, recovery, and context keys for an action."""
         action = "my_action"

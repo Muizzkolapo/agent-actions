@@ -237,6 +237,10 @@ class StorageBackend(ABC):
         """Delete all metadata keys starting with prefix. Returns count deleted."""
         raise NotImplementedError(f"{type(self).__name__} must implement delete_metadata_prefix()")
 
+    def list_metadata_prefix(self, prefix: str) -> list[str]:
+        """Return all metadata keys starting with `prefix`, sorted lexically."""
+        raise NotImplementedError(f"{type(self).__name__} must implement list_metadata_prefix()")
+
     def _extract_delta(
         self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
     ) -> dict[str, Any]:
@@ -639,7 +643,9 @@ class StorageBackend(ABC):
 
     def clear_batch_state(self, action_name: str) -> None:
         """Delete all batch state (registry, recovery, context) for an action."""
-        self.delete_metadata(f"batch_registry:{action_name}")
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        self.delete_metadata(f"{BatchRegistryManager.METADATA_KEY_PREFIX}{action_name}")
         self.delete_metadata_prefix(f"recovery_state:{action_name}:")
         self.delete_metadata_prefix(f"batch_context:{action_name}:")
 
