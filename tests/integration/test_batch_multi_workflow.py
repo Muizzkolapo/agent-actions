@@ -136,3 +136,77 @@ class TestActionNameRouting:
         assert captured_check_status[0]["action_name"] == "solo_action", (
             "CLI must pass --action verbatim, NOT workflow_name"
         )
+
+
+class TestHardening:
+    def test_empty_action_string_rejected(self, single_workflow_project):
+        result = CliRunner().invoke(cli, ["batch", "status", "--action", "", "--batch-id", "x"])
+        assert result.exit_code != 0
+        assert "--action must not be empty" in result.output
+
+    def test_status_refuses_to_silently_create_db(self, tmp_path, monkeypatch):
+        """Read-only commands must not mutate the working tree when there's no
+        batch state yet."""
+        (tmp_path / "agent_actions.yml").write_text("name: empty\n")
+        wf_root = tmp_path / "agent_workflow" / "empty"
+        (wf_root / "agent_config").mkdir(parents=True)
+        (wf_root / "agent_config" / "empty.yml").write_text("name: empty\n")
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(cli, ["batch", "status", "--batch-id", "x"])
+        assert result.exit_code != 0
+        assert "no batch state yet" in result.output.lower()
+        assert not (wf_root / "agent_io" / "store" / "empty.db").exists()
+
+    def test_symlink_workflow_is_ignored(self, tmp_path, monkeypatch):
+        """A symlink under agent_workflow/ must not be treated as a workflow."""
+        (tmp_path / "agent_actions.yml").write_text("name: solo\n")
+        seed_workflow(tmp_path, "real", "real_action", "fake_real_batch")
+        external = tmp_path.parent / f"escape-{tmp_path.name}"
+        external.mkdir()
+        (external / "agent_config").mkdir()
+        try:
+            (tmp_path / "agent_workflow" / "sneaky").symlink_to(external)
+            monkeypatch.chdir(tmp_path)
+
+            result = CliRunner().invoke(cli, ["batch", "status", "-a", "sneaky", "--batch-id", "x"])
+            assert result.exit_code != 0
+            assert "not found" in result.output.lower()
+        finally:
+            import shutil
+
+            shutil.rmtree(external, ignore_errors=True)
+
+    def test_batch_id_routes_to_owning_action_when_action_omitted(
+        self, tmp_path, monkeypatch, captured_check_status
+    ):
+        """When --action is omitted but --batch-id is provided, auto-select
+        the action whose registry actually contains that batch_id."""
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+        from agent_actions.storage import get_storage_backend
+
+        (tmp_path / "agent_actions.yml").write_text("name: multi_action\n")
+        seed_workflow(tmp_path, "multi", "action_a", "fake_a_batch")
+
+        wf_root = tmp_path / "agent_workflow" / "multi"
+        backend = get_storage_backend(workflow_path=str(wf_root), workflow_name="multi")
+        backend.initialize()
+        BatchRegistryManager(storage_backend=backend, action_name="action_b").save_batch_job(
+            file_name="action_b_chunk_0.jsonl",
+            entry=BatchJobEntry(
+                batch_id="fake_b_batch",
+                status=BatchStatus.COMPLETED,
+                timestamp="2026-06-28T00:00:00Z",
+                provider="ollama",
+                file_name="action_b_chunk_0.jsonl",
+            ),
+        )
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(cli, ["batch", "status", "--batch-id", "fake_b_batch"])
+        assert result.exit_code == 0, f"output: {result.output}"
+        assert captured_check_status[0]["action_name"] == "action_b", (
+            "CLI must auto-route batch_id to the action that owns it"
+        )

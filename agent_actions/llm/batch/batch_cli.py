@@ -19,16 +19,22 @@ from agent_actions.storage.backend import StorageBackend
 
 
 def _list_workflows(project_root: Path) -> list[str]:
-    """Return workflow names — directories under `agent_workflow/` that contain
-    an `agent_config/` subdir. Hidden entries (`.<name>`) are skipped."""
+    """Return workflow names — real (non-symlink) subdirs of `agent_workflow/`
+    that contain a real `agent_config/`. Symlinks and hidden entries are
+    skipped so a stray symlink can't point batch state at a path outside the
+    project tree."""
     workflows_dir = project_root / "agent_workflow"
-    if not workflows_dir.is_dir():
+    if not workflows_dir.is_dir() or workflows_dir.is_symlink():
         return []
-    return sorted(
-        p.name
-        for p in workflows_dir.iterdir()
-        if p.is_dir() and not p.name.startswith(".") and (p / "agent_config").is_dir()
-    )
+    candidates = []
+    for p in workflows_dir.iterdir():
+        if p.name.startswith(".") or p.is_symlink() or not p.is_dir():
+            continue
+        config = p / "agent_config"
+        if config.is_symlink() or not config.is_dir():
+            continue
+        candidates.append(p.name)
+    return sorted(candidates)
 
 
 def _resolve_workflow(project_root: Path, agent_name: str | None) -> tuple[str, Path]:
@@ -63,28 +69,58 @@ def _resolve_workflow(project_root: Path, agent_name: str | None) -> tuple[str, 
 
 
 def _resolve_action(
-    storage_backend: StorageBackend, workflow_name: str, action_name: str | None
+    storage_backend: StorageBackend,
+    workflow_name: str,
+    action_name: str | None,
+    batch_id: str | None = None,
 ) -> str:
     """Return the action name to use.
 
-    When `--action` is given, it's accepted verbatim — the service layer will
-    surface a clearer error if the batch is unknown to the provider. This keeps
-    recovery scenarios working (e.g. after `--fresh` wiped the local registry
-    but a batch is still live at the provider).
+    When `--action` is given, it's accepted verbatim — empty strings are
+    rejected. Skipping the registry check lets recovery flows work (e.g.
+    a batch is still live at the provider after `--fresh` wiped the
+    local registry).
 
-    When `--action` is omitted, auto-select from the local registry.
+    When `--action` is omitted and `batch_id` is supplied, scan registered
+    actions for one whose registry contains that batch_id. Exactly one
+    match → use it. Multiple matches → error. Otherwise fall back to the
+    single-action auto-select.
     """
     if action_name is not None:
+        if not action_name.strip():
+            raise click.UsageError("--action must not be empty.")
         return action_name
 
     actions = BatchRegistryManager.list_action_names(storage_backend)
-    if len(actions) == 1:
-        return actions[0]
     if not actions:
         raise click.UsageError(
             f"No batch jobs found for workflow '{workflow_name}'; "
             "pass --action <action_name> to address a specific action."
         )
+
+    if batch_id is not None:
+        owning = [
+            a
+            for a in actions
+            if BatchRegistryManager(
+                storage_backend=storage_backend, action_name=a
+            ).get_batch_job_by_id(batch_id)
+            is not None
+        ]
+        if len(owning) == 1:
+            return owning[0]
+        if len(owning) > 1:
+            raise click.UsageError(
+                f"Batch '{batch_id}' is registered under multiple actions in "
+                f"workflow '{workflow_name}'; pass --action <action_name>. "
+                f"Candidates: {', '.join(owning)}"
+            )
+        # No action owns this batch_id locally — fall through to single-action
+        # auto-select; the service layer will surface 'batch not found' if the
+        # auto-selected action's registry doesn't include it.
+
+    if len(actions) == 1:
+        return actions[0]
     raise click.UsageError(
         f"Multiple batch actions in workflow '{workflow_name}'; "
         f"pass --action <action_name>. Available: {', '.join(actions)}"
@@ -92,6 +128,16 @@ def _resolve_action(
 
 
 def _build_storage_backend(workflow_root: Path, workflow_name: str) -> StorageBackend:
+    """Open the workflow's existing SQLite DB. Refuse to silently create one —
+    `batch status` and `batch retrieve` are read-mostly commands; if the DB
+    doesn't exist the user has never run the workflow and there's nothing to
+    query."""
+    db_path = workflow_root / "agent_io" / "store" / f"{workflow_name}.db"
+    if not db_path.is_file():
+        raise click.UsageError(
+            f"Workflow '{workflow_name}' has no batch state yet. Run the workflow "
+            f"first (no DB at {db_path})."
+        )
     backend = get_storage_backend(
         workflow_path=str(workflow_root),
         workflow_name=workflow_name,
@@ -113,11 +159,14 @@ def _prepare_batch_context(
     project_root: Path | None,
     agent_name: str | None,
     action_name: str | None,
+    batch_id: str | None = None,
 ) -> _BatchContext:
     root = resolve_project_root(project_root)
     workflow_name, workflow_root = _resolve_workflow(root, agent_name)
     storage_backend = _build_storage_backend(workflow_root, workflow_name)
-    resolved_action = _resolve_action(storage_backend, workflow_name, action_name)
+    resolved_action = _resolve_action(
+        storage_backend, workflow_name, action_name, batch_id=batch_id
+    )
     return _BatchContext(
         workflow_name=workflow_name,
         workflow_root=workflow_root,
@@ -170,7 +219,7 @@ def status(
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
 
-    ctx = _prepare_batch_context(project_root, agent_name, action_name)
+    ctx = _prepare_batch_context(project_root, agent_name, action_name, batch_id=args.batch_id)
 
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
@@ -207,8 +256,9 @@ def retrieve(
 ):
     """Retrieves the results of a completed batch job.
 
-    Results are saved to the workflow's configured output directory to maintain
-    consistency with the batch registry.
+    Results are written under the workflow's per-action target directory
+    (`agent_workflow/<wf>/agent_io/target/<action>/`), matching the layout
+    `agac run` writes to.
     """
     from agent_actions.validation.batch_validator import BatchCommandArgs
 
@@ -216,7 +266,7 @@ def retrieve(
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
 
-    ctx = _prepare_batch_context(project_root, agent_name, action_name)
+    ctx = _prepare_batch_context(project_root, agent_name, action_name, batch_id=args.batch_id)
 
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
     context_manager = BatchContextManager()
@@ -228,5 +278,7 @@ def retrieve(
         storage_backend=ctx.storage_backend,
         action_name=ctx.action_name,
     )
-    result = service.retrieve_results(args.batch_id, str(ctx.workflow_root))
+    target_dir = ctx.workflow_root / "agent_io" / "target" / ctx.action_name
+    target_dir.mkdir(parents=True, exist_ok=True)
+    result = service.retrieve_results(args.batch_id, str(target_dir))
     click.echo(result)
