@@ -165,59 +165,100 @@ class InspectCommand(BaseInspectCommand):
         action_count = sum(len(lvl) for lvl in levels)
         parallel_count = sum(1 for lvl in levels if len(lvl) > 1)
         estimate = inspector.estimate()
-        # Default view answers three jobs in one read:
-        #   1. mental model → the chain/parallel layout below
-        #   2. pre-run check → ✅ validated banner + LLM/guard counts
-        #   3. navigation → action names + L-numbers for cross-ref
-        # We deliberately *omit* per-action scope counts (that's
-        # `inspect action`'s job) and the rendered config (`--yaml`).
+
+        # Visual hierarchy:
+        #   row 1 = identity (workflow name) + status pill — eye lands first
+        #   row 2 = stats subtitle — answers "how big? how expensive?"
+        #   blank line — section break
+        #   "Pipeline:" header — labels the body
+        #   blank line — breathing room
+        #   numbered steps — left-anchored for fast scan
         self.console.print(
-            f"\n[bold green]✅ validated[/bold green]  [bold cyan]{self.agent_name}[/bold cyan]"
+            f"\n  [bold cyan]{self.agent_name}[/bold cyan]  [bold green]✅ validated[/bold green]"
         )
         self.console.print(
-            f"[dim]{action_count} actions · {len(levels)} levels · "
-            f"{parallel_count} parallel groups · "
-            f"{estimate['llm_calls']} LLM calls · "
-            f"{estimate['guarded_actions']} guarded[/dim]\n"
+            f"  [dim]{action_count} actions, {estimate['llm_calls']} LLM calls, "
+            f"{estimate['guarded_actions']} guarded · "
+            f"{len(levels)} levels, {parallel_count} parallel groups[/dim]"
         )
+        self.console.print()
+        self.console.print("  [bold]Pipeline[/bold]")
+        self.console.print()
 
-        # Label column width: longest possible is `LXX-LYY` so chains and
-        # singletons share one left-aligned column for the action names.
-        level_width = len(str(len(levels)))
-        label_col = 2 * level_width + 3  # "L" + N + "-" + "L" + N
+        # Chunk levels into "steps" — what the user thinks of as one
+        # conceptual unit: either a fan-out (parallel level) or a run of
+        # serial actions. Step numbering is more conversational than
+        # leaking L-numbers; --dry-run keeps L-numbers for accuracy.
+        steps = self._build_steps(levels)
+        step_width = len(str(len(steps)))
 
+        for step_num, step in enumerate(steps, 1):
+            label = f"[dim]{step_num:>{step_width}}.[/dim]"
+            if step["kind"] == "parallel":
+                self._print_parallel(label, step["actions"])
+            else:
+                self._print_chain(label, step["actions"])
+
+    @staticmethod
+    def _build_steps(levels: list[list[str]]) -> list[dict[str, object]]:
+        """Group consecutive single-action levels into one "serial" step,
+        keep multi-action levels as standalone "parallel" steps.
+        """
+        steps: list[dict[str, object]] = []
         idx = 0
         while idx < len(levels):
             level = levels[idx]
             if len(level) > 1:
-                label = f"L{idx + 1:>{level_width}}".ljust(label_col)
-                self.console.print(
-                    f"  [dim]{label}[/dim]  [bold yellow]⫻[/bold yellow] "
-                    f"{', '.join(level)} [dim]({len(level)} parallel)[/dim]",
-                    soft_wrap=True,
-                )
+                steps.append({"kind": "parallel", "actions": list(level)})
                 idx += 1
                 continue
-
-            # Collapse runs of single-action levels into chains —
-            # the structural signal is "these run in series", not "this
-            # is level 24, this is level 25".
-            chain_start = idx
-            chain_actions = [level[0]]
+            chain = [level[0]]
             while idx + 1 < len(levels) and len(levels[idx + 1]) == 1:
                 idx += 1
-                chain_actions.append(levels[idx][0])
-            chain_end = idx
-            if chain_start == chain_end:
-                label = f"L{chain_start + 1:>{level_width}}".ljust(label_col)
-            else:
-                label = f"L{chain_start + 1:>{level_width}}-L{chain_end + 1:>{level_width}}"
-            arrow = " [dim]→[/dim] "
-            self.console.print(
-                f"  [dim]{label}[/dim]  [green]→[/green] {arrow.join(chain_actions)}",
-                soft_wrap=True,
-            )
+                chain.append(levels[idx][0])
+            steps.append({"kind": "serial", "actions": chain})
             idx += 1
+        return steps
+
+    def _print_chain(self, label: str, actions: list[str]) -> None:
+        """Render a serial chain, wrapping with consistent continuation
+        indent so long chains don't run off screen as one wall of text.
+        """
+        prefix = f"  {label}  [green]→[/green] "
+        cont = "       [dim]→[/dim] "
+        self._print_wrapped(prefix, cont, " [dim]→[/dim] ", actions)
+
+    def _print_parallel(self, label: str, actions: list[str]) -> None:
+        """Render a parallel fan-out, wrapping member lists the same way
+        so a 7-way fan doesn't blow past the terminal width.
+        """
+        prefix = f"  {label}  [bold yellow]⫻[/bold yellow] [dim]{len(actions)} parallel:[/dim]  "
+        cont = "                       "
+        self._print_wrapped(prefix, cont, ", ", actions)
+
+    def _print_wrapped(
+        self,
+        prefix: str,
+        cont: str,
+        separator: str,
+        items: list[str],
+    ) -> None:
+        """Greedy line packer for a prefixed, separator-joined list."""
+        import re
+
+        def _visible(s: str) -> int:
+            return len(re.sub(r"\[/?[^\]]+\]", "", s))
+
+        width = max(self.console.width or 80, 60)
+        line = prefix + items[0]
+        for nxt in items[1:]:
+            tentative = f"{line}{separator}{nxt}"
+            if _visible(tentative) > width:
+                self.console.print(line, soft_wrap=False)
+                line = cont + nxt
+            else:
+                line = tentative
+        self.console.print(line, soft_wrap=False)
 
 
 @click.group(name="inspect", invoke_without_command=True)
