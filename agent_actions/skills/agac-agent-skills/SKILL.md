@@ -322,7 +322,7 @@ agac run -a {workflow} -u tools
 agac run -a {workflow} -u tools --fresh
 
 # See the full resolved YAML (versions expanded, schema inlined)
-agac render -a {workflow} -u tools
+agac inspect -a {workflow} -u tools --yaml
 
 # Per-record status across all actions
 agac dispositions -a {workflow} -u tools

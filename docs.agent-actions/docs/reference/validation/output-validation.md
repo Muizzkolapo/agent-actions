@@ -590,7 +590,7 @@ Record filtered by guard on action 'generate_output'
 Compile the workflow that uses the schema. Malformed schemas surface with a path-attributed error before any LLM call is made:
 
 ```bash
-agac compile -a workflow_name
+agac inspect -a workflow_name --validate
 ```
 
 ### Analyze Schema Structure

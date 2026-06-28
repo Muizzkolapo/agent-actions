@@ -14,7 +14,7 @@ project/
 ├── artefact/
 │   ├── catalog.json                    # Project catalog (agac docs)
 │   ├── runs.json                       # Workflow execution history (agac run + agac docs)
-│   └── rendered_workflows/             # Compiled workflow configs (agac render)
+│   └── rendered_workflows/             # Compiled workflow configs (agac inspect --yaml)
 ├── logs/
 │   └── agent_actions.log              # Application logs
 └── agent_workflow/

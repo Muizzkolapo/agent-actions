@@ -196,7 +196,7 @@ Generate multiple actions with loops:
 To see the rendered output, use `agac run` which writes compiled prompts into the `prompt_trace` table. For a quick check of the rendered workflow config without executing actions:
 
 ```bash
-agac compile -a my_workflow
+agac inspect -a my_workflow --yaml
 ```
 
 The compiled workflow YAML is saved to `artefact/rendered_workflows/my_workflow.yml`. You can inspect this file to verify that template variables expanded correctly and that context scope produced the expected fields.
@@ -250,7 +250,7 @@ Always verify template expansion before running:
 
 ```bash
 # Render and review
-agac render -a my_workflow > /dev/null && \
+agac inspect -a my_workflow --yaml > /dev/null && \
 cat artefact/rendered_workflows/my_workflow.yml
 ```
 

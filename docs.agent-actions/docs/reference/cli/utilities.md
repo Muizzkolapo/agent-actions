@@ -8,48 +8,25 @@ sidebar_position: 4
 
 Beyond running agentic workflows, `agac` provides commands for project setup, debugging, and maintenance. These utilities help you initialize projects, debug template rendering, run tests, and keep your workspace clean.
 
-## render
+## render / compile (removed)
 
-**What does your agentic workflow configuration look like after compilation?**
-
-The `render` command compiles your workflow configuration and shows you the final, fully-resolved YAML without executing it. This shows you the fully-resolved configuration before execution.
+`agac render` and `agac compile` have been consolidated into
+[`agac inspect --yaml`](./inspect#--yaml). The new command produces the
+same fully-resolved YAML (Jinja2 expanded, prompts resolved, schemas
+inlined, versions expanded), without requiring a separate command surface.
 
 ```bash
-agac render -a <workflow-name> [options]
+# Before
+agac render  -a my_workflow > rendered.yml
+agac compile -a my_workflow > rendered.yml
+
+# After
+agac inspect -a my_workflow --yaml > rendered.yml
 ```
 
-The render step performs full compilation:
-- **Jinja2 template expansion** - Macros and variables are resolved
-- **Prompt resolution** - `$prompt_name` references are loaded from prompt store
-- **Schema inlining** - `schema_name: foo` loads `schema/foo.yml` (or `.yaml`/`.json`) and inlines it
-- **Inline schema expansion** - Shorthand `{field: type}` expands to unified format
-- **Version expansion** - `versions: {range: [1,3]}` expands to multiple actions
-
-This is helpful when:
-- **Debugging template issues** - See exactly what the templates produce
-- **Verifying schema resolution** - Confirm schemas are inlined correctly
-- **Inspecting version expansion** - See how versioned actions expand
-- **Troubleshooting YAML parsing errors** - Identify if templates generate invalid YAML
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-a, --agent TEXT` | Agentic workflow name to render (required) |
-| `-t, --template-dir TEXT` | Directory containing templates (default: `./templates`) |
-| `--create-dirs` | Create template directory if it does not exist |
-
-**Examples:**
-```bash
-# Render agentic workflow config to console
-agac render -a my_workflow
-
-# Render with custom templates directory
-agac render -a my_workflow -t custom_templates
-```
-
-:::tip Run from Anywhere
-You can run this command from any subdirectory within your project.
-:::
+The `-t/--template-dir` and `--create-dirs` flags are not carried over —
+`agac inspect` is read-only and never creates directories. Use
+[`agac init`](#init) when you need fresh scaffolding.
 
 ## init
 
