@@ -41,7 +41,11 @@ class BaseInspectCommand:
         (``verify_keys=False``) since introspection shouldn't make
         network calls.
         """
-        inspector = WorkflowInspector(agent_name=self.agent_name, project_root=project_root)
+        inspector = WorkflowInspector(
+            agent_name=self.agent_name,
+            project_root=project_root,
+            user_code_path=self.user_code,
+        )
         # validate() runs load() internally and populates schema_service.
         # The inspect subcommands need schema_service for output-field
         # resolution, so we always validate here.

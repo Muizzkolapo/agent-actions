@@ -57,7 +57,11 @@ class InspectCommand(BaseInspectCommand):
     def execute(self, project_root: Path | None = None) -> None:
         # --yaml is the compile replacement — skip validation, render only.
         if self.yaml_output:
-            inspector = WorkflowInspector(agent_name=self.agent_name, project_root=project_root)
+            inspector = WorkflowInspector(
+                agent_name=self.agent_name,
+                project_root=project_root,
+                user_code_path=self.user_code,
+            )
             click.echo(inspector.render())
             return
 
@@ -129,11 +133,14 @@ class InspectCommand(BaseInspectCommand):
         scope = inspector.get_context_scope()
 
         if self.json_output:
+            # "status: ok" mirrors --validate / --dry-run JSON output so
+            # CI consumers can branch on a single key. We only ever reach
+            # this code path on success — failures raise upstream.
             click.echo(
                 json_lib.dumps(
                     {
                         "workflow": self.agent_name,
-                        "validation_ok": True,
+                        "status": "ok",
                         "execution_levels": levels,
                         "context_scope": scope,
                     },
@@ -241,28 +248,24 @@ def inspect(
     try:
         cmd.execute(project_root=project_root)
     except PreFlightValidationError as exc:
-        # --validate / --dry-run want a clean failure surface rather
-        # than the formatted user-error banner.
-        if validate_only or dry_run:
-            if json_output:
-                click.echo(
-                    json_lib.dumps(
-                        {
-                            "workflow": Path(agent_opt).stem,
-                            "status": "failed",
-                            "error": str(exc),
-                        },
-                        indent=2,
-                    )
-                )
-            else:
-                click.echo(
-                    f"❌ {Path(agent_opt).stem}: validation failed",
-                    err=True,
-                )
-                click.echo(str(exc), err=True)
-            raise click.ClickException("Validation failed") from exc
-        raise
+        # JSON consumers need a machine-readable failure body on stdout,
+        # which @handles_user_errors can't produce. For non-JSON modes we
+        # fall through to the standard error-formatting decorator so the
+        # default/--validate/--dry-run paths all surface failures with a
+        # single banner — no double-print.
+        if not json_output:
+            raise
+        click.echo(
+            json_lib.dumps(
+                {
+                    "workflow": cmd.agent_name,
+                    "status": "failed",
+                    "error": str(exc),
+                },
+                indent=2,
+            )
+        )
+        raise click.exceptions.Exit(1) from exc
 
 
 inspect.add_command(dependencies)

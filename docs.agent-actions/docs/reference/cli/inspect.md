@@ -53,6 +53,13 @@ $ agac inspect -a my_workflow --yaml > rendered.yml
 The output is post-template-expansion, post-prompt-resolution, and
 post-schema-inlining — the same YAML the runtime would consume.
 
+:::tip `--yaml` skips validation
+For speed, `--yaml` does not run preflight checks — a workflow with a
+broken guard or missing schema will still render. If you want both,
+run `agac inspect -a <wf> --validate && agac inspect -a <wf> --yaml`,
+or use `--dry-run` for the combined view.
+:::
+
 ### `--validate`
 
 Validation report only (pass/fail). Exits 0 on success, non-zero on
@@ -85,9 +92,10 @@ Context scope:
   analyze_sentiment → {'observe': [...], 'drop': [...]}
 
 Estimate: 5 actions, 4 LLM calls, 2 guarded
-
-✅ Validation passed
 ```
+
+The command exits 0 on success and non-zero if any preflight check
+fails — no separate "passed" footer is printed.
 
 ### `--json`
 

@@ -134,12 +134,12 @@ class TestInspectValidate:
             result = _invoke("-a", "test", "--validate", "--json")
 
         assert result.exit_code != 0, result.output
-        # The JSON payload should be parseable even on failure
-        # (banner is stderr, JSON is stdout)
-        if result.output.strip():
-            payload = json.loads(_stdout(result).strip())
-            assert payload["status"] == "failed"
-            assert payload["workflow"] == "test"
+        # Failure MUST emit JSON on stdout — a regression that drops the
+        # payload (e.g. routing the error to stderr instead) should fail
+        # this test, so assert unconditionally.
+        payload = json.loads(_stdout(result).strip())
+        assert payload["status"] == "failed"
+        assert payload["workflow"] == "test"
 
 
 # ── --dry-run shows graph + validation + estimate ────────────────────────
@@ -227,7 +227,7 @@ class TestInspectDefault:
 
         assert result.exit_code == 0, result.output
         payload = json.loads(_stdout(result).strip())
-        assert payload["validation_ok"] is True
+        assert payload["status"] == "ok"
         assert payload["execution_levels"] == [["a"]]
 
 
@@ -248,6 +248,39 @@ class TestInspectFlagExclusion:
         result = _invoke("-a", "test", *flags)
         assert result.exit_code != 0, result.output
         assert "only one" in result.output.lower() or "mutually" in result.output.lower()
+
+
+# ── --user-code plumbing ────────────────────────────────────────────────
+
+
+class TestInspectUserCode:
+    """`-u <path>` must reach WorkflowInspector as user_code_path."""
+
+    def test_user_code_forwarded_to_inspector_validate_mode(self):
+        with patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls:
+            mock_inspector = MagicMock()
+            mock_inspector.action_configs = {"a": {}}
+            mock_inspector.execution_order = ["a"]
+            mock_inspector_cls.return_value = mock_inspector
+
+            result = _invoke("-a", "test", "-u", "my_tools", "--validate")
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_inspector_cls.call_args.kwargs
+        assert kwargs.get("user_code_path") == "my_tools"
+
+    def test_user_code_forwarded_to_inspector_yaml_mode(self):
+        """--yaml constructs its own WorkflowInspector and must also forward -u."""
+        with patch("agent_actions.cli.inspect.WorkflowInspector") as mock_inspector_cls:
+            mock_inspector = MagicMock()
+            mock_inspector.render.return_value = "name: t\n"
+            mock_inspector_cls.return_value = mock_inspector
+
+            result = _invoke("-a", "test", "-u", "my_tools", "--yaml")
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_inspector_cls.call_args.kwargs
+        assert kwargs.get("user_code_path") == "my_tools"
 
 
 # ── --agent is required when no subcommand ──────────────────────────────

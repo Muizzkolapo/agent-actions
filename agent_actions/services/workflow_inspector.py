@@ -51,9 +51,15 @@ class WorkflowInspector:
     reflects what ``agac run`` would actually execute.
     """
 
-    def __init__(self, agent_name: str, project_root: Path | None = None):
+    def __init__(
+        self,
+        agent_name: str,
+        project_root: Path | None = None,
+        user_code_path: str | None = None,
+    ):
         self.agent_name = agent_name
         self.project_root = project_root
+        self.user_code_path = user_code_path
         self.paths: ProjectPaths = ProjectPathsFactory.create_project_paths(
             agent_name, agent_name, auto_create=False, project_root=project_root
         )
@@ -124,7 +130,7 @@ class WorkflowInspector:
         runtime_config = WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(self._config_path),
-                user_code_path=None,
+                user_code_path=self.user_code_path,
                 default_path=str(self.paths.default_config_path),
             ),
             use_tools=False,
