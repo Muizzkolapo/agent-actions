@@ -249,6 +249,14 @@ class TestInspectFlagExclusion:
         assert result.exit_code != 0, result.output
         assert "only one" in result.output.lower() or "mutually" in result.output.lower()
 
+    def test_yaml_and_json_rejected(self):
+        """--yaml emits raw YAML; combining with --json would change the
+        consumer contract silently. Must error out.
+        """
+        result = _invoke("-a", "test", "--yaml", "--json")
+        assert result.exit_code != 0, result.output
+        assert "yaml" in result.output.lower() and "json" in result.output.lower()
+
 
 # ── --user-code plumbing ────────────────────────────────────────────────
 
@@ -299,6 +307,95 @@ class TestInspectAgentRequired:
 
 
 # ── compile/render removal regression ────────────────────────────────────
+
+
+class TestWorkflowInspectorRender:
+    """Direct WorkflowInspector.render() tests — the CLI tests above mock
+    render() entirely, which would hide a bug where render extracts
+    actions from the wrong key in the rendered config map.
+    """
+
+    def test_render_extracts_validated_actions_from_new_format(self):
+        """ConfigRenderingService writes parsed actions to '_validated_actions'
+        for new-format configs. render() must extract from that key, not
+        from `agent_name` (which is unset for new-format).
+        """
+        from agent_actions.services.workflow_inspector import WorkflowInspector
+
+        inspector = WorkflowInspector.__new__(WorkflowInspector)
+        inspector.agent_name = "wf"
+        inspector.project_root = None
+        inspector.user_code_path = None
+        inspector.paths = MagicMock()
+        inspector._config_path = Path("/fake/wf.yml")
+
+        rendered_map = {
+            "name": "wf",
+            "_validated_actions": [
+                {"name": "action_a", "kind": "llm"},
+                {"name": "action_b", "kind": "llm"},
+            ],
+        }
+        with patch("agent_actions.services.workflow_inspector.ConfigRenderingService") as svc_cls:
+            svc_cls.return_value.render_and_load_config.return_value = rendered_map
+            out = inspector.render()
+
+        assert "action_a" in out, "render dropped validated actions"
+        assert "action_b" in out, "render dropped validated actions"
+        assert "actions: []" not in out
+
+    def test_render_falls_back_to_agent_name_for_legacy_format(self):
+        from agent_actions.services.workflow_inspector import WorkflowInspector
+
+        inspector = WorkflowInspector.__new__(WorkflowInspector)
+        inspector.agent_name = "wf"
+        inspector.project_root = None
+        inspector.user_code_path = None
+        inspector.paths = MagicMock()
+        inspector._config_path = Path("/fake/wf.yml")
+
+        rendered_map = {
+            "wf": [
+                {"name": "legacy_action", "kind": "llm"},
+            ],
+        }
+        with patch("agent_actions.services.workflow_inspector.ConfigRenderingService") as svc_cls:
+            svc_cls.return_value.render_and_load_config.return_value = rendered_map
+            out = inspector.render()
+
+        assert "legacy_action" in out
+
+
+class TestWorkflowInspectorGetLevels:
+    """get_levels() must include non-operational agents that
+    ConfigManager omits from execution_order.
+    """
+
+    def test_get_levels_includes_non_operational_actions(self):
+        from agent_actions.services.workflow_inspector import WorkflowInspector
+
+        inspector = WorkflowInspector.__new__(WorkflowInspector)
+        inspector.agent_name = "wf"
+        inspector.project_root = None
+        inspector.user_code_path = None
+        inspector.paths = MagicMock()
+        inspector._config_path = Path("/fake/wf.yml")
+        # Two operational, one non-operational (absent from execution_order).
+        inspector.action_configs = {
+            "op_a": {"depends_on": []},
+            "op_b": {"depends_on": ["op_a"]},
+            "non_op_c": {"depends_on": ["op_b"]},
+        }
+        inspector.execution_order = ["op_a", "op_b"]
+        inspector._loaded = True
+
+        levels = inspector.get_levels()
+        flat = [name for level in levels for name in level]
+        assert "non_op_c" in flat, "non-operational action was dropped"
+        # And it should be placed AFTER its dep, not in a 'cycle' bucket.
+        op_b_level = next(i for i, lvl in enumerate(levels) if "op_b" in lvl)
+        non_op_c_level = next(i for i, lvl in enumerate(levels) if "non_op_c" in lvl)
+        assert non_op_c_level > op_b_level
 
 
 class TestCompileRemoved:

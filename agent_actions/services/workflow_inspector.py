@@ -78,9 +78,10 @@ class WorkflowInspector:
     def render(self) -> str:
         """Return the fully rendered workflow YAML.
 
-        Uses ``ConfigManager``-merged defaults so the output matches
-        what the runtime would consume — including expanded versions,
-        inlined schemas, and resolved prompt references.
+        Output reflects template expansion, prompt resolution, schema
+        inlining, and version expansion. It does NOT apply runtime-only
+        transforms such as guard-nullable schema fixes — those are
+        layered on by the runtime, not the renderer.
         """
         action_config_map = ConfigRenderingService().render_and_load_config(
             self.agent_name,
@@ -89,9 +90,14 @@ class WorkflowInspector:
             self.paths.rendered_workflows_dir,
             project_root=self.project_root,
         )
+        # New-format configs land under "_validated_actions"; legacy
+        # configs land under the agent_name top-level key.
+        actions = action_config_map.get("_validated_actions") or action_config_map.get(
+            self.agent_name, []
+        )
         workflow_dict = {
             "name": self.agent_name,
-            "actions": action_config_map.get(self.agent_name, []),
+            "actions": actions,
         }
         return yaml.dump(workflow_dict, sort_keys=False)
 
@@ -114,9 +120,10 @@ class WorkflowInspector:
         manager.validate_agent_name()
 
         # UDF discovery is read-only (scans filesystem, populates a
-        # process-level registry).  Use a stderr-suppressed console so
-        # introspection doesn't print runtime banners to the user.
-        quiet_console = Console(quiet=True)
+        # process-level registry). Route its banners to stderr so they
+        # stay visible to the user without polluting stdout (which
+        # carries the JSON / rendered YAML payload).
+        quiet_console = Console(stderr=True)
         runtime_config = WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(self._config_path),
@@ -172,9 +179,12 @@ class WorkflowInspector:
                 return [deps]
             return list(deps or [])
 
-        # execution_order is the topological order ConfigManager derived
-        # from action_configs — they always agree on the action set.
-        remaining = list(self.execution_order or self.action_configs.keys())
+        # execution_order only covers operational agents — non-operational
+        # ones are absent. Use it as the preferred order, then append any
+        # action_configs entries it missed so we don't drop them or
+        # mis-attribute them as a dependency cycle.
+        operational = [name for name in self.execution_order if name in self.action_configs]
+        remaining = operational + [name for name in self.action_configs if name not in operational]
         completed: set[str] = set()
         levels: list[list[str]] = []
 

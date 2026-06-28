@@ -225,6 +225,11 @@ def inspect(
     flag_count = sum([yaml_output, validate_only, dry_run])
     if flag_count > 1:
         raise click.UsageError("Only one of --yaml, --validate, --dry-run may be used at a time.")
+    # --json combines with --validate / --dry-run / default but not --yaml
+    # (rendered YAML can't meaningfully be wrapped in JSON without changing
+    # its consumer contract).
+    if yaml_output and json_output:
+        raise click.UsageError("--yaml and --json cannot be combined; --yaml emits raw YAML.")
 
     project_root = ensure_in_project()
     cwd = Path.cwd()

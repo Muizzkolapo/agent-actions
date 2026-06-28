@@ -50,14 +50,22 @@ and `agac render` commands.
 $ agac inspect -a my_workflow --yaml > rendered.yml
 ```
 
-The output is post-template-expansion, post-prompt-resolution, and
-post-schema-inlining — the same YAML the runtime would consume.
+The output reflects template expansion, prompt resolution, schema
+inlining, and version expansion — i.e. the rendered configuration as
+the framework parses it.
 
-:::tip `--yaml` skips validation
+:::tip `--yaml` skips validation and runtime transforms
 For speed, `--yaml` does not run preflight checks — a workflow with a
-broken guard or missing schema will still render. If you want both,
-run `agac inspect -a <wf> --validate && agac inspect -a <wf> --yaml`,
-or use `--dry-run` for the combined view.
+broken guard or missing schema will still render. The output also does
+NOT include runtime-only transforms such as guard-nullable schema fixes
+(the framework adds `nullable: true` to fields guarded against null at
+run time, but those edits are layered in by the runtime, not the
+renderer). If you want validation as well, run
+`agac inspect -a <wf> --validate && agac inspect -a <wf> --yaml`, or
+use `--dry-run` for the combined view.
+
+`--yaml` and `--json` cannot be combined — `--yaml` always emits raw
+YAML.
 :::
 
 ### `--validate`
