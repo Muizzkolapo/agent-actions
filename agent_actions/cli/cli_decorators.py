@@ -46,12 +46,19 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
 
 
 def requires_project(func):
-    """Find project root and inject it as a ``project_root`` keyword argument."""
+    """Find project root and inject it as a ``project_root`` keyword argument.
+
+    Prints a ``📁 Project root: <path>`` banner only when running from a
+    sub-directory of the project (the only case where the path tells the
+    user anything new — ``.`` is noise).
+    """
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         project_root = ensure_in_project()
-        click.echo(f"📁 Project root: {_format_project_root_display(project_root)}", err=True)
+        display = _format_project_root_display(project_root)
+        if display != ".":
+            click.echo(f"📁 Project root: {display}", err=True)
         return func(*args, project_root=project_root, **kwargs)
 
     return wrapper
