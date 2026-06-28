@@ -106,6 +106,22 @@ class TestFreshRunClearsBatchState:
         stub.storage_backend.clear_batch_state.assert_any_call("action_a")
         stub.storage_backend.clear_batch_state.assert_any_call("action_b")
 
+    def test_fresh_actually_wipes_batch_registry_metadata(self, tmp_path: Path):
+        """End-to-end pin: --fresh removes the batch_registry:{action} key
+        from a real SQLite backend, not just the mocked call."""
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        real_backend = SQLiteBackend(str(tmp_path / "agent_io" / "test.db"), "test_workflow")
+        real_backend.initialize()
+        real_backend._save_metadata_raw("batch_registry:my_action", '{"id":"x"}')
+        assert real_backend.load_metadata("batch_registry:my_action") is not None
+
+        stub = _make_coordinator_stub(tmp_path, ["my_action"])
+        stub.storage_backend = real_backend
+        stub._clear_for_fresh_run()
+
+        assert real_backend.load_metadata("batch_registry:my_action") is None
+
 
 class TestFreshRunExistingBehavior:
     """Existing cleanup behavior must be preserved."""
