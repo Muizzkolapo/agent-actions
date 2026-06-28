@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
 from agent_actions.config.types import RunMode
+from agent_actions.errors import ConfigValidationError
 
 
 class TestActionConfigForbidsUnknownKeys:
@@ -18,6 +19,15 @@ class TestActionConfigForbidsUnknownKeys:
     def test_unknown_key_raises_validation_error(self):
         data = {"name": "test", "intent": "test", "totally_bogus": True}
         with pytest.raises(ValidationError, match="totally_bogus"):
+            ActionConfig.model_validate(data)
+
+    def test_unknown_guard_subkey_raises_via_field_validator(self):
+        data = {
+            "name": "test",
+            "intent": "test",
+            "guard": {"condition": "true", "on_falsee": "skip"},
+        }
+        with pytest.raises(ConfigValidationError, match="on_falsee"):
             ActionConfig.model_validate(data)
 
     def test_accepts_all_valid_action_keys(self):
