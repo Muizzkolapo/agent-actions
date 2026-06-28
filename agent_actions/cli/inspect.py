@@ -164,14 +164,21 @@ class InspectCommand(BaseInspectCommand):
 
         action_count = sum(len(lvl) for lvl in levels)
         parallel_count = sum(1 for lvl in levels if len(lvl) > 1)
-        # Default view answers "show me the workflow's shape so I can
-        # reason about it." Per-action context_scope counts belong to
-        # `inspect action` — leaving them out here keeps the visual
-        # signal focused on fan-out points and serial chains.
-        self.console.print(f"\n[bold cyan]✅ {self.agent_name}[/bold cyan]")
+        estimate = inspector.estimate()
+        # Default view answers three jobs in one read:
+        #   1. mental model → the chain/parallel layout below
+        #   2. pre-run check → ✅ validated banner + LLM/guard counts
+        #   3. navigation → action names + L-numbers for cross-ref
+        # We deliberately *omit* per-action scope counts (that's
+        # `inspect action`'s job) and the rendered config (`--yaml`).
+        self.console.print(
+            f"\n[bold green]✅ validated[/bold green]  [bold cyan]{self.agent_name}[/bold cyan]"
+        )
         self.console.print(
             f"[dim]{action_count} actions · {len(levels)} levels · "
-            f"{parallel_count} parallel groups[/dim]\n"
+            f"{parallel_count} parallel groups · "
+            f"{estimate['llm_calls']} LLM calls · "
+            f"{estimate['guarded_actions']} guarded[/dim]\n"
         )
 
         # Label column width: longest possible is `LXX-LYY` so chains and
@@ -211,10 +218,6 @@ class InspectCommand(BaseInspectCommand):
                 soft_wrap=True,
             )
             idx += 1
-
-        self.console.print(
-            "\n[dim]Hint: `agac inspect action -a <wf> <action>` for per-action detail.[/dim]"
-        )
 
 
 @click.group(name="inspect", invoke_without_command=True)
@@ -314,9 +317,12 @@ def inspect(
     # workflows, config errors, or a missing project root too.
     try:
         project_root = ensure_in_project()
-        click.echo(
-            f"\U0001f4c1 Project root: {_format_project_root_display(project_root)}", err=True
-        )
+        # Only print the project-root banner when there's something to
+        # learn from it — running from a sub-directory of the project. If
+        # cwd == project_root the banner just shows "." which is noise.
+        display = _format_project_root_display(project_root)
+        if display != ".":
+            click.echo(f"\U0001f4c1 Project root: {display}", err=True)
         cmd.execute(project_root=project_root)
     except AgentActionsError as exc:
         if not json_output:
