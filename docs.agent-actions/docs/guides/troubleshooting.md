@@ -534,20 +534,20 @@ Reprompting adds latency and token cost. For high-volume agentic workflows, cons
 ### Log Location
 
 ```
-project/logs/agent_actions.log
+agent_io/logs/events.json
 ```
 
 ### Search Patterns
 
 ```bash
 # Find all schema validation errors
-grep "SchemaValidationError" logs/agent_actions.log
+jq -c 'select(.message | test("SchemaValidationError"))' agent_io/logs/events.json
 
 # Find errors for specific action
-grep "agent_name=add_answer_text" logs/agent_actions.log
+jq -c 'select(.action_name == "add_answer_text")' agent_io/logs/events.json
 
 # Find errors for specific field
-grep "error_path=answer_text" logs/agent_actions.log
+jq -c 'select(.error_path == "answer_text")' agent_io/logs/events.json
 ```
 
 ### Execution History

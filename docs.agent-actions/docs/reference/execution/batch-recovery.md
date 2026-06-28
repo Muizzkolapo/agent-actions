@@ -203,7 +203,7 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
 :::note Sparse serialization
 Counter fields use a sparse contract: absent means zero. Consumers should use `record.get("parse_error_count", 0)`, not assume the key exists.
 
-Counter fields are populated by the **online** reprompt path. Batch paths default to 0 because the batch evaluation loop returns pass/fail without failure-type classification.
+Counter fields are populated by both the online and batch reprompt paths. Earlier documentation incorrectly stated that batch paths always default to 0; in practice, batch recovery also populates these counters when the provider returns per-record error classification.
 :::
 
 ### Serialization

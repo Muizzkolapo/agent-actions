@@ -86,7 +86,7 @@ The browser UI provides:
 hitl:
   port: 3001                        # Port for review server (1024-65535)
   instructions: "Review carefully"  # Instructions shown in UI (required)
-  timeout: 300                      # Seconds before auto-timeout (30-3600)
+  timeout: 300                      # Seconds before auto-timeout (5-3600)
   require_comment_on_reject: true   # Require comment when rejecting
 ```
 
