@@ -41,10 +41,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
-from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
-from agent_actions.storage import get_storage_backend
+from tests._support.batch_workflows import seed_workflow
 
 # --------------------------------------------------------------------------
 # Fixtures
@@ -55,26 +52,8 @@ def _make_multi_workflow_project(root: Path) -> None:
     """Two workflows under one project, each with one batch action, each
     seeded with a `batch_registry:{action}` row in its own DB."""
     (root / "agent_actions.yml").write_text("name: multi\n")
-    for wf, action in (("alpha", "alpha_action"), ("beta", "beta_action")):
-        wf_root = root / "agent_workflow" / wf
-        (wf_root / "agent_io" / "store").mkdir(parents=True)
-        (wf_root / "agent_config").mkdir(parents=True)
-        (wf_root / "agent_config" / f"{wf}.yml").write_text(f"name: {wf}\n")
-        (wf_root / f"{wf}.yml").write_text(f"name: {wf}\n")
-
-        backend = get_storage_backend(workflow_path=str(wf_root), workflow_name=wf)
-        backend.initialize()
-        registry = BatchRegistryManager(storage_backend=backend, action_name=action)
-        registry.save_batch_job(
-            file_name=f"{action}_chunk_0.jsonl",
-            entry=BatchJobEntry(
-                batch_id=f"fake_{wf}_batch",
-                status=BatchStatus.COMPLETED,
-                timestamp="2026-06-28T00:00:00Z",
-                provider="ollama",
-                file_name=f"{action}_chunk_0.jsonl",
-            ),
-        )
+    seed_workflow(root, "alpha", "alpha_action", "fake_alpha_batch")
+    seed_workflow(root, "beta", "beta_action", "fake_beta_batch")
 
 
 # --------------------------------------------------------------------------

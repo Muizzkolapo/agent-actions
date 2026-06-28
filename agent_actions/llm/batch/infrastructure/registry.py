@@ -27,17 +27,25 @@ class BatchRegistryManager:
     """Thread-safe CRUD for batch registry with in-memory caching.
 
     Persists to StorageBackend metadata store under key
-    ``batch_registry:{action_name}``.
+    ``{METADATA_KEY_PREFIX}{action_name}``.
     """
+
+    METADATA_KEY_PREFIX = "batch_registry:"
 
     def __init__(self, storage_backend: "StorageBackend", action_name: str):
         self._backend = storage_backend
         self._action_name = action_name
-        self._metadata_key = f"batch_registry:{action_name}"
+        self._metadata_key = f"{self.METADATA_KEY_PREFIX}{action_name}"
         self._cache: dict[str, BatchJobEntry] | None = None
         self._batch_id_index: dict[str, str] | None = None
         self._lock = threading.Lock()
         logger.debug("Initialized BatchRegistryManager for action %s", action_name)
+
+    @classmethod
+    def list_action_names(cls, storage_backend: "StorageBackend") -> list[str]:
+        """Return the action names that have a batch registry in the given backend."""
+        keys = storage_backend.list_metadata_prefix(cls.METADATA_KEY_PREFIX)
+        return [k.removeprefix(cls.METADATA_KEY_PREFIX) for k in keys]
 
     # ============================================================
     # PUBLIC API - Thread-safe operations
