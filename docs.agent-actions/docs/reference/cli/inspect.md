@@ -57,12 +57,19 @@ the framework parses it.
 :::tip `--yaml` skips validation and runtime transforms
 For speed, `--yaml` does not run preflight checks — a workflow with a
 broken guard or missing schema will still render. The output also does
-NOT include runtime-only transforms such as guard-nullable schema fixes
-(the framework adds `nullable: true` to fields guarded against null at
-run time, but those edits are layered in by the runtime, not the
-renderer). If you want validation as well, run
+NOT include runtime-only transforms such as:
+
+- **Guard-nullable schema fixes** — at run time the framework adds
+  `nullable: true` to fields guarded against null. The renderer leaves
+  the original schema alone.
+- **Unreachable-drop pruning** — `context_scope.drop` entries that
+  target namespaces outside an action's dependency chain are silently
+  stripped at run time. They survive into `--yaml` output.
+
+If you want validation as well, run
 `agac inspect -a <wf> --validate && agac inspect -a <wf> --yaml`, or
-use `--dry-run` for the combined view.
+use `--dry-run` for the combined view (which DOES reflect the
+post-pruning state).
 
 `--yaml` and `--json` cannot be combined — `--yaml` always emits raw
 YAML.

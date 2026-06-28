@@ -1,9 +1,7 @@
-"""Standalone preflight validation for workflow configs.
+"""Preflight validation for workflow configs.
 
-Runs the four static checks (schema validation, guard-nullable schema
-fixes, guard syntax validation, resolution) without instantiating any
-runtime storage or execution services, so it can be used from both
-the runtime path and read-only CLI introspection.
+Standalone so both the runtime coordinator and the read-only inspect
+CLI can call it without spinning up storage or execution services.
 """
 
 from __future__ import annotations
@@ -13,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
 )
@@ -25,16 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 class PreflightService:
-    """Validates a workflow configuration without executing it.
+    """Validate a workflow config without executing it.
 
-    Runs schema validation, guard syntax validation, and resolution
-    checks (API keys, seed files, vendor batch compatibility). Mutates
-    ``action_configs`` to apply guard-nullable schema fixes.
-
-    Pass-or-raise contract: ``validate()`` returns nothing on success and
-    raises ``PreFlightValidationError`` on the first failed check.
-    Callers that want the rebuilt ``WorkflowSchemaService`` for downstream
-    use can read ``self.schema_service`` after a successful validate().
+    Runs schema, guard syntax, and resolution checks. Mutates
+    ``action_configs`` for guard-nullable schema fixes. Pass-or-raise:
+    ``validate()`` returns nothing on success and raises
+    ``PreFlightValidationError`` on the first failed check.
+    Callers can read ``self.schema_service`` after success to reuse the
+    rebuilt service for downstream work.
     """
 
     def __init__(
@@ -50,17 +47,10 @@ class PreflightService:
         self.project_root = project_root
         self.workflow_config_path = workflow_config_path
         self.verify_keys = verify_keys
-        # Built during validate() so callers can reuse for downstream work
-        # (the coordinator stores it on self for inspect subcommands).
         self.schema_service: WorkflowSchemaService | None = None
 
     def validate(self) -> None:
-        """Run preflight validation.
-
-        Raises:
-            PreFlightValidationError: When any check fails.
-        """
-        # --- 1. Schema validation ---
+        # 1. Schema validation
         self.schema_service = WorkflowSchemaService.from_action_configs(
             self.agent_name,
             self.action_configs,
@@ -74,7 +64,7 @@ class PreflightService:
                 hint="Fix the static type errors above before running the workflow.",
             )
 
-        # --- 2. Guard-nullable schema fixes (MUTATES action_configs) ---
+        # 2. Guard-nullable schema fixes (mutates action_configs)
         guard_fixes = apply_guard_nullable_schema_fixes(self.action_configs)
         if guard_fixes:
             logger.info(
@@ -83,11 +73,7 @@ class PreflightService:
                 ", ".join(guard_fixes),
             )
 
-        # --- 3. Guard syntax validation ---
-        # Lazy import — pulling this at module top would drag the
-        # runtime stack into the read-only CLI inspect path.
-        from agent_actions.workflow.coordinator import validate_guard_conditions
-
+        # 3. Guard syntax validation
         guard_errors = validate_guard_conditions(self.action_configs)
         if guard_errors:
             raise PreFlightValidationError(
@@ -95,7 +81,7 @@ class PreflightService:
                 hint="Fix the guard condition errors above before running the workflow.",
             )
 
-        # --- 4. Resolution checks (API keys, seed files, vendor batch) ---
+        # 4. Resolution checks (API keys, seed files, vendor batch)
         resolution_result = WorkflowResolutionService(
             action_configs=self.action_configs,
             workflow_config_path=self.workflow_config_path,

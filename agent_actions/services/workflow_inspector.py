@@ -1,12 +1,7 @@
-"""Lightweight workflow inspector for read-only introspection.
-
-Renders, validates, and resolves a workflow without initializing the
-storage backend or runtime execution services. Used by the
-``agac inspect`` subcommands.
+"""Read-only workflow introspection for ``agac inspect``.
 
 Exposes ``action_configs``, ``execution_order``, and ``schema_service``
-(populated after ``validate()``) so call sites can treat it as a
-read-only view of the workflow.
+without spinning up storage or runtime services.
 """
 
 from __future__ import annotations
@@ -15,18 +10,17 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml
 from rich.console import Console
 
-from agent_actions.config.manager import ConfigManager
 from agent_actions.config.project_paths import (
     ProjectPaths,
     ProjectPathsFactory,
     find_config_file,
 )
-from agent_actions.prompt.renderer import ConfigRenderingService
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.services.preflight_service import PreflightService
-from agent_actions.workflow.config_pipeline import discover_workflow_udfs
+from agent_actions.workflow.config_pipeline import load_workflow_configs
+from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -34,14 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 class WorkflowInspector:
-    """Lightweight workflow introspection.
+    """Read-only workflow introspection.
 
-    No storage backend, no execution services, no LLM calls.
-
-    Drives the same ``ConfigManager`` pipeline the runtime uses, so
-    ``action_configs`` and ``execution_order`` reflect what the runtime
-    would actually execute. UDF discovery fires its normal start/complete
-    events; the runtime initialization event is intentionally skipped.
+    ``load()`` delegates to the runtime's ``load_workflow_configs`` so
+    inspect output matches what ``agac run`` would actually see, but
+    with workflow-init and UDF-discovery events suppressed.
     """
 
     def __init__(
@@ -56,7 +47,6 @@ class WorkflowInspector:
         self.paths: ProjectPaths = ProjectPathsFactory.create_project_paths(
             agent_name, agent_name, auto_create=False, project_root=project_root
         )
-        # Resolve config file once so render() and load() agree.
         self._config_path = find_config_file(
             agent_name,
             self.paths.agent_config_dir,
@@ -64,7 +54,6 @@ class WorkflowInspector:
             check_alternatives=True,
             project_root=project_root,
         )
-        # Populated by load() / validate().
         self.action_configs: dict[str, dict[str, Any]] = {}
         self.execution_order: list[str] = []
         self.schema_service: WorkflowSchemaService | None = None
@@ -72,57 +61,27 @@ class WorkflowInspector:
 
     @property
     def config_path(self) -> Path:
-        """Path to the agent's constructor (workflow) config file."""
         return self._config_path
 
     def render(self) -> str:
         """Return the fully rendered workflow YAML.
 
-        Output reflects template expansion, prompt resolution, schema
-        inlining, and version expansion. It does NOT apply runtime-only
-        transforms such as guard-nullable schema fixes — those are
-        layered on by the runtime, not the renderer.
+        Every top-level key in the source YAML survives. Runtime
+        mutations (drop pruning, guard-nullable schema fixes) are NOT
+        applied — ``--yaml`` is the pre-preflight snapshot.
         """
-        action_config_map = ConfigRenderingService().render_and_load_config(
-            self.agent_name,
+        return render_pipeline_with_templates(
             self._config_path,
             self.paths.template_dir,
-            self.paths.rendered_workflows_dir,
             project_root=self.project_root,
         )
-        # New-format configs land under "_validated_actions"; legacy
-        # configs land under the agent_name top-level key.
-        actions = action_config_map.get("_validated_actions") or action_config_map.get(
-            self.agent_name, []
-        )
-        workflow_dict = {
-            "name": self.agent_name,
-            "actions": actions,
-        }
-        return yaml.dump(workflow_dict, sort_keys=False)
 
     def load(self) -> dict[str, dict[str, Any]]:
-        """Run the config pipeline and populate ``action_configs`` +
-        ``execution_order``. Idempotent.
-
-        Skips the runtime initialization event but UDF-discovery events
-        still fire (shared helper).
-        """
+        """Populate ``action_configs`` and ``execution_order``. Idempotent."""
         if self._loaded:
             return self.action_configs
 
-        manager = ConfigManager(
-            str(self._config_path),
-            str(self.paths.default_config_path),
-            project_root=self.project_root,
-        )
-        manager.load_configs()
-        manager.validate_agent_name()
-
-        # UDF discovery is read-only (scans filesystem, populates a
-        # process-level registry). Route its banners to stderr so they
-        # stay visible to the user without polluting stdout (which
-        # carries the JSON / rendered YAML payload).
+        # UDF banners on stderr keep stdout clean for JSON/YAML payloads.
         quiet_console = Console(stderr=True)
         runtime_config = WorkflowRuntimeConfig(
             paths=WorkflowPaths(
@@ -131,23 +90,22 @@ class WorkflowInspector:
                 default_path=str(self.paths.default_config_path),
             ),
             use_tools=False,
-            manager=manager,
             project_root=self.project_root,
         )
-        discover_workflow_udfs(runtime_config, quiet_console)
 
-        user_agents = manager.get_user_agents()
-        manager.merge_agent_configs(user_agents)
-        manager.determine_execution_order()
+        metadata = load_workflow_configs(runtime_config, quiet_console, fire_events=False)
 
-        self.action_configs = manager.get_all_agent_configs_as_dicts()
-        self.execution_order = list(manager.execution_order)
+        self.action_configs = metadata.action_configs
+        self.execution_order = list(metadata.execution_order)
         self._loaded = True
         return self.action_configs
 
     def validate(self, verify_keys: bool = False) -> None:
-        """Run preflight validation. Raises ``PreFlightValidationError``
-        on failure. Side-effect: populates ``self.schema_service``.
+        """Run preflight, populate ``schema_service``, strip dead drops.
+
+        Drop-pruning mirrors the coordinator so ``--dry-run`` reports the
+        same post-preflight state ``agac run`` will see. Raises
+        ``PreFlightValidationError`` on failure.
         """
         self.load()
         service = PreflightService(
@@ -159,30 +117,24 @@ class WorkflowInspector:
         )
         service.validate()
         self.schema_service = service.schema_service
+        strip_unreachable_drops(self.action_configs)
 
     def get_levels(self) -> list[list[str]]:
-        """Group actions into execution levels (parallelizable groups)
-        respecting ``depends_on``/``dependencies``.
-
-        Returns one list per topological level. Empty when the workflow
-        has no actions.
-        """
+        """Topological levels of parallelizable actions."""
         self.load()
         if not self.action_configs:
             return []
 
         def _deps_of(config: dict[str, Any]) -> list[str]:
-            deps = config.get("depends_on")
-            if deps is None:
-                deps = config.get("dependencies", [])
+            # `or` (not `is None`) so depends_on:[] defers to dependencies —
+            # matches scope_inference / workflow_static_analyzer.
+            deps = config.get("depends_on") or config.get("dependencies") or []
             if isinstance(deps, str):
                 return [deps]
-            return list(deps or [])
+            return list(deps)
 
-        # execution_order only covers operational agents — non-operational
-        # ones are absent. Use it as the preferred order, then append any
-        # action_configs entries it missed so we don't drop them or
-        # mis-attribute them as a dependency cycle.
+        # execution_order skips non-operational agents — append them at
+        # the tail so they still get bucketed instead of looking like a cycle.
         operational = [name for name in self.execution_order if name in self.action_configs]
         remaining = operational + [name for name in self.action_configs if name not in operational]
         completed: set[str] = set()
@@ -195,8 +147,7 @@ class WorkflowInspector:
                 if all(d in completed for d in _deps_of(self.action_configs[name]))
             ]
             if not level:
-                # Cycle or unresolved dependency — dump the rest in one
-                # bucket so callers can still display something.
+                # Cycle / unresolved dep — dump the rest so callers still see something.
                 levels.append(list(remaining))
                 break
             levels.append(level)

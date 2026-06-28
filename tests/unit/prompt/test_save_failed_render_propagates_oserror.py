@@ -40,7 +40,7 @@ class TestSaveFailedRenderPropagatesOSError:
             result = _save_failed_render("bad yaml", "my_workflow", project_root=tmp_path)
 
         assert "my_workflow_failed.yml" in result
-        assert "agac render my_workflow" in result
+        assert "agac inspect -a my_workflow --yaml" in result
 
 
 class TestRenderPipelineYamlParseErrorWithSaveFailure:

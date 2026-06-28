@@ -65,7 +65,7 @@ class TestFailedRenderCache:
         assert "broken_workflow_failed.yml" in error_message
 
     def test_error_message_suggests_render_command(self):
-        """Test that error message suggests using render command."""
+        """Test that error message suggests using inspect --yaml command."""
         yaml_file = Path(self.temp_dir) / "test_workflow.yml"
         yaml_file.write_text("\nactions:\n  - : broken\n")
         with pytest.raises(ConfigurationError) as exc_info:
@@ -75,8 +75,7 @@ class TestFailedRenderCache:
                 project_root=self.project_root,
             )
         error_message = str(exc_info.value)
-        assert "agac render" in error_message
-        assert "test_workflow" in error_message
+        assert "agac inspect -a test_workflow --yaml" in error_message
 
     def test_cache_directory_created_automatically(self):
         """Test that cache directory is created if it doesn't exist."""

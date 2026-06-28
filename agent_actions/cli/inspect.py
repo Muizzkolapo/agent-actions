@@ -5,7 +5,7 @@ Unified preflight and introspection surface.
 Surface:
 
     agac inspect -a <workflow>             # graph + validation status
-    agac inspect -a <workflow> --yaml      # rendered YAML (was: agac compile)
+    agac inspect -a <workflow> --yaml      # rendered YAML
     agac inspect -a <workflow> --validate  # validation report (pass/fail)
     agac inspect -a <workflow> --dry-run   # graph + validation + estimate
     agac inspect -a <workflow> --json      # JSON output (combines with above)
@@ -24,8 +24,8 @@ from pathlib import Path
 import click
 from rich.tree import Tree
 
-from agent_actions.cli.cli_decorators import handles_user_errors
-from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.cli.cli_decorators import _format_project_root_display, handles_user_errors
+from agent_actions.errors.base import AgentActionsError
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.project_root import ensure_in_project
 
@@ -53,7 +53,6 @@ class InspectCommand(BaseInspectCommand):
         self.dry_run = dry_run
 
     def execute(self, project_root: Path | None = None) -> None:
-        # --yaml is the compile replacement — skip validation, render only.
         if self.yaml_output:
             inspector = WorkflowInspector(
                 agent_name=self.agent_name,
@@ -76,8 +75,6 @@ class InspectCommand(BaseInspectCommand):
     # ── --validate ───────────────────────────────────────────────────
 
     def _output_validation(self, inspector: WorkflowInspector) -> None:
-        # _load_inspector already ran validation successfully (it raises
-        # on failure), so reaching here means the workflow is valid.
         if self.json_output:
             click.echo(
                 json_lib.dumps(
@@ -131,9 +128,6 @@ class InspectCommand(BaseInspectCommand):
         scope = inspector.get_context_scope()
 
         if self.json_output:
-            # "status: ok" mirrors --validate / --dry-run JSON output so
-            # CI consumers can branch on a single key. We only ever reach
-            # this code path on success — failures raise upstream.
             click.echo(
                 json_lib.dumps(
                     {
@@ -154,7 +148,6 @@ class InspectCommand(BaseInspectCommand):
             for action_name in level:
                 action_scope = scope.get(action_name, {}).get("scope", "observe")
                 if isinstance(action_scope, dict):
-                    # Summarize compactly
                     parts = []
                     for kind in ("observe", "passthrough", "drop"):
                         items = action_scope.get(kind) or []
@@ -174,7 +167,7 @@ class InspectCommand(BaseInspectCommand):
     "--yaml",
     "yaml_output",
     is_flag=True,
-    help="Output rendered YAML (replaces 'agac compile')",
+    help="Output rendered YAML",
 )
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.option(
@@ -212,33 +205,44 @@ def inspect(
         agac inspect -a my_workflow --dry-run    # full preflight report
         agac inspect -a my_workflow --json       # JSON output
     """
-    # Subcommand routing: subcommands manage their own options and
-    # project-root injection via @requires_project.
+    # Mutex checks must precede subcommand routing — otherwise the early
+    # return below silently drops group flags into a subcommand path that
+    # ignores them.
+    flag_count = sum([yaml_output, validate_only, dry_run])
+    if flag_count > 1:
+        raise click.UsageError("Only one of --yaml, --validate, --dry-run may be used at a time.")
+    if yaml_output and json_output:
+        raise click.UsageError("--yaml and --json cannot be combined; --yaml emits raw YAML.")
+    if ctx.invoked_subcommand is not None and (yaml_output or validate_only or dry_run):
+        raise click.UsageError(
+            "--yaml, --validate, and --dry-run apply to the default "
+            "`agac inspect -a <wf>` form only — do not combine them with a subcommand."
+        )
+
+    # ``default_map`` forwards group-level ``-a`` / ``-u`` to the
+    # subcommand so ``agac inspect -a foo graph`` works (subcommands
+    # still mark ``-a`` required, so missing-option errors fire as before).
     if ctx.invoked_subcommand is not None:
+        defaults: dict[str, str] = {}
+        if agent_opt:
+            defaults["agent"] = agent_opt
+        if user_code:
+            defaults["user_code"] = user_code
+        if defaults:
+            existing = ctx.default_map or {}
+            ctx.default_map = {
+                **existing,
+                ctx.invoked_subcommand: {
+                    **(existing.get(ctx.invoked_subcommand) or {}),
+                    **defaults,
+                },
+            }
         return
 
     if not agent_opt:
         raise click.UsageError(
             "Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage."
         )
-
-    flag_count = sum([yaml_output, validate_only, dry_run])
-    if flag_count > 1:
-        raise click.UsageError("Only one of --yaml, --validate, --dry-run may be used at a time.")
-    # --json combines with --validate / --dry-run / default but not --yaml
-    # (rendered YAML can't meaningfully be wrapped in JSON without changing
-    # its consumer contract).
-    if yaml_output and json_output:
-        raise click.UsageError("--yaml and --json cannot be combined; --yaml emits raw YAML.")
-
-    project_root = ensure_in_project()
-    cwd = Path.cwd()
-    try:
-        rel_path = project_root.relative_to(cwd)
-        display_path = f"./{rel_path}" if str(rel_path) != "." else "."
-    except ValueError:
-        display_path = str(project_root)
-    click.echo(f"\U0001f4c1 Project root: {display_path}", err=True)
 
     cmd = InspectCommand(
         agent=agent_opt,
@@ -248,14 +252,16 @@ def inspect(
         validate_only=validate_only,
         dry_run=dry_run,
     )
+    # --json catches every AgentActionsError (not just preflight) so CI
+    # scripts parsing stdout see ``{status: failed, ...}`` for missing
+    # workflows, config errors, or a missing project root too.
     try:
+        project_root = ensure_in_project()
+        click.echo(
+            f"\U0001f4c1 Project root: {_format_project_root_display(project_root)}", err=True
+        )
         cmd.execute(project_root=project_root)
-    except PreFlightValidationError as exc:
-        # JSON consumers need a machine-readable failure body on stdout,
-        # which @handles_user_errors can't produce. For non-JSON modes we
-        # fall through to the standard error-formatting decorator so the
-        # default/--validate/--dry-run paths all surface failures with a
-        # single banner — no double-print.
+    except AgentActionsError as exc:
         if not json_output:
             raise
         click.echo(

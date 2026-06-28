@@ -51,16 +51,11 @@ def requires_project(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         project_root = ensure_in_project()
-
-        cwd = Path.cwd()
-        try:
-            rel_path = project_root.relative_to(cwd)
-            display_path = f"./{rel_path}" if str(rel_path) != "." else "."
-        except ValueError:
-            display_path = str(project_root)
-
-        click.echo(f"📁 Project root: {display_path}", err=True)
-
+        click.echo(f"📁 Project root: {_format_project_root_display(project_root)}", err=True)
         return func(*args, project_root=project_root, **kwargs)
 
     return wrapper
+
+
+def _format_project_root_display(project_root: Path) -> str:
+    return "." if Path.cwd() == project_root else str(project_root)

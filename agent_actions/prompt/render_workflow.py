@@ -88,7 +88,8 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
     with open(failed_render_path, "w", encoding="utf-8") as f:
         f.write(rendered_yaml_content)
     return (
-        f"\nRendered output saved to: {failed_render_path}\nDebug with: agac render {workflow_name}"
+        f"\nRendered output saved to: {failed_render_path}"
+        f"\nDebug with: agac inspect -a {workflow_name} --yaml"
     )
 
 

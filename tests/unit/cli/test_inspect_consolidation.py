@@ -49,7 +49,7 @@ def _stdout(result) -> str:
         return result.output
 
 
-# ── --yaml replaces agac compile ─────────────────────────────────────────
+# ── --yaml renders the workflow as YAML ──────────────────────────────────
 
 
 class TestInspectYaml:
@@ -311,14 +311,15 @@ class TestInspectAgentRequired:
 
 class TestWorkflowInspectorRender:
     """Direct WorkflowInspector.render() tests — the CLI tests above mock
-    render() entirely, which would hide a bug where render extracts
-    actions from the wrong key in the rendered config map.
+    render() entirely, which would hide a bug where render rebuilt the
+    dict from scratch and stripped top-level keys (defaults, storage,
+    version, custom metadata) the user actually wrote.
     """
 
-    def test_render_extracts_validated_actions_from_new_format(self):
-        """ConfigRenderingService writes parsed actions to '_validated_actions'
-        for new-format configs. render() must extract from that key, not
-        from `agent_name` (which is unset for new-format).
+    def test_render_preserves_all_top_level_keys(self):
+        """Every top-level key in the source YAML must survive into the
+        render output. Stripping ``defaults``, ``storage``, ``version``,
+        or custom metadata is silent data loss.
         """
         from agent_actions.services.workflow_inspector import WorkflowInspector
 
@@ -329,22 +330,30 @@ class TestWorkflowInspectorRender:
         inspector.paths = MagicMock()
         inspector._config_path = Path("/fake/wf.yml")
 
-        rendered_map = {
-            "name": "wf",
-            "_validated_actions": [
-                {"name": "action_a", "kind": "llm"},
-                {"name": "action_b", "kind": "llm"},
-            ],
-        }
-        with patch("agent_actions.services.workflow_inspector.ConfigRenderingService") as svc_cls:
-            svc_cls.return_value.render_and_load_config.return_value = rendered_map
+        rendered_yaml = (
+            "name: wf\n"
+            "defaults:\n"
+            "  json_mode: true\n"
+            "storage:\n"
+            "  backend: sqlite\n"
+            "actions:\n"
+            "- name: action_a\n"
+            "  kind: llm\n"
+        )
+        with patch(
+            "agent_actions.services.workflow_inspector.render_pipeline_with_templates",
+            return_value=rendered_yaml,
+        ):
             out = inspector.render()
 
-        assert "action_a" in out, "render dropped validated actions"
-        assert "action_b" in out, "render dropped validated actions"
-        assert "actions: []" not in out
+        assert "action_a" in out
+        assert "defaults" in out, "render dropped a top-level YAML key"
+        assert "storage" in out, "render dropped a top-level YAML key"
 
-    def test_render_falls_back_to_agent_name_for_legacy_format(self):
+    def test_render_emits_legacy_format_unchanged(self):
+        """Legacy-format configs ({agent_name: [...]}) round-trip without
+        the inspector re-shaping them into the new {name, actions} form.
+        """
         from agent_actions.services.workflow_inspector import WorkflowInspector
 
         inspector = WorkflowInspector.__new__(WorkflowInspector)
@@ -354,13 +363,11 @@ class TestWorkflowInspectorRender:
         inspector.paths = MagicMock()
         inspector._config_path = Path("/fake/wf.yml")
 
-        rendered_map = {
-            "wf": [
-                {"name": "legacy_action", "kind": "llm"},
-            ],
-        }
-        with patch("agent_actions.services.workflow_inspector.ConfigRenderingService") as svc_cls:
-            svc_cls.return_value.render_and_load_config.return_value = rendered_map
+        rendered_yaml = "wf:\n- name: legacy_action\n  kind: llm\n"
+        with patch(
+            "agent_actions.services.workflow_inspector.render_pipeline_with_templates",
+            return_value=rendered_yaml,
+        ):
             out = inspector.render()
 
         assert "legacy_action" in out
@@ -417,3 +424,148 @@ class TestCompileRemoved:
         assert "cli.compile" not in source, "compile import re-introduced"
         assert "add_command(compile)" not in source, "compile command re-registered"
         assert "add_command(render)" not in source, "render command re-registered"
+
+
+# ── Group flag propagation to subcommands ───────────────────────────────
+
+
+class TestGroupFlagPropagation:
+    """``agac inspect -a foo graph`` — Click eats ``-a`` at the group
+    level; subcommands must inherit it via ``ctx.obj``.
+    """
+
+    def test_agent_passed_before_subcommand_reaches_subcommand(self):
+        """Regression: ``-a foo graph`` used to fail with
+        'Missing option -a'. The group must propagate to ``graph``.
+        """
+        with (
+            patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls,
+            patch(
+                "agent_actions.cli.cli_decorators.ensure_in_project",
+                return_value=Path("/fake/project"),
+            ),
+        ):
+            mock_inspector = MagicMock()
+            mock_inspector.action_configs = {"a": {}}
+            mock_inspector.execution_order = ["a"]
+            mock_inspector.schema_service = None
+            mock_inspector_cls.return_value = mock_inspector
+
+            runner = CliRunner()
+            result = runner.invoke(inspect, ["-a", "test_workflow", "graph"])
+
+        assert result.exit_code == 0, result.output
+        # WorkflowInspector should be constructed with the propagated agent.
+        kwargs = mock_inspector_cls.call_args.kwargs
+        assert kwargs.get("agent_name") == "test_workflow"
+
+    def test_user_code_propagates_too(self):
+        with (
+            patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls,
+            patch(
+                "agent_actions.cli.cli_decorators.ensure_in_project",
+                return_value=Path("/fake/project"),
+            ),
+        ):
+            mock_inspector = MagicMock()
+            mock_inspector.action_configs = {"a": {}}
+            mock_inspector.execution_order = ["a"]
+            mock_inspector.schema_service = None
+            mock_inspector_cls.return_value = mock_inspector
+
+            runner = CliRunner()
+            result = runner.invoke(inspect, ["-a", "wf", "-u", "my_tools", "graph"])
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_inspector_cls.call_args.kwargs
+        assert kwargs.get("user_code_path") == "my_tools"
+
+    def test_subcommand_explicit_agent_wins_over_group(self):
+        """When both group and subcommand pass -a, subcommand wins."""
+        with (
+            patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls,
+            patch(
+                "agent_actions.cli.cli_decorators.ensure_in_project",
+                return_value=Path("/fake/project"),
+            ),
+        ):
+            mock_inspector = MagicMock()
+            mock_inspector.action_configs = {"a": {}}
+            mock_inspector.execution_order = ["a"]
+            mock_inspector.schema_service = None
+            mock_inspector_cls.return_value = mock_inspector
+
+            runner = CliRunner()
+            result = runner.invoke(inspect, ["-a", "group_wf", "graph", "-a", "sub_wf"])
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_inspector_cls.call_args.kwargs
+        assert kwargs.get("agent_name") == "sub_wf"
+
+
+# ── Group flag mutex BEFORE subcommand routing ──────────────────────────
+
+
+class TestFlagSubcommandInteraction:
+    """``--yaml`` / ``--validate`` / ``--dry-run`` are default-form only.
+    Combining with a subcommand silently dropped them before this fix.
+    """
+
+    @pytest.mark.parametrize("flag", ["--yaml", "--validate", "--dry-run"])
+    def test_flag_with_subcommand_is_usage_error(self, flag):
+        runner = CliRunner()
+        result = runner.invoke(inspect, [flag, "graph", "-a", "wf"])
+        assert result.exit_code != 0
+        assert "subcommand" in result.output.lower() or "default" in result.output.lower()
+
+    def test_mutex_runs_before_subcommand_routing(self):
+        """``--yaml --validate graph -a wf`` must still hit the mutex
+        check rather than silently routing to ``graph``.
+        """
+        runner = CliRunner()
+        result = runner.invoke(inspect, ["--yaml", "--validate", "graph", "-a", "wf"])
+        assert result.exit_code != 0
+        assert "only one" in result.output.lower()
+
+
+# ── --json failure body covers all AgentActionsError subclasses ─────────
+
+
+class TestJsonFailureBodyCoverage:
+    """Regression for HIGH-5: --json failure body only caught
+    PreFlightValidationError. Any other AgentActionsError leaked to the
+    human formatter, breaking the CI contract.
+    """
+
+    def test_configuration_error_emits_json_failure_body(self):
+        from agent_actions.errors import ConfigurationError
+
+        with patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls:
+            mock_inspector = MagicMock()
+            mock_inspector.validate.side_effect = ConfigurationError(
+                "config blew up", context={"file": "wf.yml"}
+            )
+            mock_inspector_cls.return_value = mock_inspector
+
+            result = _invoke("-a", "test", "--validate", "--json")
+
+        assert result.exit_code != 0
+        payload = json.loads(_stdout(result).strip())
+        assert payload["status"] == "failed"
+        assert payload["workflow"] == "test"
+
+    def test_file_load_error_emits_json_failure_body(self):
+        from agent_actions.errors import FileLoadError
+
+        with patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls:
+            mock_inspector = MagicMock()
+            mock_inspector.validate.side_effect = FileLoadError(
+                "file gone", context={"file": "wf.yml"}
+            )
+            mock_inspector_cls.return_value = mock_inspector
+
+            result = _invoke("-a", "test", "--validate", "--json")
+
+        assert result.exit_code != 0
+        payload = json.loads(_stdout(result).strip())
+        assert payload["status"] == "failed"
