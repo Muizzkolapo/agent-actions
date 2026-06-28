@@ -166,38 +166,44 @@ class InspectCommand(BaseInspectCommand):
         parallel_count = sum(1 for lvl in levels if len(lvl) > 1)
         estimate = inspector.estimate()
 
-        # Visual hierarchy:
-        #   row 1 = identity (workflow name) + status pill — eye lands first
-        #   row 2 = stats subtitle — answers "how big? how expensive?"
-        #   blank line — section break
-        #   "Pipeline:" header — labels the body
-        #   blank line — breathing room
-        #   numbered steps — left-anchored for fast scan
+        # Three-tier visual hierarchy:
+        #   h1 = workflow name (the subject)
+        #   meta row = ✅ status · scale · cost (everything at-a-glance)
+        #   h2 = "Pipeline" with structural subtitle (36 levels · 7 parallel)
+        # Each tier separated by a blank line so the eye registers them
+        # as distinct regions, not one block.
+        self.console.print(f"\n  [bold cyan]{self.agent_name}[/bold cyan]")
         self.console.print(
-            f"\n  [bold cyan]{self.agent_name}[/bold cyan]  [bold green]✅ validated[/bold green]"
-        )
-        self.console.print(
-            f"  [dim]{action_count} actions, {estimate['llm_calls']} LLM calls, "
-            f"{estimate['guarded_actions']} guarded · "
-            f"{len(levels)} levels, {parallel_count} parallel groups[/dim]"
+            f"  [bold green]✅ validated[/bold green]"
+            f"  [dim]·[/dim]  [dim]{action_count} actions[/dim]"
+            f"  [dim]·[/dim]  [dim]{estimate['llm_calls']} LLM calls[/dim]"
+            f"  [dim]·[/dim]  [dim]{estimate['guarded_actions']} guarded[/dim]"
         )
         self.console.print()
-        self.console.print("  [bold]Pipeline[/bold]")
+        self.console.print(
+            f"  [bold]Pipeline[/bold]  "
+            f"[dim]({len(levels)} levels · {parallel_count} parallel groups)[/dim]"
+        )
         self.console.print()
 
-        # Chunk levels into "steps" — what the user thinks of as one
-        # conceptual unit: either a fan-out (parallel level) or a run of
-        # serial actions. Step numbering is more conversational than
-        # leaking L-numbers; --dry-run keeps L-numbers for accuracy.
+        # Chunk levels into "steps" — one conceptual unit each: a fan-out
+        # (parallel level) or a run of serial actions. Step numbering
+        # is more conversational than leaking the internal L-numbers
+        # (the user thinks "step 7", not "level 17"); --dry-run keeps
+        # L-numbers since it's the level-accurate report.
         steps = self._build_steps(levels)
         step_width = len(str(len(steps)))
+
+        # Continuation indent for wrapped lines lines up with the action
+        # column: 2 lead + step_width + 1 (period) + 2 spaces.
+        action_col = 2 + step_width + 1 + 2
 
         for step_num, step in enumerate(steps, 1):
             label = f"[dim]{step_num:>{step_width}}.[/dim]"
             if step["kind"] == "parallel":
-                self._print_parallel(label, step["actions"])
+                self._print_parallel(label, step["actions"], action_col)
             else:
-                self._print_chain(label, step["actions"])
+                self._print_chain(label, step["actions"], action_col)
 
     @staticmethod
     def _build_steps(levels: list[list[str]]) -> list[dict[str, object]]:
@@ -220,21 +226,63 @@ class InspectCommand(BaseInspectCommand):
             idx += 1
         return steps
 
-    def _print_chain(self, label: str, actions: list[str]) -> None:
+    def _print_chain(self, label: str, actions: list[str], action_col: int) -> None:
         """Render a serial chain, wrapping with consistent continuation
         indent so long chains don't run off screen as one wall of text.
         """
         prefix = f"  {label}  [green]→[/green] "
-        cont = "       [dim]→[/dim] "
+        cont = " " * action_col + "[dim]→[/dim] "
         self._print_wrapped(prefix, cont, " [dim]→[/dim] ", actions)
 
-    def _print_parallel(self, label: str, actions: list[str]) -> None:
-        """Render a parallel fan-out, wrapping member lists the same way
-        so a 7-way fan doesn't blow past the terminal width.
+    def _print_parallel(self, label: str, actions: list[str], action_col: int) -> None:
+        """Render a parallel fan-out.
+
+        Version groups (``foo_1``, ``foo_2``, ``foo_3``) collapse to
+        ``foo (×3)`` — a 7-way fan of "validate_final_question_*,
+        verify_answer_*, contract_scenario" reads as three names
+        instead of seven. Pure scale + readability win on workflows
+        that use the version-action pattern.
         """
-        prefix = f"  {label}  [bold yellow]⫻[/bold yellow] [dim]{len(actions)} parallel:[/dim]  "
-        cont = "                       "
-        self._print_wrapped(prefix, cont, ", ", actions)
+        display = self._collapse_version_groups(actions)
+        prefix = f"  {label}  [bold yellow]⫻[/bold yellow]  "
+        # Continuation lands one column right of the action column so
+        # the wrapped names sit under the first member (not under `⫻`).
+        cont = " " * (action_col + 2)
+        self._print_wrapped(prefix, cont, ", ", display)
+
+    @staticmethod
+    def _collapse_version_groups(actions: list[str]) -> list[str]:
+        """Replace runs of ``{base}_{int}`` names with ``{base} (×N)``.
+
+        Preserves first-occurrence order. A base with only one variant
+        keeps its full name (no `(×1)` noise). Non-versioned names pass
+        through untouched.
+        """
+        import re
+
+        pattern = re.compile(r"^(.+)_(\d+)$")
+        first_slot: dict[str, int] = {}
+        counts: dict[str, int] = {}
+        result: list[str | None] = []
+
+        for name in actions:
+            match = pattern.match(name)
+            if match:
+                base = match.group(1)
+                if base in first_slot:
+                    counts[base] += 1
+                else:
+                    first_slot[base] = len(result)
+                    counts[base] = 1
+                    result.append(name)
+            else:
+                result.append(name)
+
+        for base, count in counts.items():
+            if count >= 2:
+                result[first_slot[base]] = f"{base} (×{count})"
+
+        return [r for r in result if r is not None]
 
     def _print_wrapped(
         self,

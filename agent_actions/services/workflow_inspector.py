@@ -83,8 +83,12 @@ class WorkflowInspector:
         if self._loaded:
             return self.action_configs
 
-        # UDF banners on stderr keep stdout clean for JSON/YAML payloads.
-        quiet_console = Console(stderr=True)
+        # Suppress UDF discovery banners entirely. For `agac inspect`,
+        # they're preamble — the inspect title row already implies
+        # "everything loaded" via the ✅ pill. Tool-discovery errors
+        # still propagate as exceptions, so a real failure is never
+        # silently swallowed.
+        quiet_console = Console(quiet=True)
         runtime_config = WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(self._config_path),

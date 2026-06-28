@@ -406,6 +406,50 @@ class TestWorkflowInspectorGetLevels:
         assert non_op_c_level > op_b_level
 
 
+class TestVersionGroupCollapse:
+    """``foo_1, foo_2, foo_3`` collapses to ``foo (×3)`` in the parallel
+    fan-out display so big version groups don't blow past terminal width.
+    """
+
+    def _collapse(self, actions):
+        from agent_actions.cli.inspect import InspectCommand
+
+        return InspectCommand._collapse_version_groups(actions)
+
+    def test_simple_version_group_collapses(self):
+        assert self._collapse(["foo_1", "foo_2", "foo_3"]) == ["foo (×3)"]
+
+    def test_order_preserved_by_first_occurrence(self):
+        assert self._collapse(["bar", "foo_1", "baz", "foo_2"]) == ["bar", "foo (×2)", "baz"]
+
+    def test_single_version_not_collapsed(self):
+        """One member isn't a group — keep the full name (no `(×1)` noise)."""
+        assert self._collapse(["foo_1", "bar"]) == ["foo_1", "bar"]
+
+    def test_non_versioned_names_pass_through(self):
+        assert self._collapse(["alpha", "beta", "gamma"]) == ["alpha", "beta", "gamma"]
+
+    def test_mixed_groups_and_singletons(self):
+        actions = [
+            "validate_final_question_3",
+            "validate_final_question_2",
+            "validate_final_question_1",
+            "verify_answer_3",
+            "verify_answer_2",
+            "verify_answer_1",
+            "contract_scenario",
+        ]
+        assert self._collapse(actions) == [
+            "validate_final_question (×3)",
+            "verify_answer (×3)",
+            "contract_scenario",
+        ]
+
+    def test_out_of_order_versions(self):
+        """`_3, _1, _2` (any order) — collapses on first appearance, keeps count."""
+        assert self._collapse(["foo_3", "foo_1", "foo_2"]) == ["foo (×3)"]
+
+
 class TestCompileRemoved:
     def test_no_compile_module(self):
         """`agent_actions.cli.compile` is gone — guard against re-introduction."""
