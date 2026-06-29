@@ -344,13 +344,6 @@ class InspectCommand(BaseInspectCommand):
     is_flag=True,
     help="Full preflight: graph + validate + estimate",
 )
-@click.option(
-    "-i",
-    "--interactive",
-    "interactive",
-    is_flag=True,
-    help="Launch interactive TUI (navigate steps, drill into actions)",
-)
 @click.pass_context
 @handles_user_errors("inspect")
 def inspect(
@@ -361,7 +354,6 @@ def inspect(
     json_output: bool,
     validate_only: bool,
     dry_run: bool,
-    interactive: bool,
 ) -> None:
     """Inspect workflow structure, data flow, and validation status.
 
@@ -413,32 +405,6 @@ def inspect(
         raise click.UsageError(
             "Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage."
         )
-
-    # Interactive TUI mode. -i is only meaningful in the default form;
-    # combining with --yaml/--validate/--dry-run/--json would be ambiguous
-    # (the TUI is a navigation UI, not a single-shot report).
-    if interactive:
-        if yaml_output or validate_only or dry_run or json_output:
-            raise click.UsageError(
-                "--interactive is for the default form only — drop "
-                "--yaml/--validate/--dry-run/--json to launch the TUI."
-            )
-        from agent_actions.cli.inspect_tui import InspectTUI, tui_available
-
-        if not tui_available():
-            raise click.UsageError(
-                "TUI requires a real terminal (TTY) on stdin and stdout. "
-                "Drop -i for static output, or run from an interactive shell."
-            )
-        project_root = ensure_in_project()
-        inspector = WorkflowInspector(
-            agent_name=agent_opt,
-            project_root=project_root,
-            user_code_path=user_code,
-        )
-        inspector.validate(verify_keys=False)
-        InspectTUI(inspector).run()
-        return
 
     cmd = InspectCommand(
         agent=agent_opt,
