@@ -93,7 +93,8 @@ class TestInspectValidate:
             result = _invoke("-a", "test", "--validate")
 
         assert result.exit_code == 0, result.output
-        assert "passed" in result.output.lower() or "ok" in result.output.lower()
+        # Title-row style: `<name>  ✅ validated`.
+        assert "validated" in result.output.lower()
 
     def test_validate_fail_exits_nonzero(self):
         """Failed validation should exit non-zero (CI signal)."""

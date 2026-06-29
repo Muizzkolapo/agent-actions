@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import click
-from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.services.workflow_inspector import WorkflowInspector
@@ -60,11 +59,14 @@ class GraphCommand(BaseInspectCommand):
         dependency_info: dict[str, Any],
         execution_order: list[str],
     ) -> None:
-        flow_str = " → ".join(execution_order) if execution_order else "none"
-        self.console.print(f"[bold cyan]Workflow: {self.agent_name}[/bold cyan]")
-        self.console.print(f"[dim]Flow: {flow_str}[/dim]\n")
-
-        tree = Tree("[bold]Actions[/bold]")
+        """Per-action block view — same arrows the rest of the family
+        uses: ``←`` for inputs, ``+`` for context-only sources,
+        ``→`` for outputs. One block per action in execution order.
+        """
+        self.console.print(
+            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [dim]workflow graph[/dim]"
+        )
+        self.console.print(f"  [dim]{len(execution_order)} actions[/dim]\n")
 
         for action_name in execution_order:
             if action_name not in dependency_info:
@@ -72,32 +74,32 @@ class GraphCommand(BaseInspectCommand):
 
             info = dependency_info[action_name]
             action_config = inspector.action_configs.get(action_name, {})
-            action_type = self._get_action_type(info["input_sources"], info["context_sources"])
-
-            node = tree.add(f"[bold]{action_name}[/bold] [dim]({action_type})[/dim]")
-
             kind = action_config.get("kind", DEFAULT_ACTION_KIND)
-            if kind != DEFAULT_ACTION_KIND:
-                node.add(f"[dim]kind: {kind}[/dim]")
-
-            if info["input_sources"]:
-                for src in info["input_sources"]:
-                    node.add(f"[green]← {src}[/green]")
-            else:
-                node.add("[green]← source data[/green]")
-
-            for src in info["context_sources"]:
-                node.add(f"[yellow]◇ {src}[/yellow] [dim](context)[/dim]")
-
-            output_fields = self._get_output_fields(
+            inputs = info["input_sources"]
+            contexts = [c for c in info["context_sources"] if c != "source"]
+            outputs = self._get_output_fields(
                 action_config, action_schema=self._get_action_schema(action_name)
             )
-            if output_fields:
-                outputs_str = ", ".join(output_fields)
-                node.add(f"[magenta]→ {outputs_str}[/magenta]")
 
-        self.console.print(tree)
-        self.console.print("\n[dim]← input  ◇ context  → output[/dim]")
+            kind_tag = "" if kind == DEFAULT_ACTION_KIND else f"  [dim]({kind})[/dim]"
+            self.console.print(f"  [bold]{action_name}[/bold]{kind_tag}")
+
+            if inputs:
+                self.console.print(f"    [green]←[/green] {', '.join(inputs)}", soft_wrap=True)
+            else:
+                self.console.print("    [green]←[/green] [italic dim]source data[/italic dim]")
+            if contexts:
+                self.console.print(
+                    f"    [yellow]+[/yellow] [dim]context:[/dim] {', '.join(contexts)}",
+                    soft_wrap=True,
+                )
+            if outputs:
+                self.console.print(
+                    f"    [magenta]→[/magenta] {', '.join(outputs)}",
+                    soft_wrap=True,
+                    highlight=False,
+                )
+            self.console.print()
 
 
 @click.command(name="graph")

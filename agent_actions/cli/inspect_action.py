@@ -6,9 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import click
-from rich.panel import Panel
-from rich.table import Table
-from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.output.response.config_fields import get_default
@@ -65,69 +62,97 @@ class ActionCommand(BaseInspectCommand):
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(self, action_config: dict[str, Any], info: dict[str, Any]) -> None:
-        action_type = self._get_action_type(info["input_sources"], info["context_sources"])
+        """Definition-list layout.
 
-        self.console.print(f"[bold cyan]Action: {self.action_name}[/bold cyan]")
-        self.console.print(f"[dim]Type: {action_type}[/dim]\n")
-
+        Top block (Kind, Model, Granularity, Guard) is the action's
+        identity. Input/Reads/Writes form the data-flow block: what
+        feeds this action, which fields it observes, what it produces.
+        """
         kind = action_config.get("kind", DEFAULT_ACTION_KIND)
-        model = action_config.get("model_name", "default")
+        model = action_config.get("model_name") or "—"
         granularity = action_config.get("granularity", get_default("granularity"))
+        guard = action_config.get("guard")
+        guard_label = guard.get("clause", "yes") if isinstance(guard, dict) else "none"
 
-        config_table = Table(show_header=False, box=None, padding=(0, 2))
-        config_table.add_column(style="bold")
-        config_table.add_column()
-        config_table.add_row("Kind:", kind)
-        config_table.add_row("Model:", model)
-        config_table.add_row("Granularity:", granularity)
-        self.console.print(Panel(config_table, title="Configuration", border_style="dim"))
-
-        tree = Tree("[bold]Dependencies[/bold]")
-
-        if info["input_sources"]:
-            branch = tree.add("[green]Input Sources[/green]")
-            for src in info["input_sources"]:
-                branch.add(f"• {src}")
-        else:
-            tree.add("[green]Input Sources[/green]: [dim]source data[/dim]")
-
-        if info["context_sources"]:
-            branch = tree.add("[yellow]Context Sources[/yellow]")
-            for src in info["context_sources"]:
-                branch.add(f"• {src}")
-        else:
-            tree.add("[yellow]Context Sources[/yellow]: [dim]none[/dim]")
-
-        self.console.print(tree)
-
-        ctx = info["context_scope"]
-        if ctx.get("observe") or ctx.get("passthrough") or ctx.get("drop"):
-            self.console.print()
-            scope_tree = Tree("[bold]Input Fields (from context_scope)[/bold]")
-            if ctx.get("observe"):
-                obs = scope_tree.add("[cyan]observe:[/cyan]")
-                for f in ctx["observe"]:
-                    obs.add(f"• {f}")
-            if ctx.get("passthrough"):
-                pas = scope_tree.add("[cyan]passthrough:[/cyan]")
-                for f in ctx["passthrough"]:
-                    pas.add(f"• {f}")
-            if ctx.get("drop"):
-                drp = scope_tree.add("[cyan]drop:[/cyan]")
-                for f in ctx["drop"]:
-                    drp.add(f"• {f}")
-            self.console.print(scope_tree)
-
-        output_fields = self._get_output_fields(
-            action_config,
-            action_schema=self._get_action_schema(self.action_name),
+        input_label = self._describe_input(info["input_sources"], info["context_sources"])
+        reads = self._gather_reads(info)
+        writes = self._get_output_fields(
+            action_config, action_schema=self._get_action_schema(self.action_name)
         )
-        if output_fields:
-            self.console.print()
-            out_tree = Tree("[bold]Output Fields (from schema)[/bold]")
-            for f in output_fields:
-                out_tree.add(f"[magenta]• {f}[/magenta]")
-            self.console.print(out_tree)
+
+        self.console.print(f"\n  [bold cyan]{self.action_name}[/bold cyan]\n")
+
+        fields: list[tuple[str, object]] = [
+            ("Kind", kind),
+            ("Model", model),
+            ("Granularity", granularity),
+            ("Guard", guard_label),
+            ("Input", input_label),
+        ]
+        if reads:
+            fields.append(("Reads", reads))
+        if writes:
+            fields.append(("Writes", writes))
+
+        label_width = max(len(label) for label, _ in fields)
+        for i, (label, value) in enumerate(fields):
+            prev_was_list = i > 0 and isinstance(fields[i - 1][1], list)
+            curr_is_list = isinstance(value, list)
+            # Breathing room: metadata block → first list (Reads), and
+            # between two adjacent list blocks (Reads → Writes).
+            if i > 0 and (curr_is_list and not prev_was_list or curr_is_list and prev_was_list):
+                self.console.print()
+            self._print_field(label, value, label_width)
+
+    @staticmethod
+    def _describe_input(input_sources: list[str], context_sources: list[str]) -> str:
+        """Render the Input row.
+
+        Names the upstream action(s) feeding this one. For source
+        actions (no upstream), shows the placeholder ``source data``.
+        Type tag (``transform`` / ``merge``) appended in dim parens.
+        """
+        # Strip the always-available `source` namespace from contexts —
+        # it'd otherwise show as "(+ source)" on most rows.
+        contexts = [c for c in context_sources if c != "source"]
+        if not input_sources:
+            return "source data  [dim](source action)[/dim]"
+        if len(input_sources) == 1:
+            value = input_sources[0]
+            tag = "transform"
+        else:
+            value = ", ".join(input_sources)
+            tag = f"merge of {len(input_sources)}"
+        if contexts:
+            tag += f" + {len(contexts)} context"
+        return f"{value}  [dim]({tag})[/dim]"
+
+    @staticmethod
+    def _gather_reads(info: dict[str, Any]) -> list[str]:
+        """Flatten observed / passthrough / dropped field references
+        into one ordered list — what the action SEES.
+        """
+        scope = info.get("context_scope") or {}
+        reads: list[str] = []
+        reads.extend(scope.get("observe") or [])
+        reads.extend(scope.get("passthrough") or [])
+        return reads
+
+    def _print_field(self, label: str, value: object, label_width: int) -> None:
+        # ``highlight=False`` keeps Rich from re-coloring values that
+        # look like numbers, paths, URLs, etc. — e.g. ``gpt-4`` would
+        # otherwise have the ``4`` painted cyan as if it were a literal.
+        padded_label = f"[bold]{label}[/bold]" + " " * (label_width - len(label))
+        if isinstance(value, list):
+            if not value:
+                self.console.print(f"  {padded_label}  [dim]—[/dim]", highlight=False)
+                return
+            self.console.print(f"  {padded_label}  {value[0]}", soft_wrap=True, highlight=False)
+            hang = " " * (2 + label_width + 2)
+            for item in value[1:]:
+                self.console.print(f"{hang}{item}", soft_wrap=True, highlight=False)
+        else:
+            self.console.print(f"  {padded_label}  {value}", soft_wrap=True, highlight=False)
 
 
 @click.command(name="action")
@@ -196,32 +221,28 @@ class ContextCommand(BaseInspectCommand):
         action_config: dict[str, Any],
         info: dict[str, Any],
     ) -> dict[str, Any]:
-        namespaces = {}
-        namespaces["source"] = ["[from source data]"]
-
+        namespaces: dict[str, list[str]] = {}
         for dep in info["input_sources"]:
             dep_config = inspector.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(
                 dep_config, action_schema=self._get_action_schema(dep)
             )
-            namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
+            if dep_fields:
+                namespaces[dep] = dep_fields
 
         for dep in info["context_sources"]:
             dep_config = inspector.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(
                 dep_config, action_schema=self._get_action_schema(dep)
             )
-            namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
+            if dep_fields:
+                namespaces[dep] = dep_fields
 
-        namespaces["version"] = ["i", "idx", "length", "first", "last"]
+        # Always-available special namespaces.
         namespaces["workflow"] = ["name", "run_id"]
+        namespaces["version"] = ["i", "idx", "length", "first", "last"]
 
         context_scope = action_config.get("context_scope", {})
-        output_fields = self._get_output_fields(
-            action_config, action_schema=self._get_action_schema(self.target_action_name)
-        )
-        total_vars = sum(len(fields) for fields in namespaces.values())
-
         return {
             "action_name": self.target_action_name,
             "workflow": self.agent_name,
@@ -231,76 +252,56 @@ class ContextCommand(BaseInspectCommand):
                 "passthrough": context_scope.get("passthrough", []),
                 "drop": context_scope.get("drop", []),
             },
-            "dependencies": {
-                "input_sources": info["input_sources"],
-                "context_sources": info["context_sources"],
-            },
-            "output_fields": output_fields,
-            "total_template_variables": total_vars,
+            "total_template_variables": sum(len(fs) for fs in namespaces.values()),
         }
 
     def _output_json(self, context_data: dict[str, Any]) -> None:
         click.echo(json_lib.dumps(context_data, indent=2))
 
     def _output_rich(self, context_data: dict[str, Any]) -> None:
+        """Namespace table — each namespace gets one row with its fields.
+
+        The user knows the ``{{ ns.field }}`` syntax; we show the
+        building blocks (namespace → fields) rather than enumerating
+        every combination as boilerplate template syntax.
+        """
         action_name = context_data["action_name"]
+        namespaces = context_data["namespaces"]
+        scope = context_data["context_scope"]
 
-        self.console.print()
         self.console.print(
-            f"[bold cyan]=== Context Debug for action '{action_name}' ===[/bold cyan]"
+            f"\n  [bold cyan]{action_name}[/bold cyan]   [dim]template context[/dim]\n"
         )
-        self.console.print()
 
-        namespaces = context_data.get("namespaces", {})
-        if namespaces:
-            tree = Tree("[bold]Namespaces loaded:[/bold]")
-            for ns, fields in namespaces.items():
-                field_str = ", ".join(fields[:5])
-                if len(fields) > 5:
-                    field_str += f"... (+{len(fields) - 5} more)"
-                tree.add(f"[green]{ns}[/green]: {len(fields)} fields [{field_str}]")
-            self.console.print(tree)
+        # Scope on its own indented block — avoids the awkward
+        # mid-line wrap that happens when observe/drop lists are long.
+        scope_lines: list[str] = []
+        for kind in ("observe", "passthrough", "drop"):
+            items = scope.get(kind) or []
+            if items:
+                scope_lines.append(f"    [cyan]{kind}[/cyan]: {', '.join(items)}")
+        if scope_lines:
+            self.console.print("  [bold]Scope applied:[/bold]")
+            for line in scope_lines:
+                self.console.print(line, soft_wrap=True)
             self.console.print()
-
-        scope = context_data.get("context_scope", {})
-        if scope.get("observe") or scope.get("passthrough") or scope.get("drop"):
-            tree = Tree("[bold]Context scope applied:[/bold]")
-            if scope.get("observe"):
-                tree.add(f"[cyan]observe:[/cyan] {', '.join(scope['observe'])}")
-            if scope.get("passthrough"):
-                tree.add(f"[cyan]passthrough:[/cyan] {', '.join(scope['passthrough'])}")
-            if scope.get("drop"):
-                tree.add(f"[cyan]drop:[/cyan] {', '.join(scope['drop'])}")
-            self.console.print(tree)
-            self.console.print()
+        else:
+            self.console.print(
+                "  [bold]Scope applied:[/bold]  [dim]none (all fields visible)[/dim]\n"
+            )
 
         if namespaces:
-            tree = Tree("[bold]Template variables available:[/bold]")
+            ns_width = max(len(ns) for ns in namespaces) + 2
             for ns, fields in namespaces.items():
-                vars_str = ", ".join(f"{{{{ {ns}.{f} }}}}" for f in fields[:3])
-                if len(fields) > 3:
-                    vars_str += f", ... (+{len(fields) - 3} more)"
-                tree.add(f"[magenta]{vars_str}[/magenta]")
-            self.console.print(tree)
-            self.console.print()
+                self.console.print(
+                    f"  [green]{ns}[/green]" + " " * (ns_width - len(ns)) + f"{', '.join(fields)}",
+                    soft_wrap=True,
+                )
 
-        deps = context_data.get("dependencies", {})
-        if deps.get("input_sources") or deps.get("context_sources"):
-            tree = Tree("[bold]Dependencies:[/bold]")
-            if deps.get("input_sources"):
-                tree.add(f"[green]input_sources:[/green] {', '.join(deps['input_sources'])}")
-            if deps.get("context_sources"):
-                tree.add(f"[yellow]context_sources:[/yellow] {', '.join(deps['context_sources'])}")
-            self.console.print(tree)
-            self.console.print()
-
-        output_fields = context_data.get("output_fields", [])
-        if output_fields:
-            tree = Tree("[bold]Output fields (from schema):[/bold]")
-            for f in output_fields:
-                tree.add(f"[magenta]{f}[/magenta]")
-            self.console.print(tree)
-            self.console.print()
+        total = context_data["total_template_variables"]
+        self.console.print(
+            f"\n  [dim]{total} template variables across {len(namespaces)} namespaces[/dim]"
+        )
 
 
 @click.command(name="context")

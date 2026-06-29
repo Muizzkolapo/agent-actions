@@ -82,7 +82,11 @@ class InspectCommand(BaseInspectCommand):
                 )
             )
             return
-        self.console.print(f"[green]✅ {self.agent_name}: validation passed[/green]")
+        # Match the family's title-row style: `<name>  ✅ <status>`.
+        # CI users care about exit code + one-line confirmation.
+        self.console.print(
+            f"  [bold cyan]{self.agent_name}[/bold cyan]   [bold green]✅ validated[/bold green]"
+        )
 
     # ── --dry-run ────────────────────────────────────────────────────
 
@@ -106,24 +110,31 @@ class InspectCommand(BaseInspectCommand):
             )
             return
 
-        self.console.print(f"[bold cyan]Preflight: {self.agent_name}[/bold cyan]\n")
-        self.console.print("[bold]Execution levels[/bold]")
+        # Consistent with the other inspect outputs: title row +
+        # section labels + scoped detail. `--dry-run` is the
+        # "exhaustive truth" mode — level-accurate (not collapsed
+        # into steps) and full per-action context_scope detail.
+        self.console.print(
+            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [dim]preflight report[/dim]\n"
+        )
+        self.console.print(
+            f"  [dim]{estimate['action_count']} actions in {len(levels)} levels  ·  "
+            f"{estimate['llm_calls']} LLM calls, {estimate['guarded_actions']} guarded[/dim]\n"
+        )
+
+        self.console.print("  [bold]Execution levels[/bold]")
         level_width = len(str(len(levels)))
         for i, level in enumerate(levels, 1):
             self.console.print(
-                f"  [dim]L{i:>{level_width}}[/dim]  {', '.join(level)}", soft_wrap=True
+                f"    [dim]L{i:>{level_width}}[/dim]  {', '.join(level)}", soft_wrap=True
             )
+
         if scope:
-            self.console.print("\n[bold]Context scope[/bold] [dim](empty fields omitted)[/dim]")
+            self.console.print("\n  [bold]Context scope[/bold] [dim](empty fields omitted)[/dim]")
             for name, info in scope.items():
                 line = self._format_scope_line(name, info.get("scope"))
                 if line is not None:
-                    self.console.print(f"  {line}", soft_wrap=True)
-        self.console.print(
-            f"\n[bold]Estimate[/bold]  {estimate['action_count']} actions, "
-            f"{estimate['llm_calls']} LLM calls, "
-            f"{estimate['guarded_actions']} guarded"
-        )
+                    self.console.print(f"    {line}", soft_wrap=True)
 
     @staticmethod
     def _format_scope_line(action_name: str, action_scope: object) -> str | None:

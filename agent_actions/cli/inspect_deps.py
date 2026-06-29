@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import click
-from rich.table import Table
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 
@@ -29,9 +28,6 @@ class DependenciesCommand(BaseInspectCommand):
         self.action_filter = action_filter
 
     def execute(self, project_root: Path | None = None) -> None:
-        if not self.json_output:
-            self.console.print(f"[cyan]Dependency Analysis: {self.agent_name}[/cyan]\n")
-
         inspector = self._load_inspector(project_root=project_root)
         dependency_info = self._analyze_dependencies(inspector)
 
@@ -53,27 +49,44 @@ class DependenciesCommand(BaseInspectCommand):
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(self, dependency_info: dict[str, Any], execution_order: list) -> None:
-        table = Table(title="Dependency Model", show_lines=True)
-        table.add_column("Action", style="bold")
-        table.add_column("Input Sources", style="green")
-        table.add_column("Context Sources", style="yellow")
-        table.add_column("Type", style="cyan")
+        """Per-action list with `←` arrows.
 
-        order = execution_order if execution_order else list(dependency_info.keys())
+        Solves the table truncation problem: action names get the room
+        they need, inputs are listed inline, type tag is right-aligned
+        in a dim trailing label.
+        """
+        order = [n for n in execution_order if n in dependency_info] or list(dependency_info.keys())
+        name_width = max(len(name) for name in order) + 2
+
+        self.console.print(
+            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [dim]dependency model[/dim]\n"
+        )
+
         for name in order:
-            if name not in dependency_info:
-                continue
             info = dependency_info[name]
             inputs = info["input_sources"]
-            contexts = info["context_sources"]
+            # Strip the always-available `source` namespace — it's not a
+            # real per-action context dependency, just the default input,
+            # and it would print "+ context: source" on nearly every row.
+            contexts = [c for c in info["context_sources"] if c != "source"]
 
-            input_str = ", ".join(inputs) if inputs else "[dim]source data[/dim]"
-            context_str = ", ".join(contexts) if contexts else "[dim]none[/dim]"
-            action_type = self._get_action_type(inputs, contexts)
+            if inputs:
+                inputs_str = ", ".join(inputs)
+            else:
+                inputs_str = "[dim italic]source data[/dim italic]"
 
-            table.add_row(name, input_str, context_str, action_type)
+            padded = f"[bold]{name}[/bold]" + " " * (name_width - len(name))
+            line = f"  {padded}[dim]←[/dim] {inputs_str}"
+            if contexts:
+                line += f"   [dim]+ context: {', '.join(contexts)}[/dim]"
 
-        self.console.print(table)
+            # Hide the type tag for source actions — `← source data`
+            # already says it, and the trailing `(source)` was just
+            # echoing the input column.
+            type_label = self._get_action_type(inputs, contexts).lower()
+            if inputs:
+                line += f"   [dim]({type_label})[/dim]"
+            self.console.print(line, soft_wrap=True)
 
 
 @click.command(name="dependencies")
