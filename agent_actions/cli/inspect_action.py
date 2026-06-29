@@ -64,11 +64,15 @@ class ActionCommand(BaseInspectCommand):
     def _output_rich(
         self, action_config: dict[str, Any], info: dict[str, Any], inspector=None
     ) -> None:
-        kind = action_config.get("kind", DEFAULT_ACTION_KIND)
+        kind = self._stringify(action_config.get("kind", DEFAULT_ACTION_KIND))
         model = action_config.get("model_name") or "—"
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
         guard_label = guard.get("clause", "yes") if isinstance(guard, dict) else "none"
+        run_mode = self._stringify(action_config.get("run_mode")) or "online"
+        json_mode = "yes" if action_config.get("json_mode") else "no"
+        reprompt_label = self._describe_reprompt(action_config.get("reprompt"))
+        retry_label = self._describe_retry(action_config.get("retry"))
 
         input_label = self._describe_input(info["input_sources"], info["context_sources"])
         reads = self._gather_reads(info)
@@ -93,9 +97,14 @@ class ActionCommand(BaseInspectCommand):
             ("Kind", kind),
             ("Model", model),
             ("Granularity", granularity),
-            ("Guard", guard_label),
-            ("Input", input_label),
+            ("Run mode", f"{run_mode}  ·  json mode: {json_mode}"),
         ]
+        if reprompt_label:
+            fields.append(("Reprompt", reprompt_label))
+        if retry_label:
+            fields.append(("Retry", retry_label))
+        fields.append(("Guard", guard_label))
+        fields.append(("Input", input_label))
         if reads:
             fields.append(("Reads", reads))
         if writes:
@@ -108,11 +117,100 @@ class ActionCommand(BaseInspectCommand):
         for i, (label, value) in enumerate(fields):
             prev_was_list = i > 0 and isinstance(fields[i - 1][1], list)
             curr_is_list = isinstance(value, list)
-            # Breathing room: metadata block → first list (Reads), and
-            # between two adjacent list blocks (Reads → Writes).
             if i > 0 and (curr_is_list and not prev_was_list or curr_is_list and prev_was_list):
                 self.console.print()
             self._print_field(label, value, label_width)
+
+        # Full rendered prompt + schema — what the LLM actually sees.
+        # ``{{ jinja }}`` placeholders remain visible because they're
+        # substituted per-record at run time, not at preflight.
+        self._print_prompt_section(action_config.get("prompt"))
+        self._print_schema_section(action_config)
+
+    def _print_prompt_section(self, prompt: object) -> None:
+        if not isinstance(prompt, str) or not prompt.strip():
+            return
+        self.console.print()
+        self._print_section_rule(
+            "Prompt", subtitle="{{ jinja }} placeholders filled in per-record at run time"
+        )
+        for line in prompt.splitlines():
+            self.console.print(f"    {line}", soft_wrap=True, highlight=False)
+        self.console.print()
+
+    def _print_schema_section(self, action_config: dict[str, Any]) -> None:
+        # Prefer the compiled JSON output schema (what the LLM actually
+        # gets); fall back to the raw `schema` dict for non-LLM kinds.
+        schema = action_config.get("json_output_schema") or action_config.get("schema")
+        if not schema or not isinstance(schema, dict):
+            return
+        import yaml
+
+        self._print_section_rule("Schema")
+        rendered = yaml.dump(schema, sort_keys=False, default_flow_style=False, allow_unicode=True)
+        from rich.syntax import Syntax
+
+        self.console.print(
+            Syntax(
+                rendered,
+                "yaml",
+                theme="ansi_dark",
+                background_color="default",
+                padding=(0, 4),
+                line_numbers=False,
+                word_wrap=True,
+            )
+        )
+
+    def _print_section_rule(self, title: str, subtitle: str | None = None) -> None:
+        from rich.text import Text
+
+        width = self.console.width or 100
+        head = Text()
+        head.append("── ", style="dim")
+        head.append(title, style="bold")
+        head.append(" ", style="")
+        rule_len = max(width - head.cell_len - 2, 8)
+        head.append("─" * rule_len, style="dim")
+        self.console.print(head)
+        if subtitle:
+            self.console.print(f"   [dim]{subtitle}[/dim]")
+        self.console.print()
+
+    @staticmethod
+    def _stringify(value: object) -> str:
+        if value is None:
+            return ""
+        # Enums: prefer the member's `value` over the noisy repr.
+        if hasattr(value, "value"):
+            return str(value.value)
+        return str(value)
+
+    @staticmethod
+    def _describe_reprompt(reprompt: object) -> str:
+        if not isinstance(reprompt, dict):
+            return ""
+        bits = []
+        if reprompt.get("max_attempts"):
+            bits.append(f"max {reprompt['max_attempts']}")
+        if reprompt.get("on_schema_mismatch"):
+            bits.append(f"on_schema_mismatch={reprompt['on_schema_mismatch']}")
+        if reprompt.get("on_exhausted"):
+            bits.append(f"on_exhausted={reprompt['on_exhausted']}")
+        if reprompt.get("use_self_reflection"):
+            bits.append("self-reflection")
+        return ", ".join(bits) or "yes"
+
+    @staticmethod
+    def _describe_retry(retry: object) -> str:
+        if not isinstance(retry, dict) or not retry:
+            return ""
+        bits = []
+        if retry.get("max_attempts"):
+            bits.append(f"max {retry['max_attempts']}")
+        if retry.get("backoff"):
+            bits.append(f"backoff={retry['backoff']}")
+        return ", ".join(bits) or "yes"
 
     def _find_consumers(self, inspector) -> list[str]:
         """Actions whose deps include this one, returned in execution order."""
