@@ -70,7 +70,12 @@ def compute_graph_hash(action_configs: dict) -> str:
 
     payload_parts = []
     for name in sorted(action_configs):
-        deps = action_configs[name].get("dependencies") or []
+        cfg = action_configs[name]
+        # Codebase carries both `dependencies` and `depends_on`. Reading
+        # only one gives an "all empty deps" hash for the other convention,
+        # so two unrelated workflows could collide on a hash that doesn't
+        # actually describe their DAG.
+        deps = cfg.get("dependencies") or cfg.get("depends_on") or []
         if isinstance(deps, str):
             deps = [deps]
         payload_parts.append(f"{name}:{','.join(sorted(deps))}")
@@ -188,10 +193,12 @@ class BaseInspectCommand:
                 return list(schema["properties"].keys())
             return list(schema.keys())
 
-        # If schema_name is set but no ActionSchema resolved it, show placeholder
+        # If schema_name is set but no ActionSchema resolved it, show
+        # placeholder. Use parens not square brackets — Rich treats
+        # `[…]` as markup and swallows the entire token.
         schema_name = action_config.get("schema_name")
         if schema_name:
-            return [f"[schema: {schema_name}]"]
+            return [f"(schema: {schema_name})"]
 
         return []
 

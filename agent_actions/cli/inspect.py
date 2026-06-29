@@ -188,6 +188,10 @@ class InspectCommand(BaseInspectCommand):
         estimate = inspector.estimate()
         steps = self._build_steps(levels)
         graph_hash = compute_graph_hash(inspector.action_configs)
+        # Cache for `_collapse_version_groups` — it needs to read
+        # `is_versioned_agent` to avoid folding unrelated `step_1`/`step_2`
+        # names into one pill.
+        self._inspector_action_configs = inspector.action_configs
 
         self.console.print()
         render_title_row(self.console, self.agent_name, validated=True, graph_hash=graph_hash)
@@ -381,21 +385,23 @@ class InspectCommand(BaseInspectCommand):
             idx += 1
         return steps
 
-    @staticmethod
-    def _collapse_version_groups(actions: list[str]) -> list[str]:
-        """`foo_1, foo_2, foo_3` → `foo (×3)`. Preserves first-occurrence
-        order; singletons keep their full name (no `(×1)` noise)."""
-        import re
+    def _collapse_version_groups(self, actions: list[str]) -> list[str]:
+        """`foo_1, foo_2, foo_3` → `foo (×3)`, but ONLY for actions the
+        runtime flagged as version expansions (`is_versioned_agent`).
 
-        pattern = re.compile(r"^(.+)_(\d+)$")
+        Without that gate, two unrelated actions named `step_1` and
+        `step_2` get folded into one pill — hiding a real distinct
+        action from the dependency-graph view."""
+        configs = getattr(self, "_inspector_action_configs", None) or {}
+
         first_slot: dict[str, int] = {}
         counts: dict[str, int] = {}
         result: list[str | None] = []
 
         for name in actions:
-            match = pattern.match(name)
-            if match:
-                base = match.group(1)
+            cfg = configs.get(name) or {}
+            base = cfg.get("version_base_name") if cfg.get("is_versioned_agent") else None
+            if base:
                 if base in first_slot:
                     counts[base] += 1
                 else:

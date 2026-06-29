@@ -69,7 +69,11 @@ class ActionCommand(BaseInspectCommand):
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
         guard_label = guard.get("clause", "yes") if isinstance(guard, dict) else "none"
-        run_mode = self._stringify(action_config.get("run_mode")) or "online"
+        # `get_default("run_mode")` keeps this in sync with whatever the
+        # rest of the codebase uses as the project-wide default.
+        run_mode = self._stringify(action_config.get("run_mode")) or self._stringify(
+            get_default("run_mode")
+        )
         json_mode = "yes" if action_config.get("json_mode") else "no"
         reprompt_label = self._describe_reprompt(action_config.get("reprompt"))
         retry_label = self._describe_retry(action_config.get("retry"))
@@ -226,11 +230,15 @@ class ActionCommand(BaseInspectCommand):
         return consumers
 
     def _position_meta(self, inspector) -> str | None:
+        # "action N of M" — N is position in execution_order, M is the
+        # total action count. Previously labelled "level" which conflicts
+        # with the dependency-level count shown in the default view
+        # (52 actions can sit in 36 levels — the two numbers differ).
         try:
             idx = list(inspector.execution_order).index(self.action_name)
         except ValueError:
             return self.agent_name
-        return f"{self.agent_name} · level {idx + 1} of {len(inspector.execution_order)}"
+        return f"{self.agent_name} · action {idx + 1} of {len(inspector.execution_order)}"
 
     @staticmethod
     def _describe_input(input_sources: list[str], context_sources: list[str]) -> str:
@@ -339,6 +347,11 @@ class ContextCommand(BaseInspectCommand):
         info: dict[str, Any],
     ) -> dict[str, Any]:
         namespaces: dict[str, list[str]] = {}
+        # `source` is always available at runtime — every action can read
+        # `{{ source.<field> }}` even if it has no upstream actions.
+        # Parens (not square brackets) — Rich treats `[…]` as markup
+        # and would swallow the placeholder token.
+        namespaces["source"] = ["(record fields)"]
         for dep in info["input_sources"]:
             dep_config = inspector.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(
@@ -348,6 +361,8 @@ class ContextCommand(BaseInspectCommand):
                 namespaces[dep] = dep_fields
 
         for dep in info["context_sources"]:
+            if dep in namespaces:
+                continue
             dep_config = inspector.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(
                 dep_config, action_schema=self._get_action_schema(dep)
@@ -415,17 +430,25 @@ class ContextCommand(BaseInspectCommand):
                     soft_wrap=True,
                 )
 
-        # Copy-paste snippet — prompt authors get a concrete example
-        # instead of having to know Jinja syntax themselves.
-        if namespaces:
-            example_ns, example_fields = next(iter(namespaces.items()))
-            if example_fields:
-                example = f"{{{{ {example_ns}.{example_fields[0]} }}}}"
-                self.console.print(f"\n  [dim]Use in prompts as[/dim]  [cyan]{example}[/cyan]")
-                self.console.print(
-                    f"  [dim]({context_data['total_template_variables']} variables "
-                    f"across {len(namespaces)} namespaces)[/dim]"
-                )
+        # Copy-paste snippet — prompt authors get a concrete example.
+        # Prefer a namespace with a real concrete field; the `source`
+        # namespace only has a `(record fields)` placeholder which
+        # would render as `{{ source. }}` (empty field) in the snippet.
+        example: str | None = None
+        for ns, fields in namespaces.items():
+            if not fields:
+                continue
+            first_field = fields[0]
+            if first_field.startswith("(") or first_field.startswith("["):
+                continue  # placeholder, not a real field name
+            example = f"{{{{ {ns}.{first_field} }}}}"
+            break
+        if example is not None:
+            self.console.print(f"\n  [dim]Use in prompts as[/dim]  [cyan]{example}[/cyan]")
+            self.console.print(
+                f"  [dim]({context_data['total_template_variables']} variables "
+                f"across {len(namespaces)} namespaces)[/dim]"
+            )
 
 
 @click.command(name="context")

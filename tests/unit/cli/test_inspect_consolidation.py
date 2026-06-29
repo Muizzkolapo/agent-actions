@@ -408,47 +408,61 @@ class TestWorkflowInspectorGetLevels:
 
 
 class TestVersionGroupCollapse:
-    """``foo_1, foo_2, foo_3`` collapses to ``foo (×3)`` in the parallel
-    fan-out display so big version groups don't blow past terminal width.
+    """Version-expanded actions (`is_versioned_agent=True` with a
+    `version_base_name`) collapse to ``<base> (×N)`` in the parallel
+    fan-out display. Plain ``_N`` suffix names without the runtime
+    flag are kept distinct — regex-only collapse would fold unrelated
+    sibling actions named `step_1` / `step_2` into one pill.
     """
 
-    def _collapse(self, actions):
+    def _versioned(self, base, n):
+        return [
+            (
+                f"{base}_{i}",
+                {"is_versioned_agent": True, "version_base_name": base},
+            )
+            for i in range(1, n + 1)
+        ]
+
+    def _collapse(self, name_cfg_pairs):
         from agent_actions.cli.inspect import InspectCommand
 
-        return InspectCommand._collapse_version_groups(actions)
+        cmd = InspectCommand.__new__(InspectCommand)
+        cmd._inspector_action_configs = dict(name_cfg_pairs)
+        return cmd._collapse_version_groups([name for name, _ in name_cfg_pairs])
 
-    def test_simple_version_group_collapses(self):
-        assert self._collapse(["foo_1", "foo_2", "foo_3"]) == ["foo (×3)"]
+    def test_versioned_group_collapses(self):
+        assert self._collapse(self._versioned("foo", 3)) == ["foo (×3)"]
 
-    def test_order_preserved_by_first_occurrence(self):
-        assert self._collapse(["bar", "foo_1", "baz", "foo_2"]) == ["bar", "foo (×2)", "baz"]
+    def test_singleton_versioned_keeps_full_name(self):
+        # Only one variant — no `(×1)` noise.
+        assert self._collapse(self._versioned("foo", 1)) == ["foo_1"]
 
-    def test_single_version_not_collapsed(self):
-        """One member isn't a group — keep the full name (no `(×1)` noise)."""
-        assert self._collapse(["foo_1", "bar"]) == ["foo_1", "bar"]
+    def test_non_versioned_pass_through_even_with_n_suffix(self):
+        # `step_1` / `step_2` look version-shaped but the runtime never
+        # flagged them as versioned — keep them distinct.
+        pairs = [("step_1", {}), ("step_2", {})]
+        assert self._collapse(pairs) == ["step_1", "step_2"]
 
-    def test_non_versioned_names_pass_through(self):
-        assert self._collapse(["alpha", "beta", "gamma"]) == ["alpha", "beta", "gamma"]
-
-    def test_mixed_groups_and_singletons(self):
-        actions = [
-            "validate_final_question_3",
-            "validate_final_question_2",
-            "validate_final_question_1",
-            "verify_answer_3",
-            "verify_answer_2",
-            "verify_answer_1",
-            "contract_scenario",
+    def test_mixed_versioned_and_singleton(self):
+        pairs = [
+            *self._versioned("validate_final_question", 3),
+            *self._versioned("verify_answer", 3),
+            ("contract_scenario", {}),
         ]
-        assert self._collapse(actions) == [
+        assert self._collapse(pairs) == [
             "validate_final_question (×3)",
             "verify_answer (×3)",
             "contract_scenario",
         ]
 
     def test_out_of_order_versions(self):
-        """`_3, _1, _2` (any order) — collapses on first appearance, keeps count."""
-        assert self._collapse(["foo_3", "foo_1", "foo_2"]) == ["foo (×3)"]
+        pairs = [
+            ("foo_3", {"is_versioned_agent": True, "version_base_name": "foo"}),
+            ("foo_1", {"is_versioned_agent": True, "version_base_name": "foo"}),
+            ("foo_2", {"is_versioned_agent": True, "version_base_name": "foo"}),
+        ]
+        assert self._collapse(pairs) == ["foo (×3)"]
 
 
 class TestCompileRemoved:

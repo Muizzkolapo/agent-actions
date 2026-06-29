@@ -11,17 +11,23 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _action_deps(cfg: dict[str, Any]) -> list[str]:
+    """Codebase carries both `dependencies` (canonical, post-pydantic-dump)
+    and `depends_on` (legacy / pre-merge). Read both."""
+    deps = cfg.get("dependencies") or cfg.get("depends_on") or []
+    return list(deps) if not isinstance(deps, str) else [deps]
+
+
 def _get_reachable_actions(action_name: str, action_configs: dict[str, dict[str, Any]]) -> set[str]:
     reachable: set[str] = set()
-    stack = list(action_configs.get(action_name, {}).get("depends_on") or [])
+    stack = _action_deps(action_configs.get(action_name, {}))
 
     while stack:
         dep = stack.pop()
         if dep in reachable:
             continue
         reachable.add(dep)
-        dep_config = action_configs.get(dep, {})
-        for upstream in dep_config.get("depends_on") or []:
+        for upstream in _action_deps(action_configs.get(dep, {})):
             if upstream not in reachable:
                 stack.append(upstream)
 

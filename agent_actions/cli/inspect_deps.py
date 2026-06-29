@@ -52,7 +52,9 @@ class DependenciesCommand(BaseInspectCommand):
         from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
 
         order = [n for n in execution_order if n in dependency_info] or list(dependency_info.keys())
-        name_width = max(len(name) for name in order) + 2
+        # Empty workflow → empty seq for max(); fall back to 0 so we
+        # still render the title + "(no actions)" instead of crashing.
+        name_width = (max(len(name) for name in order) + 2) if order else 0
 
         self.console.print()
         render_title_row(
@@ -62,6 +64,10 @@ class DependenciesCommand(BaseInspectCommand):
             graph_hash=compute_graph_hash(inspector.action_configs),
         )
         self.console.print()
+
+        if not order:
+            self.console.print("  [dim](no actions)[/dim]")
+            return
 
         for name in order:
             info = dependency_info[name]

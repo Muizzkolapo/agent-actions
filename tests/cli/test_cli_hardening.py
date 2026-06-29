@@ -406,7 +406,9 @@ class TestGetOutputFieldsWithSchemaDir:
 
         config = {"schema_name": "some_schema"}
         fields = BaseInspectCommand._get_output_fields(config)
-        assert fields == ["[schema: some_schema]"]
+        # Parens, not square brackets — Rich treats `[…]` as markup
+        # and would swallow the entire token at print time.
+        assert fields == ["(schema: some_schema)"]
 
 
 class TestRequiresProjectErrorPath:
