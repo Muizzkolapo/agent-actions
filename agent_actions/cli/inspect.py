@@ -173,40 +173,229 @@ class InspectCommand(BaseInspectCommand):
             )
             return
 
+        from rich.text import Text
+
         action_count = sum(len(lvl) for lvl in levels)
         estimate = inspector.estimate()
-
-        # Two-line header: title row, then a flat stats row.
-        # `7 parallel` is intentionally NOT in stats — the user can
-        # count `⫻` rows in the body if they care, and dropping it
-        # keeps the stats line short enough to fit on a 60-col
-        # terminal without orphaning the last fact.
-        self.console.print(
-            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [bold green]✅ validated[/bold green]"
-        )
-        self.console.print(
-            f"  [dim]{action_count} actions in {len(levels)} levels  ·  "
-            f"{estimate['llm_calls']} LLM calls, {estimate['guarded_actions']} guarded[/dim]\n"
-        )
-
-        # Chunk levels into "steps" — one conceptual unit each: a fan-out
-        # (parallel level) or a run of serial actions. Step numbering
-        # is more conversational than leaking the internal L-numbers
-        # (the user thinks "step 7", not "level 17"); --dry-run keeps
-        # L-numbers since it's the level-accurate report.
         steps = self._build_steps(levels)
-        step_width = len(str(len(steps)))
+        graph_hash = self._compute_graph_hash(inspector.action_configs)
 
-        # Continuation indent for wrapped lines lines up with the action
-        # column: 2 lead + step_width + 1 (period) + 2 spaces.
-        action_col = 2 + step_width + 1 + 2
+        # Header row: workflow name + ● validated pill + graph hash on right
+        self.console.print()
+        self._print_title_row(self.agent_name, graph_hash)
+        self.console.print()
 
-        for step_num, step in enumerate(steps, 1):
-            label = f"[dim]{step_num:>{step_width}}.[/dim]"
-            if step["kind"] == "parallel":
-                self._print_parallel(label, step["actions"], action_col)
-            else:
-                self._print_chain(label, step["actions"], action_col)
+        # Stat cards row — 4 equal-width cards in a borderless grid.
+        # Columns(equal=True) gives ragged inter-card gaps because Rich
+        # left-aligns each card and distributes leftover columns
+        # unevenly; Table.grid with 4 ratio-1 columns sits flush.
+        from rich.table import Table
+
+        stats = Table.grid(expand=True, padding=(0, 1))
+        for _ in range(4):
+            stats.add_column(ratio=1, justify="left")
+        stats.add_row(
+            self._stat_card(str(action_count), "ACTIONS", "bold cyan"),
+            self._stat_card(str(len(levels)), "LEVELS", "bold bright_white"),
+            self._stat_card(str(estimate["llm_calls"]), "LLM CALLS", "bold yellow"),
+            self._stat_card(str(estimate["guarded_actions"]), "GUARDED", "bold bright_red"),
+        )
+        self.console.print(stats)
+        self.console.print()
+
+        # Section divider — left + right labels with rule line between.
+        # Rich Rule's title centres in fixed space, so build the line
+        # by hand: dim label · padded rule · dim label.
+        width = self.console.width or 100
+        left_label = "DEPENDENCY GRAPH"
+        right_label = "TOP-DOWN EXECUTION"
+        rule_chars = max(width - len(left_label) - len(right_label) - 4, 8)
+        rule = Text()
+        rule.append(left_label + " ", style="dim")
+        rule.append("─" * rule_chars, style="dim rgb(70,80,95)")
+        rule.append(" " + right_label, style="dim")
+        self.console.print(rule)
+        self.console.print()
+
+        # Step rows: numbered by ACTION POSITION (matches the mockup —
+        # `03-05` means the 3rd through 5th actions in the workflow).
+        # Walk steps tracking running position.
+        position = 1
+        for step in steps:
+            count = len(step["actions"])
+            self._render_step(position, position + count - 1, step)
+            position += count
+            self.console.print()
+
+    # ── Header helpers ────────────────────────────────────────────────
+
+    def _print_title_row(self, name: str, graph_hash: str) -> None:
+        """Workflow name + status pill on the left, graph hash on the right.
+
+        Padded to terminal width so the hash hits the right edge.
+        """
+        from rich.text import Text
+
+        width = self.console.width or 100
+        left = Text()
+        left.append(f"{name}", style="bold bright_white")
+        left.append("   ")
+        left.append("● validated", style="bold black on rgb(108,168,138)")
+        right = Text("graph hash ", style="dim")
+        right.append(graph_hash, style="dim bright_white")
+
+        pad = max(width - left.cell_len - right.cell_len, 2)
+        line = Text()
+        line.append(left)
+        line.append(" " * pad)
+        line.append(right)
+        self.console.print(line)
+
+    @staticmethod
+    def _stat_card(value: str, label: str, value_style: str):
+        """A small panel: big bold number + dim label below."""
+        from rich.console import Group
+        from rich.panel import Panel
+        from rich.text import Text
+
+        number = Text(value, style=value_style, justify="left")
+        sub = Text(label, style="dim", justify="left")
+        return Panel(Group(number, sub), border_style="rgb(60,75,90)", padding=(1, 2))
+
+    @staticmethod
+    def _compute_graph_hash(action_configs: dict) -> str:
+        """Short, stable identifier — same configs always hash the same.
+
+        Hash of action names + their direct deps. Display as `XXXX·XXXX`
+        like a short git SHA, gives the user something to recognise.
+        """
+        import hashlib
+
+        payload_parts = []
+        for name in sorted(action_configs):
+            deps = action_configs[name].get("dependencies") or []
+            if isinstance(deps, str):
+                deps = [deps]
+            payload_parts.append(f"{name}:{','.join(sorted(deps))}")
+        digest = hashlib.sha256("|".join(payload_parts).encode()).hexdigest()
+        return f"{digest[:4]}·{digest[4:8]}"
+
+    # ── Step rendering (cards / pills / chains) ──────────────────────
+
+    def _render_step(self, start: int, end: int, step: dict[str, object]) -> None:
+        """One pipeline row.
+
+        Layout: `NN  ●─  <body>` (or `NN-MM  ●─  <body>` for chains
+        spanning multiple action positions).
+
+        Chains render as pill → pill → pill. Parallels render as a
+        small "FAN-OUT · N PARALLEL CALLS" card containing the
+        version-collapsed action pill.
+        """
+        from rich.console import Group
+        from rich.panel import Panel
+        from rich.text import Text
+
+        gutter = self._step_gutter(start, end)
+
+        if step["kind"] == "parallel":
+            collapsed = self._collapse_version_groups(step["actions"])
+            pill_row = Text()
+            for i, name in enumerate(collapsed):
+                if i > 0:
+                    pill_row.append("   ")
+                pill_row.append_text(self._action_pill(name))
+            header = Text(
+                f"⫻ FAN-OUT · {len(step['actions'])} PARALLEL CALLS",
+                style="bold yellow",
+            )
+            body = Panel(
+                Group(header, Text(""), pill_row),
+                border_style="rgb(60,120,100)",
+                padding=(0, 1),
+                expand=False,
+            )
+        else:
+            body = self._chain_pills(step["actions"])
+
+        self.console.print(self._row(gutter, body))
+
+    @staticmethod
+    def _step_gutter(start: int, end: int) -> object:
+        """`01    ●─` or `03-05 ●─` — left-edge level marker.
+
+        Width is fixed (8 chars) so the body column lines up across
+        single-position and range rows.
+        """
+        from rich.text import Text
+
+        if start == end:
+            label_text = f"{start:02d}"
+        else:
+            label_text = f"{start:02d}-{end:02d}"
+
+        text = Text()
+        text.append(f"{label_text:<6}", style="dim")
+        text.append("●", style="bold rgb(108,168,138)")
+        text.append("─ ", style="dim rgb(108,168,138)")
+        return text
+
+    @staticmethod
+    def _action_pill(name: str):
+        """Rounded background pill with a leading bullet."""
+        from rich.text import Text
+
+        pill = Text()
+        pill.append(" ● ", style="rgb(108,168,138) on rgb(28,52,46)")
+        pill.append(f"{name} ", style="bold rgb(180,220,200) on rgb(28,52,46)")
+        return pill
+
+    def _chain_pills(self, actions: list[str]):
+        """Render a serial chain as pill → pill → pill, wrapping at
+        pill boundaries (not mid-pill, which breaks the background
+        color in Rich's word-wrap).
+        """
+        from rich.console import Group
+        from rich.text import Text
+
+        # Terminal width minus the left gutter (8 chars).
+        body_width = max((self.console.width or 100) - 10, 40)
+
+        lines: list[Text] = []
+        current = Text()
+        for i, name in enumerate(actions):
+            # Each pill takes len(name) + 4 cells (` ● name `).
+            pill_len = len(name) + 4
+            sep_len = 5 if i > 0 else 0  # `  →  `
+            if i > 0 and current.cell_len + sep_len + pill_len > body_width:
+                lines.append(current)
+                current = Text()
+                # Indent continuation pills with arrow at start so the
+                # chain signal carries across lines.
+                current.append("→  ", style="dim")
+            elif i > 0:
+                current.append("  ")
+                current.append("→", style="dim")
+                current.append("  ")
+            current.append_text(self._action_pill(name))
+        if current.cell_len:
+            lines.append(current)
+        return Group(*lines)
+
+    @staticmethod
+    def _row(left, right):
+        """Place `left` and `right` on one row using a 2-col table.
+
+        Rich `Columns` doesn't align baselines for mixed Text + Panel,
+        so use a Table with no borders and `vertical='middle'`.
+        """
+        from rich.table import Table
+
+        table = Table.grid(padding=(0, 0))
+        table.add_column(no_wrap=True, vertical="top")
+        table.add_column()
+        table.add_row(left, right)
+        return table
 
     @staticmethod
     def _build_steps(levels: list[list[str]]) -> list[dict[str, object]]:
