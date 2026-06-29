@@ -42,7 +42,7 @@ class ActionCommand(BaseInspectCommand):
         if self.json_output:
             self._output_json(action_config, info)
         else:
-            self._output_rich(action_config, info)
+            self._output_rich(action_config, info, inspector)
 
     def _output_json(self, action_config: dict[str, Any], info: dict[str, Any]) -> None:
         output = {
@@ -61,12 +61,15 @@ class ActionCommand(BaseInspectCommand):
         }
         click.echo(json_lib.dumps(output, indent=2))
 
-    def _output_rich(self, action_config: dict[str, Any], info: dict[str, Any]) -> None:
+    def _output_rich(
+        self, action_config: dict[str, Any], info: dict[str, Any], inspector=None
+    ) -> None:
         """Definition-list layout.
 
         Top block (Kind, Model, Granularity, Guard) is the action's
-        identity. Input/Reads/Writes form the data-flow block: what
-        feeds this action, which fields it observes, what it produces.
+        identity. Input/Reads/Writes/Used-by form the data-flow block:
+        what feeds this action, what it observes, what it produces,
+        who consumes its output.
         """
         kind = action_config.get("kind", DEFAULT_ACTION_KIND)
         model = action_config.get("model_name") or "—"
@@ -79,11 +82,18 @@ class ActionCommand(BaseInspectCommand):
         writes = self._get_output_fields(
             action_config, action_schema=self._get_action_schema(self.action_name)
         )
+        consumers = self._find_consumers(inspector) if inspector else []
+        right_meta = self._position_meta(inspector) if inspector else None
 
         from agent_actions.cli.inspect_base import render_title_row
 
         self.console.print()
-        render_title_row(self.console, self.action_name, section="action detail")
+        render_title_row(
+            self.console,
+            self.action_name,
+            section="action detail",
+            right_meta=right_meta,
+        )
         self.console.print()
 
         fields: list[tuple[str, object]] = [
@@ -97,6 +107,9 @@ class ActionCommand(BaseInspectCommand):
             fields.append(("Reads", reads))
         if writes:
             fields.append(("Writes", writes))
+        # Always include Used by — explicit "no downstream" is more
+        # informative than absence (the user knows whether it's a leaf).
+        fields.append(("Used by", consumers if consumers else "— [dim](terminal action)[/dim]"))
 
         label_width = max(len(label) for label, _ in fields)
         for i, (label, value) in enumerate(fields):
@@ -107,6 +120,38 @@ class ActionCommand(BaseInspectCommand):
             if i > 0 and (curr_is_list and not prev_was_list or curr_is_list and prev_was_list):
                 self.console.print()
             self._print_field(label, value, label_width)
+
+    def _find_consumers(self, inspector) -> list[str]:
+        """Find every action whose dependencies include this one.
+
+        Iterates `inspector.action_configs` — handles both the
+        ``dependencies: [...]`` field and ``depends_on``, matching the
+        codebase's two conventions. Returns names in execution order so
+        the user sees the natural reading sequence.
+        """
+        target = self.action_name
+        consumers: list[str] = []
+        for name in inspector.execution_order:
+            cfg = inspector.action_configs.get(name, {})
+            deps = cfg.get("dependencies") or cfg.get("depends_on") or []
+            if isinstance(deps, str):
+                deps = [deps]
+            if target in deps:
+                consumers.append(name)
+        return consumers
+
+    def _position_meta(self, inspector) -> str | None:
+        """`qanalabs_quiz_gen · level 3 of 36` — right-side title meta.
+
+        Gives the bookmarkable output a workflow root and a position
+        anchor. Lets the user re-find this action in the pipeline view.
+        """
+        try:
+            idx = list(inspector.execution_order).index(self.action_name)
+        except ValueError:
+            return self.agent_name  # action not in order — show parent only
+        total = len(inspector.execution_order)
+        return f"{self.agent_name} · level {idx + 1} of {total}"
 
     @staticmethod
     def _describe_input(input_sources: list[str], context_sources: list[str]) -> str:
@@ -276,7 +321,12 @@ class ContextCommand(BaseInspectCommand):
         from agent_actions.cli.inspect_base import render_title_row
 
         self.console.print()
-        render_title_row(self.console, action_name, section="template context")
+        render_title_row(
+            self.console,
+            action_name,
+            section="template context",
+            right_meta=self.agent_name,
+        )
         self.console.print()
 
         # Scope on its own indented block — avoids the awkward
@@ -304,10 +354,20 @@ class ContextCommand(BaseInspectCommand):
                     soft_wrap=True,
                 )
 
-        total = context_data["total_template_variables"]
-        self.console.print(
-            f"\n  [dim]{total} template variables across {len(namespaces)} namespaces[/dim]"
-        )
+        # Concrete `{{ ns.field }}` snippet so a prompt author can copy
+        # one verbatim. Picks the first observed namespace's first
+        # field — most likely to be the one driving the prompt.
+        # Split onto two lines so the parenthetical count never wraps
+        # mid-phrase on narrow terminals.
+        if namespaces:
+            example_ns, example_fields = next(iter(namespaces.items()))
+            if example_fields:
+                example = f"{{{{ {example_ns}.{example_fields[0]} }}}}"
+                self.console.print(f"\n  [dim]Use in prompts as[/dim]  [cyan]{example}[/cyan]")
+                self.console.print(
+                    f"  [dim]({context_data['total_template_variables']} variables "
+                    f"across {len(namespaces)} namespaces)[/dim]"
+                )
 
 
 @click.command(name="context")

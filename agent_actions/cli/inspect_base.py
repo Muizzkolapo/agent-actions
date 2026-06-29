@@ -27,11 +27,14 @@ def render_title_row(
     section: str | None = None,
     validated: bool = False,
     graph_hash: str | None = None,
+    right_meta: str | None = None,
 ) -> None:
     """Shared title-row renderer for every `agac inspect` command.
 
     Format:  `<subject>   <suffix>` left-aligned with no leading
-    indent; optional graph-hash flushed right.
+    indent; optional right-aligned metadata (`graph hash NNNN·NNNN`
+    for workflow-level views, ``parent / position`` for action-level
+    drilldowns).
 
     The suffix is exactly one of:
       - a status pill (` ● validated `, mint-on-darker-mint) when
@@ -40,8 +43,9 @@ def render_title_row(
         ``section`` is given
       - nothing
 
-    Standardising this keeps the visual language consistent across
-    the inspect family.
+    Right-side metadata: at most one of ``graph_hash`` (workflow
+    views) or ``right_meta`` (action views — e.g. parent workflow
+    name + step position).
     """
     width = console.width or 100
     left = Text()
@@ -56,14 +60,20 @@ def render_title_row(
     if graph_hash:
         right = Text("graph hash ", style="dim")
         right.append(graph_hash, style="dim bright_white")
+    elif right_meta:
+        right = Text(right_meta, style="dim")
+    else:
+        right = None
+
+    if right is None:
+        console.print(left)
+    else:
         pad = max(width - left.cell_len - right.cell_len, 2)
         line = Text()
         line.append(left)
         line.append(" " * pad)
         line.append(right)
         console.print(line)
-    else:
-        console.print(left)
 
 
 def compute_graph_hash(action_configs: dict) -> str:
