@@ -1,8 +1,5 @@
-"""Preflight validation for workflow configs.
-
-Standalone so both the runtime coordinator and the read-only inspect
-CLI can call it without spinning up storage or execution services.
-"""
+"""Preflight validation — standalone so runtime and inspect can both
+call it without spinning up storage or execution services."""
 
 from __future__ import annotations
 
@@ -26,13 +23,9 @@ logger = logging.getLogger(__name__)
 class PreflightService:
     """Validate a workflow config without executing it.
 
-    Runs schema, guard syntax, and resolution checks. Mutates
-    ``action_configs`` for guard-nullable schema fixes. Pass-or-raise:
-    ``validate()`` returns nothing on success and raises
-    ``PreFlightValidationError`` on the first failed check.
-    Callers can read ``self.schema_service`` after success to reuse the
-    rebuilt service for downstream work.
-    """
+    Mutates ``action_configs`` for guard-nullable schema fixes. Raises
+    ``PreFlightValidationError`` on the first failed check. After
+    success ``self.schema_service`` is reusable downstream."""
 
     def __init__(
         self,

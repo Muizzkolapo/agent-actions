@@ -32,10 +32,9 @@ logger = logging.getLogger(__name__)
 class WorkflowInspector:
     """Read-only workflow introspection.
 
-    ``load()`` delegates to the runtime's ``load_workflow_configs`` so
-    inspect output matches what ``agac run`` would actually see, but
-    with workflow-init and UDF-discovery events suppressed.
-    """
+    Delegates to the runtime's ``load_workflow_configs`` so inspect
+    output matches what ``agac run`` would see; init / UDF-discovery
+    events are suppressed."""
 
     def __init__(
         self,
@@ -66,12 +65,8 @@ class WorkflowInspector:
         return self._config_path
 
     def render(self) -> str:
-        """Return the fully rendered workflow YAML.
-
-        Every top-level key in the source YAML survives. Runtime
-        mutations (drop pruning, guard-nullable schema fixes) are NOT
-        applied — ``--yaml`` is the pre-preflight snapshot.
-        """
+        """Fully-rendered YAML. Pre-preflight — runtime mutations (drop
+        pruning, guard-nullable fixes) are NOT applied."""
         return render_pipeline_with_templates(
             self._config_path,
             self.paths.template_dir,
@@ -83,11 +78,8 @@ class WorkflowInspector:
         if self._loaded:
             return self.action_configs
 
-        # Suppress UDF discovery banners entirely. For `agac inspect`,
-        # they're preamble — the inspect title row already implies
-        # "everything loaded" via the ✅ pill. Tool-discovery errors
-        # still propagate as exceptions, so a real failure is never
-        # silently swallowed.
+        # UDF banners suppressed — preamble for the inspect title row
+        # which already implies "everything loaded". Errors still raise.
         quiet_console = Console(quiet=True)
         runtime_config = WorkflowRuntimeConfig(
             paths=WorkflowPaths(
@@ -109,10 +101,8 @@ class WorkflowInspector:
     def validate(self, verify_keys: bool = False) -> None:
         """Run preflight, populate ``schema_service``, strip dead drops.
 
-        Drop-pruning mirrors the coordinator so ``--dry-run`` reports the
-        same post-preflight state ``agac run`` will see. Raises
-        ``PreFlightValidationError`` on failure.
-        """
+        Drop-pruning mirrors the coordinator so ``--dry-run`` reports
+        the same post-preflight state ``agac run`` will see."""
         self.load()
         service = PreflightService(
             agent_name=self.agent_name,
@@ -128,26 +118,18 @@ class WorkflowInspector:
     def get_levels(self) -> list[list[str]]:
         """Topological levels of parallelizable actions.
 
-        Delegates to the runtime's ``ActionLevelOrchestrator`` so version
-        base names (``extract_raw_qa`` → ``extract_raw_qa_1/2/3``) expand
-        the same way ``agac run`` would resolve them. On cycles, the
-        orchestrator raises ``WorkflowError`` — we surface the assigned
-        prefix plus the unresolved tail so the user still sees something.
-        """
+        Delegates to ``ActionLevelOrchestrator`` so version base names
+        expand the same way ``agac run`` resolves them."""
         self.load()
         if not self.action_configs:
             return []
 
-        # execution_order skips non-operational actions; include them so
-        # inspect shows the full DAG instead of silently dropping them.
-        # `dict.fromkeys` preserves the original execution_order while
-        # appending any missing names.
+        # Non-operational actions are excluded from execution_order;
+        # include them so inspect shows the full DAG.
         operational_order = [n for n in self.execution_order if n in self.action_configs]
         full_order = list(dict.fromkeys(operational_order + list(self.action_configs.keys())))
 
-        # Normalize so the orchestrator's `dependencies` lookup also sees
-        # actions declared with `depends_on` (codebase carries both
-        # conventions — see scope_inference / workflow_static_analyzer).
+        # Normalize: codebase carries both `dependencies` and `depends_on`.
         normalized = {
             name: {**cfg, "dependencies": cfg.get("dependencies") or cfg.get("depends_on") or []}
             for name, cfg in self.action_configs.items()

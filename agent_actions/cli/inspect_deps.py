@@ -49,12 +49,6 @@ class DependenciesCommand(BaseInspectCommand):
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(self, dependency_info, execution_order, inspector) -> None:
-        """Per-action list with `←` arrows.
-
-        Solves the table truncation problem: action names get the room
-        they need, inputs are listed inline, type tag is right-aligned
-        in a dim trailing label.
-        """
         from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
 
         order = [n for n in execution_order if n in dependency_info] or list(dependency_info.keys())
@@ -72,9 +66,7 @@ class DependenciesCommand(BaseInspectCommand):
         for name in order:
             info = dependency_info[name]
             inputs = info["input_sources"]
-            # Strip the always-available `source` namespace — it's not a
-            # real per-action context dependency, just the default input,
-            # and it would print "+ context: source" on nearly every row.
+            # `source` is always-available, not a real context dep.
             contexts = [c for c in info["context_sources"] if c != "source"]
 
             if inputs:
@@ -87,9 +79,7 @@ class DependenciesCommand(BaseInspectCommand):
             if contexts:
                 line += f"   [dim]+ context: {', '.join(contexts)}[/dim]"
 
-            # Hide the type tag for source actions — `← source data`
-            # already says it, and the trailing `(source)` was just
-            # echoing the input column.
+            # Source actions already say "source" via `← source data`.
             type_label = self._get_action_type(inputs, contexts).lower()
             if inputs:
                 line += f"   [dim]({type_label})[/dim]"

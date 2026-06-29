@@ -1,8 +1,7 @@
 """Prune ``context_scope.drop`` entries targeting unreachable namespaces.
 
-Shared by the runtime coordinator and ``WorkflowInspector`` so the
-post-prune state matches in both paths.
-"""
+Shared by the coordinator and ``WorkflowInspector`` so post-prune
+state matches across both paths."""
 
 from __future__ import annotations
 
@@ -30,11 +29,8 @@ def _get_reachable_actions(action_name: str, action_configs: dict[str, dict[str,
 
 
 def strip_unreachable_drops(action_configs: dict[str, dict[str, Any]]) -> None:
-    """Strip drops targeting namespaces outside an action's dep chain.
-
-    They're no-ops at runtime but produce per-record warnings; we drop
-    them after preflight so the runtime never sees them.
-    """
+    """Strip drops on namespaces outside an action's dep chain — they're
+    no-ops at runtime but produce per-record warnings."""
     all_action_names = set(action_configs.keys())
 
     for action_name, config in action_configs.items():

@@ -239,7 +239,6 @@ class InspectCommand(BaseInspectCommand):
 
     @staticmethod
     def _stat_card(value: str, label: str, value_style: str):
-        """A small panel: big bold number + dim label below."""
         from rich.console import Group
         from rich.panel import Panel
         from rich.text import Text
@@ -251,15 +250,6 @@ class InspectCommand(BaseInspectCommand):
     # ── Step rendering (cards / pills / chains) ──────────────────────
 
     def _render_step(self, start: int, end: int, step: dict[str, object]) -> None:
-        """One pipeline row.
-
-        Layout: `NN  ●─  <body>` (or `NN-MM  ●─  <body>` for chains
-        spanning multiple action positions).
-
-        Chains render as pill → pill → pill. Parallels render as a
-        small "FAN-OUT · N PARALLEL CALLS" card containing the
-        version-collapsed action pill.
-        """
         from rich.console import Group
         from rich.panel import Panel
         from rich.text import Text
@@ -272,9 +262,8 @@ class InspectCommand(BaseInspectCommand):
                 f"⫻ FAN-OUT · {len(step['actions'])} PARALLEL CALLS",
                 style="bold yellow",
             )
-            # Compute the room available inside the card so pills wrap
-            # at boundaries instead of mid-name (which breaks Rich's
-            # background-color block in mid-word wrap).
+            # Pills wrap at pill boundaries — Rich's default word-wrap
+            # would split mid-name and leave half-coloured chips.
             body_width = max((self.console.width or 100) - 14, 30)
             pill_rows = self._parallel_pill_rows(collapsed, body_width)
             body = Panel(
@@ -290,18 +279,9 @@ class InspectCommand(BaseInspectCommand):
 
     @staticmethod
     def _step_gutter(start: int, end: int) -> object:
-        """`01    ●─` or `03-05 ●─` — left-edge level marker.
-
-        Width is fixed (8 chars) so the body column lines up across
-        single-position and range rows.
-        """
         from rich.text import Text
 
-        if start == end:
-            label_text = f"{start:02d}"
-        else:
-            label_text = f"{start:02d}-{end:02d}"
-
+        label_text = f"{start:02d}" if start == end else f"{start:02d}-{end:02d}"
         text = Text()
         text.append(f"{label_text:<6}", style="dim")
         text.append("●", style="bold rgb(108,168,138)")
@@ -310,7 +290,6 @@ class InspectCommand(BaseInspectCommand):
 
     @staticmethod
     def _action_pill(name: str):
-        """Rounded background pill with a leading bullet."""
         from rich.text import Text
 
         pill = Text()
@@ -319,12 +298,6 @@ class InspectCommand(BaseInspectCommand):
         return pill
 
     def _parallel_pill_rows(self, actions: list[str], max_width: int) -> list:
-        """Render parallel-group pills wrapping at pill boundaries.
-
-        Returns one Text per visual row. Each pill keeps its complete
-        background-color block intact (Rich's default word-wrap would
-        split a pill mid-name and leave a half-coloured chip).
-        """
         from rich.text import Text
 
         rows: list[Text] = []
@@ -343,10 +316,8 @@ class InspectCommand(BaseInspectCommand):
         return rows
 
     def _chain_pills(self, actions: list[str]):
-        """Render a serial chain as pill → pill → pill, wrapping at
-        pill boundaries (not mid-pill, which breaks the background
-        color in Rich's word-wrap).
-        """
+        """Wrap chain pills at pill boundaries — Rich's word-wrap
+        otherwise splits mid-name and leaves half-coloured chips."""
         from rich.console import Group
         from rich.text import Text
 
@@ -410,48 +381,10 @@ class InspectCommand(BaseInspectCommand):
             idx += 1
         return steps
 
-    def _print_chain(self, label: str, actions: list[str], action_col: int) -> None:
-        """Render a serial chain.
-
-        No leading row marker — serial is the default flow and doesn't
-        need to announce itself. The `→` only appears where it carries
-        meaning: between two action names, including at the start of
-        wrap-continuation lines so the reader knows the chain hasn't
-        ended.
-
-        Two spaces of phantom padding after the step label keep the
-        first action visually aligned with the parallel marker column
-        AND with wrap-continuation actions — so action names stack in
-        the same column across mixed serial/parallel rows.
-        """
-        prefix = f"  {label}    "
-        cont = " " * action_col + "[dim]→[/dim] "
-        self._print_wrapped(prefix, cont, " [dim]→[/dim] ", actions)
-
-    def _print_parallel(self, label: str, actions: list[str], action_col: int) -> None:
-        """Render a parallel fan-out.
-
-        Version groups (``foo_1``, ``foo_2``, ``foo_3``) collapse to
-        ``foo (×3)`` — a 7-way fan of "validate_final_question_*,
-        verify_answer_*, contract_scenario" reads as three names
-        instead of seven. Pure scale + readability win on workflows
-        that use the version-action pattern.
-        """
-        display = self._collapse_version_groups(actions)
-        prefix = f"  {label}  [bold yellow]⫻[/bold yellow] "
-        # Wrap continuation lands directly under the first member name
-        # (action_col + 2 for the rendered `⫻ ` width).
-        cont = " " * (action_col + 2)
-        self._print_wrapped(prefix, cont, ", ", display)
-
     @staticmethod
     def _collapse_version_groups(actions: list[str]) -> list[str]:
-        """Replace runs of ``{base}_{int}`` names with ``{base} (×N)``.
-
-        Preserves first-occurrence order. A base with only one variant
-        keeps its full name (no `(×1)` noise). Non-versioned names pass
-        through untouched.
-        """
+        """`foo_1, foo_2, foo_3` → `foo (×3)`. Preserves first-occurrence
+        order; singletons keep their full name (no `(×1)` noise)."""
         import re
 
         pattern = re.compile(r"^(.+)_(\d+)$")
@@ -477,30 +410,6 @@ class InspectCommand(BaseInspectCommand):
                 result[first_slot[base]] = f"{base} (×{count})"
 
         return [r for r in result if r is not None]
-
-    def _print_wrapped(
-        self,
-        prefix: str,
-        cont: str,
-        separator: str,
-        items: list[str],
-    ) -> None:
-        """Greedy line packer for a prefixed, separator-joined list."""
-        import re
-
-        def _visible(s: str) -> int:
-            return len(re.sub(r"\[/?[^\]]+\]", "", s))
-
-        width = max(self.console.width or 80, 60)
-        line = prefix + items[0]
-        for nxt in items[1:]:
-            tentative = f"{line}{separator}{nxt}"
-            if _visible(tentative) > width:
-                self.console.print(line, soft_wrap=False)
-                line = cont + nxt
-            else:
-                line = tentative
-        self.console.print(line, soft_wrap=False)
 
 
 @click.group(name="inspect", invoke_without_command=True)

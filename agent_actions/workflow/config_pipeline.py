@@ -41,12 +41,8 @@ def load_workflow_configs(
     console: Console,
     fire_events: bool = True,
 ) -> WorkflowMetadata:
-    """Run the config pipeline and return runtime metadata.
-
-    Fires init / UDF-discovery events and creates a ``ConfigManager``
-    when *config* doesn't already carry one. Pass ``fire_events=False``
-    for read-only callers (inspect CLI) so events.json stays clean.
-    """
+    """Run the config pipeline. ``fire_events=False`` for read-only
+    callers (inspect CLI) so events.json stays clean."""
     if fire_events:
         fire_event(
             WorkflowInitializationStartEvent(

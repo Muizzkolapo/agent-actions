@@ -1,9 +1,7 @@
 """Static validation for action ``guard`` clauses.
 
-Lives outside ``workflow.coordinator`` so the read-only ``PreflightService``
-can import it without dragging the runtime initialization stack
-(storage backend, services, event loggers) in via a circular import.
-"""
+Outside ``workflow.coordinator`` so ``PreflightService`` can import
+it without dragging in the runtime stack via a circular import."""
 
 from __future__ import annotations
 
@@ -35,7 +33,7 @@ def _find_comparison_nodes(node: ASTNode) -> list[ComparisonNode]:
 
 
 def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str) -> list[str]:
-    """Flag ComparisonNode instances where the RHS is a bare FieldNode (likely unquoted string)."""
+    """Flag comparisons whose RHS is a bare identifier (usually an unquoted string)."""
     from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode
 
     errors: list[str] = []
@@ -56,12 +54,9 @@ def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str)
 
 
 def validate_guard_conditions(action_configs: dict) -> list[str]:
-    """Parse all guard conditions and return error messages for any that are invalid.
+    """Parse all guard clauses, returning one error message per invalid one.
 
-    Runs after config expansion, so guard dicts already use 'clause' (not 'condition').
-    Catches syntax errors and semantic issues (e.g., unquoted string literals on RHS)
-    before any LLM calls are made.
-    """
+    Runs after config expansion (guard dicts use 'clause', not 'condition')."""
     errors: list[str] = []
     parser = WhereClauseParser()
 

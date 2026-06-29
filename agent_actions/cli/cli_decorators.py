@@ -46,12 +46,8 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
 
 
 def requires_project(func):
-    """Find project root and inject it as a ``project_root`` keyword argument.
-
-    Prints a ``📁 Project root: <path>`` banner only when running from a
-    sub-directory of the project (the only case where the path tells the
-    user anything new — ``.`` is noise).
-    """
+    """Inject ``project_root`` kwarg. Banner only when cwd ≠ project_root
+    (``📁 Project root: .`` from inside the project is just noise)."""
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):

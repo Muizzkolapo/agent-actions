@@ -59,10 +59,6 @@ class GraphCommand(BaseInspectCommand):
         dependency_info: dict[str, Any],
         execution_order: list[str],
     ) -> None:
-        """Per-action block view — same arrows the rest of the family
-        uses: ``←`` for inputs, ``+`` for context-only sources,
-        ``→`` for outputs. One block per action in execution order.
-        """
         from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
 
         self.console.print()

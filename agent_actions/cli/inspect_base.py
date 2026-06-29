@@ -29,24 +29,12 @@ def render_title_row(
     graph_hash: str | None = None,
     right_meta: str | None = None,
 ) -> None:
-    """Shared title-row renderer for every `agac inspect` command.
+    """Shared title row: `<subject>   <pill|section>            <right>`.
 
-    Format:  `<subject>   <suffix>` left-aligned with no leading
-    indent; optional right-aligned metadata (`graph hash NNNN·NNNN`
-    for workflow-level views, ``parent / position`` for action-level
-    drilldowns).
-
-    The suffix is exactly one of:
-      - a status pill (` ● validated `, mint-on-darker-mint) when
-        ``validated=True``
-      - a dim section label (e.g. ``dependency model``) when
-        ``section`` is given
-      - nothing
-
-    Right-side metadata: at most one of ``graph_hash`` (workflow
-    views) or ``right_meta`` (action views — e.g. parent workflow
-    name + step position).
-    """
+    Exactly one of ``validated`` (status pill) or ``section`` (dim label)
+    sets the left suffix; exactly one of ``graph_hash`` or ``right_meta``
+    fills the right column. Keeps every `agac inspect` view visually
+    consistent through one function."""
     width = console.width or 100
     left = Text()
     left.append(subject, style="bold bright_white")
@@ -77,11 +65,7 @@ def render_title_row(
 
 
 def compute_graph_hash(action_configs: dict) -> str:
-    """Short, stable identifier — same configs always hash the same.
-
-    Hash of action names + their direct deps. Display as `XXXX·XXXX`
-    like a short git SHA, gives the user something to recognise.
-    """
+    """Short stable DAG identifier — same actions + deps → same hash."""
     import hashlib
 
     payload_parts = []

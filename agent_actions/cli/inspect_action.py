@@ -64,13 +64,6 @@ class ActionCommand(BaseInspectCommand):
     def _output_rich(
         self, action_config: dict[str, Any], info: dict[str, Any], inspector=None
     ) -> None:
-        """Definition-list layout.
-
-        Top block (Kind, Model, Granularity, Guard) is the action's
-        identity. Input/Reads/Writes/Used-by form the data-flow block:
-        what feeds this action, what it observes, what it produces,
-        who consumes its output.
-        """
         kind = action_config.get("kind", DEFAULT_ACTION_KIND)
         model = action_config.get("model_name") or "—"
         granularity = action_config.get("granularity", get_default("granularity"))
@@ -122,13 +115,7 @@ class ActionCommand(BaseInspectCommand):
             self._print_field(label, value, label_width)
 
     def _find_consumers(self, inspector) -> list[str]:
-        """Find every action whose dependencies include this one.
-
-        Iterates `inspector.action_configs` — handles both the
-        ``dependencies: [...]`` field and ``depends_on``, matching the
-        codebase's two conventions. Returns names in execution order so
-        the user sees the natural reading sequence.
-        """
+        """Actions whose deps include this one, returned in execution order."""
         target = self.action_name
         consumers: list[str] = []
         for name in inspector.execution_order:
@@ -141,28 +128,16 @@ class ActionCommand(BaseInspectCommand):
         return consumers
 
     def _position_meta(self, inspector) -> str | None:
-        """`qanalabs_quiz_gen · level 3 of 36` — right-side title meta.
-
-        Gives the bookmarkable output a workflow root and a position
-        anchor. Lets the user re-find this action in the pipeline view.
-        """
         try:
             idx = list(inspector.execution_order).index(self.action_name)
         except ValueError:
-            return self.agent_name  # action not in order — show parent only
-        total = len(inspector.execution_order)
-        return f"{self.agent_name} · level {idx + 1} of {total}"
+            return self.agent_name
+        return f"{self.agent_name} · level {idx + 1} of {len(inspector.execution_order)}"
 
     @staticmethod
     def _describe_input(input_sources: list[str], context_sources: list[str]) -> str:
-        """Render the Input row.
-
-        Names the upstream action(s) feeding this one. For source
-        actions (no upstream), shows the placeholder ``source data``.
-        Type tag (``transform`` / ``merge``) appended in dim parens.
-        """
-        # Strip the always-available `source` namespace from contexts —
-        # it'd otherwise show as "(+ source)" on most rows.
+        # `source` namespace is always-available — stripped so it
+        # doesn't show as "(+ source)" on most rows.
         contexts = [c for c in context_sources if c != "source"]
         if not input_sources:
             return "source data  [dim](source action)[/dim]"
@@ -178,9 +153,6 @@ class ActionCommand(BaseInspectCommand):
 
     @staticmethod
     def _gather_reads(info: dict[str, Any]) -> list[str]:
-        """Flatten observed / passthrough / dropped field references
-        into one ordered list — what the action SEES.
-        """
         scope = info.get("context_scope") or {}
         reads: list[str] = []
         reads.extend(scope.get("observe") or [])
@@ -188,9 +160,7 @@ class ActionCommand(BaseInspectCommand):
         return reads
 
     def _print_field(self, label: str, value: object, label_width: int) -> None:
-        # ``highlight=False`` keeps Rich from re-coloring values that
-        # look like numbers, paths, URLs, etc. — e.g. ``gpt-4`` would
-        # otherwise have the ``4`` painted cyan as if it were a literal.
+        # highlight=False — otherwise Rich repaints the `4` in `gpt-4`.
         padded_label = f"[bold]{label}[/bold]" + " " * (label_width - len(label))
         if isinstance(value, list):
             if not value:
@@ -308,12 +278,6 @@ class ContextCommand(BaseInspectCommand):
         click.echo(json_lib.dumps(context_data, indent=2))
 
     def _output_rich(self, context_data: dict[str, Any]) -> None:
-        """Namespace table — each namespace gets one row with its fields.
-
-        The user knows the ``{{ ns.field }}`` syntax; we show the
-        building blocks (namespace → fields) rather than enumerating
-        every combination as boilerplate template syntax.
-        """
         action_name = context_data["action_name"]
         namespaces = context_data["namespaces"]
         scope = context_data["context_scope"]
@@ -329,8 +293,7 @@ class ContextCommand(BaseInspectCommand):
         )
         self.console.print()
 
-        # Scope on its own indented block — avoids the awkward
-        # mid-line wrap that happens when observe/drop lists are long.
+        # Scope as its own block — long observe/drop lists wrap awkwardly inline.
         scope_lines: list[str] = []
         for kind in ("observe", "passthrough", "drop"):
             items = scope.get(kind) or []
@@ -354,11 +317,8 @@ class ContextCommand(BaseInspectCommand):
                     soft_wrap=True,
                 )
 
-        # Concrete `{{ ns.field }}` snippet so a prompt author can copy
-        # one verbatim. Picks the first observed namespace's first
-        # field — most likely to be the one driving the prompt.
-        # Split onto two lines so the parenthetical count never wraps
-        # mid-phrase on narrow terminals.
+        # Copy-paste snippet — prompt authors get a concrete example
+        # instead of having to know Jinja syntax themselves.
         if namespaces:
             example_ns, example_fields = next(iter(namespaces.items()))
             if example_fields:
