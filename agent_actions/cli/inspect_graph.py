@@ -63,10 +63,16 @@ class GraphCommand(BaseInspectCommand):
         uses: ``←`` for inputs, ``+`` for context-only sources,
         ``→`` for outputs. One block per action in execution order.
         """
-        self.console.print(
-            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [dim]workflow graph[/dim]"
+        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
+
+        self.console.print()
+        render_title_row(
+            self.console,
+            self.agent_name,
+            section="workflow graph",
+            graph_hash=compute_graph_hash(inspector.action_configs),
         )
-        self.console.print(f"  [dim]{len(execution_order)} actions[/dim]\n")
+        self.console.print(f"[dim]{len(execution_order)} actions[/dim]\n")
 
         for action_name in execution_order:
             if action_name not in dependency_info:

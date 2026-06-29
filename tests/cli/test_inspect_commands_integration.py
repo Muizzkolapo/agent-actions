@@ -132,8 +132,9 @@ class TestDependenciesCommandOutput:
         cmd = _new_cmd(DependenciesCommand, action_filter=None)
         dep_info = _make_dependency_info()
         execution_order = ["extract", "summarize"]
+        inspector = _make_workflow_mock()
 
-        cmd._output_rich(dep_info, execution_order)
+        cmd._output_rich(dep_info, execution_order, inspector)
 
         output = cmd.console.file.getvalue()
         assert "extract" in output

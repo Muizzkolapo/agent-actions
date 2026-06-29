@@ -42,25 +42,32 @@ class DependenciesCommand(BaseInspectCommand):
         if self.json_output:
             self._output_json(dependency_info)
         else:
-            self._output_rich(dependency_info, inspector.execution_order)
+            self._output_rich(dependency_info, inspector.execution_order, inspector)
 
     def _output_json(self, dependency_info: dict[str, Any]) -> None:
         output = {"workflow": self.agent_name, "actions": dependency_info}
         click.echo(json_lib.dumps(output, indent=2))
 
-    def _output_rich(self, dependency_info: dict[str, Any], execution_order: list) -> None:
+    def _output_rich(self, dependency_info, execution_order, inspector) -> None:
         """Per-action list with `←` arrows.
 
         Solves the table truncation problem: action names get the room
         they need, inputs are listed inline, type tag is right-aligned
         in a dim trailing label.
         """
+        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
+
         order = [n for n in execution_order if n in dependency_info] or list(dependency_info.keys())
         name_width = max(len(name) for name in order) + 2
 
-        self.console.print(
-            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [dim]dependency model[/dim]\n"
+        self.console.print()
+        render_title_row(
+            self.console,
+            self.agent_name,
+            section="dependency model",
+            graph_hash=compute_graph_hash(inspector.action_configs),
         )
+        self.console.print()
 
         for name in order:
             info = dependency_info[name]

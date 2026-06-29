@@ -82,10 +82,14 @@ class InspectCommand(BaseInspectCommand):
                 )
             )
             return
-        # Match the family's title-row style: `<name>  ✅ <status>`.
-        # CI users care about exit code + one-line confirmation.
-        self.console.print(
-            f"  [bold cyan]{self.agent_name}[/bold cyan]   [bold green]✅ validated[/bold green]"
+        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
+
+        self.console.print()
+        render_title_row(
+            self.console,
+            self.agent_name,
+            validated=True,
+            graph_hash=compute_graph_hash(inspector.action_configs),
         )
 
     # ── --dry-run ────────────────────────────────────────────────────
@@ -110,31 +114,34 @@ class InspectCommand(BaseInspectCommand):
             )
             return
 
-        # Consistent with the other inspect outputs: title row +
-        # section labels + scoped detail. `--dry-run` is the
-        # "exhaustive truth" mode — level-accurate (not collapsed
-        # into steps) and full per-action context_scope detail.
-        self.console.print(
-            f"\n  [bold cyan]{self.agent_name}[/bold cyan]   [dim]preflight report[/dim]\n"
+        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
+
+        self.console.print()
+        render_title_row(
+            self.console,
+            self.agent_name,
+            section="preflight report",
+            graph_hash=compute_graph_hash(inspector.action_configs),
         )
+        self.console.print()
         self.console.print(
-            f"  [dim]{estimate['action_count']} actions in {len(levels)} levels  ·  "
+            f"[dim]{estimate['action_count']} actions in {len(levels)} levels  ·  "
             f"{estimate['llm_calls']} LLM calls, {estimate['guarded_actions']} guarded[/dim]\n"
         )
 
-        self.console.print("  [bold]Execution levels[/bold]")
+        self.console.print("[bold]Execution levels[/bold]")
         level_width = len(str(len(levels)))
         for i, level in enumerate(levels, 1):
             self.console.print(
-                f"    [dim]L{i:>{level_width}}[/dim]  {', '.join(level)}", soft_wrap=True
+                f"  [dim]L{i:>{level_width}}[/dim]  {', '.join(level)}", soft_wrap=True
             )
 
         if scope:
-            self.console.print("\n  [bold]Context scope[/bold] [dim](empty fields omitted)[/dim]")
+            self.console.print("\n[bold]Context scope[/bold] [dim](empty fields omitted)[/dim]")
             for name, info in scope.items():
                 line = self._format_scope_line(name, info.get("scope"))
                 if line is not None:
-                    self.console.print(f"    {line}", soft_wrap=True)
+                    self.console.print(f"  {line}", soft_wrap=True)
 
     @staticmethod
     def _format_scope_line(action_name: str, action_scope: object) -> str | None:
@@ -175,14 +182,15 @@ class InspectCommand(BaseInspectCommand):
 
         from rich.text import Text
 
+        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
+
         action_count = sum(len(lvl) for lvl in levels)
         estimate = inspector.estimate()
         steps = self._build_steps(levels)
-        graph_hash = self._compute_graph_hash(inspector.action_configs)
+        graph_hash = compute_graph_hash(inspector.action_configs)
 
-        # Header row: workflow name + ● validated pill + graph hash on right
         self.console.print()
-        self._print_title_row(self.agent_name, graph_hash)
+        render_title_row(self.console, self.agent_name, validated=True, graph_hash=graph_hash)
         self.console.print()
 
         # Stat cards row — 4 equal-width cards in a borderless grid.
@@ -229,28 +237,6 @@ class InspectCommand(BaseInspectCommand):
 
     # ── Header helpers ────────────────────────────────────────────────
 
-    def _print_title_row(self, name: str, graph_hash: str) -> None:
-        """Workflow name + status pill on the left, graph hash on the right.
-
-        Padded to terminal width so the hash hits the right edge.
-        """
-        from rich.text import Text
-
-        width = self.console.width or 100
-        left = Text()
-        left.append(f"{name}", style="bold bright_white")
-        left.append("   ")
-        left.append("● validated", style="bold black on rgb(108,168,138)")
-        right = Text("graph hash ", style="dim")
-        right.append(graph_hash, style="dim bright_white")
-
-        pad = max(width - left.cell_len - right.cell_len, 2)
-        line = Text()
-        line.append(left)
-        line.append(" " * pad)
-        line.append(right)
-        self.console.print(line)
-
     @staticmethod
     def _stat_card(value: str, label: str, value_style: str):
         """A small panel: big bold number + dim label below."""
@@ -261,24 +247,6 @@ class InspectCommand(BaseInspectCommand):
         number = Text(value, style=value_style, justify="left")
         sub = Text(label, style="dim", justify="left")
         return Panel(Group(number, sub), border_style="rgb(60,75,90)", padding=(1, 2))
-
-    @staticmethod
-    def _compute_graph_hash(action_configs: dict) -> str:
-        """Short, stable identifier — same configs always hash the same.
-
-        Hash of action names + their direct deps. Display as `XXXX·XXXX`
-        like a short git SHA, gives the user something to recognise.
-        """
-        import hashlib
-
-        payload_parts = []
-        for name in sorted(action_configs):
-            deps = action_configs[name].get("dependencies") or []
-            if isinstance(deps, str):
-                deps = [deps]
-            payload_parts.append(f"{name}:{','.join(sorted(deps))}")
-        digest = hashlib.sha256("|".join(payload_parts).encode()).hexdigest()
-        return f"{digest[:4]}·{digest[4:8]}"
 
     # ── Step rendering (cards / pills / chains) ──────────────────────
 
@@ -300,17 +268,17 @@ class InspectCommand(BaseInspectCommand):
 
         if step["kind"] == "parallel":
             collapsed = self._collapse_version_groups(step["actions"])
-            pill_row = Text()
-            for i, name in enumerate(collapsed):
-                if i > 0:
-                    pill_row.append("   ")
-                pill_row.append_text(self._action_pill(name))
             header = Text(
                 f"⫻ FAN-OUT · {len(step['actions'])} PARALLEL CALLS",
                 style="bold yellow",
             )
+            # Compute the room available inside the card so pills wrap
+            # at boundaries instead of mid-name (which breaks Rich's
+            # background-color block in mid-word wrap).
+            body_width = max((self.console.width or 100) - 14, 30)
+            pill_rows = self._parallel_pill_rows(collapsed, body_width)
             body = Panel(
-                Group(header, Text(""), pill_row),
+                Group(header, Text(""), *pill_rows),
                 border_style="rgb(60,120,100)",
                 padding=(0, 1),
                 expand=False,
@@ -349,6 +317,30 @@ class InspectCommand(BaseInspectCommand):
         pill.append(" ● ", style="rgb(108,168,138) on rgb(28,52,46)")
         pill.append(f"{name} ", style="bold rgb(180,220,200) on rgb(28,52,46)")
         return pill
+
+    def _parallel_pill_rows(self, actions: list[str], max_width: int) -> list:
+        """Render parallel-group pills wrapping at pill boundaries.
+
+        Returns one Text per visual row. Each pill keeps its complete
+        background-color block intact (Rich's default word-wrap would
+        split a pill mid-name and leave a half-coloured chip).
+        """
+        from rich.text import Text
+
+        rows: list[Text] = []
+        current = Text()
+        for name in actions:
+            pill_cell_len = len(name) + 4  # ` ● name `
+            sep_cell_len = 3 if current.cell_len else 0
+            if current.cell_len and current.cell_len + sep_cell_len + pill_cell_len > max_width:
+                rows.append(current)
+                current = Text()
+            elif current.cell_len:
+                current.append("   ")
+            current.append_text(self._action_pill(name))
+        if current.cell_len:
+            rows.append(current)
+        return rows
 
     def _chain_pills(self, actions: list[str]):
         """Render a serial chain as pill → pill → pill, wrapping at

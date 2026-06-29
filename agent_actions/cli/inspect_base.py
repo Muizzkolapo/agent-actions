@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
+from rich.text import Text
 
 from agent_actions.config.project_paths import ProjectPaths
 from agent_actions.errors import ConfigurationError
@@ -17,6 +18,70 @@ if TYPE_CHECKING:
     from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
+
+
+def render_title_row(
+    console: Console,
+    subject: str,
+    *,
+    section: str | None = None,
+    validated: bool = False,
+    graph_hash: str | None = None,
+) -> None:
+    """Shared title-row renderer for every `agac inspect` command.
+
+    Format:  `<subject>   <suffix>` left-aligned with no leading
+    indent; optional graph-hash flushed right.
+
+    The suffix is exactly one of:
+      - a status pill (` ● validated `, mint-on-darker-mint) when
+        ``validated=True``
+      - a dim section label (e.g. ``dependency model``) when
+        ``section`` is given
+      - nothing
+
+    Standardising this keeps the visual language consistent across
+    the inspect family.
+    """
+    width = console.width or 100
+    left = Text()
+    left.append(subject, style="bold bright_white")
+    if validated:
+        left.append("   ")
+        left.append("● validated", style="bold black on rgb(108,168,138)")
+    elif section:
+        left.append("   ")
+        left.append(section, style="dim")
+
+    if graph_hash:
+        right = Text("graph hash ", style="dim")
+        right.append(graph_hash, style="dim bright_white")
+        pad = max(width - left.cell_len - right.cell_len, 2)
+        line = Text()
+        line.append(left)
+        line.append(" " * pad)
+        line.append(right)
+        console.print(line)
+    else:
+        console.print(left)
+
+
+def compute_graph_hash(action_configs: dict) -> str:
+    """Short, stable identifier — same configs always hash the same.
+
+    Hash of action names + their direct deps. Display as `XXXX·XXXX`
+    like a short git SHA, gives the user something to recognise.
+    """
+    import hashlib
+
+    payload_parts = []
+    for name in sorted(action_configs):
+        deps = action_configs[name].get("dependencies") or []
+        if isinstance(deps, str):
+            deps = [deps]
+        payload_parts.append(f"{name}:{','.join(sorted(deps))}")
+    digest = hashlib.sha256("|".join(payload_parts).encode()).hexdigest()
+    return f"{digest[:4]}·{digest[4:8]}"
 
 
 class BaseInspectCommand:

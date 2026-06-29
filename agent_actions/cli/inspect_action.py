@@ -80,7 +80,11 @@ class ActionCommand(BaseInspectCommand):
             action_config, action_schema=self._get_action_schema(self.action_name)
         )
 
-        self.console.print(f"\n  [bold cyan]{self.action_name}[/bold cyan]\n")
+        from agent_actions.cli.inspect_base import render_title_row
+
+        self.console.print()
+        render_title_row(self.console, self.action_name, section="action detail")
+        self.console.print()
 
         fields: list[tuple[str, object]] = [
             ("Kind", kind),
@@ -269,9 +273,11 @@ class ContextCommand(BaseInspectCommand):
         namespaces = context_data["namespaces"]
         scope = context_data["context_scope"]
 
-        self.console.print(
-            f"\n  [bold cyan]{action_name}[/bold cyan]   [dim]template context[/dim]\n"
-        )
+        from agent_actions.cli.inspect_base import render_title_row
+
+        self.console.print()
+        render_title_row(self.console, action_name, section="template context")
+        self.console.print()
 
         # Scope on its own indented block — avoids the awkward
         # mid-line wrap that happens when observe/drop lists are long.
