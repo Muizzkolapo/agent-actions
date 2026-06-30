@@ -231,10 +231,12 @@ context_scope:
 
 ## Debugging
 
-Inspect expanded version actions. `agac inspect graph` prints the dependency graph with each version's expanded node IDs:
+`agac inspect -a workflow_name` shows the dependency graph with version
+groups collapsed (`foo (×3)`). To see the per-variant configuration of a
+specific expansion, drill into one:
 
 ```bash
-agac inspect graph -a workflow_name
+agac inspect action -a workflow_name foo_1     # full config + rendered prompt for variant 1
 ```
 
 Enable prompt debug to see rendered prompts per iteration:

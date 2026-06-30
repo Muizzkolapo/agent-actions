@@ -32,7 +32,7 @@ class TestSaveFailedRenderPropagatesOSError:
         read_only_dir.chmod(0o755)
 
     def test_successful_save_returns_path_message(self, tmp_path):
-        """When save succeeds, returns message with file path and debug command."""
+        """When save succeeds, returns message with file path."""
         with patch(
             "agent_actions.prompt.render_workflow.resolve_project_root",
             return_value=tmp_path,
@@ -40,7 +40,6 @@ class TestSaveFailedRenderPropagatesOSError:
             result = _save_failed_render("bad yaml", "my_workflow", project_root=tmp_path)
 
         assert "my_workflow_failed.yml" in result
-        assert "agac inspect -a my_workflow --yaml" in result
 
 
 class TestRenderPipelineYamlParseErrorWithSaveFailure:

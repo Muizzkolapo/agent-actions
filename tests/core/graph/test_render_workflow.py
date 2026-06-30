@@ -64,19 +64,6 @@ class TestFailedRenderCache:
         assert ".agent-actions/cache/rendered_workflows" in error_message
         assert "broken_workflow_failed.yml" in error_message
 
-    def test_error_message_suggests_render_command(self):
-        """Test that error message suggests using inspect --yaml command."""
-        yaml_file = Path(self.temp_dir) / "test_workflow.yml"
-        yaml_file.write_text("\nactions:\n  - : broken\n")
-        with pytest.raises(ConfigurationError) as exc_info:
-            render_pipeline_with_templates(
-                yaml_path=str(yaml_file),
-                templates_folder=str(self.templates_folder),
-                project_root=self.project_root,
-            )
-        error_message = str(exc_info.value)
-        assert "agac inspect -a test_workflow --yaml" in error_message
-
     def test_cache_directory_created_automatically(self):
         """Test that cache directory is created if it doesn't exist."""
         cache_dir = self.project_root / ".agent-actions" / "cache" / "rendered_workflows"

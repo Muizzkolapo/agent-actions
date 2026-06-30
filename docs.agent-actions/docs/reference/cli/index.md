@@ -132,7 +132,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 
 | Command | Description |
 |---------|-------------|
-| [`inspect`](./inspect) | Preflight + introspection — graph, `--validate`, `--dry-run`, `--yaml` (replaces `compile`/`render`) |
+| [`inspect`](./inspect) | Preflight + introspection — graph + validation with `dependencies` / `action` / `context` drill-downs |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |

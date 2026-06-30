@@ -153,50 +153,6 @@ class TestHandlesUserErrorsExceptionRouting:
         assert "already shown" not in result.output
 
 
-class TestInspectNotFoundExitCode:
-    """Inspect 'not found' paths must produce exit code 1, not 0."""
-
-    def test_dependencies_action_filter_not_found_raises(self):
-        """DependenciesCommand raises ClickException when action filter doesn't match."""
-        from agent_actions.cli.inspect import DependenciesCommand
-
-        cmd = DependenciesCommand.__new__(DependenciesCommand)
-        cmd.agent_name = "test"
-        cmd.action_filter = "nonexistent"
-        cmd.json_output = False
-        cmd.console = MagicMock()
-
-        # Mock _load_inspector and _analyze_dependencies
-        mock_inspector = MagicMock()
-        mock_inspector.execution_order = []
-        cmd._load_inspector = MagicMock(return_value=mock_inspector)
-        cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
-
-        import click
-
-        with pytest.raises(click.ClickException, match="nonexistent"):
-            cmd.execute()
-
-    def test_dependencies_json_mode_also_filters(self):
-        """Action filter applies in JSON mode too (not only rich mode)."""
-        from agent_actions.cli.inspect import DependenciesCommand
-
-        cmd = DependenciesCommand.__new__(DependenciesCommand)
-        cmd.agent_name = "test"
-        cmd.action_filter = "nonexistent"
-        cmd.json_output = True
-        cmd.console = MagicMock()
-
-        mock_inspector = MagicMock()
-        cmd._load_inspector = MagicMock(return_value=mock_inspector)
-        cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
-
-        import click
-
-        with pytest.raises(click.ClickException, match="nonexistent"):
-            cmd.execute()
-
-
 class TestReadOnlyCommandsNoMutation:
     """Read-only commands must not create directories."""
 

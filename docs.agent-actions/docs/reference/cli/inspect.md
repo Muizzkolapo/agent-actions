@@ -1,175 +1,58 @@
 ---
 title: inspect Commands
-description: Unified workflow preflight and introspection
+description: Workflow preflight and introspection
 sidebar_position: 6
 ---
 
 # inspect Commands
 
-`agac inspect` is the single preflight and introspection surface. Use it
-to render the rendered workflow YAML, validate it, dry-run estimates, or
-explore the dependency graph — without touching storage or the LLM.
+`agac inspect` is the read-only introspection surface for a workflow. The
+default form runs preflight validation and renders a dependency graph;
+two subcommands drill into a single action.
 
 ```bash
-agac inspect -a <workflow> [--yaml|--validate|--dry-run] [--json]
-agac inspect <subcommand> -a <workflow> [options]
+agac inspect -a <workflow>                          # default: graph + validation
+agac inspect action  -a <workflow> ACTION [options]
+agac inspect context -a <workflow> ACTION [options]
 ```
 
 :::tip Run from Anywhere
 You can run inspect commands from any subdirectory within your project.
 :::
 
-## Default behavior (no flag)
+## Default behavior
 
-Shows the dependency graph with validation status:
+`agac inspect -a <workflow>` runs preflight validation and shows the
+dependency graph. Exits 0 on success, non-zero on validation error.
 
 ```bash
 $ agac inspect -a review_analyzer
 
-✅ Workflow: review_analyzer
+review_analyzer  ✅ validated                                         a1b2·c3d4
 
-Actions
-├── Level 1
-│   └── fetch_reviews (observe)
-├── Level 2
-│   ├── analyze_sentiment (drop=2)
-│   └── extract_topics (drop=2)
-└── Level 3
-    ├── generate_summary (observe)
-    └── write_report (passthrough=1)
+ 5  ACTIONS    │  3  LEVELS    │  4  LLM CALLS  │  2  GUARDED
+
+DEPENDENCY GRAPH ─────────────────────────── TOP-DOWN EXECUTION
+
+01    ●─  ● fetch_reviews
+02-03 ●─  ⫻ FAN-OUT · 2 PARALLEL CALLS
+            ● analyze_sentiment    ● extract_topics
+04-05 ●─  ● generate_summary  →  ● write_report
 ```
 
-## Flags
-
-### `--yaml`
-
-Output the rendered workflow YAML. Replaces the removed `agac compile`
-and `agac render` commands.
-
-```bash
-$ agac inspect -a my_workflow --yaml > rendered.yml
-```
-
-The output reflects template expansion, prompt resolution, schema
-inlining, and version expansion — i.e. the rendered configuration as
-the framework parses it.
-
-:::tip `--yaml` skips validation and runtime transforms
-For speed, `--yaml` does not run preflight checks — a workflow with a
-broken guard or missing schema will still render. The output also does
-NOT include runtime-only transforms such as:
-
-- **Guard-nullable schema fixes** — at run time the framework adds
-  `nullable: true` to fields guarded against null. The renderer leaves
-  the original schema alone.
-- **Unreachable-drop pruning** — `context_scope.drop` entries that
-  target namespaces outside an action's dependency chain are silently
-  stripped at run time. They survive into `--yaml` output.
-
-If you want validation as well, run
-`agac inspect -a <wf> --validate && agac inspect -a <wf> --yaml`, or
-use `--dry-run` for the combined view (which DOES reflect the
-post-pruning state).
-
-`--yaml` and `--json` cannot be combined — `--yaml` always emits raw
-YAML.
-:::
-
-### `--validate`
-
-Validation report only (pass/fail). Exits 0 on success, non-zero on
-failure. Useful in CI:
-
-```bash
-$ agac inspect -a my_workflow --validate
-✅ my_workflow: validation passed
-
-$ agac inspect -a broken_workflow --validate
-❌ broken_workflow: validation failed
-schema: Action 'analyze_sentiment': Could not load schema 'sentiment.yml'
-```
-
-### `--dry-run`
-
-Full preflight: dependency graph + validation + resource estimate.
-
-```bash
-$ agac inspect -a my_workflow --dry-run
-Preflight: my_workflow
-
-Execution levels:
-  Level 1: fetch_reviews
-  Level 2: analyze_sentiment, extract_topics
-  Level 3: generate_summary, write_report
-
-Context scope:
-  fetch_reviews     → {'observe': [...], 'drop': [...]}
-  analyze_sentiment → {'observe': [...], 'drop': [...]}
-
-Estimate: 5 actions, 4 LLM calls, 2 guarded
-```
-
-The command exits 0 on success and non-zero if any preflight check
-fails — no separate "passed" footer is printed.
-
-### `--json`
-
-Output JSON instead of rich text. Combines with the other modes.
-
-```bash
-$ agac inspect -a my_workflow --json
-{
-  "workflow": "my_workflow",
-  "status": "ok",
-  "execution_levels": [["fetch_reviews"], ["analyze_sentiment", "extract_topics"]],
-  "context_scope": { "fetch_reviews": { "scope": "observe" }, ... }
-}
-```
-
-`status` is `"ok"` on success and `"failed"` on validation error
-(consistent across `--validate`, `--dry-run`, and the default mode), so
-CI scripts can branch on a single key.
-
-:::tip Validation never hits the network
-The bare `agac inspect` (and `--validate`, `--dry-run`) runs preflight
-with `verify_keys=False`, so the LLM-vendor key-probing endpoint is
-skipped. Use `agac run --verify-keys` if you want to confirm keys are
-live.
-:::
-
-### Flag mutual exclusion
-
-`--yaml`, `--validate`, and `--dry-run` are mutually exclusive — pass
-exactly one (or none for the default graph). `--json` combines with any
-of them.
+Validation runs as part of the load, so a broken workflow surfaces a
+non-zero exit and a formatted error without you having to opt in to a
+separate flag.
 
 ## Subcommands
 
-The original deep-dive subcommands are still available unchanged.
-
 | Subcommand | Description |
 |------------|-------------|
-| `dependencies` | Dependency analysis table |
-| `graph` | Visual dependency tree (alternative to default) |
-| `action` | Detailed configuration for a single action |
+| `action`  | Detailed configuration for a single action |
 | `context` | Template-variable debug view for a single action |
 
-### inspect dependencies
-
-```bash
-agac inspect dependencies -a <workflow> [--action <name>] [--json]
-```
-
-Shows input sources (execution dependencies) and context sources
-(auto-inferred from `context_scope`) per action.
-
-### inspect graph
-
-```bash
-agac inspect graph -a <workflow> [--json]
-```
-
-Identical to the default `agac inspect -a <workflow>` view.
+Each subcommand accepts its own `--json` flag for machine-readable
+output.
 
 ### inspect action
 
@@ -177,8 +60,8 @@ Identical to the default `agac inspect -a <workflow>` view.
 agac inspect action -a <workflow> <action_name> [--json]
 ```
 
-Configuration, dependencies, context scope, and resolved output fields
-for one action.
+Configuration, dependencies, context scope, rendered prompt template,
+output schema, LLM settings, and downstream consumers for one action.
 
 ### inspect context
 
@@ -199,45 +82,26 @@ action.
 
 | Code | Meaning |
 |------|---------|
-| 0 | Inspection OK (graph shown, validation passed or skipped) |
-| 1 | Validation failed (`--validate` / `--dry-run`), or other CLI error |
+| 0 | Inspection OK (graph shown, validation passed) |
+| 1 | Validation failed or other CLI error |
 | 2 | Bad flags or missing required option |
-
-## Migration from `agac compile` / `agac render`
-
-```bash
-# Before (removed)
-agac compile -a my_workflow > rendered.yml
-agac render  -a my_workflow > rendered.yml
-
-# After
-agac inspect -a my_workflow --yaml > rendered.yml
-```
-
-The `-t/--template-dir` and `--create-dirs` flags from the old commands
-have no equivalent under `agac inspect` — introspection is read-only, so
-it never creates directories. If you depended on `--create-dirs`,
-`agac init` is the right command for first-time scaffolding.
 
 ## Common patterns
 
 ### Dependency debugging
 
+The default `agac inspect -a my_workflow` shows the full dependency
+graph with parallel fan-outs. For per-action drill-down with inputs,
+context, schema, and rendered prompt:
+
 ```bash
 agac inspect action -a my_workflow problematic_action
-agac inspect graph  -a my_workflow
-```
-
-### Execution order
-
-```bash
-agac inspect -a my_workflow --json | jq '.execution_levels'
 ```
 
 ### Validate before run (in CI)
 
 ```bash
-agac inspect -a my_workflow --validate || exit 1
+agac inspect -a my_workflow || exit 1
 agac run     -a my_workflow
 ```
 

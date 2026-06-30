@@ -10,8 +10,6 @@ from rich.console import Console
 from agent_actions.cli.inspect import (
     ActionCommand,
     ContextCommand,
-    DependenciesCommand,
-    GraphCommand,
 )
 from agent_actions.models.action_schema import (
     ActionKind,
@@ -111,70 +109,6 @@ def _new_cmd(cls, **extra_attrs):
     for k, v in extra_attrs.items():
         setattr(cmd, k, v)
     return cmd
-
-
-# ── DependenciesCommand ─────────────────────────────────────────────
-
-
-class TestDependenciesCommandOutput:
-    def test_output_json(self, capsys):
-        cmd = _new_cmd(DependenciesCommand, action_filter=None)
-        dep_info = _make_dependency_info()
-        cmd._output_json(dep_info)
-
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        assert data["workflow"] == "test_wf"
-        assert "extract" in data["actions"]
-        assert "summarize" in data["actions"]
-
-    def test_output_rich_renders_table(self):
-        cmd = _new_cmd(DependenciesCommand, action_filter=None)
-        dep_info = _make_dependency_info()
-        execution_order = ["extract", "summarize"]
-        inspector = _make_workflow_mock()
-
-        cmd._output_rich(dep_info, execution_order, inspector)
-
-        output = cmd.console.file.getvalue()
-        assert "extract" in output
-        assert "summarize" in output
-        # "source data" is the label for actions with no inputs (type=Source)
-        assert "source data" in output
-
-
-# ── GraphCommand ─────────────────────────────────────────────────────
-
-
-class TestGraphCommandOutput:
-    def test_output_json(self, capsys):
-        cmd = _new_cmd(GraphCommand)
-        wf = _make_workflow_mock()
-        dep_info = _make_dependency_info()
-        execution_order = ["extract", "summarize"]
-
-        cmd._output_json(wf, dep_info, execution_order)
-
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        assert data["workflow"] == "test_wf"
-        assert data["execution_order"] == ["extract", "summarize"]
-        assert "extract" in data["actions"]
-        assert data["actions"]["extract"]["type"] == "Source"
-        assert "output_fields" in data["actions"]["summarize"]
-
-    def test_output_rich_renders_tree(self):
-        cmd = _new_cmd(GraphCommand)
-        wf = _make_workflow_mock()
-        dep_info = _make_dependency_info()
-        execution_order = ["extract", "summarize"]
-
-        cmd._output_rich(wf, dep_info, execution_order)
-
-        output = cmd.console.file.getvalue()
-        assert "extract" in output
-        assert "summarize" in output
-        assert "source data" in output
 
 
 # ── ActionCommand ────────────────────────────────────────────────────

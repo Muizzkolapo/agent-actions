@@ -10,23 +10,16 @@ Beyond running agentic workflows, `agac` provides commands for project setup, de
 
 ## render / compile (removed)
 
-`agac render` and `agac compile` have been consolidated into
-[`agac inspect --yaml`](./inspect#--yaml). The new command produces the
-same fully-resolved YAML (Jinja2 expanded, prompts resolved, schemas
-inlined, versions expanded), without requiring a separate command surface.
+`agac render` and `agac compile` are no longer available as standalone
+commands. Rendering happens implicitly during preflight — when
+[`agac inspect`](./inspect) loads a workflow it Jinja2-expands templates,
+resolves prompts, inlines schemas, and expands versions. A rendering
+failure surfaces a non-zero exit and writes the partial YAML to
+`.agent-actions/cache/rendered_workflows/<workflow>_failed.yml` for
+debugging.
 
-```bash
-# Before
-agac render  -a my_workflow > rendered.yml
-agac compile -a my_workflow > rendered.yml
-
-# After
-agac inspect -a my_workflow --yaml > rendered.yml
-```
-
-The `-t/--template-dir` and `--create-dirs` flags are not carried over —
-`agac inspect` is read-only and never creates directories. Use
-[`agac init`](#init) when you need fresh scaffolding.
+If you need fresh scaffolding (the prior `--create-dirs` use case), use
+[`agac init`](#init).
 
 ## init
 

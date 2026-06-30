@@ -126,7 +126,7 @@ actions:
 ```
 
 :::tip Schema Compilation
-During the render step, schema references are **inlined** into the workflow. This means `schema: candidate_facts_list` gets replaced with the actual schema content from the matching file (`candidate_facts_list.yml`, `.yaml`, or `.json`). Use `agac inspect -a workflow_name --yaml` to see the compiled output with all schemas inlined.
+During the render step, schema references are **inlined** into the workflow. This means `schema: candidate_facts_list` gets replaced with the actual schema content from the matching file (`candidate_facts_list.yml`, `.yaml`, or `.json`).
 :::
 
 ## Inline Schemas

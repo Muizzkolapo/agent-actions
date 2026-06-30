@@ -259,8 +259,6 @@ RetryCommand.execute()
 
 ```
 @click.group("inspect")
-  ├─ dependencies     ← DependenciesCommand (BaseInspectCommand)
-  ├─ graph            ← GraphCommand (BaseInspectCommand)
   ├─ action           ← ActionCommand (BaseInspectCommand)
   └─ context          ← ContextCommand (BaseInspectCommand)
 ```
@@ -365,8 +363,6 @@ BaseInspectCommand
   │  _get_input_fields(config)        ← context_scope observe/passthrough
   │  _get_action_type(inputs, ctx)    ← Source/Transform/Merge classification
   │
-  ├── DependenciesCommand   ← table of explicit + inferred deps per action
-  ├── GraphCommand          ← visual dependency graph (ASCII art)
   ├── ActionCommand         ← detailed view of a single action
   └── ContextCommand        ← context debug info for a single action
 ```
@@ -441,8 +437,6 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 | `schema.py` | `SchemaCommand` -- display input/output schemas per action |
 | `status.py` | `StatusCommand` -- read `.agent_status.json` |
 | `dispositions.py` | `DispositionsCommand` -- per-action disposition breakdown |
-| `inspect_deps.py` | `DependenciesCommand` -- dependency analysis table |
-| `inspect_graph.py` | `GraphCommand` -- visual dependency graph |
 | `inspect_action.py` | `ActionCommand` + `ContextCommand` -- action detail + context debug |
 
 ### Utility

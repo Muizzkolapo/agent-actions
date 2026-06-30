@@ -1,190 +1,44 @@
 """Inspect commands for the Agent Actions CLI.
 
-Unified preflight and introspection surface.
-
 Surface:
 
-    agac inspect -a <workflow>             # graph + validation status
-    agac inspect -a <workflow> --yaml      # rendered YAML
-    agac inspect -a <workflow> --validate  # validation report (pass/fail)
-    agac inspect -a <workflow> --dry-run   # graph + validation + estimate
-    agac inspect -a <workflow> --json      # JSON output (combines with above)
-
-    agac inspect graph     -a <workflow>
-    agac inspect deps      -a <workflow>
-    agac inspect action    -a <workflow> ACTION
-    agac inspect context   -a <workflow> ACTION
+    agac inspect -a <workflow>                 # graph + validation
+    agac inspect action  -a <workflow> ACTION  # action drill-down
+    agac inspect context -a <workflow> ACTION  # template variables
 """
 
 from __future__ import annotations
 
-import json as json_lib
 from pathlib import Path
 
 import click
+from rich.console import Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from agent_actions.cli.cli_decorators import _format_project_root_display, handles_user_errors
-from agent_actions.errors.base import AgentActionsError
+from agent_actions.cli.inspect_base import (
+    collapse_version_groups,
+    compute_graph_hash,
+    render_title_row,
+)
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.project_root import ensure_in_project
 
 from .inspect_action import ActionCommand, ContextCommand, action, context
 from .inspect_base import BaseInspectCommand
-from .inspect_deps import DependenciesCommand, dependencies
-from .inspect_graph import GraphCommand, graph
 
 
 class InspectCommand(BaseInspectCommand):
-    """Default ``agac inspect`` — graph + validation, or one of the flag modes."""
-
-    def __init__(
-        self,
-        agent: str,
-        user_code: str | None,
-        yaml_output: bool,
-        json_output: bool,
-        validate_only: bool,
-        dry_run: bool,
-    ):
-        super().__init__(agent, user_code, json_output)
-        self.yaml_output = yaml_output
-        self.validate_only = validate_only
-        self.dry_run = dry_run
+    """Default ``agac inspect`` — stat cards + dependency graph + validation."""
 
     def execute(self, project_root: Path | None = None) -> None:
-        if self.yaml_output:
-            inspector = WorkflowInspector(
-                agent_name=self.agent_name,
-                project_root=project_root,
-                user_code_path=self.user_code,
-            )
-            click.echo(inspector.render())
-            return
-
         inspector = self._load_inspector(project_root=project_root)
-
-        if self.validate_only:
-            self._output_validation(inspector)
-            return
-        if self.dry_run:
-            self._output_dry_run(inspector)
-            return
         self._output_graph_with_validation(inspector)
-
-    # ── --validate ───────────────────────────────────────────────────
-
-    def _output_validation(self, inspector: WorkflowInspector) -> None:
-        if self.json_output:
-            click.echo(
-                json_lib.dumps(
-                    {"workflow": self.agent_name, "status": "ok"},
-                    indent=2,
-                )
-            )
-            return
-        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
-
-        self.console.print()
-        render_title_row(
-            self.console,
-            self.agent_name,
-            validated=True,
-            graph_hash=compute_graph_hash(inspector.action_configs),
-        )
-
-    # ── --dry-run ────────────────────────────────────────────────────
-
-    def _output_dry_run(self, inspector: WorkflowInspector) -> None:
-        levels = inspector.get_levels()
-        scope = inspector.get_context_scope()
-        estimate = inspector.estimate()
-
-        if self.json_output:
-            click.echo(
-                json_lib.dumps(
-                    {
-                        "workflow": self.agent_name,
-                        "status": "ok",
-                        "execution_levels": levels,
-                        "context_scope": scope,
-                        "estimate": estimate,
-                    },
-                    indent=2,
-                )
-            )
-            return
-
-        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
-
-        self.console.print()
-        render_title_row(
-            self.console,
-            self.agent_name,
-            section="preflight report",
-            graph_hash=compute_graph_hash(inspector.action_configs),
-        )
-        self.console.print()
-        self.console.print(
-            f"[dim]{estimate['action_count']} actions in {len(levels)} levels  ·  "
-            f"{estimate['llm_calls']} LLM calls, {estimate['guarded_actions']} guarded[/dim]\n"
-        )
-
-        self.console.print("[bold]Execution levels[/bold]")
-        level_width = len(str(len(levels)))
-        for i, level in enumerate(levels, 1):
-            self.console.print(
-                f"  [dim]L{i:>{level_width}}[/dim]  {', '.join(level)}", soft_wrap=True
-            )
-
-        if scope:
-            self.console.print("\n[bold]Context scope[/bold] [dim](empty fields omitted)[/dim]")
-            for name, info in scope.items():
-                line = self._format_scope_line(name, info.get("scope"))
-                if line is not None:
-                    self.console.print(f"  {line}", soft_wrap=True)
-
-    @staticmethod
-    def _format_scope_line(action_name: str, action_scope: object) -> str | None:
-        """Render an action's context_scope on one line, skipping empty kinds."""
-        if isinstance(action_scope, str):
-            return f"[bold]{action_name}[/bold] [dim]→[/dim] {action_scope}"
-        if not isinstance(action_scope, dict):
-            return None
-        parts: list[str] = []
-        for kind in ("observe", "passthrough", "drop"):
-            items = action_scope.get(kind) or []
-            if not items:
-                continue
-            parts.append(f"[cyan]{kind}[/cyan]={', '.join(items)}")
-        if not parts:
-            return None
-        return f"[bold]{action_name}[/bold] [dim]→[/dim] {'; '.join(parts)}"
-
-    # ── default (no flags) ───────────────────────────────────────────
 
     def _output_graph_with_validation(self, inspector: WorkflowInspector) -> None:
         levels = inspector.get_levels()
-        scope = inspector.get_context_scope()
-
-        if self.json_output:
-            click.echo(
-                json_lib.dumps(
-                    {
-                        "workflow": self.agent_name,
-                        "status": "ok",
-                        "execution_levels": levels,
-                        "context_scope": scope,
-                    },
-                    indent=2,
-                )
-            )
-            return
-
-        from rich.text import Text
-
-        from agent_actions.cli.inspect_base import compute_graph_hash, render_title_row
-
-        action_count = sum(len(lvl) for lvl in levels)
         estimate = inspector.estimate()
         steps = self._build_steps(levels)
         graph_hash = compute_graph_hash(inspector.action_configs)
@@ -201,13 +55,11 @@ class InspectCommand(BaseInspectCommand):
         # Columns(equal=True) gives ragged inter-card gaps because Rich
         # left-aligns each card and distributes leftover columns
         # unevenly; Table.grid with 4 ratio-1 columns sits flush.
-        from rich.table import Table
-
         stats = Table.grid(expand=True, padding=(0, 1))
         for _ in range(4):
             stats.add_column(ratio=1, justify="left")
         stats.add_row(
-            self._stat_card(str(action_count), "ACTIONS", "bold cyan"),
+            self._stat_card(str(estimate["action_count"]), "ACTIONS", "bold cyan"),
             self._stat_card(str(len(levels)), "LEVELS", "bold bright_white"),
             self._stat_card(str(estimate["llm_calls"]), "LLM CALLS", "bold yellow"),
             self._stat_card(str(estimate["guarded_actions"]), "GUARDED", "bold bright_red"),
@@ -243,10 +95,6 @@ class InspectCommand(BaseInspectCommand):
 
     @staticmethod
     def _stat_card(value: str, label: str, value_style: str):
-        from rich.console import Group
-        from rich.panel import Panel
-        from rich.text import Text
-
         number = Text(value, style=value_style, justify="left")
         sub = Text(label, style="dim", justify="left")
         return Panel(Group(number, sub), border_style="rgb(60,75,90)", padding=(1, 2))
@@ -254,10 +102,6 @@ class InspectCommand(BaseInspectCommand):
     # ── Step rendering (cards / pills / chains) ──────────────────────
 
     def _render_step(self, start: int, end: int, step: dict[str, object]) -> None:
-        from rich.console import Group
-        from rich.panel import Panel
-        from rich.text import Text
-
         gutter = self._step_gutter(start, end)
 
         if step["kind"] == "parallel":
@@ -282,9 +126,7 @@ class InspectCommand(BaseInspectCommand):
         self.console.print(self._row(gutter, body))
 
     @staticmethod
-    def _step_gutter(start: int, end: int) -> object:
-        from rich.text import Text
-
+    def _step_gutter(start: int, end: int) -> Text:
         label_text = f"{start:02d}" if start == end else f"{start:02d}-{end:02d}"
         text = Text()
         text.append(f"{label_text:<6}", style="dim")
@@ -293,22 +135,22 @@ class InspectCommand(BaseInspectCommand):
         return text
 
     @staticmethod
-    def _action_pill(name: str):
-        from rich.text import Text
-
+    def _action_pill(name: str) -> Text:
         pill = Text()
         pill.append(" ● ", style="rgb(108,168,138) on rgb(28,52,46)")
         pill.append(f"{name} ", style="bold rgb(180,220,200) on rgb(28,52,46)")
         return pill
 
-    def _parallel_pill_rows(self, actions: list[str], max_width: int) -> list:
-        from rich.text import Text
-
+    def _parallel_pill_rows(self, actions: list[str], max_width: int) -> list[Text]:
         rows: list[Text] = []
         current = Text()
         for name in actions:
             pill_cell_len = len(name) + 4  # ` ● name `
             sep_cell_len = 3 if current.cell_len else 0
+            # Wrap when adding this pill would overflow — including the
+            # single-pill case where `current` is empty (a very long
+            # pill on a narrow terminal still needs its own row, not
+            # silent overflow of the panel border).
             if current.cell_len and current.cell_len + sep_cell_len + pill_cell_len > max_width:
                 rows.append(current)
                 current = Text()
@@ -319,12 +161,9 @@ class InspectCommand(BaseInspectCommand):
             rows.append(current)
         return rows
 
-    def _chain_pills(self, actions: list[str]):
+    def _chain_pills(self, actions: list[str]) -> Group:
         """Wrap chain pills at pill boundaries — Rich's word-wrap
         otherwise splits mid-name and leaves half-coloured chips."""
-        from rich.console import Group
-        from rich.text import Text
-
         # Terminal width minus the left gutter (8 chars).
         body_width = max((self.console.width or 100) - 10, 40)
 
@@ -356,7 +195,6 @@ class InspectCommand(BaseInspectCommand):
         Rich `Columns` doesn't align baselines for mixed Text + Panel,
         so use a Table with no borders and `vertical='middle'`.
         """
-        from rich.table import Table
 
         table = Table.grid(padding=(0, 0))
         table.add_column(no_wrap=True, vertical="top")
@@ -386,99 +224,32 @@ class InspectCommand(BaseInspectCommand):
         return steps
 
     def _collapse_version_groups(self, actions: list[str]) -> list[str]:
-        """`foo_1, foo_2, foo_3` → `foo (×3)`, but ONLY for actions the
-        runtime flagged as version expansions (`is_versioned_agent`).
-
-        Without that gate, two unrelated actions named `step_1` and
-        `step_2` get folded into one pill — hiding a real distinct
-        action from the dependency-graph view."""
         configs = getattr(self, "_inspector_action_configs", None) or {}
-
-        first_slot: dict[str, int] = {}
-        counts: dict[str, int] = {}
-        result: list[str | None] = []
-
-        for name in actions:
-            cfg = configs.get(name) or {}
-            base = cfg.get("version_base_name") if cfg.get("is_versioned_agent") else None
-            if base:
-                if base in first_slot:
-                    counts[base] += 1
-                else:
-                    first_slot[base] = len(result)
-                    counts[base] = 1
-                    result.append(name)
-            else:
-                result.append(name)
-
-        for base, count in counts.items():
-            if count >= 2:
-                result[first_slot[base]] = f"{base} (×{count})"
-
-        return [r for r in result if r is not None]
+        return collapse_version_groups(actions, configs)
 
 
 @click.group(name="inspect", invoke_without_command=True)
 @click.option("-a", "--agent", "agent_opt", required=False, help="Workflow name")
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
-@click.option(
-    "--yaml",
-    "yaml_output",
-    is_flag=True,
-    help="Output rendered YAML",
-)
-@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-@click.option(
-    "--validate",
-    "validate_only",
-    is_flag=True,
-    help="Validation report only (pass/fail)",
-)
-@click.option(
-    "--dry-run",
-    "dry_run",
-    is_flag=True,
-    help="Full preflight: graph + validate + estimate",
-)
 @click.pass_context
 @handles_user_errors("inspect")
 def inspect(
     ctx: click.Context,
     agent_opt: str | None,
     user_code: str | None,
-    yaml_output: bool,
-    json_output: bool,
-    validate_only: bool,
-    dry_run: bool,
 ) -> None:
-    """Inspect workflow structure, data flow, and validation status.
+    """Inspect workflow structure and validation status.
 
-    Default (no flags): dependency graph with validation status.
+    Default: dependency graph with validation status.
 
     \b
     Examples:
-        agac inspect -a my_workflow              # graph + validation
-        agac inspect -a my_workflow --yaml       # rendered YAML
-        agac inspect -a my_workflow --validate   # validation pass/fail
-        agac inspect -a my_workflow --dry-run    # full preflight report
-        agac inspect -a my_workflow --json       # JSON output
+        agac inspect -a my_workflow
+        agac inspect action  -a my_workflow extract_facts
+        agac inspect context -a my_workflow extract_facts
     """
-    # Mutex checks must precede subcommand routing — otherwise the early
-    # return below silently drops group flags into a subcommand path that
-    # ignores them.
-    flag_count = sum([yaml_output, validate_only, dry_run])
-    if flag_count > 1:
-        raise click.UsageError("Only one of --yaml, --validate, --dry-run may be used at a time.")
-    if yaml_output and json_output:
-        raise click.UsageError("--yaml and --json cannot be combined; --yaml emits raw YAML.")
-    if ctx.invoked_subcommand is not None and (yaml_output or validate_only or dry_run):
-        raise click.UsageError(
-            "--yaml, --validate, and --dry-run apply to the default "
-            "`agac inspect -a <wf>` form only — do not combine them with a subcommand."
-        )
-
     # ``default_map`` forwards group-level ``-a`` / ``-u`` to the
-    # subcommand so ``agac inspect -a foo graph`` works (subcommands
+    # subcommand so ``agac inspect -a foo action <name>`` works (subcommands
     # still mark ``-a`` required, so missing-option errors fire as before).
     if ctx.invoked_subcommand is not None:
         defaults: dict[str, str] = {}
@@ -502,52 +273,19 @@ def inspect(
             "Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage."
         )
 
-    cmd = InspectCommand(
-        agent=agent_opt,
-        user_code=user_code,
-        yaml_output=yaml_output,
-        json_output=json_output,
-        validate_only=validate_only,
-        dry_run=dry_run,
-    )
-    # --json catches every AgentActionsError (not just preflight) so CI
-    # scripts parsing stdout see ``{status: failed, ...}`` for missing
-    # workflows, config errors, or a missing project root too.
-    try:
-        project_root = ensure_in_project()
-        # Only print the project-root banner when there's something to
-        # learn from it — running from a sub-directory of the project. If
-        # cwd == project_root the banner just shows "." which is noise.
-        display = _format_project_root_display(project_root)
-        if display != ".":
-            click.echo(f"\U0001f4c1 Project root: {display}", err=True)
-        cmd.execute(project_root=project_root)
-    except AgentActionsError as exc:
-        if not json_output:
-            raise
-        click.echo(
-            json_lib.dumps(
-                {
-                    "workflow": cmd.agent_name,
-                    "status": "failed",
-                    "error": str(exc),
-                },
-                indent=2,
-            )
-        )
-        raise click.exceptions.Exit(1) from exc
+    project_root = ensure_in_project()
+    display = _format_project_root_display(project_root)
+    if display != ".":
+        click.echo(f"\U0001f4c1 Project root: {display}", err=True)
+    InspectCommand(agent=agent_opt, user_code=user_code).execute(project_root=project_root)
 
 
-inspect.add_command(dependencies)
-inspect.add_command(graph)
 inspect.add_command(action)
 inspect.add_command(context)
 
 __all__ = [
     "inspect",
     "BaseInspectCommand",
-    "DependenciesCommand",
-    "GraphCommand",
     "ActionCommand",
     "ContextCommand",
     "InspectCommand",

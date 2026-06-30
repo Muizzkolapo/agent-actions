@@ -64,6 +64,35 @@ def render_title_row(
         console.print(line)
 
 
+def collapse_version_groups(actions: list[str], action_configs: dict) -> list[str]:
+    """`foo_1, foo_2, foo_3` → `foo (×3)`, but ONLY when the runtime flagged
+    the actions as version expansions (`is_versioned_agent`). Without that
+    gate, two unrelated sibling actions named `step_1` / `step_2` get folded
+    into one display row — hiding a real distinct action."""
+    first_slot: dict[str, int] = {}
+    counts: dict[str, int] = {}
+    result: list[str | None] = []
+
+    for name in actions:
+        cfg = action_configs.get(name) or {}
+        base = cfg.get("version_base_name") if cfg.get("is_versioned_agent") else None
+        if base:
+            if base in first_slot:
+                counts[base] += 1
+            else:
+                first_slot[base] = len(result)
+                counts[base] = 1
+                result.append(name)
+        else:
+            result.append(name)
+
+    for base, count in counts.items():
+        if count >= 2:
+            result[first_slot[base]] = f"{base} (×{count})"
+
+    return [r for r in result if r is not None]
+
+
 def compute_graph_hash(action_configs: dict) -> str:
     """Short stable DAG identifier — same actions + deps → same hash."""
     import hashlib
@@ -86,7 +115,7 @@ def compute_graph_hash(action_configs: dict) -> str:
 class BaseInspectCommand:
     """Base class for inspect commands."""
 
-    def __init__(self, agent: str, user_code: str | None, json_output: bool):
+    def __init__(self, agent: str, user_code: str | None, json_output: bool = False):
         self.agent = agent
         self.agent_name = Path(agent).stem
         self.user_code = user_code
@@ -201,15 +230,3 @@ class BaseInspectCommand:
             return [f"(schema: {schema_name})"]
 
         return []
-
-    @staticmethod
-    def _get_input_fields(action_config: dict[str, Any]) -> list[str]:
-        fields = []
-        ctx = action_config.get("context_scope", {})
-        for field_ref in ctx.get("observe", []):
-            fields.append(f"{field_ref} (observe)")
-        for field_ref in ctx.get("passthrough", []):
-            fields.append(f"{field_ref} (passthrough)")
-        for field_ref in ctx.get("drop", []):
-            fields.append(f"{field_ref} (drop)")
-        return fields

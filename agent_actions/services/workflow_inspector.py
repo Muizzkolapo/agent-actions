@@ -18,7 +18,6 @@ from agent_actions.config.project_paths import (
     find_config_file,
 )
 from agent_actions.errors import WorkflowError
-from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.services.preflight_service import PreflightService
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
@@ -64,15 +63,6 @@ class WorkflowInspector:
     def config_path(self) -> Path:
         return self._config_path
 
-    def render(self) -> str:
-        """Fully-rendered YAML. Pre-preflight — runtime mutations (drop
-        pruning, guard-nullable fixes) are NOT applied."""
-        return render_pipeline_with_templates(
-            self._config_path,
-            self.paths.template_dir,
-            project_root=self.project_root,
-        )
-
     def load(self) -> dict[str, dict[str, Any]]:
         """Populate ``action_configs`` and ``execution_order``. Idempotent."""
         if self._loaded:
@@ -99,10 +89,7 @@ class WorkflowInspector:
         return self.action_configs
 
     def validate(self, verify_keys: bool = False) -> None:
-        """Run preflight, populate ``schema_service``, strip dead drops.
-
-        Drop-pruning mirrors the coordinator so ``--dry-run`` reports
-        the same post-preflight state ``agac run`` will see."""
+        """Run preflight, populate ``schema_service``, strip dead drops."""
         self.load()
         service = PreflightService(
             agent_name=self.agent_name,
@@ -150,23 +137,6 @@ class WorkflowInspector:
             if remaining:
                 levels.append(list(remaining))
             return levels
-
-    def get_context_scope(self) -> dict[str, dict[str, Any]]:
-        """Return per-action context_scope summary for ``--dry-run``."""
-        self.load()
-        result: dict[str, dict[str, Any]] = {}
-        for name, config in self.action_configs.items():
-            scope = config.get("context_scope", {}) or {}
-            if isinstance(scope, str):
-                summary: Any = scope
-            else:
-                summary = {
-                    "observe": list(scope.get("observe", []) or []),
-                    "passthrough": list(scope.get("passthrough", []) or []),
-                    "drop": list(scope.get("drop", []) or []),
-                }
-            result[name] = {"scope": summary}
-        return result
 
     def estimate(self) -> dict[str, Any]:
         """Estimate resource shape without executing any LLM calls."""
