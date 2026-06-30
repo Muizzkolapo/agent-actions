@@ -80,9 +80,19 @@ class ActionCommand(BaseInspectCommand):
 
         input_label = self._describe_input(info["input_sources"], info["context_sources"])
         reads = self._gather_reads(info)
-        writes = self._get_output_fields(
+        write_fields = self._get_output_fields(
             action_config, action_schema=self._get_action_schema(self.action_name)
         )
+        # Long writes lists balloon the header and duplicate the Output
+        # schema section below. Show the count + first few names as a
+        # preview; the full table is right there.
+        if len(write_fields) > 3:
+            preview = ", ".join(write_fields[:3])
+            writes: object = f"{len(write_fields)} fields  [dim]({preview}, …)[/dim]"
+        elif write_fields:
+            writes = ", ".join(write_fields)
+        else:
+            writes = None
         consumers = self._find_consumers(inspector) if inspector else []
         right_meta = self._position_meta(inspector) if inspector else None
 
@@ -148,12 +158,106 @@ class ActionCommand(BaseInspectCommand):
         schema = action_config.get("json_output_schema") or action_config.get("schema")
         if not schema or not isinstance(schema, dict):
             return
-        import yaml
 
-        self._print_section_rule("Schema")
-        rendered = yaml.dump(schema, sort_keys=False, default_flow_style=False, allow_unicode=True)
+        self.console.print()
+        self._print_section_rule("Output schema")
+        wrapper, inner, is_array = self._unwrap_object_schema(schema)
+
+        if wrapper and isinstance(inner, dict):
+            marker = "[]" if is_array else ""
+            shape = "array of objects, each with:" if is_array else "object with:"
+            self.console.print(
+                f"    [bold]{wrapper}[/bold][dim]{marker}[/dim]   [dim]{shape}[/dim]\n",
+                highlight=False,
+            )
+            self._print_schema_fields(inner)
+            return
+
+        properties = schema.get("properties") if isinstance(schema, dict) else None
+        if isinstance(properties, dict):
+            self._print_schema_fields(schema)
+            return
+
+        # Fallback: schema doesn't follow the standard {type:object,
+        # properties:{}} shape (e.g. inline custom-fields format). Render
+        # the raw YAML so nothing is hidden.
+        self._print_schema_yaml(schema)
+
+    @staticmethod
+    def _unwrap_object_schema(schema: dict[str, Any]) -> tuple[str | None, dict | None, bool]:
+        """For `{object, properties:{one: {array, items: {object, properties:...}}}}`
+        return `(one, inner_object, True)`. Single-property wrappers are
+        the common LLM-output shape (a top-level object whose only
+        property is the actual payload array)."""
+        if schema.get("type") != "object":
+            return None, None, False
+        props = schema.get("properties") or {}
+        if not isinstance(props, dict) or len(props) != 1:
+            return None, None, False
+        wrapper_name = next(iter(props))
+        wrapper = props[wrapper_name]
+        if not isinstance(wrapper, dict):
+            return None, None, False
+        if wrapper.get("type") == "array":
+            items = wrapper.get("items")
+            if isinstance(items, dict) and items.get("type") == "object":
+                return wrapper_name, items, True
+        if wrapper.get("type") == "object":
+            return wrapper_name, wrapper, False
+        return None, None, False
+
+    def _print_schema_fields(self, obj_schema: dict[str, Any]) -> None:
+        properties = obj_schema.get("properties") or {}
+        if not isinstance(properties, dict) or not properties:
+            return
+        required = set(obj_schema.get("required") or [])
+
+        name_w = max(len(name) for name in properties)
+        type_w = 0
+        for prop in properties.values():
+            if isinstance(prop, dict):
+                type_w = max(type_w, len(str(prop.get("type", "?"))))
+
+        # Reserve gutter + req + spacing + name + spacing + type + spacing
+        # then give the rest to the description. Truncate descriptions
+        # that would push past the terminal.
+        fixed = 4 + 2 + 2 + name_w + 2 + type_w + 2
+        desc_w = max((self.console.width or 100) - fixed, 20)
+
+        for name, prop in properties.items():
+            if not isinstance(prop, dict):
+                continue
+            is_req = name in required
+            type_str = str(prop.get("type", "?"))
+            desc = str(prop.get("description") or "").strip().replace("\n", " ")
+            if len(desc) > desc_w:
+                desc = desc[: desc_w - 1].rstrip() + "…"
+
+            req_marker = "[green]●[/green]" if is_req else "[dim]○[/dim]"
+            name_padded = (
+                f"[bold]{name}[/bold]" + " " * (name_w - len(name))
+                if is_req
+                else f"{name}" + " " * (name_w - len(name))
+            )
+            type_padded = f"[dim]{type_str}[/dim]" + " " * (type_w - len(type_str))
+            desc_part = f"  [dim]{desc}[/dim]" if desc else ""
+            self.console.print(
+                f"    {req_marker}  {name_padded}  {type_padded}{desc_part}",
+                soft_wrap=True,
+                highlight=False,
+            )
+
+        legend_parts = [f"[green]●[/green] required ({len(required)})"]
+        optional_count = len(properties) - len(required)
+        if optional_count > 0:
+            legend_parts.append(f"[dim]○[/dim] optional ({optional_count})")
+        self.console.print(f"\n    [dim]{' · '.join(legend_parts)}[/dim]")
+
+    def _print_schema_yaml(self, schema: dict[str, Any]) -> None:
+        import yaml
         from rich.syntax import Syntax
 
+        rendered = yaml.dump(schema, sort_keys=False, default_flow_style=False, allow_unicode=True)
         self.console.print(
             Syntax(
                 rendered,
@@ -217,17 +321,51 @@ class ActionCommand(BaseInspectCommand):
         return ", ".join(bits) or "yes"
 
     def _find_consumers(self, inspector) -> list[str]:
-        """Actions whose deps include this one, returned in execution order."""
+        """Downstream consumers, with the relationship type. An action can
+        read this one either as a hard dependency (``dependencies:``) or as
+        context-only (``context_scope.observe/passthrough``); both belong
+        in the blast radius.
+
+        Returns Rich-markup-ready strings like ``foo (×3)  (depends on)``
+        and ``bar  (reads as context)``. Sorted, version-collapsed."""
+        from agent_actions.cli.inspect_base import collapse_version_groups
+
         target = self.action_name
-        consumers: list[str] = []
+        dep_consumers: list[str] = []
+        ctx_consumers: list[str] = []
+
         for name in inspector.execution_order:
             cfg = inspector.action_configs.get(name, {})
             deps = cfg.get("dependencies") or cfg.get("depends_on") or []
             if isinstance(deps, str):
                 deps = [deps]
             if target in deps:
-                consumers.append(name)
-        return consumers
+                dep_consumers.append(name)
+                continue
+
+            # Context-only consumer: target appears in observe/passthrough
+            # but not in dependencies. Drop entries that already showed
+            # up as direct deps (above) so we don't double-count.
+            scope = cfg.get("context_scope") or {}
+            if isinstance(scope, dict):
+                refs = list(scope.get("observe") or []) + list(scope.get("passthrough") or [])
+                for ref in refs:
+                    if isinstance(ref, str) and ref.split(".", 1)[0] == target:
+                        ctx_consumers.append(name)
+                        break
+
+        configs = inspector.action_configs
+        dep_collapsed = collapse_version_groups(sorted(dep_consumers), configs)
+        ctx_collapsed = collapse_version_groups(sorted(ctx_consumers), configs)
+
+        # Render with a relationship tag. Direct deps first (they're the
+        # ones that move records downstream); context consumers second.
+        lines: list[str] = []
+        for name in dep_collapsed:
+            lines.append(f"{name}  [dim](depends on)[/dim]")
+        for name in ctx_collapsed:
+            lines.append(f"{name}  [dim](reads as context)[/dim]")
+        return lines
 
     def _position_meta(self, inspector) -> str | None:
         # "action N of M" — N is position in execution_order, M is the
@@ -259,11 +397,35 @@ class ActionCommand(BaseInspectCommand):
 
     @staticmethod
     def _gather_reads(info: dict[str, Any]) -> list[str]:
+        """One line per upstream namespace, with the fields observed from
+        it. Wildcards collapse to `*`. Long explicit lists show a count
+        + the names. Both are far easier to scan than the raw per-ref
+        flat list."""
         scope = info.get("context_scope") or {}
-        reads: list[str] = []
-        reads.extend(scope.get("observe") or [])
-        reads.extend(scope.get("passthrough") or [])
-        return reads
+        refs: list[str] = list(scope.get("observe") or []) + list(scope.get("passthrough") or [])
+        if not refs:
+            return []
+
+        grouped: dict[str, list[str]] = {}
+        for ref in refs:
+            if not isinstance(ref, str):
+                continue
+            ns, _, field = ref.partition(".")
+            grouped.setdefault(ns, []).append(field or "")
+
+        lines: list[str] = []
+        for ns in sorted(grouped):
+            fields = grouped[ns]
+            if any(f == "*" or f == "" for f in fields):
+                lines.append(f"{ns}: [dim]*[/dim]")
+                continue
+            fields = sorted(fields)
+            if len(fields) <= 5:
+                lines.append(f"{ns}: {', '.join(fields)}")
+            else:
+                head = ", ".join(fields[:5])
+                lines.append(f"{ns}: {head}, … [dim](+{len(fields) - 5} more)[/dim]")
+        return lines
 
     def _print_field(self, label: str, value: object, label_width: int) -> None:
         # highlight=False — otherwise Rich repaints the `4` in `gpt-4`.
@@ -387,6 +549,20 @@ class ContextCommand(BaseInspectCommand):
             "total_template_variables": sum(len(fs) for fs in namespaces.values()),
         }
 
+    @staticmethod
+    def _group_refs_by_namespace(refs: list[str]) -> dict[str, list[str]]:
+        """`["a.x", "a.y", "b.*"]` → `{"a": ["x", "y"], "b": ["*"]}`. Bare
+        names without a dot fall into a `""` namespace (rare; preserved
+        so nothing is hidden)."""
+        grouped: dict[str, list[str]] = {}
+        for ref in refs:
+            if not isinstance(ref, str):
+                continue
+            ns, _, field = ref.partition(".")
+            grouped.setdefault(ns, []).append(field if field else "")
+        # Sort namespaces and their field lists for stable display.
+        return {ns: sorted(fields) for ns, fields in sorted(grouped.items(), key=lambda kv: kv[0])}
+
     def _output_json(self, context_data: dict[str, Any]) -> None:
         click.echo(json_lib.dumps(context_data, indent=2))
 
@@ -406,16 +582,30 @@ class ContextCommand(BaseInspectCommand):
         )
         self.console.print()
 
-        # Scope as its own block — long observe/drop lists wrap awkwardly inline.
-        scope_lines: list[str] = []
-        for kind in ("observe", "passthrough", "drop"):
-            items = scope.get(kind) or []
-            if items:
-                scope_lines.append(f"    [cyan]{kind}[/cyan]: {', '.join(items)}")
-        if scope_lines:
+        # Scope as its own block. Group refs by namespace so a long
+        # observe list reads as "format_quiz_text: a, b, c, …" rather
+        # than 14 newline-wrapped `format_quiz_text.x` lines.
+        scope_kinds = [(kind, scope.get(kind) or []) for kind in ("observe", "passthrough", "drop")]
+        scope_kinds = [(k, refs) for k, refs in scope_kinds if refs]
+
+        if scope_kinds:
             self.console.print("  [bold]Scope applied:[/bold]")
-            for line in scope_lines:
-                self.console.print(line, soft_wrap=True)
+            for kind, refs in scope_kinds:
+                grouped = self._group_refs_by_namespace(refs)
+                count_label = (
+                    f"{len(refs)} ref{'s' if len(refs) != 1 else ''} "
+                    f"from {len(grouped)} namespace{'s' if len(grouped) != 1 else ''}"
+                )
+                self.console.print(f"    [cyan]{kind}[/cyan]  [dim]({count_label})[/dim]")
+                ns_width = max(len(n) for n in grouped) + 2
+                for ns, fields in grouped.items():
+                    field_str = ", ".join(fields) if fields else "[dim]*[/dim]"
+                    self.console.print(
+                        f"      [bright_white]{ns}[/bright_white]"
+                        + " " * (ns_width - len(ns))
+                        + field_str,
+                        soft_wrap=True,
+                    )
             self.console.print()
         else:
             self.console.print(
@@ -423,10 +613,19 @@ class ContextCommand(BaseInspectCommand):
             )
 
         if namespaces:
-            ns_width = max(len(ns) for ns in namespaces) + 2
-            for ns, fields in namespaces.items():
+            framework = {"source", "workflow", "version", "loop", "seed"}
+            # Sort: user-defined namespaces first (most relevant for the
+            # action being inspected), framework-provided at the bottom.
+            ordered = sorted(namespaces.items(), key=lambda kv: (kv[0] in framework, kv[0]))
+            ns_width = max(len(ns) for ns, _ in ordered) + 2
+            for ns, fields in ordered:
+                is_framework = ns in framework
+                colour = "bright_blue" if is_framework else "green"
+                tag = "  [dim italic](framework)[/dim italic]" if is_framework else ""
                 self.console.print(
-                    f"  [green]{ns}[/green]" + " " * (ns_width - len(ns)) + f"{', '.join(fields)}",
+                    f"  [{colour}]{ns}[/{colour}]"
+                    + " " * (ns_width - len(ns))
+                    + f"{', '.join(fields)}{tag}",
                     soft_wrap=True,
                 )
 
