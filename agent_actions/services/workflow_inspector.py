@@ -137,28 +137,3 @@ class WorkflowInspector:
             if remaining:
                 levels.append(list(remaining))
             return levels
-
-    def estimate(self) -> dict[str, Any]:
-        """Estimate resource shape without executing any LLM calls."""
-        self.load()
-        # Only `llm` is a real ActionKind value. The previous
-        # `{"llm", "prompt"}` set carried a dead member that could
-        # never match — `"prompt"` isn't in `ActionKind`.
-        llm_actions = [
-            name
-            for name, config in self.action_configs.items()
-            if str(self._kind_value(config.get("kind", "llm"))) == "llm"
-        ]
-        guarded_actions = [
-            name for name, config in self.action_configs.items() if config.get("guard")
-        ]
-        return {
-            "action_count": len(self.action_configs),
-            "llm_calls": len(llm_actions),
-            "guarded_actions": len(guarded_actions),
-        }
-
-    @staticmethod
-    def _kind_value(kind: Any) -> Any:
-        """Enum members stringify to ``ActionKind.LLM``; we want ``llm``."""
-        return getattr(kind, "value", kind)

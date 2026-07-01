@@ -22,27 +22,30 @@ You can run inspect commands from any subdirectory within your project.
 
 ## Default behavior
 
-`agac inspect -a <workflow>` runs preflight validation and shows the
-dependency graph. Exits 0 on success, non-zero on validation error.
+`agac inspect -a <workflow>` runs preflight validation and prints a
+validated action list — one ✓ per action, one `● validated` badge for
+the whole workflow. Exits 0 on success, non-zero on validation error.
 
 ```bash
 $ agac inspect -a review_analyzer
 
-review_analyzer  ✅ validated                                         a1b2·c3d4
+review_analyzer  ● validated                              5 actions
 
- 5  ACTIONS    │  3  LEVELS    │  4  LLM CALLS  │  2  GUARDED
-
-DEPENDENCY GRAPH ─────────────────────────── TOP-DOWN EXECUTION
-
-01    ●─  ● fetch_reviews
-02-03 ●─  ⫻ FAN-OUT · 2 PARALLEL CALLS
-            ● analyze_sentiment    ● extract_topics
-04-05 ●─  ● generate_summary  →  ● write_report
+  ✓  fetch_reviews
+  ✓  analyze_sentiment
+  ✓  extract_topics
+  ✓  generate_summary
+  ✓  write_report
 ```
 
-Validation runs as part of the load, so a broken workflow surfaces a
-non-zero exit and a formatted error without you having to opt in to a
-separate flag.
+Preflight covers action definitions, dependency cycles, `context_scope`
+references, template variables, schema structure, and guard syntax. If
+any static check fails you get a `PreFlightValidationError` naming the
+exact YAML field instead of the list.
+
+For structure, drill down with `inspect action <name>` (deps + prompt
++ schema + who reads this action) or `inspect context <name>`
+(template variables that are in scope).
 
 ## Subcommands
 

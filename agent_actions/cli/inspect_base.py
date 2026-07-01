@@ -26,15 +26,12 @@ def render_title_row(
     *,
     section: str | None = None,
     validated: bool = False,
-    graph_hash: str | None = None,
     right_meta: str | None = None,
 ) -> None:
     """Shared title row: `<subject>   <pill|section>            <right>`.
 
     Exactly one of ``validated`` (status pill) or ``section`` (dim label)
-    sets the left suffix; exactly one of ``graph_hash`` or ``right_meta``
-    fills the right column. Keeps every `agac inspect` view visually
-    consistent through one function."""
+    sets the left suffix; ``right_meta`` fills the right column."""
     width = console.width or 100
     left = Text()
     left.append(subject, style="bold bright_white")
@@ -45,13 +42,7 @@ def render_title_row(
         left.append("   ")
         left.append(section, style="dim")
 
-    if graph_hash:
-        right = Text("graph hash ", style="dim")
-        right.append(graph_hash, style="dim bright_white")
-    elif right_meta:
-        right = Text(right_meta, style="dim")
-    else:
-        right = None
+    right = Text(right_meta, style="dim") if right_meta else None
 
     if right is None:
         console.print(left)
@@ -91,25 +82,6 @@ def collapse_version_groups(actions: list[str], action_configs: dict) -> list[st
             result[first_slot[base]] = f"{base} (×{count})"
 
     return [r for r in result if r is not None]
-
-
-def compute_graph_hash(action_configs: dict) -> str:
-    """Short stable DAG identifier — same actions + deps → same hash."""
-    import hashlib
-
-    payload_parts = []
-    for name in sorted(action_configs):
-        cfg = action_configs[name]
-        # Codebase carries both `dependencies` and `depends_on`. Reading
-        # only one gives an "all empty deps" hash for the other convention,
-        # so two unrelated workflows could collide on a hash that doesn't
-        # actually describe their DAG.
-        deps = cfg.get("dependencies") or cfg.get("depends_on") or []
-        if isinstance(deps, str):
-            deps = [deps]
-        payload_parts.append(f"{name}:{','.join(sorted(deps))}")
-    digest = hashlib.sha256("|".join(payload_parts).encode()).hexdigest()
-    return f"{digest[:4]}·{digest[4:8]}"
 
 
 class BaseInspectCommand:
@@ -180,7 +152,11 @@ class BaseInspectCommand:
                 input_sources = explicit_deps
                 context_sources = []
 
-            context_scope = action_config.get("context_scope", {})
+            # `context_scope` may be `None` (`context_scope: null` in
+            # YAML) or a non-dict — guard so `.get` below doesn't blow up.
+            context_scope = action_config.get("context_scope") or {}
+            if not isinstance(context_scope, dict):
+                context_scope = {}
             has_primary_dep = "primary_dependency" in action_config
 
             result[action_name] = {

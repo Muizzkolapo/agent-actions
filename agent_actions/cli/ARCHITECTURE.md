@@ -264,9 +264,9 @@ RetryCommand.execute()
 ```
 
 All inherit from `BaseInspectCommand` which provides:
-- `_load_workflow()` with `auto_create=False`
+- `_load_inspector()` — read-only workflow load + preflight (`verify_keys=False`)
 - `_analyze_dependencies()` for inferring data flow
-- `_get_action_schema()`, `_get_output_fields()`, `_get_input_fields()` helpers
+- `_get_action_schema()`, `_get_output_fields()` helpers
 
 ### `preview` -- Read SQLite Storage
 
@@ -348,26 +348,27 @@ Key design decisions:
 
 ## Inspect Command Group Architecture
 
-`inspect` is a Click group with four subcommands, all sharing a base class:
+`inspect` is a Click group with two subcommands plus the default form,
+all sharing a base class:
 
 ```
 BaseInspectCommand
   │
   │  Fields: agent, agent_name, user_code, json_output, console
-  │  Fields set by _load_workflow(): paths, schema_service
+  │  Fields set by _load_inspector(): paths, schema_service
   │
-  │  _load_workflow(project_root)     ← auto_create=False, no output_dir
-  │  _analyze_dependencies(workflow)  ← infer_dependencies() per action
-  │  _get_action_schema(name)         ← via schema_service
-  │  _get_output_fields(config)       ← schema properties → field names
-  │  _get_input_fields(config)        ← context_scope observe/passthrough
-  │  _get_action_type(inputs, ctx)    ← Source/Transform/Merge classification
+  │  _load_inspector(project_root)     ← read-only, verify_keys=False
+  │  _analyze_dependencies(inspector)  ← infer_dependencies() per action
+  │  _get_action_schema(name)          ← via schema_service
+  │  _get_output_fields(config)        ← schema properties → field names
+  │  _get_action_type(inputs, ctx)     ← Source/Transform/Merge classification
   │
+  ├── InspectCommand        ← default: flat validated action list
   ├── ActionCommand         ← detailed view of a single action
-  └── ContextCommand        ← context debug info for a single action
+  └── ContextCommand        ← template-variable namespaces
 ```
 
-All subcommands use `@handles_user_errors` and `@requires_project`. Each implements its own `execute()` that calls `self._load_workflow()` from the base class.
+All subcommands use `@handles_user_errors` and `@requires_project`. Each implements its own `execute()` that calls `self._load_inspector()` from the base class.
 
 ---
 
