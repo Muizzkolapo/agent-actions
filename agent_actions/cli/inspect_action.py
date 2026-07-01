@@ -159,104 +159,11 @@ class ActionCommand(BaseInspectCommand):
         if not schema or not isinstance(schema, dict):
             return
 
-        self.console.print()
-        self._print_section_rule("Output schema")
-        wrapper, inner, is_array = self._unwrap_object_schema(schema)
-
-        if wrapper and isinstance(inner, dict):
-            marker = "[]" if is_array else ""
-            shape = "array of objects, each with:" if is_array else "object with:"
-            self.console.print(
-                f"    [bold]{wrapper}[/bold][dim]{marker}[/dim]   [dim]{shape}[/dim]\n",
-                highlight=False,
-            )
-            self._print_schema_fields(inner)
-            return
-
-        properties = schema.get("properties") if isinstance(schema, dict) else None
-        if isinstance(properties, dict):
-            self._print_schema_fields(schema)
-            return
-
-        # Fallback: schema doesn't follow the standard {type:object,
-        # properties:{}} shape (e.g. inline custom-fields format). Render
-        # the raw YAML so nothing is hidden.
-        self._print_schema_yaml(schema)
-
-    @staticmethod
-    def _unwrap_object_schema(schema: dict[str, Any]) -> tuple[str | None, dict | None, bool]:
-        """For `{object, properties:{one: {array, items: {object, properties:...}}}}`
-        return `(one, inner_object, True)`. Single-property wrappers are
-        the common LLM-output shape (a top-level object whose only
-        property is the actual payload array)."""
-        if schema.get("type") != "object":
-            return None, None, False
-        props = schema.get("properties") or {}
-        if not isinstance(props, dict) or len(props) != 1:
-            return None, None, False
-        wrapper_name = next(iter(props))
-        wrapper = props[wrapper_name]
-        if not isinstance(wrapper, dict):
-            return None, None, False
-        if wrapper.get("type") == "array":
-            items = wrapper.get("items")
-            if isinstance(items, dict) and items.get("type") == "object":
-                return wrapper_name, items, True
-        if wrapper.get("type") == "object":
-            return wrapper_name, wrapper, False
-        return None, None, False
-
-    def _print_schema_fields(self, obj_schema: dict[str, Any]) -> None:
-        properties = obj_schema.get("properties") or {}
-        if not isinstance(properties, dict) or not properties:
-            return
-        required = set(obj_schema.get("required") or [])
-
-        name_w = max(len(name) for name in properties)
-        type_w = 0
-        for prop in properties.values():
-            if isinstance(prop, dict):
-                type_w = max(type_w, len(str(prop.get("type", "?"))))
-
-        # Reserve gutter + req + spacing + name + spacing + type + spacing
-        # then give the rest to the description. Truncate descriptions
-        # that would push past the terminal.
-        fixed = 4 + 2 + 2 + name_w + 2 + type_w + 2
-        desc_w = max((self.console.width or 100) - fixed, 20)
-
-        for name, prop in properties.items():
-            if not isinstance(prop, dict):
-                continue
-            is_req = name in required
-            type_str = str(prop.get("type", "?"))
-            desc = str(prop.get("description") or "").strip().replace("\n", " ")
-            if len(desc) > desc_w:
-                desc = desc[: desc_w - 1].rstrip() + "…"
-
-            req_marker = "[green]●[/green]" if is_req else "[dim]○[/dim]"
-            name_padded = (
-                f"[bold]{name}[/bold]" + " " * (name_w - len(name))
-                if is_req
-                else f"{name}" + " " * (name_w - len(name))
-            )
-            type_padded = f"[dim]{type_str}[/dim]" + " " * (type_w - len(type_str))
-            desc_part = f"  [dim]{desc}[/dim]" if desc else ""
-            self.console.print(
-                f"    {req_marker}  {name_padded}  {type_padded}{desc_part}",
-                soft_wrap=True,
-                highlight=False,
-            )
-
-        legend_parts = [f"[green]●[/green] required ({len(required)})"]
-        optional_count = len(properties) - len(required)
-        if optional_count > 0:
-            legend_parts.append(f"[dim]○[/dim] optional ({optional_count})")
-        self.console.print(f"\n    [dim]{' · '.join(legend_parts)}[/dim]")
-
-    def _print_schema_yaml(self, schema: dict[str, Any]) -> None:
         import yaml
         from rich.syntax import Syntax
 
+        self.console.print()
+        self._print_section_rule("Schema")
         rendered = yaml.dump(schema, sort_keys=False, default_flow_style=False, allow_unicode=True)
         self.console.print(
             Syntax(
@@ -536,7 +443,20 @@ class ContextCommand(BaseInspectCommand):
         namespaces["workflow"] = ["name", "run_id"]
         namespaces["version"] = ["i", "idx", "length", "first", "last"]
 
-        context_scope = action_config.get("context_scope", {})
+        context_scope = action_config.get("context_scope", {}) or {}
+
+        # `seed` is populated when the action's context_scope declares
+        # `seed_data` or `seed_path`. Each key under those maps becomes a
+        # `seed.<key>` variable in the prompt (e.g. `{{ seed.exam_syllabus }}`).
+        seed_keys: list[str] = []
+        for src_key in ("seed_data", "seed_path"):
+            entries = context_scope.get(src_key)
+            if isinstance(entries, dict):
+                seed_keys.extend(entries.keys())
+        if seed_keys:
+            # Preserve insertion order but dedupe.
+            namespaces["seed"] = list(dict.fromkeys(seed_keys))
+
         return {
             "action_name": self.target_action_name,
             "workflow": self.agent_name,
