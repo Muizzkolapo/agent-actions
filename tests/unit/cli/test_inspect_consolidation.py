@@ -111,10 +111,11 @@ class TestWorkflowInspectorGetLevels:
 
 class TestVersionGroupCollapse:
     """Version-expanded actions (`is_versioned_agent=True` with a
-    `version_base_name`) collapse to ``<base> (×N)`` in the parallel
-    fan-out display. Plain ``_N`` suffix names without the runtime
-    flag are kept distinct — regex-only collapse would fold unrelated
-    sibling actions named `step_1` / `step_2` into one pill.
+    `version_base_name`) collapse to ``<base> (×N)`` where the collapse
+    helper is called (currently: `inspect action`'s Used-by list).
+    Plain ``_N`` suffix names without the runtime flag are kept
+    distinct — regex-only collapse would fold unrelated sibling actions
+    named `step_1` / `step_2` into one entry.
     """
 
     def _versioned(self, base, n):
@@ -127,11 +128,9 @@ class TestVersionGroupCollapse:
         ]
 
     def _collapse(self, name_cfg_pairs):
-        from agent_actions.cli.inspect import InspectCommand
+        from agent_actions.cli.inspect_base import collapse_version_groups
 
-        cmd = InspectCommand.__new__(InspectCommand)
-        cmd._inspector_action_configs = dict(name_cfg_pairs)
-        return cmd._collapse_version_groups([name for name, _ in name_cfg_pairs])
+        return collapse_version_groups([name for name, _ in name_cfg_pairs], dict(name_cfg_pairs))
 
     def test_versioned_group_collapses(self):
         assert self._collapse(self._versioned("foo", 3)) == ["foo (×3)"]
