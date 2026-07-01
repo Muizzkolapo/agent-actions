@@ -213,6 +213,7 @@ class TestStandardStrategy:
             idx=5,
             processor_factory=factory,
             action_configs={"a": {}, "b": {}},
+            workflow_metadata=None,
             storage_backend=backend,
             source_relative_path="rel/path.json",
         )
@@ -255,6 +256,24 @@ class TestStandardStrategy:
         params = _make_params()
         with pytest.raises(RuntimeError, match="requires processor_factory"):
             strategy.execute(params)
+
+    @patch("agent_actions.workflow.pipeline.create_processing_pipeline_from_params")
+    def test_execute_forwards_workflow_metadata_to_pipeline_factory(self, mock_create):
+        """workflow_metadata on the params flows into create_processing_pipeline_from_params
+        so `{{ workflow.name }}` / `{{ workflow.run_id }}` resolve at runtime."""
+        mock_pipeline = MagicMock()
+        mock_pipeline.process.return_value = "/out/file.json"
+        mock_create.return_value = mock_pipeline
+
+        strategy = StandardStrategy(processor_factory=MagicMock())
+        params = _make_params(workflow_metadata={"name": "my_wf", "run_id": "run_7"})
+
+        strategy.execute(params)
+
+        assert mock_create.call_args.kwargs["workflow_metadata"] == {
+            "name": "my_wf",
+            "run_id": "run_7",
+        }
 
     def test_equality_same_factory(self):
         factory = MagicMock()

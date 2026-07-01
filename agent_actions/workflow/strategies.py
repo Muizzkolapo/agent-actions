@@ -29,6 +29,9 @@ class StrategyExecutionParams:
     storage_backend: Optional["StorageBackend"] = field(default=None)
     source_relative_path: str | None = None  # For storage backend source lookups
     data: list[dict[str, Any]] | None = None  # Pre-loaded data (skips file read)
+    # Populates the runtime `workflow` namespace (`{{ workflow.name }}`, etc.).
+    # Runner injects this from its own `workflow_metadata` field.
+    workflow_metadata: dict[str, Any] | None = None
 
 
 class ActionStrategy(ABC):
@@ -59,6 +62,7 @@ class ActionStrategy(ABC):
             idx=params.idx,
             processor_factory=self.processor_factory,
             action_configs=params.action_configs,
+            workflow_metadata=params.workflow_metadata,
             storage_backend=params.storage_backend,
             source_relative_path=params.source_relative_path,
         )

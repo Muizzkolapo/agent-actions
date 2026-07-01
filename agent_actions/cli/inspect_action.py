@@ -454,8 +454,12 @@ class ContextCommand(BaseInspectCommand):
             if dep_fields:
                 namespaces[dep] = dep_fields
 
-        namespaces["workflow"] = ["name", "run_id"]
-        namespaces["version"] = ["i", "idx", "length", "first", "last"]
+        # Source of truth: what the runtime actually populates at pipeline entry
+        # (see build_workflow_metadata in prompt.context.scope_application).
+        from agent_actions.prompt.context.scope_application import FRAMEWORK_FIELDS
+
+        namespaces["workflow"] = list(FRAMEWORK_FIELDS["workflow"])
+        namespaces["version"] = list(FRAMEWORK_FIELDS["version"])
 
         context_scope = action_config.get("context_scope") or {}
 

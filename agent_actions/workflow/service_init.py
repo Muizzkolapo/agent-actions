@@ -91,6 +91,9 @@ def initialize_services(
     action_runner.action_indices = metadata.action_indices
     action_runner.action_configs = metadata.action_configs
     action_runner.workflow_name = metadata.agent_name
+    from agent_actions.prompt.context.scope_application import build_workflow_metadata
+
+    action_runner.workflow_metadata = build_workflow_metadata(name=metadata.agent_name)
     action_runner.project_root = config.project_root
 
     workflow_defaults = config.manager.user_config.get("defaults") or {}
