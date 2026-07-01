@@ -76,8 +76,6 @@ class ActionCommand(BaseInspectCommand):
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
         guard_label = guard.get("clause", "yes") if isinstance(guard, dict) else "none"
-        # `get_default("run_mode")` keeps this in sync with whatever the
-        # rest of the codebase uses as the project-wide default.
         run_mode = self._stringify(action_config.get("run_mode")) or self._stringify(
             get_default("run_mode")
         )
@@ -90,11 +88,7 @@ class ActionCommand(BaseInspectCommand):
         write_fields = self._get_output_fields(
             action_config, action_schema=self._get_action_schema(self.action_name)
         )
-        # Long writes lists balloon the header and duplicate the Output
-        # schema section below. Show the count + first few names as a
-        # preview; the full table is right there. Escape field names —
-        # a generated schema field like `metrics[0]` would otherwise be
-        # parsed by Rich as `[0]` markup.
+        # Show count + preview; the full list is in the Schema section below.
         if len(write_fields) > 3:
             preview = ", ".join(_escape_markup(f) for f in write_fields[:3])
             writes: object = f"{len(write_fields)} fields  [dim]({preview}, …)[/dim]"
@@ -132,21 +126,15 @@ class ActionCommand(BaseInspectCommand):
             fields.append(("Reads", reads))
         if writes:
             fields.append(("Writes", writes))
-        # Always include Used by — explicit "no downstream" is more
-        # informative than absence (the user knows whether it's a leaf).
+        # Explicit terminal marker is clearer than an absent row.
         fields.append(("Used by", consumers if consumers else "— [dim](terminal action)[/dim]"))
 
         label_width = max(len(label) for label, _ in fields)
         for i, (label, value) in enumerate(fields):
-            # Insert a blank line before any list-typed row so multi-line
-            # blocks (Reads, Used by) get visual breathing room.
             if i > 0 and isinstance(value, list):
                 self.console.print()
             self._print_field(label, value, label_width)
 
-        # Full rendered prompt + schema — what the LLM actually sees.
-        # ``{{ jinja }}`` placeholders remain visible because they're
-        # substituted per-record at run time, not at preflight.
         self._print_prompt_section(action_config.get("prompt"))
         self._print_schema_section(action_config)
 
@@ -162,11 +150,8 @@ class ActionCommand(BaseInspectCommand):
         self.console.print()
 
     def _print_schema_section(self, action_config: dict[str, Any]) -> None:
-        # Prefer the compiled JSON output schema (what the LLM actually
-        # gets); fall back to the raw `schema` dict for non-LLM kinds.
-        # `schema:` in YAML can be a list-of-field-dicts (custom-fields
-        # format) — accept it too so `inspect action` shows something when
-        # compile_output_schema didn't run.
+        # Prefer the compiled JSON schema; fall back to the raw `schema:`
+        # (dict or custom-fields list) so non-LLM kinds still show something.
         schema = action_config.get("json_output_schema") or action_config.get("schema")
         if not schema or not isinstance(schema, (dict, list)):
             return
@@ -181,9 +166,7 @@ class ActionCommand(BaseInspectCommand):
                 schema, sort_keys=False, default_flow_style=False, allow_unicode=True
             )
         except yaml.YAMLError:
-            # Compiled schema left a non-safe type behind (e.g. a stray
-            # Enum after HITL auto-injection); degrade to repr rather
-            # than crash the whole drill-down.
+            # Non-safe type in schema (e.g. HITL-injected Enum) — repr, don't crash.
             rendered = repr(schema)
         self.console.print(
             Syntax(
@@ -270,10 +253,7 @@ class ActionCommand(BaseInspectCommand):
                 dep_consumers.append(name)
                 continue
 
-            # Context-only consumer: target appears in observe/passthrough
-            # OR drop (a drop entry still means the action referenced
-            # the target — removing the target silently breaks the drop
-            # directive). Skip entries already counted as direct deps.
+            # Include `drop` — dropping a namespace still references it.
             scope = cfg.get("context_scope") or {}
             if isinstance(scope, dict):
                 refs = (
@@ -290,8 +270,7 @@ class ActionCommand(BaseInspectCommand):
         dep_collapsed = collapse_version_groups(sorted(dep_consumers), configs)
         ctx_collapsed = collapse_version_groups(sorted(ctx_consumers), configs)
 
-        # Render with a relationship tag. Direct deps first (they're the
-        # ones that move records downstream); context consumers second.
+        # Direct deps first — they move records; context readers second.
         lines: list[str] = []
         for name in dep_collapsed:
             lines.append(f"{name}  [dim](depends on)[/dim]")
@@ -300,10 +279,8 @@ class ActionCommand(BaseInspectCommand):
         return lines
 
     def _position_meta(self, inspector) -> str | None:
-        # "action N of M" — N is position in execution_order, M is the
-        # total action count. Previously labelled "level" which conflicts
-        # with the dependency-level count shown in the default view
-        # (52 actions can sit in 36 levels — the two numbers differ).
+        """`action N of M` — N is position in execution_order. Not "level" —
+        the default view already shows a distinct level count."""
         try:
             idx = list(inspector.execution_order).index(self.action_name)
         except ValueError:
@@ -312,8 +289,7 @@ class ActionCommand(BaseInspectCommand):
 
     @staticmethod
     def _describe_input(input_sources: list[str], context_sources: list[str]) -> str:
-        # `source` namespace is always-available — stripped so it
-        # doesn't show as "(+ source)" on most rows.
+        # `source` is always available — strip so it doesn't clutter every row.
         contexts = [c for c in context_sources if c != "source"]
         if not input_sources:
             return "source data  [dim](source action)[/dim]"
@@ -334,7 +310,9 @@ class ActionCommand(BaseInspectCommand):
         + the names. Both are far easier to scan than the raw per-ref
         flat list."""
         scope = info.get("context_scope") or {}
-        refs: list[str] = list(scope.get("observe") or []) + list(scope.get("passthrough") or [])
+        # YAML source — entries are Any before preflight; the `isinstance`
+        # guard below is real, not dead.
+        refs: list[Any] = list(scope.get("observe") or []) + list(scope.get("passthrough") or [])
         if not refs:
             return []
 
@@ -345,9 +323,8 @@ class ActionCommand(BaseInspectCommand):
                 continue
             ns, sep, field = ref.partition(".")
             if not sep:
-                # Bare namespace ref like `foo` (no dot). It's malformed —
-                # the runtime rejects it. Track separately so we don't
-                # collapse a real explicit-fields list to `*` because of it.
+                # Track bare-namespace refs (`foo` with no dot) separately so
+                # a malformed entry doesn't collapse a real fields list to `*`.
                 bare.add(ns)
                 grouped.setdefault(ns, [])
                 continue
@@ -356,22 +333,15 @@ class ActionCommand(BaseInspectCommand):
         lines: list[str] = []
         for ns in sorted(grouped):
             fields = [f for f in grouped[ns] if f]
-            # `*` in the fields set means the user explicitly observed
-            # `foo.*` — collapse to a single `*`.
-            is_wildcard = "*" in fields
-            if is_wildcard:
+            if "*" in fields:
                 lines.append(f"{ns}: [dim]*[/dim]")
                 continue
             if not fields and ns in bare:
-                # Malformed bare-namespace ref with no explicit fields.
-                # Flag it visibly rather than silently pretending it's a
-                # wildcard.
                 lines.append(f"{ns}: [red](bare namespace — no field)[/red]")
                 continue
             fields = sorted(set(fields))
-            # Field names could contain `[` (e.g. `metrics[0]` in a
-            # generated schema); escape so they don't corrupt the
-            # surrounding `[dim]…[/dim]` markup.
+            # Escape `[` in field names (e.g. `metrics[0]`) so Rich doesn't
+            # eat them as markup.
             safe_ns = _escape_markup(ns)
             safe = [_escape_markup(f) for f in fields]
             if len(safe) <= 5:
@@ -382,7 +352,7 @@ class ActionCommand(BaseInspectCommand):
         return lines
 
     def _print_field(self, label: str, value: object, label_width: int) -> None:
-        # highlight=False — otherwise Rich repaints the `4` in `gpt-4`.
+        # highlight=False — otherwise Rich repaints digits like the `4` in `gpt-4`.
         padded_label = f"[bold]{label}[/bold]" + " " * (label_width - len(label))
         if isinstance(value, list):
             if not value:
@@ -463,10 +433,8 @@ class ContextCommand(BaseInspectCommand):
         info: dict[str, Any],
     ) -> dict[str, Any]:
         namespaces: dict[str, list[str]] = {}
-        # `source` is always available at runtime — every action can read
-        # `{{ source.<field> }}` even if it has no upstream actions.
-        # Parens (not square brackets) — Rich treats `[…]` as markup
-        # and would swallow the placeholder token.
+        # `source` is always available. Parens (not brackets) so Rich
+        # doesn't parse the placeholder as markup.
         namespaces["source"] = ["(record fields)"]
         for dep in info["input_sources"]:
             dep_config = inspector.action_configs.get(dep, {})
@@ -486,25 +454,19 @@ class ContextCommand(BaseInspectCommand):
             if dep_fields:
                 namespaces[dep] = dep_fields
 
-        # Always-available special namespaces.
         namespaces["workflow"] = ["name", "run_id"]
         namespaces["version"] = ["i", "idx", "length", "first", "last"]
 
         context_scope = action_config.get("context_scope") or {}
 
-        # `seed` is populated by `context_scope.seed_path` (dict directive)
-        # and `context_scope.static_data` (both declared in ContextScopeDict).
-        # Each key under either becomes a `seed.<key>` template variable.
-        # `seed_data` (with the underscore) is NOT a real config key — it's
-        # only in SEED_CONFIG_KEYS as an anti-misuse flag for the static
-        # analyzer to catch users typing `seed_data.foo` in observe/passthrough.
+        # `seed.*` is populated by the `seed_path` and `static_data` directives.
+        # (`seed_data` in SEED_CONFIG_KEYS is an anti-typo flag, not a real key.)
         seed_keys: list[str] = []
         for src_key in ("seed_path", "static_data"):
             entries = context_scope.get(src_key)
             if isinstance(entries, dict):
                 seed_keys.extend(entries.keys())
-        # Don't clobber a user action literally named `seed` — its output
-        # fields were already registered above.
+        # Don't shadow a user action literally named `seed`.
         if seed_keys and "seed" not in namespaces:
             namespaces["seed"] = list(dict.fromkeys(seed_keys))
 
@@ -521,17 +483,16 @@ class ContextCommand(BaseInspectCommand):
         }
 
     @staticmethod
-    def _group_refs_by_namespace(refs: list[str]) -> dict[str, list[str]]:
+    def _group_refs_by_namespace(refs: list[Any]) -> dict[str, list[str]]:
         """`["a.x", "a.y", "b.*"]` → `{"a": ["x", "y"], "b": ["*"]}`. Bare
-        names without a dot fall into a `""` namespace (rare; preserved
-        so nothing is hidden)."""
+        names fall into a `""` namespace. Non-string entries (raw YAML)
+        are skipped."""
         grouped: dict[str, list[str]] = {}
         for ref in refs:
             if not isinstance(ref, str):
                 continue
             ns, _, field = ref.partition(".")
             grouped.setdefault(ns, []).append(field if field else "")
-        # Sort namespaces and their field lists for stable display.
         return {ns: sorted(fields) for ns, fields in sorted(grouped.items(), key=lambda kv: kv[0])}
 
     def _output_json(self, context_data: dict[str, Any]) -> None:
@@ -553,9 +514,8 @@ class ContextCommand(BaseInspectCommand):
         )
         self.console.print()
 
-        # Scope as its own block. Group refs by namespace so a long
-        # observe list reads as "format_quiz_text: a, b, c, …" rather
-        # than 14 newline-wrapped `format_quiz_text.x` lines.
+        # Group by namespace so a long observe list reads as `foo: a, b, c, …`
+        # rather than many single-field lines.
         scope_kinds = [(kind, scope.get(kind) or []) for kind in ("observe", "passthrough", "drop")]
         scope_kinds = [(k, refs) for k, refs in scope_kinds if refs]
 
@@ -568,9 +528,7 @@ class ContextCommand(BaseInspectCommand):
                     f"from {len(grouped)} namespace{'s' if len(grouped) != 1 else ''}"
                 )
                 self.console.print(f"    [cyan]{kind}[/cyan]  [dim]({count_label})[/dim]")
-                # `grouped` can be empty when every ref is a non-string
-                # (e.g. `observe: [null]` from a mangled YAML). Guard
-                # `max` so a render-only path doesn't crash.
+                # `default=0` — every ref could be non-string (e.g. `observe: [null]`).
                 ns_width = max((len(n) for n in grouped), default=0) + 2
                 for ns, fields in grouped.items():
                     field_str = ", ".join(fields) if fields else "[dim]*[/dim]"
@@ -588,8 +546,7 @@ class ContextCommand(BaseInspectCommand):
 
         if namespaces:
             framework = {"source", "workflow", "version", "loop", "seed"}
-            # Sort: user-defined namespaces first (most relevant for the
-            # action being inspected), framework-provided at the bottom.
+            # User namespaces first, framework at the bottom.
             ordered = sorted(namespaces.items(), key=lambda kv: (kv[0] in framework, kv[0]))
             ns_width = max(len(ns) for ns, _ in ordered) + 2
             for ns, fields in ordered:
@@ -603,20 +560,18 @@ class ContextCommand(BaseInspectCommand):
                     soft_wrap=True,
                 )
 
-        # Copy-paste snippet — prompt authors get a concrete example.
-        # Walk `ordered` (user namespaces first, framework last) so the
-        # picker prefers action-specific fields over always-available
-        # framework namespaces like `{{ workflow.name }}`. Skip the
-        # `(record fields)` / `[schema: …]` placeholders which would
-        # render as `{{ ns. }}` (empty field).
+        # Copy-paste snippet. Walk user namespaces first so the picker
+        # prefers action-specific fields over framework ones like `workflow.name`.
         example: str | None = None
         snippet_walk = ordered if namespaces else []
         for ns, fields in snippet_walk:
             if not fields:
                 continue
             first_field = fields[0]
+            # Skip `(record fields)` / `[schema: …]` placeholders — they'd render
+            # as `{{ ns. }}` with an empty field.
             if first_field.startswith("(") or first_field.startswith("["):
-                continue  # placeholder, not a real field name
+                continue
             example = f"{{{{ {ns}.{first_field} }}}}"
             break
         if example is not None:

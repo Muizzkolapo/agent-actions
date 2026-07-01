@@ -30,11 +30,9 @@ class InspectCommand(BaseInspectCommand):
         self._render_action_list(inspector)
 
     def _render_action_list(self, inspector: WorkflowInspector) -> None:
-        # Flatten `get_levels()` rather than using `execution_order`
-        # directly: get_levels includes non-operational actions that
-        # ConfigManager filters out. Sort *within* each level so version
-        # siblings read `foo_1, foo_2, foo_3` — the runtime registers
-        # them in reverse, which looks like the pipeline is upside down.
+        # `get_levels()` includes non-operational actions that ConfigManager
+        # filters out of `execution_order`. Sort within each level so
+        # version siblings render `foo_1, foo_2, foo_3` (runtime order is reversed).
         order = [name for level in inspector.get_levels() for name in sorted(level)]
         n = len(order)
 
@@ -73,9 +71,8 @@ def inspect(
         agac inspect action  -a my_workflow extract_facts
         agac inspect context -a my_workflow extract_facts
     """
-    # ``default_map`` forwards group-level ``-a`` / ``-u`` to the
-    # subcommand so ``agac inspect -a foo action <name>`` works (subcommands
-    # still mark ``-a`` required, so missing-option errors fire as before).
+    # Forward group-level `-a` / `-u` to the invoked subcommand so
+    # `agac inspect -a foo action <name>` works.
     if ctx.invoked_subcommand is not None:
         defaults: dict[str, str] = {}
         if agent_opt:

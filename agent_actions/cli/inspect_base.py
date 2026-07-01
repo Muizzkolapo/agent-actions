@@ -97,30 +97,20 @@ class BaseInspectCommand:
         self.schema_service: WorkflowSchemaService | None = None
 
     def _load_inspector(self, project_root: Path | None = None) -> WorkflowInspector:
-        """Load a workflow inspector for read-only introspection.
-
-        Does NOT initialize the storage backend or runtime execution
-        services — that overhead is wasted on read-only commands.
-        Validation still runs so the inspect commands surface the same
-        errors ``agac run`` would surface, but bypasses key probing
-        (``verify_keys=False``) since introspection shouldn't make
-        network calls.
-        """
+        """Read-only workflow inspector. Skips storage/runtime init and
+        `verify_keys` (no network calls) but runs the same preflight
+        `agac run` would run."""
         inspector = WorkflowInspector(
             agent_name=self.agent_name,
             project_root=project_root,
             user_code_path=self.user_code,
         )
-        # validate() runs load() internally and populates schema_service.
-        # The inspect subcommands need schema_service for output-field
-        # resolution, so we always validate here.
         inspector.validate(verify_keys=False)
         self.paths = inspector.paths
         self.schema_service = inspector.schema_service
         return inspector
 
     def _get_action_schema(self, action_name: str) -> ActionSchema | None:
-        """Get ActionSchema for an action via the schema service."""
         if self.schema_service is None:
             return None
         return self.schema_service.get_action_schema(action_name)
@@ -152,8 +142,7 @@ class BaseInspectCommand:
                 input_sources = explicit_deps
                 context_sources = []
 
-            # `context_scope` may be `None` (`context_scope: null` in
-            # YAML) or a non-dict — guard so `.get` below doesn't blow up.
+            # `context_scope: null` in YAML surfaces as None; a scalar as non-dict.
             context_scope = action_config.get("context_scope") or {}
             if not isinstance(context_scope, dict):
                 context_scope = {}
@@ -187,20 +176,16 @@ class BaseInspectCommand:
         action_config: dict[str, Any],
         action_schema: ActionSchema | None = None,
     ) -> list[str]:
-        # Preferred: use pre-resolved ActionSchema from WorkflowSchemaService
         if action_schema is not None:
             return action_schema.available_outputs
 
-        # Fallback for inline schema dicts (not file-based)
         schema = action_config.get("schema", {})
         if schema and isinstance(schema, dict):
             if "properties" in schema:
                 return list(schema["properties"].keys())
             return list(schema.keys())
 
-        # If schema_name is set but no ActionSchema resolved it, show
-        # placeholder. Use parens not square brackets — Rich treats
-        # `[…]` as markup and swallows the entire token.
+        # Parens (not brackets) — Rich would eat `[schema: …]` as markup.
         schema_name = action_config.get("schema_name")
         if schema_name:
             return [f"(schema: {schema_name})"]
