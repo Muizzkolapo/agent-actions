@@ -7,17 +7,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
+from rich.text import Text
 
-from agent_actions.config.project_paths import (
-    ProjectPaths,
-    ProjectPathsFactory,
-    find_config_file,
-)
+from agent_actions.config.project_paths import ProjectPaths
 from agent_actions.errors import ConfigurationError
 from agent_actions.models.action_schema import ActionSchema
-from agent_actions.prompt.renderer import ConfigRenderingService
-from agent_actions.workflow.coordinator import AgentWorkflow
-from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
+from agent_actions.services.workflow_inspector import WorkflowInspector
 
 if TYPE_CHECKING:
     from agent_actions.workflow.schema_service import WorkflowSchemaService
@@ -25,70 +20,108 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def render_title_row(
+    console: Console,
+    subject: str,
+    *,
+    section: str | None = None,
+    validated: bool = False,
+    right_meta: str | None = None,
+) -> None:
+    """Shared title row: `<subject>   <pill|section>            <right>`.
+
+    Exactly one of ``validated`` (status pill) or ``section`` (dim label)
+    sets the left suffix; ``right_meta`` fills the right column."""
+    width = console.width or 100
+    left = Text()
+    left.append(subject, style="bold bright_white")
+    if validated:
+        left.append("   ")
+        left.append("● validated", style="bold black on rgb(108,168,138)")
+    elif section:
+        left.append("   ")
+        left.append(section, style="dim")
+
+    right = Text(right_meta, style="dim") if right_meta else None
+
+    if right is None:
+        console.print(left)
+    else:
+        pad = max(width - left.cell_len - right.cell_len, 2)
+        line = Text()
+        line.append(left)
+        line.append(" " * pad)
+        line.append(right)
+        console.print(line)
+
+
+def collapse_version_groups(actions: list[str], action_configs: dict) -> list[str]:
+    """`foo_1, foo_2, foo_3` → `foo (×3)`, but ONLY when the runtime flagged
+    the actions as version expansions (`is_versioned_agent`). Without that
+    gate, two unrelated sibling actions named `step_1` / `step_2` get folded
+    into one display row — hiding a real distinct action."""
+    first_slot: dict[str, int] = {}
+    counts: dict[str, int] = {}
+    result: list[str | None] = []
+
+    for name in actions:
+        cfg = action_configs.get(name) or {}
+        base = cfg.get("version_base_name") if cfg.get("is_versioned_agent") else None
+        if base:
+            if base in first_slot:
+                counts[base] += 1
+            else:
+                first_slot[base] = len(result)
+                counts[base] = 1
+                result.append(name)
+        else:
+            result.append(name)
+
+    for base, count in counts.items():
+        if count >= 2:
+            result[first_slot[base]] = f"{base} (×{count})"
+
+    return [r for r in result if r is not None]
+
+
 class BaseInspectCommand:
     """Base class for inspect commands."""
 
-    def __init__(self, agent: str, user_code: str | None, json_output: bool):
+    def __init__(self, agent: str, user_code: str | None, json_output: bool = False):
         self.agent = agent
         self.agent_name = Path(agent).stem
         self.user_code = user_code
         self.json_output = json_output
         self.console = Console()
-        self.paths: ProjectPaths | None = None  # Will be set by _load_workflow
+        self.paths: ProjectPaths | None = None
         self.schema_service: WorkflowSchemaService | None = None
 
-    def _load_workflow(self, project_root: Path | None = None) -> AgentWorkflow:
-        paths = ProjectPathsFactory.create_project_paths(
-            self.agent_name, self.agent, auto_create=False, project_root=project_root
-        )
-        self.paths = paths
-        filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(
-            self.agent_name,
-            paths.agent_config_dir,
-            filename,
-            check_alternatives=True,
+    def _load_inspector(self, project_root: Path | None = None) -> WorkflowInspector:
+        """Read-only workflow inspector. Skips storage/runtime init and
+        `verify_keys` (no network calls) but runs the same preflight
+        `agac run` would run."""
+        inspector = WorkflowInspector(
+            agent_name=self.agent_name,
             project_root=project_root,
+            user_code_path=self.user_code,
         )
-
-        ConfigRenderingService().render_and_load_config(
-            self.agent_name,
-            full_path,
-            paths.template_dir,
-            paths.rendered_workflows_dir,
-            project_root=project_root,
-        )
-
-        workflow = AgentWorkflow(
-            WorkflowRuntimeConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    user_code_path=str(self.user_code) if self.user_code else None,
-                    default_path=str(paths.default_config_path),
-                ),
-                use_tools=False,
-                project_root=project_root,
-            )
-        )
-
-        # Reuse schema service built during static validation
-        self.schema_service = workflow.schema_service
-
-        return workflow
+        inspector.validate(verify_keys=False)
+        self.paths = inspector.paths
+        self.schema_service = inspector.schema_service
+        return inspector
 
     def _get_action_schema(self, action_name: str) -> ActionSchema | None:
-        """Get ActionSchema for an action via the schema service."""
         if self.schema_service is None:
             return None
         return self.schema_service.get_action_schema(action_name)
 
-    def _analyze_dependencies(self, workflow: AgentWorkflow) -> dict[str, Any]:
+    def _analyze_dependencies(self, inspector: WorkflowInspector) -> dict[str, Any]:
         from agent_actions.prompt.context.scope_inference import infer_dependencies
 
-        workflow_actions = list(workflow.action_configs.keys())
+        workflow_actions = list(inspector.action_configs.keys())
         result = {}
 
-        for action_name, action_config in workflow.action_configs.items():
+        for action_name, action_config in inspector.action_configs.items():
             deps_raw = action_config.get("dependencies", [])
             if isinstance(deps_raw, str):
                 explicit_deps = [deps_raw]
@@ -109,7 +142,10 @@ class BaseInspectCommand:
                 input_sources = explicit_deps
                 context_sources = []
 
-            context_scope = action_config.get("context_scope", {})
+            # `context_scope: null` in YAML surfaces as None; a scalar as non-dict.
+            context_scope = action_config.get("context_scope") or {}
+            if not isinstance(context_scope, dict):
+                context_scope = {}
             has_primary_dep = "primary_dependency" in action_config
 
             result[action_name] = {
@@ -140,32 +176,18 @@ class BaseInspectCommand:
         action_config: dict[str, Any],
         action_schema: ActionSchema | None = None,
     ) -> list[str]:
-        # Preferred: use pre-resolved ActionSchema from WorkflowSchemaService
         if action_schema is not None:
             return action_schema.available_outputs
 
-        # Fallback for inline schema dicts (not file-based)
         schema = action_config.get("schema", {})
         if schema and isinstance(schema, dict):
             if "properties" in schema:
                 return list(schema["properties"].keys())
             return list(schema.keys())
 
-        # If schema_name is set but no ActionSchema resolved it, show placeholder
+        # Parens (not brackets) — Rich would eat `[schema: …]` as markup.
         schema_name = action_config.get("schema_name")
         if schema_name:
-            return [f"[schema: {schema_name}]"]
+            return [f"(schema: {schema_name})"]
 
         return []
-
-    @staticmethod
-    def _get_input_fields(action_config: dict[str, Any]) -> list[str]:
-        fields = []
-        ctx = action_config.get("context_scope", {})
-        for field_ref in ctx.get("observe", []):
-            fields.append(f"{field_ref} (observe)")
-        for field_ref in ctx.get("passthrough", []):
-            fields.append(f"{field_ref} (passthrough)")
-        for field_ref in ctx.get("drop", []):
-            fields.append(f"{field_ref} (drop)")
-        return fields

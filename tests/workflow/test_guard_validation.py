@@ -1,6 +1,6 @@
 """Unit tests for validate_guard_conditions() — all 6 branches."""
 
-from agent_actions.workflow.coordinator import validate_guard_conditions
+from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 
 
 class TestValidateGuardConditions:

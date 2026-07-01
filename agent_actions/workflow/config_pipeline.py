@@ -36,17 +36,19 @@ def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -
         raise
 
 
-def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> WorkflowMetadata:
-    """Load and process configuration files, discover UDFs, return metadata.
-
-    Fires ``WorkflowInitializationStartEvent`` and creates the
-    ``ConfigManager`` when one is not already present on *config*.
-    """
-    fire_event(
-        WorkflowInitializationStartEvent(
-            workflow_name=config.manager.agent_name if config.manager else "unknown"
+def load_workflow_configs(
+    config: WorkflowRuntimeConfig,
+    console: Console,
+    fire_events: bool = True,
+) -> WorkflowMetadata:
+    """Run the config pipeline. ``fire_events=False`` for read-only
+    callers (inspect CLI) so events.json stays clean."""
+    if fire_events:
+        fire_event(
+            WorkflowInitializationStartEvent(
+                workflow_name=config.manager.agent_name if config.manager else "unknown"
+            )
         )
-    )
 
     if config.manager is None:
         config.manager = ConfigManager(
@@ -59,7 +61,7 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
     _run_config_stage(manager.load_configs, "load_configs", manager)
     _run_config_stage(manager.validate_agent_name, "validate_agent_name", manager)
     # Discover UDFs BEFORE expanding actions (which needs UDF metadata)
-    discover_workflow_udfs(config, console)
+    discover_workflow_udfs(config, console, fire_events=fire_events)
 
     user_agents = _run_config_stage(manager.get_user_agents, "get_user_agents", manager)
     _run_config_stage(manager.merge_agent_configs, "merge_agent_configs", manager, user_agents)
@@ -94,25 +96,37 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
     )
 
 
-def discover_workflow_udfs(config: WorkflowRuntimeConfig, console: Console) -> None:
+def discover_workflow_udfs(
+    config: WorkflowRuntimeConfig,
+    console: Console,
+    fire_events: bool = True,
+) -> None:
     """Discover user-defined functions from configured paths."""
     total_udfs = 0
     if config.paths.user_code_path:
         total_udfs = _discover_udfs_from_path(
-            config.paths.user_code_path, config.project_root, console
+            config.paths.user_code_path, config.project_root, console, fire_events=fire_events
         )
     elif config.manager and config.manager.tool_path:
         for path in config.manager.tool_path:
-            count = _discover_udfs_from_path(path, config.project_root, console)
+            count = _discover_udfs_from_path(
+                path, config.project_root, console, fire_events=fire_events
+            )
             total_udfs += count
 
     if total_udfs > 0:
         label = "Tool" if total_udfs == 1 else "Tools"
         console.print(f"[green]\u2705 Discovered {total_udfs} {label}[/green]")
-        fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
+        if fire_events:
+            fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
 
-def _discover_udfs_from_path(path: str, project_root: Path | None, console: Console) -> int:
+def _discover_udfs_from_path(
+    path: str,
+    project_root: Path | None,
+    console: Console,
+    fire_events: bool = True,
+) -> int:
     """Discover UDFs from a specific path."""
     p = Path(path)
     if p.is_absolute():
@@ -132,8 +146,17 @@ def _discover_udfs_from_path(path: str, project_root: Path | None, console: Cons
         )
         return 0
 
-    fire_event(UDFDiscoveryStartEvent(search_path=str(abs_path)))
-    console.print(f"[cyan]\U0001f50d Discovering Tools in {abs_path}...[/cyan]")
+    if fire_events:
+        fire_event(UDFDiscoveryStartEvent(search_path=str(abs_path)))
+    # Project-relative when possible — absolute paths in the banner wrap
+    # onto multiple lines on narrow terminals.
+    display_path = str(abs_path)
+    if project_root is not None:
+        try:
+            display_path = f"./{abs_path.relative_to(project_root)}"
+        except ValueError:
+            pass
+    console.print(f"[cyan]\U0001f50d Discovering tools in {display_path}...[/cyan]", soft_wrap=True)
     try:
         registry = discover_udfs(abs_path)
     except UDFLoadError as e:

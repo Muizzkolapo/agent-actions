@@ -193,13 +193,9 @@ Generate multiple actions with loops:
 
 ## Debugging Templates
 
-To see the rendered output, use `agac run` which writes compiled prompts into the `prompt_trace` table. For a quick check of the rendered workflow config without executing actions:
+To see the rendered output, use `agac run` which writes compiled prompts into the `prompt_trace` table.
 
-```bash
-agac compile -a my_workflow
-```
-
-The compiled workflow YAML is saved to `artefact/rendered_workflows/my_workflow.yml`. You can inspect this file to verify that template variables expanded correctly and that context scope produced the expected fields.
+When workflow rendering fails, the framework saves the partial rendered YAML to `.agent-actions/cache/rendered_workflows/<workflow>_failed.yml` and prints the path in the error message. You can `cat` that file to inspect template expansion and context-scope output that produced the failure.
 
 For deeper debugging, use `agac inspect context -a my_workflow <action_name>` to see what data namespaces and variables are available for a specific action's template.
 
@@ -249,9 +245,8 @@ Let's walk through some patterns that make templates easier to maintain.
 Always verify template expansion before running:
 
 ```bash
-# Render and review
-agac render -a my_workflow > /dev/null && \
-cat artefact/rendered_workflows/my_workflow.yml
+# Validate (any rendering failure surfaces non-zero with the saved YAML path).
+agac inspect -a my_workflow
 ```
 
 ### 5. Use Whitespace Control

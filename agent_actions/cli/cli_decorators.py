@@ -46,21 +46,19 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
 
 
 def requires_project(func):
-    """Find project root and inject it as a ``project_root`` keyword argument."""
+    """Inject ``project_root`` kwarg. Banner only when cwd ≠ project_root
+    (``📁 Project root: .`` from inside the project is just noise)."""
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         project_root = ensure_in_project()
-
-        cwd = Path.cwd()
-        try:
-            rel_path = project_root.relative_to(cwd)
-            display_path = f"./{rel_path}" if str(rel_path) != "." else "."
-        except ValueError:
-            display_path = str(project_root)
-
-        click.echo(f"📁 Project root: {display_path}", err=True)
-
+        display = _format_project_root_display(project_root)
+        if display != ".":
+            click.echo(f"📁 Project root: {display}", err=True)
         return func(*args, project_root=project_root, **kwargs)
 
     return wrapper
+
+
+def _format_project_root_display(project_root: Path) -> str:
+    return "." if Path.cwd() == project_root else str(project_root)

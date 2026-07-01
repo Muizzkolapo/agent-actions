@@ -153,50 +153,6 @@ class TestHandlesUserErrorsExceptionRouting:
         assert "already shown" not in result.output
 
 
-class TestInspectNotFoundExitCode:
-    """Inspect 'not found' paths must produce exit code 1, not 0."""
-
-    def test_dependencies_action_filter_not_found_raises(self):
-        """DependenciesCommand raises ClickException when action filter doesn't match."""
-        from agent_actions.cli.inspect import DependenciesCommand
-
-        cmd = DependenciesCommand.__new__(DependenciesCommand)
-        cmd.agent_name = "test"
-        cmd.action_filter = "nonexistent"
-        cmd.json_output = False
-        cmd.console = MagicMock()
-
-        # Mock _load_workflow and _analyze_dependencies
-        mock_workflow = MagicMock()
-        mock_workflow.execution_order = []
-        cmd._load_workflow = MagicMock(return_value=mock_workflow)
-        cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
-
-        import click
-
-        with pytest.raises(click.ClickException, match="nonexistent"):
-            cmd.execute()
-
-    def test_dependencies_json_mode_also_filters(self):
-        """Action filter applies in JSON mode too (not only rich mode)."""
-        from agent_actions.cli.inspect import DependenciesCommand
-
-        cmd = DependenciesCommand.__new__(DependenciesCommand)
-        cmd.agent_name = "test"
-        cmd.action_filter = "nonexistent"
-        cmd.json_output = True
-        cmd.console = MagicMock()
-
-        mock_workflow = MagicMock()
-        cmd._load_workflow = MagicMock(return_value=mock_workflow)
-        cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
-
-        import click
-
-        with pytest.raises(click.ClickException, match="nonexistent"):
-            cmd.execute()
-
-
 class TestReadOnlyCommandsNoMutation:
     """Read-only commands must not create directories."""
 
@@ -406,7 +362,9 @@ class TestGetOutputFieldsWithSchemaDir:
 
         config = {"schema_name": "some_schema"}
         fields = BaseInspectCommand._get_output_fields(config)
-        assert fields == ["[schema: some_schema]"]
+        # Parens, not square brackets — Rich treats `[…]` as markup
+        # and would swallow the entire token at print time.
+        assert fields == ["(schema: some_schema)"]
 
 
 class TestRequiresProjectErrorPath:

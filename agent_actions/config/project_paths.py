@@ -220,7 +220,11 @@ class ProjectPathsFactory:
             logger.debug("All project paths created successfully")
             return paths
         except Exception as e:
-            logger.exception("Failed to create project paths for agent %s: %s", agent_name, e)
+            # debug, not exception/error — the error is re-raised so the
+            # top-level CLI handler renders a single formatted banner.
+            # Logging at INFO+ here duplicates that banner with a noisy
+            # timestamped log line above it.
+            logger.debug("Failed to create project paths for agent %s: %s", agent_name, e)
             if isinstance(e, DirectoryError | ValidationError | FileLoadError):
                 raise
             raise ValidationError(

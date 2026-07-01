@@ -87,9 +87,7 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
     failed_render_path = cache_dir / f"{workflow_name}_failed.yml"
     with open(failed_render_path, "w", encoding="utf-8") as f:
         f.write(rendered_yaml_content)
-    return (
-        f"\nRendered output saved to: {failed_render_path}\nDebug with: agac render {workflow_name}"
-    )
+    return f"\nRendered output saved to: {failed_render_path}"
 
 
 def _resolve_prompt_fields(item, project_root: Path | None = None):

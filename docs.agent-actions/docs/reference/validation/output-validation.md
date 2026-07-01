@@ -587,10 +587,12 @@ Record filtered by guard on action 'generate_output'
 
 ### Validate Schema Syntax
 
-Compile the workflow that uses the schema. Malformed schemas surface with a path-attributed error before any LLM call is made:
+`agac inspect` loads the workflow through preflight, which validates
+referenced schemas. Malformed schemas surface with a path-attributed
+error and a non-zero exit before any LLM call is made:
 
 ```bash
-agac compile -a workflow_name
+agac inspect -a workflow_name
 ```
 
 ### Analyze Schema Structure

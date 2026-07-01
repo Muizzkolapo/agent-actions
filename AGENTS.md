@@ -301,6 +301,17 @@ Rules:
 - Silent `except: pass` must log at `debug` or `warning` (except destructors and safety utilities)
 - `print()` permitted only in: standalone scripts (`__main__`), docstring examples, dedicated debug handlers
 
+### 9. Docstrings and Comments
+
+Follow PEP 257 *shape* (one-line summary, blank line, body) but be aggressive about brevity. Docstrings rot faster than code — keep them minimal so the rot stays small.
+
+Rules:
+- **One-line summary, body optional.** If the signature plus a one-line summary tells the reader everything, stop. `def get_user(user_id: int) -> User` doesn't even need `"""Get a user by ID."""` — skip the docstring entirely.
+- **Only write a body when the *why* is non-obvious from the signature:** a hidden contract a caller must obey, an invariant that types can't express, behavior that would surprise a reader, a workaround tied to a specific upstream bug.
+- **Don't restate the signature in prose.** No `Args/Returns/Raises` boilerplate unless a parameter's semantics aren't visible from its name + type. A typed `user_id: int` does not need an `Args: user_id: The user ID.` entry.
+- **Don't use docstrings as design notes.** Multi-paragraph rationales belong in commit messages or design docs. If a docstring is more than ~10 lines, that's a smell — extract the prose, or split the function.
+- **Inline comments: default to none.** Add one only when the *why* isn't already in the code: a constraint, a workaround, a surprising invariant. Don't explain *what* — names do that. Don't reference tasks, PRs, callers, or "added for X" — that belongs in commit messages, not the code.
+
 ---
 
 ## Git and Change Hygiene (If Applicable)
@@ -344,3 +355,9 @@ A task is done when:
 - Regression coverage:
 - Verification performed:
 - Risk/rollback notes:
+
+## Architecture
+
+- Agent Actions — Declarative LLM orchestration framework. ~80K lines Python, ~445 source files, ~533 test files. Users define YAML workflows; framework resolves DAG, executes actions (sequential/parallel), handles batch/reprompt/guards. Key modules: config (Pydantic schema), workflow (coordinator/executor/runner), llm (multi-provider), processing (guards/retry/disposition), storage (SQLite delta storage), cli (Click). Entry point: `agac` CLI. Core concepts: context scope (observe/drop/passthrough), guard conditions, version actions (parallel fan-out/fan-in), disposition tracking, delta storage.
+
+- UAT Violations specs: 62 implementation plans for bugs/docs found during UAT rounds 1-6J. Organized in tiers: T1 (highest impact/effort, 10 plans), T2 (A-K classes: data integrity, diagnostics, CLI/tooling, workflow defects, docs parity, HITL security, process safety, multi-tenant), T3 (HITL UX). Key violation categories: silent data loss (VIOL-0031 retry null crash, VIOL-0098 review overwrite), silent acceptance (VIOL-0032 guard config typos, VIOL-0029 dead enum members), crash on edge cases (VIOL-0034 version-merge all-filtered, VIOL-0009 empty-output cascade), process safety (VIOL-0045 concurrent run lock), HITL security (VIOL-0038 GET auth, VIOL-0098 conflict detection), state machine gaps (VIOL-0024 state history cap, VIOL-0033 stale disposition), multi-tenant isolation (VIOL-0064/0065/0066 name disambiguation), and extensive documentation parity fixes (E-1 through E-29). Many plans require a Task 1 decision before implementation (e.g., rename vs populate for lineage, 409 vs append-only for HITL).

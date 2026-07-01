@@ -3,7 +3,7 @@
 import pytest
 
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-from agent_actions.workflow.coordinator import (
+from agent_actions.validation.preflight.guard_validation import (
     _check_bare_identifier_rhs,
     _find_comparison_nodes,
     validate_guard_conditions,

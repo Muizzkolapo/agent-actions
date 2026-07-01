@@ -132,13 +132,11 @@ Here's what each command does - organized by what you're trying to accomplish:
 
 | Command | Description |
 |---------|-------------|
-| [`inspect`](./inspect) | Analyze workflow structure, dependencies, and data flow |
+| [`inspect`](./inspect) | Preflight + introspection — graph + validation with `dependencies` / `action` / `context` drill-downs |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |
 | [`validate-udfs`](./tools#validate-udfs) | Validate tool references |
-| [`render`](./utilities#render) | Compile and render workflow configuration |
-| [`compile`](./utilities#render) | Alias for `render` |
 
 **Project management:**
 

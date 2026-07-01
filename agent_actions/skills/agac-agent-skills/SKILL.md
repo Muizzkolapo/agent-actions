@@ -321,9 +321,6 @@ agac run -a {workflow} -u tools
 # Fresh run (clears all state first)
 agac run -a {workflow} -u tools --fresh
 
-# See the full resolved YAML (versions expanded, schema inlined)
-agac render -a {workflow} -u tools
-
 # Per-record status across all actions
 agac dispositions -a {workflow} -u tools
 ```
@@ -368,7 +365,7 @@ python3 scripts/inspect_action.py {workflow} {action_name}
 agac schema -a {workflow} -u tools
 
 # Full pipeline graph
-agac inspect graph -a {workflow} -u tools
+agac inspect -a {workflow} -u tools
 ```
 
 **Inspecting live output data and rendered prompts:**

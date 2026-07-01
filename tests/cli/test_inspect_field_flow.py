@@ -12,46 +12,6 @@ def cli_runner():
     return CliRunner()
 
 
-class TestInspectDependenciesCommand:
-    """Tests for the inspect dependencies CLI command."""
-
-    def test_help_message(self, cli_runner):
-        """Test that help message is displayed correctly."""
-        result = cli_runner.invoke(cli, ["inspect", "dependencies", "--help"])
-
-        assert result.exit_code == 0
-        assert "Analyze workflow dependencies" in result.output
-        assert "--agent" in result.output
-        assert "--json" in result.output
-
-    def test_dependencies_requires_agent_option(self, cli_runner):
-        """Test that --agent option is required."""
-        result = cli_runner.invoke(cli, ["inspect", "dependencies"])
-
-        assert result.exit_code != 0
-        assert "Missing option" in result.output or "required" in result.output.lower()
-
-
-class TestInspectGraphCommand:
-    """Tests for the inspect graph CLI command."""
-
-    def test_help_message(self, cli_runner):
-        """Test that help message is displayed correctly."""
-        result = cli_runner.invoke(cli, ["inspect", "graph", "--help"])
-
-        assert result.exit_code == 0
-        assert "dependency graph" in result.output.lower()
-        assert "--agent" in result.output
-        assert "--json" in result.output
-
-    def test_graph_requires_agent_option(self, cli_runner):
-        """Test that --agent option is required."""
-        result = cli_runner.invoke(cli, ["inspect", "graph"])
-
-        assert result.exit_code != 0
-        assert "Missing option" in result.output or "required" in result.output.lower()
-
-
 class TestInspectActionCommand:
     """Tests for the inspect action CLI command."""
 
@@ -124,9 +84,8 @@ class TestInspectCommandGroup:
         result = cli_runner.invoke(cli, ["inspect", "--help"])
 
         assert result.exit_code == 0
-        assert "dependencies" in result.output
-        assert "graph" in result.output
         assert "action" in result.output
+        assert "context" in result.output
         assert "Inspect workflow structure" in result.output
 
 
@@ -186,18 +145,3 @@ class TestBaseInspectCommandHelpers:
         config = {}
         fields = BaseInspectCommand._get_output_fields(config)
         assert fields == []
-
-    def test_get_input_fields_from_context_scope(self):
-        """Test extracting input fields from context_scope."""
-        from agent_actions.cli.inspect import BaseInspectCommand
-
-        config = {
-            "context_scope": {
-                "observe": ["action1.field1", "action2.*"],
-                "passthrough": ["action3.data"],
-            }
-        }
-        fields = BaseInspectCommand._get_input_fields(config)
-        assert "action1.field1 (observe)" in fields
-        assert "action2.* (observe)" in fields
-        assert "action3.data (passthrough)" in fields

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 from agent_actions.workflow.managers.state import ActionStatus
@@ -362,7 +363,7 @@ class TestStripUnreachableDrops:
             agent_configs=configs,
         )
 
-        wf._strip_unreachable_drops()
+        strip_unreachable_drops(wf.action_configs)
 
         # Unreachable drops should be stripped.
         assert configs["summary"]["context_scope"]["drop"] == []
@@ -384,7 +385,7 @@ class TestStripUnreachableDrops:
             agent_configs=configs,
         )
 
-        wf._strip_unreachable_drops()
+        strip_unreachable_drops(wf.action_configs)
 
         assert configs["consumer"]["context_scope"]["drop"] == ["upstream.verbose_field"]
 
@@ -406,7 +407,7 @@ class TestStripUnreachableDrops:
             agent_configs=configs,
         )
 
-        wf._strip_unreachable_drops()
+        strip_unreachable_drops(wf.action_configs)
 
         # A is transitively reachable from C through B.
         assert configs["C"]["context_scope"]["drop"] == ["A.field"]
@@ -422,7 +423,7 @@ class TestStripUnreachableDrops:
             agent_configs=configs,
         )
 
-        wf._strip_unreachable_drops()  # Should not raise
+        strip_unreachable_drops(wf.action_configs)  # Should not raise
 
     def test_mixed_reachable_and_unreachable(self):
         """Reachable drops kept, unreachable drops stripped, in the same list."""
@@ -445,6 +446,6 @@ class TestStripUnreachableDrops:
             agent_configs=configs,
         )
 
-        wf._strip_unreachable_drops()
+        strip_unreachable_drops(wf.action_configs)
 
         assert configs["consumer"]["context_scope"]["drop"] == ["reachable.field_a"]

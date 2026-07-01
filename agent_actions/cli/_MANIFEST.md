@@ -47,12 +47,6 @@
 | `inspect` | Function | Inspect workflow structure and data flow (command group). | - |
 | `inspect_base.py` | Module | Shared base class for all inspect subcommands. | `cli`, `orchestration`, `validation` |
 | `BaseInspectCommand` | Class | Base class for inspect commands with common functionality. | - |
-| `inspect_deps.py` | Module | Dependencies inspect subcommand. | `cli`, `orchestration` |
-| `DependenciesCommand` | Class | Show dependency analysis in table format. | - |
-| `dependencies` | Function | Analyze workflow dependencies and auto-inferred context. | - |
-| `inspect_graph.py` | Module | Graph inspect subcommand. | `cli`, `orchestration` |
-| `GraphCommand` | Class | Show workflow structure as a visual dependency graph. | - |
-| `graph` | Function | Show workflow structure as a dependency graph. | - |
 | `inspect_action.py` | Module | Action and context inspect subcommands. | `cli`, `orchestration`, `prompt_generation` |
 | `ActionCommand` | Class | Show detailed information about a single action. | - |
 | `action` | Function | Show details for a specific action. | - |

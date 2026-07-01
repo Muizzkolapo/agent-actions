@@ -230,6 +230,11 @@ class RetryCommand:
         )
         workflow.services.core.action_executor.run_tracker = tracker
         workflow.services.core.action_executor.run_id = run_id
+        from agent_actions.prompt.context.scope_application import build_workflow_metadata
+
+        workflow.services.core.action_runner.workflow_metadata = build_workflow_metadata(
+            name=self.agent_name, run_id=run_id
+        )
 
         agent_folder = workflow.services.core.action_runner.get_action_folder(self.agent_name)
         LoggerFactory.initialize(

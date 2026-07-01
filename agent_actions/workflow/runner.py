@@ -116,6 +116,10 @@ class ActionRunner:
         self.execution_order: list[str] = []  # Set by service_init.initialize_services
         self.action_indices: dict[str, int] = {}  # Set by service_init.initialize_services
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
+        # Populated at service init (name-only) and augmented at cli/run.py once
+        # a run_id exists. Threaded into StrategyExecutionParams so the runtime
+        # `workflow` namespace matches the schema inspect/static-analyzer promise.
+        self.workflow_metadata: dict[str, Any] | None = None
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
         self.project_root: Path | None = None  # Set by service_init.initialize_services
@@ -298,6 +302,7 @@ class ActionRunner:
                 storage_backend=self.storage_backend,
                 source_relative_path=params.source_relative_path,
                 data=params.data,
+                workflow_metadata=self.workflow_metadata,
             )
         )
 

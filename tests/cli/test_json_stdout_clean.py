@@ -61,8 +61,8 @@ class TestDiscoveryProgressChannel:
         _discover_udfs_from_path(str(tools), project_root=None, console=console)
 
         captured = capfd.readouterr()
-        assert "Discovering Tools" not in captured.out, f"leaked to stdout: {captured.out!r}"
-        assert "Discovering Tools" in captured.err, f"missing from stderr: {captured.err!r}"
+        assert "Discovering tools" not in captured.out, f"leaked to stdout: {captured.out!r}"
+        assert "Discovering tools" in captured.err, f"missing from stderr: {captured.err!r}"
 
     def test_stdout_console_demonstrates_the_bug(self, tmp_path, capfd):
         tools = tmp_path / "tools"
@@ -72,6 +72,6 @@ class TestDiscoveryProgressChannel:
         _discover_udfs_from_path(str(tools), project_root=None, console=console)
 
         captured = capfd.readouterr()
-        assert "Discovering Tools" in captured.out, (
+        assert "Discovering tools" in captured.out, (
             "stdout-bound Console no longer leaks — print site moved"
         )

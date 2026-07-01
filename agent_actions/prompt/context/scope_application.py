@@ -97,10 +97,32 @@ def _resolve_missing_field(
 # Source: build_field_context_with_history() in scope_builder.py
 FRAMEWORK_NAMESPACES = frozenset({"version", "seed", "workflow", "loop"})
 
+# Field schemas for the fixed-shape framework namespaces. Single source of truth
+# used by (1) runtime population (build_workflow_metadata below), (2) inspect
+# context preview, and (3) any future static field-existence checks. `seed`,
+# `source`, and `loop` are user-shaped and therefore not listed here.
+FRAMEWORK_FIELDS: dict[str, tuple[str, ...]] = {
+    "workflow": ("name", "run_id"),
+    "version": ("i", "idx", "length", "first", "last"),
+}
+
+
+def build_workflow_metadata(name: str, run_id: str | None = None) -> dict[str, Any]:
+    """Runtime workflow namespace matching FRAMEWORK_FIELDS['workflow'].
+
+    `run_id` is None before a run is registered (e.g. batch prep) — the key is
+    still emitted so `{{ workflow.run_id }}` renders as an empty string rather
+    than raising TemplateVariableError."""
+    return {"name": name, "run_id": run_id or ""}
+
+
 __all__ = [
     "apply_context_scope",
     "apply_context_scope_for_records",
     "format_llm_context",
+    "FRAMEWORK_NAMESPACES",
+    "FRAMEWORK_FIELDS",
+    "build_workflow_metadata",
 ]
 
 

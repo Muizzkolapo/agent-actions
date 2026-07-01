@@ -6,24 +6,17 @@ import hashlib
 import json
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from rich.console import Console
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
-from agent_actions.errors.preflight import PreFlightValidationError
-from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
-
-if TYPE_CHECKING:
-    from agent_actions.input.preprocessing.parsing.ast_nodes import (
-        ASTNode,
-        ComparisonNode,
-    )
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
+from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.workflow.config_pipeline import load_workflow_configs
+from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.models import (
@@ -32,81 +25,9 @@ from agent_actions.workflow.models import (
     WorkflowRuntimeConfig,
     WorkflowState,
 )
-from agent_actions.workflow.schema_service import WorkflowSchemaService
 from agent_actions.workflow.service_init import initialize_services, initialize_storage_backend
 
 logger = logging.getLogger(__name__)
-
-
-def _find_comparison_nodes(node: ASTNode) -> list[ComparisonNode]:
-    """Recursively collect all ComparisonNode instances from an AST."""
-    from agent_actions.input.preprocessing.parsing.ast_nodes import (
-        ComparisonNode,
-        LogicalNode,
-    )
-
-    results: list[ComparisonNode] = []
-    if isinstance(node, ComparisonNode):
-        results.append(node)
-    elif isinstance(node, LogicalNode):
-        results.extend(_find_comparison_nodes(node.left))
-        if node.right is not None:
-            results.extend(_find_comparison_nodes(node.right))
-    return results
-
-
-def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str) -> list[str]:
-    """Flag ComparisonNode instances where the RHS is a bare FieldNode (likely unquoted string)."""
-    from agent_actions.input.preprocessing.parsing.ast_nodes import (
-        FieldNode,
-    )
-
-    errors: list[str] = []
-    for comparison in _find_comparison_nodes(ast_root):
-        if comparison.right is not None and isinstance(comparison.right, FieldNode):
-            field = comparison.right.field_path
-            left_repr = (
-                comparison.left.field_path if isinstance(comparison.left, FieldNode) else "..."
-            )
-            op = comparison.operator.value
-            errors.append(
-                f"Action '{action_name}': guard condition '{clause}' compares field "
-                f"'{left_repr}' to bare identifier '{field}'. "
-                f"If '{field}' is a string value, quote it: "
-                f'{left_repr} {op} "{field}"'
-            )
-    return errors
-
-
-def validate_guard_conditions(action_configs: dict) -> list[str]:
-    """Parse all guard conditions and return error messages for any that are invalid.
-
-    Runs after config expansion, so guard dicts already use 'clause' (not 'condition').
-    Catches syntax errors and semantic issues (e.g., unquoted string literals on RHS)
-    before any LLM calls are made.
-    """
-    errors: list[str] = []
-    parser = WhereClauseParser()
-
-    for action_name, config in action_configs.items():
-        guard = config.get("guard")
-        if not guard or not isinstance(guard, dict):
-            continue
-        clause = guard.get("clause")
-        if not clause:
-            continue
-
-        parse_result = parser.parse_cached(clause)
-        if not parse_result.success:
-            error = parse_result.error
-            detail = error.message if error else "parse failed"
-            errors.append(f"Action '{action_name}': invalid guard condition '{clause}': {detail}")
-            continue
-
-        if parse_result.ast is not None:
-            errors.extend(_check_bare_identifier_rhs(parse_result.ast.root, clause, action_name))
-
-    return errors
 
 
 class AgentWorkflow:
@@ -120,7 +41,7 @@ class AgentWorkflow:
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
         self._run_static_validation()
-        self._strip_unreachable_drops()
+        strip_unreachable_drops(self.action_configs)
 
         # Storage & services
         self.storage_backend = initialize_storage_backend(config, self.metadata, self.console)
@@ -156,117 +77,18 @@ class AgentWorkflow:
         Validates context_scope field references, schema structures, and
         data flow — like dbt compile before dbt run. Raises on errors.
         """
-        self.schema_service = WorkflowSchemaService.from_action_configs(
-            self.agent_name,
-            self.action_configs,
-            project_root=self.config.resolve_project_root(),
-            with_udf_registry=True,
-        )
+        from agent_actions.services.preflight_service import PreflightService
 
-        result = self.schema_service.validate()
-        if result.errors:
-            raise PreFlightValidationError(
-                result.format_report(),
-                hint="Fix the static type errors above before running the workflow.",
-            )
-
-        # Auto-fix schemas for fields that may be None due to guard filtering.
-        from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
-            apply_guard_nullable_schema_fixes,
-        )
-
-        guard_fixes = apply_guard_nullable_schema_fixes(self.action_configs)
-        if guard_fixes:
-            logger.info(
-                "Auto-fixed %d guard-nullable schema field(s): %s",
-                len(guard_fixes),
-                ", ".join(guard_fixes),
-            )
-
-        guard_errors = self._validate_guard_conditions()
-        if guard_errors:
-            raise PreFlightValidationError(
-                "\n".join(guard_errors),
-                hint="Fix the guard condition errors above before running the workflow.",
-            )
-
-        # Resolution checks: API keys, seed files, vendor batch compatibility
-        from agent_actions.validation.preflight.resolution_service import (
-            WorkflowResolutionService,
-        )
-
-        resolution_result = WorkflowResolutionService(
+        service = PreflightService(
+            agent_name=self.agent_name,
             action_configs=self.action_configs,
+            project_root=self.config.resolve_project_root(),
             workflow_config_path=self.config.paths.constructor_path,
-            project_root=self.config.project_root,
             verify_keys=self.config.verify_keys,
-        ).resolve_all()
-        resolution_result.raise_if_invalid()
-
-        for warning in resolution_result.warnings:
-            logger.warning("Pre-flight: %s", warning.message)
-
-    def _strip_unreachable_drops(self) -> None:
-        """Remove drop directives targeting unreachable namespaces from action configs.
-
-        After static validation, the runtime action_configs still contain drops
-        that reference namespaces outside the action's dependency chain.  These
-        are no-ops that produce noisy per-record runtime warnings.  Strip them
-        so the runtime never sees them.
-        """
-        all_action_names = set(self.action_configs.keys())
-
-        for action_name, config in self.action_configs.items():
-            context_scope = config.get("context_scope")
-            if not context_scope or not isinstance(context_scope, dict):
-                continue
-
-            drop_refs = context_scope.get("drop")
-            if not isinstance(drop_refs, list) or not drop_refs:
-                continue
-
-            # Compute transitive upstream reachable set from depends_on.
-            reachable = self._get_reachable_actions(action_name)
-
-            filtered: list[str] = []
-            for ref in drop_refs:
-                if not isinstance(ref, str) or "." not in ref:
-                    filtered.append(ref)
-                    continue
-
-                ns_name = ref.split(".", 1)[0]
-
-                # Keep drops on special namespaces, loop, and reachable actions.
-                if ns_name not in all_action_names or ns_name in reachable:
-                    filtered.append(ref)
-                    continue
-
-                # Unreachable action namespace — strip the drop.
-                logger.debug(
-                    "Stripped unreachable drop '%s' from action '%s'",
-                    ref,
-                    action_name,
-                )
-
-            if len(filtered) != len(drop_refs):
-                context_scope["drop"] = filtered
-
-    def _get_reachable_actions(self, action_name: str) -> set[str]:
-        """Compute the transitive upstream set reachable from an action."""
-        reachable: set[str] = set()
-        stack = list(self.action_configs.get(action_name, {}).get("depends_on") or [])
-
-        while stack:
-            dep = stack.pop()
-            if dep in reachable:
-                continue
-            reachable.add(dep)
-            dep_config = self.action_configs.get(dep, {})
-            for upstream in dep_config.get("depends_on") or []:
-                if upstream not in reachable:
-                    stack.append(upstream)
-
-        return reachable
+        )
+        service.validate()
+        # Reuse the rebuilt schema service to avoid a second pass.
+        self.schema_service = service.schema_service
 
     def _validate_guard_conditions(self) -> list[str]:
         return validate_guard_conditions(self.action_configs)

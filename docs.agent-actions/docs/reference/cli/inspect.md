@@ -1,198 +1,117 @@
 ---
 title: inspect Commands
-description: Analyze workflow structure and data flow
+description: Workflow preflight and introspection
 sidebar_position: 6
 ---
 
 # inspect Commands
 
-Understanding how your actions connect can be challenging as workflows grow. The `inspect` command group helps you analyze workflow structure, dependencies, and data flow without executing anything.
+`agac inspect` is the read-only introspection surface for a workflow. The
+default form runs preflight validation and renders a dependency graph;
+two subcommands drill into a single action.
 
 ```bash
-agac inspect <subcommand> [options]
+agac inspect -a <workflow>                          # default: graph + validation
+agac inspect action  -a <workflow> ACTION [options]
+agac inspect context -a <workflow> ACTION [options]
 ```
 
 :::tip Run from Anywhere
 You can run inspect commands from any subdirectory within your project.
 :::
 
+## Default behavior
+
+`agac inspect -a <workflow>` runs preflight validation and prints a
+validated action list — one ✓ per action, one `● validated` badge for
+the whole workflow. Exits 0 on success, non-zero on validation error.
+
+```bash
+$ agac inspect -a review_analyzer
+
+review_analyzer  ● validated                              5 actions
+
+  ✓  fetch_reviews
+  ✓  analyze_sentiment
+  ✓  extract_topics
+  ✓  generate_summary
+  ✓  write_report
+```
+
+Preflight covers action definitions, dependency cycles, `context_scope`
+references, template variables, schema structure, and guard syntax. If
+any static check fails you get a `PreFlightValidationError` naming the
+exact YAML field instead of the list.
+
+For structure, drill down with `inspect action <name>` (deps + prompt
++ schema + who reads this action) or `inspect context <name>`
+(template variables that are in scope).
+
 ## Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `dependencies` | Analyze workflow dependencies and auto-inferred context |
-| `graph` | Show workflow structure as a visual dependency graph |
-| `action` | Show detailed information about a specific action |
-| `context` | Show context debug information for a specific action |
+| `action`  | Detailed configuration for a single action |
+| `context` | Template-variable debug view for a single action |
 
-## inspect dependencies
+Each subcommand accepts its own `--json` flag for machine-readable
+output.
 
-**How do actions connect to each other?**
-
-This command shows the dependency model for your workflow - which actions feed into others and which provide context data.
+### inspect action
 
 ```bash
-agac inspect dependencies -a <workflow-name> [options]
+agac inspect action -a <workflow> <action_name> [--json]
 ```
 
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-a, --agent TEXT` | Workflow name (required) |
-| `-u, --user-code` | Path to user code directory |
-| `--json` | Output as JSON |
-| `--action TEXT` | Filter to a specific action |
+Configuration, dependencies, context scope, rendered prompt template,
+output schema, LLM settings, and downstream consumers for one action.
 
-**Example:**
-```bash
-agac inspect dependencies -a my_workflow
-```
-
-The output table shows:
-- **Input Sources**: Actions that provide the primary input data
-- **Context Sources**: Actions that provide additional context (via `context_scope`)
-- **Type**: Classification based on dependency pattern (Source, Transform, Merge, etc.)
-
-### Filter to Specific Action
+### inspect context
 
 ```bash
-agac inspect dependencies -a my_workflow --action extract_facts
+agac inspect context -a <workflow> <action_name> [--json]
 ```
 
-### JSON Output
-
-```bash
-agac inspect dependencies -a my_workflow --json
-```
-
-## inspect graph
-
-**Visualize the workflow structure**
-
-Shows your workflow as a tree with data flow indicators:
-
-```bash
-agac inspect graph -a <workflow-name> [options]
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-a, --agent TEXT` | Workflow name (required) |
-| `-u, --user-code` | Path to user code directory |
-| `--json` | Output as JSON |
-
-**Example:**
-```bash
-agac inspect graph -a my_workflow
-```
-
-The output symbols indicate:
-- **←** Input source (execution dependency)
-- **◇** Context source (additional data)
-- **→** Output fields (from schema)
-
-## inspect action
-
-**Deep dive into a single action**
-
-Shows detailed configuration, dependencies, and schema for one action:
-
-```bash
-agac inspect action -a <workflow-name> <action-name> [options]
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-a, --agent TEXT` | Workflow name (required) |
-| `-u, --user-code` | Path to user code directory |
-| `--json` | Output as JSON |
-
-**Example:**
-```bash
-agac inspect action -a my_workflow generate_question
-```
-
-### JSON Output
-
-```bash
-agac inspect action -a my_workflow generate_question --json
-```
-
-## inspect context
-
-**Debug context data availability for an action**
-
-Shows what data namespaces, template variables, and context scope rules would be available during template rendering for a specific action. This helps you understand what data is available without running the workflow.
-
-```bash
-agac inspect context -a <workflow-name> <action-name> [options]
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-a, --agent TEXT` | Workflow name (required) |
-| `-u, --user-code` | Path to user code directory |
-| `--json` | Output as JSON |
-
-**Example:**
-```bash
-agac inspect context -a my_workflow generate_question
-```
-
-The output shows:
-- **Namespaces loaded**: Available data namespaces (source, dependencies, versions, workflow)
-- **Context scope applied**: Which fields are observed, passed through, or dropped
-- **Template variables available**: Variables you can use in your prompt templates
-- **Dependencies**: Input sources and context sources
-
-### JSON Output
-
-```bash
-agac inspect context -a my_workflow generate_question --json
-```
+Available namespaces, applied context scope, and template variables the
+action's prompt would see.
 
 :::tip Debugging Template Errors
-If you're getting "undefined variable" errors in your templates, use `inspect context` to see exactly what variables are available for that action.
+If you're getting "undefined variable" errors in your templates, use
+`inspect context` to see exactly what variables are available for that
+action.
 :::
 
-## Use Cases
+## Exit codes
 
-### Debugging Dependency Issues
+| Code | Meaning |
+|------|---------|
+| 0 | Inspection OK (graph shown, validation passed) |
+| 1 | Validation failed or other CLI error |
+| 2 | Bad flags or missing required option |
 
-If an action isn't receiving expected data:
+## Common patterns
+
+### Dependency debugging
+
+The default `agac inspect -a my_workflow` shows the full dependency
+graph with parallel fan-outs. For per-action drill-down with inputs,
+context, schema, and rendered prompt:
 
 ```bash
-# Check what the action thinks its dependencies are
 agac inspect action -a my_workflow problematic_action
-
-# See the full dependency chain
-agac inspect graph -a my_workflow
 ```
 
-### Understanding Execution Order
+### Validate before run (in CI)
 
 ```bash
-# See the computed execution order
-agac inspect graph -a my_workflow --json | jq '.execution_order'
+agac inspect -a my_workflow || exit 1
+agac run     -a my_workflow
 ```
 
-### Validating context_scope Configuration
+### Template-variable debug
 
 ```bash
-# Check if context fields are correctly inferred
-agac inspect dependencies -a my_workflow --json
-```
-
-### Debugging Template Variable Issues
-
-```bash
-# See what variables are available for an action
 agac inspect context -a my_workflow problematic_action
-
-# Check if specific fields are accessible
 agac inspect context -a my_workflow problematic_action --json | jq '.namespaces'
 ```
 
