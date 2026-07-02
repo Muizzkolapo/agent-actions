@@ -25,9 +25,7 @@ logger = logging.getLogger(__name__)
 STATE_HISTORY_CAP: int = 64
 _STATE_SCHEMA_VERSION: int = 1
 
-# Action names that have already emitted the truncation log this process.
-# Dedup key is action_name — records do not carry run_id/workflow_name, and
-# the useful diagnostic dimension is "which action keeps hitting the cap".
+# Keyed on action_name: records don't carry run_id/workflow_name.
 _truncation_logged: set[str] = set()
 
 

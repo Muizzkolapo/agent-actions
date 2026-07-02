@@ -29,10 +29,8 @@ def _drive_transitions(n: int, action_name: str = "act") -> dict:
 
 @pytest.fixture
 def envelope_log_propagates():
-    # LoggingFactory sets `agent_actions` propagate=False once initialized in a
-    # prior test. Caplog attaches at root, so without propagation the truncation
-    # log never reaches it. Restore the original value after the test to avoid
-    # polluting downstream tests that assert on logger-bridge behavior.
+    # LoggingFactory sets agent_actions.propagate=False once initialized; caplog
+    # attaches at root, so without this the truncation log never reaches it.
     root = logging.getLogger("agent_actions")
     original = root.propagate
     root.propagate = True
