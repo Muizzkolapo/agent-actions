@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from agent_actions.record.envelope import (
     STATE_HISTORY_CAP,
     RecordEnvelope,
@@ -25,6 +27,21 @@ def _drive_transitions(n: int, action_name: str = "act") -> dict:
     return record
 
 
+@pytest.fixture
+def envelope_log_propagates():
+    # LoggingFactory sets `agent_actions` propagate=False once initialized in a
+    # prior test. Caplog attaches at root, so without propagation the truncation
+    # log never reaches it. Restore the original value after the test to avoid
+    # polluting downstream tests that assert on logger-bridge behavior.
+    root = logging.getLogger("agent_actions")
+    original = root.propagate
+    root.propagate = True
+    try:
+        yield
+    finally:
+        root.propagate = original
+
+
 def test_cap_constant_is_64():
     assert STATE_HISTORY_CAP == 64
 
@@ -37,7 +54,7 @@ def test_transitioning_past_cap_trims_oldest_entries():
     assert history[-1]["reason"] == "test"
 
 
-def test_first_truncation_for_action_logs_once(caplog):
+def test_first_truncation_for_action_logs_once(caplog, envelope_log_propagates):
     _reset_truncation_log_state_for_tests()
     with caplog.at_level(logging.INFO, logger="agent_actions.record.envelope"):
         _drive_transitions(STATE_HISTORY_CAP + 1, action_name="act_a")
@@ -53,7 +70,7 @@ def test_first_truncation_for_action_logs_once(caplog):
     assert "act_a" in msg
 
 
-def test_distinct_actions_log_independently(caplog):
+def test_distinct_actions_log_independently(caplog, envelope_log_propagates):
     _reset_truncation_log_state_for_tests()
     with caplog.at_level(logging.INFO, logger="agent_actions.record.envelope"):
         _drive_transitions(STATE_HISTORY_CAP + 1, action_name="act_a")
@@ -69,7 +86,7 @@ def test_distinct_actions_log_independently(caplog):
     assert any("act_b" in m for m in logged_actions)
 
 
-def test_no_log_when_under_cap(caplog):
+def test_no_log_when_under_cap(caplog, envelope_log_propagates):
     _reset_truncation_log_state_for_tests()
     with caplog.at_level(logging.INFO, logger="agent_actions.record.envelope"):
         _drive_transitions(STATE_HISTORY_CAP, action_name="act_under")
