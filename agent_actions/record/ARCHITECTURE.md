@@ -232,7 +232,7 @@ Each call appends a history entry:
 }
 ```
 
-History is capped at `STATE_HISTORY_CAP` (64 entries). When overflow occurs, the oldest entries are dropped. `_state_schema_version` (currently 1) bumps when a required key is added to history entries or an existing key changes semantics.
+History is capped at `STATE_HISTORY_CAP` (64 entries). When overflow occurs, the oldest entries are dropped and the first truncation for each `action_name` in a process emits a `logger.warning` on `agent_actions.record.envelope`; subsequent truncations for the same action are silent. `_state_schema_version` (currently 1) bumps when a required key is added to history entries or an existing key changes semantics.
 
 `can_transition()` is the read-only check — returns `True`/`False` without mutating.
 
@@ -352,7 +352,7 @@ UNPROCESSED, PARSE_ERROR, GUARD_FILTERED_ALL
 
 6. **_state is a stage field, not a lifecycle field.** It lives in `RECORD_STAGE_FIELDS`, not `RECORD_LIFECYCLE_FIELDS`. This means `_carry_persistent_fields()` does NOT carry `_state` from input to output. Each stage must call `transition()` to set the state explicitly. The *history* is carried; the *current value* is not.
 
-7. **History cap drops oldest entries.** When `_state_history` exceeds 64 entries, the list is trimmed to the most recent 64. For records that pass through many actions or retry loops, early history entries may be lost. The cap prevents unbounded growth in storage.
+7. **History cap drops oldest entries.** When `_state_history` exceeds 64 entries, the list is trimmed to the most recent 64. For records that pass through many actions or retry loops, early history entries may be lost. The cap prevents unbounded growth in storage. The first truncation for each `action_name` in a process emits a `logger.warning`; subsequent truncations for the same action are silent (once-per-action-per-process dedup keyed on `action_name` because records do not carry run/workflow identifiers).
 
 8. **No migration path for missing _state.** `validate_lifecycle()` is fail-closed. Records without `_state` (pre-dating the lifecycle machine or written by external tools) cannot be migrated. The only remedy is `rm -rf agent_io/target/` and re-run from scratch.
 

@@ -57,4 +57,4 @@ The module does NOT own:
 | `CASCADE_SKIPPED`, `FAILED`, `EXHAUSTED` | `ACTIVE` | **No** — cascade-blocking states cannot be reset |
 | settled | different settled | **No** — cross-settled writes are not valid |
 
-History is capped at 64 entries (oldest drops on overflow). Schema version bumps when a required key is added to history entries or an existing key changes semantics.
+History is capped at 64 entries (oldest drops on overflow). The first truncation for each `action_name` in a process emits a `logger.warning` (`agent_actions.record.envelope`); subsequent truncations for the same action are silent. Schema version bumps when a required key is added to history entries or an existing key changes semantics.

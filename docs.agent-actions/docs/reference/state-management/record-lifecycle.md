@@ -45,9 +45,13 @@ Each state transition appends to `_state_history`:
 
 ### History Capping
 
-The `_state_history` array is capped at **64 entries**. In workflows with many actions (16+), histories near this limit will have their oldest entries silently truncated. The truncation is silent — no log message is emitted, so do not rely on `_state_history` containing the full transition record for very long workflows.
+The `_state_history` array is capped at **64 entries** (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`). In workflows with roughly 16 or more actions, histories can reach this limit and the oldest entries are dropped. The framework emits an INFO log the first time this happens for a given action in a process:
 
-For most workflows (under ~16 actions with standard retries), this cap will never be reached.
+```
+_state_history capped at 64 entries; dropped N oldest transition(s) for action='<name>'.
+```
+
+The log fires at most once per action per process to avoid per-record spam. If you see it, `_state_history` for that action has already lost its oldest transitions.
 
 ## Dispositions
 
