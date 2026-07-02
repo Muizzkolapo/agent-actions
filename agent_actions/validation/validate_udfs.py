@@ -100,7 +100,7 @@ class ValidateUDFsCommand:
                     self._handle_load_error(error)
                 elif error_type == "not_found":
                     self._handle_not_found_error(error)
-                return
+                raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
             fire_event(
@@ -122,6 +122,8 @@ class ValidateUDFsCommand:
                         self.console.print(f"  • {ref} ([cyan]{udf_meta['file']}[/cyan])")
                     except FunctionNotFoundError:
                         self.console.print(f"  • {ref}")
+        except click.exceptions.Exit:
+            raise
         except Exception as e:
             error_message = format_user_error(
                 e,

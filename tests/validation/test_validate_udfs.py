@@ -259,7 +259,8 @@ class TestExecute:
             return_value={"valid": False, "error": dup_err, "error_type": "duplicate"}
         )
 
-        cmd.execute()
+        with pytest.raises(click.exceptions.Exit):
+            cmd.execute()
 
         calls = [str(c) for c in cmd.console.print.call_args_list]
         assert any("Duplicate function name" in c for c in calls)
@@ -275,7 +276,8 @@ class TestExecute:
             return_value={"valid": False, "error": load_err, "error_type": "load_error"}
         )
 
-        cmd.execute()
+        with pytest.raises(click.exceptions.Exit):
+            cmd.execute()
 
         joined = "\n".join(str(c) for c in cmd.console.print.call_args_list)
         # Marker line + canonical formatter output.
@@ -300,7 +302,8 @@ class TestExecute:
             return_value={"valid": False, "error": load_err, "error_type": "load_error"}
         )
 
-        cmd.execute()
+        with pytest.raises(click.exceptions.Exit):
+            cmd.execute()
 
         calls = [str(c) for c in cmd.console.print.call_args_list]
         joined = "\n".join(calls)
@@ -323,7 +326,10 @@ class TestExecute:
             return_value={"valid": False, "error": nf_err, "error_type": "not_found"}
         )
 
-        with patch("agent_actions.validation.validate_udfs.get_udf_metadata") as mock_meta:
+        with (
+            patch("agent_actions.validation.validate_udfs.get_udf_metadata") as mock_meta,
+            pytest.raises(click.exceptions.Exit),
+        ):
             mock_meta.return_value = {"file": "tools.py"}
             cmd.execute()
 
@@ -352,10 +358,13 @@ class TestExecute:
             return_value={"valid": False, "error": nf_err, "error_type": "not_found"}
         )
 
-        with patch("agent_actions.validation.validate_udfs.get_udf_metadata") as mock_meta:
+        with (
+            patch("agent_actions.validation.validate_udfs.get_udf_metadata") as mock_meta,
+            pytest.raises(click.exceptions.Exit),
+        ):
             mock_meta.return_value = {"file": "tools.py"}
             cmd.execute()
 
         calls = [str(c) for c in cmd.console.print.call_args_list]
-        # Should show "... and N more"
+        # Should show "... and 5 more"
         assert any("and 5 more" in c for c in calls)
