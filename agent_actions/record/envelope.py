@@ -38,10 +38,9 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
     if dropped <= 0 or action_name in _truncation_logged:
         return
     _truncation_logged.add(action_name)
-    logger.info(
+    logger.warning(
         "_state_history capped at %d entries; dropped %d oldest transition(s) "
-        "for action=%r. Fires at most once per action per process. "
-        "See docs/reference/state-management/record-lifecycle.md#history-capping.",
+        "for action=%r. Fires at most once per action per process.",
         STATE_HISTORY_CAP,
         dropped,
         action_name,
@@ -226,12 +225,14 @@ class RecordEnvelope:
         history.append(entry)
         overflow = len(history) - STATE_HISTORY_CAP
         if overflow > 0:
-            _log_history_truncation_once(action_name, dropped=overflow)
             history = history[-STATE_HISTORY_CAP:]
 
         record["_state"] = to_state.value
         record["_state_history"] = history
         record["_state_schema_version"] = _STATE_SCHEMA_VERSION
+
+        if overflow > 0:
+            _log_history_truncation_once(action_name, dropped=overflow)
         return record
 
 
