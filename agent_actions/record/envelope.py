@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import datetime
+import logging
 from typing import Any
 
 from agent_actions.record.state import (
@@ -19,8 +20,35 @@ from agent_actions.record.state import (
     RecordState,
 )
 
+logger = logging.getLogger(__name__)
+
 STATE_HISTORY_CAP: int = 64
 _STATE_SCHEMA_VERSION: int = 1
+
+# Action names that have already emitted the truncation log this process.
+# Dedup key is action_name — records do not carry run_id/workflow_name, and
+# the useful diagnostic dimension is "which action keeps hitting the cap".
+_truncation_logged: set[str] = set()
+
+
+def _reset_truncation_log_state_for_tests() -> None:
+    """Test-only hook. Production code MUST NOT call this."""
+    _truncation_logged.clear()
+
+
+def _log_history_truncation_once(action_name: str, dropped: int) -> None:
+    if dropped <= 0 or action_name in _truncation_logged:
+        return
+    _truncation_logged.add(action_name)
+    logger.info(
+        "_state_history capped at %d entries; dropped %d oldest transition(s) "
+        "for action=%r. Fires at most once per action per process. "
+        "See docs/reference/state-management/record-lifecycle.md#history-capping.",
+        STATE_HISTORY_CAP,
+        dropped,
+        action_name,
+    )
+
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
@@ -198,7 +226,9 @@ class RecordEnvelope:
             "detail": detail,
         }
         history.append(entry)
-        if len(history) > STATE_HISTORY_CAP:
+        overflow = len(history) - STATE_HISTORY_CAP
+        if overflow > 0:
+            _log_history_truncation_once(action_name, dropped=overflow)
             history = history[-STATE_HISTORY_CAP:]
 
         record["_state"] = to_state.value
