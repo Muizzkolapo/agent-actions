@@ -29,7 +29,10 @@ from agent_actions.validation.clean_validator import CleanCommandArgs
     "remove_all",
     is_flag=True,
     default=False,
-    help="Remove all directories including staging.",
+    help=(
+        "Remove all agent_io directories including staging and store "
+        "(SQLite databases — unrecoverable). Confirms unless --force."
+    ),
 )
 @handles_user_errors("clean")
 @requires_project

@@ -50,9 +50,10 @@ class Cleaner:
             if sub_path.exists():
                 directories.append(sub_path)
         if self.remove_all:
-            staging_path = io_dir / "staging"
-            if staging_path.exists():
-                directories.append(staging_path)
+            for sub in ("staging", "store"):
+                sub_path = io_dir / sub
+                if sub_path.exists():
+                    directories.append(sub_path)
         if not directories:
             click.echo(f"No directories to clean for agent '{self.agent}'.")
             return
