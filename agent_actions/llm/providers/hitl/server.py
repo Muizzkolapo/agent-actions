@@ -267,7 +267,29 @@ class HitlServer:
         if reject_error:
             return jsonify({"success": False, "error": reject_error}), 400
 
+        reviewer_id = str(payload.get("reviewer_id", ""))[:200]
+        if not reviewer_id:
+            return jsonify({"success": False, "error": "reviewer_id is required."}), 400
+        normalized_review["reviewer_id"] = reviewer_id
+        normalized_review["staged_at"] = _utc_timestamp()
+
         with self._lock:
+            existing = self.record_reviews[raw_index]
+            if existing is not None and existing.get("reviewer_id") != reviewer_id:
+                # A different reviewer already staged this record. Refuse rather
+                # than silently clobber their decision. The same reviewer
+                # overwriting their own slot (change-of-mind) is allowed.
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": "Record already staged by a different reviewer.",
+                            "reviewer_id": existing.get("reviewer_id"),
+                            "staged_at": existing.get("staged_at"),
+                        }
+                    ),
+                    409,
+                )
             self.record_reviews[raw_index] = normalized_review
         logger.debug("Saved review for record %d: %s", raw_index, normalized_review["hitl_status"])
         self._persist_state()

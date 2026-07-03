@@ -223,7 +223,7 @@ def test_review_record_persists_state_for_refresh():
         client,
         "/api/review-record",
         server,
-        json={"index": 0, "hitl_status": "approved", "user_comment": "ok"},
+        json={"index": 0, "hitl_status": "approved", "user_comment": "ok", "reviewer_id": "rev-1"},
     )
     assert response.status_code == 200
 
@@ -251,7 +251,7 @@ def test_submit_uses_persisted_review_state_when_payload_missing():
         client,
         "/api/review-record",
         server,
-        json={"index": 0, "hitl_status": "approved", "user_comment": "ok"},
+        json={"index": 0, "hitl_status": "approved", "user_comment": "ok", "reviewer_id": "rev-1"},
     )
     response = _post(client, "/api/submit", server, json={"hitl_status": "approved"})
     assert response.status_code == 400
@@ -262,7 +262,12 @@ def test_submit_uses_persisted_review_state_when_payload_missing():
         client,
         "/api/review-record",
         server,
-        json={"index": 1, "hitl_status": "rejected", "user_comment": "needs fix"},
+        json={
+            "index": 1,
+            "hitl_status": "rejected",
+            "user_comment": "needs fix",
+            "reviewer_id": "rev-1",
+        },
     )
     response = _post(client, "/api/submit", server, json={"hitl_status": "rejected"})
     assert response.status_code == 200

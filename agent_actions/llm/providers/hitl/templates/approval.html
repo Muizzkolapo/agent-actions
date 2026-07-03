@@ -805,6 +805,23 @@ h4.md-heading { font-size: 13.5px; }
         var showQueue = true;
         var showInspector = true;
 
+        /* ── Per-browser reviewer id (persisted in localStorage) ──
+           Identifies which browser staged a decision so the server can reject
+           (409) a different reviewer's overwrite. There is no per-session
+           token, so this localStorage UUID is the reviewer discriminator. */
+        var REVIEWER_ID_KEY = 'hitl-reviewer-id';
+        function reviewerId() {
+            var id = null;
+            try { id = localStorage.getItem(REVIEWER_ID_KEY); } catch(e) {}
+            if (!id) {
+                id = (window.crypto && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : 'r-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+                try { localStorage.setItem(REVIEWER_ID_KEY, id); } catch(e) {}
+            }
+            return id;
+        }
+
         /* ── Field visibility preferences (persisted in localStorage) ── */
         var FIELD_VIS_KEY = 'hitl-field-vis';
         var fieldVisPrefs = {};
@@ -1646,9 +1663,16 @@ h4.md-heading { font-size: 13.5px; }
                 index: index,
                 hitl_status: decision.hitl_status,
                 user_comment: decision.user_comment || '',
+                reviewer_id: reviewerId(),
             });
             if (!resp.ok) {
                 var p = await resp.json().catch(function() { return {}; });
+                if (resp.status === 409 && p.reviewer_id) {
+                    throw new Error(
+                        'Already decided by another reviewer (' + p.reviewer_id +
+                        (p.staged_at ? ' at ' + p.staged_at : '') + ').'
+                    );
+                }
                 throw new Error(p.error || 'Failed to save');
             }
         }

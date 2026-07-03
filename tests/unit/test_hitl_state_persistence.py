@@ -41,14 +41,23 @@ class TestStateFileCreation:
             client,
             "/api/review-record",
             server,
-            json={"index": 0, "hitl_status": "approved", "user_comment": ""},
+            json={
+                "index": 0,
+                "hitl_status": "approved",
+                "user_comment": "",
+                "reviewer_id": "rev-1",
+            },
         )
         assert resp.status_code == 200
 
         assert state_file.exists()
         state = json.loads(state_file.read_text())
         assert state["total_records"] == 4
-        assert state["record_reviews"][0] == {"hitl_status": "approved", "user_comment": ""}
+        entry = state["record_reviews"][0]
+        assert entry["hitl_status"] == "approved"
+        assert entry["user_comment"] == ""
+        assert entry["reviewer_id"] == "rev-1"
+        assert entry["staged_at"].endswith("Z")
         assert state["record_reviews"][1] is None
         assert "last_updated" in state
 
@@ -60,19 +69,31 @@ class TestStateFileCreation:
             client,
             "/api/review-record",
             server,
-            json={"index": 0, "hitl_status": "approved", "user_comment": ""},
+            json={
+                "index": 0,
+                "hitl_status": "approved",
+                "user_comment": "",
+                "reviewer_id": "rev-1",
+            },
         )
         _post(
             client,
             "/api/review-record",
             server,
-            json={"index": 2, "hitl_status": "rejected", "user_comment": "bad"},
+            json={
+                "index": 2,
+                "hitl_status": "rejected",
+                "user_comment": "bad",
+                "reviewer_id": "rev-1",
+            },
         )
 
         state = json.loads(state_file.read_text())
-        assert state["record_reviews"][0] == {"hitl_status": "approved", "user_comment": ""}
+        assert state["record_reviews"][0]["hitl_status"] == "approved"
+        assert state["record_reviews"][0]["user_comment"] == ""
         assert state["record_reviews"][1] is None
-        assert state["record_reviews"][2] == {"hitl_status": "rejected", "user_comment": "bad"}
+        assert state["record_reviews"][2]["hitl_status"] == "rejected"
+        assert state["record_reviews"][2]["user_comment"] == "bad"
         assert state["record_reviews"][3] is None
 
 
@@ -212,7 +233,12 @@ class TestStateDeletion:
                 client,
                 "/api/review-record",
                 server,
-                json={"index": i, "hitl_status": "approved", "user_comment": ""},
+                json={
+                    "index": i,
+                    "hitl_status": "approved",
+                    "user_comment": "",
+                    "reviewer_id": "rev-1",
+                },
             )
         assert state_file.exists()
 
@@ -238,7 +264,12 @@ class TestStateDeletion:
             client,
             "/api/review-record",
             server,
-            json={"index": 0, "hitl_status": "approved", "user_comment": ""},
+            json={
+                "index": 0,
+                "hitl_status": "approved",
+                "user_comment": "",
+                "reviewer_id": "rev-1",
+            },
         )
         assert state_file.exists()
 
@@ -264,7 +295,12 @@ class TestStateDeletion:
             client,
             "/api/review-record",
             server,
-            json={"index": 0, "hitl_status": "rejected", "user_comment": "no"},
+            json={
+                "index": 0,
+                "hitl_status": "rejected",
+                "user_comment": "no",
+                "reviewer_id": "rev-1",
+            },
         )
         assert state_file.exists()
 
@@ -287,7 +323,12 @@ class TestReviewRecordAfterSubmit:
                 client,
                 "/api/review-record",
                 server,
-                json={"index": i, "hitl_status": "approved", "user_comment": ""},
+                json={
+                    "index": i,
+                    "hitl_status": "approved",
+                    "user_comment": "",
+                    "reviewer_id": "rev-1",
+                },
             )
         _post(client, "/api/submit", server, json={})
         assert not state_file.exists()
@@ -297,7 +338,12 @@ class TestReviewRecordAfterSubmit:
             client,
             "/api/review-record",
             server,
-            json={"index": 0, "hitl_status": "rejected", "user_comment": "late"},
+            json={
+                "index": 0,
+                "hitl_status": "rejected",
+                "user_comment": "late",
+                "reviewer_id": "rev-1",
+            },
         )
         assert resp.status_code == 409
         assert not state_file.exists()
@@ -315,13 +361,23 @@ class TestStateTimeout:
             client,
             "/api/review-record",
             server,
-            json={"index": 0, "hitl_status": "approved", "user_comment": ""},
+            json={
+                "index": 0,
+                "hitl_status": "approved",
+                "user_comment": "",
+                "reviewer_id": "rev-1",
+            },
         )
         _post(
             client,
             "/api/review-record",
             server,
-            json={"index": 1, "hitl_status": "rejected", "user_comment": "fix"},
+            json={
+                "index": 1,
+                "hitl_status": "rejected",
+                "user_comment": "fix",
+                "reviewer_id": "rev-1",
+            },
         )
         assert state_file.exists()
 
@@ -353,7 +409,12 @@ class TestNoStateFile:
             client,
             "/api/review-record",
             server,
-            json={"index": 0, "hitl_status": "approved", "user_comment": ""},
+            json={
+                "index": 0,
+                "hitl_status": "approved",
+                "user_comment": "",
+                "reviewer_id": "rev-1",
+            },
         )
         assert resp.status_code == 200
         # No crash, no state file created
