@@ -7,13 +7,14 @@ import logging
 from typing import Any, cast
 
 from agent_actions.errors import AgentActionsError
+from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
 )
-from agent_actions.record.reasons import TOOL_MISSING_RECORD
+from agent_actions.record.reasons import EMPTY_OUTPUT, TOOL_MISSING_RECORD
 from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.content import is_version_merge
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -74,6 +75,35 @@ class FileToolStrategy:
             )
 
             if is_empty_response(raw_response) and records:
+                on_empty = context.agent_config.get("on_empty", "warn")
+
+                if on_empty == "error":
+                    raise EmptyOutputError(
+                        f"Tool '{context.agent_name}' returned empty result from "
+                        f"{len(records)} input record(s) (on_empty=error)",
+                        context={
+                            "agent_name": context.agent_name,
+                            "record_count": len(records),
+                        },
+                    )
+
+                if on_empty == "skip":
+                    return [
+                        ProcessingResult.skipped(
+                            passthrough_data=build_tombstone(
+                                context.agent_name,
+                                record,
+                                EMPTY_OUTPUT,
+                                source_guid=record.get("source_guid"),
+                            ),
+                            reason=EMPTY_OUTPUT,
+                            source_guid=record.get("source_guid"),
+                            source_snapshot=copy.deepcopy(record),
+                            input_record=record,
+                        )
+                        for record in records
+                    ]
+
                 error_msg = (
                     f"Tool '{context.agent_name}' returned empty result "
                     f"from {len(records)} input record(s)"

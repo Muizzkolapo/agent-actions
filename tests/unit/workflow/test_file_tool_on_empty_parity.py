@@ -66,7 +66,9 @@ def test_on_empty_skip_produces_empty_output_tombstones():
         assert result.skip_reason == EMPTY_OUTPUT
         assert result.source_guid == input_data[i]["source_guid"]
         assert len(result.data) == 1
-        assert result.data[0].get("_state") is not None  # tombstone was built
+        tombstone = result.data[0]
+        assert tombstone["_tombstone"] is True
+        assert tombstone["_tombstone_reason"] == EMPTY_OUTPUT
 
 
 def test_on_empty_warn_matches_prior_behavior():
