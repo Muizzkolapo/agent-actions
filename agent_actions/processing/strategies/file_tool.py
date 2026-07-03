@@ -84,6 +84,9 @@ class FileToolStrategy:
                         context={
                             "agent_name": context.agent_name,
                             "record_count": len(records),
+                            "source_guids": [
+                                r.get("source_guid") for r in records if r.get("source_guid")
+                            ],
                         },
                     )
 

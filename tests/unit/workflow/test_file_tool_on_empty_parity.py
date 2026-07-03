@@ -47,6 +47,7 @@ def test_on_empty_error_raises_empty_output_error():
 
     assert "my_file_tool" in str(exc_info.value)
     assert "on_empty=error" in str(exc_info.value)
+    assert exc_info.value.context["source_guids"] == ["sg-1", "sg-2"]
 
 
 def test_on_empty_skip_produces_empty_output_tombstones():
