@@ -4,6 +4,7 @@ import logging
 import signal
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import click
 
@@ -184,12 +185,32 @@ class CLI:
             return 1
 
 
+def _warn_shadowed_project_root(chosen: Path, shadowed: list[Path]) -> None:
+    """Warn once that a nested ``agent_actions.yml`` was passed over.
+
+    Emitted at the CLI layer (not inside the dependency-free resolver, which
+    runs ~4×/invocation before logging boots) so the message fires exactly
+    once and names both the chosen outermost root and the shadowed nested
+    marker(s).
+    """
+    nested = "\n".join(f"    - {p}" for p in shadowed)
+    click.echo(
+        click.style("Warning: ", fg="yellow", bold=True)
+        + "nested 'agent_actions.yml' shadowed by an outer project.\n"
+        + f"  Using outermost project root: {chosen}\n"
+        + f"  Ignoring nested marker(s):\n{nested}",
+        err=True,
+    )
+
+
 def main_entrypoint(argv: Sequence[str] | None = None) -> int:
     from dotenv import load_dotenv
 
-    from agent_actions.config.path_config import find_project_root_dir
+    from agent_actions.config.path_config import find_project_root_dir_with_shadow
 
-    project_root = find_project_root_dir()
+    project_root, shadowed = find_project_root_dir_with_shadow()
+    if shadowed:
+        _warn_shadowed_project_root(project_root, shadowed)
     if project_root:
         env_path = project_root / ".env"
         if env_path.is_file():

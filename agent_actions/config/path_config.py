@@ -71,9 +71,12 @@ def find_project_root_dir(
     """Walk up from *start* (default CWD) looking for the project root.
 
     The project root is the directory that contains a marker file
-    (``agent_actions.yml`` by default).  When *use_fallback_heuristics* is
-    ``True`` (the default) the ``agent_actions/`` and ``agent_config/``
-    directories are also accepted as indicators — matching the behaviour of
+    (``agent_actions.yml`` by default).  When several markers sit on the walk
+    (e.g. a nested ``agent_actions.yml`` dropped by ``agac example install``),
+    the **outermost** wins so the parent project stays visible from a nested
+    subtree.  When *use_fallback_heuristics* is ``True`` (the default) the
+    ``agent_actions/`` and ``agent_config/`` directories are also accepted as
+    indicators — matching the behaviour of
     :pymethod:`PathManager.get_project_root`.
 
     Returns the directory containing the marker, or ``None`` if no marker is
@@ -81,17 +84,51 @@ def find_project_root_dir(
 
     This function is intentionally dependency-free (only ``pathlib``) so it
     can be called very early — e.g. to locate ``.env`` before the config
-    system boots.
+    system boots.  Callers that need to warn about shadowed nested markers use
+    :func:`find_project_root_dir_with_shadow`.
+    """
+    root, _ = find_project_root_dir_with_shadow(
+        start, marker_file=marker_file, use_fallback_heuristics=use_fallback_heuristics
+    )
+    return root
+
+
+def find_project_root_dir_with_shadow(
+    start: Path | None = None,
+    *,
+    marker_file: str | None = None,
+    use_fallback_heuristics: bool = True,
+) -> tuple[Path | None, list[Path]]:
+    """Like :func:`find_project_root_dir` but also report shadowed markers.
+
+    Returns ``(root, shadowed)`` where *root* is the outermost marker directory
+    (or the fallback-heuristic directory when no marker exists) and *shadowed*
+    lists the nested marker directories that were passed over, innermost first.
+    A single marker yields an empty *shadowed* list, so the CLI can warn once
+    only when a genuine nested-project shadow occurred.  Fallback-heuristic
+    directories are never reported as shadowed — they are not marker files.
+
+    Dependency-free (only ``pathlib``) for the same early-boot reason as
+    :func:`find_project_root_dir`.
     """
     markers = (marker_file,) if marker_file else _PROJECT_MARKERS
+    marker_hits: list[Path] = []
+    fallback_hit: Path | None = None
     current = (start or Path.cwd()).resolve()
     while current != current.parent:
         if any((current / m).exists() for m in markers):
-            return current
-        if use_fallback_heuristics and any((current / d).is_dir() for d in _FALLBACK_DIRS):
-            return current
+            marker_hits.append(current)
+        elif (
+            fallback_hit is None
+            and use_fallback_heuristics
+            and any((current / d).is_dir() for d in _FALLBACK_DIRS)
+        ):
+            fallback_hit = current
         current = current.parent
-    return None
+
+    if marker_hits:
+        return marker_hits[-1], marker_hits[:-1]
+    return fallback_hit, []
 
 
 def resolve_project_root(explicit_root: Path | None = None) -> Path:
