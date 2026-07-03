@@ -10,10 +10,8 @@ from agent_actions.storage.backend import Disposition
 
 _STATE_TO_DISPOSITION: dict[RecordState, Disposition] = {
     RecordState.PROCESSED: Disposition.SUCCESS,
-    RecordState.COMMITTED: Disposition.SUCCESS,
     RecordState.GUARD_SKIPPED: Disposition.PASSTHROUGH,
     RecordState.CASCADE_SKIPPED: Disposition.UNPROCESSED,
-    RecordState.GUARD_DEFERRED: Disposition.DEFERRED,
     RecordState.FAILED: Disposition.FAILED,
     RecordState.EXHAUSTED: Disposition.EXHAUSTED,
     RecordState.ACTIVE: Disposition.PASSTHROUGH,

@@ -91,8 +91,8 @@ def reset_for_downstream(
 ) -> None:
     """Reset resettable records to ACTIVE for downstream processing.
 
-    Records in RESETTABLE_DOWNSTREAM_STATES (PROCESSED, COMMITTED,
-    GUARD_SKIPPED, GUARD_DEFERRED) are reset to ACTIVE via transition().
+    Records in RESETTABLE_DOWNSTREAM_STATES (PROCESSED, GUARD_SKIPPED)
+    are reset to ACTIVE via transition().
     Records in CASCADE_BLOCKING_STATES stay as-is for cascade logic.
     ACTIVE records pass through unchanged.
     """

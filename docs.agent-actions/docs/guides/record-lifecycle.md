@@ -28,31 +28,25 @@ The `content` dict is empty — it will grow as each action adds its output unde
 
 ## The State Machine
 
-Every record has a `_state` field governed by a finite state machine. There are 8 possible states:
+Every record has a `_state` field governed by a finite state machine. There are 6 possible states:
 
 ```mermaid
 flowchart TD
     A[ACTIVE<br/>Ready for processing]
     P[PROCESSED<br/>Action succeeded]
-    C[COMMITTED<br/>Written to storage]
     GS[GUARD_SKIPPED<br/>Guard said skip]
-    GD[GUARD_DEFERRED<br/>Guard deferred]
     CS[CASCADE_SKIPPED<br/>Upstream failed]
     F[FAILED<br/>Error occurred]
     E[EXHAUSTED<br/>All retries used]
 
     A --> P
-    A --> C
     A --> GS
-    A --> GD
     A --> CS
     A --> F
     A --> E
 
     P -->|boundary reset| A
-    C -->|boundary reset| A
     GS -->|boundary reset| A
-    GD -->|boundary reset| A
 ```
 
 Three categories:
@@ -60,7 +54,7 @@ Three categories:
 | Category | States | Behavior |
 |----------|--------|----------|
 | **Processable** | `active` | Ready for the next action |
-| **Resettable** | `processed`, `committed`, `guard_skipped`, `guard_deferred` | Reset to `active` at the next action boundary |
+| **Resettable** | `processed`, `guard_skipped` | Reset to `active` at the next action boundary |
 | **Terminal** | `cascade_skipped`, `failed`, `exhausted` | Record stops flowing. No further actions process it. |
 
 ## How Records Flow Through Actions

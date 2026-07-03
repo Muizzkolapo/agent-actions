@@ -32,7 +32,7 @@ class TestRecordStateEnum:
         assert len(values) == len(set(values))
 
     def test_member_count(self):
-        assert len(RecordState) == 8
+        assert len(RecordState) == 6
 
 
 class TestStateCategories:
