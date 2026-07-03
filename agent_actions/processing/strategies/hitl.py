@@ -33,6 +33,15 @@ class HITLStrategy:
     Conforms to the ``ProcessingStrategy`` protocol so it can be used
     with ``UnifiedProcessor.process()``.  Enrichment is handled by the
     processor, not by this strategy.
+
+    Failure contract: HITL signals problems by raising, never by emitting
+    "empty output".  A timed-out review raises ``AgentActionsError`` (partial
+    reviews persist on disk for resume); a missing or malformed decision
+    payload raises ``ValueError``.  The ``on_empty`` config (warn|error|skip)
+    is deliberately not honored here — it governs generative actions whose
+    model may return no content (see ``FileToolStrategy`` and
+    ``OnlineLLMStrategy``), whereas a completed human review always yields a
+    decision payload.
     """
 
     def invoke(
