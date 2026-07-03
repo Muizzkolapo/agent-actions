@@ -15,6 +15,7 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
+from agent_actions.storage.lock import WorkflowLockHeld, workflow_lock
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.validation.run_validator import RunCommandArgs
@@ -235,6 +236,15 @@ class RunCommand:
     default=False,
     help="Verify API keys are valid by probing vendor endpoints before execution",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help=(
+        "Bypass the advisory concurrency lock. Use only if you understand that "
+        "two parallel runs double-execute every action and double the LLM cost."
+    ),
+)
 @handles_user_errors("run")
 @requires_project
 def run(
@@ -245,6 +255,7 @@ def run(
     concurrency_limit: int = 5,
     fresh: bool = False,
     verify_keys: bool = False,
+    force: bool = False,
     project_root: Path | None = None,
 ) -> None:
     """
@@ -269,4 +280,19 @@ def run(
         verify_keys=verify_keys,
     )
     command = RunCommand(args)
-    command.execute(project_root=project_root)
+
+    if force:
+        command.execute(project_root=project_root)
+        return
+
+    # Advisory lock (VIOL-0045): one `agac run` writer per workflow per machine.
+    # Wraps the whole run — releasing mid-run would reopen the double-execute
+    # window. The lock keys on the config name (`-a`), so repeat invocations of
+    # the same workflow contend; the OS releases it if the process is killed.
+    store_dir = project_root / "agent_io" / "store"
+    try:
+        with workflow_lock(store_dir, command.agent_name):
+            command.execute(project_root=project_root)
+    except WorkflowLockHeld as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1) from exc
