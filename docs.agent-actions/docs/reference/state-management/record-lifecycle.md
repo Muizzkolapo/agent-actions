@@ -20,7 +20,7 @@ Every record has a `_state` field governed by a finite state machine. There are 
 | `failed` | Terminal | Record hit an unrecoverable error |
 | `exhausted` | Terminal | Record exhausted all reprompt attempts |
 
-> **Note:** `committed` and `guard_deferred` appear in the `RecordState` enum but have **zero stamp sites** in the framework — no code path writes them. They are dead states and should not be relied upon. See VIOL-0029/0030.
+> **Note:** `committed` and `guard_deferred` were **removed** from the `RecordState` enum in VIOL-0029/0030. They had zero stamp sites — no code path ever wrote them — so the state machine now produces only the six states above. A record carrying either value fails loudly (`RecordEnvelopeError`) on load.
 
 Three categories:
 

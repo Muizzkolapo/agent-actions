@@ -15,9 +15,7 @@ class RecordState(str, Enum):
 
     ACTIVE = "active"
     PROCESSED = "processed"
-    COMMITTED = "committed"
     GUARD_SKIPPED = "guard_skipped"
-    GUARD_DEFERRED = "guard_deferred"
     CASCADE_SKIPPED = "cascade_skipped"
     FAILED = "failed"
     EXHAUSTED = "exhausted"
@@ -30,9 +28,7 @@ SETTLED_STATES: frozenset[RecordState] = frozenset(RecordState) - PROCESSABLE_ST
 RESETTABLE_DOWNSTREAM_STATES: frozenset[RecordState] = frozenset(
     {
         RecordState.PROCESSED,
-        RecordState.COMMITTED,
         RecordState.GUARD_SKIPPED,
-        RecordState.GUARD_DEFERRED,
     }
 )
 

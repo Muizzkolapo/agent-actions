@@ -162,12 +162,6 @@ Internal helper `_extract_existing()` pulls the `content` dict from `input_recor
         │   (settled,     │                  │  (settled,      │
         │    resettable)  │                  │   resettable)   │
         └─────────────────┘                  └────────────────┘
-                 │
-        ┌────────▼────────┐                  ┌────────────────┐
-        │   COMMITTED     │                  │ GUARD_DEFERRED  │
-        │   (settled,     │                  │  (settled,      │
-        │    resettable)  │                  │   resettable)   │
-        └─────────────────┘                  └────────────────┘
 
         ┌─────────────────┐   ┌──────────┐   ┌───────────────┐
         │ CASCADE_SKIPPED │   │  FAILED  │   │   EXHAUSTED   │
@@ -182,7 +176,7 @@ Internal helper `_extract_existing()` pulls the `content` dict from `input_recor
 |------|----|----------|-----|
 | `None` (new record) | any | Yes | First write — no prior state |
 | `ACTIVE` | any settled | Yes | Normal processing progression |
-| `PROCESSED`, `COMMITTED`, `GUARD_SKIPPED`, `GUARD_DEFERRED` | `ACTIVE` | Yes | Downstream reset for re-processing |
+| `PROCESSED`, `GUARD_SKIPPED` | `ACTIVE` | Yes | Downstream reset for re-processing |
 | any | same state | Yes | Idempotent re-application |
 | `CASCADE_SKIPPED`, `FAILED`, `EXHAUSTED` | `ACTIVE` | **No** | Blocking states cannot be reset |
 | `CASCADE_SKIPPED`, `FAILED`, `EXHAUSTED` | `CASCADE_SKIPPED` | Yes | Cascade propagation through blocking states |
@@ -201,7 +195,7 @@ PROCESSABLE_STATES     = {ACTIVE}
 SETTLED_STATES         = {all states} - {ACTIVE}
     # Records that have reached a terminal state for this action
 
-RESETTABLE_DOWNSTREAM_STATES = {PROCESSED, COMMITTED, GUARD_SKIPPED, GUARD_DEFERRED}
+RESETTABLE_DOWNSTREAM_STATES = {PROCESSED, GUARD_SKIPPED}
     # Can be reset to ACTIVE when fed as input to a downstream action
 
 CASCADE_BLOCKING_STATES = {CASCADE_SKIPPED, FAILED, EXHAUSTED}
@@ -268,10 +262,8 @@ The source_guid is a record's stable identity across pipeline stages. Checkpoint
 RecordState          →  Disposition
 ─────────────────────────────────────
 PROCESSED            →  SUCCESS
-COMMITTED            →  SUCCESS
 GUARD_SKIPPED        →  PASSTHROUGH
 CASCADE_SKIPPED      →  UNPROCESSED
-GUARD_DEFERRED       →  DEFERRED
 FAILED               →  FAILED
 EXHAUSTED            →  EXHAUSTED
 ACTIVE               →  PASSTHROUGH

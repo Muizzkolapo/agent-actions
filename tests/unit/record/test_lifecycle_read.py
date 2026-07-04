@@ -54,7 +54,7 @@ class TestValidateLifecycle:
 
 class TestValidateLifecycleBatch:
     def test_all_valid_passes(self):
-        records = [_record("active"), _record("processed"), _record("committed")]
+        records = [_record("active"), _record("processed"), _record("guard_skipped")]
         validate_lifecycle_batch(records, action_name="act")
 
     def test_empty_list_passes(self):

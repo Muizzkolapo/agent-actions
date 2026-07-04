@@ -65,9 +65,7 @@ class TestTransitionLegalEdges:
         "to_state",
         [
             RecordState.PROCESSED,
-            RecordState.COMMITTED,
             RecordState.GUARD_SKIPPED,
-            RecordState.GUARD_DEFERRED,
             RecordState.CASCADE_SKIPPED,
             RecordState.FAILED,
             RecordState.EXHAUSTED,
@@ -82,9 +80,7 @@ class TestTransitionLegalEdges:
         "from_state",
         [
             RecordState.PROCESSED,
-            RecordState.COMMITTED,
             RecordState.GUARD_SKIPPED,
-            RecordState.GUARD_DEFERRED,
         ],
     )
     def test_resettable_to_active(self, from_state):
@@ -132,9 +128,9 @@ class TestTransitionIllegalEdges:
         with pytest.raises(RecordEnvelopeError, match="'processed'.*'failed'"):
             RecordEnvelope.transition(rec, RecordState.FAILED, "act", "oops")
 
-    def test_committed_cannot_go_to_guard_skipped(self):
-        rec = _record(RecordState.COMMITTED)
-        with pytest.raises(RecordEnvelopeError, match="'committed'.*'guard_skipped'"):
+    def test_processed_cannot_go_to_guard_skipped(self):
+        rec = _record(RecordState.PROCESSED)
+        with pytest.raises(RecordEnvelopeError, match="'processed'.*'guard_skipped'"):
             RecordEnvelope.transition(rec, RecordState.GUARD_SKIPPED, "act", "reason")
 
     def test_unknown_state_value_raises_envelope_error(self):

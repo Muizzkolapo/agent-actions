@@ -14,17 +14,11 @@ class TestDeriveDisposition:
     def test_processed_maps_to_success(self):
         assert derive_disposition({"_state": "processed"}) == Disposition.SUCCESS.value
 
-    def test_committed_maps_to_success(self):
-        assert derive_disposition({"_state": "committed"}) == Disposition.SUCCESS.value
-
     def test_guard_skipped_maps_to_passthrough(self):
         assert derive_disposition({"_state": "guard_skipped"}) == Disposition.PASSTHROUGH.value
 
     def test_cascade_skipped_maps_to_unprocessed(self):
         assert derive_disposition({"_state": "cascade_skipped"}) == Disposition.UNPROCESSED.value
-
-    def test_guard_deferred_maps_to_deferred(self):
-        assert derive_disposition({"_state": "guard_deferred"}) == Disposition.DEFERRED.value
 
     def test_failed_maps_to_failed(self):
         assert derive_disposition({"_state": "failed"}) == Disposition.FAILED.value

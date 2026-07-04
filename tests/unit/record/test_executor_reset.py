@@ -20,18 +20,8 @@ class TestResetForDownstream:
         reset_for_downstream(records, action_name="downstream")
         assert records[0]["_state"] == "active"
 
-    def test_committed_resets_to_active(self):
-        records = [_record("committed")]
-        reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "active"
-
     def test_guard_skipped_resets_to_active(self):
         records = [_record("guard_skipped")]
-        reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "active"
-
-    def test_guard_deferred_resets_to_active(self):
-        records = [_record("guard_deferred")]
         reset_for_downstream(records, action_name="downstream")
         assert records[0]["_state"] == "active"
 

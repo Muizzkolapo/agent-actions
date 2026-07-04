@@ -52,7 +52,7 @@ The module does NOT own:
 |------|----|----------|
 | `None` (new record) | any | Yes — first write |
 | `ACTIVE` | any settled | Yes — normal progression |
-| `PROCESSED`, `COMMITTED`, `GUARD_SKIPPED`, `GUARD_DEFERRED` | `ACTIVE` | Yes — downstream reset |
+| `PROCESSED`, `GUARD_SKIPPED` | `ACTIVE` | Yes — downstream reset |
 | any | same state | Yes — idempotent re-application |
 | `CASCADE_SKIPPED`, `FAILED`, `EXHAUSTED` | `ACTIVE` | **No** — cascade-blocking states cannot be reset |
 | settled | different settled | **No** — cross-settled writes are not valid |

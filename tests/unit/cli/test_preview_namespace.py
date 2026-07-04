@@ -65,9 +65,6 @@ class TestIsTombstone:
     def test_processed_state_is_not_tombstone(self):
         assert _is_tombstone({"_state": "processed"}) is False
 
-    def test_committed_state_is_not_tombstone(self):
-        assert _is_tombstone({"_state": "committed"}) is False
-
     def test_active_state_is_not_tombstone(self):
         assert _is_tombstone({"_state": "active"}) is False
 
