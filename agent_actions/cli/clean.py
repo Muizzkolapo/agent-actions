@@ -30,8 +30,8 @@ from agent_actions.validation.clean_validator import CleanCommandArgs
     is_flag=True,
     default=False,
     help=(
-        "Remove all agent_io directories including staging and store "
-        "(SQLite databases — unrecoverable). Confirms unless --force."
+        "Remove all agent_io directories including staging and any "
+        "backend-owned store contents — unrecoverable. Confirms unless --force."
     ),
 )
 @handles_user_errors("clean")

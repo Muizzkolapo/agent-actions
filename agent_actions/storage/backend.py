@@ -5,6 +5,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
+from pathlib import Path
 from types import TracebackType
 from typing import Any
 
@@ -679,6 +680,18 @@ class StorageBackend(ABC):
         Default is no-op. SQLiteBackend overrides with actual maintenance.
         """
         pass
+
+    @classmethod
+    def paths_to_wipe(cls, io_dir: Path) -> list[Path]:
+        """Paths under ``io_dir`` this backend owns and ``clean --all`` should remove.
+
+        Default is empty — remote backends (Postgres, S3) own no local
+        filesystem paths and are not touched by ``clean --all``. File-based
+        backends (SQLite, DuckDB) override to name their owned directories so
+        the CLI lists, confirms, and deletes them uniformly regardless of
+        which backend is configured.
+        """
+        return []
 
     def close(self) -> None:  # noqa: B027
         """Close the storage backend and release resources."""

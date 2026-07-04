@@ -255,6 +255,11 @@ class SQLiteBackend(StorageBackend):
         """Return the backend type identifier."""
         return "sqlite"
 
+    @classmethod
+    def paths_to_wipe(cls, io_dir: Path) -> list[Path]:
+        store = io_dir / "store"
+        return [store] if store.exists() else []
+
     def _open_connection(self) -> None:
         """Create and configure the database connection."""
         if self._connection is not None:
