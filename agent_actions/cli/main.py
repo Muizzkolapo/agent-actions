@@ -209,7 +209,7 @@ def main_entrypoint(argv: Sequence[str] | None = None) -> int:
     from agent_actions.config.path_config import find_project_root_dir_with_shadow
 
     project_root, shadowed = find_project_root_dir_with_shadow()
-    if shadowed:
+    if shadowed and project_root is not None:
         _warn_shadowed_project_root(project_root, shadowed)
     if project_root:
         env_path = project_root / ".env"
