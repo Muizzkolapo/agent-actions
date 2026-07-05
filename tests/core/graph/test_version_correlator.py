@@ -680,8 +680,10 @@ class TestVersionCorrelationFailureError:
             )
             output_manager = AgentOutputManager(config)
 
-            # Resolve correlated input for consumer (idx=2) — no version
-            # outputs exist so this should raise ConfigurationError
+            # Resolve correlated input for consumer (idx=2). The mock storage
+            # backend reports version-source outputs (truthy list_target_files),
+            # so this is the genuine correlation-failure path → ConfigurationError.
+            # (The all-sources-empty path raises AllVersionsFilteredError instead.)
             with pytest.raises(ConfigurationError) as exc_info:
                 output_manager.resolve_correlated_input(idx=2)
 

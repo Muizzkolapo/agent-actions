@@ -214,7 +214,14 @@ class ActionOutputManager:
             )
             return [str(correlated_dir)]
 
-        from agent_actions.errors import ConfigurationError
+        # No correlated dir. Distinguish all-sources-empty (every version branch
+        # produced no output — e.g. all guard-filtered) from a genuine correlation
+        # failure (some source had output but correlation still failed).
+        all_sources_empty = all(
+            not self.storage_backend.list_target_files(src) for src in version_sources
+        )
+        if all_sources_empty:
+            raise AllVersionsFilteredError(current_agent, version_sources)
 
         raise ConfigurationError(
             f"Version correlation failed for '{current_agent}'. "

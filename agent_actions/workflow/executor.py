@@ -20,7 +20,7 @@ from agent_actions.logging.events import (
     BatchCompleteEvent,
     BatchSubmittedEvent,
 )
-from agent_actions.record.reasons import GUARD_FILTERED_ALL
+from agent_actions.record.reasons import ALL_VERSIONS_FILTERED, GUARD_FILTERED_ALL
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
@@ -32,6 +32,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
 logger = logging.getLogger(__name__)
@@ -549,6 +550,59 @@ class ActionExecutor:
         return ActionExecutionResult(
             success=True,
             output_folder=output_folder,
+            status=ActionStatus.SKIPPED,
+            metrics=ExecutionMetrics(duration=duration),
+        )
+
+    def _handle_all_versions_filtered(
+        self, params: ActionRunParams, avf: AllVersionsFilteredError
+    ) -> ActionExecutionResult:
+        """Cascade-skip a version-consumption action whose every branch was filtered.
+
+        All version sources produced no output, so there is nothing to merge.
+        Resolve the action as SKIPPED with reason=all_versions_filtered and let
+        the pipeline continue instead of crashing.
+        """
+        duration = (datetime.now() - params.start_time).total_seconds()
+        self.deps.state_manager.update_status(
+            params.action_name,
+            ActionStatus.SKIPPED,
+            execution_time=duration,
+            skip_reason=ALL_VERSIONS_FILTERED,
+        )
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is not None:
+            storage_backend.set_disposition(
+                params.action_name,
+                NODE_LEVEL_RECORD_ID,
+                DISPOSITION_SKIPPED,
+                reason=ALL_VERSIONS_FILTERED,
+                detail=f"All version sources filtered: {avf.version_sources}",
+            )
+        total_actions = (
+            len(self.deps.action_runner.execution_order)
+            if hasattr(self.deps.action_runner, "execution_order")
+            else 0
+        )
+        fire_event(
+            ActionSkipEvent(
+                action_name=params.action_name,
+                action_index=params.action_idx,
+                total_actions=total_actions,
+                skip_reason=ALL_VERSIONS_FILTERED,
+                mode=params.action_config.get("run_mode", ""),
+            )
+        )
+        self._track_action_complete(
+            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=ALL_VERSIONS_FILTERED
+        )
+        logger.warning(
+            "All version sources filtered for '%s' (%s) — cascade-skipping; no output produced.",
+            params.action_name,
+            avf.version_sources,
+        )
+        return ActionExecutionResult(
+            success=True,
             status=ActionStatus.SKIPPED,
             metrics=ExecutionMetrics(duration=duration),
         )
@@ -1142,7 +1196,10 @@ class ActionExecutor:
         """Execute action run (synchronous)."""
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
-        correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
+        try:
+            correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
+        except AllVersionsFilteredError as avf:
+            return self._handle_all_versions_filtered(params, avf)
 
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
@@ -1174,7 +1231,10 @@ class ActionExecutor:
         """Execute action run (asynchronous)."""
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
-        correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
+        try:
+            correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
+        except AllVersionsFilteredError as avf:
+            return self._handle_all_versions_filtered(params, avf)
 
         # See sync counterpart for the rationale on snapshot placement.
         pre_run_count = self._count_records_for_action(params.action_name)
