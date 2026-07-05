@@ -75,6 +75,11 @@ def _is_empty_output(response: Any) -> bool:
     return False
 
 
+def _empty_warn_reason(action_config: dict[str, Any], agent_name: str, source_guid: str) -> str:
+    """Reason text for the on_empty=warn branch."""
+    return f"Empty LLM response for record '{source_guid}'"
+
+
 def _create_item_context(
     base_context: ProcessingContext, index: int, item: Any
 ) -> ProcessingContext:
@@ -538,7 +543,9 @@ class OnlineLLMStrategy:
 
             if on_empty == "warn":
                 return ProcessingResult.failed(
-                    error=f"Empty LLM response for record '{source_guid}'",
+                    error=_empty_warn_reason(
+                        context.agent_config, context.agent_name, source_guid
+                    ),
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
                     input_record=input_record,
