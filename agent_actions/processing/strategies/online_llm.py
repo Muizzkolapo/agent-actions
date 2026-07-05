@@ -11,7 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from agent_actions.config.types import RunMode
+from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ConfigurationError, RecordContextError, SchemaValidationError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
@@ -75,7 +75,9 @@ def _is_empty_output(response: Any) -> bool:
     return False
 
 
-def _empty_warn_reason(action_config: dict[str, Any], agent_name: str, source_guid: str) -> str:
+def _empty_warn_reason(
+    action_config: ActionConfigDict, agent_name: str, source_guid: str | None
+) -> str:
     """Reason text for the on_empty=warn branch; tool-aware for tool actions.
 
     A tool action is identified by either `kind` or `model_vendor` being
