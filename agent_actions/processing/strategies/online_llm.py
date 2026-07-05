@@ -76,7 +76,14 @@ def _is_empty_output(response: Any) -> bool:
 
 
 def _empty_warn_reason(action_config: dict[str, Any], agent_name: str, source_guid: str) -> str:
-    """Reason text for the on_empty=warn branch."""
+    """Reason text for the on_empty=warn branch; tool-aware for tool actions.
+
+    A tool action is identified by either `kind` or `model_vendor` being
+    ``"tool"`` (the same signal that routed and executed it as a tool), so the
+    reason names the empty tool output rather than blaming the LLM.
+    """
+    if action_config.get("kind") == "tool" or action_config.get("model_vendor") == "tool":
+        return f"Tool '{agent_name}' returned an empty list of records for input {source_guid}"
     return f"Empty LLM response for record '{source_guid}'"
 
 
@@ -543,9 +550,7 @@ class OnlineLLMStrategy:
 
             if on_empty == "warn":
                 return ProcessingResult.failed(
-                    error=_empty_warn_reason(
-                        context.agent_config, context.agent_name, source_guid
-                    ),
+                    error=_empty_warn_reason(context.agent_config, context.agent_name, source_guid),
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
                     input_record=input_record,
