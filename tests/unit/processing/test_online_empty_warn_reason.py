@@ -5,11 +5,9 @@ from agent_actions.processing.strategies.online_llm import _empty_warn_reason
 
 
 def test_tool_action_by_kind_gets_tool_aware_reason():
-    reason = _empty_warn_reason(
-        {"kind": "tool", "name": "flatten_code", "on_empty": "warn"},
-        agent_name="flatten_code",
-        source_guid="rec-abc-123",
-    )
+    cfg = {"kind": "tool", "name": "flatten_code", "on_empty": "warn"}
+    assert "model_vendor" not in cfg  # isolate the kind path — no vendor marker present
+    reason = _empty_warn_reason(cfg, agent_name="flatten_code", source_guid="rec-abc-123")
     assert "Tool" in reason
     assert "empty list" in reason
     assert "rec-abc-123" in reason
@@ -19,11 +17,9 @@ def test_tool_action_by_kind_gets_tool_aware_reason():
 def test_tool_action_by_model_vendor_gets_tool_aware_reason():
     # A tool declared via model_vendor (kind left at its LLM default) is routed
     # and executed as a tool, so its empty-output reason must be tool-aware too.
-    reason = _empty_warn_reason(
-        {"model_vendor": "tool", "name": "flatten_code", "on_empty": "warn"},
-        agent_name="flatten_code",
-        source_guid="rec-v-9",
-    )
+    cfg = {"model_vendor": "tool", "name": "flatten_code", "on_empty": "warn"}
+    assert cfg.get("kind") != "tool"  # isolate the model_vendor path — kind is not the trigger
+    reason = _empty_warn_reason(cfg, agent_name="flatten_code", source_guid="rec-v-9")
     assert "Tool" in reason
     assert "empty list" in reason
     assert "rec-v-9" in reason
