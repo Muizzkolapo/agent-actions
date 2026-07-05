@@ -23,6 +23,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class AllVersionsFilteredError(RuntimeError):
+    """Every version source of a version-consumption action produced no output.
+
+    Raised by ``resolve_correlated_input`` when all version branches were
+    filtered out (nothing to correlate), so the caller can cascade-skip the
+    action instead of raising a hard ``ConfigurationError``.
+    """
+
+    def __init__(self, action_name: str, version_sources: list[str]) -> None:
+        self.action_name = action_name
+        self.version_sources = version_sources
+        super().__init__(
+            f"All version sources filtered for '{action_name}': {version_sources}. "
+            "Nothing to correlate; cascade-skip with reason=all_versions_filtered."
+        )
+
+
 @dataclass
 class OutputManagerConfig:
     """Configuration for ActionOutputManager."""
