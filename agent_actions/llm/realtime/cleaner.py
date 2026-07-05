@@ -44,7 +44,7 @@ class Cleaner:
             self.agent, project_root=self.project_root
         )
         io_dir = Path(io_dir_str)
-        directories = []
+        directories: list[Path] = []
         for sub in ("source", "target"):
             sub_path = io_dir / sub
             if sub_path.exists():
@@ -53,6 +53,14 @@ class Cleaner:
             staging_path = io_dir / "staging"
             if staging_path.exists():
                 directories.append(staging_path)
+            from agent_actions.storage import BACKENDS
+
+            seen = set(directories)
+            for backend_cls in BACKENDS.values():
+                for path in backend_cls.paths_to_wipe(io_dir):
+                    if path not in seen:
+                        directories.append(path)
+                        seen.add(path)
         if not directories:
             click.echo(f"No directories to clean for agent '{self.agent}'.")
             return
