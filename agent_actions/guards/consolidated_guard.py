@@ -20,7 +20,7 @@ class GuardBehavior(StrEnum):
 _UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess"})
 
 # Only keys whose values reach the runtime; expander synthesizes the rest.
-_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset({"condition", "on_false"})
+_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset({"condition", "on_false", "passthrough_on_error"})
 
 
 class GuardConfig:
@@ -30,10 +30,12 @@ class GuardConfig:
         self,
         condition: str,
         on_false: GuardBehavior | str,
+        passthrough_on_error: bool = True,
         _parsed: "GuardExpression | None" = None,
     ):
         """Initialize guard configuration."""
         self.condition = condition
+        self.passthrough_on_error = passthrough_on_error
         if isinstance(on_false, GuardBehavior):
             self.on_false = on_false
         elif isinstance(on_false, str):
@@ -105,10 +107,25 @@ class GuardConfig:
             )
         condition = config_dict["condition"]
         on_false = config_dict.get("on_false")
+        passthrough_on_error = config_dict.get("passthrough_on_error", True)
+        if not isinstance(passthrough_on_error, bool):
+            raise ConfigValidationError(
+                "passthrough_on_error",
+                f"passthrough_on_error must be a boolean, got {type(passthrough_on_error).__name__}",
+                context={
+                    "passthrough_on_error_value": repr(passthrough_on_error),
+                    "operation": "parse_guard_config",
+                },
+            )
         parsed = GuardParser.parse(condition)
         if on_false is None:
             on_false = GuardBehavior.SKIP if parsed.type == GuardType.UDF else GuardBehavior.FILTER
-        return cls(condition=condition, on_false=on_false, _parsed=parsed)
+        return cls(
+            condition=condition,
+            on_false=on_false,
+            passthrough_on_error=passthrough_on_error,
+            _parsed=parsed,
+        )
 
     @classmethod
     def from_string(cls, guard_string: str) -> "GuardConfig":
