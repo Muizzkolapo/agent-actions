@@ -136,16 +136,47 @@ class TestConsolidatedGuardParser:
         assert "foo" in msg
         assert "bar" in msg
 
-    def test_parse_rejects_passthrough_keys_until_wire_through_lands(self):
+    def test_passthrough_on_error_round_trips_through_parser(self):
+        cfg = parse_guard_config(
+            {"condition": "score >= 80", "on_false": "filter", "passthrough_on_error": False}
+        )
+        assert cfg.passthrough_on_error is False
+
+    def test_passthrough_on_error_defaults_true_when_omitted(self):
+        cfg = parse_guard_config({"condition": "score >= 80", "on_false": "filter"})
+        assert cfg.passthrough_on_error is True
+
+    def test_passthrough_on_error_rejects_non_bool(self):
         with pytest.raises(ConfigValidationError) as exc:
             parse_guard_config(
-                {
-                    "condition": "score >= 80",
-                    "on_false": "filter",
-                    "passthrough_on_error": False,
-                }
+                {"condition": "score >= 80", "on_false": "filter", "passthrough_on_error": "false"}
             )
         assert "passthrough_on_error" in str(exc.value)
+
+    def test_passthrough_on_empty_still_rejected_no_consumer(self):
+        """passthrough_on_empty has no runtime consumer, so it must stay rejected."""
+        with pytest.raises(ConfigValidationError) as exc:
+            parse_guard_config(
+                {"condition": "score >= 80", "on_false": "filter", "passthrough_on_empty": False}
+            )
+        assert "passthrough_on_empty" in str(exc.value)
+
+    def test_passthrough_on_error_rejected_on_udf_guard(self):
+        """UDF guards cannot honor passthrough_on_error, so setting it must fail loud."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.output.response.expander_action_types import process_guard_config
+
+        agent: dict = {}
+        action = {
+            "name": "a",
+            "guard": {
+                "condition": "udf:validators.my_check",
+                "on_false": "skip",
+                "passthrough_on_error": False,
+            },
+        }
+        with pytest.raises(ConfigurationError):
+            process_guard_config(agent, action)
 
     def test_parse_rejects_non_string_keys_as_config_error(self):
         with pytest.raises(ConfigValidationError) as exc:
