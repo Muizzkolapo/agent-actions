@@ -75,6 +75,7 @@ from agent_actions.errors.resources import (
 
 # Validation errors
 from agent_actions.errors.validation import (
+    AmbiguousAgentName,
     DataValidationError,
     PromptValidationError,
     SchemaValidationError,
@@ -102,6 +103,7 @@ __all__ = [
     "PromptValidationError",
     "DataValidationError",
     "SchemaValidationError",
+    "AmbiguousAgentName",
     # Processing
     "ProcessingError",
     "TransformationError",

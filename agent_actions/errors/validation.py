@@ -1,5 +1,6 @@
 """Validation-related errors."""
 
+from pathlib import Path
 from typing import Any
 
 from agent_actions.errors.base import AgentActionsError
@@ -10,6 +11,20 @@ class ValidationError(AgentActionsError):
     """Base exception for validation failures."""
 
     pass
+
+
+class AmbiguousAgentName(ValidationError):
+    """Multiple directories share the agent base name; the resolver refuses to guess."""
+
+    def __init__(self, agent_name: str, candidates: list[str]) -> None:
+        self.agent_name = agent_name
+        self.candidates = candidates
+        bullets = "\n  ".join(f"{c}  (workflow: {Path(c).parent.parent.name})" for c in candidates)
+        super().__init__(
+            f"Multiple workflows named '{agent_name}' found:\n  {bullets}\n"
+            "Disambiguate by reorganizing so the base name is unique.",
+            context={"agent_name": agent_name, "candidates": candidates},
+        )
 
 
 class PromptValidationError(ValidationError):

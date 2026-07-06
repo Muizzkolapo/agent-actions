@@ -33,12 +33,28 @@ class FileHandler:
         return None
 
     @staticmethod
+    def find_all_specific_folders(current_dir, parent_folder_name, folder_name):
+        """Return every matching folder path under a named parent folder (empty if none)."""
+        matches = []
+        for root, dirs, _ in os.walk(current_dir):
+            if parent_folder_name in dirs:
+                target_folder_path = Path(root) / parent_folder_name / folder_name
+                if target_folder_path.is_dir():
+                    matches.append(str(target_folder_path))
+        return matches
+
+    @staticmethod
     def get_agent_paths(agent_name, project_root: Path | None = None):
-        """Return (agent_config_dir, io_dir) for the given agent name."""
+        """Return (agent_config_dir, io_dir), raising when the agent name is ambiguous."""
+        from agent_actions.errors.validation import AmbiguousAgentName
+
         search_dir = resolve_project_root(project_root)
-        agent_config_dir = FileHandler.find_specific_folder(
+        config_matches = FileHandler.find_all_specific_folders(
             str(search_dir), agent_name, "agent_config"
         )
+        if len(config_matches) >= 2:
+            raise AmbiguousAgentName(agent_name, config_matches)
+        agent_config_dir = config_matches[0] if config_matches else None
         io_dir = FileHandler.find_specific_folder(str(search_dir), agent_name, "agent_io")
         return agent_config_dir, io_dir
 
