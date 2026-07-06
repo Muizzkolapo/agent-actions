@@ -1,12 +1,13 @@
-"""All version branches filtered must cascade-skip, not crash.
+"""Version-merge with no correlatable input is classified by cause.
 
-When every version source of a version-consumption action produced no output,
-``resolve_correlated_input`` raises ``AllVersionsFilteredError`` (not
-``ConfigurationError``) and the executor resolves the action as SKIPPED so the
-pipeline continues instead of exiting non-zero.
+When every version source was guard-filtered, ``resolve_correlated_input`` raises
+``AllVersionsFilteredError`` so the executor cascade-skips instead of crashing.
+Sources that produced records (genuine correlation failure) or that are empty for
+a non-filter reason (missing data) raise ``ConfigurationError``.
 """
 
 import asyncio
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -42,21 +43,69 @@ def _make_manager(version_sources: list[str], storage_backend: MagicMock) -> Act
     return ActionOutputManager(config)
 
 
-def test_all_sources_empty_raises_all_versions_filtered_error():
+def _backend(
+    *,
+    records: dict[str, list] | None = None,
+    filtered: tuple[str, ...] = (),
+    disposition_error: bool = False,
+) -> MagicMock:
+    """Backend mock keyed by output records (empty list = empty file) and filter dispositions."""
+    records = records or {}
+    filtered_set = set(filtered)
+
+    def list_target_files(action_name: str) -> list[str]:
+        return ["out.json"] if action_name in records else []
+
+    def read_target(action_name: str, _relative_path: str) -> list:
+        return records.get(action_name, [])
+
+    def has_disposition(action_name: str, disposition: str, record_id=None) -> bool:
+        if disposition_error:
+            raise sqlite3.Error("disposition probe failed")
+        return action_name in filtered_set
+
     backend = MagicMock()
-    backend.list_target_files.return_value = []  # every version source empty
-    mgr = _make_manager(["v1", "v2"], backend)
+    backend.list_target_files.side_effect = list_target_files
+    backend.read_target.side_effect = read_target
+    backend.has_disposition.side_effect = has_disposition
+    return backend
+
+
+def test_all_sources_guard_filtered_raises_all_versions_filtered_error():
+    mgr = _make_manager(["v1", "v2"], _backend(filtered=("v1", "v2")))
     with pytest.raises(AllVersionsFilteredError) as exc:
         mgr.resolve_correlated_input(2)  # idx of "consumer"
     assert "consumer" in str(exc.value)
     assert exc.value.version_sources == ["v1", "v2"]
 
 
+def test_filtered_source_with_empty_output_file_still_skips():
+    """A filtered branch that wrote an empty output file has files but zero records → skip, not crash."""
+    mgr = _make_manager(["v1", "v2"], _backend(records={"v1": [], "v2": []}, filtered=("v1", "v2")))
+    with pytest.raises(AllVersionsFilteredError):
+        mgr.resolve_correlated_input(2)
+
+
 def test_some_source_has_output_raises_configuration_error():
-    """A source produced output but correlation still failed → keep the loud error."""
-    backend = MagicMock()
-    backend.list_target_files.side_effect = lambda a: ["out.json"] if a == "v1" else []
-    mgr = _make_manager(["v1", "v2"], backend)
+    """A source produced records but correlation still failed → keep the loud error."""
+    mgr = _make_manager(["v1", "v2"], _backend(records={"v1": [{"id": 1}]}, filtered=("v2",)))
+    with pytest.raises(ConfigurationError) as exc:
+        mgr.resolve_correlated_input(2)
+    assert "v1" in str(exc.value)
+
+
+def test_all_empty_but_not_filtered_raises_configuration_error():
+    """No records anywhere and nothing was filtered → missing data surfaces loudly, no silent skip."""
+    mgr = _make_manager(["v1", "v2"], _backend(filtered=()))
+    with pytest.raises(ConfigurationError) as exc:
+        mgr.resolve_correlated_input(2)
+    assert "v1" in str(exc.value)
+    assert "v2" in str(exc.value)
+
+
+def test_disposition_probe_error_surfaces_config_error_not_raw_crash():
+    """A storage error while probing filter dispositions must not escape as a raw backend error."""
+    mgr = _make_manager(["v1", "v2"], _backend(disposition_error=True))
     with pytest.raises(ConfigurationError):
         mgr.resolve_correlated_input(2)
 

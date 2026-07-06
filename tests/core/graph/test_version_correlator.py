@@ -668,7 +668,12 @@ class TestVersionCorrelationFailureError:
                 },
             }
 
-            # Create minimal config for output manager
+            # A version source that produced output records but could not be
+            # correlated is the genuine-failure path → ConfigurationError.
+            storage_backend = MagicMock()
+            storage_backend.list_target_files.return_value = ["out.json"]
+            storage_backend.read_target.return_value = [{"id": 1}]
+
             config = OutputManagerConfig(
                 agent_folder=agent_folder,
                 execution_order=["action_1", "action_2", "consumer"],
@@ -676,14 +681,10 @@ class TestVersionCorrelationFailureError:
                 action_status={},
                 version_correlator=version_correlator,
                 console=MagicMock(),  # Mock console to avoid print errors
-                storage_backend=MagicMock(),
+                storage_backend=storage_backend,
             )
             output_manager = AgentOutputManager(config)
 
-            # Resolve correlated input for consumer (idx=2). The mock storage
-            # backend reports version-source outputs (truthy list_target_files),
-            # so this is the genuine correlation-failure path → ConfigurationError.
-            # (The all-sources-empty path raises AllVersionsFilteredError instead.)
             with pytest.raises(ConfigurationError) as exc_info:
                 output_manager.resolve_correlated_input(idx=2)
 

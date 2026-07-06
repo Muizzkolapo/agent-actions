@@ -12,6 +12,7 @@ from rich.console import Console
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.storage.backend import (
+    DISPOSITION_FILTERED,
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
@@ -214,25 +215,55 @@ class ActionOutputManager:
             )
             return [str(correlated_dir)]
 
-        # No correlated dir. Distinguish all-sources-empty (every version branch
-        # produced no output — e.g. all guard-filtered) from a genuine correlation
-        # failure (some source had output but correlation still failed).
-        all_sources_empty = all(
-            not self.storage_backend.list_target_files(src) for src in version_sources
-        )
-        if all_sources_empty:
-            raise AllVersionsFilteredError(current_agent, version_sources)
+        # Classify by cause, not file existence: records present → genuine failure;
+        # no records but guard-filtered → cascade-skip; empty for any other reason →
+        # missing data, surface loudly.
+        sources_with_output = [src for src in version_sources if self._has_output_records(src)]
+        if sources_with_output:
+            raise ConfigurationError(
+                f"Version correlation failed for '{current_agent}'. "
+                f"Version sources produced output but could not be correlated: "
+                f"{sources_with_output}.",
+                context={
+                    "agent": current_agent,
+                    "version_sources": version_sources,
+                    "sources_with_output": sources_with_output,
+                    "pattern": pattern,
+                },
+            )
 
-        raise ConfigurationError(
-            f"Version correlation failed for '{current_agent}'. "
-            f"Could not load outputs from version sources: {version_sources}. "
-            f"Check that all version agents completed successfully.",
-            context={
-                "agent": current_agent,
-                "version_sources": version_sources,
-                "pattern": pattern,
-            },
-        )
+        unexpectedly_empty = [src for src in version_sources if not self._was_guard_filtered(src)]
+        if unexpectedly_empty:
+            raise ConfigurationError(
+                f"Version correlation failed for '{current_agent}'. "
+                f"Version sources produced no output and were not guard-filtered: "
+                f"{unexpectedly_empty}. Expected records to merge — check that these "
+                f"agents ran and produced output.",
+                context={
+                    "agent": current_agent,
+                    "version_sources": version_sources,
+                    "unexpectedly_empty": unexpectedly_empty,
+                    "pattern": pattern,
+                },
+            )
+
+        raise AllVersionsFilteredError(current_agent, version_sources)
+
+    def _has_output_records(self, action_name: str) -> bool:
+        outputs, _ = self._load_outputs_from_backend(action_name)
+        return len(outputs) > 0
+
+    def _was_guard_filtered(self, action_name: str) -> bool:
+        try:
+            return self.storage_backend.has_disposition(action_name, DISPOSITION_FILTERED)
+        except (OSError, sqlite3.Error) as e:
+            logger.warning(
+                "Failed to check filtered dispositions for %s: %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
+            return False
 
 
 # Backward-compatible alias
