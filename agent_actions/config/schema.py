@@ -55,6 +55,8 @@ class VersionMode(str, Enum):
 class VersionConfig(BaseModel):
     """Configuration for version-based actions."""
 
+    model_config = ConfigDict(extra="forbid")
+
     param: str = Field(default="i", description="Parameter name for version variable")
     range: list[int] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
         ..., description="Range of values for version parameter"
@@ -72,6 +74,8 @@ class MergePattern(str, Enum):
 class VersionConsumptionConfig(BaseModel):
     """Configuration for consuming version outputs."""
 
+    model_config = ConfigDict(extra="forbid")
+
     source: str = Field(..., description="Base name of the version action to consume")
     pattern: MergePattern = Field(
         default=MergePattern.MERGE, description="Pattern for merging version outputs"
@@ -80,6 +84,8 @@ class VersionConsumptionConfig(BaseModel):
 
 class RetryConfig(BaseModel):
     """Configuration for retry behavior on transport-layer failures."""
+
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(default=True, description="Whether retry is enabled")
     max_attempts: int = Field(
@@ -136,6 +142,8 @@ class RepromptConfig(BaseModel):
 
 class HitlConfig(BaseModel):
     """Configuration for Human-in-the-Loop actions."""
+
+    model_config = ConfigDict(extra="forbid")
 
     port: int = Field(
         default=3001,
