@@ -6,6 +6,7 @@ When every version source of a version-consumption action produced no output,
 pipeline continues instead of exiting non-zero.
 """
 
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -13,6 +14,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.record.reasons import ALL_VERSIONS_FILTERED
+from agent_actions.storage.backend import DISPOSITION_SKIPPED, NODE_LEVEL_RECORD_ID
 from agent_actions.workflow.managers.output import (
     ActionOutputManager,
     AllVersionsFilteredError,
@@ -58,7 +61,7 @@ def test_some_source_has_output_raises_configuration_error():
         mgr.resolve_correlated_input(2)
 
 
-def test_executor_cascade_skips_instead_of_crashing():
+def _make_executor(version_sources: list[str]):
     from agent_actions.workflow.executor import (
         ActionExecutor,
         ActionRunParams,
@@ -73,19 +76,52 @@ def test_executor_cascade_skips_instead_of_crashing():
         output_manager=MagicMock(),
     )
     deps.output_manager.resolve_correlated_input.side_effect = AllVersionsFilteredError(
-        "consumer", ["v1", "v2"]
+        "consumer", version_sources
     )
-    deps.action_runner.execution_order = ["v1", "v2", "consumer"]
+    deps.action_runner.execution_order = [*version_sources, "consumer"]
     executor = ActionExecutor(deps, console=MagicMock())
     params = ActionRunParams(
         action_name="consumer",
-        action_idx=2,
+        action_idx=len(version_sources),
         action_config={},
         is_last_action=True,
         start_time=datetime.now(),
     )
+    return executor, params, deps
 
+
+def test_executor_cascade_skips_instead_of_crashing():
+    executor, params, _ = _make_executor(["v1", "v2"])
     result = executor._execute_action_run(params)  # must NOT raise
+    assert result.status == ActionStatus.SKIPPED
+    assert result.success is True
 
+
+def test_executor_writes_node_level_skip_disposition():
+    executor, params, deps = _make_executor(["v1", "v2"])
+    executor._execute_action_run(params)
+    set_disposition = deps.action_runner.storage_backend.set_disposition
+    set_disposition.assert_called_once()
+    kwargs = set_disposition.call_args.kwargs
+    assert kwargs["record_id"] == NODE_LEVEL_RECORD_ID
+    assert kwargs["disposition"] == DISPOSITION_SKIPPED
+    assert kwargs["reason"] == ALL_VERSIONS_FILTERED
+    assert "v1" in kwargs["detail"]
+    assert "v2" in kwargs["detail"]
+
+
+def test_executor_cascade_skip_survives_disposition_write_error():
+    """A storage error while recording the skip must not re-crash the cascade-skip path."""
+    executor, params, deps = _make_executor(["v1", "v2"])
+    deps.action_runner.storage_backend.set_disposition.side_effect = RuntimeError("db locked")
+    result = executor._execute_action_run(params)  # must NOT raise
+    assert result.status == ActionStatus.SKIPPED
+    assert result.success is True
+
+
+def test_executor_async_cascade_skip_survives_disposition_write_error():
+    executor, params, deps = _make_executor(["v1", "v2"])
+    deps.action_runner.storage_backend.set_disposition.side_effect = RuntimeError("db locked")
+    result = asyncio.run(executor._execute_action_run_async(params))  # must NOT raise
     assert result.status == ActionStatus.SKIPPED
     assert result.success is True

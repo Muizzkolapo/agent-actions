@@ -403,6 +403,7 @@ class TestWriteSkippedDisposition:
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_SKIPPED,
             reason="Upstream failed",
+            detail=None,
         )
 
     def test_logs_warning_on_storage_error(self, executor, mock_deps, caplog):

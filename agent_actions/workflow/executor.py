@@ -570,15 +570,11 @@ class ActionExecutor:
             execution_time=duration,
             skip_reason=ALL_VERSIONS_FILTERED,
         )
-        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        if storage_backend is not None:
-            storage_backend.set_disposition(
-                params.action_name,
-                NODE_LEVEL_RECORD_ID,
-                DISPOSITION_SKIPPED,
-                reason=ALL_VERSIONS_FILTERED,
-                detail=f"All version sources filtered: {avf.version_sources}",
-            )
+        self._write_skipped_disposition(
+            params.action_name,
+            ALL_VERSIONS_FILTERED,
+            detail=f"All version sources filtered: {avf.version_sources}",
+        )
         total_actions = (
             len(self.deps.action_runner.execution_order)
             if hasattr(self.deps.action_runner, "execution_order")
@@ -683,7 +679,9 @@ class ActionExecutor:
                     disp_err,
                 )
 
-    def _write_skipped_disposition(self, action_name: str, reason: str) -> None:
+    def _write_skipped_disposition(
+        self, action_name: str, reason: str, *, detail: str | None = None
+    ) -> None:
         """Write DISPOSITION_SKIPPED to storage so downstream and future runs detect the skip."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is not None:
@@ -693,6 +691,7 @@ class ActionExecutor:
                     record_id=NODE_LEVEL_RECORD_ID,
                     disposition=DISPOSITION_SKIPPED,
                     reason=reason[:500],
+                    detail=detail[:500] if detail is not None else None,
                 )
             except Exception as disp_err:
                 logger.warning(
