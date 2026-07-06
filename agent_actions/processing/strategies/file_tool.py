@@ -8,6 +8,8 @@ from typing import Any, cast
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.errors.processing import EmptyOutputError
+from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.record_helpers import build_tombstone
 from agent_actions.processing.types import (
@@ -76,6 +78,17 @@ class FileToolStrategy:
 
             if is_empty_response(raw_response) and records:
                 on_empty = context.agent_config.get("on_empty", "warn")
+
+                fire_event(
+                    RecordEmptyOutputEvent(
+                        action_name=context.agent_name,
+                        record_index=-1,
+                        source_guid="",
+                        input_field_count=len(records),
+                        output=raw_response,
+                        on_empty=on_empty,
+                    )
+                )
 
                 if on_empty == "error":
                     raise EmptyOutputError(
