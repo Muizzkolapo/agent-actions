@@ -9,6 +9,7 @@ from rich.console import Console
 from agent_actions.config.manager import ConfigManager
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import (
+    ConfigurationError,
     DuplicateFunctionError,
     FunctionNotFoundError,
     UDFLoadError,
@@ -68,6 +69,16 @@ class ValidateUDFsCommand:
             }
         config_manager = ConfigManager(str(config_path), str(paths.default_config_path))
         config_manager.load_configs()
+        try:
+            config_manager.validate_agent_name()
+        except ConfigurationError as e:
+            if "agent_name" not in e.context or "config_filename" not in e.context:
+                raise
+            return {
+                "valid": False,
+                "error": e,
+                "error_type": "name_mismatch",
+            }
         config = config_manager.user_config
         if config is None:
             config = {}
@@ -100,6 +111,8 @@ class ValidateUDFsCommand:
                     self._handle_load_error(error)
                 elif error_type == "not_found":
                     self._handle_not_found_error(error)
+                elif error_type == "name_mismatch":
+                    self._handle_name_mismatch_error(error)
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
@@ -165,6 +178,16 @@ class ValidateUDFsCommand:
         self.console.print(f"  File: [cyan]{error.context['new_file']}[/cyan]\n")
         self.console.print("[yellow]Fix:[/yellow]")
         self.console.print("  Function names must be unique. Rename one of these functions.\n")
+
+    def _handle_name_mismatch_error(self, error: ConfigurationError) -> None:
+        """Report a workflow whose name field does not equal its filename stem."""
+        actual = error.context["agent_name"]
+        expected = error.context["config_filename"]
+        self.console.print(
+            f"[red]❌ Error: workflow name '{actual}' does not match filename "
+            f"'{expected}.yml'[/red]\n"
+            f"  Rename the file to '{actual}.yml', or set 'name: {expected}' in the config."
+        )
 
     def _handle_load_error(self, error: UDFLoadError) -> None:
         """Render via the shared translator chain so UX stays in sync with the CLI."""
