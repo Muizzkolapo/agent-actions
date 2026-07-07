@@ -120,11 +120,13 @@ def test_per_record_filtered_without_node_skip_raises_not_masks():
         mgr.resolve_correlated_input(2)
 
 
-def test_disposition_probe_error_surfaces_config_error_not_raw_crash():
-    """A storage error while probing the node-level skip marker must not escape as a raw backend error."""
+def test_disposition_probe_error_surfaces_storage_error_not_raw_crash():
+    """A storage fault probing the skip marker surfaces a storage-specific error, not a raw crash or the missing-data message."""
     mgr = _make_manager(["v1", "v2"], _backend(disposition_error=True))
-    with pytest.raises(ConfigurationError):
+    with pytest.raises(ConfigurationError) as exc:
         mgr.resolve_correlated_input(2)
+    assert "storage backend" in str(exc.value)
+    assert "were not guard-filtered" not in str(exc.value)
 
 
 def _make_executor(version_sources: list[str]):

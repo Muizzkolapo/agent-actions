@@ -260,13 +260,11 @@ class ActionOutputManager:
                 action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
             )
         except (OSError, sqlite3.Error) as e:
-            logger.warning(
-                "Failed to check node-level skip disposition for %s: %s",
-                action_name,
-                e,
-                exc_info=True,
-            )
-            return False
+            raise ConfigurationError(
+                f"Could not read the skip state of version source '{action_name}' "
+                f"from the storage backend: {e}",
+                context={"action_name": action_name},
+            ) from e
 
 
 # Backward-compatible alias
