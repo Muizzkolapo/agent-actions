@@ -12,7 +12,6 @@ from rich.console import Console
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.storage.backend import (
-    DISPOSITION_FILTERED,
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
     NODE_LEVEL_RECORD_ID,
@@ -216,8 +215,8 @@ class ActionOutputManager:
             return [str(correlated_dir)]
 
         # Classify by cause, not file existence: records present → genuine failure;
-        # no records but guard-filtered → cascade-skip; empty for any other reason →
-        # missing data, surface loudly.
+        # no records but a node-level skip marker (all records filtered) → cascade-skip;
+        # empty for any other reason → missing data, surface loudly.
         sources_with_output = [src for src in version_sources if self._has_output_records(src)]
         if sources_with_output:
             raise ConfigurationError(
@@ -232,7 +231,9 @@ class ActionOutputManager:
                 },
             )
 
-        unexpectedly_empty = [src for src in version_sources if not self._was_guard_filtered(src)]
+        unexpectedly_empty = [
+            src for src in version_sources if not self._was_skipped_without_output(src)
+        ]
         if unexpectedly_empty:
             raise ConfigurationError(
                 f"Version correlation failed for '{current_agent}'. "
@@ -253,12 +254,14 @@ class ActionOutputManager:
         outputs, _ = self._load_outputs_from_backend(action_name)
         return len(outputs) > 0
 
-    def _was_guard_filtered(self, action_name: str) -> bool:
+    def _was_skipped_without_output(self, action_name: str) -> bool:
         try:
-            return self.storage_backend.has_disposition(action_name, DISPOSITION_FILTERED)
+            return self.storage_backend.has_disposition(
+                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+            )
         except (OSError, sqlite3.Error) as e:
             logger.warning(
-                "Failed to check filtered dispositions for %s: %s",
+                "Failed to check node-level skip disposition for %s: %s",
                 action_name,
                 e,
                 exc_info=True,

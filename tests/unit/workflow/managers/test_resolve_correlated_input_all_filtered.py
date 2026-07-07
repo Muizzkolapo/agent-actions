@@ -16,7 +16,11 @@ import pytest
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.record.reasons import ALL_VERSIONS_FILTERED
-from agent_actions.storage.backend import DISPOSITION_SKIPPED, NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_FILTERED,
+    DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.workflow.managers.output import (
     ActionOutputManager,
     AllVersionsFilteredError,
@@ -46,12 +50,14 @@ def _make_manager(version_sources: list[str], storage_backend: MagicMock) -> Act
 def _backend(
     *,
     records: dict[str, list] | None = None,
-    filtered: tuple[str, ...] = (),
+    skipped: tuple[str, ...] = (),
+    filtered_records: tuple[str, ...] = (),
     disposition_error: bool = False,
 ) -> MagicMock:
-    """Backend mock keyed by output records (empty list = empty file) and filter dispositions."""
+    """Backend mock keyed by output records, node-level skip markers, and per-record filter dispositions."""
     records = records or {}
-    filtered_set = set(filtered)
+    skipped_set = set(skipped)
+    filtered_records_set = set(filtered_records)
 
     def list_target_files(action_name: str) -> list[str]:
         return ["out.json"] if action_name in records else []
@@ -62,7 +68,11 @@ def _backend(
     def has_disposition(action_name: str, disposition: str, record_id=None) -> bool:
         if disposition_error:
             raise sqlite3.Error("disposition probe failed")
-        return action_name in filtered_set
+        if disposition == DISPOSITION_SKIPPED and record_id == NODE_LEVEL_RECORD_ID:
+            return action_name in skipped_set
+        if disposition == DISPOSITION_FILTERED and record_id is None:
+            return action_name in filtered_records_set
+        return False
 
     backend = MagicMock()
     backend.list_target_files.side_effect = list_target_files
@@ -71,40 +81,47 @@ def _backend(
     return backend
 
 
-def test_all_sources_guard_filtered_raises_all_versions_filtered_error():
-    mgr = _make_manager(["v1", "v2"], _backend(filtered=("v1", "v2")))
+def test_all_sources_skipped_raises_all_versions_filtered_error():
+    mgr = _make_manager(["v1", "v2"], _backend(skipped=("v1", "v2")))
     with pytest.raises(AllVersionsFilteredError) as exc:
         mgr.resolve_correlated_input(2)  # idx of "consumer"
     assert "consumer" in str(exc.value)
     assert exc.value.version_sources == ["v1", "v2"]
 
 
-def test_filtered_source_with_empty_output_file_still_skips():
-    """A filtered branch that wrote an empty output file has files but zero records → skip, not crash."""
-    mgr = _make_manager(["v1", "v2"], _backend(records={"v1": [], "v2": []}, filtered=("v1", "v2")))
+def test_skipped_source_with_empty_output_file_still_skips():
+    """A skipped branch that wrote an empty output file has files but zero records → skip, not crash."""
+    mgr = _make_manager(["v1", "v2"], _backend(records={"v1": [], "v2": []}, skipped=("v1", "v2")))
     with pytest.raises(AllVersionsFilteredError):
         mgr.resolve_correlated_input(2)
 
 
 def test_some_source_has_output_raises_configuration_error():
     """A source produced records but correlation still failed → keep the loud error."""
-    mgr = _make_manager(["v1", "v2"], _backend(records={"v1": [{"id": 1}]}, filtered=("v2",)))
+    mgr = _make_manager(["v1", "v2"], _backend(records={"v1": [{"id": 1}]}, skipped=("v2",)))
     with pytest.raises(ConfigurationError) as exc:
         mgr.resolve_correlated_input(2)
     assert "v1" in str(exc.value)
 
 
-def test_all_empty_but_not_filtered_raises_configuration_error():
-    """No records anywhere and nothing was filtered → missing data surfaces loudly, no silent skip."""
-    mgr = _make_manager(["v1", "v2"], _backend(filtered=()))
+def test_all_empty_but_not_skipped_raises_configuration_error():
+    """No records anywhere and no node-level skip → missing data surfaces loudly, no silent skip."""
+    mgr = _make_manager(["v1", "v2"], _backend(skipped=()))
     with pytest.raises(ConfigurationError) as exc:
         mgr.resolve_correlated_input(2)
     assert "v1" in str(exc.value)
     assert "v2" in str(exc.value)
 
 
+def test_per_record_filtered_without_node_skip_raises_not_masks():
+    """Records filtered per-record but no node-level skip (e.g. crashed mid-run) → raise, don't cascade-skip."""
+    mgr = _make_manager(["v1", "v2"], _backend(filtered_records=("v1", "v2")))
+    with pytest.raises(ConfigurationError):
+        mgr.resolve_correlated_input(2)
+
+
 def test_disposition_probe_error_surfaces_config_error_not_raw_crash():
-    """A storage error while probing filter dispositions must not escape as a raw backend error."""
+    """A storage error while probing the node-level skip marker must not escape as a raw backend error."""
     mgr = _make_manager(["v1", "v2"], _backend(disposition_error=True))
     with pytest.raises(ConfigurationError):
         mgr.resolve_correlated_input(2)
