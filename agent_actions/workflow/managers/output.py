@@ -203,68 +203,17 @@ class ActionOutputManager:
         version_sources = consumption_config["version_agents"]
         pattern = consumption_config["pattern"]
 
+        # prepare_correlated_input returns the correlated directory, or raises
+        # AllVersionsFilteredError (every source empty → executor cascade-skips)
+        # or ConfigurationError (correlation/storage fault).
         correlated_dir = self.version_correlator.prepare_correlated_input(
             current_agent, version_sources, idx
         )
-
-        if correlated_dir:
-            self.console.print(
-                f"[blue]🔗 Using correlated input for {current_agent} from "
-                f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
-            )
-            return [str(correlated_dir)]
-
-        # Classify by cause, not file existence: records present → genuine failure;
-        # no records but a node-level skip marker (all records filtered) → cascade-skip;
-        # empty for any other reason → missing data, surface loudly.
-        sources_with_output = [src for src in version_sources if self._has_output_records(src)]
-        if sources_with_output:
-            raise ConfigurationError(
-                f"Version correlation failed for '{current_agent}'. "
-                f"Version sources produced output but could not be correlated: "
-                f"{sources_with_output}.",
-                context={
-                    "agent": current_agent,
-                    "version_sources": version_sources,
-                    "sources_with_output": sources_with_output,
-                    "pattern": pattern,
-                },
-            )
-
-        unexpectedly_empty = [
-            src for src in version_sources if not self._was_skipped_without_output(src)
-        ]
-        if unexpectedly_empty:
-            raise ConfigurationError(
-                f"Version correlation failed for '{current_agent}'. "
-                f"Version sources produced no output and were not guard-filtered: "
-                f"{unexpectedly_empty}. Expected records to merge — check that these "
-                f"agents ran and produced output.",
-                context={
-                    "agent": current_agent,
-                    "version_sources": version_sources,
-                    "unexpectedly_empty": unexpectedly_empty,
-                    "pattern": pattern,
-                },
-            )
-
-        raise AllVersionsFilteredError(current_agent, version_sources)
-
-    def _has_output_records(self, action_name: str) -> bool:
-        outputs, _ = self._load_outputs_from_backend(action_name)
-        return len(outputs) > 0
-
-    def _was_skipped_without_output(self, action_name: str) -> bool:
-        try:
-            return self.storage_backend.has_disposition(
-                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-            )
-        except (OSError, sqlite3.Error) as e:
-            raise ConfigurationError(
-                f"Could not read the skip state of version source '{action_name}' "
-                f"from the storage backend: {e}",
-                context={"action_name": action_name},
-            ) from e
+        self.console.print(
+            f"[blue]🔗 Using correlated input for {current_agent} from "
+            f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
+        )
+        return [str(correlated_dir)]
 
 
 # Backward-compatible alias

@@ -319,20 +319,12 @@ class TestVersionOutputCorrelator:
         expected_b = {"loop_1", "loop_2"}
         assert set(rec_b["content"].keys()) == expected_b
 
-    def test_error_handling_in_correlation(self, correlator, temp_agent_folder):
-        """Test error handling during correlation."""
-        # Use simple directory names (no node_X_ prefix)
-        loop_dir = temp_agent_folder / "target" / "loop_1"
-        loop_dir.mkdir(parents=True)
-        with open(loop_dir / "invalid.json", "w") as f:
-            f.write("not valid json {")
-        result = correlator.prepare_correlated_input("consumer", ["loop_1"], 2)
-        if result:
-            output_files = list(Path(result).glob("*.json"))
-            if output_files:
-                with open(output_files[0]) as f:
-                    data = json.load(f)
-                    assert data == []
+    def test_error_handling_in_correlation(self, correlator):
+        """A version source with no backend records raises the cascade-skip signal."""
+        from agent_actions.workflow.managers.output import AllVersionsFilteredError
+
+        with pytest.raises(AllVersionsFilteredError):
+            correlator.prepare_correlated_input("consumer", ["loop_1"], 2)
 
 
 class TestVersionOutputCorrelatorIntegration:
@@ -641,10 +633,10 @@ class TestVersionCorrelationFailureError:
     """Test that version correlation failure raises ConfigurationError instead of silent fallback."""
 
     def test_version_correlation_failure_raises_error(self):
-        """Test that version correlation failure raises ConfigurationError."""
+        """Records present but uncorrelatable raises loudly — not a silent None."""
         from unittest.mock import MagicMock
 
-        from agent_actions.errors import ConfigurationError
+        from agent_actions.errors import DataValidationError
         from agent_actions.workflow.managers.output import (
             AgentOutputManager,
             OutputManagerConfig,
@@ -652,9 +644,7 @@ class TestVersionCorrelationFailureError:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             agent_folder = Path(tmpdir)
-            version_correlator = VersionOutputCorrelator(agent_folder)
 
-            # Create agent configs with version_consumption_config declared
             # Version agents must have numeric suffixes (action_1, action_2)
             agent_configs = {
                 "action_1": {"agent_type": "action"},
@@ -668,11 +658,14 @@ class TestVersionCorrelationFailureError:
                 },
             }
 
-            # A version source that produced output records but could not be
-            # correlated is the genuine-failure path → ConfigurationError.
+            # Sources produced records, but they lack version_correlation_id, so
+            # correlation cannot key them — a loud failure, not a silent skip.
             storage_backend = MagicMock()
             storage_backend.list_target_files.return_value = ["out.json"]
             storage_backend.read_target.return_value = [{"id": 1}]
+            version_correlator = VersionOutputCorrelator(
+                agent_folder, storage_backend=storage_backend
+            )
 
             config = OutputManagerConfig(
                 agent_folder=agent_folder,
@@ -685,13 +678,8 @@ class TestVersionCorrelationFailureError:
             )
             output_manager = AgentOutputManager(config)
 
-            with pytest.raises(ConfigurationError) as exc_info:
+            with pytest.raises(DataValidationError):
                 output_manager.resolve_correlated_input(idx=2)
-
-            # Verify error message contains helpful context
-            error_msg = str(exc_info.value)
-            assert "consumer" in error_msg
-            assert "Version correlation failed" in error_msg
 
             # Non-consumer should return None
             result = output_manager.resolve_correlated_input(idx=0)

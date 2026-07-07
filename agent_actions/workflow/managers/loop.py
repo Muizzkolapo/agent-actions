@@ -7,10 +7,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import DataValidationError
+from agent_actions.errors import AgentActionsError, ConfigurationError, DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.content import get_existing_content
+from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.merge import merge_branch_records
 
 if TYPE_CHECKING:
@@ -150,8 +151,13 @@ class VersionOutputCorrelator:
 
     def prepare_correlated_input(
         self, agent_name: str, version_sources: list[str], _current_idx: int
-    ) -> str | None:
-        """Return path to correlated input directory, or None if correlation failed."""
+    ) -> str:
+        """Return the correlated input directory.
+
+        Raises AllVersionsFilteredError when every version source produced zero
+        records (nothing to merge — the caller cascade-skips), or
+        ConfigurationError on a correlation or storage fault.
+        """
         try:
             correlation_dir = self.agent_folder / "target" / agent_name
             if self.storage_backend is None:
@@ -159,15 +165,22 @@ class VersionOutputCorrelator:
 
             version_outputs, version_filenames = self._load_version_outputs(version_sources)
             if not version_outputs:
-                return None
+                raise AllVersionsFilteredError(agent_name, version_sources)
 
             self._process_version_files(
                 version_outputs, version_filenames, correlation_dir, action_name=agent_name
             )
             return str(correlation_dir)
-        except (OSError, ValueError, KeyError) as e:
-            logger.exception("Error preparing correlated input for %s: %s", agent_name, e)
-            return None
+        except (AllVersionsFilteredError, AgentActionsError):
+            raise
+        except Exception as e:
+            # Translate raw backend/OS faults into a clean, loud ConfigurationError
+            # rather than letting a raw traceback escape.
+            raise ConfigurationError(
+                f"Version correlation failed for '{agent_name}' from sources "
+                f"{version_sources}: {e}",
+                context={"agent": agent_name, "version_sources": version_sources},
+            ) from e
 
     def _build_correlation_groups(
         self, version_outputs: dict[str, list[dict[str, Any]]]
