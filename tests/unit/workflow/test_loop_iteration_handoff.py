@@ -9,8 +9,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import DataValidationError
+from agent_actions.errors import ConfigurationError, DataValidationError
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+from agent_actions.workflow.managers.output import AllVersionsFilteredError
 
 
 @pytest.fixture
@@ -73,17 +74,16 @@ class TestLoopIterationHandoff:
         assert len(written_data) == 1
         assert written_data[0]["source_guid"] == "guid_1"
 
-    def test_no_version_outputs_returns_none(self, correlator, storage_backend):
-        """When no version agents have outputs, returns None."""
+    def test_no_version_outputs_raises_all_versions_filtered(self, correlator, storage_backend):
+        """When no version agents have outputs, the cascade-skip signal is raised."""
         storage_backend.list_target_files.return_value = []
 
-        result = correlator.prepare_correlated_input(
-            agent_name="downstream",
-            version_sources=["v1", "v2"],
-            _current_idx=0,
-        )
-
-        assert result is None
+        with pytest.raises(AllVersionsFilteredError):
+            correlator.prepare_correlated_input(
+                agent_name="downstream",
+                version_sources=["v1", "v2"],
+                _current_idx=0,
+            )
 
     def test_missing_namespace_raises_data_validation_error(self, correlator, storage_backend):
         """DataValidationError propagates (not caught by OSError/ValueError/KeyError)."""
@@ -104,35 +104,33 @@ class TestLoopIterationHandoff:
                 _current_idx=0,
             )
 
-    def test_oserror_during_mkdir_returns_none(self):
-        """OSError when creating correlation_dir → caught, returns None."""
+    def test_oserror_during_mkdir_raises_configuration_error(self):
+        """OSError creating correlation_dir surfaces as a clean ConfigurationError."""
         correlator = VersionOutputCorrelator(
             agent_folder=Path("/nonexistent/impossible/path"),
             storage_backend=None,
         )
 
-        result = correlator.prepare_correlated_input(
-            agent_name="downstream",
-            version_sources=["v1"],
-            _current_idx=0,
-        )
+        with pytest.raises(ConfigurationError):
+            correlator.prepare_correlated_input(
+                agent_name="downstream",
+                version_sources=["v1"],
+                _current_idx=0,
+            )
 
-        assert result is None
-
-    def test_filesystem_fallback_when_no_storage_backend(self, tmp_path):
-        """Without storage_backend, creates correlation dir and falls back to filesystem."""
+    def test_no_storage_backend_creates_dir_then_cascade_skips(self, tmp_path):
+        """Without a storage backend no records load: the dir is created, then cascade-skip is raised."""
         correlator = VersionOutputCorrelator(
             agent_folder=tmp_path,
             storage_backend=None,
         )
 
-        result = correlator.prepare_correlated_input(
-            agent_name="downstream",
-            version_sources=["v1"],
-            _current_idx=0,
-        )
-
-        assert result is None
+        with pytest.raises(AllVersionsFilteredError):
+            correlator.prepare_correlated_input(
+                agent_name="downstream",
+                version_sources=["v1"],
+                _current_idx=0,
+            )
         assert (tmp_path / "target" / "downstream").exists()
 
     def test_file_not_found_in_storage_skips_and_continues(self, correlator, storage_backend):

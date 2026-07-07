@@ -203,36 +203,17 @@ class ActionOutputManager:
         version_sources = consumption_config["version_agents"]
         pattern = consumption_config["pattern"]
 
+        # prepare_correlated_input returns the correlated directory, or raises
+        # AllVersionsFilteredError (every source empty → executor cascade-skips)
+        # or ConfigurationError (correlation/storage fault).
         correlated_dir = self.version_correlator.prepare_correlated_input(
             current_agent, version_sources, idx
         )
-
-        if correlated_dir:
-            self.console.print(
-                f"[blue]🔗 Using correlated input for {current_agent} from "
-                f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
-            )
-            return [str(correlated_dir)]
-
-        # No correlated dir. Distinguish all-sources-empty (every version branch
-        # produced no output — e.g. all guard-filtered) from a genuine correlation
-        # failure (some source had output but correlation still failed).
-        all_sources_empty = all(
-            not self.storage_backend.list_target_files(src) for src in version_sources
+        self.console.print(
+            f"[blue]🔗 Using correlated input for {current_agent} from "
+            f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
         )
-        if all_sources_empty:
-            raise AllVersionsFilteredError(current_agent, version_sources)
-
-        raise ConfigurationError(
-            f"Version correlation failed for '{current_agent}'. "
-            f"Could not load outputs from version sources: {version_sources}. "
-            f"Check that all version agents completed successfully.",
-            context={
-                "agent": current_agent,
-                "version_sources": version_sources,
-                "pattern": pattern,
-            },
-        )
+        return [str(correlated_dir)]
 
 
 # Backward-compatible alias
