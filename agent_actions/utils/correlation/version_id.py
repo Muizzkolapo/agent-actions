@@ -93,12 +93,10 @@ class VersionIdGenerator:
         """Add version correlation ID to an object.
 
         For versioned agents (``is_versioned_agent=True``), keys on
-        ``source_guid`` for 1:1 records — so all N parallel versions of one
-        source record share an id — and on position for expansions
-        (``force=True``) and records without a ``source_guid``. For
-        non-versioned agents, only assigns when *force* is ``True`` (used by
-        ``VersionIdEnricher`` for 1→N expansions where each new item needs a
-        unique identity for downstream fan-in grouping).
+        ``source_guid`` so all N parallel versions of one source record share
+        an id. Expansions (``force=True``) are keyed on position instead, so
+        each 1→N child gets a unique id for downstream fan-in grouping;
+        non-versioned agents assign only on that expansion path.
 
         Raises:
             ValueError: If workflow_session_id is missing in version context.
