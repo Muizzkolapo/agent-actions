@@ -560,19 +560,22 @@ def _consumer(prompt: str) -> dict:
 
 def _preflight_warnings(action_configs: dict, caplog) -> list[str]:
     """Run PreflightService.validate() and return preflight warning messages."""
-    caplog.set_level(logging.WARNING, logger="agent_actions.services.preflight_service")
-    PreflightService(
-        agent_name="wf",
-        action_configs=action_configs,
-        project_root=None,
-        workflow_config_path="wf.yml",
-        verify_keys=False,
-    ).validate()
-    return [
-        r.getMessage()
-        for r in caplog.records
-        if r.name == "agent_actions.services.preflight_service"
-    ]
+    logger_name = "agent_actions.services.preflight_service"
+    aa_logger = logging.getLogger("agent_actions")
+    original = aa_logger.propagate
+    aa_logger.propagate = True
+    try:
+        with caplog.at_level(logging.WARNING, logger=logger_name):
+            PreflightService(
+                agent_name="wf",
+                action_configs=action_configs,
+                project_root=None,
+                workflow_config_path="wf.yml",
+                verify_keys=False,
+            ).validate()
+        return [r.getMessage() for r in caplog.records if r.name == logger_name]
+    finally:
+        aa_logger.propagate = original
 
 
 class TestPromptRequiredCrossCheck:

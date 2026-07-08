@@ -7,10 +7,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.errors import ConfigValidationError, PromptValidationError
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.models.action_schema import FieldSource
+from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
+)
+from agent_actions.validation.prompt_required_field_validator import (
+    find_unguarded_required_refs,
 )
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     apply_guard_nullable_schema_fixes,
@@ -18,6 +24,8 @@ from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
+
+_NON_PROMPT_KINDS = ("tool", "hitl", "seed", "source")
 
 
 class PreflightService:
@@ -85,3 +93,35 @@ class PreflightService:
 
         for warning in resolution_result.warnings:
             logger.warning("Pre-flight: %s", warning.message)
+
+        # 5. Cross-check prompt refs against each producer's required set
+        for finding in find_unguarded_required_refs(
+            self._collect_prompts(), self._collect_producing_schemas()
+        ):
+            logger.warning("Pre-flight: %s", finding)
+
+    def _collect_prompts(self) -> dict[str, str]:
+        """Resolved prompt text per prompt-bearing action, keyed by action name."""
+        prompts: dict[str, str] = {}
+        for name, config in self.action_configs.items():
+            if config.get("kind") in _NON_PROMPT_KINDS:
+                continue
+            try:
+                prompts[name] = PromptFormatter.get_raw_prompt(config)
+            except (ConfigValidationError, PromptValidationError) as exc:
+                logger.debug("Skipping prompt cross-check for %s: %s", name, exc)
+        return prompts
+
+    def _collect_producing_schemas(self) -> dict[str, dict[str, Any]]:
+        """Declared schema-source fields per action with their required flags."""
+        if self.schema_service is None:
+            return {}
+        schemas: dict[str, dict[str, Any]] = {}
+        for name, action_schema in self.schema_service.get_all_schemas().items():
+            fields = [
+                {"id": f.name, "required": f.is_required}
+                for f in action_schema.output_fields
+                if f.source is FieldSource.SCHEMA
+            ]
+            schemas[name] = {"fields": fields}
+        return schemas
