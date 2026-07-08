@@ -3,7 +3,7 @@
 from agent_actions.errors import ConfigValidationError, PromptValidationError
 from agent_actions.logging.filters import _redact_sensitive_data
 from agent_actions.prompt.handler import PromptLoader
-from agent_actions.utils.constants import PROMPT_KEY
+from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS, PROMPT_KEY
 
 
 class PromptFormatter:
@@ -25,7 +25,7 @@ class PromptFormatter:
             PromptValidationError: If prompt retrieval or loading fails
         """
         raw_prompt = agent_config.get(PROMPT_KEY)
-        if agent_config.get("kind") not in ("tool", "hitl", "seed", "source"):
+        if agent_config.get("kind") not in NON_PROMPT_ACTION_KINDS:
             if isinstance(raw_prompt, str) and not raw_prompt.strip():
                 raise ConfigValidationError(
                     f"prompt cannot be an empty string for action "

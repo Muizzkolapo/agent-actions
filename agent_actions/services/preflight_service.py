@@ -7,10 +7,17 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.errors import ConfigValidationError, PromptValidationError
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.models.action_schema import FieldSource
+from agent_actions.prompt.formatter import PromptFormatter
+from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
+)
+from agent_actions.validation.prompt_required_field_validator import (
+    find_unguarded_required_refs,
 )
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     apply_guard_nullable_schema_fixes,
@@ -85,3 +92,42 @@ class PreflightService:
 
         for warning in resolution_result.warnings:
             logger.warning("Pre-flight: %s", warning.message)
+
+        # 5. Cross-check prompt refs against each producer's required set
+        for finding in find_unguarded_required_refs(
+            self._collect_prompts(), self._collect_producing_schemas()
+        ):
+            logger.warning("Pre-flight: %s", finding)
+
+    def _collect_prompts(self) -> dict[str, str]:
+        """Resolved prompt text per prompt-bearing action, keyed by action name."""
+        prompts: dict[str, str] = {}
+        for name, config in self.action_configs.items():
+            if config.get("kind") in NON_PROMPT_ACTION_KINDS:
+                continue
+            try:
+                prompts[name] = PromptFormatter.get_raw_prompt(config)
+            except (ConfigValidationError, PromptValidationError) as exc:
+                logger.debug("Skipping prompt cross-check for %s: %s", name, exc)
+        return prompts
+
+    def _collect_producing_schemas(self) -> dict[str, dict[str, Any]]:
+        """Available (non-dropped) schema-source fields per producing action.
+
+        Fan-out versions are additionally indexed under their shared base name,
+        which is how downstream prompts reference them.
+        """
+        if self.schema_service is None:
+            return {}
+        schemas: dict[str, dict[str, Any]] = {}
+        for name, action_schema in self.schema_service.get_all_schemas().items():
+            fields = [
+                {"id": f.name, "required": f.is_required}
+                for f in action_schema.output_fields
+                if f.source is FieldSource.SCHEMA and not f.is_dropped
+            ]
+            schemas[name] = {"fields": fields}
+            base = self.action_configs.get(name, {}).get("version_base_name")
+            if base and base not in schemas:
+                schemas[base] = {"fields": fields}
+        return schemas
