@@ -685,6 +685,19 @@ class TestVersionCorrelationFailureError:
             result = output_manager.resolve_correlated_input(idx=0)
             assert result is None
 
+    def test_merge_abort_names_source_and_version(self):
+        """The abort message names the misaligned source record and the version agent."""
+        from agent_actions.errors import DataValidationError
+
+        correlator = VersionOutputCorrelator(Path("/tmp"))
+        with pytest.raises(DataValidationError) as exc:
+            correlator._build_correlation_groups(
+                {"extract_v1": [{"source_guid": "g1", "content": {}}]}
+            )
+        msg = str(exc.value)
+        assert "g1" in msg  # names the misaligned source record
+        assert "extract_v1" in msg  # names the version agent
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
