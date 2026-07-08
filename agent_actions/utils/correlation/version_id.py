@@ -122,22 +122,25 @@ class VersionIdGenerator:
             )
 
         obj = obj.copy()
-        if record_index is not None:
+        source_guid = obj.get("source_guid")
+        is_versioned = agent_config.get("is_versioned_agent", False)
+        if not force and is_versioned and source_guid:
+            # Versioned 1:1 — key on source_guid so all N parallel versions of
+            # the same source record share one id regardless of per-version
+            # position (guard filters shift positions independently per version).
+            obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(
+                source_guid, version_base_name, workflow_session_id
+            )
+        elif record_index is not None:
             obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
-                record_index,
-                version_base_name,
-                workflow_session_id,
-                file_context=obj.get("source_guid", ""),
+                record_index, version_base_name, workflow_session_id, file_context=source_guid or ""
+            )
+        elif source_guid:
+            obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(
+                source_guid, version_base_name, workflow_session_id
             )
         else:
-            source_guid = obj.get("source_guid")
-            if source_guid:
-                obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(
-                    source_guid, version_base_name, workflow_session_id
-                )
-            else:
-                logger.debug(
-                    "Skipping version correlation: source_guid absent for %s",
-                    version_base_name,
-                )
+            logger.debug(
+                "Skipping version correlation: source_guid absent for %s", version_base_name
+            )
         return obj

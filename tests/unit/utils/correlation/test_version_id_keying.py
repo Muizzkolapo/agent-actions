@@ -55,3 +55,12 @@ def test_versioned_no_source_guid_falls_back_to_position():
     a = VersionIdGenerator.add_version_correlation_id({}, _CFG, record_index=0)
     b = VersionIdGenerator.add_version_correlation_id({}, _CFG, record_index=1)
     assert a.get("version_correlation_id") != b.get("version_correlation_id")
+
+
+def test_versioned_shared_id_uses_guid_helper():
+    """The shared id is exactly the GUID helper's output (kills inline-hash and clamp-to-0 cheats)."""
+    VersionIdGenerator.clear()
+    v = VersionIdGenerator.add_version_correlation_id({"source_guid": "g1"}, _CFG, record_index=3)
+    assert v["version_correlation_id"] == VersionIdGenerator.get_or_create_version_correlation_id(
+        "g1", "extract", "s1"
+    )
