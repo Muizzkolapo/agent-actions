@@ -1,16 +1,20 @@
 """Integration tests for inspect command _output_rich() and _output_json() methods."""
 
 import json
+import textwrap
 from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from click.testing import CliRunner
 from rich.console import Console
 
 from agent_actions.cli.inspect import (
     ActionCommand,
     ContextCommand,
 )
+from agent_actions.cli.main import cli
 from agent_actions.models.action_schema import (
     ActionKind,
     ActionSchema,
@@ -240,3 +244,82 @@ class TestWorkflowMockSpecEnforcement:
     def test_spec_mock_allows_new_attribute(self):
         wf = _make_workflow_mock()
         assert wf.action_configs is not None
+
+
+# ── End-to-end: prompt-required cross-check through real `agac inspect` ───────
+
+
+def _build_prompt_ref_project(root: Path, *, required_b: bool) -> str:
+    """Scaffold a real on-disk project whose consumer prompt is a prompt_store
+    `$`-ref reading a producer field. Returns the workflow name."""
+    wf = "demo"
+    (root / "agent_actions.yml").write_text("version: '1.0'\n")
+    for name in ("templates", "rendered_workflows", "prompt_store"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    (root / "agent_workflow" / wf / "agent_io").mkdir(parents=True, exist_ok=True)
+    (root / "prompt_store" / f"{wf}.md").write_text(
+        "{prompt consumer}\nUse {{ producer.b }} here.\n{end_prompt}\n"
+    )
+    cfg_dir = root / "agent_workflow" / wf / "agent_config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / f"{wf}.yml").write_text(
+        textwrap.dedent(f"""\
+        name: {wf}
+        description: demo
+        defaults:
+          json_mode: true
+          granularity: Record
+          run_mode: online
+          model_name: gpt-4o-mini
+          model_vendor: openai
+          api_key: OPENAI_API_KEY
+        actions:
+          - name: producer
+            intent: produce a and b
+            kind: llm
+            context_scope:
+              observe: ["source.*"]
+            schema:
+              fields:
+                - id: a
+                  type: string
+                  required: true
+                - id: b
+                  type: string
+                  required: {str(required_b).lower()}
+          - name: consumer
+            intent: consume producer output
+            kind: llm
+            dependencies: [producer]
+            prompt: ${wf}.consumer
+            context_scope:
+              observe: ["producer.a", "producer.b"]
+            schema:
+              fields:
+                - id: out
+                  type: string
+                  required: true
+        """)
+    )
+    return wf
+
+
+class TestInspectPromptRequiredEndToEnd:
+    """`agac inspect` on a real on-disk workflow whose consumer prompt (a
+    prompt_store `$`-ref) reads a non-required producer field warns and still
+    exits 0."""
+
+    def test_unguarded_optional_ref_warns_but_inspect_succeeds(self, tmp_path, monkeypatch):
+        wf = _build_prompt_ref_project(tmp_path, required_b=False)
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["inspect", "-a", wf])
+        assert result.exit_code == 0, result.output
+        assert "producer.b" in result.output
+        assert "consumer" in result.output
+
+    def test_required_ref_produces_no_warning(self, tmp_path, monkeypatch):
+        wf = _build_prompt_ref_project(tmp_path, required_b=True)
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["inspect", "-a", wf])
+        assert result.exit_code == 0, result.output
+        assert "producer.b" not in result.output
