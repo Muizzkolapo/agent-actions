@@ -606,10 +606,82 @@ class TestPromptRequiredCrossCheck:
         warnings = _preflight_warnings(cfgs, caplog)
         assert not any("producer.b" in w for w in warnings), warnings
 
-    def test_unguarded_ref_warns_but_does_not_raise(self, caplog):
+    def test_guard_on_other_field_still_warns(self, caplog):
+        # Guard tests producer.a; body reads the unguarded producer.b.
         cfgs = {
             "producer": _producer(required_b=False),
-            "consumer": _consumer("Use {{ producer.b }} here."),
+            "consumer": _consumer("{% if producer.a is defined %}{{ producer.b }}{% endif %}"),
         }
-        # Must complete (warn, never raise) — the fix is a warning, not an error.
-        _preflight_warnings(cfgs, caplog)
+        warnings = _preflight_warnings(cfgs, caplog)
+        assert any("producer.b" in w for w in warnings), warnings
+
+    def test_optional_ref_warns_exactly_once_and_does_not_raise(self, caplog):
+        # Same field referenced twice — one warning, and validate() completes
+        # (warn, never raise).
+        cfgs = {
+            "producer": _producer(required_b=False),
+            "consumer": _consumer("Use {{ producer.b }} and again {{ producer.b }}."),
+        }
+        matches = [w for w in _preflight_warnings(cfgs, caplog) if "producer.b" in w]
+        assert len(matches) == 1, matches
+
+
+class TestProducingSchemaCollection:
+    """`_collect_producing_schemas` feeds the cross-check the right field set."""
+
+    def _service(self, action_configs: dict, schemas: dict) -> PreflightService:
+        from unittest.mock import MagicMock
+
+        svc = PreflightService(
+            agent_name="wf",
+            action_configs=action_configs,
+            project_root=None,
+            workflow_config_path="wf.yml",
+            verify_keys=False,
+        )
+        svc.schema_service = MagicMock()
+        svc.schema_service.get_all_schemas.return_value = schemas
+        return svc
+
+    def test_dropped_field_is_excluded(self):
+        from agent_actions.models.action_schema import (
+            ActionKind,
+            ActionSchema,
+            FieldInfo,
+            FieldSource,
+        )
+
+        schema = ActionSchema(
+            name="producer",
+            kind=ActionKind.LLM,
+            output_fields=[
+                FieldInfo(name="kept", source=FieldSource.SCHEMA, is_required=False),
+                FieldInfo(
+                    name="gone", source=FieldSource.SCHEMA, is_required=False, is_dropped=True
+                ),
+            ],
+        )
+        svc = self._service({"producer": {"kind": "llm"}}, {"producer": schema})
+        ids = {f["id"] for f in svc._collect_producing_schemas()["producer"]["fields"]}
+        assert ids == {"kept"}
+
+    def test_versioned_producer_indexed_under_base_name(self):
+        from agent_actions.models.action_schema import (
+            ActionKind,
+            ActionSchema,
+            FieldInfo,
+            FieldSource,
+        )
+
+        schema = ActionSchema(
+            name="classify_1",
+            kind=ActionKind.LLM,
+            output_fields=[FieldInfo(name="label", source=FieldSource.SCHEMA, is_required=False)],
+        )
+        svc = self._service(
+            {"classify_1": {"kind": "llm", "version_base_name": "classify"}},
+            {"classify_1": schema},
+        )
+        collected = svc._collect_producing_schemas()
+        assert "classify" in collected
+        assert {f["id"] for f in collected["classify"]["fields"]} == {"label"}

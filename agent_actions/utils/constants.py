@@ -10,6 +10,8 @@ MODEL_NAME_KEY = "model_name"
 JSON_MODE_KEY = "json_mode"
 API_KEY_KEY = "api_key"
 PROMPT_KEY = "prompt"
+# Action kinds that do not carry a user-authored prompt template.
+NON_PROMPT_ACTION_KINDS = ("tool", "hitl", "seed", "source")
 SCHEMA_NAME_KEY = "schema_name"
 SCHEMA_KEY = "schema"
 CHUNK_CONFIG_KEY = "chunk_config"
