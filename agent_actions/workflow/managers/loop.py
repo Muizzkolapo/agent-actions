@@ -194,7 +194,10 @@ class VersionOutputCorrelator:
                 if not correlation_key:
                     source_guid = record_copy.get("source_guid", "unknown")
                     raise DataValidationError(
-                        "Missing required field: version_correlation_id",
+                        f"Could not align versions for source record '{source_guid}': "
+                        f"version '{version_agent}' produced a record with no "
+                        f"version_correlation_id. All N parallel versions of a source "
+                        f"record must share one id before a merge consumer can group them.",
                         {
                             "source_guid": source_guid,
                             "version_agent": version_agent,
