@@ -3,8 +3,10 @@
 import jsonschema
 import pytest
 
+from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.expander_schema import compile_output_schema
 from agent_actions.output.response.vendor_compilation import compile_unified_schema
+from agent_actions.utils.udf_management.tooling import _validate_against_schema
 
 _UNIFIED = {"name": "s", "fields": [{"id": "a", "type": "string"}]}
 
@@ -75,3 +77,14 @@ def test_array_item_honours_true():
 
 def test_array_item_defaults_false_when_absent():
     assert _compile_array_item(None) is False
+
+
+def test_udf_output_extra_key_accepted_when_true():
+    schema = compile_unified_schema({**_UNIFIED, "additionalProperties": True}, "openai")["schema"]
+    _validate_against_schema({"a": "x", "extra": 1}, schema, "udf", validation_type="output")
+
+
+def test_udf_output_extra_key_rejected_when_default():
+    schema = compile_unified_schema(_UNIFIED, "openai")["schema"]
+    with pytest.raises(SchemaValidationError):
+        _validate_against_schema({"a": "x", "extra": 1}, schema, "udf", validation_type="output")

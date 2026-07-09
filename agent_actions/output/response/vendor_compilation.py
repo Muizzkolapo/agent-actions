@@ -76,7 +76,7 @@ def compile_unified_schema(
                 "type": "object",
                 "properties": properties,
                 "required": required,
-                "additionalProperties": False,
+                "additionalProperties": unified.get("additionalProperties", False),
             },
         }
     elif target == "anthropic":
@@ -88,7 +88,7 @@ def compile_unified_schema(
                     "type": "object",
                     "properties": properties,
                     "required": required,
-                    "additionalProperties": False,
+                    "additionalProperties": unified.get("additionalProperties", False),
                 },
             }
         ]
@@ -107,7 +107,7 @@ def compile_unified_schema(
             "type": "object",
             "properties": properties,
             "required": required,
-            "additionalProperties": False,
+            "additionalProperties": unified.get("additionalProperties", False),
         }
     elif target == "cohere":
         # Cohere native format
