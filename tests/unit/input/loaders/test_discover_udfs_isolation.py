@@ -6,6 +6,7 @@ import pytest
 
 from agent_actions.errors import UDFLoadError
 from agent_actions.input.loaders.udf import discover_udfs
+from agent_actions.processing.recovery.validation import _VALIDATION_REGISTRY
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, clear_registry
 
 _GOOD_UDF = (
@@ -51,6 +52,15 @@ _ATTR_FORM_UDF = (
     "    return data\n"
 )
 
+# Registers a reprompt validator via import side effect; declares no udf_tool.
+_VALIDATION_ONLY = (
+    "from agent_actions import reprompt_validation\n"
+    "\n"
+    '@reprompt_validation("answer must cite a source")\n'
+    "def check_citation(data):\n"
+    "    return True\n"
+)
+
 
 def _evict_udf_modules():
     for name in [k for k in sys.modules if k.startswith("agent_actions._udfs.")]:
@@ -60,9 +70,11 @@ def _evict_udf_modules():
 @pytest.fixture(autouse=True)
 def _isolated_registry():
     clear_registry()
+    _VALIDATION_REGISTRY.clear()
     _evict_udf_modules()
     yield
     clear_registry()
+    _VALIDATION_REGISTRY.clear()
     _evict_udf_modules()
 
 
@@ -105,3 +117,9 @@ def test_attribute_form_decorator_is_discovered(tmp_path):
     (tmp_path / "labels_udf.py").write_text(_ATTR_FORM_UDF)
     discover_udfs(tmp_path)
     assert "rewrite_labels" in UDF_REGISTRY
+
+
+def test_reprompt_validation_only_file_is_imported(tmp_path):
+    (tmp_path / "citation_checks.py").write_text(_VALIDATION_ONLY)
+    discover_udfs(tmp_path)
+    assert "check_citation" in _VALIDATION_REGISTRY

@@ -12,11 +12,12 @@ from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
 logger = logging.getLogger(__name__)
 
-_UDF_DECORATOR = "udf_tool"
+# Decorators that register user tool code via import side effect.
+_TOOL_DECORATORS = frozenset({"udf_tool", "reprompt_validation"})
 
 
-def _declares_udf_tool(py_file: Path) -> bool:
-    """True if the file declares a udf_tool-decorated function, without executing it."""
+def _declares_tool_decorator(py_file: Path) -> bool:
+    """True if the file declares a tool-registering decorated function, without executing it."""
     try:
         source = py_file.read_text(encoding="utf-8")
     except (OSError, ValueError) as e:
@@ -25,9 +26,9 @@ def _declares_udf_tool(py_file: Path) -> bool:
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
-        # Unparseable: can't prove intent structurally. A udf_tool mention keeps
-        # the file on the import path so its syntax error surfaces loudly.
-        return _UDF_DECORATOR in source
+        # Unparseable: can't prove intent structurally. A decorator-name mention
+        # keeps the file on the import path so its syntax error surfaces loudly.
+        return any(name in source for name in _TOOL_DECORATORS)
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for dec in node.decorator_list:
@@ -37,7 +38,7 @@ def _declares_udf_tool(py_file: Path) -> bool:
                     if isinstance(target, ast.Attribute)
                     else getattr(target, "id", None)
                 )
-                if name == _UDF_DECORATOR:
+                if name in _TOOL_DECORATORS:
                     return True
     return False
 
@@ -61,9 +62,10 @@ def discover_tool_files(tool_dir: Path) -> list[Path]:
 def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     """Discover and register all UDFs in the user code directory.
 
-    Only files that declare a ``udf_tool``-decorated function are imported;
-    other ``.py`` files under the tree (helper scripts, notes) are skipped so
-    a broken non-UDF file cannot block discovery.
+    Only files that declare a tool-registering decorator (``udf_tool`` or
+    ``reprompt_validation``) are imported; other ``.py`` files under the tree
+    (helper scripts, notes) are skipped so a broken non-UDF file cannot block
+    discovery.
 
     Raises:
         UDFLoadError: If the user-code directory is missing or invalid
@@ -109,8 +111,8 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
                 cause=e,
             ) from e
 
-        if not _declares_udf_tool(py_file):
-            logger.debug("Skipping %s: no udf_tool declaration", py_file)
+        if not _declares_tool_decorator(py_file):
+            logger.debug("Skipping %s: no tool-registering decorator declared", py_file)
             continue
 
         if f"agent_actions._udfs.{module_name}" in sys.modules:

@@ -18,6 +18,6 @@ processing.
 | `source_data.py` | Module | `SourceDataLoader` that loads/saves source data via storage backend (`read_source`/`write_source`), requiring a `StorageBackend` at init. | `config.interfaces`, `errors`, `storage.backend` |
 | `tabular.py` | Module | `TabularLoader` for CSV/TSV content; reads via `csv.DictReader` and wraps parsing errors in `AgentActionsError`. | `errors`, `logging` |
 | `text.py` | Module | `TextLoader` for plain text/markdown/HTML content with the same fallback/validation pattern as other loaders. | `errors` |
-| `udf.py` | Module | Discovers user-defined functions (UDFs) under `user_code` by importing discovered modules and validating `impl` references. | `utils.module_loader`, `utils.udf_management`, `errors` |
+| `udf.py` | Module | Discovers user-defined functions (UDFs) under `user_code` by importing only modules that declare a tool-registering decorator (`udf_tool`/`reprompt_validation`) and validating `impl` references. | `utils.module_loader`, `utils.udf_management`, `errors` |
 | `xml.py` | Module | `XmlLoader` that parses XML text into `ElementTree` roots, exposes helper for turning elements to dicts, and surfaces parse metadata. | `errors`, `xml` |
 | `data_source.py` | Module | `DataSourceType` enum, `DataSourceConfig` model, and resolver that maps `data_source` config values to concrete directories (staging, local, API). | `config`, `errors`, `pydantic` |
