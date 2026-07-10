@@ -368,3 +368,62 @@ class TestExecute:
         calls = [str(c) for c in cmd.console.print.call_args_list]
         # Should show "... and 5 more"
         assert any("and 5 more" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# FILE-mode UDF return-contract warnings
+# ---------------------------------------------------------------------------
+
+
+class TestFileUdfContractWarnings:
+    @pytest.fixture(autouse=True)
+    def _clean_registry(self):
+        from agent_actions.utils.udf_management.registry import clear_registry
+
+        clear_registry()
+        yield
+        clear_registry()
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_file_udf_returning_list_prints_warning_and_succeeds(self, mock_fire, tmp_path):
+        from agent_actions.config.types import Granularity
+        from agent_actions.utils.udf_management.registry import UDF_REGISTRY, udf_tool
+
+        @udf_tool(granularity=Granularity.FILE)
+        def dedup_scores(data) -> list[dict]:
+            return data
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={"valid": True, "registry": dict(UDF_REGISTRY), "impl_refs": set()}
+        )
+
+        cmd.execute()  # warning, not error: must not raise
+
+        calls = [str(c) for c in cmd.console.print.call_args_list]
+        assert any("dedup_scores" in c and "FileUDFResult" in c for c in calls)
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_file_udf_returning_fileudfresult_prints_no_warning(self, mock_fire, tmp_path):
+        from agent_actions.config.types import Granularity
+        from agent_actions.utils.udf_management.registry import (
+            UDF_REGISTRY,
+            FileUDFResult,
+            udf_tool,
+        )
+
+        @udf_tool(granularity=Granularity.FILE)
+        def merge_scores(data) -> FileUDFResult:
+            return FileUDFResult(outputs=[])
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={"valid": True, "registry": dict(UDF_REGISTRY), "impl_refs": set()}
+        )
+
+        cmd.execute()
+
+        calls = [str(c) for c in cmd.console.print.call_args_list]
+        assert not any("merge_scores" in c and "FileUDFResult" in c for c in calls)
