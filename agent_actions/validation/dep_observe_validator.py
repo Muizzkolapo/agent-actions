@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
 
 logger = logging.getLogger(__name__)
@@ -37,10 +38,21 @@ def find_missing_observe_deps(action_configs: dict[str, dict[str, Any]]) -> list
     Pure preflight mirror of the fatal runtime check in
     ``scope_namespace._extract_allowed_fields_per_dependency``: no events,
     no raising on the first offender — all offenders are reported.
+
+    The dependency set comes from ``infer_dependencies`` exactly as the
+    runtime's scope_builder derives it. That is load-bearing: the loader
+    expands a versioned producer into ``<base>_N`` actions and rewrites the
+    consumer's observe refs to the branch names while its ``dependencies``
+    keep the base name — comparing raw config strings would reject those
+    valid workflows.
     """
     findings: list[str] = []
+    workflow_actions = list(action_configs)
     for name, cfg in action_configs.items():
-        deps = cfg.get("dependencies") or []
+        input_sources, context_sources = infer_dependencies(
+            cfg, workflow_actions, name, validate=False
+        )
+        deps = input_sources + context_sources
         if not deps:
             continue
         scope = cfg.get("context_scope") or {}
