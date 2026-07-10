@@ -37,11 +37,7 @@ _BROKEN_UDF = (
 
 # A real UDF with a syntax error (missing colon) — unparseable but clearly UDF-intent.
 _SYNTAX_UDF = (
-    "from agent_actions import udf_tool\n"
-    "\n"
-    "@udf_tool()\n"
-    "def tag_records(data)\n"
-    "    return data\n"
+    "from agent_actions import udf_tool\n\n@udf_tool()\ndef tag_records(data)\n    return data\n"
 )
 
 # Unparseable scratch file with no udf_tool mention at all.
