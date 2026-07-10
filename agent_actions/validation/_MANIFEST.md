@@ -25,6 +25,7 @@ decoders to schema validators and preflight checks.
 | `batch_validator.py` | Module | Validator that ensures batch CLI arguments conform to expectations. | `validation`, `llm.batch` |
 | `clean_validator.py` | Module | `CleanCommandArgs` pydantic model used by the CLI. | `validation` |
 | `config_validator.py` | Module | Central config parser/validator used across startup flows. | `configuration`, `validation` |
+| `dep_observe_validator.py` | Module | `find_missing_observe_deps`: preflight mirror of the fatal runtime check that every declared dependency has an observe/passthrough field reference. | `validation` |
 | `init_validator.py` | Module | `InitCommandArgs` pydantic model used by the CLI. | `validation` |
 | `path_validator.py` | Module | Path validation utilities conforming to BaseValidator interface. | `validation` |
 | `prompt_ast.py` | Module | Jinja2 AST parser for extracting template variables. | `prompt_generation` |
