@@ -9,6 +9,7 @@ import logging
 import pytest
 
 from agent_actions.config.schema import ActionConfig, WorkflowConfig
+from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.services.preflight_service import PreflightService
 from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
     ActionEntryValidationOrchestrator,
@@ -624,6 +625,96 @@ class TestPromptRequiredCrossCheck:
         }
         matches = [w for w in _preflight_warnings(cfgs, caplog) if "producer.b" in w]
         assert len(matches) == 1, matches
+
+
+class TestDependencyObserveCheck:
+    """Preflight must hard-fail when a declared dependency has no
+    observe/passthrough reference in context_scope — the runtime treats
+    that as fatal (scope_namespace), so inspect must not report green."""
+
+    @staticmethod
+    def _llm_action(**overrides) -> dict:
+        base = {
+            "agent_type": "llm",
+            "kind": "llm",
+            "model_name": "gpt-4o-mini",
+            "prompt": "Do the thing.",
+            "context_scope": {"observe": ["source.*"]},
+            "schema": {"fields": [{"id": "out", "type": "string", "required": True}]},
+        }
+        base.update(overrides)
+        return base
+
+    def _validate(self, action_configs: dict) -> None:
+        PreflightService(
+            agent_name="wf",
+            action_configs=action_configs,
+            project_root=None,
+            workflow_config_path="wf.yml",
+            verify_keys=False,
+        ).validate()
+
+    def _producers(self) -> dict:
+        return {
+            "producer": self._llm_action(
+                schema={"fields": [{"id": "a", "type": "string", "required": True}]}
+            ),
+            "other": self._llm_action(
+                schema={"fields": [{"id": "b", "type": "string", "required": True}]}
+            ),
+        }
+
+    def test_over_declared_dependency_raises(self):
+        cfgs = {
+            **self._producers(),
+            "consumer": self._llm_action(
+                dependencies=["producer", "other"],
+                context_scope={"observe": ["producer.a"]},
+            ),
+        }
+        with pytest.raises(PreFlightValidationError, match="'other'.*not referenced"):
+            self._validate(cfgs)
+
+    def test_all_offenders_reported_in_one_error(self):
+        cfgs = {
+            **self._producers(),
+            "first_consumer": self._llm_action(
+                dependencies=["producer", "other"],
+                context_scope={"observe": ["producer.a"]},
+            ),
+            "second_consumer": self._llm_action(
+                dependencies=["producer"],
+                context_scope={"observe": ["source.*"]},
+            ),
+        }
+        with pytest.raises(PreFlightValidationError) as excinfo:
+            self._validate(cfgs)
+        message = str(excinfo.value)
+        assert "first_consumer" in message and "'other'" in message
+        assert "second_consumer" in message and "'producer'" in message
+
+    def test_dotless_ref_does_not_satisfy_dep(self):
+        # observe: ["producer"] (no dot) is skipped by the runtime's
+        # reference parser, so the dependency is unreferenced at runtime.
+        cfgs = {
+            **self._producers(),
+            "consumer": self._llm_action(
+                dependencies=["producer"],
+                context_scope={"observe": ["producer"]},
+            ),
+        }
+        with pytest.raises(PreFlightValidationError, match="'producer'.*not referenced"):
+            self._validate(cfgs)
+
+    def test_satisfied_deps_pass(self):
+        cfgs = {
+            **self._producers(),
+            "consumer": self._llm_action(
+                dependencies=["producer", "other"],
+                context_scope={"observe": ["producer.a"], "passthrough": ["other.b"]},
+            ),
+        }
+        self._validate(cfgs)  # completes without raising
 
 
 class TestProducingSchemaCollection:
