@@ -716,6 +716,25 @@ class TestDependencyObserveCheck:
         }
         self._validate(cfgs)  # completes without raising
 
+    def test_version_base_dependency_passes(self):
+        # Post-loader shape of version_consumption: the producer is expanded
+        # into <base>_N actions, the consumer's observe refs are rewritten to
+        # the branch names, but its dependencies keep the base name.
+        branch = {
+            "is_versioned_agent": True,
+            "version_base_name": "producer",
+            "schema": {"fields": [{"id": "a", "type": "string", "required": True}]},
+        }
+        cfgs = {
+            "producer_1": self._llm_action(**branch),
+            "producer_2": self._llm_action(**branch),
+            "consumer": self._llm_action(
+                dependencies=["producer"],
+                context_scope={"observe": ["producer_1.*", "producer_2.*"]},
+            ),
+        }
+        self._validate(cfgs)  # completes without raising
+
 
 class TestProducingSchemaCollection:
     """`_collect_producing_schemas` feeds the cross-check the right field set."""

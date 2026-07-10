@@ -105,6 +105,36 @@ def test_drop_refs_do_not_satisfy_dep():
     assert any("'ground'" in f and "not referenced" in f for f in findings)
 
 
+def test_version_base_dependency_satisfied_by_expanded_branches():
+    # The loader expands a versioned producer into <base>_N actions and
+    # rewrites the consumer's observe refs to the branch names, but leaves
+    # dependencies on the base name. The runtime resolves this through
+    # infer_dependencies — a raw string comparison false-positives here.
+    actions = {
+        "extract_raw_qa_1": {"context_scope": {"observe": ["source.*"]}},
+        "extract_raw_qa_2": {"context_scope": {"observe": ["source.*"]}},
+        "consumer": {
+            "dependencies": ["extract_raw_qa"],
+            "context_scope": {"observe": ["extract_raw_qa_1.*", "extract_raw_qa_2.*"]},
+        },
+    }
+    assert find_missing_observe_deps(actions) == []
+
+
+def test_version_base_dependency_with_unreferenced_branches_is_flagged():
+    actions = {
+        "extract_raw_qa_1": {"context_scope": {"observe": ["source.*"]}},
+        "extract_raw_qa_2": {"context_scope": {"observe": ["source.*"]}},
+        "consumer": {
+            "dependencies": ["extract_raw_qa"],
+            "context_scope": {"observe": ["source.*"]},
+        },
+    }
+    findings = find_missing_observe_deps(actions)
+    assert findings, "unreferenced version branches must still be flagged"
+    assert all("extract_raw_qa" in f for f in findings)
+
+
 def test_all_offenders_reported():
     actions = {
         "first": {
