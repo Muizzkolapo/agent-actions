@@ -9,15 +9,15 @@ from agent_actions.utils.udf_management.registry import FileUDFResult
 
 
 def _returns_fileudfresult(annotation: Any) -> bool:
-    # Coarse name check by design: class identity, or the name text mentions
-    # FileUDFResult (covers string forward-refs). It reads only what is already
-    # recorded — never imports or resolves the annotation, which could fail.
+    # Coarse check by design: class identity, or the annotation's text mentions
+    # FileUDFResult (covers string forward-refs and Optional/Union wrappers). It
+    # reads only what is already recorded — never imports or resolves the
+    # annotation, which could fail.
     if annotation is FileUDFResult:
         return True
-    name = getattr(annotation, "__name__", None) or (
-        annotation if isinstance(annotation, str) else ""
-    )
-    return "FileUDFResult" in str(name)
+    if isinstance(annotation, str):
+        return "FileUDFResult" in annotation
+    return "FileUDFResult" in str(annotation)
 
 
 def find_file_udf_contract_warnings(
