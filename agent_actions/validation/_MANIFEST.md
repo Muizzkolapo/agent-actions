@@ -23,6 +23,7 @@ decoders to schema validators and preflight checks.
 |------|------|-------------|---------|
 | `base_validator.py` | Module | `BaseValidator` base class with helper assertions for validators. | `validation` |
 | `batch_validator.py` | Module | Validator that ensures batch CLI arguments conform to expectations. | `validation`, `llm.batch` |
+| `bus_namespace_validator.py` | Module | `find_unknown_bus_namespaces`: AST scan flagging tool-UDF reads of `data.get("X")` / `data["X"]` where X is not a runtime bus namespace (action name or framework key), catching silent namespace typos at `validate-udfs`. | `validation` |
 | `clean_validator.py` | Module | `CleanCommandArgs` pydantic model used by the CLI. | `validation` |
 | `config_validator.py` | Module | Central config parser/validator used across startup flows. | `configuration`, `validation` |
 | `dep_observe_validator.py` | Module | `find_missing_observe_deps`: preflight mirror of the fatal runtime check that every declared dependency has an observe/passthrough field reference. | `validation` |

@@ -69,7 +69,6 @@ def find_unknown_bus_namespaces(sources: dict[str, str], valid_namespaces: set[s
     read outside any function. Non-literal keys (`data.get(var)`) are skipped.
     """
     findings: list[str] = []
-    seen: set[tuple[str, str]] = set()
     for label, src in sources.items():
         try:
             tree = ast.parse(src)
@@ -77,6 +76,10 @@ def find_unknown_bus_namespaces(sources: dict[str, str], valid_namespaces: set[s
             continue
         collector = _BusKeyCollector(label)
         collector.visit(tree)
+        # Dedup per source only: the same (owner, key) in two different sources are
+        # genuinely distinct findings (e.g. an identically-named nested helper in two
+        # UDFs), and must not collapse into one.
+        seen: set[tuple[str, str]] = set()
         for owner, key in collector.reads:
             if key in valid_namespaces or (owner, key) in seen:
                 continue

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+from rich.console import Console
 
 from agent_actions.errors import (
     DuplicateFunctionError,
@@ -403,21 +404,27 @@ class TestExecute:
 class TestBusNamespaceWarnings:
     @pytest.fixture(autouse=True)
     def _clean_registry(self):
+        import sys
+
         from agent_actions.utils.module_loader import clear_module_cache
         from agent_actions.utils.udf_management.registry import clear_registry
 
-        clear_registry()
-        clear_module_cache()
+        def _reset():
+            clear_registry()
+            clear_module_cache()
+            # clear_registry/clear_module_cache do NOT evict the sys.modules entries
+            # discover_udfs creates under the "agent_actions._udfs." prefix; without
+            # this, a second discover of the same file stem returns a stale (empty)
+            # module and the test silently scans nothing.
+            for name in [k for k in sys.modules if k.startswith("agent_actions._udfs.")]:
+                sys.modules.pop(name, None)
+
+        _reset()
         yield
-        clear_registry()
-        clear_module_cache()
+        _reset()
 
     def _discover(self, tool_dir: Path, mod: str, body: str):
-        """Write an isolated, uniquely-named tool file and register it via real discovery.
-
-        `mod` must be unique per test — the module loader caches by module name, so a
-        shared stem would return a stale module and skip re-registration.
-        """
+        """Write an isolated tool file and register it via real discovery."""
         from agent_actions.input.loaders.udf import discover_udfs
 
         tool_dir.mkdir()
@@ -490,7 +497,7 @@ class TestBusNamespaceWarnings:
         tool_dir.mkdir()
         (tool_dir / "used.py").write_text(
             "from agent_actions import udf_tool\n\n@udf_tool\ndef used_tool(data):\n"
-            "    return data.get('real_action')\n"
+            "    return data.get('used_typo')\n"
         )
         (tool_dir / "other.py").write_text(
             "from agent_actions import udf_tool\n\n@udf_tool\ndef other_tool(data):\n"
@@ -512,6 +519,9 @@ class TestBusNamespaceWarnings:
         cmd.execute()
 
         joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        # Positive (non-vacuous): the referenced UDF's own typo IS flagged...
+        assert "used_typo" in joined
+        # ...while the unreferenced tool's read is not scanned at all.
         assert "some_other_workflow_ns" not in joined
         assert "other_tool" not in joined
 
@@ -529,7 +539,7 @@ class TestBusNamespaceWarnings:
         (tool_dir / "used.py").write_text(
             "from agent_actions import udf_tool\n\n"
             "def _process_record(data):\n    return data.get('question')\n\n"
-            "@udf_tool\ndef used_tool(data):\n    return data.get('real_action')\n"
+            "@udf_tool\ndef used_tool(data):\n    return data.get('used_typo')\n"
         )
         registry = discover_udfs(tool_dir)
 
@@ -547,5 +557,82 @@ class TestBusNamespaceWarnings:
         cmd.execute()
 
         joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        # Positive (non-vacuous): the registered UDF's own typo IS flagged...
+        assert "used_typo" in joined
+        # ...while the same-file helper's record-field read is not scanned.
         assert "question" not in joined
         assert "_process_record" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_reserved_config_token_is_flagged(self, mock_fire, tmp_path):
+        # prompt/schema/action are reserved config tokens, NOT runtime bus keys, so a
+        # UDF reading data.get("schema") silently gets {} — it must be flagged (they
+        # are deliberately excluded from the valid runtime-bus set).
+        registry = self._discover(
+            tmp_path / "tools", "tool_reserved", "    return data.get('schema')\n"
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "bus namespace 'schema'" in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_framework_namespaces_are_not_flagged(self, mock_fire, tmp_path):
+        # The four real framework bus keys must never be flagged.
+        registry = self._discover(
+            tmp_path / "tools",
+            "tool_framework",
+            "    return (data.get('source'), data['version'], data.get('workflow'), data['seed'])\n",
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "bus namespace" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_bracketed_bus_key_does_not_crash(self, mock_fire, tmp_path):
+        # A bus-key literal containing Rich markup must not crash the console or drop
+        # the offending key — the warning text is escaped before printing.
+        registry = self._discover(
+            tmp_path / "tools", "tool_markup", "    return data.get('[/x]y')\n"
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = Console()  # real console, markup enabled — would MarkupError unescaped
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        with cmd.console.capture() as cap:
+            cmd.execute()  # must not raise
+
+        assert "[/x]y" in cap.get()

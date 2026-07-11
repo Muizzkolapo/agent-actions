@@ -7,6 +7,7 @@ from typing import Any
 
 import click
 from rich.console import Console
+from rich.markup import escape
 
 from agent_actions.config.manager import ConfigManager
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -24,7 +25,7 @@ from agent_actions.input.loaders.udf import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
-from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
     get_udf_metadata,
@@ -139,7 +140,10 @@ class ValidateUDFsCommand:
             self.console.print(f"  - {len(registry)} Tools discovered and registered")
             self.console.print("  - All functions found\n")
             for warning in namespace_warnings:
-                self.console.print(f"[yellow]⚠ {warning}[/yellow]")
+                # escape: the warning embeds a UDF-controlled bus-key literal that
+                # may contain Rich markup (e.g. "[/x]"), which would otherwise crash
+                # the console or silently drop the offending key.
+                self.console.print(f"[yellow]⚠ {escape(warning)}[/yellow]")
             if impl_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")
                 for ref in sorted(impl_refs):
@@ -208,7 +212,7 @@ class ValidateUDFsCommand:
                 sources[ref] = textwrap.dedent(inspect.getsource(meta["function"]))
             except (OSError, TypeError, KeyError):
                 continue
-        return find_unknown_bus_namespaces(sources, action_names | SPECIAL_NAMESPACES)
+        return find_unknown_bus_namespaces(sources, action_names | RUNTIME_BUS_NAMESPACES)
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""

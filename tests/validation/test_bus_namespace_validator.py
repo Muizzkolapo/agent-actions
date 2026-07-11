@@ -80,3 +80,19 @@ def test_multiple_unknown_keys_all_reported():
     findings = find_unknown_bus_namespaces({"f": src}, {"author"})
     assert any("one" in f for f in findings)
     assert any("two" in f for f in findings)
+
+
+def test_identical_nested_helper_across_sources_not_deduped():
+    # Two distinct UDFs each define a nested helper of the same name reading the same
+    # unknown key. These are two independent bugs and must both be reported — dedup is
+    # per-source, so the second must not be swallowed.
+    src_a = "def udf_a(data):\n    def _inner(data):\n        return data.get('bad')\n    return _inner(data)\n"
+    src_b = "def udf_b(data):\n    def _inner(data):\n        return data.get('bad')\n    return _inner(data)\n"
+    findings = find_unknown_bus_namespaces({"a": src_a, "b": src_b}, {"author"})
+    assert len(findings) == 2
+
+
+def test_same_key_repeated_within_one_function_still_deduped():
+    # Per-source dedup must still collapse a repeat within the same function.
+    src = "def f(data):\n    return data.get('bad'), data['bad'], data.get('bad')\n"
+    assert len(find_unknown_bus_namespaces({"f": src}, {"author"})) == 1
