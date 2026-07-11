@@ -70,6 +70,6 @@ def test_valid_result_exits_zero(monkeypatch, tmp_path):
     result = _run_cli(
         monkeypatch,
         tmp_path,
-        {"valid": True, "registry": {"fn": {}}, "impl_refs": {"fn"}},
+        {"valid": True, "registry": {"fn": {}}, "impl_refs": {"fn"}, "action_names": set()},
     )
     assert result.exit_code == 0, result.output

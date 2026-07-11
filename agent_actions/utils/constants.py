@@ -100,6 +100,15 @@ SCHEMA_FILE_GLOBS = tuple(f"*{s}" for s in SCHEMA_SUFFIXES)
 # - Context scope processor
 SPECIAL_NAMESPACES = RESERVED_AGENT_NAMES - {"context_scope"}
 
+# Framework-injected keys that the runtime actually writes into a tool UDF's
+# `data` bus, alongside per-dependency action-name namespaces. Populated by
+# build_field_context_with_history (source/version/workflow) + scope_application
+# (seed). Deliberately narrower than SPECIAL_NAMESPACES: prompt/schema/action are
+# reserved config/agent-name tokens that never appear as runtime bus keys, and
+# "loop" is the Jinja loop variable, not bus data. Version-promoted keys
+# (i/idx/custom params) are dynamic and not statically enumerable here.
+RUNTIME_BUS_NAMESPACES = frozenset({"source", "version", "workflow", "seed"})
+
 HITL_FILE_GRANULARITY_ERROR = (
     "HITL actions require FILE granularity. "
     "Record granularity launches a separate approval UI per record. "

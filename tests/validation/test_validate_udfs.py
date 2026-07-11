@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+from rich.console import Console
 
 from agent_actions.errors import (
     DuplicateFunctionError,
@@ -66,6 +67,30 @@ class TestCountImplReferences:
             ]
         }
         assert cmd._count_impl_references(config) == {"a", "c"}
+
+
+class TestExtractActionNames:
+    def _make_cmd(self) -> ValidateUDFsCommand:
+        return ValidateUDFsCommand.__new__(ValidateUDFsCommand)
+
+    def test_list_of_action_dicts(self):
+        cmd = self._make_cmd()
+        config = {"name": "wf", "actions": [{"name": "split"}, {"name": "score"}]}
+        assert cmd._extract_action_names(config) == {"split", "score"}
+
+    def test_no_actions_key(self):
+        cmd = self._make_cmd()
+        assert cmd._extract_action_names({}) == set()
+
+    def test_non_list_actions_is_safe(self):
+        # Legacy/malformed shapes must degrade to empty, never raise.
+        cmd = self._make_cmd()
+        assert cmd._extract_action_names({"actions": {"s": {"impl": "f"}}}) == set()
+
+    def test_action_without_name_is_skipped(self):
+        cmd = self._make_cmd()
+        config = {"actions": [{"name": "ok"}, {"impl": "no_name"}, "bare_string"]}
+        assert cmd._extract_action_names(config) == {"ok"}
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +258,7 @@ class TestExecute:
                 "valid": True,
                 "registry": {"fn": {}},
                 "impl_refs": {"fn"},
+                "action_names": set(),
             }
         )
 
@@ -371,6 +397,248 @@ class TestExecute:
 
 
 # ---------------------------------------------------------------------------
+# Unknown bus-namespace warnings (UDF reads data.get("X") for an unknown X)
+# ---------------------------------------------------------------------------
+
+
+class TestBusNamespaceWarnings:
+    @pytest.fixture(autouse=True)
+    def _clean_registry(self):
+        import sys
+
+        from agent_actions.utils.module_loader import clear_module_cache
+        from agent_actions.utils.udf_management.registry import clear_registry
+
+        def _reset():
+            clear_registry()
+            clear_module_cache()
+            # clear_registry/clear_module_cache do NOT evict the sys.modules entries
+            # discover_udfs creates under the "agent_actions._udfs." prefix; without
+            # this, a second discover of the same file stem returns a stale (empty)
+            # module and the test silently scans nothing.
+            for name in [k for k in sys.modules if k.startswith("agent_actions._udfs.")]:
+                sys.modules.pop(name, None)
+
+        _reset()
+        yield
+        _reset()
+
+    def _discover(self, tool_dir: Path, mod: str, body: str):
+        """Write an isolated tool file and register it via real discovery."""
+        from agent_actions.input.loaders.udf import discover_udfs
+
+        tool_dir.mkdir()
+        (tool_dir / f"{mod}.py").write_text(
+            "from agent_actions import udf_tool\n\n@udf_tool\ndef aggregate(data):\n" + body
+        )
+        return discover_udfs(tool_dir)
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_unknown_bus_namespace_warns_and_exits_zero(self, mock_fire, tmp_path):
+        registry = self._discover(
+            tmp_path / "tools", "tool_unknown", "    return data.get('typo_action_name')\n"
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()  # warning, not error: must not raise
+
+        calls = [str(c) for c in cmd.console.print.call_args_list]
+        assert any("typo_action_name" in c and "aggregate" in c for c in calls)
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_action_and_framework_namespaces_are_not_flagged(self, mock_fire, tmp_path):
+        # One file mixing a known action name, a framework namespace, and a typo:
+        # only the typo must be flagged (proves the scan runs AND discriminates).
+        registry = self._discover(
+            tmp_path / "tools",
+            "tool_mixed",
+            "    a = data.get('real_action')\n"
+            "    b = data['seed']\n"
+            "    c = data.get('typo_name')\n"
+            "    return {}\n",
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "typo_name" in joined
+        assert "real_action" not in joined
+        assert "'seed'" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_unreferenced_udf_in_shared_dir_is_not_scanned(self, mock_fire, tmp_path):
+        # A shared tools/ dir holds UDFs for several workflows. A UDF this workflow
+        # does NOT reference reads its own workflow's namespace — it must not be
+        # flagged against this workflow's action names (the real-project failure).
+        from agent_actions.input.loaders.udf import discover_udfs
+
+        tool_dir = tmp_path / "tools"
+        tool_dir.mkdir()
+        (tool_dir / "used.py").write_text(
+            "from agent_actions import udf_tool\n\n@udf_tool\ndef used_tool(data):\n"
+            "    return data.get('used_typo')\n"
+        )
+        (tool_dir / "other.py").write_text(
+            "from agent_actions import udf_tool\n\n@udf_tool\ndef other_tool(data):\n"
+            "    return data.get('some_other_workflow_ns')\n"
+        )
+        registry = discover_udfs(tool_dir)
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"used_tool"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        # Positive (non-vacuous): the referenced UDF's own typo IS flagged...
+        assert "used_typo" in joined
+        # ...while the unreferenced tool's read is not scanned at all.
+        assert "some_other_workflow_ns" not in joined
+        assert "other_tool" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_record_helper_in_referenced_file_is_not_scanned(self, mock_fire, tmp_path):
+        # A referenced UDF's file also defines a plain helper that receives a record
+        # (not the action bus) and reads record fields. Only the registered UDF's own
+        # body is scoped, so the helper's field reads must not warn.
+        from agent_actions.input.loaders.udf import discover_udfs
+
+        tool_dir = tmp_path / "tools"
+        tool_dir.mkdir()
+        # The helper's `data` is a record passed by used_tool, not the action bus;
+        # a whole-file scan would wrongly flag `question` against the bus namespaces.
+        (tool_dir / "used.py").write_text(
+            "from agent_actions import udf_tool\n\n"
+            "def _process_record(data):\n    return data.get('question')\n\n"
+            "@udf_tool\ndef used_tool(data):\n    return data.get('used_typo')\n"
+        )
+        registry = discover_udfs(tool_dir)
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"used_tool"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        # Positive (non-vacuous): the registered UDF's own typo IS flagged...
+        assert "used_typo" in joined
+        # ...while the same-file helper's record-field read is not scanned.
+        assert "question" not in joined
+        assert "_process_record" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_reserved_config_token_is_flagged(self, mock_fire, tmp_path):
+        # prompt/schema/action are reserved config tokens, NOT runtime bus keys, so a
+        # UDF reading data.get("schema") silently gets {} — it must be flagged (they
+        # are deliberately excluded from the valid runtime-bus set).
+        registry = self._discover(
+            tmp_path / "tools", "tool_reserved", "    return data.get('schema')\n"
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "bus namespace 'schema'" in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_framework_namespaces_are_not_flagged(self, mock_fire, tmp_path):
+        # The four real framework bus keys must never be flagged.
+        registry = self._discover(
+            tmp_path / "tools",
+            "tool_framework",
+            "    return (data.get('source'), data['version'], data.get('workflow'), data['seed'])\n",
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "bus namespace" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_bracketed_bus_key_does_not_crash(self, mock_fire, tmp_path):
+        # A bus-key literal containing Rich markup must not crash the console or drop
+        # the offending key — the warning text is escaped before printing.
+        registry = self._discover(
+            tmp_path / "tools", "tool_markup", "    return data.get('[/x]y')\n"
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = Console()  # real console, markup enabled — would MarkupError unescaped
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"aggregate"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        with cmd.console.capture() as cap:
+            cmd.execute()  # must not raise
+
+        assert "[/x]y" in cap.get()
+
+
+# ---------------------------------------------------------------------------
 # FILE-mode UDF return-contract warnings
 # ---------------------------------------------------------------------------
 
@@ -400,6 +668,7 @@ class TestFileUdfContractWarnings:
                 "valid": True,
                 "registry": dict(UDF_REGISTRY),
                 "impl_refs": {"dedup_scores"},
+                "action_names": set(),
             }
         )
 
@@ -426,6 +695,7 @@ class TestFileUdfContractWarnings:
                 "valid": True,
                 "registry": dict(UDF_REGISTRY),
                 "impl_refs": {"unrelated"},
+                "action_names": set(),
             }
         )
 
@@ -456,6 +726,7 @@ class TestFileUdfContractWarnings:
                 "valid": True,
                 "registry": dict(UDF_REGISTRY),
                 "impl_refs": {"merge_scores"},
+                "action_names": set(),
             }
         )
 

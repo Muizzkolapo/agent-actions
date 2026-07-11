@@ -1,10 +1,13 @@
 """Validate-udfs CLI command for checking UDF references without running workflows."""
 
+import inspect
+import textwrap
 from pathlib import Path
 from typing import Any
 
 import click
 from rich.console import Console
+from rich.markup import escape
 
 from agent_actions.config.manager import ConfigManager
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -22,10 +25,12 @@ from agent_actions.input.loaders.udf import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
     get_udf_metadata,
 )
+from agent_actions.validation.bus_namespace_validator import find_unknown_bus_namespaces
 from agent_actions.validation.file_udf_contract_validator import find_file_udf_contract_warnings
 
 
@@ -90,6 +95,7 @@ class ValidateUDFsCommand:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": impl_refs,
+                "action_names": self._extract_action_names(config),
             }
         except FunctionNotFoundError as e:
             return {
@@ -117,13 +123,16 @@ class ValidateUDFsCommand:
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
-            contract_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
+            udf_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
+            udf_warnings += self._find_bus_namespace_warnings(
+                registry, impl_refs, result["action_names"]
+            )
             fire_event(
                 ValidationCompleteEvent(
                     target="UDFs",
                     validator="validate-udfs",
                     error_count=0,
-                    warning_count=len(contract_warnings),
+                    warning_count=len(udf_warnings),
                 )
             )
             self.console.print("[green]✅ All UDF references valid[/green]")
@@ -132,8 +141,11 @@ class ValidateUDFsCommand:
             self.console.print(f"  - {len(impl_refs)} Tools referenced in config")
             self.console.print(f"  - {len(registry)} Tools discovered and registered")
             self.console.print("  - All functions found\n")
-            for warning in contract_warnings:
-                self.console.print(f"[yellow]⚠ {warning}[/yellow]")
+            for warning in udf_warnings:
+                # escape: warnings embed UDF-controlled literals (bus keys, return
+                # annotations) that may contain Rich markup (e.g. "[/x]", "list[dict]"),
+                # which would otherwise crash the console or drop text.
+                self.console.print(f"[yellow]⚠ {escape(warning)}[/yellow]")
             if impl_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")
                 for ref in sorted(impl_refs):
@@ -172,6 +184,37 @@ class ValidateUDFsCommand:
 
         extract_impl_refs(config)
         return impl_refs
+
+    def _extract_action_names(self, config: dict) -> set[str]:
+        """Return workflow action names from the raw config (list-of-dicts form)."""
+        actions = config.get("actions", [])
+        if not isinstance(actions, list):
+            return set()
+        return {
+            a["name"] for a in actions if isinstance(a, dict) and isinstance(a.get("name"), str)
+        }
+
+    def _find_bus_namespace_warnings(
+        self, registry: dict, impl_refs: set[str], action_names: set[str]
+    ) -> list[str]:
+        """Scan each REFERENCED UDF's own source for reads of an unknown bus namespace.
+
+        Scoped to impl_refs, and to each UDF's own function body (not its whole file):
+        a shared tools/ dir holds UDFs for many workflows — each reading its own
+        workflow's action names — and a UDF file often defines record-level helpers
+        that receive a plain record, not the action-keyed bus. Scanning either would
+        flag legitimate reads against the wrong namespace set.
+        """
+        sources: dict[str, str] = {}
+        for ref in impl_refs:
+            meta = registry.get(ref) or registry.get(ref.lower())
+            if meta is None:
+                continue
+            try:
+                sources[ref] = textwrap.dedent(inspect.getsource(meta["function"]))
+            except (OSError, TypeError, KeyError):
+                continue
+        return find_unknown_bus_namespaces(sources, action_names | RUNTIME_BUS_NAMESPACES)
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""
