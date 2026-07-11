@@ -71,6 +71,32 @@ def test_warning_names_the_fix_path():
     assert "filter mode" in warning
 
 
+def test_referenced_filter_scopes_to_named_udfs():
+    @udf_tool(granularity=Granularity.FILE)
+    def used_udf(data) -> list[dict]:
+        return data
+
+    @udf_tool(granularity=Granularity.FILE)
+    def unused_udf(data) -> list[dict]:
+        return data
+
+    warnings = find_file_udf_contract_warnings(UDF_REGISTRY, referenced={"used_udf"})
+    assert any("used_udf" in w for w in warnings)
+    assert not any("unused_udf" in w for w in warnings)
+
+
+def test_referenced_none_warns_all():
+    @udf_tool(granularity=Granularity.FILE)
+    def a_udf(data) -> list[dict]:
+        return data
+
+    @udf_tool(granularity=Granularity.FILE)
+    def b_udf(data) -> list[dict]:
+        return data
+
+    assert len(find_file_udf_contract_warnings(UDF_REGISTRY)) == 2
+
+
 def test_unresolvable_forward_ref_does_not_crash():
     # A string annotation naming a type that does not exist must be handled
     # without importing/resolving it — it is simply not FileUDFResult, so warn.

@@ -396,13 +396,43 @@ class TestFileUdfContractWarnings:
         cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
         cmd.console = MagicMock()
         cmd.validate = MagicMock(
-            return_value={"valid": True, "registry": dict(UDF_REGISTRY), "impl_refs": set()}
+            return_value={
+                "valid": True,
+                "registry": dict(UDF_REGISTRY),
+                "impl_refs": {"dedup_scores"},
+            }
         )
 
         cmd.execute()  # warning, not error: must not raise
 
         calls = [str(c) for c in cmd.console.print.call_args_list]
         assert any("dedup_scores" in c and "FileUDFResult" in c for c in calls)
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_file_udf_not_referenced_by_workflow_is_not_warned(self, mock_fire, tmp_path):
+        # A mis-annotated FILE UDF this workflow never calls cannot crash its run,
+        # so validate-udfs -a <workflow> must not warn about it.
+        from agent_actions.config.types import Granularity
+        from agent_actions.utils.udf_management.registry import UDF_REGISTRY, udf_tool
+
+        @udf_tool(granularity=Granularity.FILE)
+        def other_workflows_udf(data) -> list[dict]:
+            return data
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": dict(UDF_REGISTRY),
+                "impl_refs": {"unrelated"},
+            }
+        )
+
+        cmd.execute()
+
+        calls = [str(c) for c in cmd.console.print.call_args_list]
+        assert not any("other_workflows_udf" in c for c in calls)
 
     @patch("agent_actions.validation.validate_udfs.fire_event")
     def test_file_udf_returning_fileudfresult_prints_no_warning(self, mock_fire, tmp_path):
