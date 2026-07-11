@@ -69,3 +69,13 @@ def test_warning_names_the_fix_path():
     (warning,) = find_file_udf_contract_warnings(UDF_REGISTRY)
     assert "source_index" in warning
     assert "filter mode" in warning
+
+
+def test_unresolvable_forward_ref_does_not_crash():
+    # A string annotation naming a type that does not exist must be handled
+    # without importing/resolving it — it is simply not FileUDFResult, so warn.
+    @udf_tool(granularity=Granularity.FILE)
+    def bad_ref(data) -> "TypeThatDoesNotExist":  # noqa: F821
+        return data
+
+    assert any("bad_ref" in w for w in find_file_udf_contract_warnings(UDF_REGISTRY))

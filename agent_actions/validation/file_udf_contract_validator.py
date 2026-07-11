@@ -9,6 +9,9 @@ from agent_actions.utils.udf_management.registry import FileUDFResult
 
 
 def _returns_fileudfresult(annotation: Any) -> bool:
+    # Coarse name check by design: class identity, or the name text mentions
+    # FileUDFResult (covers string forward-refs). It reads only what is already
+    # recorded — never imports or resolves the annotation, which could fail.
     if annotation is FileUDFResult:
         return True
     name = getattr(annotation, "__name__", None) or (
