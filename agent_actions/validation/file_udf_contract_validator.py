@@ -20,11 +20,20 @@ def _returns_fileudfresult(annotation: Any) -> bool:
     return "FileUDFResult" in str(name)
 
 
-def find_file_udf_contract_warnings(registry: dict[str, dict]) -> list[str]:
-    """Return one warning per FILE-mode UDF whose return annotation is not FileUDFResult."""
+def find_file_udf_contract_warnings(
+    registry: dict[str, dict], referenced: set[str] | None = None
+) -> list[str]:
+    """Return one warning per FILE-mode UDF whose return annotation is not FileUDFResult.
+
+    When *referenced* is given, only UDFs named in it are checked — the warning
+    predicts a runtime crash, which can only happen for UDFs the workflow calls.
+    """
+    refs_lower = {r.lower() for r in referenced} if referenced is not None else None
     warnings: list[str] = []
     for meta in registry.values():
         if meta.get("granularity") is not Granularity.FILE:
+            continue
+        if refs_lower is not None and meta["name"].lower() not in refs_lower:
             continue
         annotation = meta["signature"].return_annotation
         if _returns_fileudfresult(annotation):

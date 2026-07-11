@@ -117,7 +117,7 @@ class ValidateUDFsCommand:
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
-            contract_warnings = find_file_udf_contract_warnings(registry)
+            contract_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
             fire_event(
                 ValidationCompleteEvent(
                     target="UDFs",
