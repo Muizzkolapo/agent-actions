@@ -449,8 +449,14 @@ class TestFileUdfContractWarnings:
 
         cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
         cmd.console = MagicMock()
+        # Reference merge_scores so the annotation is actually inspected — with an
+        # empty impl_refs the scope filter would skip it before the matcher runs.
         cmd.validate = MagicMock(
-            return_value={"valid": True, "registry": dict(UDF_REGISTRY), "impl_refs": set()}
+            return_value={
+                "valid": True,
+                "registry": dict(UDF_REGISTRY),
+                "impl_refs": {"merge_scores"},
+            }
         )
 
         cmd.execute()
