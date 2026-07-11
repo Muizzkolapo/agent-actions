@@ -1,5 +1,7 @@
 """FILE-mode UDF return-contract warnings: FILE + non-FileUDFResult annotation flagged."""
 
+from typing import Optional
+
 import pytest
 
 from agent_actions.config.types import Granularity
@@ -40,6 +42,24 @@ def test_file_udf_returning_fileudfresult_is_ok():
 def test_file_udf_string_annotation_fileudfresult_is_ok():
     @udf_tool(granularity=Granularity.FILE)
     def merge_str(data) -> "FileUDFResult":
+        return FileUDFResult(outputs=[])
+
+    assert find_file_udf_contract_warnings(UDF_REGISTRY) == []
+
+
+def test_union_fileudfresult_or_none_is_ok():
+    @udf_tool(granularity=Granularity.FILE)
+    def maybe_merge(data) -> FileUDFResult | None:
+        return FileUDFResult(outputs=[])
+
+    assert find_file_udf_contract_warnings(UDF_REGISTRY) == []
+
+
+def test_typing_optional_fileudfresult_is_ok():
+    # typing.Optional (distinct from `X | None`: it has __name__ == "Optional")
+    # must also be recognised, so pin this exact spelling.
+    @udf_tool(granularity=Granularity.FILE)
+    def maybe_merge_opt(data) -> Optional[FileUDFResult]:  # noqa: UP045
         return FileUDFResult(outputs=[])
 
     assert find_file_udf_contract_warnings(UDF_REGISTRY) == []
