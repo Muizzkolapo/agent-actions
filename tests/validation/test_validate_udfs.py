@@ -368,3 +368,78 @@ class TestExecute:
         calls = [str(c) for c in cmd.console.print.call_args_list]
         # Should show "... and 5 more"
         assert any("and 5 more" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# Unknown bus-namespace warnings (UDF reads data.get("X") for an unknown X)
+# ---------------------------------------------------------------------------
+
+
+class TestBusNamespaceWarnings:
+    @pytest.fixture(autouse=True)
+    def _clean_registry(self):
+        from agent_actions.utils.udf_management.registry import clear_registry
+
+        clear_registry()
+        yield
+        clear_registry()
+
+    def _discover(self, tool_dir: Path, body: str):
+        """Write an isolated tool file and register it via real discovery."""
+        from agent_actions.input.loaders.udf import discover_udfs
+
+        tool_dir.mkdir()
+        (tool_dir / "agg.py").write_text(
+            "from agent_actions import udf_tool\n\n@udf_tool\ndef aggregate(data):\n" + body
+        )
+        return discover_udfs(tool_dir)
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_unknown_bus_namespace_warns_and_exits_zero(self, mock_fire, tmp_path):
+        registry = self._discover(tmp_path / "tools", "    return data.get('typo_action_name')\n")
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": set(),
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()  # warning, not error: must not raise
+
+        calls = [str(c) for c in cmd.console.print.call_args_list]
+        assert any("typo_action_name" in c and "aggregate" in c for c in calls)
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_action_and_framework_namespaces_are_not_flagged(self, mock_fire, tmp_path):
+        # One file mixing a known action name, a framework namespace, and a typo:
+        # only the typo must be flagged (proves the scan runs AND discriminates).
+        registry = self._discover(
+            tmp_path / "tools",
+            "    a = data.get('real_action')\n"
+            "    b = data['seed']\n"
+            "    c = data.get('typo_name')\n"
+            "    return {}\n",
+        )
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": set(),
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "typo_name" in joined
+        assert "real_action" not in joined
+        assert "'seed'" not in joined
