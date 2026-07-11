@@ -68,6 +68,30 @@ class TestCountImplReferences:
         assert cmd._count_impl_references(config) == {"a", "c"}
 
 
+class TestExtractActionNames:
+    def _make_cmd(self) -> ValidateUDFsCommand:
+        return ValidateUDFsCommand.__new__(ValidateUDFsCommand)
+
+    def test_list_of_action_dicts(self):
+        cmd = self._make_cmd()
+        config = {"name": "wf", "actions": [{"name": "split"}, {"name": "score"}]}
+        assert cmd._extract_action_names(config) == {"split", "score"}
+
+    def test_no_actions_key(self):
+        cmd = self._make_cmd()
+        assert cmd._extract_action_names({}) == set()
+
+    def test_non_list_actions_is_safe(self):
+        # Legacy/malformed shapes must degrade to empty, never raise.
+        cmd = self._make_cmd()
+        assert cmd._extract_action_names({"actions": {"s": {"impl": "f"}}}) == set()
+
+    def test_action_without_name_is_skipped(self):
+        cmd = self._make_cmd()
+        config = {"actions": [{"name": "ok"}, {"impl": "no_name"}, "bare_string"]}
+        assert cmd._extract_action_names(config) == {"ok"}
+
+
 # ---------------------------------------------------------------------------
 # validate() — mock external dependencies
 # ---------------------------------------------------------------------------
@@ -233,6 +257,7 @@ class TestExecute:
                 "valid": True,
                 "registry": {"fn": {}},
                 "impl_refs": {"fn"},
+                "action_names": set(),
             }
         )
 
@@ -378,25 +403,34 @@ class TestExecute:
 class TestBusNamespaceWarnings:
     @pytest.fixture(autouse=True)
     def _clean_registry(self):
+        from agent_actions.utils.module_loader import clear_module_cache
         from agent_actions.utils.udf_management.registry import clear_registry
 
         clear_registry()
+        clear_module_cache()
         yield
         clear_registry()
+        clear_module_cache()
 
-    def _discover(self, tool_dir: Path, body: str):
-        """Write an isolated tool file and register it via real discovery."""
+    def _discover(self, tool_dir: Path, mod: str, body: str):
+        """Write an isolated, uniquely-named tool file and register it via real discovery.
+
+        `mod` must be unique per test — the module loader caches by module name, so a
+        shared stem would return a stale module and skip re-registration.
+        """
         from agent_actions.input.loaders.udf import discover_udfs
 
         tool_dir.mkdir()
-        (tool_dir / "agg.py").write_text(
+        (tool_dir / f"{mod}.py").write_text(
             "from agent_actions import udf_tool\n\n@udf_tool\ndef aggregate(data):\n" + body
         )
         return discover_udfs(tool_dir)
 
     @patch("agent_actions.validation.validate_udfs.fire_event")
     def test_unknown_bus_namespace_warns_and_exits_zero(self, mock_fire, tmp_path):
-        registry = self._discover(tmp_path / "tools", "    return data.get('typo_action_name')\n")
+        registry = self._discover(
+            tmp_path / "tools", "tool_unknown", "    return data.get('typo_action_name')\n"
+        )
 
         cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
         cmd.console = MagicMock()
@@ -420,6 +454,7 @@ class TestBusNamespaceWarnings:
         # only the typo must be flagged (proves the scan runs AND discriminates).
         registry = self._discover(
             tmp_path / "tools",
+            "tool_mixed",
             "    a = data.get('real_action')\n"
             "    b = data['seed']\n"
             "    c = data.get('typo_name')\n"

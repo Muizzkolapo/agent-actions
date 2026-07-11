@@ -22,10 +22,12 @@ from agent_actions.input.loaders.udf import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
     get_udf_metadata,
 )
+from agent_actions.validation.bus_namespace_validator import find_unknown_bus_namespaces
 
 
 class ValidateUDFsCommand:
@@ -89,6 +91,7 @@ class ValidateUDFsCommand:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": impl_refs,
+                "action_names": self._extract_action_names(config),
             }
         except FunctionNotFoundError as e:
             return {
@@ -116,9 +119,13 @@ class ValidateUDFsCommand:
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
+            namespace_warnings = self._find_bus_namespace_warnings(registry, result["action_names"])
             fire_event(
                 ValidationCompleteEvent(
-                    target="UDFs", validator="validate-udfs", error_count=0, warning_count=0
+                    target="UDFs",
+                    validator="validate-udfs",
+                    error_count=0,
+                    warning_count=len(namespace_warnings),
                 )
             )
             self.console.print("[green]✅ All UDF references valid[/green]")
@@ -127,6 +134,8 @@ class ValidateUDFsCommand:
             self.console.print(f"  - {len(impl_refs)} Tools referenced in config")
             self.console.print(f"  - {len(registry)} Tools discovered and registered")
             self.console.print("  - All functions found\n")
+            for warning in namespace_warnings:
+                self.console.print(f"[yellow]⚠ {warning}[/yellow]")
             if impl_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")
                 for ref in sorted(impl_refs):
@@ -165,6 +174,25 @@ class ValidateUDFsCommand:
 
         extract_impl_refs(config)
         return impl_refs
+
+    def _extract_action_names(self, config: dict) -> set[str]:
+        """Return workflow action names from the raw config (list-of-dicts form)."""
+        actions = config.get("actions", [])
+        if not isinstance(actions, list):
+            return set()
+        return {
+            a["name"] for a in actions if isinstance(a, dict) and isinstance(a.get("name"), str)
+        }
+
+    def _find_bus_namespace_warnings(self, registry: dict, action_names: set[str]) -> list[str]:
+        """Scan each registered UDF's source for reads of an unknown bus namespace."""
+        sources = {
+            meta["file"]: Path(meta["file"]).read_text(encoding="utf-8")
+            for meta in registry.values()
+            if meta.get("file") and Path(meta["file"]).exists()
+        }
+        valid_namespaces = action_names | SPECIAL_NAMESPACES
+        return find_unknown_bus_namespaces(sources, valid_namespaces)
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""
