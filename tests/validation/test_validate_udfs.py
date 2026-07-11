@@ -438,7 +438,7 @@ class TestBusNamespaceWarnings:
             return_value={
                 "valid": True,
                 "registry": registry,
-                "impl_refs": set(),
+                "impl_refs": {"aggregate"},
                 "action_names": {"real_action"},
             }
         )
@@ -467,7 +467,7 @@ class TestBusNamespaceWarnings:
             return_value={
                 "valid": True,
                 "registry": registry,
-                "impl_refs": set(),
+                "impl_refs": {"aggregate"},
                 "action_names": {"real_action"},
             }
         )
@@ -478,3 +478,74 @@ class TestBusNamespaceWarnings:
         assert "typo_name" in joined
         assert "real_action" not in joined
         assert "'seed'" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_unreferenced_udf_in_shared_dir_is_not_scanned(self, mock_fire, tmp_path):
+        # A shared tools/ dir holds UDFs for several workflows. A UDF this workflow
+        # does NOT reference reads its own workflow's namespace — it must not be
+        # flagged against this workflow's action names (the real-project failure).
+        from agent_actions.input.loaders.udf import discover_udfs
+
+        tool_dir = tmp_path / "tools"
+        tool_dir.mkdir()
+        (tool_dir / "used.py").write_text(
+            "from agent_actions import udf_tool\n\n@udf_tool\ndef used_tool(data):\n"
+            "    return data.get('real_action')\n"
+        )
+        (tool_dir / "other.py").write_text(
+            "from agent_actions import udf_tool\n\n@udf_tool\ndef other_tool(data):\n"
+            "    return data.get('some_other_workflow_ns')\n"
+        )
+        registry = discover_udfs(tool_dir)
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"used_tool"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "some_other_workflow_ns" not in joined
+        assert "other_tool" not in joined
+
+    @patch("agent_actions.validation.validate_udfs.fire_event")
+    def test_record_helper_in_referenced_file_is_not_scanned(self, mock_fire, tmp_path):
+        # A referenced UDF's file also defines a plain helper that receives a record
+        # (not the action bus) and reads record fields. Only the registered UDF's own
+        # body is scoped, so the helper's field reads must not warn.
+        from agent_actions.input.loaders.udf import discover_udfs
+
+        tool_dir = tmp_path / "tools"
+        tool_dir.mkdir()
+        # The helper's `data` is a record passed by used_tool, not the action bus;
+        # a whole-file scan would wrongly flag `question` against the bus namespaces.
+        (tool_dir / "used.py").write_text(
+            "from agent_actions import udf_tool\n\n"
+            "def _process_record(data):\n    return data.get('question')\n\n"
+            "@udf_tool\ndef used_tool(data):\n    return data.get('real_action')\n"
+        )
+        registry = discover_udfs(tool_dir)
+
+        cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
+        cmd.console = MagicMock()
+        cmd.validate = MagicMock(
+            return_value={
+                "valid": True,
+                "registry": registry,
+                "impl_refs": {"used_tool"},
+                "action_names": {"real_action"},
+            }
+        )
+
+        cmd.execute()
+
+        joined = " ".join(str(c) for c in cmd.console.print.call_args_list)
+        assert "question" not in joined
+        assert "_process_record" not in joined

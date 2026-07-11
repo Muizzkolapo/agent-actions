@@ -1,5 +1,7 @@
 """Validate-udfs CLI command for checking UDF references without running workflows."""
 
+import inspect
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -119,7 +121,9 @@ class ValidateUDFsCommand:
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
-            namespace_warnings = self._find_bus_namespace_warnings(registry, result["action_names"])
+            namespace_warnings = self._find_bus_namespace_warnings(
+                registry, impl_refs, result["action_names"]
+            )
             fire_event(
                 ValidationCompleteEvent(
                     target="UDFs",
@@ -184,15 +188,27 @@ class ValidateUDFsCommand:
             a["name"] for a in actions if isinstance(a, dict) and isinstance(a.get("name"), str)
         }
 
-    def _find_bus_namespace_warnings(self, registry: dict, action_names: set[str]) -> list[str]:
-        """Scan each registered UDF's source for reads of an unknown bus namespace."""
-        sources = {
-            meta["file"]: Path(meta["file"]).read_text(encoding="utf-8")
-            for meta in registry.values()
-            if meta.get("file") and Path(meta["file"]).exists()
-        }
-        valid_namespaces = action_names | SPECIAL_NAMESPACES
-        return find_unknown_bus_namespaces(sources, valid_namespaces)
+    def _find_bus_namespace_warnings(
+        self, registry: dict, impl_refs: set[str], action_names: set[str]
+    ) -> list[str]:
+        """Scan each REFERENCED UDF's own source for reads of an unknown bus namespace.
+
+        Scoped to impl_refs, and to each UDF's own function body (not its whole file):
+        a shared tools/ dir holds UDFs for many workflows — each reading its own
+        workflow's action names — and a UDF file often defines record-level helpers
+        that receive a plain record, not the action-keyed bus. Scanning either would
+        flag legitimate reads against the wrong namespace set.
+        """
+        sources: dict[str, str] = {}
+        for ref in impl_refs:
+            meta = registry.get(ref) or registry.get(ref.lower())
+            if meta is None:
+                continue
+            try:
+                sources[ref] = textwrap.dedent(inspect.getsource(meta["function"]))
+            except (OSError, TypeError, KeyError):
+                continue
+        return find_unknown_bus_namespaces(sources, action_names | SPECIAL_NAMESPACES)
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""
