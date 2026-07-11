@@ -31,6 +31,7 @@ from agent_actions.utils.udf_management.registry import (
     get_udf_metadata,
 )
 from agent_actions.validation.bus_namespace_validator import find_unknown_bus_namespaces
+from agent_actions.validation.file_udf_contract_validator import find_file_udf_contract_warnings
 
 
 class ValidateUDFsCommand:
@@ -122,7 +123,8 @@ class ValidateUDFsCommand:
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
-            namespace_warnings = self._find_bus_namespace_warnings(
+            udf_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
+            udf_warnings += self._find_bus_namespace_warnings(
                 registry, impl_refs, result["action_names"]
             )
             fire_event(
@@ -130,7 +132,7 @@ class ValidateUDFsCommand:
                     target="UDFs",
                     validator="validate-udfs",
                     error_count=0,
-                    warning_count=len(namespace_warnings),
+                    warning_count=len(udf_warnings),
                 )
             )
             self.console.print("[green]✅ All UDF references valid[/green]")
@@ -139,10 +141,10 @@ class ValidateUDFsCommand:
             self.console.print(f"  - {len(impl_refs)} Tools referenced in config")
             self.console.print(f"  - {len(registry)} Tools discovered and registered")
             self.console.print("  - All functions found\n")
-            for warning in namespace_warnings:
-                # escape: the warning embeds a UDF-controlled bus-key literal that
-                # may contain Rich markup (e.g. "[/x]"), which would otherwise crash
-                # the console or silently drop the offending key.
+            for warning in udf_warnings:
+                # escape: warnings embed UDF-controlled literals (bus keys, return
+                # annotations) that may contain Rich markup (e.g. "[/x]", "list[dict]"),
+                # which would otherwise crash the console or drop text.
                 self.console.print(f"[yellow]⚠ {escape(warning)}[/yellow]")
             if impl_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")
