@@ -17,6 +17,11 @@ def _referenced_namespaces(context_scope: dict[str, Any], action_name: str) -> s
     Malformed refs are skipped, exactly as the runtime skips them — a
     dotless ref like ``"producer"`` must not satisfy a dependency here
     when it would not satisfy it at execution time.
+
+    Deliberately not ``scope_parsing.extract_action_names_from_context_scope``:
+    that fires a ``ContextFieldSkippedEvent`` per malformed ref, and the
+    preceding ``infer_dependencies`` call already fires those for the same
+    refs — reusing it would surface duplicate skip events during inspect.
     """
     refs = list(context_scope.get("observe") or []) + list(context_scope.get("passthrough") or [])
     namespaces: set[str] = set()
