@@ -26,6 +26,7 @@ from agent_actions.utils.udf_management.registry import (
     clear_registry,
     get_udf_metadata,
 )
+from agent_actions.validation.file_udf_contract_validator import find_file_udf_contract_warnings
 
 
 class ValidateUDFsCommand:
@@ -116,9 +117,13 @@ class ValidateUDFsCommand:
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
+            contract_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
             fire_event(
                 ValidationCompleteEvent(
-                    target="UDFs", validator="validate-udfs", error_count=0, warning_count=0
+                    target="UDFs",
+                    validator="validate-udfs",
+                    error_count=0,
+                    warning_count=len(contract_warnings),
                 )
             )
             self.console.print("[green]✅ All UDF references valid[/green]")
@@ -127,6 +132,8 @@ class ValidateUDFsCommand:
             self.console.print(f"  - {len(impl_refs)} Tools referenced in config")
             self.console.print(f"  - {len(registry)} Tools discovered and registered")
             self.console.print("  - All functions found\n")
+            for warning in contract_warnings:
+                self.console.print(f"[yellow]⚠ {warning}[/yellow]")
             if impl_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")
                 for ref in sorted(impl_refs):
