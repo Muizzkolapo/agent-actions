@@ -323,3 +323,145 @@ class TestInspectPromptRequiredEndToEnd:
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code == 0, result.output
         assert "producer.b" not in result.output
+
+
+def _build_over_declared_dep_project(root: Path) -> str:
+    """Scaffold a real on-disk project whose consumer declares dependencies
+    [producer, other] but only references producer in context_scope. Returns
+    the workflow name."""
+    wf = "demo"
+    (root / "agent_actions.yml").write_text("version: '1.0'\n")
+    for name in ("templates", "rendered_workflows", "prompt_store"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    (root / "agent_workflow" / wf / "agent_io").mkdir(parents=True, exist_ok=True)
+    cfg_dir = root / "agent_workflow" / wf / "agent_config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / f"{wf}.yml").write_text(
+        textwrap.dedent(f"""\
+        name: {wf}
+        description: demo
+        defaults:
+          json_mode: true
+          granularity: Record
+          run_mode: online
+          model_name: gpt-4o-mini
+          model_vendor: openai
+          api_key: OPENAI_API_KEY
+        actions:
+          - name: producer
+            intent: produce a
+            kind: llm
+            prompt: "Produce a."
+            context_scope:
+              observe: ["source.*"]
+            schema:
+              fields:
+                - id: a
+                  type: string
+                  required: true
+          - name: other
+            intent: produce b
+            kind: llm
+            prompt: "Produce b."
+            context_scope:
+              observe: ["source.*"]
+            schema:
+              fields:
+                - id: b
+                  type: string
+                  required: true
+          - name: consumer
+            intent: consume producer output
+            kind: llm
+            prompt: "Use the observed context."
+            dependencies: [producer, other]
+            context_scope:
+              observe: ["producer.a"]
+            schema:
+              fields:
+                - id: out
+                  type: string
+                  required: true
+        """)
+    )
+    return wf
+
+
+def _build_versioned_merge_project(root: Path) -> str:
+    """Scaffold a real on-disk project with a fan-out producer (versions) and
+    a merge consumer whose dependency stays on the base name after the loader
+    expands the branches. Returns the workflow name."""
+    wf = "demo"
+    (root / "agent_actions.yml").write_text("version: '1.0'\n")
+    for name in ("templates", "rendered_workflows", "prompt_store"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    (root / "agent_workflow" / wf / "agent_io").mkdir(parents=True, exist_ok=True)
+    cfg_dir = root / "agent_workflow" / wf / "agent_config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / f"{wf}.yml").write_text(
+        textwrap.dedent(f"""\
+        name: {wf}
+        description: demo
+        defaults:
+          json_mode: true
+          granularity: Record
+          run_mode: online
+          model_name: gpt-4o-mini
+          model_vendor: openai
+          api_key: OPENAI_API_KEY
+        actions:
+          - name: producer
+            intent: produce a
+            kind: llm
+            prompt: "Produce a."
+            versions:
+              param: iteration
+              range: [1, 2]
+              mode: parallel
+            context_scope:
+              observe: ["source.*"]
+            schema:
+              fields:
+                - id: a
+                  type: string
+                  required: true
+          - name: consumer
+            intent: merge producer versions
+            kind: llm
+            prompt: "Merge the observed context."
+            dependencies: [producer]
+            version_consumption:
+              source: producer
+              pattern: merge
+            context_scope:
+              observe: ["producer.*"]
+            schema:
+              fields:
+                - id: out
+                  type: string
+                  required: true
+        """)
+    )
+    return wf
+
+
+class TestInspectDepObserveEndToEnd:
+    """`agac inspect` on a real on-disk workflow with a dependency that has
+    no observe/passthrough reference must fail preflight — the runtime
+    treats it as fatal, so inspect reporting green wastes upstream tokens."""
+
+    def test_over_declared_dependency_fails_inspect(self, tmp_path, monkeypatch):
+        wf = _build_over_declared_dep_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["inspect", "-a", wf])
+        assert result.exit_code != 0, result.output
+        assert "'other'" in result.output
+
+    def test_versioned_merge_workflow_passes_inspect(self, tmp_path, monkeypatch):
+        """The loader rewrites the merge consumer's observe refs to producer_1/
+        producer_2 while dependencies keep the base name — a valid workflow
+        that a raw-string dependency check would wrongly reject."""
+        wf = _build_versioned_merge_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["inspect", "-a", wf])
+        assert result.exit_code == 0, result.output

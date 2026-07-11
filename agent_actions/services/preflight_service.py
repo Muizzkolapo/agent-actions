@@ -12,6 +12,7 @@ from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
+from agent_actions.validation.dep_observe_validator import find_missing_observe_deps
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
@@ -81,7 +82,16 @@ class PreflightService:
                 hint="Fix the guard condition errors above before running the workflow.",
             )
 
-        # 4. Resolution checks (API keys, seed files, vendor batch)
+        # 4. Dependency/observe consistency — fatal at runtime, so fatal here
+        observe_errors = find_missing_observe_deps(self.action_configs)
+        if observe_errors:
+            raise PreFlightValidationError(
+                "\n".join(observe_errors),
+                hint="Add an observe or passthrough field for each dependency, "
+                "or drop the unused dependency.",
+            )
+
+        # 5. Resolution checks (API keys, seed files, vendor batch)
         resolution_result = WorkflowResolutionService(
             action_configs=self.action_configs,
             workflow_config_path=self.workflow_config_path,
@@ -93,7 +103,7 @@ class PreflightService:
         for warning in resolution_result.warnings:
             logger.warning("Pre-flight: %s", warning.message)
 
-        # 5. Cross-check prompt refs against each producer's required set
+        # 6. Cross-check prompt refs against each producer's required set
         for finding in find_unguarded_required_refs(
             self._collect_prompts(), self._collect_producing_schemas()
         ):
