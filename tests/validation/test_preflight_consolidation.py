@@ -784,6 +784,28 @@ class TestToolPassthroughCrossCheck:
         finally:
             aa_logger.propagate = original
 
+    def test_expanded_config_model_name_is_used_as_impl(self):
+        # Post-expansion tool configs carry the UDF name in model_name (the
+        # expander maps impl -> model_name); impl does not survive. The check
+        # must read model_name or it never fires on a real workflow.
+        from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
+
+        clear_registry()
+        udf_tool(_passthrough_tool)
+        try:
+            cfgs = {
+                "flatten": {
+                    "kind": "tool",
+                    "model_name": "_passthrough_tool",
+                    "json_output_schema": {"type": "object", "additionalProperties": False},
+                }
+            }
+            collected = self._svc(cfgs)._collect_tool_passthrough_inputs()
+            assert "flatten" in collected
+            assert "out.append(candidate)" in collected["flatten"]["source"]
+        finally:
+            clear_registry()
+
     def test_passthrough_tool_source_and_schema_collected(self):
         from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
 

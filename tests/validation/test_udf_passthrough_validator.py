@@ -64,6 +64,26 @@ _MUTATE_RETURN_INPUT = "def mark(record):\n    record['status'] = 'KEEP'\n    re
 _SUBKEY_CONSTRUCT = (
     "def build(data):\n    cfg = data.get('config', {})\n    return {'ok': cfg.get('threshold')}\n"
 )
+# Accumulator fed from bus data, then nested as a VALUE in a constructed output
+# dict whose keys are bounded — safe. The output item is the dict, not the list.
+_ACC_INTO_DICT = (
+    "def build(data):\n"
+    "    opts = data.get('src', {}).get('options', [])\n"
+    "    texts = []\n"
+    "    for i in range(len(opts)):\n"
+    "        texts.append(opts[i])\n"
+    "    return {'answer_text': texts, 'options': opts}\n"
+)
+# Aggregate-into-summary-dict: extend an accumulator from bus reads, return it
+# under a declared key of a constructed dict — safe.
+_AGG_SUMMARY = (
+    "def agg(data):\n"
+    "    issues = []\n"
+    "    for i in range(3):\n"
+    "        r = data.get('rev', {})\n"
+    "        issues.extend(r.get('items', []))\n"
+    "    return {'count': len(issues), 'remaining': issues}\n"
+)
 # String first param with sequence indexing — a prompt/parse helper, not a dict
 # passthrough. Numeric index / slice must not be mistaken for a mapping read.
 _STR_INDEX = "def make_prompt(context_str):\n    return context_str[0]\n"
@@ -157,6 +177,14 @@ def test_mutate_and_return_input_not_flagged():
 
 def test_subkey_read_into_dict_literal_not_flagged():
     assert _risks(_SUBKEY_CONSTRUCT) == []
+
+
+def test_accumulator_nested_in_constructed_dict_not_flagged():
+    assert _risks(_ACC_INTO_DICT) == []
+
+
+def test_aggregate_into_summary_dict_not_flagged():
+    assert _risks(_AGG_SUMMARY) == []
 
 
 def test_string_index_not_flagged():
