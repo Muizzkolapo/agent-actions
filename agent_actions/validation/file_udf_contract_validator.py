@@ -40,6 +40,13 @@ def _is_list_of_dicts(node: ast.AST, dict_vars: set[str]) -> bool:
     return False
 
 
+def _feeds_dicts(node: ast.AST, dict_vars: set[str], list_dict_vars: set[str]) -> bool:
+    """A value that is, or aliases, a list of freshly-built dicts."""
+    if _is_list_of_dicts(node, dict_vars):
+        return True
+    return isinstance(node, ast.Name) and node.id in list_dict_vars
+
+
 def _scope_nodes(func: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.AST]:
     """Yield nodes in the function's own scope, not descending into nested defs/lambdas."""
     stack: list[ast.AST] = list(func.body)
@@ -95,34 +102,39 @@ def _source_constructs_new_dicts(source: str) -> bool:
         if len(dict_vars) == before:
             break
 
-    # List accumulators that receive freshly-built dicts.
+    # List accumulators that receive freshly-built dicts, to a fixpoint so an
+    # accumulator aliased to another name (out = results) is tracked too.
     list_dict_vars: set[str] = set()
-    for node in nodes:
-        if isinstance(node, ast.Assign) and _is_list_of_dicts(node.value, dict_vars):
-            list_dict_vars |= {t.id for t in node.targets if isinstance(t, ast.Name)}
-        elif (
-            isinstance(node, ast.AnnAssign)
-            and node.value is not None
-            and isinstance(node.target, ast.Name)
-            and _is_list_of_dicts(node.value, dict_vars)
-        ):
-            list_dict_vars.add(node.target.id)
-        elif (
-            isinstance(node, ast.AugAssign)
-            and isinstance(node.target, ast.Name)
-            and _is_list_of_dicts(node.value, dict_vars)
-        ):
-            list_dict_vars.add(node.target.id)
-        elif (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.args
-        ):
-            if node.func.attr == "append" and _is_dict_construct(node.args[0], dict_vars):
-                list_dict_vars.add(node.func.value.id)
-            elif node.func.attr == "extend" and _is_list_of_dicts(node.args[0], dict_vars):
-                list_dict_vars.add(node.func.value.id)
+    while True:
+        before = len(list_dict_vars)
+        for node in nodes:
+            if isinstance(node, ast.Assign) and _feeds_dicts(node.value, dict_vars, list_dict_vars):
+                list_dict_vars |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+            elif (
+                isinstance(node, ast.AnnAssign)
+                and node.value is not None
+                and isinstance(node.target, ast.Name)
+                and _feeds_dicts(node.value, dict_vars, list_dict_vars)
+            ):
+                list_dict_vars.add(node.target.id)
+            elif (
+                isinstance(node, ast.AugAssign)
+                and isinstance(node.target, ast.Name)
+                and _is_list_of_dicts(node.value, dict_vars)
+            ):
+                list_dict_vars.add(node.target.id)
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.args
+            ):
+                if node.func.attr == "append" and _is_dict_construct(node.args[0], dict_vars):
+                    list_dict_vars.add(node.func.value.id)
+                elif node.func.attr == "extend" and _is_list_of_dicts(node.args[0], dict_vars):
+                    list_dict_vars.add(node.func.value.id)
+        if len(list_dict_vars) == before:
+            break
 
     # Construction is only a problem when the freshly-built dicts are returned —
     # a list wrapped in FileUDFResult(...) is a call, not a bare dict/list, so it
@@ -130,9 +142,9 @@ def _source_constructs_new_dicts(source: str) -> bool:
     for node in nodes:
         if isinstance(node, ast.Return) and node.value is not None:
             value = node.value
-            if _is_dict_construct(value, dict_vars) or _is_list_of_dicts(value, dict_vars):
-                return True
-            if isinstance(value, ast.Name) and value.id in list_dict_vars:
+            if _is_dict_construct(value, dict_vars) or _feeds_dicts(
+                value, dict_vars, list_dict_vars
+            ):
                 return True
     return False
 
