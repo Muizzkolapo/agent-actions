@@ -17,7 +17,7 @@ def _target_names(target: ast.AST) -> set[str]:
     return set()
 
 
-def _first_param(func: ast.AST) -> str | None:
+def _first_param(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
     """The UDF's first positional parameter — the bus/record the framework passes in."""
     args = func.args
     params = list(args.posonlyargs) + list(args.args)
