@@ -160,3 +160,20 @@ def test_empty_prompts_or_schemas_short_circuit():
     schemas = {"producer": _schema(required=set(), optional={"b"})}
     assert find_unguarded_required_refs({}, schemas) == []
     assert find_unguarded_required_refs({"consumer": "{{ producer.b }}"}, {}) == []
+
+
+def test_unmarked_field_ref_is_not_flagged_required_by_default():
+    # An unmarked producer field is required by default (guaranteed), so an
+    # unguarded ref to it is safe and must not be flagged.
+    prompts = {"consumer": "Use {{ producer.b }} here."}
+    schemas = {"producer": {"fields": [{"id": "a"}, {"id": "b"}]}}
+    assert find_unguarded_required_refs(prompts, schemas) == []
+
+
+def test_optional_true_field_ref_is_flagged():
+    # optional: true opts a field out of required-by-default, so an unguarded
+    # ref to it is a risk and must be flagged.
+    prompts = {"consumer": "Use {{ producer.b }} here."}
+    schemas = {"producer": {"fields": [{"id": "a"}, {"id": "b", "optional": True}]}}
+    findings = find_unguarded_required_refs(prompts, schemas)
+    assert any("producer.b" in f for f in findings)

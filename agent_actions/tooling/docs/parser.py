@@ -45,7 +45,7 @@ def extract_fields_for_docs(raw_schema: dict[str, Any]) -> list[dict[str, Any]]:
                         "name": field_def["id"],
                         "type": field_def.get("type", "unknown"),
                         "description": field_def.get("description", ""),
-                        "required": field_def.get("required", False),
+                        "required": field_def.get("required", not field_def.get("optional", False)),
                     }
                 )
 

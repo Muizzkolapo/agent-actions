@@ -265,6 +265,9 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
                 elif field_id in top_level_required:
                     # Fall back to top-level required array
                     required_fields.add(field_id)
+                elif not field_def.get("optional", False):
+                    # Required by default; opt out with `optional: true`.
+                    required_fields.add(field_id)
                 if "type" in field_def:
                     field_types[field_id] = field_def["type"]
 

@@ -116,8 +116,12 @@ def _unguarded_refs(template: str) -> set[tuple[str, str]]:
 
 
 def _optional_field_names(schema: dict) -> set[str]:
-    """Names the producer declares but does not mark required."""
-    return {f["id"] for f in schema.get("fields", []) if "id" in f and not f.get("required", False)}
+    """Names the producer declares but does not guarantee (opted out of required-by-default)."""
+    return {
+        f["id"]
+        for f in schema.get("fields", [])
+        if "id" in f and not f.get("required", not f.get("optional", False))
+    }
 
 
 def find_unguarded_required_refs(prompts: dict[str, str], schemas: dict[str, dict]) -> list[str]:

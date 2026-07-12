@@ -64,7 +64,9 @@ def compile_unified_schema(
     for field in unified.get("fields", []):
         key, schema_prop = compile_field(field, target_system)
         properties[key] = schema_prop
-        if field.get("required", False):
+        # Flat fields are required by default; opt out with `optional: true`
+        # or an explicit `required: false`. Explicit `required` wins over `optional`.
+        if field.get("required", not field.get("optional", False)):
             required.append(key)
     target = target_system.lower()
     compiled: dict[str, Any] | list[dict[str, Any]]
