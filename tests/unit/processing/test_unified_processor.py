@@ -195,6 +195,27 @@ class TestUnifiedProcessorGuardFilter:
         assert stats.skipped == 1
         assert stats.success == 0
 
+    def test_first_stage_guard_skip_record_stamped_at_source(self):
+        # A first-stage record without source_guid that the guard SKIPS must still
+        # carry a content-hash guid — stamped at the source BEFORE the guard split,
+        # so it survives enrichment as SKIPPED instead of being downgraded to FAILED.
+        processor = UnifiedProcessor()
+        strategy = NoOpStrategy()
+        context = _make_context(
+            guard={"clause": "item.flag == true", "behavior": "skip"}, is_first_stage=True
+        )
+        record = {"content": {"source": {"field": "value"}}}  # no source_guid
+
+        with patch(
+            "agent_actions.processing.unified.prefilter_by_guard",
+            return_value=([], [record], [], []),
+        ):
+            output, stats = processor.process([record], context, strategy)
+
+        assert stats.skipped == 1
+        assert stats.success == 0  # not downgraded to a failure by the enrichment raise
+        assert output and output[0].get("source_guid")  # born at the source
+
     def test_filtered_records_excluded_from_output(self):
         processor = UnifiedProcessor()
         strategy = NoOpStrategy()

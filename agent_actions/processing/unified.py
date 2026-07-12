@@ -105,6 +105,14 @@ class UnifiedProcessor:
         Returns:
             Tuple of (output_records, stats).
         """
+        # Stamp first-stage records at the source BEFORE the guard split, so
+        # guard-skipped records carry a (deterministic, content-hash) identity too
+        # and are not downgraded to failures at enrichment.
+        if context.is_first_stage:
+            for record in records:
+                if isinstance(record, dict) and not record.get("source_guid"):
+                    record["source_guid"] = IDGenerator.generate_content_hash(record)
+
         if raw_records is not None:
             # FILE mode: guard needs original_data for pre-observe alignment
             passing, guard_results, original_passing = self._guard_filter_file_mode(
@@ -113,15 +121,6 @@ class UnifiedProcessor:
             context.source_data = original_passing
         else:
             passing, guard_results = self._guard_filter(records, context)
-
-        # First-stage records arrive without source_guid — assign a
-        # deterministic one (content hash) so the DispositionGate can match
-        # them to checkpointed dispositions across runs.  UUID5 from content
-        # ensures the same input record gets the same guid every time.
-        if context.is_first_stage:
-            for record in passing:
-                if not record.get("source_guid"):
-                    record["source_guid"] = IDGenerator.generate_content_hash(record)
 
         carry_results: list[ProcessingResult] = []
         if self._disposition_gate is not None and passing:
