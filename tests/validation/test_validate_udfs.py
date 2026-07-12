@@ -308,7 +308,7 @@ class TestExecute:
         joined = "\n".join(str(c) for c in cmd.console.print.call_args_list)
         # Marker line + canonical formatter output.
         assert "UDF load failed" in joined
-        assert "Failed to load UDF module 'bad'" in joined
+        assert "Auto-discovered UDF file failed to import: bad.py" in joined
         assert "Python could not import the UDF module: SyntaxError" in joined
         assert "File: bad.py" in joined
 
