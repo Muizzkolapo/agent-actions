@@ -239,7 +239,7 @@ class TestExtractFieldMetadata:
         assert desc == "Full name"
         assert req is True
 
-    def test_format1_defaults_required_true(self):
+    def test_format1_defaults_optional(self):
         schema = {
             "fields": [
                 {"id": "age", "type": "integer", "description": "Age in years"},
@@ -248,7 +248,16 @@ class TestExtractFieldMetadata:
         ft, desc, req = self._extract(schema, "age")
         assert ft == "integer"
         assert desc == "Age in years"
-        assert req is True
+        assert req is False  # unmarked → optional by default
+
+    def test_format1_required_by_default_flag_opts_in(self):
+        schema = {
+            "required_by_default": True,
+            "fields": [
+                {"id": "age", "type": "integer", "description": "Age in years"},
+            ],
+        }
+        assert self._extract(schema, "age")[2] is True
 
     def test_format1_optional_opts_out_of_required(self):
         schema = {
@@ -277,7 +286,7 @@ class TestExtractFieldMetadata:
         ft, desc, req = self._extract(schema, "title")
         assert ft == "string"
         assert desc == "Title field"
-        assert req is True  # unmarked → required by default
+        assert req is False  # unmarked → optional by default
 
     def test_format1_non_dict_items_skipped(self):
         """Non-dict items in the fields array should be skipped, not raise."""
@@ -291,7 +300,7 @@ class TestExtractFieldMetadata:
         ft, desc, req = self._extract(schema, "valid")
         assert ft == "boolean"
         assert desc == "A flag"
-        assert req is True  # unmarked → required by default
+        assert req is False  # unmarked → optional by default
 
     def test_format1_id_takes_precedence_over_name(self):
         """When both 'id' and 'name' are present, 'id' is used (via or short-circuit)."""
