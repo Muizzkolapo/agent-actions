@@ -111,7 +111,7 @@ class UnifiedProcessor:
         if context.is_first_stage:
             for record in records:
                 if isinstance(record, dict) and not record.get("source_guid"):
-                    record["source_guid"] = IDGenerator.generate_content_hash(record)
+                    record["source_guid"] = IDGenerator.derive_source_guid(record)
 
         if raw_records is not None:
             # FILE mode: guard needs original_data for pre-observe alignment
