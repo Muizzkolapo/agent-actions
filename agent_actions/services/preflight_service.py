@@ -3,15 +3,21 @@ call it without spinning up storage or execution services."""
 
 from __future__ import annotations
 
+import inspect
 import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import ConfigValidationError, PromptValidationError
+from agent_actions.errors import (
+    ConfigValidationError,
+    FunctionNotFoundError,
+    PromptValidationError,
+)
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
+from agent_actions.utils.udf_management.registry import get_udf_metadata
 from agent_actions.validation.dep_observe_validator import find_missing_observe_deps
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.validation.preflight.resolution_service import (
@@ -23,6 +29,7 @@ from agent_actions.validation.prompt_required_field_validator import (
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     apply_guard_nullable_schema_fixes,
 )
+from agent_actions.validation.udf_passthrough_validator import find_passthrough_schema_risks
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
@@ -109,6 +116,9 @@ class PreflightService:
         ):
             logger.warning("Pre-flight: %s", finding)
 
+        # 7. Cross-check kind:tool passthrough UDFs against strict output schemas
+        self._warn_tool_passthrough_risks()
+
     def _collect_prompts(self) -> dict[str, str]:
         """Resolved prompt text per prompt-bearing action, keyed by action name."""
         prompts: dict[str, str] = {}
@@ -141,3 +151,38 @@ class PreflightService:
             if base and base not in schemas:
                 schemas[base] = {"fields": fields}
         return schemas
+
+    def _collect_tool_passthrough_inputs(self) -> dict[str, dict[str, Any]]:
+        """UDF source + output-schema strictness per kind:tool action.
+
+        Actions whose impl is unregistered or has no readable source are skipped:
+        this is an advisory warning and must never break inspect."""
+        inputs: dict[str, dict[str, Any]] = {}
+        for name, config in self.action_configs.items():
+            if config.get("kind") != "tool":
+                continue
+            # Post-expansion, the UDF name lives in model_name (the expander maps
+            # impl -> model_name); impl is the raw pre-expansion key.
+            impl = config.get("model_name") or config.get("impl")
+            if not impl:
+                continue
+            schema = config.get("json_output_schema")
+            if not schema:
+                # No compiled output schema → runtime does no output validation and
+                # cannot reject, so there is nothing to warn about.
+                continue
+            try:
+                source = inspect.getsource(get_udf_metadata(impl)["function"])
+            except (FunctionNotFoundError, OSError, TypeError) as exc:
+                logger.debug("Skipping passthrough check for '%s': %s", name, exc)
+                continue
+            inputs[name] = {
+                "source": source,
+                "additional_properties": bool(schema.get("additionalProperties", False)),
+            }
+        return inputs
+
+    def _warn_tool_passthrough_risks(self) -> None:
+        """Warn when a kind:tool UDF passes upstream dicts through a strict schema."""
+        for finding in find_passthrough_schema_risks(self._collect_tool_passthrough_inputs()):
+            logger.warning("Pre-flight: %s", finding)
