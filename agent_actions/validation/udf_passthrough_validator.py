@@ -26,9 +26,28 @@ def _first_param(func: ast.AST) -> str | None:
     return args.vararg.arg if args.vararg else None
 
 
+def _is_sequence_index(sl: ast.AST) -> bool:
+    """True for a slice or a (possibly negative) integer index — sequence access, not a mapping key."""
+    if isinstance(sl, ast.Slice):
+        return True
+    if isinstance(sl, ast.Constant) and isinstance(sl.value, int):
+        return True
+    return (
+        isinstance(sl, ast.UnaryOp)
+        and isinstance(sl.operand, ast.Constant)
+        and isinstance(sl.operand.value, int)
+    )
+
+
 def _reads_input(node: ast.AST, root: str, tainted: set[str]) -> bool:
-    """True for ``x.get(...)`` or ``x[...]`` where ``x`` is the input or derived from it."""
+    """True for a mapping read ``x.get(...)`` / ``x['key']`` where ``x`` is the input or derived.
+
+    Numeric/slice subscripts are sequence access (string/list indexing) and are
+    not mapping reads, so a string-first-param helper doing ``s[0]`` is not flagged.
+    """
     if isinstance(node, ast.Subscript):
+        if _is_sequence_index(node.slice):
+            return False
         return _is_input(node.value, root, tainted)
     if (
         isinstance(node, ast.Call)
