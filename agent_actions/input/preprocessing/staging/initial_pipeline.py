@@ -346,19 +346,18 @@ def _prepare_text_chunks_batch(
     result = []
     for idx, chunk in enumerate(chunks):
         target_id = str(uuid.uuid4())
-        result.append(
-            {
-                "content": chunk,
-                "batch_id": batch_id,
-                "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": IDGenerator.generate_source_guid(),
-                "target_id": target_id,
-                # Ancestry Chain: first-stage records are their own root
-                "parent_target_id": None,
-                "root_target_id": target_id,
-                "node_id": node_id,
-            }
-        )
+        record = {
+            "content": chunk,
+            "batch_id": batch_id,
+            "batch_uuid": f"{batch_id}_{idx}",
+            "target_id": target_id,
+            # Ancestry Chain: first-stage records are their own root
+            "parent_target_id": None,
+            "root_target_id": target_id,
+            "node_id": node_id,
+        }
+        record["source_guid"] = IDGenerator.derive_source_guid(record)
+        result.append(record)
     return result
 
 
@@ -378,19 +377,18 @@ def _add_batch_metadata(
     result = []
     for idx, row in enumerate(rows):
         target_id = str(uuid.uuid4())
-        result.append(
-            {
-                **row,
-                "batch_id": batch_id,
-                "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": IDGenerator.generate_source_guid(),
-                "target_id": target_id,
-                # Ancestry Chain: first-stage records are their own root
-                "parent_target_id": None,
-                "root_target_id": target_id,
-                "node_id": node_id,
-            }
-        )
+        record = {
+            **row,
+            "batch_id": batch_id,
+            "batch_uuid": f"{batch_id}_{idx}",
+            "target_id": target_id,
+            # Ancestry Chain: first-stage records are their own root
+            "parent_target_id": None,
+            "root_target_id": target_id,
+            "node_id": node_id,
+        }
+        record["source_guid"] = IDGenerator.derive_source_guid(record)
+        result.append(record)
     return result
 
 
@@ -511,11 +509,13 @@ def _prepare_online_data(ctx: DataPreparationContext):
         )
         data_chunk = chunks
 
-        # GUIDs must match what UnifiedProcessor/OnlineLLMStrategy will generate
+        # Deterministic content identity — matches what UnifiedProcessor/
+        # OnlineLLMStrategy derive for the same content, by construction.
         src_text = []
         for text in data_chunk:
-            guid = IDGenerator.generate_source_guid()
-            src_text.append({"source_guid": guid, "content": text})
+            record = {"content": text}
+            record["source_guid"] = IDGenerator.derive_source_guid(record)
+            src_text.append(record)
 
     elif ctx.file_type == ".json":
         data_chunk = json_loader.process(ctx.content, ctx.file_path)
@@ -523,13 +523,13 @@ def _prepare_online_data(ctx: DataPreparationContext):
         if not isinstance(data_chunk, list):
             data_chunk = [data_chunk]
 
-        # Do NOT mutate data_chunk: OnlineLLMStrategy hashes raw items for source_guid
+        # Do NOT mutate data_chunk: OnlineLLMStrategy derives source_guid from the raw item
         src_text = []
         for item in data_chunk:
             if isinstance(item, dict):
                 source_item = item.copy()
                 if "source_guid" not in source_item:
-                    source_item["source_guid"] = IDGenerator.generate_source_guid()
+                    source_item["source_guid"] = IDGenerator.derive_source_guid(source_item)
                 src_text.append(source_item)
             else:
                 src_text.append(item)

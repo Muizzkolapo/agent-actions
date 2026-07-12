@@ -8,7 +8,6 @@ assert the behavioral contract at the real batch stamp path.
 # Pre-load the workflow package to break a pre-existing import-order cycle that
 # otherwise makes initial_pipeline uncollectable in isolation.
 import agent_actions.workflow.coordinator  # noqa: F401
-
 from agent_actions.input.preprocessing.staging.initial_pipeline import _add_batch_metadata
 
 

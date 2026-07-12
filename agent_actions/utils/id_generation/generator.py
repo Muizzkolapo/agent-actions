@@ -4,6 +4,21 @@ import json
 import uuid
 from typing import Any
 
+# Framework envelope fields excluded from the source_guid content projection: they
+# are per-run/positional (target_id, batch_uuid, …) so hashing them would defeat the
+# deterministic identity. Everything else is the record's content.
+_ENVELOPE_FIELDS = frozenset(
+    {
+        "source_guid",
+        "target_id",
+        "batch_id",
+        "batch_uuid",
+        "node_id",
+        "parent_target_id",
+        "root_target_id",
+    }
+)
+
 
 class IDGenerator:
     """Centralized ID generation service for processor operations."""
@@ -20,16 +35,26 @@ class IDGenerator:
 
     @staticmethod
     def generate_source_guid() -> str:
-        """Generate a unique UUID4 source GUID for a record instance."""
+        """Generate a random UUID4 identity for a genuinely new entity (expansion child, synthetic)."""
         return str(uuid.uuid4())
 
     @staticmethod
-    def generate_content_hash(content: Any) -> str:
-        """Generate a deterministic UUID5 content hash for dedup comparison.
+    def derive_source_guid(record: Any) -> str:
+        """Deterministic source_guid for a first-stage record: UUID5 over its content.
 
-        This is NOT a source_guid — it is a content fingerprint.
-        Use generate_source_guid() for record identity.
+        The same input content always yields the same guid (across runs and stamp
+        sites), so the disposition/checkpoint gate matches records on re-run and the
+        ingestion and processing stamps agree. Framework envelope fields are excluded.
         """
+        if isinstance(record, dict):
+            content = {k: v for k, v in record.items() if k not in _ENVELOPE_FIELDS}
+        else:
+            content = record
+        return IDGenerator.generate_content_hash(content)
+
+    @staticmethod
+    def generate_content_hash(content: Any) -> str:
+        """Generate a deterministic UUID5 hash of content (dedup / the basis of derive_source_guid)."""
         if isinstance(content, dict):
             content_for_hash = json.dumps(content, sort_keys=True)
         else:
